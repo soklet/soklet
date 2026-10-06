@@ -446,16 +446,18 @@ public class McpLegacyHttpWireTests {
 	}
 
 	@Test
-	public void juneToolResultRejectsNovemberResourceLinkIcons() {
+	public void juneToolResultOmitsNovemberResourceLinkIcons() {
 		McpWireResult result = McpWireResult.complete(new McpJsonObject(Map.of(
 				"content", new McpJsonArray(List.of(new McpJsonObject(Map.of(
 						"type", new McpJsonString("resource_link"),
 						"name", new McpJsonString("report"),
 						"uri", new McpJsonString("file:///report"),
 						"icons", new McpJsonArray(List.of()))))))));
-		Assertions.assertThrows(IllegalArgumentException.class,
-				() -> Mcp2025ProtocolProfile.JUNE_18.renderApplicationResult(
-						McpProfileApplicationResultKind.TOOL, result));
+		McpWireResult june = Mcp2025ProtocolProfile.JUNE_18.renderApplicationResult(
+				McpProfileApplicationResultKind.TOOL, result);
+		McpJsonObject link = (McpJsonObject) ((McpJsonArray) june.fields().members().get("content")).values().get(0);
+		Assertions.assertFalse(link.members().containsKey("icons"));
+		Assertions.assertEquals(new McpJsonString("file:///report"), link.members().get("uri"));
 		Assertions.assertDoesNotThrow(
 				() -> Mcp2025ProtocolProfile.NOVEMBER_25.renderApplicationResult(
 						McpProfileApplicationResultKind.TOOL, result));
@@ -824,7 +826,7 @@ public class McpLegacyHttpWireTests {
 					{"jsonrpc":"2.0","id":31,"method":"tools/call",
 					"params":{"name":"modern-only","arguments":{}}}
 					""");
-			Assertions.assertEquals(400, hiddenCall.statusCode(), hiddenCall.body());
+			Assertions.assertEquals(200, hiddenCall.statusCode(), hiddenCall.body());
 			Assertions.assertFalse(hiddenCall.body().contains("\"text\":\"ok\""),
 					hiddenCall.body());
 
@@ -933,14 +935,14 @@ public class McpLegacyHttpWireTests {
 			HttpResponse<String> hiddenListing = post(client, sharedUri,
 					Optional.of("2025-11-25"), Optional.empty(),
 					"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}");
-			Assertions.assertEquals(404, hiddenListing.statusCode(),
+			Assertions.assertEquals(200, hiddenListing.statusCode(),
 					hiddenListing.body());
 			HttpResponse<String> hiddenCall = post(client, sharedUri,
 					Optional.of("2025-11-25"), Optional.empty(), """
 					{"jsonrpc":"2.0","id":2,"method":"tools/call",
 					"params":{"name":"modern-only","arguments":{}}}
 					""");
-			Assertions.assertEquals(400, hiddenCall.statusCode(), hiddenCall.body());
+			Assertions.assertEquals(200, hiddenCall.statusCode(), hiddenCall.body());
 			Assertions.assertEquals(0, handlerCalls.get());
 
 			String modernFramedLegacySelector = """

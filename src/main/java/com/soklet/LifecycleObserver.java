@@ -344,7 +344,10 @@ public interface LifecycleObserver {
 	}
 
 	/**
-	 * Called after response data is written.
+	 * Called after a response is handed to the transport for writing. For an HTTP stream, this does not
+	 * mean that its body has finished; use {@link #didTerminateResponseStream} for stream termination.
+	 * When the built-in HTTP transport replaces a response before commitment, this callback receives
+	 * the finite response actually offered, including its status and headers.
 	 */
 	default void didWriteResponse(@NonNull ServerType serverType,
 																@NonNull Request request,
@@ -387,7 +390,11 @@ public interface LifecycleObserver {
 	 * If a stream is rejected before body bytes are written, {@link StreamingResponseHandle#getMarshaledResponse()}
 	 * returns the original application-provided streaming response. For example, an HTTP/1.0 request for a streaming
 	 * response is rejected on the wire with {@code 505 HTTP Version Not Supported}, while this callback still receives
-	 * the original streaming response that was rejected.
+	 * the original streaming response that was rejected. Admission and producer-executor rejection likewise
+	 * offer one notification retaining the original stream. The finite failsafe response and synchronous
+	 * request-handling finish do not wait for it. Unadmitted-stream observation uses a separate bounded
+	 * allowance on the managed callback executor; exhaustion or stopped infrastructure omits that
+	 * observation and logs the omission. Admitted streams retain their reserved callback jobs.
 	 *
 	 * @param streamingResponseHandle the stream that terminated
 	 * @param streamTermination       why and when the stream terminated

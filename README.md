@@ -1872,7 +1872,8 @@ creates one fresh, transport-isolated off-network graph and supplies a
 [`Simulator`](https://javadoc.soklet.com/com/soklet/Simulator.html) to exercise
 full request/response flows without binding a port. Its
 [`Simulator::startMcpRequest`](<https://javadoc.soklet.com/com/soklet/Simulator.html#startMcpRequest(com.soklet.Request)>)
-methods run an asynchronous MCP POST through the real
+methods run asynchronous MCP HTTP requests (POST, session-enabled 2025
+GET/DELETE, and OPTIONS preflight) through the real
 processor and lifecycle while retaining bounded JSON or exact SSE capture
 off-network; they do not start a configured network listener or change public
 server diagnostics.
@@ -2721,9 +2722,10 @@ The simulation is asynchronous and off-network but uses the real MCP
 processor, application, stream/subscription, lifecycle, metrics, and terminal
 authority. It binds no socket, leaves listener status `STOPPED`, bound address
 empty and diagnostics zero, and emits no server/connection/transport event.
-The supplied Host, Origin, headers, and body are not repaired. Effective policy
-uses the configured host and literal port, so port `0` requires an authority
-such as `127.0.0.1:0`; no Host is synthesized.
+The supplied Host, Origin, headers, and body are not repaired. Automatic
+loopback aliases require the literal configured port, such as `127.0.0.1:0`
+for port `0`. Explicitly allowlisted hostname/IP authorities permit a valid
+public or omitted port, as on the live listener. No Host is synthesized.
 
 Repeatable response/completion waits and destructive FIFO item reads expose
 defensive JSON/empty-body copies, exact unchunked SSE frames, and immutable

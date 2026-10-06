@@ -96,10 +96,22 @@ final class McpRequestSseStream {
 		default Optional<McpOutboundChannel.@NonNull OfferResult> offerGuardedCoalescing(
 				@NonNull Frame frame, @NonNull Object coalescingKey,
 				@NonNull BooleanSupplier writeAllowed, @NonNull Runnable payloadReleased) {
+			return offerGuardedCoalescing(frame, coalescingKey, writeAllowed, () -> {}, payloadReleased);
+		}
+
+		@NonNull
+		default Optional<McpOutboundChannel.@NonNull OfferResult> offerGuardedCoalescing(
+				@NonNull Frame frame, @NonNull Object coalescingKey,
+				@NonNull BooleanSupplier writeAllowed, @NonNull Runnable payloadWritten,
+				@NonNull Runnable payloadReleased) {
 			requireNonNull(payloadReleased);
+			requireNonNull(payloadWritten);
 			try {
-				return offerCoalescingIf(requireNonNull(frame),
+				Optional<McpOutboundChannel.OfferResult> result = offerCoalescingIf(requireNonNull(frame),
 						requireNonNull(coalescingKey), requireNonNull(writeAllowed));
+				if (result.filter(value -> value == McpOutboundChannel.OfferResult.ACCEPTED).isPresent())
+					payloadWritten.run();
+				return result;
 			} finally {
 				payloadReleased.run();
 			}
@@ -115,6 +127,11 @@ final class McpRequestSseStream {
 		}
 
 		boolean complete(@NonNull Frame terminalFrame);
+
+		/** Immediate capture has already delivered any preceding notifications. */
+		default boolean completeDiscardingUnwrittenNotifications(@NonNull Frame terminalFrame) {
+			return complete(terminalFrame);
+		}
 
 		default boolean completeWithoutMessage() {
 			return completeWithoutMessage(false);
@@ -268,7 +285,9 @@ final class McpRequestSseStream {
 	/**
 	 * Revalidates a caller-owned boundary immediately before the channel offer.
 	 * Encoding and test instrumentation therefore cannot move a catalog frame
-	 * past its absolute projection deadline unnoticed.
+	 * past its absolute projection deadline unnoticed. The socket channel coalesces
+	 * catalog observations only into wholly unwritten hints; a started hint needs
+	 * a bounded successor because the client may already have consumed its payload.
 	 */
 	@NonNull
 	Optional<McpOutboundChannel.@NonNull OfferResult>
@@ -285,7 +304,16 @@ final class McpRequestSseStream {
 	Optional<McpOutboundChannel.@NonNull OfferResult> offerGuardedCoalescingMessage(
 			@NonNull McpJsonRpcMessage message, @NonNull Object coalescingKey,
 			@NonNull BooleanSupplier writeAllowed, @NonNull Runnable payloadReleased) {
+		return offerGuardedCoalescingMessage(message, coalescingKey, writeAllowed, () -> {}, payloadReleased);
+	}
+
+	@NonNull
+	Optional<McpOutboundChannel.@NonNull OfferResult> offerGuardedCoalescingMessage(
+			@NonNull McpJsonRpcMessage message, @NonNull Object coalescingKey,
+			@NonNull BooleanSupplier writeAllowed, @NonNull Runnable payloadWritten,
+			@NonNull Runnable payloadReleased) {
 		requireNonNull(payloadReleased);
+		requireNonNull(payloadWritten);
 		boolean handedOff = false;
 		try {
 			Frame frame = frame(requireNonNull(message));
@@ -294,7 +322,7 @@ final class McpRequestSseStream {
 			testHooks.beforeCoalescingMessageOffer();
 			handedOff = true;
 			return channel.offerGuardedCoalescing(frame, coalescingKey,
-					writeAllowed, payloadReleased);
+					writeAllowed, payloadWritten, payloadReleased);
 		} finally {
 			if (!handedOff)
 				payloadReleased.run();
@@ -309,6 +337,12 @@ final class McpRequestSseStream {
 		Frame terminalFrame = frame(requireNonNull(message));
 		testHooks.beforeTerminalReservation();
 		return channel.complete(terminalFrame);
+	}
+
+	boolean completeMessageDiscardingUnwrittenNotifications(@NonNull McpJsonRpcMessage message) {
+		Frame terminalFrame = frame(requireNonNull(message));
+		testHooks.beforeTerminalReservation();
+		return channel.completeDiscardingUnwrittenNotifications(terminalFrame);
 	}
 
 	/** Reserves clean SSE completion without a JSON-RPC terminal event. */
@@ -474,7 +508,17 @@ final class McpRequestSseStream {
 		public Optional<McpOutboundChannel.@NonNull OfferResult> offerGuardedCoalescing(
 				@NonNull Frame frame, @NonNull Object coalescingKey,
 				@NonNull BooleanSupplier writeAllowed, @NonNull Runnable payloadReleased) {
+			return offerGuardedCoalescing(frame, coalescingKey, writeAllowed, () -> {}, payloadReleased);
+		}
+
+		@Override
+		@NonNull
+		public Optional<McpOutboundChannel.@NonNull OfferResult> offerGuardedCoalescing(
+				@NonNull Frame frame, @NonNull Object coalescingKey,
+				@NonNull BooleanSupplier writeAllowed, @NonNull Runnable payloadWritten,
+				@NonNull Runnable payloadReleased) {
 			requireNonNull(payloadReleased);
+			requireNonNull(payloadWritten);
 			boolean handedOff = false;
 			try {
 				byte[] encodedBytes = requireNonNull(frame).encodedBytes();
@@ -482,7 +526,7 @@ final class McpRequestSseStream {
 				requireNonNull(writeAllowed);
 				handedOff = true;
 				return this.delegate.offerGuardedCoalescing(encodedBytes,
-						coalescingKey, writeAllowed, payloadReleased);
+						coalescingKey, writeAllowed, payloadWritten, payloadReleased);
 			} finally {
 				if (!handedOff)
 					payloadReleased.run();
@@ -505,6 +549,12 @@ final class McpRequestSseStream {
 		@Override
 		public boolean complete(@NonNull Frame terminalFrame) {
 			return this.delegate.complete(
+					requireNonNull(terminalFrame).encodedBytes());
+		}
+
+		@Override
+		public boolean completeDiscardingUnwrittenNotifications(@NonNull Frame terminalFrame) {
+			return this.delegate.completeDiscardingUnwrittenNotifications(
 					requireNonNull(terminalFrame).encodedBytes());
 		}
 

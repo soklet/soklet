@@ -119,34 +119,40 @@ public class ResponseCompressionTests {
 
 		List<String> accepted = List.of("x-test", "X-TEST;q=0.5", "*;q=0.8", "gzip;q=1, x-test;q=0.5");
 		for (String acceptEncoding : accepted) {
-			MicrohttpResponse result = server.toMicrohttpResponse(requestAccepting(acceptEncoding), null, response);
-			Assertions.assertEquals("x-test", headerValue(result, "Content-Encoding"), acceptEncoding);
-			Assertions.assertSame(encoded, result.body(), acceptEncoding);
-			Assertions.assertEquals("W/\"v1\"", headerValue(result, "ETag"), acceptEncoding);
+			for (Request request : requestsAccepting(acceptEncoding)) {
+				MicrohttpResponse result = server.toMicrohttpResponse(request, null, response);
+				Assertions.assertEquals("x-test", headerValue(result, "Content-Encoding"), acceptEncoding);
+				Assertions.assertSame(encoded, result.body(), acceptEncoding);
+				Assertions.assertEquals("W/\"v1\"", headerValue(result, "ETag"), acceptEncoding);
+			}
 		}
 
 		List<String> rejected = List.of("*;q=1, X-TEST;q=0", "x-test;q=0", "gzip", "");
 		for (String acceptEncoding : rejected) {
-			MicrohttpResponse result = server.toMicrohttpResponse(requestAccepting(acceptEncoding), null, response);
-			Assertions.assertNull(headerValue(result, "Content-Encoding"), acceptEncoding);
-			Assertions.assertArrayEquals(original, result.body(), acceptEncoding);
-			Assertions.assertEquals("Accept-Encoding", headerValue(result, "Vary"), acceptEncoding);
-			Assertions.assertEquals("\"v1\"", headerValue(result, "ETag"), acceptEncoding);
-			Assertions.assertEquals(Integer.toString(original.length), headerValue(result, "Content-Length"));
+			for (Request request : requestsAccepting(acceptEncoding)) {
+				MicrohttpResponse result = server.toMicrohttpResponse(request, null, response);
+				Assertions.assertNull(headerValue(result, "Content-Encoding"), acceptEncoding);
+				Assertions.assertArrayEquals(original, result.body(), acceptEncoding);
+				Assertions.assertEquals("Accept-Encoding", headerValue(result, "Vary"), acceptEncoding);
+				Assertions.assertEquals("\"v1\"", headerValue(result, "ETag"), acceptEncoding);
+				Assertions.assertEquals(Integer.toString(original.length), headerValue(result, "Content-Length"));
+			}
 		}
 		MicrohttpResponse absentHeader = server.toMicrohttpResponse(
 				Request.withPath(HttpMethod.GET, "/compression").build(), null, response);
 		Assertions.assertArrayEquals(original, absentHeader.body());
 		Assertions.assertEquals("Accept-Encoding", headerValue(absentHeader, "Vary"));
 		for (String acceptEncoding : List.of("x-test;q=0, identity;q=0", "*;q=0")) {
-			MicrohttpResponse result = server.toMicrohttpResponse(requestAccepting(acceptEncoding), null, response);
-			Assertions.assertEquals(406, result.status());
-			Assertions.assertEquals(0, result.body().length);
-			Assertions.assertFalse(result.hasHeader("Content-Encoding"));
-			Assertions.assertEquals("Accept-Encoding", headerValue(result, "Vary"));
+			for (Request request : requestsAccepting(acceptEncoding)) {
+				MicrohttpResponse result = server.toMicrohttpResponse(request, null, response);
+				Assertions.assertEquals(406, result.status());
+				Assertions.assertEquals(0, result.body().length);
+				Assertions.assertFalse(result.hasHeader("Content-Encoding"));
+				Assertions.assertEquals("Accept-Encoding", headerValue(result, "Vary"));
+			}
 		}
-		Assertions.assertEquals(accepted.size(), codecCalls.get());
-		Assertions.assertEquals(accepted.size(), providerCalls.get(),
+		Assertions.assertEquals(accepted.size() * 2, codecCalls.get());
+		Assertions.assertEquals(accepted.size() * 2, providerCalls.get(),
 				"An unacceptable encoding must not trigger either cache lookup or compression");
 	}
 
@@ -309,6 +315,11 @@ public class ResponseCompressionTests {
 	private static Request requestAccepting(String contentEncoding) {
 		return Request.withPath(HttpMethod.GET, "/compression")
 				.headers(Map.of("Accept-Encoding", List.of(contentEncoding))).build();
+	}
+
+	private static List<Request> requestsAccepting(String contentEncoding) {
+		return List.of(requestAccepting(contentEncoding), Request.withRawUrl(HttpMethod.GET, "/compression")
+				.microhttpHeaders(List.of(new Header("Accept-Encoding", contentEncoding))).build());
 	}
 
 	private static MarshaledResponse response(byte[] body) {

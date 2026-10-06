@@ -723,7 +723,8 @@ public final class McpJsonCodec {
 		}
 	}
 
-	private void validateNumberForSerialization(@NonNull BigDecimal value) {
+	/** Shared number preflight; validates limits without rendering or expanding a number. */
+	void validateNumberForSerialization(@NonNull BigDecimal value) {
 		int precision = value.precision();
 		long adjustedExponent = (long) precision - value.scale() - 1;
 

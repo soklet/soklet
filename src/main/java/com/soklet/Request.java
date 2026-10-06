@@ -25,12 +25,15 @@ import com.soklet.exception.IllegalRequestException;
 import com.soklet.exception.IllegalRequestHeaderException;
 import com.soklet.internal.microhttp.Header;
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
+import com.soklet.internal.util.HostHeaderValidator;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.net.InetSocketAddress;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -89,6 +92,8 @@ public final class Request {
 	private final String rawPath;
 	@Nullable
 	private final String rawQuery;
+	@Nullable
+	private final String requestTargetScheme;
 	@NonNull
 	private final String path;
 	@NonNull
@@ -147,7 +152,9 @@ public final class Request {
 	 * The provided {@code rawUrl} must be un-decoded and in either "path-and-query" form (i.e. starts with a {@code /} character) or an absolute URL (i.e. starts with {@code http://} or {@code https://}).
 	 * It might include un-decoded query parameters, e.g. {@code https://www.example.com/one?two=thr%20ee} or {@code /one?two=thr%20ee}.  An exception to this rule is {@code OPTIONS *} requests, where the URL is the {@code *} "splat" symbol.
 	 * <p>
-	 * Note: request targets are normalized to origin-form. For example, if a client sends an absolute-form URL like {@code http://example.com/path?query}, only the path and query components are retained.
+	 * Absolute-form targets retain their path and query, and their authority replaces any supplied {@code Host} field.
+	 * {@link EffectiveOriginResolver#withRequest(Request, EffectiveOriginResolver.TrustPolicy)} also retains their scheme;
+	 * forwarded headers still require the configured proxy trust policy.
 	 * <p>
 	 * Paths will be percent-decoded. Percent-encoded slashes (e.g. {@code %2F}) are rejected.
 	 * Malformed percent-encoding and invalid UTF-8 are rejected without substituting replacement characters.
@@ -277,6 +284,16 @@ public final class Request {
 		this.idGenerator = builderIdGenerator == null ? DEFAULT_ID_GENERATOR : builderIdGenerator;
 		this.multipartParser = builderMultipartParser == null ? DefaultMultipartParser.defaultInstance() : builderMultipartParser;
 
+		URI absoluteRequestTarget = rawBuilder == null ? null : absoluteRequestTarget(rawBuilder.rawUrl);
+		if (absoluteRequestTarget != null) {
+			Map<String, List<String>> effectiveHeaders = new LinkedCaseInsensitiveMap<>();
+			effectiveHeaders.putAll(builderHeaders.asMap());
+			effectiveHeaders.put("Host", List.of(absoluteRequestTarget.getRawAuthority()));
+			builderHeaders = new MapRequestHeaders(effectiveHeaders);
+		}
+		this.requestTargetScheme = absoluteRequestTarget == null
+				? (pathBuilder == null ? null : pathBuilder.requestTargetScheme)
+				: absoluteRequestTarget.getScheme().toLowerCase(Locale.ROOT);
 		this.headers = builderHeaders;
 		this.traceContext = builderTraceContextSpecified ? builderTraceContext : extractTraceContext(builderHeaders).orElse(null);
 		String contentTypeHeaderValue = firstHeaderValue(this.headers, "Content-Type").orElse(null);
@@ -409,6 +426,29 @@ public final class Request {
 		this.id = builderId == null ? this.idGenerator.generateId(this) : builderId;
 
 		// Note that cookies, form parameters, and multipart data are lazily parsed/instantiated when callers try to access them
+	}
+
+	@Nullable
+	private static URI absoluteRequestTarget(@NonNull String rawUrl) {
+		String target = trimAggressivelyToEmpty(rawUrl);
+		if (target.startsWith("/") || target.equals("*"))
+			return null;
+
+		try {
+			URI uri = new URI(target);
+			if (!("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme()))
+					|| uri.getRawUserInfo() != null || uri.getRawFragment() != null
+					|| !HostHeaderValidator.isValidHostHeaderValue(uri.getRawAuthority()))
+				throw new IllegalRequestException("Invalid absolute request URL.");
+			return uri;
+		} catch (URISyntaxException ignored) {
+			throw new IllegalRequestException("Invalid absolute request URL.");
+		}
+	}
+
+	@Nullable
+	String getRequestTargetScheme() {
+		return this.requestTargetScheme;
 	}
 
 	@Override
@@ -568,6 +608,10 @@ public final class Request {
 	 * The keys are the form parameter names and the values are form parameter values
 	 * (it is possible for a client to send multiple form parameters with the same name, e.g. {@code ?test=1&test=2}).
 	 * <p>
+	 * Form pairs are parsed directly, so literal {@code #} and spaces are retained as data.
+	 * Names and values are not trimmed. A bare name and a name followed by {@code =} each yield one empty value;
+	 * repeated empty values remain separate occurrences. Pairs without a name are ignored.
+	 * <p>
 	 * <em>Note that form parameters have case-sensitive names per the HTTP spec.</em>
 	 * <p>
 	 * Use {@link #getFormParameter(String)} for a convenience method to access form parameter values when only one is expected.
@@ -607,6 +651,7 @@ public final class Request {
 	 * The raw (un-decoded) path component of this request exactly as the client specified.
 	 * <p>
 	 * For example, {@code "/a%20b"} (never decoded).
+	 * Repeated slashes are retained, including leading slashes such as {@code "//x/admin"}.
 	 * <p>
 	 * <em>Note: For requests constructed via {@link #withPath(HttpMethod, String)}, this value is
 	 * generated by encoding the decoded path, which may not exactly match the original wire format.</em>
@@ -668,6 +713,9 @@ public final class Request {
 	 * <p>
 	 * The keys are the header names and the values are header values
 	 * (it is possible for a client to send multiple headers with the same name).
+	 * Each list entry is one complete field occurrence. Commas are retained within that entry,
+	 * and empty field values are retained. Surrounding HTTP optional whitespace (SP/HTAB) is removed
+	 * for both physical and map-backed requests.
 	 * <p>
 	 * <em>Note that request headers have case-insensitive names per the HTTP spec.</em>
 	 * <p>
@@ -702,6 +750,9 @@ public final class Request {
 
 	/**
 	 * The request's character encoding, as specified by the client in the {@code Content-Type} header value.
+	 * <p>
+	 * The charset parameter may occur in any order and may be quoted. Multiple charset parameters, including identical ones,
+	 * are rejected with {@link IllegalRequestException} when the request is constructed.
 	 *
 	 * @return the request's character encoding, or {@link Optional#empty()} if not specified
 	 */
@@ -883,6 +934,8 @@ public final class Request {
 	 * <p>
 	 * This method is threadsafe.
 	 * <p>
+	 * Malformed combined {@code Accept-Language} input produces an empty list.
+	 * <p>
 	 * See {@link #getLanguageRanges()} for a variant that pulls {@link LanguageRange} values.
 	 *
 	 * @return locale information for this request, or the empty list if none was specified
@@ -933,6 +986,8 @@ public final class Request {
 	 * This method will lazily parse {@code Accept-Language} header values into to an ordered {@link List} of {@link LanguageRange} when first invoked.  This representation is then cached and re-used for subsequent invocations.
 	 * <p>
 	 * This method is threadsafe.
+	 * <p>
+	 * Malformed combined {@code Accept-Language} input produces an empty list.
 	 * <p>
 	 * See {@link #getLocales()} for a variant that pulls {@link Locale} values.
 	 *
@@ -1101,6 +1156,7 @@ public final class Request {
 	 * If a header {@code name} can support multiple values, {@link #getHeaders()} should be used instead of this method.
 	 * <p>
 	 * If this method is invoked for a header {@code name} with multiple values, Soklet will throw {@link IllegalRequestHeaderException}.
+	 * Comma-separated components of a single field remain one string. An empty field value returns {@code Optional.of("")}.
 	 * <p>
 	 * <em>Note that request headers have case-insensitive names per the HTTP spec.</em>
 	 *
@@ -1319,7 +1375,9 @@ public final class Request {
 			if (headers == null || headers.isEmpty()) {
 				this.headers = Map.of();
 			} else {
-				this.headers = Utilities.immutableValueLists(headers, true);
+				Map<String, List<String>> copy = Utilities.mutableValueLists(headers, true);
+				copy.replaceAll((name, values) -> values.stream().map(Utilities::trimHeaderWhitespace).toList());
+				this.headers = Collections.unmodifiableMap(copy);
 			}
 		}
 
@@ -1375,7 +1433,7 @@ public final class Request {
 				if (matchingValues == null)
 					matchingValues = new ArrayList<>();
 
-				Utilities.addParsedHeaderValues(matchingValues, header.name(), header.value());
+				Utilities.addParsedHeaderValues(matchingValues, header.value());
 			}
 
 			if (matchingValues == null || matchingValues.isEmpty())
@@ -1389,21 +1447,7 @@ public final class Request {
 		public List<@NonNull String> values(@NonNull String name) {
 			requireNonNull(name);
 
-			List<String> matchingValues = null;
-
-			for (Header header : this.headers) {
-				if (header == null || !name.equalsIgnoreCase(trimAggressivelyToEmpty(header.name())))
-					continue;
-
-				if (matchingValues == null)
-					matchingValues = new ArrayList<>();
-
-				matchingValues.add(trimAggressivelyToEmpty(header.value()));
-			}
-
-			return matchingValues == null || matchingValues.isEmpty()
-					? List.of()
-					: Collections.unmodifiableList(matchingValues);
+			return get(name).orElse(List.of());
 		}
 
 		@Override
@@ -1647,6 +1691,8 @@ public final class Request {
 	 */
 	@NotThreadSafe
 	public static final class PathBuilder {
+		@Nullable
+		private String requestTargetScheme;
 		@NonNull
 		private HttpMethod httpMethod;
 		@NonNull
@@ -1888,6 +1934,7 @@ public final class Request {
 					// Preserve original raw values initially
 					.rawPath(this.originalRawPath)
 					.rawQuery(this.originalRawQuery);
+			this.builder.requestTargetScheme = request.requestTargetScheme;
 		}
 
 		@NonNull

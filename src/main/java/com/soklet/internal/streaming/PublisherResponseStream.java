@@ -54,6 +54,8 @@ public final class PublisherResponseStream implements Flow.Subscriber<ByteBuffer
 	private boolean cancelClaimed;
 	private boolean cancelFinished;
 	private boolean lifetimeReleased;
+	private boolean demandDraining;
+	private boolean demandPending;
 	private int enteredCalls;
 
 	private PublisherResponseStream(CancelationToken cancelationToken, ManagedResponseStream.Output output,
@@ -240,15 +242,40 @@ public final class PublisherResponseStream implements Flow.Subscriber<ByteBuffer
 	}
 
 	private boolean requestNext() {
-		Flow.Subscription current;
 		synchronized (this.lock) {
 			if (this.stopping || this.terminal || this.cancelationToken.isCanceled()) return false;
-			current = requireNonNull(this.subscription);
-			// This check claims demand before a competing cancelation. The enclosing
-			// callback remains counted while the already-claimed request runs.
+			this.demandPending = true;
+			if (this.demandDraining) return true;
+			this.demandDraining = true;
+			// A request call can outlive the callback that asked for it. Retain its
+			// own provider frame through return, including reentrant completion.
+			this.enteredCalls++;
 		}
-		current.request(1L);
-		return true;
+		try {
+			while (true) {
+				Flow.Subscription current;
+				synchronized (this.lock) {
+					if (!this.demandPending || this.stopping || this.terminal || this.cancelationToken.isCanceled()) {
+						this.demandPending = false;
+						this.demandDraining = false;
+						return true;
+					}
+					this.demandPending = false;
+					current = requireNonNull(this.subscription);
+				}
+				// Synchronous onNext requests only mark demandPending. Drain it after
+				// this provider frame returns, rather than recursively calling request.
+				current.request(1L);
+			}
+		} catch (Throwable throwable) {
+			synchronized (this.lock) {
+				this.demandDraining = false;
+				this.demandPending = false;
+			}
+			throw throwable;
+		} finally {
+			exitCall();
+		}
 	}
 
 	private void cancelSubscription() {

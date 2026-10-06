@@ -17,6 +17,7 @@
 package com.soklet;
 
 import com.soklet.annotation.McpHeader;
+import com.soklet.converter.TypeReference;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
@@ -33,6 +34,63 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class McpProtocolVersionRegistrationTests {
+	@Test
+	void endpointPathsAreValidatedWithoutRewritingTheDeclaredUrl() {
+		for (String path : List.of("/mcp/", "/catalog//mcp", " /mcp", "/mcp ",
+				"//mcp", "/catalog/../mcp", "/catalog/./mcp")) {
+			IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
+					() -> McpEndpoint.withPath(path, implementation(), Set.of(V2026_07_28)), path);
+			assertTrue(failure.getMessage().contains("normalized ASCII raw URI path"), failure.getMessage());
+		}
+		for (String path : List.of("/mcp", "/catalog/mcp", "/caf%C3%A9/mcp", "/catalog%2Fmcp"))
+			assertEquals(path, McpEndpoint.withPath(path, implementation(), Set.of(V2026_07_28)).build().getPath());
+	}
+
+	@Test
+	void legacyOutputSchemaFailsAtEndpointConstructionWithActionableContext() {
+		for (McpProtocolVersion legacy : List.of(V2025_06_18, McpProtocolVersion.V2025_11_25)) {
+			Set<McpProtocolVersion> versions = Set.of(legacy, V2026_07_28);
+			McpToolRegistration<?> tool = McpToolRegistration.withName("array-output", versions)
+					.argumentAndOutputTypes(EmptyArguments.class, new TypeReference<List<String>>() {})
+					.handler((requestContext, arguments, invocationFeatures) -> List.of("value")).build();
+			IllegalStateException failure = assertThrows(IllegalStateException.class,
+					() -> McpEndpoint.withPath("/catalog/mcp", implementation(), versions)
+							.toolRegistrations(List.of(tool)).build());
+			for (String context : List.of("array-output", "/catalog/mcp", legacy.getWireValue(), "object type"))
+				assertTrue(failure.getMessage().contains(context), failure.getMessage());
+		}
+		McpToolRegistration<?> modern = McpToolRegistration.withName("array-output", Set.of(V2026_07_28))
+				.argumentAndOutputTypes(EmptyArguments.class, new TypeReference<List<String>>() {})
+				.handler((requestContext, arguments, invocationFeatures) -> List.of("value")).build();
+		assertEquals(List.of(modern), McpEndpoint.withPath("/mcp", implementation(), Set.of(V2026_07_28))
+				.toolRegistrations(List.of(modern)).build().getToolRegistrations());
+	}
+
+	@Test
+	void revisionSubsetFailureNamesEndpointOperationAndOffendingRevision() {
+		IllegalStateException failure = assertThrows(IllegalStateException.class,
+				() -> McpEndpoint.withPath("/catalog/mcp", implementation(), Set.of(V2026_07_28))
+						.toolRegistrations(List.of(tool(Set.of(V2025_06_18)))).build());
+		for (String context : List.of("search", "/catalog/mcp", "2025-06-18"))
+			assertTrue(failure.getMessage().contains(context), failure.getMessage());
+	}
+
+	private record EmptyArguments() {}
+
+	@Test
+	void subscriptionSurfaceFailureIdentifiesTheRevisionWhoseCatalogHasNoResources() {
+		McpEndpoint endpoint = McpEndpoint.withPath("/catalog/mcp", implementation(), Set.of(V2025_06_18, V2026_07_28))
+				.resourceRegistrations(List.of(legacyResourceBuilder().build()))
+				.subscriptionProtocolVersions(Set.of(V2026_07_28))
+				.subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(
+						McpSubscriptionEventPublisher.fromInMemoryDefaults(), Set.of(McpSubscriptionNotificationType.RESOURCE_UPDATED)).build()).build();
+		IllegalStateException failure = assertThrows(IllegalStateException.class, () -> McpServer.withPort(0)
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.subscriptionAuthorizer(McpSubscriptionAuthorizer.denyAllInstance()).build());
+		for (String context : List.of("/catalog/mcp", "2026-07-28", "requires an exact resource"))
+			assertTrue(failure.getMessage().contains(context), failure.getMessage());
+	}
+
 	@Test
 	void exactWireVersionsDoNotFallback() {
 		assertEquals("2025-06-18", V2025_06_18.getWireValue());

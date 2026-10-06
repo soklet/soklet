@@ -73,6 +73,85 @@ public class McpSubscriptionDeadlineWraparoundTests {
 					"subscription-deadline-wrap-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build();
 
 	@Test
+	public void queuedReconciliationReceivesFreshCallbackBudgetAtDispatch() throws Exception {
+		assertQueuedReconciliationBudget(false);
+	}
+
+	@Test
+	public void queuedReconciliationCannotExtendAnExpiredLease() throws Exception {
+		assertQueuedReconciliationBudget(true);
+	}
+
+	private void assertQueuedReconciliationBudget(boolean expire) throws Exception {
+		WrapClock clock = new WrapClock();
+		TestEventSource events = new TestEventSource();
+		AtomicInteger authorizations = new AtomicInteger();
+		CountDownLatch renewed = new CountDownLatch(1);
+		McpSubscriptionAuthorizer authorizer = (authorizationContext, invocationFeatures) -> {
+			int invocation = authorizations.incrementAndGet();
+			if (invocation > 1) {
+				Assertions.assertEquals(clock.instant().plusSeconds(5), authorizationContext.getDeadline());
+				renewed.countDown();
+			}
+			return allowed(clock.instant().plus(expire ? Duration.ofSeconds(10) : Duration.ofHours(1)));
+		};
+		RecordingObservation observation = new RecordingObservation();
+		McpHttpServerRuntime runtime = runtime(clock, events,
+				McpResourceNotificationType.RESOURCES_LIST_CHANGED, Optional.empty(), authorizer, observation);
+		CountDownLatch workersEntered = new CountDownLatch(4);
+		CountDownLatch releaseWorkers = new CountDownLatch(1);
+		List<Object> blockers = List.of(new Object(), new Object(), new Object(), new Object());
+		McpHttpServerRuntime.TaskNotificationProjectionScheduler scheduler = null;
+		try {
+			try (McpChunkedHttpClient client = listen(runtime.start().getPort(), "queued-budget",
+					"{\"resourcesListChanged\":true}")) {
+				assertSseHead(client.readHead());
+				Assertions.assertTrue(client.readChunkText().contains("notifications/subscriptions/acknowledged"));
+				Object control = soleRequestControl(runtime);
+				assertResourceGuardDoesNotWaitForOwnerLock(control);
+				Object processor = field(control, "processor");
+				scheduler = (McpHttpServerRuntime.TaskNotificationProjectionScheduler)
+						field(processor, "taskNotificationProjectionScheduler");
+				Assertions.assertTrue(scheduler.tryReserveOwners(blockers));
+				for (Object blocker : blockers)
+					scheduler.execute(new McpHttpServerRuntime.TaskNotificationProjectionJob(blocker, () -> {
+						workersEntered.countDown();
+						try { Assertions.assertTrue(releaseWorkers.await(10, TimeUnit.SECONDS)); }
+						catch (InterruptedException exception) { Thread.currentThread().interrupt(); throw new AssertionError(exception); }
+					}, Assertions::fail));
+				Assertions.assertTrue(workersEntered.await(5, TimeUnit.SECONDS));
+				runtime.reconcileSubscriptions();
+				Assertions.assertTrue(booleanField(control, "subscriptionAuthorizationMaintenanceScheduled"));
+				Assertions.assertNull(field(control, "subscriptionAuthorizationCheck"),
+						"An undelivered work slot must not reserve a running callback deadline.");
+				events.publish(new McpSubscriptionEventSource.Event.LocalizationCatalogsChanged(false, false, true));
+				clock.advance(Duration.ofSeconds(expire ? 11 : 6));
+				if (expire) {
+					invokeTimer(control, clock.nanoTime());
+					observation.awaitClosed();
+					releaseWorkers.countDown();
+					Assertions.assertEquals(McpStreamTerminationReason.SUBSCRIPTION_AUTHORIZATION_EXPIRED,
+							observation.exactCloseReason());
+					Assertions.assertEquals(1, authorizations.get(), "Queued work must not enter an authorizer after lease expiry.");
+					return;
+				}
+				releaseWorkers.countDown();
+				Assertions.assertTrue(renewed.await(5, TimeUnit.SECONDS));
+				awaitCondition(() -> nullableField(control, "subscriptionAuthorizationCheck") == null,
+						"Queued reconciliation did not complete.");
+				Assertions.assertTrue(client.readChunkText().contains("notifications/resources/list_changed"),
+						"A localization invalidation received behind the fence must catch up without a second event.");
+				Assertions.assertEquals(2, authorizations.get());
+				Assertions.assertNull(observation.exactCloseReason());
+			}
+		} finally {
+			releaseWorkers.countDown();
+			if (scheduler != null) scheduler.releaseOwners(blockers);
+			runtime.close();
+		}
+	}
+
+	@Test
 	public void catalogProjectionDeadlineRemainsOrderedAcrossNanoTimeWrap()
 			throws Exception {
 		WrapClock clock = new WrapClock();
@@ -361,6 +440,28 @@ public class McpSubscriptionDeadlineWraparoundTests {
 		awaitCondition(() -> controls.size() == 1,
 				"Expected exactly one active subscription request control.");
 		return controls.values().iterator().next();
+	}
+
+	private static void assertResourceGuardDoesNotWaitForOwnerLock(Object control) throws Exception {
+		Object stream = field(control, "responseStream");
+		Method guard = control.getClass().getDeclaredMethod("resourceNotificationWriteAllowed",
+				McpRequestSseStream.class, long.class);
+		guard.setAccessible(true);
+		long generation = longField(control, "subscriptionAuthorizationGeneration");
+		java.util.concurrent.FutureTask<Boolean> read = new java.util.concurrent.FutureTask<>(
+				() -> (Boolean) guard.invoke(control, stream, generation));
+		Thread reader = new Thread(read, "resource-guard-lock-test");
+		reader.setDaemon(true);
+		try {
+			synchronized (java.util.Objects.requireNonNull(field(control, "lock"))) {
+				reader.start();
+				Assertions.assertTrue(read.get(1, TimeUnit.SECONDS),
+						"A socket guard must finish while another thread holds the owner lock.");
+			}
+		} finally {
+			reader.join(5_000);
+			Assertions.assertFalse(reader.isAlive());
+		}
 	}
 
 	private static void invokeTimer(@NonNull Object control, long nowNanos)

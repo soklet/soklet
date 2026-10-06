@@ -30,6 +30,14 @@ import static java.util.Objects.requireNonNull;
 /**
  * Immutable output of one completed MCP tool call.
  *
+ * <p>For either 2025 protocol revision, structured content must be a JSON
+ * object and any declared output schema must have object type. The modern
+ * revision permits other JSON shapes. Raw/advanced handlers share one output
+ * type, so applications must select a representable shape before performing
+ * side effects. The legacy adapter does not silently wrap or discard a
+ * non-object structured value. June tool resource links omit optional icons;
+ * November and modern tool links retain them.</p>
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe

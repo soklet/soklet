@@ -27,6 +27,8 @@ import javax.annotation.concurrent.ThreadSafe;
  * based on prior authorization and schedules fresh checks, or safely closes a
  * stream when scheduling fails. It does not provide a distributed subscription
  * registry, migrate streams, or recall bytes already handed to a transport.
+ * Distributed applications broadcast policy invalidation to every applicable
+ * server and invoke its reconciler after the current policy is available there.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

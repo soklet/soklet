@@ -408,7 +408,7 @@ class McpLegacySessionTransportPublicRuntimeTests {
 					assertSse(existing.readHead());
 					Response denied = fixture.control("GET", "/mcp", version, otherId, "alice", "", List.of());
 					assertEquals(503, denied.status());
-					assertNotNull(denied.header("Retry-After"));
+					assertNull(denied.header("Retry-After"));
 					assertNotNull(existing.readChunk(), "Capacity failure cannot retire the existing eligible GET.");
 					assertEquals(1, fixture.server.getDiagnostics().getActiveSubscriptions());
 					assertEquals(200, fixture.ping(version, firstId).status());
@@ -487,14 +487,22 @@ class McpLegacySessionTransportPublicRuntimeTests {
 		final McpServer server;
 		final Soklet soklet;
 		final int port;
+		final boolean toolCatalogIncluded;
 
 		Fixture(boolean controller, Consumer<McpServer.Builder> configure) throws Exception {
+			this(controller, configure, null);
+		}
+
+		Fixture(boolean controller, Consumer<McpServer.Builder> configure, McpToolHandler<McpJsonObject> handler) throws Exception {
+			this.toolCatalogIncluded = handler != null;
 			McpImplementation info = McpImplementation.withNameAndVersion("transport-test", "1").build();
 			McpSubscriptionConfig sources = McpSubscriptionConfig.withEventPublisherAndNotificationTypes(
 					McpSubscriptionEventPublisher.fromInMemoryDefaults(), FAMILIES).build();
 			List<McpEndpoint> endpoints = new ArrayList<>();
 			for (String path : List.of("/mcp", "/other", "/cleanup", "/stateless")) {
 				McpEndpoint.Builder endpoint = McpEndpoint.withPath(path, info, ALL);
+				if (handler != null) endpoint.toolRegistrations(List.of(McpToolRegistration.withName("busy", ALL)
+						.jsonObjectArguments().handler(handler).build()));
 				if (!path.equals("/stateless")) endpoint.sessionProtocolVersions(Set.copyOf(LEGACY));
 				if (controller && (path.equals("/mcp") || path.equals("/other")))
 					endpoint.subscriptionProtocolVersions(Set.copyOf(LEGACY)).subscriptionConfig(sources);
@@ -516,6 +524,7 @@ class McpLegacySessionTransportPublicRuntimeTests {
 						rpcAdmissions.incrementAndGet();
 						return McpAdmissionDecision.accepted(identity(context.getRequest().getHeader("X-Subject").orElse("alice")));
 					});
+			if (handler != null) builder.toolRateLimiter(context -> McpRateLimitDecision.allowed());
 			configure.accept(builder);
 			this.server = builder.build();
 			this.soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
@@ -551,7 +560,8 @@ class McpLegacySessionTransportPublicRuntimeTests {
 			assertEquals(200, response.status(), response.body());
 			String id = response.header("Mcp-Session-Id");
 			assertNotNull(id);
-			assertFalse(response.body().contains("listChanged"), "A notification source without a corresponding catalog must not advertise list changes.");
+			assertEquals(toolCatalogIncluded && (path.equals("/mcp") || path.equals("/other")), response.body().contains("listChanged"),
+					"A notification source needs a corresponding served catalog to advertise list changes.");
 			assertFalse(response.body().contains("\"subscribe\""));
 			Response ack = exchange("POST", path, "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\",\"params\":{}}",
 					List.of(new HeaderValue("X-Subject", "alice"), new HeaderValue("MCP-Protocol-Version", version.getWireValue()), new HeaderValue("Mcp-Session-Id", id)));

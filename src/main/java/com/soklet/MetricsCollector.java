@@ -195,6 +195,14 @@ public interface MetricsCollector {
 	 * must not block and must be safe for concurrent invocation. Exceptions are
 	 * contained and surfaced through {@link LogEventType#METRICS_COLLECTOR_FAILED};
 	 * they never alter MCP request handling or its wire result.
+	 * <p>
+	 * The built-in MCP server retains at most 4,096 pending semantic records.
+	 * At capacity it omits new ordinary records, while server lifecycle records
+	 * reclaim an ordinary record. Withheld transition records share that bound.
+	 * Eligible records keep their enqueue order; an independent operation may
+	 * deliver while another transition is withheld. Records within a transition
+	 * retain their order. Counters and gauges may be incomplete after overflow.
+	 * Collector delivery must remain nonblocking.
 	 *
 	 * @param event immutable MCP metrics event
 	 */

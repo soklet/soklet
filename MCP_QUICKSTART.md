@@ -2,7 +2,8 @@
 
 This is the shortest complete Soklet MCP server: one annotation-processed
 tool, one dedicated localhost endpoint, and a standalone application lifecycle.
-It targets exactly Soklet's MCP `2026-07-28` profile.
+The initial example selects Soklet's MCP `2026-07-28` profile; section 5 shows
+the explicit additions for `2025-06-18` and `2025-11-25` clients.
 
 ## 1. Configure the dependency and compiler
 
@@ -81,7 +82,13 @@ annotated endpoints. Explicit processor selection also makes the Maven recipe
 work on JDK 23+, which does not enable processing from a dependency alone.
 
 If a build shades or repackages classes, preserve the generated Soklet endpoint
-provider and index resources under `META-INF`. Named Java modules must open or
+provider classes and concatenate every input
+`META-INF/soklet/mcp-endpoint-descriptor-providers` index. Keeping only one
+module's index silently omits endpoints from the others. With Maven Shade,
+configure an `AppendingTransformer` for that exact resource; merging only
+`META-INF/services` does not merge this index. See the
+[endpoint reference](MCP.md#annotations) for the transformer
+configuration. Named Java modules must open or
 export the endpoint package to Soklet; a package containing a non-public record
 used for runtime conversion must be open to Soklet.
 
@@ -253,3 +260,49 @@ npx --yes @modelcontextprotocol/inspector@2.3.0 --cli \
 See the dated [client compatibility matrix](release/MCP_CLIENT_COMPATIBILITY.md)
 for the exact manual-smoke record and the complete [MCP reference](MCP.md) for
 capabilities, limits, simulation, and production boundaries.
+
+## 5. Enable 2025 clients explicitly
+
+To expose this same tool to both 2025 revisions, replace `protocolVersions`
+on **both** `@McpServerEndpoint` and `@McpTool` with:
+
+```java
+protocolVersions = {
+    McpProtocolVersion.V2025_06_18,
+    McpProtocolVersion.V2025_11_25,
+    McpProtocolVersion.V2026_07_28
+}
+```
+
+Recompile and restart. The URL stays
+`http://127.0.0.1:8081/catalog/mcp`; the client connects to that configured URL
+and selects a supported revision. Soklet does not invent or discover a second
+endpoint URL. The `SearchResult` record has object-shaped output, so it fits
+both 2025 profiles. Input requests, Tasks, Skills and Apps UI require their
+separate modern opt-ins and are not enabled by adding these tool versions.
+
+A November client initializes using its requested version in the body:
+
+```sh
+curl --fail-with-body --silent --show-error \
+  --request POST http://127.0.0.1:8081/catalog/mcp \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json, text/event-stream' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"quickstart","version":"1"}}}'
+
+curl --fail-with-body --silent --show-error \
+  --request POST http://127.0.0.1:8081/catalog/mcp \
+  --header 'Content-Type: application/json' \
+  --header 'Accept: application/json, text/event-stream' \
+  --header 'MCP-Protocol-Version: 2025-11-25' \
+  --data '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"catalog.search","arguments":{"query":"sprocket"}}}'
+```
+
+For June, use `2025-06-18` in the initialization body and later version
+headers. These calls use 2025 framing, without modern mirrored headers or
+modern `_meta` capability/version fields. This example remains stateless and
+does not issue a session ID. Enable endpoint `sessionProtocolVersions` and
+provide the server's required `McpSessionConfig` when remembered client
+capabilities, explicit cross-request cancellation or legacy GET/DELETE are
+needed. See [the website's compatibility guide](https://www.soklet.com/docs/mcp-compatibility)
+for session configuration, current host checks and limits.

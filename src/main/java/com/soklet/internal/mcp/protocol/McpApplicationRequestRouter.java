@@ -1401,6 +1401,13 @@ record McpApplicationResponse(int status, @NonNull String reason,
 	}
 
 	@NonNull
+	static McpApplicationResponse capacityRejected(@NonNull McpJsonRpcId id,
+			@NonNull Throwable throwable) {
+		return error(id, 503, "Service Unavailable", McpJsonRpcError.INTERNAL_ERROR,
+				"Internal error", McpRequestOutcome.REJECTED, List.of(requireNonNull(throwable)));
+	}
+
+	@NonNull
 	static McpApplicationResponse queuedDeadline(@NonNull McpJsonRpcId id) {
 		return error(id, 503, "Service Unavailable", McpJsonRpcError.INTERNAL_ERROR,
 				"Internal error", McpRequestOutcome.DEADLINE_EXCEEDED, List.of());
@@ -2077,7 +2084,7 @@ final class McpApplicationExecution {
 			return new McpApplicationCancellationReservation(false, false, () -> {});
 		Optional<Runnable> action;
 		synchronized (executionBoundaryLock) {
-			action = stopped.get() ? Optional.empty() : exchange.tryReserveCancellation(reason, true);
+			action = stopped.get() ? Optional.empty() : exchange.tryReserveCancellation(reason);
 		}
 		return new McpApplicationCancellationReservation(true, action.isPresent(),
 				action.orElseGet(() -> () -> {}));
@@ -2285,6 +2292,14 @@ final class McpApplicationExecution {
 				new BoundedPolicyCancellation(false), physicalExitObserver, sessionOwnerPolicyDispatcher);
 	}
 
+	/** Transport termination policy shares the independent, physically bounded owner dispatcher. */
+	<T extends @NonNull Object> T invokeBoundedSessionOwnerPolicy(
+			@NonNull Callable<@NonNull T> callback, long deadlineNanos,
+			@NonNull BoundedPolicyCancellation cancellation,
+			@NonNull Runnable physicalExitObserver) throws Exception {
+		return invokeBoundedPolicy(callback, deadlineNanos, cancellation, physicalExitObserver, sessionOwnerPolicyDispatcher);
+	}
+
 	/**
 	 * Runs a policy/localization projection on the same bounded application
 	 * dispatcher used by handlers. The protocol worker waits only for this
@@ -2461,6 +2476,9 @@ final class McpApplicationExecution {
 		}
 		cancellation.complete();
 		Throwable throwable = failure.get();
+		if (throwable instanceof RejectedExecutionException
+				&& ticket.state() == McpApplicationHandlerDispatcher.TicketState.REJECTED)
+			throw new McpApplicationPolicyCapacityException();
 		if (throwable instanceof Exception exception)
 			throw exception;
 		if (throwable instanceof Error error)
@@ -2696,9 +2714,9 @@ final class McpApplicationExecution {
 		private final AtomicBoolean handlerFinished;
 		private final AtomicBoolean physicalWorkFinished;
 		private final Runnable physicalExitObserver;
-		private final CountDownLatch sessionCancellationCallbacksFinished = new CountDownLatch(1);
-		private final CountDownLatch sessionCancellationEffectsReady = new CountDownLatch(1);
-		private volatile boolean sessionCancellationCallbacksOutstanding;
+		private final CountDownLatch cancellationCallbacksFinished = new CountDownLatch(1);
+		private final CountDownLatch cancellationEffectsReady = new CountDownLatch(1);
+		private volatile boolean cancellationCallbacksOutstanding;
 		@NonNull
 		private TerminalState terminalState;
 		private boolean handlerEntryCommitted;
@@ -2853,7 +2871,7 @@ final class McpApplicationExecution {
 							McpApplicationResponse.internalError(request.id(), 500,
 									"Internal Server Error", throwable)));
 			} finally {
-				awaitSessionCancellationCallbacks();
+				awaitCancellationCallbacks();
 				handlerRunning.set(false);
 				handlerFinished.set(true);
 				cleanupRetainedExchange();
@@ -2967,10 +2985,17 @@ final class McpApplicationExecution {
 
 		private void submissionFailed(@NonNull Throwable throwable) {
 			try {
-				if (!cancellation.isCancellationRequested())
-					respond(profiledFrameworkError(McpProfileErrorKind.CONTROL,
-							McpApplicationResponse.internalError(request.id(), 500,
-									"Internal Server Error", throwable)));
+				if (!cancellation.isCancellationRequested()) {
+					if (throwable instanceof RejectedExecutionException
+							&& ticket().state() == McpApplicationHandlerDispatcher.TicketState.REJECTED) {
+						capacityRejections.incrementAndGet();
+						respond(profiledFrameworkError(McpProfileErrorKind.CONTROL,
+								McpApplicationResponse.capacityRejected(request.id(), throwable)));
+					} else
+						respond(profiledFrameworkError(McpProfileErrorKind.CONTROL,
+								McpApplicationResponse.internalError(request.id(), 500,
+										"Internal Server Error", throwable)));
+				}
 			} finally {
 				// The dispatcher has already changed the ticket to REJECTED and
 				// released its slot. Cancellation may also have detached the lease.
@@ -3100,58 +3125,59 @@ final class McpApplicationExecution {
 
 		private Optional<Runnable> tryReserveCancellation(
 				@NonNull StreamTerminationReason reason) {
-			return tryReserveCancellation(reason, false);
-		}
-
-		private Optional<Runnable> tryReserveCancellation(
-				@NonNull StreamTerminationReason reason, boolean boundedCallbacks) {
 			boolean cancelBeforeDispatch;
-			boolean releaseCancellationCallbacks;
-			dispatcher.beginObserverDeferral();
+			McpApplicationExecutionObserver.MetricDeferral metricDeferral =
+					dispatcher.beginObserverDeferral();
 			try {
-				synchronized (terminalLock) {
-					if (terminalState != TerminalState.OPEN)
-						return Optional.empty();
-					// Retain only the application-visible reason. Transport exceptions can
-					// retain connection internals and are detached with the response lease.
-					releaseCancellationCallbacks = cancellation.fixReason(
-							requireNonNull(reason));
-					terminalState = TerminalState.ABANDONED;
-					cancelBeforeDispatch = dispatcher.cancelBeforeDispatch(ticket());
-					if (boundedCallbacks && releaseCancellationCallbacks && !cancelBeforeDispatch) {
-						sessionCancellationCallbacksOutstanding = true;
-						// The execution boundary reserves the bounded sidecar before stop
-						// can shut its executor down. Public hooks wait for HTTP offering.
-						cancellationCallbackExecutor.execute(() -> {
-							awaitCancellationLatch(sessionCancellationEffectsReady);
-							try { cancellation.releaseCallbacks(); }
-							finally { sessionCancellationCallbacksFinished.countDown(); }
-						});
+				synchronized (executionBoundaryLock) {
+					synchronized (terminalLock) {
+						if (terminalState != TerminalState.OPEN)
+							return Optional.empty();
+						// Fix the reason and reserve callback retention before the handler
+						// can leave or stop can shut down the sidecar executor.
+						boolean releaseCallbacks = cancellation.fixReason(requireNonNull(reason));
+						terminalState = TerminalState.ABANDONED;
+						cancelBeforeDispatch = dispatcher.cancelBeforeDispatch(ticket());
+						if (releaseCallbacks)
+							reserveCancellationCallbacks(cancelBeforeDispatch);
 					}
 				}
 			} finally {
-				dispatcher.endObserverDeferral();
+				metricDeferral.close();
 			}
 
 			AtomicBoolean completionClaimed = new AtomicBoolean();
 			return Optional.of(() -> {
 				if (!completionClaimed.compareAndSet(false, true))
 					return;
-				if (releaseCancellationCallbacks && !sessionCancellationCallbacksOutstanding)
-					cancellation.releaseCallbacks();
 				try {
 					if (!cancelBeforeDispatch) ticket().requestInterrupt();
 					abandonedResponses.incrementAndGet();
 					releaseResponseOwnership();
 				} finally {
-					if (sessionCancellationCallbacksOutstanding) sessionCancellationEffectsReady.countDown();
+					cancellationEffectsReady.countDown();
 				}
 			});
 		}
 
-		private void awaitSessionCancellationCallbacks() {
-			if (!sessionCancellationCallbacksOutstanding) return;
-			awaitCancellationLatch(sessionCancellationCallbacksFinished);
+		// Called under terminalLock, at the cancellation election. A running
+		// handler retains its dispatcher slot until this sidecar physically exits.
+		private void reserveCancellationCallbacks(boolean handlerCannotRun) {
+			if (handlerCannotRun) {
+				cancellation.discardCallbacks();
+				return;
+			}
+			cancellationCallbacksOutstanding = true;
+			cancellationCallbackExecutor.execute(() -> {
+				awaitCancellationLatch(cancellationEffectsReady);
+				try { cancellation.releaseCallbacks(); }
+				finally { cancellationCallbacksFinished.countDown(); }
+			});
+		}
+
+		private void awaitCancellationCallbacks() {
+			if (!cancellationCallbacksOutstanding) return;
+			awaitCancellationLatch(cancellationCallbacksFinished);
 		}
 
 		private void awaitCancellationLatch(CountDownLatch latch) {
@@ -3178,7 +3204,8 @@ final class McpApplicationExecution {
 			McpApplicationResponse response;
 			TransportLease lease;
 			boolean shutdown;
-			dispatcher.beginObserverDeferral();
+			McpApplicationExecutionObserver.MetricDeferral metricDeferral =
+					dispatcher.beginObserverDeferral();
 			try {
 				synchronized (executionBoundaryLock) {
 					shutdown = stopped.get();
@@ -3189,6 +3216,8 @@ final class McpApplicationExecution {
 							releaseCancellationCallbacks = cancellation.fixReason(
 									StreamTerminationReason.RESPONSE_TIMEOUT);
 							canceledBeforeDispatch = dispatcher.cancelBeforeDispatch(ticket());
+							if (releaseCancellationCallbacks)
+								reserveCancellationCallbacks(canceledBeforeDispatch);
 							lease = requireNonNull(transportLease.get(),
 									"An open exchange must retain its transport lease.");
 							terminalState = TerminalState.RESPONSE_OFFERED;
@@ -3207,15 +3236,13 @@ final class McpApplicationExecution {
 					}
 				}
 			} finally {
-				dispatcher.endObserverDeferral();
+				metricDeferral.close();
 			}
 			if (shutdown) {
 				cancel(stoppingReason(), null);
 				return;
 			}
 
-			if (releaseCancellationCallbacks)
-				cancellation.releaseCallbacks();
 			deadlineExpirations.incrementAndGet();
 			if (!canceledBeforeDispatch && requestInterrupt)
 				ticket().requestInterrupt();
@@ -3230,7 +3257,8 @@ final class McpApplicationExecution {
 					terminalResponses.incrementAndGet();
 				else
 					abandonedResponses.incrementAndGet();
-				releaseResponseOwnership();
+				try { releaseResponseOwnership(); }
+				finally { cancellationEffectsReady.countDown(); }
 			}
 		}
 
@@ -3245,7 +3273,7 @@ final class McpApplicationExecution {
 				}
 			}
 			if (releaseCancellationCallbacks)
-				cancellation.releaseCallbacks();
+				cancellation.discardCallbacks();
 			releaseResponseOwnership();
 		}
 

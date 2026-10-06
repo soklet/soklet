@@ -18,6 +18,7 @@ package com.soklet;
 
 import com.soklet.annotation.GET;
 import com.soklet.annotation.POST;
+import com.soklet.annotation.FormParameter;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -27,6 +28,8 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -36,15 +39,7 @@ class RequestTextDecodingTransportTests {
 	@Test
 	void malformedClientTextReceivesRedacted400AndValidUnicodeAndRawBytesRemainUsable() throws Exception {
 		int port = TestSupport.findFreePort();
-		SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(port).build())
-				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(TextResource.class)))
-				.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(5))
-						.startupCancelationTimeout(Duration.ofSeconds(2)).gracefulShutdownTimeout(Duration.ofSeconds(1))
-						.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
-				.lifecycleObserver(new LifecycleObserver() {
-					@Override public void didReceiveLogEvent(@NonNull LogEvent event) {}
-				}).build();
-		try (Soklet soklet = Soklet.fromConfig(config)) {
+		try (Soklet soklet = Soklet.fromConfig(config(port))) {
 			soklet.start();
 			assertRejected(exchange(port, "GET", "/text/secret%FF", "", new byte[0]));
 			assertRejected(exchange(port, "GET", "/query?selected=ok&secret=%FF", "", new byte[0]));
@@ -62,6 +57,78 @@ class RequestTextDecodingTransportTests {
 			assertEquals(200, binary.statusCode());
 			assertEquals("1", binary.body());
 		}
+	}
+
+	@Test
+	void originFormLeadingSlashesCannotSelectARouteAfterDroppingAComponent() throws Exception {
+		int port = TestSupport.findFreePort();
+		try (Soklet soklet = Soklet.fromConfig(config(port))) {
+			soklet.start();
+			Response response = exchange(port, "GET", "//x/admin?selected=ok", "", new byte[0]);
+			assertEquals(200, response.statusCode());
+			assertEquals("//x/admin?selected=ok|/x/admin|ok", response.body());
+			Response repeated = exchange(port, "GET", "///x//admin/?selected=ok", "", new byte[0]);
+			assertEquals(200, repeated.statusCode());
+			assertEquals("///x//admin/?selected=ok|/x/admin|ok", repeated.body());
+			Response root = exchange(port, "GET", "//?selected=ok", "", new byte[0]);
+			assertEquals(200, root.statusCode());
+			assertEquals("//?selected=ok|/|ok", root.body());
+			assertRejected(exchange(port, "GET", "//x%2Fadmin", "", new byte[0]));
+		}
+	}
+
+	@Test
+	void formLiteralsAndBlankOptionalBindingSurviveRealHttpParsing() throws Exception {
+		int port = TestSupport.findFreePort();
+		String headers = "Content-Type: application/x-www-form-urlencoded\r\n";
+		try (Soklet soklet = Soklet.fromConfig(config(port))) {
+			soklet.start();
+			String form = "id= one#two \"{}|\\?=+%2B%26%3D&id=last&tail=three";
+			Response literal = exchange(port, "POST", "/form-pairs", headers, form.getBytes(StandardCharsets.US_ASCII));
+			assertEquals(200, literal.statusCode());
+			assertEquals(" one#two \"{}|\\?= +&=|last;three", literal.body());
+			Response bound = exchange(port, "POST", "/bound-form-pairs", headers, form.getBytes(StandardCharsets.US_ASCII));
+			assertEquals(200, bound.statusCode());
+			assertEquals("one#two \"{}|\\?= +&=|last;three", bound.body());
+			for (String blank : List.of("", "id", "id=", "id= ", "id=+")) {
+				Response response = exchange(port, "POST", "/optional-form", headers, blank.getBytes(StandardCharsets.US_ASCII));
+				assertEquals(200, response.statusCode(), blank);
+				assertEquals("absent", response.body(), blank);
+			}
+			for (String repeated : List.of("id&id", "id=&id=", "id=+&id=%20"))
+				assertEquals(400, exchange(port, "POST", "/optional-form", headers, repeated.getBytes(StandardCharsets.US_ASCII)).statusCode(), repeated);
+			assertRejected(exchange(port, "POST", "/form", headers, "secret=ok#tail&unselected=%FF".getBytes(StandardCharsets.US_ASCII)));
+		}
+	}
+
+	@Test
+	void realHttpUsesLateCharsetParametersAndRejectsAmbiguousCharsets() throws Exception {
+		int port = TestSupport.findFreePort();
+		try (Soklet soklet = Soklet.fromConfig(config(port))) {
+			soklet.start();
+			Response body = exchange(port, "POST", "/body", "Content-Type: text/plain; profile=\"x;y\"; charset=ISO-8859-1\r\n", new byte[]{(byte) 0xff});
+			assertEquals(200, body.statusCode());
+			assertEquals("ÿ", body.body());
+			for (String form : List.of("secret=ÿ", "secret=%FF")) {
+				Response response = exchange(port, "POST", "/form", "Content-Type: application/x-www-form-urlencoded; profile=test; charset=ISO-8859-1\r\n",
+						form.getBytes(StandardCharsets.ISO_8859_1));
+				assertEquals(200, response.statusCode());
+				assertEquals("ÿ", response.body());
+			}
+			for (String charsets : List.of("charset=UTF-8; charset=UTF-8", "charset=UTF-8; charset=ISO-8859-1"))
+				assertRejected(exchange(port, "POST", "/body", "Content-Type: text/plain; " + charsets + "; secret=value\r\n", new byte[0]));
+		}
+	}
+
+	private static SokletConfig config(int port) {
+		return SokletConfig.withHttpServer(HttpServer.withPort(port).build())
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(TextResource.class)))
+				.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(5))
+						.startupCancelationTimeout(Duration.ofSeconds(2)).gracefulShutdownTimeout(Duration.ofSeconds(1))
+						.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
+				.lifecycleObserver(new LifecycleObserver() {
+					@Override public void didReceiveLogEvent(@NonNull LogEvent event) {}
+				}).build();
 	}
 
 	private static void assertRejected(Response response) {
@@ -90,12 +157,19 @@ class RequestTextDecodingTransportTests {
 	private record Response(int statusCode, String body) {}
 
 	public static class TextResource {
+		@GET("/x/admin") public String preservedPath(Request request) { return pathAndQuery(request); }
+		@GET("/admin") public String admin() { return "wrong-route"; }
+		@GET("/") public String root(Request request) { return pathAndQuery(request); }
 		@GET("/text/{id}") public String text(Request request) { return request.getPath(); }
 		@GET("/query") public String query(Request request) { return request.getQueryParameter("selected").orElse(""); }
 		@GET("/cookie") public String cookie(Request request) { return request.getCookie("secret").orElse(""); }
 		@POST("/body") public String body(Request request) { return request.getBodyAsString().orElse(""); }
 		@POST("/form") public String form(Request request) { return request.getFormParameter("secret").orElse(""); }
+		@POST("/form-pairs") public String formPairs(Request request) { return String.join("|", request.getFormParameters().get("id")) + ";" + request.getFormParameter("tail").orElseThrow(); }
+		@POST("/bound-form-pairs") public String boundFormPairs(@FormParameter(name="id") List<String> ids, @FormParameter(name="tail") String tail) { return String.join("|", ids) + ";" + tail; }
+		@POST("/optional-form") public String optionalForm(@FormParameter(name="id") Optional<String> id) { return id.orElse("absent"); }
 		@POST("/multipart") public String multipart(Request request) { return request.getMultipartFields().get("field").iterator().next().getDataAsString().orElse(""); }
 		@POST("/bytes") public String bytes(Request request) { return Integer.toString(request.getBody().orElseThrow().length); }
+		private static String pathAndQuery(Request request) { return request.getRawPathAndQuery() + "|" + request.getPath() + "|" + request.getQueryParameter("selected").orElse(""); }
 	}
 }

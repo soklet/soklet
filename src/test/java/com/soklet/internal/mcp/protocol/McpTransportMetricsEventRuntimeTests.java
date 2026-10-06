@@ -18,6 +18,7 @@ package com.soklet.internal.mcp.protocol;
 
 import com.soklet.CorsAuthorizer;
 import com.soklet.MetricsCollector;
+import com.soklet.McpMetricsEvent;
 import com.soklet.internal.microhttp.ConnectionListener;
 import com.soklet.internal.microhttp.EventLoop;
 import com.soklet.internal.microhttp.NoopLogger;
@@ -46,12 +47,77 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static java.util.Objects.requireNonNull;
 
 @Timeout(60)
 public class McpTransportMetricsEventRuntimeTests {
 	private static final String LOOPBACK = "127.0.0.1";
+
+	@Test
+	public void subscriptionMaintenanceNeverDrainsOnTheProjectionThread() throws Exception {
+		CountDownLatch drainEntered = new CountDownLatch(1);
+		CountDownLatch drainRelease = new CountDownLatch(1);
+		CountDownLatch drainExited = new CountDownLatch(1);
+		AtomicInteger records = new AtomicInteger();
+		AtomicReference<Thread> projectionThread = new AtomicReference<>();
+		AtomicReference<Thread> drainThread = new AtomicReference<>();
+		McpApplicationExecutionObserver observer = (McpApplicationExecutionObserver)
+				Proxy.newProxyInstance(McpApplicationExecutionObserver.class.getClassLoader(),
+						new Class<?>[]{McpApplicationExecutionObserver.class},
+						(proxy, method, arguments) -> {
+							if (method.getName().equals("recordSubscriptionMaintenance")) {
+								records.incrementAndGet();
+								return null;
+							}
+							if (method.getName().equals("drainAsynchronously")) {
+								drainThread.set(Thread.currentThread());
+								drainEntered.countDown();
+								try {
+									Assertions.assertTrue(drainRelease.await(5, TimeUnit.SECONDS));
+								} finally {
+									drainExited.countDown();
+								}
+								return null;
+							}
+							return method.invoke(McpApplicationExecutionObserver.disabledInstance(), arguments);
+						});
+		McpHttpServerRuntime runtime = runtime(
+				McpHttpTransportConfiguration.productionDefaults(0), observer);
+		ExecutorService executor = Executors.newSingleThreadExecutor();
+		try {
+			Method record = McpHttpServerRuntime.class.getDeclaredMethod(
+					"recordSubscriptionMaintenance", String.class,
+					McpMetricsEvent.SubscriptionMaintenance.Work.class,
+					McpMetricsEvent.SubscriptionMaintenance.Outcome.class);
+			record.setAccessible(true);
+			Future<?> projection = executor.submit(() -> {
+				projectionThread.set(Thread.currentThread());
+				try {
+					record.invoke(runtime, "/mcp", McpMetricsEvent.SubscriptionMaintenance.Work.CATALOG_PROJECTION,
+							McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED);
+				} catch (ReflectiveOperationException exception) {
+					throw new AssertionError(exception);
+				}
+			});
+			projection.get(1, TimeUnit.SECONDS);
+			Assertions.assertTrue(drainEntered.await(5, TimeUnit.SECONDS));
+			Assertions.assertEquals(1, records.get());
+			Assertions.assertNotSame(projectionThread.get(), drainThread.get());
+		} finally {
+			drainRelease.countDown();
+			Assertions.assertTrue(drainExited.await(5, TimeUnit.SECONDS));
+			executor.shutdownNow();
+			Assertions.assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
+			runtime.close();
+		}
+	}
 
 	@Test
 	public void sameConnectionRecordsAcceptedBeforeRequestAccepted() throws Exception {

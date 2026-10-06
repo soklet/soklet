@@ -28,9 +28,11 @@ import java.util.List;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
+import static com.soklet.internal.ObjectIdentity.sameInstance;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -209,12 +211,8 @@ final class McpApplicationHandlerDispatcher {
 				requireNonNull(physicalExitObserver));
 	}
 
-	void beginObserverDeferral() {
-		this.observer.beginRequestTransitionDeferral();
-	}
-
-	void endObserverDeferral() {
-		this.observer.endDeferral();
+	McpApplicationExecutionObserver.@NonNull MetricDeferral beginObserverDeferral() {
+		return this.observer.beginRequestTransitionDeferral();
 	}
 
 	@NonNull
@@ -258,7 +256,7 @@ final class McpApplicationHandlerDispatcher {
 
 		drainObserver();
 		if (dispatch)
-			dispatch(ticket);
+			dispatch(ticket, false);
 
 		return admission;
 	}
@@ -393,22 +391,41 @@ final class McpApplicationHandlerDispatcher {
 		}
 	}
 
-	private void dispatch(@NonNull Ticket ticket) {
+	/** Returns a promoted ticket to the accepted worker only if handoff rejects. */
+	private @Nullable Ticket dispatch(@NonNull Ticket ticket, boolean reuseWorkerOnRejection) {
 		List<SubmissionFailure> submissionFailures = new ArrayList<>();
 		Ticket ticketToSubmit = ticket;
+		Ticket retainedContinuation = null;
 		Error fatalFailure = null;
 
 		while (ticketToSubmit != null) {
 			Ticket submittedTicket = ticketToSubmit;
+			Thread submittingThread = Thread.currentThread();
+			AtomicBoolean submissionActive = new AtomicBoolean(true);
 
 			try {
-				executorService.execute(() -> run(submittedTicket));
+				executorService.execute(() -> {
+					if (sameInstance(Thread.currentThread(), submittingThread) && submissionActive.get())
+						throw new RejectedExecutionException(
+								"MCP application work cannot run on the submitting thread.");
+					run(submittedTicket);
+				});
 				ticketToSubmit = null;
 			} catch (RuntimeException | Error failure) {
+				if (reuseWorkerOnRejection && failure instanceof RejectedExecutionException
+						&& fatalFailure == null) {
+					// The current worker has not returned to a direct-handoff pool yet.
+					// Keep this accepted ticket and its slot; do not reject the queue or
+					// create retry jobs. The same worker enters it through the run loop.
+					retainedContinuation = submittedTicket;
+					break;
+				}
 				submissionFailures.add(new SubmissionFailure(submittedTicket, failure));
-				ticketToSubmit = onSubmissionFailure(submittedTicket);
+				ticketToSubmit = onSubmissionFailure(submittedTicket, failure);
 				if (failure instanceof Error error && fatalFailure == null)
 					fatalFailure = error;
+			} finally {
+				submissionActive.set(false);
 			}
 		}
 
@@ -416,36 +433,43 @@ final class McpApplicationHandlerDispatcher {
 			notifyFailure(submissionFailure.ticket(), submissionFailure.throwable());
 		if (fatalFailure != null)
 			throw fatalFailure;
+		return retainedContinuation;
 	}
 
-	private void run(@NonNull Ticket ticket) {
-		Thread.interrupted();
+	private void run(@NonNull Ticket firstTicket) {
+		Ticket ticketToRun = firstTicket;
+		while (ticketToRun != null) {
+			Ticket ticket = ticketToRun;
+			Thread.interrupted();
 
-		synchronized (ticket.interruptLock) {
-			ticket.handlerThread = Thread.currentThread();
-
-			if (ticket.interruptRequested)
-				Thread.currentThread().interrupt();
-		}
-
-		try {
-			ticket.work.run();
-		} catch (InterruptedException exception) {
-			Thread.currentThread().interrupt();
-			notifyFailure(ticket, exception);
-		} catch (Throwable throwable) {
-			notifyFailure(ticket, throwable);
-		} finally {
 			synchronized (ticket.interruptLock) {
-				ticket.handlerThread = null;
+				ticket.handlerThread = Thread.currentThread();
+
+				if (ticket.interruptRequested)
+					Thread.currentThread().interrupt();
 			}
 
-			Thread.interrupted();
-			onHandlerExited(ticket);
+			Ticket next;
+			try {
+				ticket.work.run();
+			} catch (InterruptedException exception) {
+				Thread.currentThread().interrupt();
+				notifyFailure(ticket, exception);
+			} catch (Throwable throwable) {
+				notifyFailure(ticket, throwable);
+			} finally {
+				synchronized (ticket.interruptLock) {
+					ticket.handlerThread = null;
+				}
+
+				Thread.interrupted();
+				next = onHandlerExited(ticket);
+			}
+			ticketToRun = next == null ? null : dispatch(next, true);
 		}
 	}
 
-	private void onHandlerExited(@NonNull Ticket ticket) {
+	private @Nullable Ticket onHandlerExited(@NonNull Ticket ticket) {
 		Ticket next;
 
 		synchronized (lock) {
@@ -465,11 +489,10 @@ final class McpApplicationHandlerDispatcher {
 		notifySlotReleased();
 		notifyPhysicalExit(ticket);
 		drainObserver();
-		if (next != null)
-			dispatch(next);
+		return next;
 	}
 
-	private @Nullable Ticket onSubmissionFailure(@NonNull Ticket ticket) {
+	private @Nullable Ticket onSubmissionFailure(@NonNull Ticket ticket, @NonNull Throwable failure) {
 		Ticket next;
 		synchronized (lock) {
 			if (ticket.state != TicketState.DISPATCHED)
@@ -482,6 +505,8 @@ final class McpApplicationHandlerDispatcher {
 						"A rejected handler is absent from the active ticket set.");
 			activeSlots--;
 			recordHandlerExecutionFinished();
+			if (failure instanceof RejectedExecutionException)
+				recordHandlerCapacityRejected();
 			next = promoteNextLocked();
 		}
 		notifySlotReleased();

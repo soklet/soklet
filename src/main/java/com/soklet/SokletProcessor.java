@@ -992,7 +992,7 @@ public final class SokletProcessor extends AbstractProcessor {
 						"Soklet: Every enclosing class of an @McpServerEndpoint must be public.");
 		}
 
-		String path = annotationString(annotation, "path").strip();
+		String path = annotationString(annotation, "path");
 		if (!path.startsWith("/") || path.length() == 1
 				|| path.contains("?") || path.contains("#")) {
 			mcpError(endpointType,
@@ -1001,11 +1001,7 @@ public final class SokletProcessor extends AbstractProcessor {
 			mcpError(endpointType,
 					"Soklet: MCP endpoint path parameters are not supported by the annotated MCP processor; use a fixed path.");
 		} else {
-			path = ResourcePathDeclaration.normalizePath(path);
-			if (path.length() == 1)
-				mcpError(endpointType,
-						"Soklet: MCP endpoint path must not normalize to the root path.");
-			else if (!McpEndpointPathLimit.isValidWirePath(path))
+			if (!McpEndpointPathLimit.isValidWirePath(path))
 				mcpError(endpointType,
 						"Soklet: MCP endpoint path must be a normalized ASCII raw URI path; percent-encode non-ASCII characters.");
 			else if (!McpEndpointPathLimit.isWithinLimit(path))
@@ -1553,6 +1549,17 @@ public final class SokletProcessor extends AbstractProcessor {
 		}
 		boolean multiRoundTripMetadata = !inputRequestDeclarations.isEmpty()
 				|| !"NONE".equals(requestStateMode);
+		boolean legacySelected = protocolVersions.stream()
+				.anyMatch(version -> !"V2026_07_28".equals(version));
+		if (legacySelected && multiRoundTripMetadata)
+			mcpError(method,
+					"Soklet: A 2025 @McpTool must not declare input requests or request state (tool '%s', revisions %s).",
+					name, protocolVersions);
+		if (legacySelected && appToolMetadata != null
+				&& !appToolMetadata.getVisibility().contains(McpAppToolMetadata.Visibility.MODEL))
+			mcpError(method,
+					"Soklet: App-only tools cannot be exposed by a 2025 @McpTool (tool '%s', revisions %s).",
+					name, protocolVersions);
 		if (multiRoundTripMetadata && !operationResultReturn)
 			mcpError(method,
 					"Soklet: An @McpTool method that declares input requests or request state must return McpOperationResult or a subtype.");
@@ -1578,6 +1585,10 @@ public final class SokletProcessor extends AbstractProcessor {
 			AnnotationMirror argument = findAnnotation(parameter,
 					argumentAnnotation);
 			AnnotationMirror header = findAnnotation(parameter, headerAnnotation);
+			if (legacySelected && header != null)
+				mcpError(parameter,
+						"Soklet: A 2025 @McpTool must not declare mirrored headers (tool '%s', revisions %s).",
+						name, protocolVersions);
 			boolean requestContext = isExactType(parameter.asType(),
 					mcpRequestContextType);
 			boolean invocationFeatures = isExactType(parameter.asType(),
@@ -1718,6 +1729,11 @@ public final class SokletProcessor extends AbstractProcessor {
 			} else if (result instanceof McpTypeMirrorTypedSchemaBridge.CompiledSchemas compiled) {
 				inputSchemaBytes = compiled.getInputSchemaBytes();
 				outputSchemaBytes = compiled.getOutputSchemaBytes();
+				if (legacySelected && !new com.soklet.internal.mcp.protocol.McpJsonString("object")
+						.equals(compiled.getOutputSchemaDocument().members().get("type")))
+					mcpError(method,
+							"Soklet: A 2025 @McpTool output schema must have object type (tool '%s', revisions %s).",
+							name, protocolVersions);
 			} else if (result instanceof McpTypeMirrorTypedSchemaBridge.CompiledInputSchema compiled) {
 				inputSchemaBytes = compiled.getInputSchemaBytes();
 			}

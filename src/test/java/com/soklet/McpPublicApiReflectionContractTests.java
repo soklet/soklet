@@ -89,7 +89,7 @@ public class McpPublicApiReflectionContractTests {
 	private static final int PROVISIONAL_TYPE_COUNT = 22;
 	private static final int CURRENT_MCP_TYPE_COUNT = 303;
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
-			"114850fa519f4147da79a5197d5f43ea841e5069b4ff468b8ff8358b4d5a4ce6";
+			"658ef885a9c69dceeb4ca12539af60d45fda28614b26f5323cda95dfbda03053";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
 			"d677a7f58b36d0293b7ff47dd1501fee626369b6cacee26317a350a5fd14b1e1";
 	private static final String PHASE_SIX_NULLABILITY_SHA_256 =
@@ -1095,6 +1095,12 @@ public class McpPublicApiReflectionContractTests {
 		Assertions.assertTrue(
 				hasExactNullness(authoredArguments[0], NonNull.class),
 				"inputSchema() payload must be exactly @NonNull");
+	}
+
+	@Test
+	public void resourceNotFoundFactoryUsesTheReviewedSignature() throws Exception {
+		assertRequiredFactory(McpJsonRpcError.class.getMethod("fromResourceNotFound", URI.class),
+				McpJsonRpcError.class, "resourceUri");
 	}
 
 	@Test

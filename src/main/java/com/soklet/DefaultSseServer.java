@@ -58,6 +58,7 @@ import java.util.Collections;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -2653,9 +2654,15 @@ final class DefaultSseServer implements SseServer {
 
 				printWriter.print("HTTP/1.1 " + statusCode + " " + reasonPhrase + "\r\n");
 
-				// Write headers
-				boolean hasContentLength = false;
-				boolean hasTransferEncoding = false;
+				// This transport writes one finite body and closes the connection.
+				Set<String> transportOwnedHeaderNames = new HashSet<>(Set.of(
+						"connection", "keep-alive", "content-length", "transfer-encoding",
+						"te", "trailer", "upgrade", "proxy-connection"));
+				for (String connectionValue : marshaledResponse.getHeaders().getOrDefault("Connection", List.of())) {
+					for (String name : connectionValue.split(",", -1))
+						transportOwnedHeaderNames.add(name.trim().toLowerCase(Locale.ENGLISH));
+				}
+				boolean hasResponseDate = hasDate && !transportOwnedHeaderNames.contains("date");
 
 					for (Entry<String, List<String>> entry : marshaledResponse.getHeaders().entrySet()) {
 						String headerName = entry.getKey();
@@ -2665,11 +2672,8 @@ final class DefaultSseServer implements SseServer {
 
 					String lowercaseHeaderName = headerName.toLowerCase(Locale.ENGLISH);
 
-					if (lowercaseHeaderName.equals("content-length"))
-						hasContentLength = true;
-
-					if (lowercaseHeaderName.equals("transfer-encoding"))
-						hasTransferEncoding = true;
+					if (transportOwnedHeaderNames.contains(lowercaseHeaderName))
+						continue;
 
 						List<String> headerValues = entry.getValue();
 						if (headerValues == null || headerValues.isEmpty())
@@ -2687,18 +2691,19 @@ final class DefaultSseServer implements SseServer {
 				for (ResponseCookie cookie : marshaledResponse.getCookies())
 					printWriter.printf("Set-Cookie: %s\r\n", cookie.toSetCookieHeaderRepresentation());
 
-				byte[] body = marshaledResponse.bodyBytesOrNull();
+				boolean bodyAllowed = statusCode >= 200 && statusCode != 204 && statusCode != 205 && statusCode != 304;
+				byte[] body = bodyAllowed ? marshaledResponse.bodyBytesOrNull() : null;
 				int bodyLength = (body == null ? 0 : body.length);
 
-				// Add Content-Length if body is present and user didn’t set it
-				if (bodyLength > 0 && !hasContentLength && !hasTransferEncoding)
+				// Replace application framing with the actual length, including empty bodies.
+				if (statusCode >= 200 && statusCode != 204 && statusCode != 304)
 					printWriter.print("Content-Length: " + bodyLength + "\r\n");
 
 				// Default Connection: close (rejected handshakes do not remain open)
 				printWriter.print("Connection: close\r\n");
 
 				// End headers
-				if (!hasDate)
+				if (!hasResponseDate)
 					printWriter.print("Date: " + HttpDate.currentSecondHeaderValue() + "\r\n");
 				printWriter.print("\r\n");
 				printWriter.flush();
@@ -3279,9 +3284,7 @@ final class DefaultSseServer implements SseServer {
 			throws RequestHeadersTooLargeIOException, RequestTargetTooLongIOException {
 		requireNonNull(rawRequest);
 
-		rawRequest = trimAggressivelyToNull(rawRequest);
-
-		if (rawRequest == null)
+		if (trimAggressivelyToNull(rawRequest) == null)
 			throw new IllegalRequestException("Server-Sent Event HTTP request has no data");
 
 		rejectHeadersTooLarge(rawRequest);
@@ -3362,8 +3365,8 @@ final class DefaultSseServer implements SseServer {
 				continue;
 			}
 
-			// End-of-headers: blank line or whitespace-only line
-			if (rawLine.isEmpty() || rawLine.trim().isEmpty())
+			// Only an empty line ends the header section; whitespace is obs-fold.
+			if (rawLine.isEmpty())
 				break;
 
 			if (rawLine.charAt(0) == ' ' || rawLine.charAt(0) == '\t')
@@ -3459,10 +3462,11 @@ final class DefaultSseServer implements SseServer {
 			char c = rawRequest.charAt(i);
 
 			if (c == '\r') {
+				if (i + 1 == rawRequest.length() || rawRequest.charAt(i + 1) != '\n')
+					throw new IllegalRequestException("Bare carriage returns are not allowed for Server-Sent Event requests");
 				lines.add(current.toString());
 				current.setLength(0);
-				if (i + 1 < rawRequest.length() && rawRequest.charAt(i + 1) == '\n')
-					i++;
+				i++;
 				continue;
 			}
 
@@ -3514,15 +3518,21 @@ final class DefaultSseServer implements SseServer {
 			if (contentLengthValues.size() != 1)
 				throw new IllegalRequestException("Multiple Content-Length headers are not allowed for Server-Sent Event requests");
 
-			String contentLengthValue = contentLengthValues.iterator().next();
+			String contentLengthValue = Utilities.trimHeaderWhitespace(contentLengthValues.iterator().next());
 
-			if (contentLengthValue == null || contentLengthValue.trim().isEmpty())
+			if (contentLengthValue.isEmpty())
 				throw new IllegalRequestException("Invalid Content-Length header value");
+
+			for (int i = 0; i < contentLengthValue.length(); i++) {
+				char value = contentLengthValue.charAt(i);
+				if (value < '0' || value > '9')
+					throw new IllegalRequestException("Invalid Content-Length header value");
+			}
 
 			long contentLength;
 
 			try {
-				contentLength = Long.parseLong(contentLengthValue.trim());
+				contentLength = Long.parseLong(contentLengthValue);
 			} catch (NumberFormatException e) {
 				throw new IllegalRequestException("Invalid Content-Length header value", e);
 			}

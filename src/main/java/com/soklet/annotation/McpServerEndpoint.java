@@ -86,7 +86,9 @@ public @interface McpServerEndpoint {
 	/**
 	 * The fixed, non-root URL path exposed by the dedicated MCP server. It must
 	 * be a normalized ASCII raw URI path of at most 8192 bytes; non-ASCII
-	 * characters must be percent-encoded.
+	 * characters must be percent-encoded. Trailing slashes, repeated slashes,
+	 * whitespace and dot segments are rejected; the declared path is never
+	 * rewritten.
 	 *
 	 * @return the endpoint URL path
 	 */

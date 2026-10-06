@@ -20,6 +20,7 @@ import com.soklet.HttpMethod;
 import com.soklet.Request;
 import com.soklet.StreamTerminationReason;
 import com.soklet.StreamingResponseBody;
+import com.soklet.internal.streaming.StateChangeWaiters;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -61,6 +62,9 @@ public class StreamingQueueCapacityOverflowTests {
 			Field sourceLock = source.getClass().getDeclaredField("lock");
 			sourceLock.setAccessible(true);
 			Object lock = sourceLock.get(source);
+			Field waitersField = source.getClass().getDeclaredField("stateChangeWaiters");
+			waitersField.setAccessible(true);
+			StateChangeWaiters waiters = (StateChangeWaiters) waitersField.get(source);
 			synchronized (lock) {
 				queueBytes.setInt(source, Integer.MAX_VALUE - 8);
 			}
@@ -72,7 +76,7 @@ public class StreamingQueueCapacityOverflowTests {
 
 			synchronized (lock) {
 				queueBytes.setInt(source, Integer.MAX_VALUE - 16);
-				lock.notifyAll();
+				waiters.signalAll();
 			}
 			Assertions.assertTrue(writeReturned.await(2, TimeUnit.SECONDS),
 					"The payload should fit exactly when enough queue space becomes available");

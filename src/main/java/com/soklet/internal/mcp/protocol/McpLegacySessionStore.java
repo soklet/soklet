@@ -50,6 +50,9 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 final class McpLegacySessionStore {
 	static final int MAXIMUM_ACTIVE_CALLS_PER_SESSION = 32;
+	static final int MAXIMUM_CONTROL_CALLS_PER_SESSION = 4;
+	static final int MAXIMUM_CONTROL_CALLS_PER_OWNER = 8;
+	static final int MAXIMUM_CONTROL_CALLS_GLOBAL = 64;
 	static final int MAXIMUM_CORRELATION_BYTES = 256;
 	static final int MAXIMUM_METADATA_NODES = 4096;
 	static final int MAXIMUM_ANONYMOUS_SESSIONS = 64;
@@ -69,7 +72,7 @@ final class McpLegacySessionStore {
 
 	enum Status {
 		ACCEPTED, NOT_FOUND, REVISION_MISMATCH, INVALID_ID,
-		ACTIVE_ID_COLLISION, CALL_CAPACITY, OWNER_CAPACITY, GLOBAL_CAPACITY,
+		ACTIVE_ID_COLLISION, CALL_CAPACITY, OWNER_CAPACITY, GLOBAL_CAPACITY, TRANSIENT_CAPACITY,
 		METADATA_TOO_LARGE, ANONYMOUS_DENIED, PARTITION_MISMATCH,
 		AUTHORIZATION_EXPIRED, STOPPED, INTERNAL_FAILURE
 	}
@@ -125,10 +128,42 @@ final class McpLegacySessionStore {
 
 	record GetCounts(int logicalGets, int physicalGets, int quotaRegistrations) {}
 
+	enum NotificationStatus { ACCEPTED, STALE, OWNER_CAPACITY, GLOBAL_CAPACITY }
+
+	/** Reservation and rejection reason are elected together under the store lock. */
+	record NotificationAllocation(@NonNull NotificationStatus status,
+			@NonNull Optional<@NonNull NotificationReservation> reservation) {
+		NotificationAllocation { requireNonNull(status); requireNonNull(reservation); }
+		@Override public String toString() { return "NotificationAllocation[status=" + status + "]"; }
+	}
+
 	record Config(int maximumSessions, int maximumSessionsPerOwner,
 			long idleNanos, long lifetimeNanos, int maximumClientMetadataBytes,
 			boolean anonymousAllowed, long maximumSessionEvidenceBytes,
-			long maximumOwnerEvidenceBytes, long maximumGlobalEvidenceBytes) {
+			long maximumOwnerEvidenceBytes, long maximumGlobalEvidenceBytes,
+			long maximumSessionTransientBytes, long maximumOwnerTransientBytes,
+			long maximumGlobalTransientBytes, long maximumControlRequestBytes) {
+		Config(int maximumSessions, int maximumSessionsPerOwner,
+				long idleNanos, long lifetimeNanos, int maximumClientMetadataBytes,
+				boolean anonymousAllowed, long maximumSessionEvidenceBytes,
+				long maximumOwnerEvidenceBytes, long maximumGlobalEvidenceBytes,
+				long maximumSessionTransientBytes, long maximumOwnerTransientBytes,
+				long maximumGlobalTransientBytes) {
+			this(maximumSessions, maximumSessionsPerOwner, idleNanos, lifetimeNanos,
+					maximumClientMetadataBytes, anonymousAllowed, maximumSessionEvidenceBytes,
+					maximumOwnerEvidenceBytes, maximumGlobalEvidenceBytes, maximumSessionTransientBytes,
+					maximumOwnerTransientBytes, maximumGlobalTransientBytes, 65_536L);
+		}
+		Config(int maximumSessions, int maximumSessionsPerOwner,
+				long idleNanos, long lifetimeNanos, int maximumClientMetadataBytes,
+				boolean anonymousAllowed, long maximumSessionEvidenceBytes,
+				long maximumOwnerEvidenceBytes, long maximumGlobalEvidenceBytes) {
+			this(maximumSessions, maximumSessionsPerOwner, idleNanos, lifetimeNanos,
+					maximumClientMetadataBytes, anonymousAllowed, maximumSessionEvidenceBytes,
+					maximumOwnerEvidenceBytes, maximumGlobalEvidenceBytes,
+					maximumSessionEvidenceBytes, maximumOwnerEvidenceBytes, maximumGlobalEvidenceBytes);
+		}
+
 		Config {
 			if (maximumSessions <= 0 || maximumSessionsPerOwner <= 0
 					|| maximumSessionsPerOwner > maximumSessions
@@ -136,7 +171,12 @@ final class McpLegacySessionStore {
 					|| maximumClientMetadataBytes <= 0
 					|| maximumSessionEvidenceBytes <= 0
 					|| maximumOwnerEvidenceBytes < maximumSessionEvidenceBytes
-					|| maximumGlobalEvidenceBytes < maximumOwnerEvidenceBytes)
+					|| maximumGlobalEvidenceBytes < maximumOwnerEvidenceBytes
+					|| maximumSessionTransientBytes <= 0
+					|| maximumOwnerTransientBytes < maximumSessionTransientBytes
+					|| maximumGlobalTransientBytes < maximumOwnerTransientBytes
+					|| maximumControlRequestBytes <= 0
+					|| maximumControlRequestBytes > Long.MAX_VALUE / MAXIMUM_CONTROL_CALLS_GLOBAL)
 				throw new IllegalArgumentException("Inconsistent legacy session resource bounds.");
 		}
 	}
@@ -183,9 +223,15 @@ final class McpLegacySessionStore {
 	private final McpApplicationClock clock;
 	private final Supplier<byte[]> tokenSource;
 	private final Map<String, Session> sessions = new LinkedHashMap<>();
+	private final Map<EndpointRevision, Set<Session>> endpointSessions = new HashMap<>();
 	private final Map<Owner, OwnerUsage> owners = new HashMap<>();
 	private int anonymousSessions;
+	// retainedBytes counts all evidence; transientBytes includes ordinary and control work.
 	private long retainedBytes;
+	private long transientBytes;
+	// Control evidence is a separately bounded subset of transient evidence.
+	private long controlBytes;
+	private int controlCalls;
 	private int physicalReferences;
 	private long sequence;
 	private @Nullable GetQuota getQuota;
@@ -245,9 +291,9 @@ final class McpLegacySessionStore {
 		GetAllocation result;
 		synchronized (lock) {
 			long now = clock.nanoTime();
-			maintainWhileLocked(now, actions);
 			Session session = sessions.get(sessionId);
-			if (session == null || !session.owner.equals(owner) || !session.path.equals(path)
+			maintainSessionWhileLocked(session, now, actions);
+			if (session == null || !session.live || !session.owner.equals(owner) || !session.path.equals(path)
 					|| session.lifecycleGeneration != lifecycleGeneration) result = getAllocation(Status.NOT_FOUND);
 			else if (!session.revision.equals(revision)) result = getAllocation(Status.REVISION_MISMATCH);
 			else if (partition.purpose() != McpPartitionPurpose.AUTHORIZATION
@@ -267,10 +313,10 @@ final class McpLegacySessionStore {
 						? (long) path.length() + partition.applicationKey().map(value -> value.getBytes(StandardCharsets.UTF_8).length).orElse(0) : 0L;
 				long allocationBytes = partitionBytes > Long.MAX_VALUE - retainedRequestEvidenceBytes
 						? Long.MAX_VALUE : partitionBytes + retainedRequestEvidenceBytes;
-				if (exceeds(session.retainedBytes, allocationBytes, config.maximumSessionEvidenceBytes())
-						|| exceeds(session.usage.retainedBytes, allocationBytes, config.maximumOwnerEvidenceBytes()))
+				if (exceeds(session.retainedBytes - session.transientBytes, allocationBytes, config.maximumSessionEvidenceBytes())
+						|| exceeds(session.usage.retainedBytes - session.usage.transientBytes, allocationBytes, config.maximumOwnerEvidenceBytes()))
 					result = getAllocation(Status.OWNER_CAPACITY);
-				else if (exceeds(retainedBytes, allocationBytes, config.maximumGlobalEvidenceBytes()))
+				else if (exceeds(retainedBytes - transientBytes, allocationBytes, config.maximumGlobalEvidenceBytes()))
 					result = getAllocation(Status.GLOBAL_CAPACITY);
 				else if (exceeds(maintenanceDemandUnits - oldDemand, demand, MAXIMUM_MAINTENANCE_DEMAND_UNITS))
 					result = getAllocation(Status.GLOBAL_CAPACITY);
@@ -293,6 +339,7 @@ final class McpLegacySessionStore {
 						retainedBytes += allocationBytes;
 						session.gets.add(get); logicalGets++; physicalGets++;
 						session.physicalReferences++; physicalReferences++;
+						session.clientPhysicalReferences++;
 						session.deliveryEvidence = true; session.lastActivityNanos = now;
 						if (replacement != null) retireGetWhileLocked(replacement, GetCause.REPLACED, actions);
 						result = new GetAllocation(Status.ACCEPTED, Optional.of(get));
@@ -311,7 +358,7 @@ final class McpLegacySessionStore {
 		boolean retired;
 		synchronized (lock) {
 			long now = clock.nanoTime();
-			maintainWhileLocked(now, actions);
+			if (owned(verifiedUse)) maintainSessionWhileLocked(verifiedUse.session, now, actions);
 			retired = now - authorizationDeadlineNanos < 0L && owned(verifiedUse)
 					&& verifiedUse.logical && verifiedUse.session.live && verifiedUse.accepted;
 			if (retired) retireWhileLocked(verifiedUse.session, cause, actions);
@@ -342,10 +389,12 @@ final class McpLegacySessionStore {
 		List<Runnable> actions = new ArrayList<>();
 		GrantAllocation result;
 		synchronized (lock) {
-			long now = clock.nanoTime(); maintainWhileLocked(now, actions);
+			long now = clock.nanoTime();
 			Session session = verifiedUse.session;
+			if (owned(verifiedUse)) maintainSessionWhileLocked(session, now, actions);
 			if (!owned(verifiedUse) || !verifiedUse.logical || !verifiedUse.physical
 					|| !verifiedUse.accepted || !session.live) result = grantAllocation(Status.NOT_FOUND);
+			else if (verifiedUse.evidence.controlRetention) result = grantAllocation(Status.INVALID_ID);
 			else if (!validPartition(session, partition)) result = grantAllocation(Status.PARTITION_MISMATCH);
 			else if (totalDeadlineNanos - now <= 0L) result = grantAllocation(Status.AUTHORIZATION_EXPIRED);
 			else {
@@ -353,16 +402,18 @@ final class McpLegacySessionStore {
 				long uriBytes = entry == null ? uri.getBytes(StandardCharsets.UTF_8).length : 0L;
 				long partitionBytes = session.deliveryPartition == null ? partitionBytes(partition) : 0L;
 				long allocationBytes = uriBytes + partitionBytes;
+				long promotedBytes = verifiedUse.evidence.transientRetention ? verifiedUse.evidence.bytes : 0L;
+				long persistentAllocationBytes = Math.addExact(allocationBytes, promotedBytes);
 				if (entry == null && (session.grants.size() >= MAXIMUM_URI_GRANTS_PER_SESSION
 						|| session.usage.liveGrants >= MAXIMUM_URI_GRANTS_PER_OWNER
 						|| exceeds(session.retainedUriBytes, uriBytes, MAXIMUM_RETAINED_URI_BYTES_PER_SESSION)))
 					result = grantAllocation(Status.OWNER_CAPACITY);
 				else if (entry == null && logicalGrants >= MAXIMUM_URI_GRANTS_GLOBAL)
 					result = grantAllocation(Status.GLOBAL_CAPACITY);
-				else if (exceeds(session.retainedBytes, allocationBytes, config.maximumSessionEvidenceBytes())
-						|| exceeds(session.usage.retainedBytes, allocationBytes, config.maximumOwnerEvidenceBytes()))
+				else if (exceeds(session.retainedBytes - session.transientBytes, persistentAllocationBytes, config.maximumSessionEvidenceBytes())
+						|| exceeds(session.usage.retainedBytes - session.usage.transientBytes, persistentAllocationBytes, config.maximumOwnerEvidenceBytes()))
 					result = grantAllocation(Status.OWNER_CAPACITY);
-				else if (exceeds(retainedBytes, allocationBytes, config.maximumGlobalEvidenceBytes()))
+				else if (exceeds(retainedBytes - transientBytes, persistentAllocationBytes, config.maximumGlobalEvidenceBytes()))
 					result = grantAllocation(Status.GLOBAL_CAPACITY);
 				else {
 					Status quota = ensureDeliveryQuotaWhileLocked(session, partition);
@@ -370,13 +421,16 @@ final class McpLegacySessionStore {
 					else {
 						if (session.deliveryPartition == null) session.deliveryPartition = partition;
 						addEvidenceWhileLocked(session, allocationBytes);
+						if (verifiedUse.evidence.transientRetention) {
+							verifiedUse.evidence.transientRetention = false;
+							releaseTransientAccountingWhileLocked(session, promotedBytes);
+						}
 						if (entry == null) {
 							entry = new GrantEntry(session, uri, uriBytes,
 									earlierDeadline(now, totalDeadlineNanos, session.createdNanos + config.lifetimeNanos()));
 							session.grants.put(URI.create(uri), entry); logicalGrants++; session.usage.liveGrants++;
 							session.retainedUriBytes += uriBytes; retainedUriBytes += uriBytes;
 						}
-						invalidatePendingGrantHintsWhileLocked(entry);
 						entry.generation.incrementAndGet(); entry.authorized = false;
 						if (entry.pending != null) retireGrantHandleWhileLocked(entry.pending, GrantCause.REPLACED, actions);
 						fenceGrantTargetWhileLocked(entry.activeGrant, entry.generation.get(), actions);
@@ -398,7 +452,7 @@ final class McpLegacySessionStore {
 		requireNonNull(verifiedUse); requireNonNull(uri);
 		List<Runnable> actions = new ArrayList<>(); boolean accepted;
 		synchronized (lock) {
-			maintainWhileLocked(clock.nanoTime(), actions);
+			if (owned(verifiedUse)) maintainSessionWhileLocked(verifiedUse.session, clock.nanoTime(), actions);
 			accepted = owned(verifiedUse) && verifiedUse.logical && verifiedUse.accepted && verifiedUse.session.live;
 			if (accepted) {
 				GrantEntry entry = validResourceUri(uri) ? verifiedUse.session.grants.get(URI.create(uri)) : null;
@@ -423,7 +477,7 @@ final class McpLegacySessionStore {
 		requireNonNull(path); requireLegacy(revision);
 		List<Grant> result = new ArrayList<>();
 		synchronized (lock) {
-			for (Session session : sessions.values()) if (session.path.equals(path) && session.revision.equals(revision))
+			for (Session session : endpointSessions.getOrDefault(new EndpointRevision(path, revision), Set.of()))
 				for (GrantEntry entry : session.grants.values())
 					if (entry.activeGrant != null && entry.pending == null) result.add(entry.activeGrant);
 		}
@@ -446,10 +500,10 @@ final class McpLegacySessionStore {
 		requireNonNull(sourceActive);
 		synchronized (lock) {
 			if (!sourceActive.getAsBoolean()) return;
-			for (Session session : sessions.values()) if (session.path.equals(path) && session.revision.equals(revision)) {
+			for (Session session : endpointSessions.getOrDefault(new EndpointRevision(path, revision), Set.of())) {
 				CatalogDirty dirty = session.catalogDirty.computeIfAbsent(notificationType, ignored -> new CatalogDirty());
 				if (!dirty.dirty || !dirty.sourceActive.getAsBoolean()) {
-					dirty.dirty = true; dirty.sequence++; dirty.lastOfferedGet = null; dirty.lastOfferedAttempt = null;
+					dirty.dirty = true; dirty.sequence++;
 				}
 				dirty.sourceActive = sourceActive;
 			}
@@ -463,10 +517,12 @@ final class McpLegacySessionStore {
 			@NonNull BooleanSupplier sourceActive) {
 		requireNonNull(path); requireLegacy(revision); requireNonNull(uri);
 		requireNonNull(sourceActive);
+		if (!validResourceUri(uri)) return;
+		URI resourceUri = URI.create(uri);
 		synchronized (lock) {
 			if (!sourceActive.getAsBoolean()) return;
-			for (Session session : sessions.values()) if (session.path.equals(path) && session.revision.equals(revision)) {
-				GrantEntry entry = validResourceUri(uri) ? session.grants.get(URI.create(uri)) : null;
+			for (Session session : endpointSessions.getOrDefault(new EndpointRevision(path, revision), Set.of())) {
+				GrantEntry entry = session.grants.get(resourceUri);
 				if (entry != null && entry.live) {
 					entry.dirty = true; entry.dirtySequence++; entry.sourceActive = sourceActive;
 				}
@@ -481,7 +537,7 @@ final class McpLegacySessionStore {
 			if (!owned(verifiedUse) || !verifiedUse.logical || !verifiedUse.accepted || !verifiedUse.session.live)
 				return false;
 			CatalogDirty dirty = verifiedUse.session.catalogDirty.get(notificationType);
-			if (dirty != null) { dirty.dirty = false; dirty.sequence++; dirty.lastOfferedGet = null; }
+			if (dirty != null) { dirty.dirty = false; dirty.sequence++; }
 			return true;
 		}
 	}
@@ -492,17 +548,18 @@ final class McpLegacySessionStore {
 		List<Delivery> result = new ArrayList<>();
 		synchronized (lock) {
 			long now = clock.nanoTime();
-			for (Session session : sessions.values()) if (session.path.equals(path) && session.revision.equals(revision)) {
+			for (Session session : endpointSessions.getOrDefault(new EndpointRevision(path, revision), Set.of())) {
 				for (Map.Entry<McpResourceNotificationType, CatalogDirty> item : session.catalogDirty.entrySet()) {
 					CatalogDirty dirty = item.getValue();
 					List<Get> gets = eligibleGetsWhileLocked(session, item.getKey(), now);
-					if (dirty.dirty && !gets.isEmpty() && gets.get(0) != dirty.lastOfferedGet)
+					if (dirty.dirty && dirty.writtenSequence != dirty.sequence
+							&& dirty.pendingAttempt == null && !gets.isEmpty())
 						result.add(new Delivery(session, item.getKey(), null, dirty.sequence, gets));
 				}
 				for (GrantEntry entry : session.grants.values()) {
 					List<Get> gets = eligibleGetsWhileLocked(session, McpResourceNotificationType.RESOURCE_UPDATED, now);
 					if (entry.dirty && grantDeliverable(entry, now) && !gets.isEmpty()
-							&& (gets.get(0) != entry.lastOfferedGet || entry.lastOfferedSequence != entry.dirtySequence))
+							&& entry.pendingAttempt == null)
 						result.add(new Delivery(session, McpResourceNotificationType.RESOURCE_UPDATED, entry,
 								entry.dirtySequence, gets));
 				}
@@ -514,30 +571,31 @@ final class McpLegacySessionStore {
 	boolean acknowledgeOffered(@NonNull DeliveryAttempt attempt) {
 		requireNonNull(attempt);
 		synchronized (lock) {
-			if (!attempt.valid() || !attempt.currentDirtyWhileLocked()) return false;
-			if (attempt.entry == null) {
-				CatalogDirty dirty = attempt.get.session.catalogDirty.get(attempt.notificationType);
-				requireNonNull(dirty).lastOfferedGet = attempt.get; dirty.lastOfferedAttempt = attempt;
-			} else {
-				attempt.entry.lastOfferedGet = attempt.get; attempt.entry.lastOfferedSequence = attempt.dirtySequence;
-				attempt.entry.lastOfferedAttempt = attempt;
-			}
-			return true;
+			// Immediate capture or a fast socket writer may finish before offer returns.
+			return attempt.written || (attempt.valid() && attempt.currentDirtyWhileLocked()
+					&& attempt.pendingAttemptWhileLocked() == attempt);
 		}
 	}
 
-	@NonNull Optional<@NonNull NotificationReservation> reserveNotificationBytes(
+	@NonNull NotificationAllocation reserveNotificationBytes(
 			@NonNull DeliveryAttempt attempt, long encodedBytes) {
 		requireNonNull(attempt); requireEvidence(encodedBytes);
 		synchronized (lock) {
 			OwnerUsage usage = attempt.get.session.usage;
-			if (encodedBytes == 0L || !attempt.valid()
-					|| exceeds(usage.queuedNotificationBytes, encodedBytes, MAXIMUM_NOTIFICATION_BYTES_PER_OWNER)
-					|| exceeds(queuedNotificationBytes, encodedBytes, MAXIMUM_NOTIFICATION_BYTES_GLOBAL))
-				return Optional.empty();
-			usage.queuedNotificationBytes += encodedBytes; queuedNotificationBytes += encodedBytes; attempt.reservations++;
+			if (encodedBytes == 0L || !attempt.valid() || !attempt.currentDirtyWhileLocked()
+					|| attempt.alreadyOfferedWhileLocked())
+				return new NotificationAllocation(NotificationStatus.STALE, Optional.empty());
+			if (exceeds(usage.queuedNotificationBytes, encodedBytes, MAXIMUM_NOTIFICATION_BYTES_PER_OWNER))
+				return new NotificationAllocation(NotificationStatus.OWNER_CAPACITY, Optional.empty());
+			if (exceeds(queuedNotificationBytes, encodedBytes, MAXIMUM_NOTIFICATION_BYTES_GLOBAL))
+				return new NotificationAllocation(NotificationStatus.GLOBAL_CAPACITY, Optional.empty());
+			// Claim the key before calling the channel. Concurrent flush snapshots may
+			// choose different GETs, but only one can retain this notification.
+			attempt.setPendingAttemptWhileLocked(attempt);
+			usage.queuedNotificationBytes += encodedBytes; queuedNotificationBytes += encodedBytes;
 			attempt.get.queuedNotificationBytes += encodedBytes;
-			return Optional.of(new NotificationReservation(attempt, encodedBytes));
+			return new NotificationAllocation(NotificationStatus.ACCEPTED,
+					Optional.of(new NotificationReservation(attempt, encodedBytes)));
 		}
 	}
 
@@ -584,16 +642,18 @@ final class McpLegacySessionStore {
 		private final Get get;
 		private final McpResourceNotificationType notificationType;
 		private final @Nullable GrantEntry entry;
+		private final @Nullable CatalogDirty catalog;
 		private final long dirtySequence;
 		private final long getGeneration;
 		private final long grantGeneration;
 		private final BooleanSupplier sourceActive;
-		private int reservations;
+		private boolean written;
 		private DeliveryAttempt(Get get, McpResourceNotificationType type, @Nullable GrantEntry entry, long sequence) {
 			this.get = get; this.notificationType = type; this.entry = entry; this.dirtySequence = sequence;
+			this.catalog = entry == null ? requireNonNull(get.session.catalogDirty.get(type)) : null;
 			this.getGeneration = get.authorizationGeneration.get(); this.grantGeneration = entry == null ? 0L : entry.generation.get();
 			this.sourceActive = entry == null
-					? requireNonNull(get.session.catalogDirty.get(type)).sourceActive : entry.sourceActive;
+					? requireNonNull(catalog).sourceActive : entry.sourceActive;
 		}
 		@NonNull Get get() { return get; }
 		@NonNull McpResourceNotificationType notificationType() { return notificationType; }
@@ -605,14 +665,23 @@ final class McpLegacySessionStore {
 		}
 		private boolean currentDirtyWhileLocked() {
 			if (entry != null) return entry.dirty && entry.dirtySequence == dirtySequence;
-			CatalogDirty dirty = get.session.catalogDirty.get(notificationType);
+			CatalogDirty dirty = catalog;
 			return dirty != null && dirty.dirty && dirty.sequence == dirtySequence;
 		}
-		private boolean alreadyOfferedWhileLocked() {
-			if (entry != null) return entry.lastOfferedGet == get && entry.lastOfferedSequence == dirtySequence;
-			CatalogDirty dirty = get.session.catalogDirty.get(notificationType);
-			return dirty != null && dirty.lastOfferedGet == get;
+		private @Nullable DeliveryAttempt pendingAttemptWhileLocked() {
+			return entry != null ? entry.pendingAttempt
+					: requireNonNull(catalog).pendingAttempt;
 		}
+		private void setPendingAttemptWhileLocked(@Nullable DeliveryAttempt attempt) {
+			if (entry != null) entry.pendingAttempt = attempt;
+			else requireNonNull(catalog).pendingAttempt = attempt;
+		}
+		private boolean alreadyOfferedWhileLocked() {
+			if (pendingAttemptWhileLocked() != null) return true;
+			return entry == null
+					&& requireNonNull(catalog).writtenSequence == dirtySequence;
+		}
+
 		@Override public String toString() { return "DeliveryAttempt[redacted]"; }
 	}
 
@@ -625,11 +694,22 @@ final class McpLegacySessionStore {
 			this.attempt = attempt; this.encodedBytes = encodedBytes;
 		}
 		boolean valid() { return !released.get() && attempt.valid(); }
+		/** Called only for a complete frame, before release, outside the channel lock. */
+		void written() {
+			synchronized (lock) { if (!released.get()) attempt.written = true; }
+		}
 		void release() {
 			if (!released.compareAndSet(false, true)) return;
 			synchronized (lock) {
 				OwnerUsage usage = attempt.get.session.usage;
-				usage.queuedNotificationBytes -= encodedBytes; queuedNotificationBytes -= encodedBytes; attempt.reservations--;
+				usage.queuedNotificationBytes -= encodedBytes; queuedNotificationBytes -= encodedBytes;
+				if (attempt.pendingAttemptWhileLocked() == attempt) attempt.setPendingAttemptWhileLocked(null);
+				if (attempt.written) {
+					if (attempt.entry == null) {
+						CatalogDirty dirty = requireNonNull(attempt.catalog);
+						if (dirty.sequence == attempt.dirtySequence) dirty.writtenSequence = attempt.dirtySequence;
+					} else if (attempt.entry.dirtySequence == attempt.dirtySequence) attempt.entry.dirty = false;
+				}
 				attempt.get.queuedNotificationBytes -= encodedBytes;
 				removeOwnerIfCompleteWhileLocked(attempt.get.session);
 			}
@@ -678,8 +758,10 @@ final class McpLegacySessionStore {
 		} catch (IllegalArgumentException | ArithmeticException exception) {
 			return allocation(Status.METADATA_TOO_LARGE);
 		}
-		if (exceeds(bytes, retainedRequestEvidenceBytes, config.maximumSessionEvidenceBytes()))
+		if (bytes > config.maximumSessionEvidenceBytes())
 			return allocation(Status.OWNER_CAPACITY);
+		if (retainedRequestEvidenceBytes > config.maximumSessionTransientBytes())
+			return allocation(Status.TRANSIENT_CAPACITY);
 		List<Runnable> actions = new ArrayList<>();
 		Allocation result;
 		long allocationBytes = Math.addExact(bytes, retainedRequestEvidenceBytes);
@@ -689,13 +771,13 @@ final class McpLegacySessionStore {
 			if (owner.anonymous() && !config.anonymousAllowed()) result = allocation(Status.ANONYMOUS_DENIED);
 			else {
 				OwnerUsage usage = owners.get(owner);
-				Status capacity = publicationCapacityWhileLocked(owner, usage, allocationBytes);
+				Status capacity = publicationCapacityWhileLocked(owner, usage, bytes, retainedRequestEvidenceBytes);
 				while (capacity != Status.ACCEPTED) {
 					Session evictable = oldestEvictableWhileLocked(owner, now);
 					if (evictable == null) break;
 					retireWhileLocked(evictable, Cause.SESSION_CLOSED, actions);
 					usage = owners.get(owner);
-					capacity = publicationCapacityWhileLocked(owner, usage, allocationBytes);
+					capacity = publicationCapacityWhileLocked(owner, usage, bytes, retainedRequestEvidenceBytes);
 				}
 				if (capacity != Status.ACCEPTED) result = allocation(capacity);
 				else {
@@ -707,12 +789,17 @@ final class McpLegacySessionStore {
 								snapshot, bytes, now, ++sequence, usage);
 						Initialization initialization = new Initialization(session, target, retainedRequestEvidenceBytes);
 						session.retainedBytes = allocationBytes;
+						session.transientBytes = retainedRequestEvidenceBytes;
 						session.initialization = initialization;
 						session.physicalReferences = 1;
+						session.clientPhysicalReferences = 1;
 						sessions.put(id, session);
+						endpointSessions.computeIfAbsent(session.endpointRevision, ignored -> new java.util.LinkedHashSet<>()).add(session);
 						usage.liveSessions++;
 						usage.retainedBytes += allocationBytes;
+						usage.transientBytes += retainedRequestEvidenceBytes;
 						retainedBytes += allocationBytes;
+						transientBytes += retainedRequestEvidenceBytes;
 						physicalReferences++;
 						if (owner.anonymous()) anonymousSessions++;
 						result = new Allocation(Status.ACCEPTED, Optional.of(initialization));
@@ -743,6 +830,23 @@ final class McpLegacySessionStore {
 			@NonNull String path, @NonNull String revision, @NonNull Object lifecycleGeneration,
 			@Nullable McpJsonRpcId requestId, @Nullable McpProgressToken progressToken,
 			@NonNull Target target, long retainedRequestEvidenceBytes) {
+		return acquire(sessionId, owner, path, revision, lifecycleGeneration, requestId,
+				progressToken, target, retainedRequestEvidenceBytes, false);
+	}
+
+	/** Only the runtime's validated cleanup subset may use this finite reservation. */
+	@NonNull Acquisition acquireControl(@NonNull String sessionId, @NonNull Owner owner,
+			@NonNull String path, @NonNull String revision, @NonNull Object lifecycleGeneration,
+			@Nullable McpJsonRpcId requestId, @NonNull Target target, long retainedRequestEvidenceBytes) {
+		return acquire(sessionId, owner, path, revision, lifecycleGeneration, requestId,
+				null, target, retainedRequestEvidenceBytes, true);
+	}
+
+	@SuppressWarnings("ReferenceEquality")
+	private @NonNull Acquisition acquire(@NonNull String sessionId, @NonNull Owner owner,
+			@NonNull String path, @NonNull String revision, @NonNull Object lifecycleGeneration,
+			@Nullable McpJsonRpcId requestId, @Nullable McpProgressToken progressToken,
+			@NonNull Target target, long retainedRequestEvidenceBytes, boolean control) {
 		requireNonNull(owner); requireNonNull(lifecycleGeneration); requireNonNull(target);
 		requireEvidence(retainedRequestEvidenceBytes);
 		requireNonNull(path);
@@ -752,31 +856,46 @@ final class McpLegacySessionStore {
 		Acquisition result;
 		synchronized (lock) {
 			long now = clock.nanoTime();
-			maintainWhileLocked(now, actions);
 			Session session = sessions.get(sessionId);
-			if (session == null || !session.owner.equals(owner) || !session.path.equals(path)
+			maintainSessionWhileLocked(session, now, actions);
+			if (session == null || !session.live || !session.owner.equals(owner) || !session.path.equals(path)
 					|| session.lifecycleGeneration != lifecycleGeneration)
 				result = acquisition(Status.NOT_FOUND);
 			else if (!session.revision.equals(revision)) result = acquisition(Status.REVISION_MISMATCH);
 			else if (requestId != null && session.requests.containsKey(requestId)) result = acquisition(Status.ACTIVE_ID_COLLISION);
-			else if (requestId != null && session.requests.size() >= MAXIMUM_ACTIVE_CALLS_PER_SESSION)
+			else if (!control && requestId != null && session.requests.size() - session.logicalControlRequests >= MAXIMUM_ACTIVE_CALLS_PER_SESSION)
 				result = acquisition(Status.CALL_CAPACITY);
-			else if (exceeds(session.retainedBytes, retainedRequestEvidenceBytes, config.maximumSessionEvidenceBytes())
-					|| exceeds(session.usage.retainedBytes, retainedRequestEvidenceBytes, config.maximumOwnerEvidenceBytes()))
-				result = acquisition(Status.OWNER_CAPACITY);
-			else if (exceeds(retainedBytes, retainedRequestEvidenceBytes, config.maximumGlobalEvidenceBytes()))
-				result = acquisition(Status.GLOBAL_CAPACITY);
+			else if (control && (retainedRequestEvidenceBytes > config.maximumControlRequestBytes()
+					|| session.controlCalls >= MAXIMUM_CONTROL_CALLS_PER_SESSION
+					|| session.usage.controlCalls >= MAXIMUM_CONTROL_CALLS_PER_OWNER
+					|| controlCalls >= MAXIMUM_CONTROL_CALLS_GLOBAL))
+				result = acquisition(Status.TRANSIENT_CAPACITY);
+			else if (!control && (exceeds(session.transientBytes - session.controlBytes, retainedRequestEvidenceBytes, config.maximumSessionTransientBytes())
+					|| exceeds(session.usage.transientBytes - session.usage.controlBytes, retainedRequestEvidenceBytes, config.maximumOwnerTransientBytes())))
+				result = acquisition(Status.TRANSIENT_CAPACITY);
+			else if (!control && exceeds(transientBytes - controlBytes, retainedRequestEvidenceBytes, config.maximumGlobalTransientBytes()))
+				result = acquisition(Status.TRANSIENT_CAPACITY);
 			else {
 				McpProgressToken retainedToken = requestId != null && validProgressToken(progressToken)
 						&& !session.progressTokens.contains(progressToken) ? progressToken : null;
 				Call call = new Call(session, requestId, retainedToken, target, retainedRequestEvidenceBytes);
-				session.retainedBytes += retainedRequestEvidenceBytes;
-				session.usage.retainedBytes += retainedRequestEvidenceBytes;
-				retainedBytes += retainedRequestEvidenceBytes;
+				call.evidence.controlRetention = control;
+				addEvidenceWhileLocked(session, retainedRequestEvidenceBytes);
+				session.transientBytes += retainedRequestEvidenceBytes;
+				session.usage.transientBytes += retainedRequestEvidenceBytes;
+				transientBytes += retainedRequestEvidenceBytes;
+				if (control) {
+					session.controlCalls++; session.usage.controlCalls++; controlCalls++;
+					session.controlBytes += retainedRequestEvidenceBytes;
+					session.usage.controlBytes += retainedRequestEvidenceBytes;
+					controlBytes += retainedRequestEvidenceBytes;
+					if (requestId != null) session.logicalControlRequests++;
+				}
 				session.uses.add(call);
 				if (requestId != null) session.requests.put(requestId, call);
 				if (retainedToken != null) session.progressTokens.add(retainedToken);
 				session.physicalReferences++;
+				session.clientPhysicalReferences++;
 				physicalReferences++;
 				result = new Acquisition(Status.ACCEPTED, Optional.of(call));
 			}
@@ -797,7 +916,7 @@ final class McpLegacySessionStore {
 		Target target;
 		List<Runnable> actions = new ArrayList<>();
 		synchronized (lock) {
-			maintainWhileLocked(clock.nanoTime(), actions);
+			if (owned(verifiedUse)) maintainSessionWhileLocked(verifiedUse.session, clock.nanoTime(), actions);
 			if (!owned(verifiedUse) || !verifiedUse.logical || !verifiedUse.session.live
 					|| !verifiedUse.accepted) target = null;
 			else {
@@ -868,8 +987,9 @@ final class McpLegacySessionStore {
 				physical = false;
 				target = null;
 				session.initialization = null;
+				releaseTransientAccountingWhileLocked(session, evidenceBytes);
 				releaseRequestEvidenceWhileLocked(session, evidenceBytes);
-				releasePhysicalWhileLocked(session);
+				releaseClientPhysicalWhileLocked(session);
 			}
 		}
 		@Override public String toString() { return "Initialization[redacted]"; }
@@ -904,7 +1024,7 @@ final class McpLegacySessionStore {
 				physical = false;
 				logicalCompleteWhileLocked(this);
 				releaseSharedEvidenceWhileLocked(evidence);
-				releasePhysicalWhileLocked(session);
+				releaseClientPhysicalWhileLocked(session);
 			}
 		}
 		@Override public String toString() { return "Call[redacted]"; }
@@ -956,7 +1076,7 @@ final class McpLegacySessionStore {
 			List<Runnable> actions = new ArrayList<>();
 			long generation;
 			synchronized (lock) {
-				maintainWhileLocked(clock.nanoTime(), actions);
+				maintainSessionWhileLocked(session, clock.nanoTime(), actions);
 				if (logical && session.live) fenceGetWhileLocked(this, actions);
 				generation = authorizationGeneration.get();
 			}
@@ -966,7 +1086,7 @@ final class McpLegacySessionStore {
 		boolean fenceIfCurrent(long expectedGeneration) {
 			List<Runnable> actions = new ArrayList<>(); boolean fenced;
 			synchronized (lock) {
-				maintainWhileLocked(clock.nanoTime(), actions);
+				maintainSessionWhileLocked(session, clock.nanoTime(), actions);
 				fenced = logical && session.live && authorizationGeneration.get() == expectedGeneration;
 				if (fenced) fenceGetWhileLocked(this, actions);
 			}
@@ -993,7 +1113,7 @@ final class McpLegacySessionStore {
 			Status result = Status.NOT_FOUND;
 			synchronized (lock) {
 				long now = clock.nanoTime();
-				maintainWhileLocked(now, actions);
+				maintainSessionWhileLocked(session, now, actions);
 				if (logical && session.live && authorizationGeneration.get() == expectedGeneration) {
 					if (!session.owner.equals(freshOwner) || !requireNonNull(session.deliveryPartition).equals(freshPartition)) {
 						retireGetWhileLocked(this, GetCause.AUTHORIZATION_DENIED, actions);
@@ -1008,7 +1128,6 @@ final class McpLegacySessionStore {
 								demand, MAXIMUM_MAINTENANCE_DEMAND_UNITS)) result = Status.GLOBAL_CAPACITY;
 						else {
 							McpLegacySessionStore.this.maintenanceDemandUnits += demand - maintenanceDemandUnits;
-							invalidatePendingGetHintsWhileLocked(this);
 							maintenanceDemandUnits = demand; leaseDeadlineNanos = deadline;
 							notificationTypes = families; authorizationGeneration.incrementAndGet(); authorized = true;
 							result = Status.ACCEPTED;
@@ -1049,7 +1168,7 @@ final class McpLegacySessionStore {
 				completeGetWhileLocked(this, actions);
 				physicalGets--;
 				releaseRequestEvidenceWhileLocked(session, evidenceBytes);
-				releasePhysicalWhileLocked(session);
+				releaseClientPhysicalWhileLocked(session);
 			}
 			run(actions);
 		}
@@ -1105,7 +1224,7 @@ final class McpLegacySessionStore {
 		long fence() {
 			List<Runnable> actions = new ArrayList<>();
 			synchronized (lock) {
-				maintainWhileLocked(clock.nanoTime(), actions);
+				maintainSessionWhileLocked(entry.session, clock.nanoTime(), actions);
 				if (logical && entry.live && (entry.activeGrant == this || entry.pending == this))
 					fenceGrantEntryWhileLocked(entry, actions);
 			}
@@ -1114,7 +1233,7 @@ final class McpLegacySessionStore {
 		boolean fenceIfCurrent(long expectedGeneration) {
 			List<Runnable> actions = new ArrayList<>(); boolean fenced;
 			synchronized (lock) {
-				maintainWhileLocked(clock.nanoTime(), actions);
+				maintainSessionWhileLocked(entry.session, clock.nanoTime(), actions);
 				fenced = logical && entry.live && entry.session.live && entry.generation.get() == expectedGeneration
 						&& (entry.activeGrant == this || entry.pending == this);
 				if (fenced) fenceGrantEntryWhileLocked(entry, actions);
@@ -1137,7 +1256,7 @@ final class McpLegacySessionStore {
 		@NonNull Optional<@NonNull GrantWork> acquireWork(long expectedGeneration) {
 			List<Runnable> actions = new ArrayList<>(); GrantWork result = null;
 			synchronized (lock) {
-				long now = clock.nanoTime(); maintainWhileLocked(now, actions);
+				long now = clock.nanoTime(); maintainSessionWhileLocked(entry.session, now, actions);
 				if (logical && entry.live && entry.session.live && entry.activeGrant == this
 						&& entry.pending == null && entry.generation.get() == expectedGeneration
 						&& now - entry.leaseDeadlineNanos < 0L) {
@@ -1210,8 +1329,9 @@ final class McpLegacySessionStore {
 	private Status updateGrant(Grant grant, long expectedGeneration, long leaseDeadlineNanos, boolean establishing) {
 		List<Runnable> actions = new ArrayList<>(); Status result = Status.NOT_FOUND;
 		synchronized (lock) {
-			long now = clock.nanoTime(); maintainWhileLocked(now, actions);
+			long now = clock.nanoTime();
 			GrantEntry entry = grant.entry;
+			maintainSessionWhileLocked(entry.session, now, actions);
 			boolean current = establishing ? entry.pending == grant
 					: entry.activeGrant == grant && entry.pending == null;
 			if (grant.logical && entry.live && entry.session.live && current && entry.generation.get() == expectedGeneration) {
@@ -1227,7 +1347,6 @@ final class McpLegacySessionStore {
 						entry.pending = null; entry.activeGrant = grant;
 						maintenanceDemandUnits += demand - entry.maintenanceDemandUnits;
 						entry.maintenanceDemandUnits = demand;
-						invalidatePendingGrantHintsWhileLocked(entry);
 						entry.leaseDeadlineNanos = deadline; entry.generation.incrementAndGet(); entry.authorized = true;
 						result = Status.ACCEPTED;
 					}
@@ -1242,7 +1361,7 @@ final class McpLegacySessionStore {
 		boolean accepted;
 		synchronized (lock) {
 			long now = clock.nanoTime();
-			maintainWhileLocked(now, actions);
+			if (owned(call)) maintainSessionWhileLocked(call.session, now, actions);
 			accepted = owned(call) && call.logical && call.session.live;
 			if (accepted) {
 				call.accepted = true;
@@ -1257,27 +1376,32 @@ final class McpLegacySessionStore {
 
 	private boolean owned(Call call) { return call.store() == this; }
 
+	/** Global expiry runs on the periodic sweep and when allocating a new session. */
 	private void maintainWhileLocked(long now, List<Runnable> actions) {
-		for (Session session : List.copyOf(sessions.values())) {
-			boolean hardExpired = now - session.createdNanos >= config.lifetimeNanos();
-			boolean ackExpired = !session.acknowledged && !session.deliveryEvidence
-					&& now - session.createdNanos >= Math.min(ACKNOWLEDGEMENT_WAIT_NANOS, config.lifetimeNanos());
-			boolean idleExpired = session.physicalReferences == 0
-					&& now - session.quiescentNanos >= config.idleNanos()
-					&& now - session.lastActivityNanos >= config.idleNanos();
-			if (hardExpired || ackExpired || idleExpired)
-				retireWhileLocked(session, Cause.SESSION_EXPIRED, actions);
-			else {
-				for (Get get : List.copyOf(session.gets)) {
-					if (now - get.totalDeadlineNanos >= 0L) retireGetWhileLocked(get, GetCause.TOTAL_LIFETIME_EXPIRED, actions);
-					else if (now - get.leaseDeadlineNanos >= 0L) retireGetWhileLocked(get, GetCause.LEASE_EXPIRED, actions);
-				}
-				for (GrantEntry entry : List.copyOf(session.grants.values())) {
-					if (now - entry.totalDeadlineNanos >= 0L)
-						retireGrantEntryWhileLocked(entry, GrantCause.TOTAL_LIFETIME_EXPIRED, actions);
-					else if (entry.activeGrant != null && now - entry.leaseDeadlineNanos >= 0L)
-						retireGrantEntryWhileLocked(entry, GrantCause.LEASE_EXPIRED, actions);
-				}
+		for (Session session : List.copyOf(sessions.values())) maintainSessionWhileLocked(session, now, actions);
+	}
+
+	/** Existing-session operations inspect only their bounded session, GETs and grants. */
+	private void maintainSessionWhileLocked(@Nullable Session session, long now, List<Runnable> actions) {
+		if (session == null || !session.live) return;
+		boolean hardExpired = now - session.createdNanos >= config.lifetimeNanos();
+		boolean ackExpired = !session.acknowledged && !session.deliveryEvidence
+				&& now - session.createdNanos >= Math.min(ACKNOWLEDGEMENT_WAIT_NANOS, config.lifetimeNanos());
+		boolean idleExpired = session.clientPhysicalReferences == 0
+				&& now - session.quiescentNanos >= config.idleNanos()
+				&& now - session.lastActivityNanos >= config.idleNanos();
+		if (hardExpired || ackExpired || idleExpired)
+			retireWhileLocked(session, Cause.SESSION_EXPIRED, actions);
+		else {
+			for (Get get : List.copyOf(session.gets)) {
+				if (now - get.totalDeadlineNanos >= 0L) retireGetWhileLocked(get, GetCause.TOTAL_LIFETIME_EXPIRED, actions);
+				else if (now - get.leaseDeadlineNanos >= 0L) retireGetWhileLocked(get, GetCause.LEASE_EXPIRED, actions);
+			}
+			for (GrantEntry entry : List.copyOf(session.grants.values())) {
+				if (now - entry.totalDeadlineNanos >= 0L)
+					retireGrantEntryWhileLocked(entry, GrantCause.TOTAL_LIFETIME_EXPIRED, actions);
+				else if (entry.activeGrant != null && now - entry.leaseDeadlineNanos >= 0L)
+					retireGrantEntryWhileLocked(entry, GrantCause.LEASE_EXPIRED, actions);
 			}
 		}
 	}
@@ -1285,7 +1409,7 @@ final class McpLegacySessionStore {
 	private @Nullable Session oldestEvictableWhileLocked(Owner owner, long now) {
 		Session oldest = null;
 		for (Session candidate : sessions.values()) {
-			if (!candidate.owner.equals(owner) || candidate.physicalReferences != 0
+			if (!candidate.owner.equals(owner) || candidate.clientPhysicalReferences != 0
 						|| now - candidate.quiescentNanos < MINIMUM_EVICTION_IDLE_NANOS
 						|| now - candidate.lastActivityNanos < MINIMUM_EVICTION_IDLE_NANOS) continue;
 			if (oldest == null || now - candidate.lastActivityNanos > now - oldest.lastActivityNanos
@@ -1295,14 +1419,18 @@ final class McpLegacySessionStore {
 		return oldest;
 	}
 
-	private Status publicationCapacityWhileLocked(Owner owner, @Nullable OwnerUsage usage, long bytes) {
+	private Status publicationCapacityWhileLocked(Owner owner, @Nullable OwnerUsage usage,
+			long bytes, long requestBytes) {
 		if (usage != null && (usage.liveSessions >= config.maximumSessionsPerOwner()
-				|| exceeds(usage.retainedBytes, bytes, config.maximumOwnerEvidenceBytes())))
+				|| exceeds(usage.retainedBytes - usage.transientBytes, bytes, config.maximumOwnerEvidenceBytes())))
 			return Status.OWNER_CAPACITY;
 		if (sessions.size() >= config.maximumSessions()
 				|| owner.anonymous() && anonymousSessions >= Math.min(MAXIMUM_ANONYMOUS_SESSIONS, config.maximumSessions())
-				|| exceeds(retainedBytes, bytes, config.maximumGlobalEvidenceBytes()))
+				|| exceeds(retainedBytes - transientBytes, bytes, config.maximumGlobalEvidenceBytes()))
 			return Status.GLOBAL_CAPACITY;
+		if ((usage != null && exceeds(usage.transientBytes - usage.controlBytes, requestBytes, config.maximumOwnerTransientBytes()))
+				|| exceeds(transientBytes - controlBytes, requestBytes, config.maximumGlobalTransientBytes()))
+			return Status.TRANSIENT_CAPACITY;
 		return Status.ACCEPTED;
 	}
 
@@ -1310,6 +1438,9 @@ final class McpLegacySessionStore {
 		if (!session.live) return;
 		session.live = false;
 		sessions.remove(session.id, session);
+		Set<Session> endpointRecords = requireNonNull(endpointSessions.get(session.endpointRevision));
+		endpointRecords.remove(session);
+		if (endpointRecords.isEmpty()) endpointSessions.remove(session.endpointRevision);
 		session.usage.liveSessions--;
 		if (session.owner.anonymous()) anonymousSessions--;
 		Initialization initialization = session.initialization;
@@ -1341,7 +1472,6 @@ final class McpLegacySessionStore {
 
 	private void fenceGetWhileLocked(Get get, List<Runnable> actions) {
 		if (!get.logical || !get.session.live) return;
-		invalidatePendingGetHintsWhileLocked(get);
 		get.authorized = false;
 		long generation = get.authorizationGeneration.incrementAndGet();
 		GetTarget target = get.target;
@@ -1360,42 +1490,19 @@ final class McpLegacySessionStore {
 		get.logical = false; get.authorized = false; get.authorizationGeneration.incrementAndGet(); get.target = null;
 		get.session.gets.remove(get); logicalGets--;
 		maintenanceDemandUnits -= get.maintenanceDemandUnits; get.maintenanceDemandUnits = 0L;
-		for (CatalogDirty dirty : get.session.catalogDirty.values()) if (dirty.lastOfferedGet == get) {
-			dirty.lastOfferedGet = null; dirty.lastOfferedAttempt = null;
-		}
-		for (GrantEntry entry : get.session.grants.values()) if (entry.lastOfferedGet == get) {
-			entry.lastOfferedGet = null; entry.lastOfferedAttempt = null;
-		}
+		// A pending frame keeps its key until the writer reports complete write or
+		// drop. Retirement/fencing alone cannot establish which outcome won.
 		maybeReleaseDeliveryQuotaWhileLocked(get.session, actions);
 	}
 
-	private void invalidatePendingGetHintsWhileLocked(Get get) {
-		for (CatalogDirty dirty : get.session.catalogDirty.values())
-			if (dirty.lastOfferedAttempt != null && dirty.lastOfferedAttempt.get == get
-					&& dirty.lastOfferedAttempt.reservations > 0) {
-				dirty.lastOfferedGet = null; dirty.lastOfferedAttempt = null;
-			}
-		for (GrantEntry entry : get.session.grants.values())
-			if (entry.lastOfferedAttempt != null && entry.lastOfferedAttempt.get == get
-						&& entry.lastOfferedAttempt.reservations > 0) {
-				entry.lastOfferedGet = null; entry.lastOfferedAttempt = null;
-			}
-	}
 
 	private void fenceGrantEntryWhileLocked(GrantEntry entry, List<Runnable> actions) {
 		if (!entry.live || !entry.session.live) return;
-		invalidatePendingGrantHintsWhileLocked(entry);
 		entry.authorized = false; entry.generation.incrementAndGet();
 		fenceGrantTargetWhileLocked(entry.activeGrant, entry.generation.get(), actions);
 		fenceGrantTargetWhileLocked(entry.pending, entry.generation.get(), actions);
 	}
 
-	/** A generation change drops queued guards, but does not repeat a hint whose payload was already released. */
-	private void invalidatePendingGrantHintsWhileLocked(GrantEntry entry) {
-		if (entry.lastOfferedAttempt != null && entry.lastOfferedAttempt.reservations > 0) {
-			entry.lastOfferedGet = null; entry.lastOfferedAttempt = null;
-		}
-	}
 
 	private void fenceGrantTargetWhileLocked(@Nullable Grant grant, long generation, List<Runnable> actions) {
 		if (grant == null || grant.target == null) return;
@@ -1412,16 +1519,22 @@ final class McpLegacySessionStore {
 
 	private void retireGrantEntryWhileLocked(GrantEntry entry, GrantCause cause, List<Runnable> actions) {
 		if (!entry.live) return;
+		// Legacy MCP has no subscription-ended notification. Losing an established
+		// grant must also make the session unusable so reconnect can reinitialize.
+		boolean lostEstablishedGrant = entry.activeGrant != null
+				&& (cause == GrantCause.AUTHORIZATION_DENIED || cause == GrantCause.AUTHORIZATION_FAILED
+						|| cause == GrantCause.LEASE_EXPIRED || cause == GrantCause.TOTAL_LIFETIME_EXPIRED);
 		entry.live = false; entry.authorized = false; entry.generation.incrementAndGet();
 		entry.session.grants.remove(URI.create(entry.uri), entry);
 		logicalGrants--; entry.session.usage.liveGrants--;
 		maintenanceDemandUnits -= entry.maintenanceDemandUnits; entry.maintenanceDemandUnits = 0L;
-		entry.dirty = false; entry.lastOfferedGet = null; entry.lastOfferedAttempt = null;
+		entry.dirty = false;
 		if (entry.activeGrant != null) retireGrantHandleWhileLocked(entry.activeGrant, cause, actions);
 		if (entry.pending != null) retireGrantHandleWhileLocked(entry.pending, cause, actions);
 		entry.activeGrant = null; entry.pending = null;
 		releaseUriEvidenceIfCompleteWhileLocked(entry);
 		maybeReleaseDeliveryQuotaWhileLocked(entry.session, actions);
+		if (lostEstablishedGrant) retireWhileLocked(entry.session, Cause.SESSION_CLOSED, actions);
 	}
 
 	private void releaseGrantPhysicalWhileLocked(Grant grant) {
@@ -1473,7 +1586,17 @@ final class McpLegacySessionStore {
 	}
 
 	private void releaseSharedEvidenceWhileLocked(EvidenceReservation evidence) {
-		if (--evidence.references == 0) releaseRequestEvidenceWhileLocked(evidence.session, evidence.bytes);
+		if (--evidence.references == 0) {
+			if (evidence.controlRetention) {
+				evidence.session.controlCalls--; evidence.session.usage.controlCalls--; controlCalls--;
+				evidence.session.controlBytes -= evidence.bytes;
+				evidence.session.usage.controlBytes -= evidence.bytes;
+				controlBytes -= evidence.bytes;
+			}
+			if (evidence.transientRetention)
+				releaseTransientAccountingWhileLocked(evidence.session, evidence.bytes);
+			releaseRequestEvidenceWhileLocked(evidence.session, evidence.bytes);
+		}
 	}
 
 	private List<Get> eligibleGetsWhileLocked(Session session, McpResourceNotificationType type, long now) {
@@ -1509,6 +1632,7 @@ final class McpLegacySessionStore {
 		call.logical = false;
 		call.target = null;
 		call.session.uses.remove(call);
+		if (call.requestId != null && call.evidence.controlRetention) call.session.logicalControlRequests--;
 		if (call.requestId != null) call.session.requests.remove(call.requestId, call);
 		releaseProgressWhileLocked(call);
 	}
@@ -1519,13 +1643,23 @@ final class McpLegacySessionStore {
 		call.progressToken = null;
 	}
 
+	private void releaseClientPhysicalWhileLocked(Session session) {
+		if (--session.clientPhysicalReferences == 0)
+			session.quiescentNanos = clock.nanoTime();
+		releasePhysicalWhileLocked(session);
+	}
+
 	private void releasePhysicalWhileLocked(Session session) {
 		session.physicalReferences--;
 		physicalReferences--;
-		if (session.physicalReferences == 0) {
-			session.quiescentNanos = clock.nanoTime();
-			if (!session.live) releaseEvidenceWhileLocked(session);
-		}
+		if (session.physicalReferences == 0 && !session.live)
+			releaseEvidenceWhileLocked(session);
+	}
+
+	private void releaseTransientAccountingWhileLocked(Session session, long bytes) {
+		session.transientBytes -= bytes;
+		session.usage.transientBytes -= bytes;
+		transientBytes -= bytes;
 	}
 
 	private void releaseRequestEvidenceWhileLocked(Session session, long bytes) {
@@ -1537,6 +1671,7 @@ final class McpLegacySessionStore {
 	private void releaseEvidenceWhileLocked(Session session) {
 		if (session.evidenceReleased) return;
 		session.evidenceReleased = true;
+		releaseTransientAccountingWhileLocked(session, session.transientBytes);
 		session.usage.retainedBytes -= session.retainedBytes;
 		retainedBytes -= session.retainedBytes;
 		removeOwnerIfCompleteWhileLocked(session);
@@ -1566,7 +1701,7 @@ final class McpLegacySessionStore {
 		return true;
 	}
 
-	private static boolean validRequestId(@Nullable McpJsonRpcId id) {
+	static boolean validRequestId(@Nullable McpJsonRpcId id) {
 		if (id == null) return true;
 		return fitsUtf8(id instanceof McpJsonRpcId.StringId text ? text.value()
 				: ((McpJsonRpcId.IntegerId) id).value().toString(), MAXIMUM_CORRELATION_BYTES);
@@ -1620,23 +1755,30 @@ final class McpLegacySessionStore {
 		}
 	}
 
+	private record EndpointRevision(String path, String revision) {}
+
 	private static final class OwnerUsage {
 		private int liveSessions;
 		private int liveGrants;
 		private long retainedBytes;
+		private long transientBytes;
+		private long controlBytes;
+		private int controlCalls;
 		private long queuedNotificationBytes;
 	}
 	private final class EvidenceReservation {
 		private final Session session;
 		private final long bytes;
 		private int references = 1;
+		private boolean transientRetention = true;
+		private boolean controlRetention;
 		private EvidenceReservation(Session session, long bytes) { this.session = session; this.bytes = bytes; }
 	}
 	private final class CatalogDirty {
 		private boolean dirty;
 		private long sequence;
-		private @Nullable Get lastOfferedGet;
-		private @Nullable DeliveryAttempt lastOfferedAttempt;
+		private long writtenSequence;
+		private @Nullable DeliveryAttempt pendingAttempt;
 		private BooleanSupplier sourceActive = ALWAYS_ACTIVE_SOURCE;
 	}
 	private final class GrantEntry {
@@ -1656,9 +1798,7 @@ final class McpLegacySessionStore {
 		private long maintenanceDemandUnits;
 		private boolean dirty;
 		private long dirtySequence;
-		private @Nullable Get lastOfferedGet;
-		private long lastOfferedSequence;
-		private @Nullable DeliveryAttempt lastOfferedAttempt;
+		private @Nullable DeliveryAttempt pendingAttempt;
 		private BooleanSupplier sourceActive = ALWAYS_ACTIVE_SOURCE;
 		private GrantEntry(Session session, String uri, long uriBytes, long totalDeadlineNanos) {
 			this.session = session; this.uri = uri; this.uriBytes = uriBytes; this.totalDeadlineNanos = totalDeadlineNanos;
@@ -1671,6 +1811,7 @@ final class McpLegacySessionStore {
 		private @Nullable Grant busy;
 	}
 	private final class Session {
+		private final EndpointRevision endpointRevision;
 		private final String id;
 		private final Owner owner;
 		private final String path;
@@ -1678,6 +1819,10 @@ final class McpLegacySessionStore {
 		private final Object lifecycleGeneration;
 		private final Snapshot snapshot;
 		private long retainedBytes;
+		private long transientBytes;
+		private long controlBytes;
+		private int controlCalls;
+		private int logicalControlRequests;
 		private final long createdNanos;
 		private final long sequence;
 		private final OwnerUsage usage;
@@ -1695,6 +1840,9 @@ final class McpLegacySessionStore {
 		private long lastActivityNanos;
 		private long quiescentNanos;
 		private int physicalReferences;
+		// Initialization, POST and GET ownership affects idle liveness; grant
+		// authorization callbacks retain evidence without acting as clients.
+		private int clientPhysicalReferences;
 		private volatile boolean live = true;
 		private boolean deliveryEvidence;
 		private boolean acknowledged;
@@ -1702,6 +1850,7 @@ final class McpLegacySessionStore {
 		private Session(String id, Owner owner, String path, String revision, Object generation,
 				Snapshot snapshot, long bytes, long now, long sequence, OwnerUsage usage) {
 			this.id = id; this.owner = owner; this.path = path; this.revision = revision;
+			this.endpointRevision = new EndpointRevision(path, revision);
 			this.lifecycleGeneration = generation; this.snapshot = snapshot;
 			this.retainedBytes = bytes; this.createdNanos = now; this.lastActivityNanos = now;
 			this.quiescentNanos = now; this.sequence = sequence; this.usage = usage;

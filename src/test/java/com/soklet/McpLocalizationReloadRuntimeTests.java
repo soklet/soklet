@@ -269,9 +269,13 @@ class McpLocalizationReloadRuntimeTests {
 
 		List<String> frames = drain(escaped.get());
 		String terminal = frames.get(frames.size() - 1);
-		assertTrue(terminal.contains("\"title\":\"NEW:Canonical title\""),
+		// Opening retains its grant and audience rather than repeating the
+		// authorizer and pre-render. An invalidated terminal snapshot is
+		// discarded, so completion uses canonical text.
+		assertTrue(terminal.contains("\"title\":\"Canonical title\""),
 				terminal);
 		assertFalse(terminal.contains("OLD:"), terminal);
+		assertFalse(terminal.contains("NEW:"), terminal);
 	}
 
 	@Test

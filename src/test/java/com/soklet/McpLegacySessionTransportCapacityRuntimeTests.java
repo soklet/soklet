@@ -52,33 +52,30 @@ class McpLegacySessionTransportCapacityRuntimeTests {
 	@Test
 	void temporary_handler_capacity_keeps_get_fenced_and_retries_without_replacing_its_stream() throws Exception {
 		for (McpProtocolVersion version : LEGACY) {
-			CountDownLatch deleteEntered = new CountDownLatch(1);
-			CountDownLatch deleteRelease = new CountDownLatch(1);
+			CountDownLatch admissionEntered = new CountDownLatch(1);
+			CountDownLatch admissionRelease = new CountDownLatch(1);
 			AtomicInteger renewalEntries = new AtomicInteger();
-			AtomicReference<Response> firstDelete = new AtomicReference<>();
-			AtomicReference<Response> secondDelete = new AtomicReference<>();
+			AtomicReference<Response> firstAdmission = new AtomicReference<>();
+			AtomicReference<Response> secondAdmission = new AtomicReference<>();
 			AtomicReference<Throwable> failure = new AtomicReference<>();
 			List<Thread> callers = new ArrayList<>();
 			try (Fixture fixture = new Fixture(true, builder -> builder
 					.requestHandlerConcurrency(1).requestHandlerQueueCapacity(1)
 					.maximumSubscriptionAuthorizationDuration(Duration.ofSeconds(5))
 					.maximumSubscriptionDuration(Duration.ofSeconds(10))
-					.subscriptionAuthorizationTimeout(Duration.ofSeconds(4)))) {
+					.subscriptionAuthorizationTimeout(Duration.ofSeconds(4)), (requestContext, arguments, features) -> {
+				admissionEntered.countDown(); awaitRelease(admissionRelease); return McpCompleteResult.fromToolText("done");
+			})) {
 				String id = fixture.initialize("/mcp", version);
 				try (RawClient get = fixture.openControl("GET", "/mcp", version, id, "alice", "", List.of())) {
 					assertSse(get.readHead());
 					fixture.policy.set((context, features) -> {
-						if (context.getRequest().getHttpMethod() == HttpMethod.DELETE) {
-							deleteEntered.countDown(); awaitRelease(deleteRelease);
-							return McpSessionTransportAdmissionDecision.rejected(McpAdmissionRejection.withStatusCodeAndError(
-									403, McpJsonRpcError.fromApplication(-31903, "Denied")).build());
-						}
 						if (context.isReauthorization()) renewalEntries.incrementAndGet();
 						return Fixture.allow(context, features);
 					});
-					callers.add(deleteCaller(fixture, version, id, firstDelete, failure));
-					callers.get(0).start(); assertTrue(deleteEntered.await(5, TimeUnit.SECONDS));
-					callers.add(deleteCaller(fixture, version, id, secondDelete, failure)); callers.get(1).start();
+					callers.add(toolCaller(fixture, version, id, firstAdmission, failure));
+					callers.get(0).start(); assertTrue(admissionEntered.await(5, TimeUnit.SECONDS));
+					callers.add(toolCaller(fixture, version, id, secondAdmission, failure)); callers.get(1).start();
 					await(() -> fixture.server.getDiagnostics().getRequestHandlerQueueDepth() == 1);
 					fixture.server.getSubscriptionReconciler().reconcileSubscriptions();
 					await(() -> maintenance(fixture, McpMetricsEvent.SubscriptionMaintenance.Outcome.CAPACITY_REJECTED));
@@ -86,9 +83,9 @@ class McpLegacySessionTransportCapacityRuntimeTests {
 					assertEquals(1, fixture.server.getDiagnostics().getActiveSubscriptions(),
 							"Temporary capacity cannot retire the still-live fenced GET lease.");
 					assertNotNull(get.readChunk(), "Keepalive remains available while notification authorization is fenced.");
-					deleteRelease.countDown();
+					admissionRelease.countDown();
 					for (Thread caller : callers) { caller.join(5000); assertFalse(caller.isAlive()); }
-					assertNull(failure.get()); assertEquals(403, firstDelete.get().status()); assertEquals(403, secondDelete.get().status());
+					assertNull(failure.get()); assertEquals(200, firstAdmission.get().status()); assertEquals(200, secondAdmission.get().status());
 					await(() -> renewalEntries.get() >= 1
 							&& maintenance(fixture, McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED));
 					assertEquals(1, fixture.server.getDiagnostics().getActiveSubscriptions());
@@ -96,10 +93,10 @@ class McpLegacySessionTransportCapacityRuntimeTests {
 							"Retry renews the same GET instead of opening a replacement.");
 					assertEquals(0, fixture.events.stream().filter(McpMetricsEvent.SubscriptionClosed.class::isInstance).count());
 				} finally {
-					deleteRelease.countDown();
+					admissionRelease.countDown();
 					for (Thread caller : callers) { caller.interrupt(); caller.join(5000); }
 				}
-			} finally { deleteRelease.countDown(); }
+			} finally { admissionRelease.countDown(); }
 		}
 	}
 
@@ -141,7 +138,7 @@ class McpLegacySessionTransportCapacityRuntimeTests {
 					String fresh = fixture.initialize("/mcp", version);
 					Response samePartition = fixture.control("GET", "/mcp", version, fresh, "alice", "", List.of());
 					assertEquals(503, samePartition.status(), "All four physical control reservations remain charged to this partition.");
-					assertNotNull(samePartition.header("Retry-After"));
+					assertNull(samePartition.header("Retry-After"));
 					fixture.policy.set((context, features) -> {
 						if (context.isReauthorization()) {
 							renewalEntries.incrementAndGet(); entered.countDown(); awaitRelease(release);
@@ -166,12 +163,13 @@ class McpLegacySessionTransportCapacityRuntimeTests {
 		}
 	}
 
-	private static Thread deleteCaller(Fixture fixture, McpProtocolVersion version, String id,
+	private static Thread toolCaller(Fixture fixture, McpProtocolVersion version, String id,
 			AtomicReference<Response> result, AtomicReference<Throwable> failure) {
 		return new Thread(() -> {
-			try { result.set(fixture.control("DELETE", "/mcp", version, id, "alice", "", List.of())); }
+			try { result.set(fixture.control("POST", "/mcp", version, id, "alice",
+					"{\"jsonrpc\":\"2.0\",\"id\":\"" + Thread.currentThread().getName() + "\",\"method\":\"tools/call\",\"params\":{\"name\":\"busy\",\"arguments\":{}}}", List.of())); }
 			catch (Throwable throwable) { failure.compareAndSet(null, throwable); }
-		}, "mcp-legacy-get-capacity-delete");
+		}, "mcp-legacy-handler-capacity-" + System.nanoTime());
 	}
 	private static boolean maintenance(Fixture fixture, McpMetricsEvent.SubscriptionMaintenance.Outcome outcome) {
 		return fixture.events.stream().filter(McpMetricsEvent.SubscriptionMaintenance.class::isInstance)

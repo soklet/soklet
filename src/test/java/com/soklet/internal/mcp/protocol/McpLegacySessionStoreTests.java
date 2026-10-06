@@ -47,6 +47,51 @@ class McpLegacySessionStoreTests {
 			Optional.of(McpImplementationMetadata.withNameAndVersion("private-client", "1")));
 
 	@Test
+	void existing_session_use_expires_its_own_record_while_periodic_maintenance_sweeps_others() {
+		McpLegacySessionStore store = store(config(4, 4));
+		McpLegacySessionStore.Initialization old = publish(store, JUNE);
+		McpLegacySessionStore.Call oldProof = acquire(store, old, JUNE, null, null, new Target());
+		oldProof.acceptedUse(); oldProof.physicalComplete(); old.physicalComplete();
+		now.set(60 * SECOND);
+		McpLegacySessionStore.Initialization fresh = publish(store, NOVEMBER);
+		McpLegacySessionStore.Call freshProof = acquire(store, fresh, NOVEMBER, null, null, new Target());
+		freshProof.acceptedUse(); freshProof.physicalComplete(); fresh.physicalComplete();
+		now.set(121 * SECOND);
+		McpLegacySessionStore.Call freshCall = acquire(store, fresh, NOVEMBER, integer(1), null, new Target());
+		assertTrue(freshCall.acceptedUse()); freshCall.physicalComplete();
+		assertEquals(2, store.counts().liveSessions(), "Existing-session work leaves unrelated expiry to the sweep.");
+		assertEquals(NOT_FOUND, store.acquire(old.sessionId(), owner, "/mcp", JUNE, generation,
+				integer(1), null, new Target()).status(), "Touched expiry must reject an expired ID immediately.");
+		assertEquals(1, store.counts().liveSessions());
+		now.set(241 * SECOND); store.maintain();
+		assertEquals(new McpLegacySessionStore.Counts(0, 0, 0, 0, 0), store.counts());
+	}
+
+	@Test
+	void default_count_pressure_does_not_reclaim_other_owners_and_recovers_after_idle_expiry() {
+		McpLegacySessionStore store = store(new McpLegacySessionStore.Config(256, 16,
+				24 * 3600 * SECOND, 7 * 24 * 3600 * SECOND, 65536, false, 1 << 20, 2 << 20, 16 << 20));
+		for (int index = 0; index < 16; index++) {
+			McpLegacySessionStore.Owner sessionOwner = new McpLegacySessionStore.Owner("user-" + index, false);
+			for (int slot = 0; slot < 16; slot++) {
+				McpLegacySessionStore.Initialization initialization = store.publish(sessionOwner, "/mcp", JUNE,
+						generation, snapshot, new Target()).initialization().orElseThrow();
+				McpLegacySessionStore.Call proof = store.acquire(initialization.sessionId(), sessionOwner, "/mcp",
+						JUNE, generation, null, null, new Target()).call().orElseThrow();
+				proof.acceptedUse(); proof.physicalComplete(); initialization.physicalComplete();
+			}
+		}
+		now.set(23 * 3600 * SECOND);
+		assertEquals(GLOBAL_CAPACITY, store.publish(owner, "/mcp", JUNE, generation, snapshot, new Target()).status());
+		assertEquals(256, store.counts().liveSessions());
+		now.set(24 * 3600 * SECOND);
+		McpLegacySessionStore.Initialization fresh = publish(store, JUNE);
+		assertEquals(1, store.counts().liveSessions());
+		fresh.physicalComplete(); store.close();
+		assertEquals(new McpLegacySessionStore.Counts(0, 0, 0, 0, 0), store.counts());
+	}
+
+	@Test
 	void publication_is_usable_before_ack_and_retains_only_the_public_snapshot() {
 		for (String revision : List.of(JUNE, NOVEMBER)) {
 			McpLegacySessionStore store = store(config(4, 4));
@@ -241,29 +286,30 @@ class McpLegacySessionStoreTests {
 		McpLegacySessionStore store = store(new McpLegacySessionStore.Config(8, 8,
 				120 * SECOND, 300 * SECOND, 65536, false, 1024, 1024, 4096));
 		McpLegacySessionStore.Initialization first = publish(store, JUNE);
-		long base = store.counts().retainedBytes();
 		McpLegacySessionStore.Initialization second = publish(store, JUNE);
 		for (McpLegacySessionStore.Initialization initial : List.of(first, second)) {
 			McpLegacySessionStore.Call proof = acquire(store, initial, JUNE, null, null, new Target());
 			proof.acceptedUse(); proof.physicalComplete(); initial.physicalComplete();
 		}
 		now.set(31 * SECOND);
+		McpLegacySessionStore.Snapshot large = snapshotWithRetainedBytes(1024, owner);
 		McpLegacySessionStore.Initialization replacement = store.publish(owner, "/mcp", JUNE,
-				generation, snapshot, new Target(), 1024 - base).initialization().orElseThrow();
+				generation, large, new Target()).initialization().orElseThrow();
 		assertEquals(1, store.counts().liveSessions());
 		assertEquals(1024, store.counts().retainedBytes());
-		assertEquals(NOT_FOUND, store.acquire(first.sessionId(), owner, "/mcp", JUNE, generation,
-				integer(1), null, new Target()).status());
-		assertEquals(NOT_FOUND, store.acquire(second.sessionId(), owner, "/mcp", JUNE, generation,
-				integer(1), null, new Target()).status());
+		for (McpLegacySessionStore.Initialization old : List.of(first, second))
+			assertEquals(NOT_FOUND, store.acquire(old.sessionId(), owner, "/mcp", JUNE, generation,
+					integer(1), null, new Target()).status());
 		assertEquals(OWNER_CAPACITY, store.publish(owner, "/mcp", JUNE, generation, snapshot, new Target()).status());
 		replacement.physicalComplete();
 		McpLegacySessionStore.Call blockedWorker = acquire(store, replacement, JUNE, integer(1), null, new Target());
 		blockedWorker.acceptedUse(); blockedWorker.logicalComplete();
 		now.set(62 * SECOND);
-		assertEquals(OWNER_CAPACITY, store.publish(owner, "/mcp", JUNE, generation, snapshot, new Target(), 1024 - base).status());
+		assertEquals(OWNER_CAPACITY, store.publish(owner, "/mcp", JUNE, generation, large, new Target()).status());
 		assertEquals(1, store.counts().liveSessions());
 		assertEquals(1, store.counts().physicalReferences());
+		store.close(); blockedWorker.physicalComplete();
+		assertEquals(new McpLegacySessionStore.Counts(0, 0, 0, 0, 0), store.counts());
 	}
 
 	@Test
@@ -271,21 +317,24 @@ class McpLegacySessionStoreTests {
 		McpLegacySessionStore store = store(new McpLegacySessionStore.Config(8, 8,
 				120 * SECOND, 300 * SECOND, 65536, false, 1024, 1024, 1024));
 		McpLegacySessionStore.Initialization old = publish(store, JUNE);
+		long base = store.counts().retainedBytes();
 		McpLegacySessionStore.Call proof = acquire(store, old, JUNE, null, null, new Target());
 		proof.acceptedUse(); proof.physicalComplete(); old.physicalComplete();
 		McpLegacySessionStore.Owner other = new McpLegacySessionStore.Owner("other", false);
 		McpLegacySessionStore.Initialization unrelated = store.publish(other, "/mcp", JUNE,
-				generation, snapshot, new Target()).initialization().orElseThrow();
+				generation, snapshotWithRetainedBytes((int) (1024 - base), other), new Target()).initialization().orElseThrow();
 		McpLegacySessionStore.Call active = store.acquire(unrelated.sessionId(), other, "/mcp", JUNE,
-				generation, integer(1), null, new Target(), 1024 - store.counts().retainedBytes()).call().orElseThrow();
-		active.acceptedUse();
-		assertEquals(1024, store.counts().retainedBytes());
+				generation, integer(1), null, new Target(), 600).call().orElseThrow();
+		active.acceptedUse(); unrelated.physicalComplete();
+		assertEquals(1624, store.counts().retainedBytes());
 		now.set(31 * SECOND);
 		McpLegacySessionStore.Initialization replacement = publish(store, JUNE);
 		assertNotEquals(old.sessionId(), replacement.sessionId());
-		assertEquals(1024, store.counts().retainedBytes());
+		assertEquals(1624, store.counts().retainedBytes());
 		assertEquals(2, store.counts().liveSessions());
 		assertTrue(active.acceptedUse());
+		store.close(); active.physicalComplete(); replacement.physicalComplete();
+		assertEquals(new McpLegacySessionStore.Counts(0, 0, 0, 0, 0), store.counts());
 	}
 
 	@Test
@@ -325,6 +374,106 @@ class McpLegacySessionStoreTests {
 	}
 
 	@Test
+	void largeTransientRequestsHaveSeparateBoundsAndRemainChargedUntilPhysicalExit() {
+		for (String revision : List.of(JUNE, NOVEMBER)) {
+			McpLegacySessionStore store = store(new McpLegacySessionStore.Config(4, 4,
+					120 * SECOND, 300 * SECOND, 65536, false, 512, 1024, 2048,
+					2000, 4000, 8000));
+			McpLegacySessionStore.Initialization initialization = publish(store, revision);
+			initialization.physicalComplete();
+			long base = store.counts().retainedBytes();
+			McpLegacySessionStore.Call first = store.acquire(initialization.sessionId(), owner, "/mcp", revision,
+					generation, integer(1), null, new Target(), 1800).call().orElseThrow();
+			assertTrue(first.acceptedUse());
+			assertEquals(base + 1800, store.counts().retainedBytes());
+			assertEquals(TRANSIENT_CAPACITY, store.acquire(initialization.sessionId(), owner, "/mcp", revision,
+					generation, integer(2), null, new Target(), 201).status());
+			McpLegacySessionStore.Call second = store.acquire(initialization.sessionId(), owner, "/mcp", revision,
+					generation, integer(2), null, new Target(), 200).call().orElseThrow();
+			first.logicalComplete(); second.logicalComplete();
+			assertEquals(base + 2000, store.counts().retainedBytes());
+			store.close();
+			assertEquals(base + 2000, store.counts().retainedBytes());
+			first.physicalComplete(); first.physicalComplete();
+			assertEquals(base + 200, store.counts().retainedBytes());
+			second.physicalComplete(); second.physicalComplete();
+			assertEquals(new McpLegacySessionStore.Counts(0, 0, 0, 0, 0), store.counts());
+		}
+	}
+
+	@Test
+	void verifiedControlsSurviveOrdinaryByteAndIdSaturationAndKeepTheirOwnPhysicalBounds() {
+		for (String revision : List.of(JUNE, NOVEMBER)) {
+			McpLegacySessionStore store = store(new McpLegacySessionStore.Config(4, 4,
+					120 * SECOND, 300 * SECOND, 65536, false, 512, 1024, 2048,
+					32, 32, 32, 128));
+			McpLegacySessionStore.Initialization initialization = publish(store, revision);
+			initialization.physicalComplete();
+			List<McpLegacySessionStore.Call> held = new ArrayList<>();
+			for (int index = 0; index < 32; index++) held.add(store.acquire(initialization.sessionId(), owner,
+					"/mcp", revision, generation, integer(index), null, new Target(), 1).call().orElseThrow());
+			assertEquals(CALL_CAPACITY, store.acquire(initialization.sessionId(), owner, "/mcp", revision,
+					generation, integer(99), null, new Target(), 1).status());
+			assertEquals(TRANSIENT_CAPACITY, store.acquire(initialization.sessionId(), owner, "/mcp", revision,
+					generation, null, null, new Target(), 1).status());
+			assertEquals(ACTIVE_ID_COLLISION, store.acquireControl(initialization.sessionId(), owner, "/mcp",
+					revision, generation, integer(1), new Target(), 128).status());
+			assertEquals(NOT_FOUND, store.acquireControl(initialization.sessionId(), new McpLegacySessionStore.Owner("other", false),
+					"/mcp", revision, generation, integer(1), new Target(), 128).status());
+			assertEquals(INVALID_ID, store.acquireControl(initialization.sessionId(), owner, "/mcp", revision,
+					generation, new McpJsonRpcId.StringId("x".repeat(257)), new Target(), 128).status());
+			assertEquals(TRANSIENT_CAPACITY, store.acquireControl(initialization.sessionId(), owner, "/mcp", revision,
+					generation, null, new Target(), 129).status());
+			List<McpLegacySessionStore.Call> controls = new ArrayList<>();
+			for (int index = 0; index < 4; index++) controls.add(store.acquireControl(initialization.sessionId(), owner,
+					"/mcp", revision, generation, integer(100 + index), new Target(), 128).call().orElseThrow());
+			assertTrue(controls.get(0).acceptedUse());
+			controls.forEach(McpLegacySessionStore.Call::logicalComplete);
+			assertEquals(TRANSIENT_CAPACITY, store.acquireControl(initialization.sessionId(), owner, "/mcp", revision,
+					generation, null, new Target(), 1).status(), "Logical completion cannot release physical control slots.");
+			assertFalse(store.retireIfCurrent(held.get(0), McpLegacySessionStore.Cause.SESSION_CLOSED, Long.MAX_VALUE),
+					"An unaccepted ordinary lookup cannot terminate the session.");
+			assertTrue(held.get(0).acceptedUse());
+			assertTrue(store.retireIfCurrent(held.get(0), McpLegacySessionStore.Cause.SESSION_CLOSED, Long.MAX_VALUE));
+			assertEquals(36, store.counts().physicalReferences());
+			controls.forEach(call -> { call.physicalComplete(); call.physicalComplete(); });
+			held.forEach(McpLegacySessionStore.Call::physicalComplete);
+			assertEquals(new McpLegacySessionStore.Counts(0, 0, 0, 0, 0), store.counts());
+		}
+	}
+
+	@Test
+	void controlReservationsAreBoundedAcrossSessionsOwnersAndRetiredPhysicalWork() {
+		McpLegacySessionStore store = store(new McpLegacySessionStore.Config(64, 4,
+				120 * SECOND, 300 * SECOND, 65536, false, 65536, 262144, 1048576));
+		List<McpLegacySessionStore.Call> controls = new ArrayList<>();
+		for (int index = 0; index < 8; index++) {
+			McpLegacySessionStore.Owner currentOwner = new McpLegacySessionStore.Owner("owner-" + index, false);
+			for (int sessionIndex = 0; sessionIndex < 3; sessionIndex++) {
+				McpLegacySessionStore.Initialization initialization = store.publish(currentOwner, "/mcp", JUNE,
+						generation, snapshot, new Target()).initialization().orElseThrow();
+				initialization.physicalComplete();
+				for (int callIndex = 0; callIndex < 4; callIndex++) {
+					McpLegacySessionStore.Acquisition allocation = store.acquireControl(initialization.sessionId(), currentOwner,
+							"/mcp", JUNE, generation, null, new Target(), 100);
+					if (sessionIndex == 2) assertEquals(TRANSIENT_CAPACITY, allocation.status());
+					else controls.add(allocation.call().orElseThrow());
+				}
+			}
+		}
+		McpLegacySessionStore.Owner ninth = new McpLegacySessionStore.Owner("ninth", false);
+		McpLegacySessionStore.Initialization initialization = store.publish(ninth, "/mcp", JUNE,
+				generation, snapshot, new Target()).initialization().orElseThrow();
+		initialization.physicalComplete();
+		assertEquals(TRANSIENT_CAPACITY, store.acquireControl(initialization.sessionId(), ninth, "/mcp", JUNE,
+				generation, null, new Target(), 100).status());
+		store.close();
+		assertEquals(64, store.counts().physicalReferences());
+		controls.forEach(McpLegacySessionStore.Call::physicalComplete);
+		assertEquals(new McpLegacySessionStore.Counts(0, 0, 0, 0, 0), store.counts());
+	}
+
+	@Test
 	void request_evidence_stays_charged_through_logical_retirement_and_is_released_once() {
 		McpLegacySessionStore.Config limited = new McpLegacySessionStore.Config(4, 4,
 				120 * SECOND, 300 * SECOND, 65536, false, 1024, 2048, 4096);
@@ -336,7 +485,7 @@ class McpLegacySessionStoreTests {
 		call.acceptedUse(); initialization.physicalComplete();
 		call.logicalComplete();
 		assertEquals(base + 600, store.counts().retainedBytes());
-		assertEquals(OWNER_CAPACITY, store.acquire(initialization.sessionId(), owner, "/mcp", JUNE,
+		assertEquals(TRANSIENT_CAPACITY, store.acquire(initialization.sessionId(), owner, "/mcp", JUNE,
 				generation, integer(1), null, new Target(), 600).status());
 		store.close();
 		assertEquals(0, store.counts().liveSessions());
@@ -345,7 +494,7 @@ class McpLegacySessionStoreTests {
 		assertEquals(0, store.counts().retainedBytes());
 		assertEquals(0, store.counts().owners());
 		assertEquals(0, store.counts().physicalReferences());
-		assertEquals(OWNER_CAPACITY, store.publish(owner, "/mcp", JUNE, generation, snapshot, new Target(), Long.MAX_VALUE).status());
+		assertEquals(TRANSIENT_CAPACITY, store.publish(owner, "/mcp", JUNE, generation, snapshot, new Target(), Long.MAX_VALUE).status());
 		assertThrows(IllegalArgumentException.class, () -> store.publish(owner, "/mcp", JUNE, generation, snapshot, new Target(), -1));
 	}
 
@@ -357,12 +506,12 @@ class McpLegacySessionStoreTests {
 				generation, snapshot, new Target(), 800).initialization().orElseThrow();
 		McpLegacySessionStore.Initialization second = store.publish(owner, "/mcp", NOVEMBER,
 				generation, snapshot, new Target(), 800).initialization().orElseThrow();
-		assertEquals(OWNER_CAPACITY, store.publish(owner, "/mcp", JUNE, generation, snapshot, new Target(), 800).status());
-		assertEquals(GLOBAL_CAPACITY, store.publish(new McpLegacySessionStore.Owner("other", false),
+		assertEquals(TRANSIENT_CAPACITY, store.publish(owner, "/mcp", JUNE, generation, snapshot, new Target(), 800).status());
+		assertEquals(TRANSIENT_CAPACITY, store.publish(new McpLegacySessionStore.Owner("other", false),
 				"/mcp", JUNE, generation, snapshot, new Target(), 800).status());
 		store.close();
 		assertEquals(0, store.counts().liveSessions());
-		assertEquals(GLOBAL_CAPACITY, store.publish(new McpLegacySessionStore.Owner("new", false),
+		assertEquals(TRANSIENT_CAPACITY, store.publish(new McpLegacySessionStore.Owner("new", false),
 				"/mcp", JUNE, new Object(), snapshot, new Target(), 800).status());
 		first.physicalComplete(); second.physicalComplete();
 		assertEquals(ACCEPTED, store.publish(owner, "/mcp", JUNE, new Object(), snapshot, new Target(), 800).status());
@@ -555,7 +704,7 @@ class McpLegacySessionStoreTests {
 	@Test
 	void bounded_recreation_churn_keeps_canceled_workers_charged_and_releases_every_residual_reference() {
 		McpLegacySessionStore store = store(new McpLegacySessionStore.Config(8, 2,
-				120 * SECOND, 300 * SECOND, 65536, false, 1024, 2048, 4096));
+				120 * SECOND, 300 * SECOND, 65536, false, 1024, 2048, 4096, 1024, 1600, 4096));
 		List<McpLegacySessionStore.Call> ignoringWorkers = new ArrayList<>();
 		for (int index = 0; index < 2; index++) {
 			McpLegacySessionStore.Initialization initialization = publish(store, JUNE);
@@ -578,7 +727,7 @@ class McpLegacySessionStoreTests {
 		for (int iteration = 0; iteration < 500; iteration++) {
 			McpLegacySessionStore.Initialization initialization = store.publish(owner, "/mcp", NOVEMBER,
 					generation, snapshot, new Target(), 64).initialization().orElseThrow();
-			assertEquals(OWNER_CAPACITY, store.acquire(initialization.sessionId(), owner, "/mcp", NOVEMBER,
+			assertEquals(TRANSIENT_CAPACITY, store.acquire(initialization.sessionId(), owner, "/mcp", NOVEMBER,
 						generation, integer(1), null, new Target(), 600).status());
 			McpLegacySessionStore.Call shortCall = store.acquire(initialization.sessionId(), owner, "/mcp", NOVEMBER,
 						generation, integer(1), new McpProgressToken.StringToken("same-token"), new Target(), 64).call().orElseThrow();
@@ -631,6 +780,20 @@ class McpLegacySessionStoreTests {
 		return new McpLegacySessionStore.Config(sessions, perOwner, 120 * SECOND,
 				300 * SECOND, 65536, false, 1 << 20, 2 << 20, 16 << 20);
 	}
+	private McpLegacySessionStore.Snapshot snapshotWithRetainedBytes(int bytes, McpLegacySessionStore.Owner snapshotOwner) {
+		McpLegacySessionStore.Snapshot empty = paddedSnapshot(0);
+		McpJsonObject projection = new McpJsonObject(Map.of("capabilities", empty.clientCapabilities().toJsonObject()));
+		int overhead = new McpJsonCodec(McpJsonLimits.productionDefaults()).toUtf8Bytes(projection).length
+				+ "/mcp".length() + snapshotOwner.key().getBytes(java.nio.charset.StandardCharsets.UTF_8).length + 43;
+		assertTrue(bytes >= overhead);
+		return paddedSnapshot(bytes - overhead);
+	}
+
+	private McpLegacySessionStore.Snapshot paddedSnapshot(int padding) {
+		return new McpLegacySessionStore.Snapshot(McpClientCapabilities.builder()
+				.unknown("padding", new McpJsonObject(Map.of("value", new McpJsonString("x".repeat(padding))))).build(), Optional.empty());
+	}
+
 	private McpLegacySessionStore store(McpLegacySessionStore.Config config) {
 		return new McpLegacySessionStore(config, McpJsonLimits.productionDefaults(), now::get, () -> {
 			byte[] bytes = new byte[32];

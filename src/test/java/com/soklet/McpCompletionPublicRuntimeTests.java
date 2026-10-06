@@ -308,6 +308,60 @@ public class McpCompletionPublicRuntimeTests {
 		}
 	}
 
+	@Test
+	public void onlyCompletionHandlerErrorsAreClientVisible() throws Exception {
+		for (boolean promptReference : List.of(true, false)) {
+			for (String errorSource : List.of("handler", "interceptor-before", "interceptor-after")) {
+				AtomicInteger handlerEntries = new AtomicInteger();
+				McpCompletionHandler completionHandler = (requestContext, completionContext, invocationFeatures) -> {
+					handlerEntries.incrementAndGet();
+					if (errorSource.equals("handler"))
+						throw new McpJsonRpcException(McpJsonRpcError.fromInvalidParameters("Visible handler error"));
+					return McpArgumentCompletionResult.fromValues(List.of("value"));
+				};
+				McpEndpoint endpoint = McpEndpoint.withPath("/mcp",
+						McpImplementation.withNameAndVersion("completion-error-test", "1").build(), Set.of(McpProtocolVersion.V2026_07_28))
+						.promptRegistrations(List.of(prompt("visible", true, completionHandler)))
+						.resourceRegistrations(List.of(McpResourceRegistration.withUriTemplateAndName(
+								"catalog://items/{subject}", "items", Set.of(McpProtocolVersion.V2026_07_28))
+								.handler((requestContext, resourceReadContext, invocationFeatures) -> text(resourceReadContext.getUri()))
+								.completionHandler(completionHandler, Set.of(McpProtocolVersion.V2026_07_28)).build())).build();
+				McpServer server = McpServer.withPort(0).host(HOST)
+						.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+						.requestRateLimiter(rateLimitContext -> McpRateLimitDecision.allowed())
+						.handlerInterceptor((requestContext, invocationFeatures, continuation) -> {
+							if (errorSource.equals("interceptor-before"))
+								throw new McpJsonRpcException(McpJsonRpcError.fromApplication(3102, "Private interceptor error"));
+							McpOperationResult result = continuation.proceed();
+							if (errorSource.equals("interceptor-after"))
+								throw new McpJsonRpcException(McpJsonRpcError.fromApplication(3102, "Private interceptor error"));
+							return result;
+						}).corsAuthorizer(CorsAuthorizer.rejectAllInstance()).allowedHosts(Set.of(HOST)).build();
+				Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+						.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).build());
+				try {
+					soklet.start();
+					HttpResponse<String> response = send(server.getDiagnostics().getBoundAddress().orElseThrow().getPort(),
+							"completion/complete", params(promptReference, promptReference ? "visible" : "catalog://items/{subject}",
+									"subject", "s", null), "error");
+					if (errorSource.equals("handler")) {
+						assertEquals(400, response.statusCode(), response.body());
+						assertTrue(response.body().contains("\"code\":-32602"), response.body());
+						assertTrue(response.body().contains("Visible handler error"), response.body());
+					} else {
+						assertEquals(500, response.statusCode(), response.body());
+						assertTrue(response.body().contains("\"code\":-32603"), response.body());
+						assertFalse(response.body().contains("Private interceptor error"), response.body());
+						assertFalse(response.body().contains("3102"), response.body());
+					}
+					assertEquals(errorSource.equals("interceptor-before") ? 0 : 1, handlerEntries.get());
+				} finally {
+					soklet.close();
+				}
+			}
+		}
+	}
+
 	private static McpPromptRegistration prompt(String name, boolean completer,
 			McpCompletionHandler handler) {
 		McpPromptRegistration.Builder builder = McpPromptRegistration

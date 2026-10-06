@@ -285,9 +285,26 @@ final class Mcp2025ProtocolProfile implements McpProtocolProfile {
 		if (isError != null && !(isError instanceof McpJsonBoolean))
 			throw new IllegalArgumentException(
 					"A 2025 tool result requires boolean isError.");
-		for (McpJsonValue item : content.values())
-			validateContent(item);
-		return canonicalResult;
+		List<McpJsonValue> projectedContent = content.values().stream()
+				.map(this::projectToolContent).toList();
+		if (projectedContent.equals(content.values()))
+			return canonicalResult;
+		Map<String, McpJsonValue> fields = new LinkedHashMap<>(canonicalResult.fields().members());
+		fields.put("content", new McpJsonArray(projectedContent));
+		return McpWireResult.complete(new McpJsonObject(fields), canonicalResult.metadata());
+	}
+
+	private McpJsonValue projectToolContent(McpJsonValue content) {
+		McpJsonValue projected = content;
+		if ("2025-06-18".equals(revision) && content instanceof McpJsonObject object
+				&& new McpJsonString("resource_link").equals(object.members().get("type"))
+				&& object.members().containsKey("icons")) {
+			Map<String, McpJsonValue> fields = new LinkedHashMap<>(object.members());
+			fields.remove("icons");
+			projected = new McpJsonObject(fields);
+		}
+		validateContent(projected);
+		return projected;
 	}
 
 	private void validateContent(McpJsonValue content) {

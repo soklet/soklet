@@ -42,6 +42,112 @@ class McpLegacySessionGrantStoreTests {
 	};
 
 	@Test
+	void backgroundRenewalDoesNotResetClientIdleTimeOrPreventLogicalExpiry() {
+		for (String revision : List.of("2025-06-18", "2025-11-25")) {
+			for (boolean unfinishedRenewal : List.of(false, true)) {
+				Fixture fixture = new Fixture(revision);
+				Session session = fixture.session("owner");
+				McpLegacySessionStore.Grant grant = fixture.subscribe(session, "test:///idle", new GrantTarget(),
+						64, 120 * SECOND, 600 * SECOND);
+				for (int tick : List.of(90, 180, 270)) {
+					fixture.now.set(tick * SECOND);
+					long generation = grant.generation();
+					try (McpLegacySessionStore.GrantWork work = grant.acquireWork(generation).orElseThrow()) {
+						assertTrue(work.retainedEvidenceBytes() > 0);
+						assertTrue(grant.renew(generation, fixture.now.get() + 120 * SECOND));
+					}
+				}
+				fixture.now.set(299 * SECOND);
+				fixture.store.maintain();
+				assertEquals(1, fixture.store.counts().liveSessions());
+				McpLegacySessionStore.GrantWork blockedWork = unfinishedRenewal
+						? grant.acquireWork(grant.generation()).orElseThrow() : null;
+				fixture.now.set(300 * SECOND);
+				fixture.store.maintain();
+				assertEquals(0, fixture.store.counts().liveSessions(), revision + ": background work is not client activity");
+				assertFalse(grant.current());
+				assertEquals(McpLegacySessionStore.Status.NOT_FOUND, fixture.store.acquire(session.id, session.owner,
+						"/mcp", revision, fixture.generation, null, null, REQUEST_TARGET, 0).status());
+				if (blockedWork != null) {
+					assertEquals(1, fixture.store.counts().physicalReferences());
+					assertTrue(fixture.store.counts().retainedBytes() > 0, "The unfinished callback still owns its evidence.");
+					assertFalse(grant.renew(grant.generation(), 500 * SECOND));
+					blockedWork.close();
+					blockedWork.close();
+				}
+				fixture.assertEmpty();
+			}
+		}
+	}
+
+	@Test
+	void sameOwnerCanEvictAnIdleSessionWhileRenewalEvidenceRemainsPhysicallyOwned() {
+		for (String revision : List.of("2025-06-18", "2025-11-25")) {
+			Fixture fixture = new Fixture(revision);
+			List<McpLegacySessionStore.Grant> grants = new ArrayList<>();
+			List<McpLegacySessionStore.GrantWork> work = new ArrayList<>();
+			for (int index = 0; index < 4; index++) {
+				Session session = fixture.session("owner");
+				McpLegacySessionStore.Grant grant = fixture.subscribe(session, "test:///idle-" + index,
+						new GrantTarget(), 64, 120 * SECOND, 600 * SECOND);
+				grants.add(grant);
+				work.add(grant.acquireWork(grant.generation()).orElseThrow());
+			}
+			fixture.now.set(31 * SECOND);
+			McpLegacySessionStore.Allocation allocation = fixture.store.publish(
+					new McpLegacySessionStore.Owner("owner", false), "/mcp", revision, fixture.generation,
+					new McpLegacySessionStore.Snapshot(McpClientCapabilities.empty(), Optional.empty()), REQUEST_TARGET);
+			assertEquals(McpLegacySessionStore.Status.ACCEPTED, allocation.status());
+			assertFalse(grants.get(0).current(), "The oldest idle session is retired even while renewal is unfinished.");
+			for (McpLegacySessionStore.Grant grant : grants.subList(1, grants.size()))
+				assertTrue(grant.current());
+			assertEquals(4, fixture.store.counts().liveSessions());
+			assertEquals(5, fixture.store.counts().physicalReferences(), "All four unfinished callbacks retain physical ownership.");
+			fixture.store.close();
+			allocation.initialization().orElseThrow().physicalComplete();
+			assertEquals(4, fixture.store.counts().physicalReferences());
+			work.forEach(McpLegacySessionStore.GrantWork::close);
+			fixture.assertEmpty();
+		}
+	}
+
+	@Test
+	void persistentGrantEvidenceCannotBlockUnsubscribeOrSessionDeletion() {
+		for (String revision : List.of("2025-06-18", "2025-11-25")) {
+			Fixture fixture = new Fixture(revision);
+			Session session = fixture.session("owner");
+			List<McpLegacySessionStore.Grant> grants = new ArrayList<>();
+			for (int index = 0; index < 63; index++)
+				grants.add(fixture.subscribe(session, "test:///resource/" + index, new GrantTarget(),
+						16_384, 60 * SECOND, 120 * SECOND));
+			assertTrue(fixture.store.counts().retainedBytes() > 1_000_000);
+			McpLegacySessionStore.Grant first = grants.get(0);
+			McpLegacySessionStore.GrantWork held = first.acquireWork(first.generation()).orElseThrow();
+			McpLegacySessionStore.Call candidate = fixture.call(session, 32_768);
+			long beforePromotion = fixture.store.counts().retainedBytes();
+			assertEquals(McpLegacySessionStore.Status.OWNER_CAPACITY, fixture.store.beginGrant(candidate,
+					"test:///overflow", fixture.partition, new GrantTarget(), 120 * SECOND).status());
+			assertEquals(beforePromotion, fixture.store.counts().retainedBytes());
+			candidate.physicalComplete();
+			assertEquals(beforePromotion - 32_768, fixture.store.counts().retainedBytes());
+			McpLegacySessionStore.Call unsubscribe = fixture.call(session, 32_768);
+			assertTrue(fixture.store.unsubscribe(unsubscribe, first.uri()));
+			unsubscribe.physicalComplete();
+			assertFalse(first.current());
+			McpLegacySessionStore.Call delete = fixture.call(session, 32_768);
+			assertTrue(fixture.store.retireIfCurrent(delete, McpLegacySessionStore.Cause.SESSION_CLOSED, 60 * SECOND));
+			delete.physicalComplete();
+			assertEquals(0, fixture.store.counts().liveSessions());
+			assertEquals(1, fixture.store.counts().physicalReferences());
+			assertTrue(fixture.store.counts().retainedBytes() >= 16_384,
+					"The unfinished callback retains its full historical request.");
+			assertFalse(first.renew(first.generation(), 60 * SECOND));
+			held.close(); held.close();
+			fixture.store.close(); fixture.assertEmpty();
+		}
+	}
+
+	@Test
 	void grant_pins_real_subscribe_evidence_after_post_and_after_logical_revocation_until_callback_exit() {
 		Fixture fixture = new Fixture(); Session session = fixture.session("owner");
 		McpLegacySessionStore.Call subscribe = fixture.call(session, 1000);
@@ -184,6 +290,32 @@ class McpLegacySessionGrantStoreTests {
 	}
 
 	@Test
+	void lossOfAnEstablishedGrantRetiresTheSessionWithoutReleasingPhysicalCallbacks() {
+		for (String revision : List.of("2025-06-18", "2025-11-25")) {
+			for (McpLegacySessionStore.GrantCause cause : List.of(McpLegacySessionStore.GrantCause.AUTHORIZATION_DENIED,
+					McpLegacySessionStore.GrantCause.AUTHORIZATION_FAILED, McpLegacySessionStore.GrantCause.LEASE_EXPIRED,
+					McpLegacySessionStore.GrantCause.TOTAL_LIFETIME_EXPIRED)) {
+				Fixture fixture = new Fixture(revision); Session session = fixture.session("owner"); GrantTarget target = new GrantTarget();
+				McpLegacySessionStore.Grant grant = fixture.subscribe(session, "test:///resource", target, 100,
+						60 * SECOND, cause == McpLegacySessionStore.GrantCause.TOTAL_LIFETIME_EXPIRED ? 60 * SECOND : 120 * SECOND);
+				McpLegacySessionStore.GrantWork work = grant.acquireWork(grant.generation()).orElseThrow();
+				McpLegacySessionStore.Get get = fixture.get(session, Set.of(McpResourceNotificationType.RESOURCE_UPDATED), 120 * SECOND);
+				if (cause == McpLegacySessionStore.GrantCause.LEASE_EXPIRED || cause == McpLegacySessionStore.GrantCause.TOTAL_LIFETIME_EXPIRED) {
+					fixture.now.set(60 * SECOND); fixture.store.maintain();
+				} else assertTrue(grant.retireIfCurrent(grant.generation(), cause));
+				assertEquals(cause, target.cause.get()); assertFalse(get.active()); assertFalse(grant.active());
+				assertEquals(0, fixture.store.counts().liveSessions()); assertEquals(2, fixture.store.counts().physicalReferences());
+				assertTrue(fixture.store.counts().retainedBytes() >= 100);
+				assertEquals(McpLegacySessionStore.Status.NOT_FOUND, fixture.store.acquire(session.id, session.owner, "/mcp", revision,
+						fixture.generation, null, null, REQUEST_TARGET).status());
+				assertFalse(grant.renew(grant.generation(), 180 * SECOND));
+				get.physicalComplete(); work.close(); work.close(); fixture.assertEmpty();
+				fixture.store.close();
+			}
+		}
+	}
+
+	@Test
 	void total_and_session_expiry_fence_without_releasing_unfinished_callback_evidence() {
 		Fixture fixture = new Fixture(); Session session = fixture.session("owner"); GrantTarget target = new GrantTarget();
 		McpLegacySessionStore.Grant grant = fixture.subscribe(session, "test:///resource", target, 10, 120 * SECOND, 120 * SECOND);
@@ -212,7 +344,59 @@ class McpLegacySessionGrantStoreTests {
 	}
 
 	@Test
-	void catalog_dirty_state_coalesces_until_fresh_list_and_resynthesizes_after_a_get_gap() {
+	void concurrent_flushes_claim_one_writer_and_complete_write_survives_fencing_and_reconnect() {
+		for (String revision : List.of("2025-06-18", "2025-11-25"))
+			for (McpResourceNotificationType type : List.of(McpResourceNotificationType.TOOLS_LIST_CHANGED,
+					McpResourceNotificationType.RESOURCE_UPDATED)) {
+				Fixture fixture = new Fixture(revision); Session session = fixture.session("owner");
+				fixture.subscribe(session, "test:///resource", new GrantTarget(), 16, 60 * SECOND, 120 * SECOND);
+				McpLegacySessionStore.Get first = fixture.get(session, Set.of(type), 60 * SECOND);
+				McpLegacySessionStore.Get second = fixture.get(session, Set.of(type), 60 * SECOND);
+				if (type == McpResourceNotificationType.RESOURCE_UPDATED) fixture.store.markResourceDirty("/mcp", revision, "test:///resource");
+				else fixture.store.markCatalogDirty("/mcp", revision, type);
+				McpLegacySessionStore.Delivery snapshot = onlyDelivery(fixture);
+				McpLegacySessionStore.DeliveryAttempt a = snapshot.forGet(first).orElseThrow();
+				McpLegacySessionStore.DeliveryAttempt b = snapshot.forGet(second).orElseThrow();
+				McpLegacySessionStore.NotificationReservation bytes = fixture.store.reserveNotificationBytes(a, 80).reservation().orElseThrow();
+				McpLegacySessionStore.NotificationAllocation duplicate = fixture.store.reserveNotificationBytes(b, 80);
+				assertEquals(McpLegacySessionStore.NotificationStatus.STALE, duplicate.status());
+				assertTrue(duplicate.reservation().isEmpty(), "Concurrent snapshots cannot retain one key on two streams.");
+				first.fence();
+				assertTrue(fixture.store.pendingDeliveries("/mcp", revision).isEmpty(), "Wait for the original writer's actual disposition.");
+				// Its final socket write won before the fence, but notification of that
+				// write was deferred until outside the channel lock.
+				bytes.written(); bytes.release();
+				assertTrue(fixture.store.acknowledgeOffered(a));
+				first.physicalComplete(); second.physicalComplete();
+				McpLegacySessionStore.Get reconnect = fixture.get(session, Set.of(type), 60 * SECOND);
+				assertTrue(fixture.store.pendingDeliveries("/mcp", revision).isEmpty(), "A fully written message has no reconnect replay.");
+				reconnect.physicalComplete(); fixture.store.close(); fixture.assertEmpty();
+			}
+	}
+
+	@Test
+	void failed_offer_and_unwritten_disconnect_leave_one_retry_for_another_get() {
+		Fixture fixture = new Fixture(); Session session = fixture.session("owner");
+		McpLegacySessionStore.Get first = fixture.get(session, Set.of(McpResourceNotificationType.TOOLS_LIST_CHANGED), 60 * SECOND);
+		McpLegacySessionStore.Get second = fixture.get(session, Set.of(McpResourceNotificationType.TOOLS_LIST_CHANGED), 60 * SECOND);
+		fixture.store.markCatalogDirty("/mcp", REVISION, McpResourceNotificationType.TOOLS_LIST_CHANGED);
+		McpLegacySessionStore.DeliveryAttempt failed = onlyDelivery(fixture).forGet(first).orElseThrow();
+		fixture.store.reserveNotificationBytes(failed, 80).reservation().orElseThrow().release();
+		assertFalse(fixture.store.acknowledgeOffered(failed));
+		McpLegacySessionStore.DeliveryAttempt queued = onlyDelivery(fixture).forGet(first).orElseThrow();
+		McpLegacySessionStore.NotificationReservation bytes = fixture.store.reserveNotificationBytes(queued, 80).reservation().orElseThrow();
+		assertTrue(fixture.store.acknowledgeOffered(queued)); first.physicalComplete();
+		assertTrue(fixture.store.pendingDeliveries("/mcp", REVISION).isEmpty());
+		bytes.release();
+		McpLegacySessionStore.DeliveryAttempt retry = onlyDelivery(fixture).forGet(second).orElseThrow();
+		McpLegacySessionStore.NotificationReservation retried = fixture.store.reserveNotificationBytes(retry, 80).reservation().orElseThrow();
+		retried.written(); retried.release();
+		assertTrue(fixture.store.pendingDeliveries("/mcp", REVISION).isEmpty());
+		second.physicalComplete(); fixture.store.close(); fixture.assertEmpty();
+	}
+
+	@Test
+	void catalog_dirty_state_coalesces_until_fresh_list_without_replaying_on_reconnect() {
 		Fixture fixture = new Fixture(); Session session = fixture.session("owner");
 		McpLegacySessionStore.Get first = fixture.get(session, Set.of(McpResourceNotificationType.TOOLS_LIST_CHANGED), 60 * SECOND);
 		McpLegacySessionStore.Get newest = fixture.get(session, Set.of(McpResourceNotificationType.TOOLS_LIST_CHANGED), 60 * SECOND);
@@ -220,13 +404,13 @@ class McpLegacySessionGrantStoreTests {
 		McpLegacySessionStore.Delivery delivery = onlyDelivery(fixture);
 		assertEquals(List.of(newest, first), delivery.eligibleGets());
 		McpLegacySessionStore.DeliveryAttempt attempt = delivery.forGet(newest).orElseThrow();
-		McpLegacySessionStore.NotificationReservation bytes = fixture.store.reserveNotificationBytes(attempt, 80).orElseThrow();
+		McpLegacySessionStore.NotificationReservation bytes = fixture.store.reserveNotificationBytes(attempt, 80).reservation().orElseThrow();
 		assertTrue(fixture.store.acknowledgeOffered(attempt)); assertTrue(fixture.store.pendingDeliveries("/mcp", REVISION).isEmpty());
-		bytes.release(); fixture.store.markCatalogDirty("/mcp", REVISION, McpResourceNotificationType.TOOLS_LIST_CHANGED);
+		bytes.written(); bytes.release(); fixture.store.markCatalogDirty("/mcp", REVISION, McpResourceNotificationType.TOOLS_LIST_CHANGED);
 		assertTrue(fixture.store.pendingDeliveries("/mcp", REVISION).isEmpty());
 		first.physicalComplete(); newest.physicalComplete();
 		McpLegacySessionStore.Get reconnected = fixture.get(session, Set.of(McpResourceNotificationType.TOOLS_LIST_CHANGED), 60 * SECOND);
-		assertTrue(onlyDelivery(fixture).forGet(reconnected).isPresent());
+		assertTrue(fixture.store.pendingDeliveries("/mcp", REVISION).isEmpty());
 		McpLegacySessionStore.Call list = fixture.call(session, 0);
 		assertTrue(fixture.store.rearmCatalog(list, McpResourceNotificationType.TOOLS_LIST_CHANGED));
 		assertTrue(fixture.store.pendingDeliveries("/mcp", REVISION).isEmpty());
@@ -242,15 +426,14 @@ class McpLegacySessionGrantStoreTests {
 		McpLegacySessionStore.Get get = fixture.get(session, Set.of(McpResourceNotificationType.RESOURCE_UPDATED), 60 * SECOND);
 		fixture.store.markResourceDirty("/mcp", REVISION, "test:///resource");
 		McpLegacySessionStore.DeliveryAttempt old = onlyDelivery(fixture).forGet(get).orElseThrow();
-		McpLegacySessionStore.NotificationReservation oldBytes = fixture.store.reserveNotificationBytes(old, 80).orElseThrow();
+		McpLegacySessionStore.NotificationReservation oldBytes = fixture.store.reserveNotificationBytes(old, 80).reservation().orElseThrow();
 		assertTrue(fixture.store.acknowledgeOffered(old));
 		fixture.store.markResourceDirty("/mcp", REVISION, "test:///resource"); assertTrue(old.valid());
-		McpLegacySessionStore.DeliveryAttempt coalesced = onlyDelivery(fixture).forGet(get).orElseThrow();
-		McpLegacySessionStore.NotificationReservation coalescedBytes = fixture.store.reserveNotificationBytes(coalesced, 80).orElseThrow();
-		coalescedBytes.release(); // Existing older queued frame: root deliberately does not acknowledge COALESCED.
-		assertEquals(1, fixture.store.pendingDeliveries("/mcp", REVISION).size()); oldBytes.release();
+		assertTrue(fixture.store.pendingDeliveries("/mcp", REVISION).isEmpty(), "The queued key owns one writer until its outcome is known.");
+		oldBytes.written(); oldBytes.release();
+
 		McpLegacySessionStore.DeliveryAttempt fresh = onlyDelivery(fixture).forGet(get).orElseThrow();
-		McpLegacySessionStore.NotificationReservation freshBytes = fixture.store.reserveNotificationBytes(fresh, 80).orElseThrow();
+		McpLegacySessionStore.NotificationReservation freshBytes = fixture.store.reserveNotificationBytes(fresh, 80).reservation().orElseThrow();
 		assertTrue(fixture.store.acknowledgeOffered(fresh)); assertTrue(fixture.store.pendingDeliveries("/mcp", REVISION).isEmpty());
 		freshBytes.release(); get.physicalComplete(); fixture.store.close(); fixture.assertEmpty();
 	}
@@ -261,7 +444,7 @@ class McpLegacySessionGrantStoreTests {
 		McpLegacySessionStore.Get get = fixture.get(session, Set.of(McpResourceNotificationType.TOOLS_LIST_CHANGED), 60 * SECOND);
 		fixture.store.markCatalogDirty("/mcp", REVISION, McpResourceNotificationType.TOOLS_LIST_CHANGED, source::get);
 		McpLegacySessionStore.DeliveryAttempt old = onlyDelivery(fixture).forGet(get).orElseThrow();
-		McpLegacySessionStore.NotificationReservation bytes = fixture.store.reserveNotificationBytes(old, 80).orElseThrow();
+		McpLegacySessionStore.NotificationReservation bytes = fixture.store.reserveNotificationBytes(old, 80).reservation().orElseThrow();
 		assertTrue(fixture.store.acknowledgeOffered(old)); assertTrue(bytes.valid());
 		long fenced = get.fence(); assertFalse(bytes.valid());
 		bytes.release(); assertTrue(get.renew(fenced, session.owner, fixture.partition, 60 * SECOND,
@@ -282,8 +465,8 @@ class McpLegacySessionGrantStoreTests {
 		fixture.store.markCatalogDirty("/mcp", REVISION, McpResourceNotificationType.TOOLS_LIST_CHANGED);
 		fixture.store.markCatalogDirty("/mcp", REVISION, McpResourceNotificationType.PROMPTS_LIST_CHANGED);
 		McpLegacySessionStore.DeliveryAttempt written = onlyDelivery(fixture).forGet(get).orElseThrow();
-		McpLegacySessionStore.NotificationReservation bytes = fixture.store.reserveNotificationBytes(written, 80).orElseThrow();
-		assertTrue(fixture.store.acknowledgeOffered(written)); bytes.release();
+		McpLegacySessionStore.NotificationReservation bytes = fixture.store.reserveNotificationBytes(written, 80).reservation().orElseThrow();
+		assertTrue(fixture.store.acknowledgeOffered(written)); bytes.written(); bytes.release();
 		long fenced = get.fence(); assertTrue(get.renew(fenced, session.owner, fixture.partition, 60 * SECOND,
 				Set.of(McpResourceNotificationType.TOOLS_LIST_CHANGED)));
 		assertTrue(fixture.store.pendingDeliveries("/mcp", REVISION).isEmpty());
@@ -301,8 +484,8 @@ class McpLegacySessionGrantStoreTests {
 			McpLegacySessionStore.Get get = fixture.get(session, Set.of(McpResourceNotificationType.RESOURCE_UPDATED), 60 * SECOND);
 			fixture.store.markResourceDirty("/mcp", revision, grant.uri());
 			McpLegacySessionStore.DeliveryAttempt written = onlyDelivery(fixture).forGet(get).orElseThrow();
-			McpLegacySessionStore.NotificationReservation bytes = fixture.store.reserveNotificationBytes(written, 80).orElseThrow();
-			assertTrue(fixture.store.acknowledgeOffered(written)); bytes.release();
+			McpLegacySessionStore.NotificationReservation bytes = fixture.store.reserveNotificationBytes(written, 80).reservation().orElseThrow();
+			assertTrue(fixture.store.acknowledgeOffered(written)); bytes.written(); bytes.release();
 			for (int renewal = 1; renewal <= 3; renewal++) {
 				fixture.now.set(renewal * SECOND);
 				assertTrue(grant.renew(grant.generation(), fixture.now.get() + 60 * SECOND));
@@ -331,7 +514,7 @@ class McpLegacySessionGrantStoreTests {
 				McpLegacySessionStore.Get get = fixture.get(session, Set.of(McpResourceNotificationType.RESOURCE_UPDATED), 60 * SECOND);
 				fixture.store.markResourceDirty("/mcp", revision, grant.uri());
 				McpLegacySessionStore.DeliveryAttempt old = onlyDelivery(fixture).forGet(get).orElseThrow();
-				McpLegacySessionStore.NotificationReservation oldBytes = fixture.store.reserveNotificationBytes(old, 80).orElseThrow();
+				McpLegacySessionStore.NotificationReservation oldBytes = fixture.store.reserveNotificationBytes(old, 80).reservation().orElseThrow();
 				assertTrue(fixture.store.acknowledgeOffered(old)); assertTrue(oldBytes.valid());
 				if (transition.equals("duplicate")) {
 					McpLegacySessionStore.Call duplicateCall = fixture.call(session, 16);
@@ -343,10 +526,12 @@ class McpLegacySessionGrantStoreTests {
 					assertTrue(grant.renew(grant.generation(), 70 * SECOND));
 				}
 				assertFalse(oldBytes.valid()); assertFalse(fixture.store.acknowledgeOffered(old));
+				assertTrue(fixture.store.pendingDeliveries("/mcp", revision).isEmpty(), "A fenced writer must report its outcome before another stream can claim the same notification.");
+				oldBytes.release();
 				McpLegacySessionStore.DeliveryAttempt replacement = onlyDelivery(fixture).forGet(get).orElseThrow();
-				McpLegacySessionStore.NotificationReservation replacementBytes = fixture.store.reserveNotificationBytes(replacement, 80).orElseThrow();
+				McpLegacySessionStore.NotificationReservation replacementBytes = fixture.store.reserveNotificationBytes(replacement, 80).reservation().orElseThrow();
 				assertTrue(fixture.store.acknowledgeOffered(replacement));
-				assertEquals(160, fixture.store.grantCounts().queuedNotificationBytes());
+				assertEquals(80, fixture.store.grantCounts().queuedNotificationBytes());
 				oldBytes.release(); oldBytes.release(); assertTrue(replacementBytes.valid());
 				assertEquals(80, fixture.store.grantCounts().queuedNotificationBytes());
 				assertTrue(fixture.store.pendingDeliveries("/mcp", revision).isEmpty());
@@ -364,13 +549,14 @@ class McpLegacySessionGrantStoreTests {
 			McpLegacySessionStore.Get get = fixture.get(session, Set.of(McpResourceNotificationType.RESOURCE_UPDATED), 60 * SECOND);
 			fixture.store.markResourceDirty("/mcp", revision, grant.uri());
 			McpLegacySessionStore.DeliveryAttempt written = onlyDelivery(fixture).forGet(get).orElseThrow();
-			fixture.store.reserveNotificationBytes(written, 80).orElseThrow().release(); // A fast writer can drain before ACCEPTED returns.
+			McpLegacySessionStore.NotificationReservation writtenBytes = fixture.store.reserveNotificationBytes(written, 80).reservation().orElseThrow();
+			writtenBytes.written(); writtenBytes.release(); // A fast writer can drain before ACCEPTED returns.
 			assertTrue(fixture.store.acknowledgeOffered(written));
 			assertTrue(grant.renew(grant.generation(), 70 * SECOND));
 			assertTrue(fixture.store.pendingDeliveries("/mcp", revision).isEmpty());
 			fixture.store.markResourceDirty("/mcp", revision, grant.uri());
 			McpLegacySessionStore.DeliveryAttempt revoked = onlyDelivery(fixture).forGet(get).orElseThrow();
-			McpLegacySessionStore.NotificationReservation revokedBytes = fixture.store.reserveNotificationBytes(revoked, 80).orElseThrow();
+			McpLegacySessionStore.NotificationReservation revokedBytes = fixture.store.reserveNotificationBytes(revoked, 80).reservation().orElseThrow();
 			assertTrue(grant.renew(grant.generation(), 80 * SECOND));
 			revokedBytes.release(); assertFalse(fixture.store.acknowledgeOffered(revoked));
 			assertTrue(onlyDelivery(fixture).forGet(get).isPresent(), "A dropped stale frame cannot acknowledge the dirty state.");
@@ -386,15 +572,14 @@ class McpLegacySessionGrantStoreTests {
 			McpLegacySessionStore.Get get = fixture.get(session, Set.of(McpResourceNotificationType.RESOURCE_UPDATED), 60 * SECOND);
 			fixture.store.markResourceDirty("/mcp", revision, grant.uri());
 			McpLegacySessionStore.DeliveryAttempt old = onlyDelivery(fixture).forGet(get).orElseThrow();
-			McpLegacySessionStore.NotificationReservation oldBytes = fixture.store.reserveNotificationBytes(old, 80).orElseThrow();
+			McpLegacySessionStore.NotificationReservation oldBytes = fixture.store.reserveNotificationBytes(old, 80).reservation().orElseThrow();
 			assertTrue(fixture.store.acknowledgeOffered(old));
 			fixture.store.markResourceDirty("/mcp", revision, grant.uri());
-			McpLegacySessionStore.DeliveryAttempt coalesced = onlyDelivery(fixture).forGet(get).orElseThrow();
-			fixture.store.reserveNotificationBytes(coalesced, 80).orElseThrow().release(); // COALESCED releases its reservation without acknowledgement.
-			oldBytes.release(); assertTrue(grant.renew(grant.generation(), 70 * SECOND));
+			assertTrue(fixture.store.pendingDeliveries("/mcp", revision).isEmpty());
+			oldBytes.written(); oldBytes.release(); assertTrue(grant.renew(grant.generation(), 70 * SECOND));
 			McpLegacySessionStore.DeliveryAttempt fresh = onlyDelivery(fixture).forGet(get).orElseThrow();
-			McpLegacySessionStore.NotificationReservation freshBytes = fixture.store.reserveNotificationBytes(fresh, 80).orElseThrow();
-			assertTrue(fixture.store.acknowledgeOffered(fresh)); freshBytes.release();
+			McpLegacySessionStore.NotificationReservation freshBytes = fixture.store.reserveNotificationBytes(fresh, 80).reservation().orElseThrow();
+			assertTrue(fixture.store.acknowledgeOffered(fresh)); freshBytes.written(); freshBytes.release();
 			assertTrue(grant.renew(grant.generation(), 80 * SECOND));
 			assertTrue(fixture.store.pendingDeliveries("/mcp", revision).isEmpty());
 			get.physicalComplete(); fixture.store.close(); fixture.assertEmpty();
@@ -427,19 +612,28 @@ class McpLegacySessionGrantStoreTests {
 		List<McpLegacySessionStore.NotificationReservation> bytes = new ArrayList<>();
 		for (int index = 0; index < 9; index++) {
 			Session session = fixture.session("owner" + index);
-			gets.add(fixture.get(session, Set.of(McpResourceNotificationType.TOOLS_LIST_CHANGED), 60 * SECOND));
+			gets.add(fixture.get(session, Set.of(McpResourceNotificationType.TOOLS_LIST_CHANGED, McpResourceNotificationType.PROMPTS_LIST_CHANGED), 60 * SECOND));
 		}
 		fixture.store.markCatalogDirty("/mcp", REVISION, McpResourceNotificationType.TOOLS_LIST_CHANGED);
 		List<McpLegacySessionStore.Delivery> deliveries = fixture.store.pendingDeliveries("/mcp", REVISION);
 		for (int index = 0; index < 8; index++) {
 			McpLegacySessionStore.DeliveryAttempt attempt = deliveries.get(index).forGet(gets.get(index)).orElseThrow();
-			bytes.add(fixture.store.reserveNotificationBytes(attempt, 2_097_152).orElseThrow());
+			bytes.add(fixture.store.reserveNotificationBytes(attempt, 2_097_152).reservation().orElseThrow());
 			assertTrue(fixture.store.notificationOwnerCapacityExceeded(gets.get(index), 1));
-			assertTrue(fixture.store.reserveNotificationBytes(attempt, 1).isEmpty());
+			assertEquals(McpLegacySessionStore.NotificationStatus.STALE,
+					fixture.store.reserveNotificationBytes(attempt, 1).status());
+			fixture.store.markCatalogDirty("/mcp", REVISION, McpResourceNotificationType.PROMPTS_LIST_CHANGED);
+			McpLegacySessionStore.Get get = gets.get(index);
+			McpLegacySessionStore.DeliveryAttempt fresh = fixture.store.pendingDeliveries("/mcp", REVISION).stream()
+					.filter(delivery -> delivery.notificationType() == McpResourceNotificationType.PROMPTS_LIST_CHANGED
+							&& delivery.eligibleGets().contains(get)).findFirst().orElseThrow().forGet(get).orElseThrow();
+			assertEquals(McpLegacySessionStore.NotificationStatus.OWNER_CAPACITY,
+					fixture.store.reserveNotificationBytes(fresh, 1).status());
 		}
 		McpLegacySessionStore.DeliveryAttempt global = deliveries.get(8).forGet(gets.get(8)).orElseThrow();
 		assertFalse(fixture.store.notificationOwnerCapacityExceeded(gets.get(8), 1));
-		assertTrue(fixture.store.reserveNotificationBytes(global, 1).isEmpty());
+		assertEquals(McpLegacySessionStore.NotificationStatus.GLOBAL_CAPACITY,
+				fixture.store.reserveNotificationBytes(global, 1).status());
 		assertEquals(16_777_216, fixture.store.grantCounts().queuedNotificationBytes());
 		for (McpLegacySessionStore.Get get : gets) get.physicalComplete(); fixture.store.close();
 		assertEquals(8, fixture.store.counts().owners()); assertEquals(0, fixture.store.counts().retainedBytes());

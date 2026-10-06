@@ -490,7 +490,7 @@ class McpLegacySessionPublicRuntimeTests {
 				assertNotSame(early.getAdmissionIdentity(), later.getAdmissionIdentity(), "Every message has fresh admitted identity.");
 			}
 			assertEquals(10, fixture.admissions.get());
-			assertEquals(10, fixture.limits.get());
+			assertEquals(6, fixture.limits.get(), "Verified acknowledgement uses the bounded cleanup path.");
 		}
 	}
 
@@ -614,17 +614,17 @@ class McpLegacySessionPublicRuntimeTests {
 	}
 
 	@Test
-	void ownerAndGlobalCapacityFailuresHaveDistinctBoundedRetryStatuses() throws Exception {
+	void ownerAndGlobalCapacityFailuresPreserveSessionsWithoutInventingRetryTimes() throws Exception {
 		try (Fixture fixture = new Fixture(QUIET,
 				builder -> builder.maximumSessions(2).maximumSessionsPerOwner(1), builder -> {})) {
 			String alice = sessionId(fixture.initialize(McpProtocolVersion.V2025_06_18, "alice", null, "{}", "a"));
 			Response ownerFull = fixture.initialize(McpProtocolVersion.V2025_11_25, "alice", null, "{}", "a2");
 			assertEquals(429, ownerFull.status(), ownerFull.body());
-			assertNotNull(ownerFull.header("Retry-After"));
+			assertNull(ownerFull.header("Retry-After"));
 			sessionId(fixture.initialize(McpProtocolVersion.V2025_11_25, "bob", null, "{}", "b"));
 			Response globalFull = fixture.initialize(McpProtocolVersion.V2025_06_18, "charlie", null, "{}", "c");
 			assertEquals(503, globalFull.status(), globalFull.body());
-			assertNotNull(globalFull.header("Retry-After"));
+			assertNull(globalFull.header("Retry-After"));
 			assertEquals(200, fixture.call(McpProtocolVersion.V2025_06_18, alice, "alice", "\"alive\"", "").status());
 		}
 	}
@@ -639,6 +639,84 @@ class McpLegacySessionPublicRuntimeTests {
 				assertTrue(oversized.body().contains("\"error\""), oversized.body());
 				sessionId(fixture.initialize(version, "alice", null, "{}", "small"));
 			}
+		}
+	}
+
+	@Test
+	void verifiedControlsRemainAvailableWithFullHandlerQueuesAndDeniedOrdinaryQuota() throws Exception {
+		List<HeaderValue> limited = List.of(new HeaderValue("X-Limit", "deny"));
+		for (McpProtocolVersion version : LEGACY) {
+			Held held = new Held(false);
+			try (Fixture fixture = new Fixture(held::handle, builder -> builder, builder -> builder
+					.requestHandlerConcurrency(1).requestHandlerQueueCapacity(1))) {
+				String id = sessionId(fixture.initialize(version, "alice", null, "{}", "test"));
+				try (RawClient active = fixture.open("/mcp", version, "tools/call", toolParams(""),
+						"\"active\"", id, "alice", List.of(), 0)) {
+					assertTrue(held.entered.await(5, TimeUnit.SECONDS));
+					try (RawClient queued = fixture.open("/mcp", version, "tools/call", toolParams(""),
+							"\"queued\"", id, "alice", List.of(), 0)) {
+						awaitCondition(() -> fixture.server.getDiagnostics().getRequestHandlerQueueDepth() == 1);
+						assertEquals(200, fixture.post("/mcp", version, "ping", "", "\"ping\"", id, "alice", limited).status());
+						assertEquals(202, fixture.post("/mcp", version, "notifications/initialized", "", null, id, "alice", limited).status());
+						Response collision = fixture.post("/mcp", version, "ping", "", "\"active\"", id, "alice", limited);
+						assertEquals(200, collision.status()); assertTrue(collision.body().contains("\"code\":-32600"), collision.body());
+						assertEquals(404, fixture.post("/mcp", version, "notifications/cancelled", "\"requestId\":\"active\"",
+								null, id, "bob", limited).status());
+						assertEquals(403, fixture.post("/mcp", version, "notifications/cancelled", "\"requestId\":\"active\"",
+								null, id, "alice", List.of(new HeaderValue("X-Limit", "deny"), new HeaderValue("X-Admission-Status", "403"))).status());
+						assertFalse(held.token.get().isCanceled());
+						assertEquals(429, fixture.post("/mcp", version, "notifications/cancelled", "\"requestId\":1.5",
+								null, id, "alice", limited).status(), "Malformed cancellation receives no cleanup exemption.");
+						assertEquals(429, fixture.post("/mcp", version, "notifications/cancelled", "\"requestId\":1e256",
+								null, id, "alice", limited).status(), "Exponent notation cannot expand an unbounded ID.");
+						assertEquals(429, fixture.post("/mcp", version, "notifications/cancelled", "\"requestId\":\"active\",\"reason\":\"" + "x".repeat(17000) + "\"",
+								null, id, "alice", limited).status(), "Oversized controls retain the ordinary quota path.");
+						assertEquals(202, fixture.post("/mcp", version, "notifications/cancelled", "\"requestId\":\"queued\"",
+								null, id, "alice", limited).status());
+						assertSseEmpty(queued);
+						assertEquals(202, fixture.post("/mcp", version, "notifications/cancelled", "\"requestId\":\"active\"",
+								null, id, "alice", limited).status());
+						assertTrue(held.canceled.await(5, TimeUnit.SECONDS)); assertSseEmpty(active);
+						assertEquals(1, fixture.server.getDiagnostics().getActiveHandlerExecutions(), "Ignored physical work stays charged.");
+					} finally { held.release.countDown(); }
+				}
+				assertTrue(held.exited.await(5, TimeUnit.SECONDS));
+			} finally { held.release.countDown(); }
+		}
+	}
+
+	@Test
+	void verifiedDeleteTerminatesActiveAndQueuedCallsWhileOrdinaryHandlersAreFull() throws Exception {
+		for (McpProtocolVersion version : LEGACY) {
+			Held held = new Held(false);
+			try (Fixture fixture = new Fixture(held::handle, builder -> builder.transportAdmissionController((context, features) ->
+					McpSessionTransportAdmissionDecision.accepted(McpAdmissionIdentity.withRateLimitPartitionKey("shared-quota")
+							.authorizationPartitionKey("shared-authorization").principal(context.getRequest().getHeader("X-Subject").orElse("alice")).build(),
+							java.time.Instant.now().plusSeconds(30), Set.of())),
+					builder -> builder.requestHandlerConcurrency(1).requestHandlerQueueCapacity(1))) {
+				String id = sessionId(fixture.initialize(version, "alice", null, "{}", "test"));
+				try (RawClient active = fixture.open("/mcp", version, "tools/call", toolParams(""), "\"active\"", id, "alice", List.of(), 0);
+						RawClient queued = fixture.open("/mcp", version, "tools/call", toolParams(""), "\"queued\"", id, "alice", List.of(), 0)) {
+					assertTrue(held.entered.await(5, TimeUnit.SECONDS));
+					awaitCondition(() -> fixture.server.getDiagnostics().getRequestHandlerQueueDepth() == 1);
+					for (String subject : List.of("bob", "alice")) {
+						try (RawClient deletion = new RawClient(fixture.port, "DELETE", "/mcp", "", List.of(
+								new HeaderValue("MCP-Protocol-Version", version.getWireValue()), new HeaderValue("Mcp-Session-Id", id),
+								new HeaderValue("X-Subject", subject)), 0)) {
+							Head head = deletion.readHead(); assertEquals(subject.equals("alice") ? 204 : 404, head.status());
+							assertEquals("", deletion.readBody(head));
+						}
+						if (subject.equals("bob")) assertFalse(held.token.get().isCanceled());
+					}
+					assertTrue(held.canceled.await(5, TimeUnit.SECONDS));
+					for (RawClient call : List.of(active, queued)) {
+						Head head = call.readHead(); assertFalse(call.readBody(head).contains("late-result"));
+					}
+					assertEquals(404, fixture.cancel(version, id, "alice", "\"active\"").status());
+					assertEquals(1, fixture.server.getDiagnostics().getActiveHandlerExecutions());
+				} finally { held.release.countDown(); }
+				assertTrue(held.exited.await(5, TimeUnit.SECONDS));
+			} finally { held.release.countDown(); }
 		}
 	}
 
@@ -844,13 +922,17 @@ class McpLegacySessionPublicRuntimeTests {
 		long readDeadlineNanos;
 
 		RawClient(int port, String path, String body, List<HeaderValue> headers, int receiveBuffer) throws IOException {
+			this(port, "POST", path, body, headers, receiveBuffer);
+		}
+
+		RawClient(int port, String method, String path, String body, List<HeaderValue> headers, int receiveBuffer) throws IOException {
 			if (receiveBuffer > 0) socket.setReceiveBufferSize(receiveBuffer);
 			socket.setTcpNoDelay(true);
 			socket.setSoTimeout(5000);
 			socket.connect(new InetSocketAddress("127.0.0.1", port), (int) Math.max(1, remainingRequestWait().toMillis()));
 			this.input = socket.getInputStream();
 			byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
-			StringBuilder head = new StringBuilder("POST ").append(path).append(" HTTP/1.1\r\nHost: 127.0.0.1:")
+			StringBuilder head = new StringBuilder(method).append(' ').append(path).append(" HTTP/1.1\r\nHost: 127.0.0.1:")
 					.append(port).append("\r\nContent-Type: application/json\r\nAccept: application/json, text/event-stream\r\n");
 			for (HeaderValue header : headers) head.append(header.name()).append(": ").append(header.value()).append("\r\n");
 			head.append("Content-Length: ").append(bytes.length).append("\r\n\r\n");
@@ -879,6 +961,7 @@ class McpLegacySessionPublicRuntimeTests {
 		}
 
 		String readBody(Head head) throws IOException {
+			if (head.status() == 204) return "";
 			readDeadlineNanos = System.nanoTime() + remainingRequestWait().toNanos();
 			if ("chunked".equalsIgnoreCase(head.header("Transfer-Encoding"))) {
 				ByteArrayOutputStream body = new ByteArrayOutputStream();

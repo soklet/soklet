@@ -59,6 +59,33 @@ public class McpTasksSimulatorPublicRuntimeTests {
 					.build();
 
 	@Test
+	public void inaccessibleCompletedTaskReturnsTheSameRedactedErrorInSimulation()
+			throws Exception {
+		AtomicReference<Boolean> visible = new AtomicReference<>(true);
+		Fixture fixture = new Fixture(McpCatalogAccessPolicy.fromEvaluators(
+				(requestContext, tool, invocationFeatures) -> visible.get(),
+				(requestContext, prompt, invocationFeatures) -> true));
+		SokletSimulator.run(fixture.sokletConfig(), simulator -> {
+			performJson(simulator, request("tools/call", TOOL_NAME, "create",
+					"\"name\":\"" + TOOL_NAME + "\",\"arguments\":{}", true));
+			String taskId = fixture.createdTaskId();
+			McpTask persisted = fixture.taskManager().completeTask(taskId,
+					McpCompleteResult.fromToolText("simulation-output-canary"), "Ready");
+			visible.set(false);
+			String error = performJson(simulator, request("tasks/get", taskId, "hidden",
+					"\"taskId\":\"" + taskId + "\"", true), 500,
+					"The completed MCP task result is unavailable.");
+			Assertions.assertEquals("{\"jsonrpc\":\"2.0\",\"id\":\"hidden\","
+					+ "\"error\":{\"code\":-32603,\"message\":\"Internal error\"}}", error);
+			visible.set(true);
+			String recovered = getTask(simulator, "restored", taskId);
+			Assertions.assertTrue(recovered.contains("\"status\":\"completed\""), recovered);
+			Assertions.assertTrue(recovered.contains("simulation-output-canary"), recovered);
+			Assertions.assertSame(persisted, fixture.taskManager().findTask(taskId).orElseThrow());
+		});
+	}
+
+	@Test
 	@Timeout(120)
 	public void sequentialRequestsExerciseCreateGetInputUpdateAndCancelation()
 			throws Exception {
@@ -303,6 +330,13 @@ public class McpTasksSimulatorPublicRuntimeTests {
 	private static String performJson(@NonNull Simulator simulator,
 			@NonNull Request request, int expectedStatus)
 			throws InterruptedException {
+		return performJson(simulator, request, expectedStatus, null);
+	}
+
+	@NonNull
+	private static String performJson(@NonNull Simulator simulator,
+			@NonNull Request request, int expectedStatus,
+			@Nullable String expectedFailureMessage) throws InterruptedException {
 		try (McpSimulation simulation = simulator.startMcpRequest(request)) {
 			McpSimulationResponse response = simulation.awaitResponse(WAIT)
 					.orElseThrow(() -> new AssertionError(
@@ -320,7 +354,11 @@ public class McpTasksSimulatorPublicRuntimeTests {
 			Assertions.assertEquals(McpStreamTerminationReason.COMPLETED,
 					completion.getReason());
 			Assertions.assertTrue(completion.getTerminalMessage().isEmpty());
-			Assertions.assertTrue(completion.getThrowables().isEmpty());
+			if (expectedFailureMessage == null)
+				Assertions.assertTrue(completion.getThrowables().isEmpty());
+			else
+				Assertions.assertEquals(List.of(expectedFailureMessage), completion.getThrowables()
+						.stream().map(Throwable::getMessage).toList());
 			Assertions.assertTrue(simulation.awaitStreamItem(Duration.ZERO).isEmpty());
 			return json;
 		}
@@ -486,6 +524,10 @@ public class McpTasksSimulatorPublicRuntimeTests {
 		private final SokletConfig sokletConfig;
 
 		private Fixture() {
+			this(null);
+		}
+
+		private Fixture(@Nullable McpCatalogAccessPolicy catalogAccessPolicy) {
 			this.taskManager = McpTaskManager.fromInMemoryDefaults();
 			this.admissions = new AtomicInteger();
 			this.createdTaskId = new AtomicReference<>();
@@ -524,6 +566,7 @@ public class McpTasksSimulatorPublicRuntimeTests {
 					.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 					.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 					.taskManager(this.taskManager)
+					.catalogAccessPolicy(catalogAccessPolicy)
 					.subscriptionAuthorizer((context, features) ->
 							McpSubscriptionAuthorization.Allowed.fromValidUntil(
 									Instant.now().plus(Duration.ofMinutes(5))))

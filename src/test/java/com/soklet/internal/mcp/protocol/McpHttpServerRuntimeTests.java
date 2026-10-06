@@ -1019,6 +1019,45 @@ public class McpHttpServerRuntimeTests {
 	}
 
 	@Test
+	public void explicitly_allowed_hosts_accept_public_ports_while_automatic_aliases_keep_listener_ports()
+			throws Exception {
+		McpHttpEndpointPolicy policy = new McpHttpEndpointPolicy("/mcp",
+				Set.of("Mcp.Example.Test", "[::1]"), McpAbsentOriginPolicy.ALLOW,
+				CorsAuthorizer.rejectAllInstance(),
+				request -> McpRequestAdmissionDecision.ACCEPT);
+		try (McpHttpServerRuntime runtime = runtime(configuration(0), policy)) {
+			int port = runtime.start().getPort();
+			byte[] body = discoverBody("1", DISCOVER_METHOD, PROTOCOL_VERSION);
+			for (String authority : List.of("mcp.example.test", "MCP.EXAMPLE.TEST:443",
+					"mcp.example.test:8443", "[::1]", "[::1]:443"))
+				Assertions.assertEquals(200, send(port, "POST", "/mcp",
+						replaceHeader(standardHeaders(port, DISCOVER_METHOD), "Host", authority), body).status(), authority);
+			for (String authority : List.of("localhost", "localhost:1", "127.0.0.1:443",
+					"untrusted.example:443", "mcp.example.test.attacker:443"))
+				Assertions.assertEquals(421, send(port, "POST", "/mcp",
+						replaceHeader(standardHeaders(port, DISCOVER_METHOD), "Host", authority), body).status(), authority);
+			Assertions.assertEquals(200, send(port, "POST", "https://mcp.example.test/mcp",
+					standardHeaders(port, DISCOVER_METHOD), body).status());
+			Assertions.assertEquals(421, send(port, "POST", "https://untrusted.example/mcp",
+					replaceHeader(standardHeaders(port, DISCOVER_METHOD), "Host", "mcp.example.test"), body).status());
+			RawResponse duplicateHost = send(LOOPBACK, port, "POST", "/mcp", "HTTP/1.1",
+					append(replaceHeader(standardHeaders(port, DISCOVER_METHOD), "Host", "mcp.example.test"),
+							new HeaderLine("Host", "mcp.example.test")), body, true);
+			Assertions.assertEquals(400, duplicateHost.status());
+			Assertions.assertEquals(0, duplicateHost.body().length);
+			Assertions.assertEquals(List.of("0"), duplicateHost.headers().get("content-length"));
+			RawResponse invalidHostPort = send(LOOPBACK, port, "POST", "/mcp", "HTTP/1.1",
+					replaceHeader(standardHeaders(port, DISCOVER_METHOD), "Host", "mcp.example.test:65536"), body, true);
+			Assertions.assertEquals(400, invalidHostPort.status());
+			Assertions.assertEquals(0, invalidHostPort.body().length);
+			Assertions.assertEquals(List.of("0"), invalidHostPort.headers().get("content-length"));
+			Assertions.assertEquals(403, send(port, "POST", "/mcp",
+					append(replaceHeader(standardHeaders(port, DISCOVER_METHOD), "Host", "mcp.example.test"),
+							new HeaderLine("Origin", "https://untrusted.example")), body).status());
+		}
+	}
+
+	@Test
 	public void ipv4_loopback_bind_authorizes_reserved_loopback_aliases()
 			throws Exception {
 		McpHttpServerRuntime runtime = runtime(configuration(0), defaultPolicy());
@@ -1916,9 +1955,9 @@ public class McpHttpServerRuntimeTests {
 				while ((read = input.read(buffer)) >= 0)
 					response.write(buffer, 0, read);
 			} catch (SocketException exception) {
-				// A peer that rejects declared request bounds before consuming the
+				// A peer that rejects framing or declared request bounds before consuming the
 				// already-sent body may close with TCP RST on some kernels. Only the
-				// explicit early-limit probes accept that close, and only after response
+				// explicit early-rejection probes accept that close, and only after response
 				// bytes arrived; parsing plus the caller's zero-length assertion still
 				// require a complete rejection response.
 				if (!allowResetAfterResponse || response.size() == 0)

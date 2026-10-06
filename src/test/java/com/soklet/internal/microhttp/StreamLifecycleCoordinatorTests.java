@@ -42,6 +42,105 @@ public class StreamLifecycleCoordinatorTests {
 	private static final Duration GRACE = Duration.ofSeconds(30);
 
 	@Test
+	public void rejection_observers_share_callback_capacity_and_retain_physical_shutdown_work() throws Exception {
+		StreamLifecycleCoordinator coordinator = new StreamLifecycleCoordinator(1, 1, GRACE, ignored -> {});
+		var reservation = reserve(coordinator);
+		CountDownLatch observerEntered = new CountDownLatch(1);
+		CountDownLatch releaseObserver = new CountDownLatch(1);
+		CountDownLatch rejectionEntered = new CountDownLatch(1);
+		CountDownLatch releaseRejection = new CountDownLatch(1);
+		Runnable rejection = () -> { rejectionEntered.countDown(); awaitUninterruptibly(releaseRejection); };
+		try {
+			reservation.dispatchTermination(() -> {
+				observerEntered.countDown(); awaitUninterruptibly(releaseObserver);
+			});
+			reservation.complete(); await(observerEntered);
+			Assertions.assertTrue(coordinator.dispatchRejectionObserver(rejection));
+			Assertions.assertFalse(coordinator.dispatchRejectionObserver(() -> Assertions.fail("Overflow observer entered")));
+			Assertions.assertFalse(rejectionEntered.await(20, TimeUnit.MILLISECONDS),
+					"Rejection observation exceeded the one configured callback slot");
+			coordinator.force(); releaseObserver.countDown(); await(rejectionEntered);
+			long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+			while (coordinator.snapshot().reservations() != 0 && System.nanoTime() - until < 0L) Thread.yield();
+			Assertions.assertEquals(0, coordinator.snapshot().reservations());
+			Assertions.assertFalse(coordinator.isTerminated());
+			Assertions.assertFalse(coordinator.awaitTermination(System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(20)),
+					"Rejection callback work was falsely retired at shutdown");
+			releaseRejection.countDown();
+			Assertions.assertTrue(coordinator.awaitTermination(System.nanoTime() + TimeUnit.SECONDS.toNanos(3)));
+		} finally {
+			releaseObserver.countDown(); releaseRejection.countDown(); coordinator.force();
+			Assertions.assertTrue(coordinator.awaitTermination(System.nanoTime() + TimeUnit.SECONDS.toNanos(3)));
+		}
+	}
+
+	@Test
+	public void output_wait_pauses_only_the_remaining_healthy_cleanup_budget() throws Exception {
+		AtomicLong clock = new AtomicLong(100L);
+		CountDownLatch diagnostic = new CountDownLatch(1);
+		StreamLifecycleCoordinator coordinator = new StreamLifecycleCoordinator(1, 1, GRACE,
+				ignored -> diagnostic.countDown(), clock::get);
+		HoldingExecutor producers = new HoldingExecutor(false);
+		var reservation = reserve(coordinator);
+		try {
+			reservation.execute(producers, () -> {});
+			reservation.beginCleanup();
+			long originalDeadline = reservation.cleanupDeadlineNanos();
+			clock.addAndGet(TimeUnit.SECONDS.toNanos(10));
+			reservation.beginOutputWait();
+			clock.addAndGet(TimeUnit.SECONDS.toNanos(60));
+			reservation.checkCleanupDeadline(clock.get());
+			Assertions.assertTrue(reservation.reason().isEmpty());
+			Assertions.assertEquals(0, coordinator.snapshot().overdue());
+			reservation.endOutputWait();
+			Assertions.assertEquals(originalDeadline + TimeUnit.SECONDS.toNanos(60), reservation.cleanupDeadlineNanos());
+			clock.set(reservation.cleanupDeadlineNanos() - 1);
+			reservation.checkCleanupDeadline(clock.get());
+			Assertions.assertTrue(reservation.reason().isEmpty());
+			clock.incrementAndGet();
+			reservation.checkCleanupDeadline(clock.get());
+			Assertions.assertEquals(StreamTerminationReason.CLEANUP_TIMEOUT, reservation.reason().orElseThrow());
+			await(diagnostic);
+			Assertions.assertEquals(1, coordinator.snapshot().reservations(), "A deadline cannot retire physical work");
+		} finally {
+			reservation.complete();
+			finish(coordinator, producers);
+		}
+	}
+
+	@Test
+	public void cancellation_bounds_cleanup_even_while_output_is_still_waiting() throws Exception {
+		AtomicLong clock = new AtomicLong(100L);
+		CountDownLatch diagnostic = new CountDownLatch(1);
+		StreamLifecycleCoordinator coordinator = new StreamLifecycleCoordinator(1, 1, GRACE,
+				ignored -> diagnostic.countDown(), clock::get);
+		HoldingExecutor producers = new HoldingExecutor(false);
+		var reservation = reserve(coordinator);
+		try {
+			reservation.execute(producers, () -> {});
+			reservation.beginCleanup();
+			reservation.beginOutputWait();
+			clock.addAndGet(TimeUnit.MINUTES.toNanos(1));
+			Assertions.assertTrue(reservation.cancel(StreamTerminationReason.CLIENT_DISCONNECTED, null));
+			long cancellationDeadline = reservation.cleanupDeadlineNanos();
+			Assertions.assertEquals(clock.get() + GRACE.toNanos(), cancellationDeadline);
+			clock.set(cancellationDeadline - 1);
+			reservation.checkCleanupDeadline(clock.get());
+			Assertions.assertEquals(0, coordinator.snapshot().overdue());
+			clock.incrementAndGet();
+			reservation.checkCleanupDeadline(clock.get());
+			await(diagnostic);
+			Assertions.assertEquals(1, coordinator.snapshot().overdue());
+			reservation.endOutputWait();
+			Assertions.assertEquals(cancellationDeadline, reservation.cleanupDeadlineNanos());
+			Assertions.assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED, reservation.reason().orElseThrow());
+		} finally {
+			reservation.complete();
+			finish(coordinator, producers);
+		}
+	}
+
+	@Test
 	@org.junit.jupiter.api.Timeout(60)
 	public void deadline_diagnostics_and_snapshots_exclude_retained_application_secrets() throws Exception {
 		String secret = "streaming-private-request-payload-canary";

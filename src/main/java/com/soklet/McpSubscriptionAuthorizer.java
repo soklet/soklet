@@ -35,6 +35,12 @@ import static java.util.Objects.requireNonNull;
  * never on an event loop. Invocation features contain the check's cooperative
  * cancellation token; they do not expose task creation, progress reporting, or
  * a localization context computed before authorization completes.
+ * <p>
+ * For an established {@code 2026-07-28} listen, denial, expiry or a failed
+ * required check fences delivery and ends the subscription. A usable stream
+ * receives its tagged completion result before closing; diagnostics retain
+ * the authorization reason. A broken writer or partially written revoked
+ * frame may close abruptly. Initial denial still rejects before acknowledgment.
  *
  * <p>For exact 2025-era delivery, the authorizer establishes and renews one
  * session-owned resource URI grant through a real {@code resources/subscribe}
@@ -42,6 +48,13 @@ import static java.util.Objects.requireNonNull;
  * survives its disconnect within configured bounds. GET notification-family
  * admission is controlled separately by {@link McpSessionTransportAdmissionController}.
  * Unsubscribe does not invoke this authorizer.
+ * A transient renewal exception or timeout fences delivery and permits at most
+ * three consecutive failed attempts within the existing lease. Successful
+ * authorization resets this retry count. Explicit renewal denial, exhausted
+ * retries, or an expired established grant retires its session: the client must
+ * reinitialize and resubscribe. Legacy protocols have no subscription-ended
+ * notification. Initial subscribe rejection and explicit unsubscribe do not
+ * themselves retire a session.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

@@ -313,6 +313,23 @@ public final class Soklet implements AutoCloseable {
 
 		List<Throwable> throwables = new ArrayList<>(10);
 
+		// A built-in transport can replace the logical response before commitment.
+		// Keep write/finish observation aligned with that finite wire response.
+		Consumer<HttpRequestResult> transportResultConsumer = requestResult -> {
+			try {
+				requestResultConsumer.accept(requestResult);
+			} catch (HttpTransportResponseReplacement replacement) {
+				marshaledResponseHolder.set(replacement.getMarshaledResponse());
+				requestResultHolder.set(requestResult.copy().marshaledResponse(replacement.getMarshaledResponse())
+						.headResponseCompressionBody(null).finish());
+				if (replacement.getCause() != null) throwables.add(replacement.getCause());
+				Throwable writeFailure = replacement.getWriteFailure();
+				if (writeFailure instanceof Error error) throw error;
+				if (writeFailure instanceof RuntimeException runtimeException) throw runtimeException;
+				if (writeFailure != null) throw new IllegalStateException("Unable to write replacement HTTP response.", writeFailure);
+			}
+		};
+
 		Consumer<LogEvent> safelyLog = (logEvent -> {
 			try {
 				lifecycleObserver.didReceiveLogEvent(logEvent);
@@ -532,10 +549,10 @@ public final class Soklet implements AutoCloseable {
 							HttpRequestResult requestResult = requestResultHolder.get();
 
 							if (requestResult != null)
-								requestResultConsumer.accept(requestResult.copy()
+								transportResultConsumer.accept(requestResult.copy()
 										.marshaledResponse(requireNonNull(marshaledResponseHolder.get())).finish());
 							else
-								requestResultConsumer.accept(HttpRequestResult.withMarshaledResponse(marshaledResponseHolder.get())
+								transportResultConsumer.accept(HttpRequestResult.withMarshaledResponse(marshaledResponseHolder.get())
 										.resourceMethod(resourceMethodHolder.get())
 										.build());
 
@@ -564,6 +581,7 @@ public final class Soklet implements AutoCloseable {
 									(metricsInvocation) -> metricsInvocation.didWriteResponse(serverType, requestHolder.get(), resourceMethodHolder.get(),
 											marshaledResponseHolder.get(), responseWriteDuration));
 						} catch (Throwable t) {
+							didFinishResponseWritingCompleted.set(true);
 							throwables.add(t);
 
 							Instant responseWriteFinished = Instant.now();
@@ -682,10 +700,10 @@ public final class Soklet implements AutoCloseable {
 						HttpRequestResult requestResult = requestResultHolder.get();
 
 						if (requestResult != null)
-							requestResultConsumer.accept(requestResult.copy()
+							transportResultConsumer.accept(requestResult.copy()
 									.marshaledResponse(requireNonNull(marshaledResponseHolder.get())).finish());
 						else
-							requestResultConsumer.accept(HttpRequestResult.withMarshaledResponse(marshaledResponseHolder.get())
+							transportResultConsumer.accept(HttpRequestResult.withMarshaledResponse(marshaledResponseHolder.get())
 									.resourceMethod(resourceMethodHolder.get())
 									.build());
 
@@ -1076,13 +1094,16 @@ public final class Soklet implements AutoCloseable {
 		requireNonNull(request);
 		requireNonNull(marshaledResponse);
 
+		CorsAuthorizer corsAuthorizer = getSokletConfig().getCorsAuthorizer();
+		// Include every cache variant, even when this request omits Origin or is denied.
+		if (!sameInstance(corsAuthorizer, CorsAuthorizer.rejectAllInstance()) && request.getCorsPreflight().isEmpty())
+			marshaledResponse = marshaledResponse.copy().headers(headers -> Utilities.addVaryHeader(headers, "Origin")).finish();
+
 		Cors cors = request.getCors().orElse(null);
 
 		// If non-CORS request, nothing further to do (note that CORS preflight was handled earlier)
 		if (cors == null)
 			return marshaledResponse;
-
-		CorsAuthorizer corsAuthorizer = getSokletConfig().getCorsAuthorizer();
 
 		// Does the authorizer say we are authorized?
 		CorsResponse corsResponse = corsAuthorizer.authorize(request, cors).orElse(null);

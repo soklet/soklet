@@ -443,6 +443,9 @@ public interface HttpServer {
 		 * headers, transfer framing, and body bytes. Applications that think in terms of
 		 * payload size should leave room for request metadata and protocol framing.
 		 * Passing {@code null} restores the built-in default of 10 MiB.
+		 * The standard parser also limits method tokens to 64 bytes and chunk-size lines
+		 * (including extensions, excluding CRLF) to 8,192 bytes. Exceeding either bound
+		 * is a malformed request, independent of this aggregate limit.
 		 *
 		 * @param maximumRequestSizeInBytes the maximum request size, or {@code null} for the default
 		 * @return this builder
@@ -576,10 +579,11 @@ public interface HttpServer {
 		 * supplied executor and calls {@link ExecutorService#shutdown()} during
 		 * graceful shutdown or {@link ExecutorService#shutdownNow()} during forced
 		 * shutdown, which may interrupt its tasks. Passing {@code null} restores a
-		 * framework-managed fixed-size executor. Its concurrency is 16 times the
-		 * effective event-loop concurrency when virtual threads are available and four
-		 * times it otherwise, with a minimum of one; its task queue holds 64 times
-		 * that concurrency, also with a minimum of one.
+		 * framework-managed executor. With virtual threads, each admitted streaming
+		 * producer gets its own thread, bounded by streaming lifecycle admission.
+		 * Otherwise, the fixed platform pool has four times the effective event-loop
+		 * concurrency, with a minimum of one, and no pending task queue. An unavailable
+		 * platform worker rejects admission before streaming headers are committed.
 		 * <p>
 		 * The executor must dispatch tasks asynchronously and reject unavailable work
 		 * with {@link java.util.concurrent.RejectedExecutionException}. Running a task
@@ -587,6 +591,8 @@ public interface HttpServer {
 		 * invoking the streaming producer. Soklet submits a framework execution envelope
 		 * before committing streaming headers; application production waits for transport
 		 * activation. Admission or executor rejection yields a failsafe {@code 503} response.
+		 * A custom executor must have capacity to start accepted producer work promptly;
+		 * queueing behind long-lived producers delays an already accepted response.
 		 *
 		 * @param streamingExecutorServiceSupplier the executor service supplier, or {@code null} for the default
 		 * @return this builder
@@ -623,7 +629,11 @@ public interface HttpServer {
 		 * Sets the worker concurrency for streaming cancelation and termination callbacks.
 		 * <p>
 		 * These workers are separate from response producers and transport event loops. Normal resource finalization
-		 * still runs on the producer thread. Passing {@code null} restores the built-in default of four workers.
+		 * still runs on the producer thread. Precommit rejection observers are offered to these same workers after the finite response is offered,
+		 * using a separately bounded allowance that does not consume admitted streams' reserved jobs.
+		 * That observation is omitted and logged if its allowance is exhausted or infrastructure has stopped.
+		 * Accepted observer work remains retained through shutdown; request handling never waits for it.
+		 * Passing {@code null} restores the built-in default of four workers.
 		 * <p>
 		 * At {@link #build()}, the effective concurrency must be positive and no greater than the effective
 		 * {@link #streamingLifecycleCapacity(Integer) lifecycle capacity}. When configuring a capacity below four,
@@ -648,6 +658,9 @@ public interface HttpServer {
 		 * Expiry bounds the supervisor's wait and permits failure reporting; it cannot make blocking application
 		 * cleanup return. Outstanding physical work remains accounted for and retains its lifecycle slot until it
 		 * exits. Cleanup supervision does not replace the response or idle timeout during healthy transport delivery.
+		 * Healthy queue backpressure during encoder finalization pauses the remaining cleanup budget; cancelation
+		 * starts a finite cleanup budget even if an output wait remains active. Successful socket writes refresh
+		 * response idle activity after production finishes, so a progressing drain can complete.
 		 *
 		 * @param streamingCleanupTimeout the cleanup timeout, or {@code null} for the default
 		 * @return this builder

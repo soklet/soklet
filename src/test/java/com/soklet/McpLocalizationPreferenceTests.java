@@ -206,6 +206,12 @@ class McpLocalizationPreferenceTests {
 		assertEquals(List.of(),
 				McpLocaleSupport.boundedLanguageRanges(orderedValues(overBound)),
 				"Over-limit input must collapse to empty, never truncate.");
+
+		assertEquals(List.of(new Locale.LanguageRange("en")),
+				McpLocaleSupport.boundedLanguageRanges(List.of("en", " ".repeat(4_093))));
+		assertEquals(List.of(),
+				McpLocaleSupport.boundedLanguageRanges(List.of("en", " ".repeat(4_094))),
+				"Ignored empty fields still count toward the raw input bound.");
 	}
 
 	@Test

@@ -38,7 +38,10 @@ import static java.util.Objects.requireNonNull;
  * deployment and, for {@link TrustPolicy#TRUST_PROXY_ALLOWLIST}, provide a trusted proxy predicate or allowlist.
  * If the remote address is missing or not trusted, forwarded headers are ignored.
  * <p>
- * Extraction order is: trusted forwarded headers → {@code Host} → (optional) {@code Origin} fallback. {@code Origin}
+ * Extraction order is: trusted forwarded headers → {@code Host} → (optional) {@code Origin} fallback.
+ * Under {@link TrustPolicy#TRUST_PROXY_ALLOWLIST}, origin metadata comes from the nearest proxy
+ * (the rightmost entry); earlier entries cannot supply missing or invalid values. {@link TrustPolicy#TRUST_ALL}
+ * retains leftmost selection. An absolute request target supplies the effective {@code Host} and fallback scheme. {@code Origin}
  * never overrides a conflicting host value; it only fills missing scheme/port or supplies host when absent.
  * <p>
  * Trusted {@code Forwarded host=} and {@code X-Forwarded-Host} values are validated against the same host grammar
@@ -59,6 +62,8 @@ public final class EffectiveOriginResolver {
 	private Predicate<InetSocketAddress> trustedProxyPredicate;
 	@Nullable
 	private Boolean allowOriginFallback;
+	@Nullable
+	private String requestTargetScheme;
 
 	/**
 	 * Acquires a resolver seeded with raw request headers and a trust policy.
@@ -88,6 +93,7 @@ public final class EffectiveOriginResolver {
 		requireNonNull(request);
 		EffectiveOriginResolver resolver = withHeaders(request.getHeaders(), trustPolicy);
 		resolver.remoteAddress = request.getRemoteAddress().orElse(null);
+		resolver.requestTargetScheme = request.getRequestTargetScheme();
 		return resolver;
 	}
 
@@ -170,6 +176,11 @@ public final class EffectiveOriginResolver {
 	@NonNull
 	Map<@NonNull String, @NonNull List<@NonNull String>> getHeaders() {
 		return this.headers;
+	}
+
+	@Nullable
+	String getRequestTargetScheme() {
+		return this.requestTargetScheme;
 	}
 
 	@NonNull

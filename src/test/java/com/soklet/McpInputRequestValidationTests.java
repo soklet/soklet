@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.jspecify.annotations.NonNull;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -28,6 +29,20 @@ import java.util.List;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public class McpInputRequestValidationTests {
+	@Test
+	public void decimalResponseMatchingPreservesValuesAndDoesNotReplaceApplicationSchemaValidation() {
+		McpInputRequest form = request(McpInputRequestDeclaration.fromElicitationForm(McpInputRequirement.REQUIRED), formParams());
+		McpInputRequest url = request(McpInputRequestDeclaration.fromElicitationUrl(McpInputRequirement.CONDITIONAL), urlParams());
+		McpJsonNumber amount = McpJsonNumber.fromValue(new BigDecimal("3.50"));
+		McpJsonObject response = McpJsonObject.builder().put("action", "accept")
+				.put("content", McpJsonObject.builder().put("answer", amount).build()).build();
+		// The form asks for a string. Union matching intentionally does not validate that schema.
+		Assertions.assertTrue(form.matchesInputResponse(response));
+		Assertions.assertTrue(url.matchesInputResponse(response));
+		Assertions.assertSame(amount, ((McpJsonObject) response.find("content").orElseThrow()).find("answer").orElseThrow());
+		Assertions.assertEquals(new BigDecimal("3.50"), amount.getValue());
+	}
+
 	@Test
 	public void matchesTheDeclaredResponseUnionBranchForEveryRequestType() {
 		McpInputRequest form = request(

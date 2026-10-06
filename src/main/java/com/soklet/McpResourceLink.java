@@ -37,6 +37,10 @@ import static java.util.Objects.requireNonNull;
 /**
  * Immutable MCP content block linking to a resource.
  *
+ * <p>When returned as tool content, optional icons are omitted from the
+ * {@code 2025-06-18} wire projection and retained for {@code 2025-11-25} and
+ * the modern revision. Projection does not mutate this value.</p>
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe

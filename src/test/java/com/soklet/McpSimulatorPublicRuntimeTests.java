@@ -102,12 +102,12 @@ public class McpSimulatorPublicRuntimeTests {
 				Assertions.assertEquals(421,
 						awaitResponse(missingHost).getStatusCode());
 				awaitCompletion(missingHost);
-				McpSimulation missingLiteralPort = simulator.startMcpRequest(request(
-						"missing-literal-port", "blocking", null, LOOPBACK,
+				McpSimulation missingAliasPort = simulator.startMcpRequest(request(
+						"missing-alias-port", "blocking", null, "localhost",
 						Optional.empty()));
 				Assertions.assertEquals(421,
-						awaitResponse(missingLiteralPort).getStatusCode());
-				awaitCompletion(missingLiteralPort);
+						awaitResponse(missingAliasPort).getStatusCode());
+				awaitCompletion(missingAliasPort);
 				Assertions.assertNull(admittedRequest.get(),
 						"Simulator mode must not inject or repair the Host header.");
 				McpSimulation simulation = simulator.startMcpRequest(request);

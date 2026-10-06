@@ -100,9 +100,8 @@ final class McpLegacyRequestWireMapper {
 				|| version.value().isBlank()
 				|| !(fields.get("capabilities") instanceof McpJsonObject capabilities)
 				|| !(fields.get("clientInfo") instanceof McpJsonObject clientInfo)
-				|| !(clientInfo.members().get("name") instanceof McpJsonString name)
-				|| !(clientInfo.members().get("version") instanceof McpJsonString clientVersion)
-				|| name.value().isBlank() || clientVersion.value().isBlank())
+				|| !(clientInfo.members().get("name") instanceof McpJsonString)
+				|| !(clientInfo.members().get("version") instanceof McpJsonString))
 			throw invalidParams(request);
 		validateCapabilities(capabilities, request);
 		return new Initialization(version.value(), capabilities, clientInfo);

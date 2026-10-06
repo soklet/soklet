@@ -182,23 +182,19 @@ public class AdvancedTests {
 		testCases.put("", "/");
 		testCases.put("//multiple///slashes////", "/multiple/slashes");
 		testCases.put("/trailing/", "/trailing");
-		testCases.put("/%00/null-byte", "/"); // Null byte should be handled
 		testCases.put("/\\/backslash", "/\\/backslash");
-		testCases.put("/unicode/\u0000/null", "/unicode/"); // Unicode null
 
 		for (Map.Entry<String, String> testCase : testCases.entrySet()) {
 			String input = testCase.getKey();
 			String expected = testCase.getValue();
 
-			try {
-				String result = Utilities.extractPathFromUrl(input, true);
-				// Some edge cases might not match exactly but should be safe
-				Assertions.assertNotNull(result, "Normalization returned null for: " + input);
-				Assertions.assertTrue(result.startsWith("/"), "Result should start with /");
-			} catch (Exception e) {
-				Assertions.fail("Exception during normalization of: " + input + " - " + e.getMessage());
-			}
+			Assertions.assertEquals(expected, Utilities.extractPathFromUrl(input, true), input);
 		}
+
+		// Request validation rejects NUL rather than rewriting the path to a different route.
+		for (String target : List.of("/%00/null-byte", "/unicode/\u0000/null"))
+			Assertions.assertThrows(com.soklet.exception.IllegalRequestException.class,
+					() -> Request.fromRawUrl(HttpMethod.GET, target));
 	}
 
 	// ==================== Cookie Parsing Edge Cases ====================

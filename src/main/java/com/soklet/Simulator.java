@@ -142,23 +142,28 @@ public interface Simulator {
 	Optional<@NonNull McpServer> getMcpServer();
 
 	/**
-	 * Starts an asynchronous, off-network MCP POST simulation using default
-	 * bounded capture options.
+	 * Starts an asynchronous, off-network MCP HTTP simulation using default
+	 * bounded capture options. Supports POST and, on session-enabled 2025
+	 * endpoints, GET and DELETE, as well as OPTIONS preflight requests.
 	 *
 	 * @param request request to simulate
 	 * @return simulation handle
 	 * @throws NullPointerException if {@code request} is null
+	 * @throws IllegalStateException if no MCP server is configured or the simulation scope is closed
 	 */
 	@NonNull
 	McpSimulation startMcpRequest(@NonNull Request request);
 
 	/**
-	 * Starts an asynchronous, off-network MCP POST simulation.
+	 * Starts an asynchronous, off-network MCP HTTP simulation. Supports POST
+	 * and, on session-enabled 2025 endpoints, GET and DELETE, as well as OPTIONS
+	 * preflight requests.
 	 *
 	 * @param request request to simulate
 	 * @param options bounded response-capture options
 	 * @return simulation handle
 	 * @throws NullPointerException if either argument is null
+	 * @throws IllegalStateException if no MCP server is configured or the simulation scope is closed
 	 */
 	@NonNull
 	McpSimulation startMcpRequest(@NonNull Request request,

@@ -214,7 +214,7 @@ public class McpDeferredTaskOutputSafetyTests {
 	}
 
 	@Test
-	public void completedTaskResultIsStatusOnlyWhenOriginToolAccessIsRevoked()
+	public void completedTaskReadFailsWithoutDisclosureUntilOriginToolAccessIsRestored()
 			throws Exception {
 		AtomicReference<CatalogPolicyMode> policyMode =
 				new AtomicReference<>(CatalogPolicyMode.ALLOW);
@@ -239,12 +239,9 @@ public class McpDeferredTaskOutputSafetyTests {
 			Assertions.assertEquals(0, sanitizerInvocations.get());
 
 			policyMode.set(CatalogPolicyMode.DENY);
+			McpTask persisted = taskManager.task.orElseThrow();
 			HttpResponse<String> response = getTask(port, "revoked-result");
-			assertSuccess(response);
-			assertContains(response.body(), "\"taskId\":\"" + TASK_ID + "\"");
-			assertContains(response.body(), "\"status\":\"completed\"");
-			Assertions.assertEquals(1,
-					occurrences(response.body(), "\"result\":"), response.body());
+			assertFixedInternalError(response, "revoked-result");
 			for (String canary : List.of(ORIGINAL_CANARY,
 					RESULT_METADATA_CANARY,
 					"\"structuredContent\""))
@@ -254,6 +251,15 @@ public class McpDeferredTaskOutputSafetyTests {
 					"Task retrieval must reauthorize the origin tool once.");
 			Assertions.assertEquals(0, sanitizerInvocations.get(),
 					"A denied origin tool must suppress output before sanitization.");
+			Assertions.assertSame(persisted, taskManager.task.orElseThrow());
+			policyMode.set(CatalogPolicyMode.ALLOW);
+			HttpResponse<String> recovered = getTask(port, "restored-result");
+			assertSuccess(recovered);
+			assertContains(recovered.body(), "\"status\":\"completed\"");
+			assertContains(recovered.body(), "\"message\":\"sanitized\"");
+			Assertions.assertEquals(3, policyInvocations.get());
+			Assertions.assertEquals(1, sanitizerInvocations.get());
+			Assertions.assertSame(persisted, taskManager.task.orElseThrow());
 		} finally {
 			soklet.close();
 		}
@@ -393,7 +399,7 @@ public class McpDeferredTaskOutputSafetyTests {
 
 	@Test
 	@Timeout(120)
-	public void completedTaskIsStatusOnlyWhenItsOriginToolIsNoLongerRegistered()
+	public void completedTaskReadFailsWithoutDisclosureWhenItsOriginToolIsNoLongerRegistered()
 			throws Exception {
 		AtomicReference<SanitizerMode> sanitizerMode =
 				new AtomicReference<>(SanitizerMode.VALID);
@@ -435,11 +441,7 @@ public class McpDeferredTaskOutputSafetyTests {
 			reader.start();
 			HttpResponse<String> response = getTask(boundPort(readerServer),
 					"removed-origin-tool");
-			assertSuccess(response);
-			assertContains(response.body(), "\"taskId\":\"" + TASK_ID + "\"");
-			assertContains(response.body(), "\"status\":\"completed\"");
-			Assertions.assertEquals(1,
-					occurrences(response.body(), "\"result\":"), response.body());
+			assertFixedInternalError(response, "removed-origin-tool");
 			for (String canary : List.of(ORIGINAL_CANARY,
 					RESULT_METADATA_CANARY,
 					"\"structuredContent\""))

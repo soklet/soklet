@@ -71,8 +71,22 @@ public interface McpApplicationExecutionObserver {
 
 	void beginDeferral();
 
-	default void beginRequestTransitionDeferral() {
+	/**
+	 * Begins provisional metric observation for a short runtime transition. The
+	 * built-in observer withholds only this transition's records until its token
+	 * closes, then signals asynchronous delivery. Any cleanup thread may close
+	 * that token, and repeated close is harmless.
+	 */
+	@NonNull
+	default MetricDeferral beginRequestTransitionDeferral() {
 		beginDeferral();
+		return this::endDeferral;
+	}
+
+	/** Internal scope for provisional metrics produced by one runtime transition. */
+	interface MetricDeferral extends AutoCloseable {
+		@Override
+		void close();
 	}
 
 	@NonNull

@@ -138,11 +138,11 @@ public class McpPromptPublicRuntimeTests {
 						"\"name\":\"" + PROMPT_NAME + "\",\"arguments\":{\"subject\":\"x\",\"typo\":\"y\"}",
 						"\"name\":\"modern-only\"", "\"name\":\"absent\""))
 					assertError(sendLegacy(port, revision, "prompts/get", "invalid", parameters, Map.of()),
-							400, -32602, "invalid");
+							200, -32602, "invalid");
 				assertError(sendLegacy(port, revision, "prompts/list", "cursor", "\"cursor\":\"x\"", Map.of()),
-						400, -32602, "cursor");
+						200, -32602, "cursor");
 				assertError(sendLegacy(port, revision, "completion/complete", "completion", "", Map.of()),
-						404, -32601, "completion");
+						200, -32601, "completion");
 			}
 			Assertions.assertEquals(2, handlerInvocations.get());
 			HttpResponse<String> modern = send(port, request("modern", "prompts/get",
@@ -216,7 +216,7 @@ public class McpPromptPublicRuntimeTests {
 				allowed.set(false);
 				stages.clear();
 				HttpResponse<String> hidden = sendLegacy(port, revision, "prompts/get", "hidden", parameters, Map.of());
-				assertError(hidden, 400, -32602, "hidden");
+				assertError(hidden, 200, -32602, "hidden");
 				Assertions.assertEquals(List.of("admission", "request-limiter", "policy"), stages);
 				HttpResponse<String> absent = sendLegacy(port, revision, "prompts/get", "hidden",
 						"\"name\":\"absent\"", Map.of());
@@ -252,7 +252,7 @@ public class McpPromptPublicRuntimeTests {
 				assertSuccess(initialize, "init");
 				assertContains(initialize.body(), "\"capabilities\":{}");
 				assertError(sendLegacy(port, revision, "prompts/list", "list", "", Map.of()),
-						404, -32601, "list");
+						200, -32601, "list");
 			}
 		}
 	}

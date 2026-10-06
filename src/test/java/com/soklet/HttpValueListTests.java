@@ -149,7 +149,7 @@ class HttpValueListTests {
 	void rawHeaderParsingPreservesRepeatedLinesAndCommaSeparatedValues() {
 		Map<String, List<String>> headers = Utilities.extractHeadersFromRawHeaderLines(List.of(
 				"Accept: text/plain, text/plain", "accept: application/json", "X-Value: one", "x-value: one"));
-		assertEquals(List.of("text/plain", "text/plain", "application/json"), headers.get("ACCEPT"));
+		assertEquals(List.of("text/plain, text/plain", "application/json"), headers.get("ACCEPT"));
 		assertEquals(List.of("one", "one"), headers.get("x-value"));
 		assertThrows(UnsupportedOperationException.class, headers::clear);
 	}

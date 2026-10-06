@@ -20,6 +20,7 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.net.URI;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -48,6 +49,8 @@ public final class McpJsonRpcError {
 	private final String message;
 	@Nullable
 	private final McpJsonValue data;
+	@Nullable
+	private final URI resourceNotFoundUri;
 
 	/**
 	 * Creates an application-defined JSON-RPC error without a {@code data}
@@ -114,13 +117,47 @@ public final class McpJsonRpcError {
 		return new McpJsonRpcError(INVALID_PARAMS, message, requireNonNull(data));
 	}
 
+	/**
+	 * Creates a resource-not-found error with the requested URI in its
+	 * {@code data.uri} member. Its canonical code is {@code -32602}.
+	 * <p>
+	 * When thrown by a resource-read handler in {@link McpJsonRpcException},
+	 * Soklet renders code {@code -32002} for the two supported 2025 revisions
+	 * and {@code -32602} for the 2026 revision. Ordinary invalid-parameters
+	 * errors retain their code on every revision.
+	 *
+	 * @param resourceUri the absolute, normalized resource URI in ASCII wire form
+	 * @return the resource-not-found error
+	 * @throws NullPointerException if {@code resourceUri} is null
+	 * @throws IllegalArgumentException if the URI is relative, not normalized,
+	 *                                  or not in ASCII wire form
+	 */
+	@NonNull
+	public static McpJsonRpcError fromResourceNotFound(@NonNull URI resourceUri) {
+		URI validatedUri = McpResourceValueSupport.requireAbsoluteNormalizedUri(resourceUri);
+		return new McpJsonRpcError(INVALID_PARAMS, "Resource not found",
+				McpJsonObject.builder().put("uri", validatedUri.toString()).build(),
+				validatedUri);
+	}
+
 	private McpJsonRpcError(int code, @NonNull String message,
 			@Nullable McpJsonValue data) {
+		this(code, message, data, null);
+	}
+
+	private McpJsonRpcError(int code, @NonNull String message,
+			@Nullable McpJsonValue data, @Nullable URI resourceNotFoundUri) {
 		this.code = code;
 		this.message = requireNonNull(message);
 		if (message.isBlank())
 			throw new IllegalArgumentException("message must not be blank");
 		this.data = data;
+		this.resourceNotFoundUri = resourceNotFoundUri;
+	}
+
+	@NonNull
+	Optional<@NonNull URI> resourceNotFoundUri() {
+		return Optional.ofNullable(this.resourceNotFoundUri);
 	}
 
 	@NonNull
@@ -130,7 +167,9 @@ public final class McpJsonRpcError {
 	}
 
 	/**
-	 * The JSON-RPC error code.
+	 * The canonical JSON-RPC error code. Resource-not-found errors created by
+	 * {@link #fromResourceNotFound(URI)} are projected to the selected revision
+	 * at the resource-read handler boundary.
 	 *
 	 * @return the error code
 	 */
@@ -159,7 +198,7 @@ public final class McpJsonRpcError {
 		return Optional.ofNullable(this.data);
 	}
 
-	/** @return whether the code, message, and data are structurally equal */
+	/** @return whether code, message, data, and resource-not-found intent are equal */
 	@Override
 	public boolean equals(@Nullable Object other) {
 		if (this == other)
@@ -168,13 +207,14 @@ public final class McpJsonRpcError {
 			return false;
 		return this.code == error.code
 				&& this.message.equals(error.message)
-				&& Objects.equals(this.data, error.data);
+				&& Objects.equals(this.data, error.data)
+				&& Objects.equals(this.resourceNotFoundUri, error.resourceNotFoundUri);
 	}
 
 	/** @return structural error hash code */
 	@Override
 	public int hashCode() {
-		return Objects.hash(this.code, this.message, this.data);
+		return Objects.hash(this.code, this.message, this.data, this.resourceNotFoundUri);
 	}
 
 	private static int requireApplicationCode(int code) {

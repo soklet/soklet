@@ -148,6 +148,13 @@ public class McpMultiEndpointPublicRuntimeTests {
 			Assertions.assertEquals(404, unknown.statusCode(), unknown.body());
 			Assertions.assertEquals("", unknown.body());
 
+			for (String alias : List.of(FIRST_PATH + "/", "/mcp//first", "/mcp/%66irst", "/MCP/first")) {
+				HttpResponse<String> aliasResponse = send(port, alias,
+						request("alias", "server/discover", ""), "server/discover", Optional.empty());
+				Assertions.assertEquals(404, aliasResponse.statusCode(), alias + ": " + aliasResponse.body());
+				Assertions.assertEquals("", aliasResponse.body());
+			}
+
 			Assertions.assertEquals(1, firstHandlerInvocations.get());
 			Assertions.assertEquals(1, secondHandlerInvocations.get());
 			Assertions.assertSame(firstEndpoint, firstObservedEndpoint.get());

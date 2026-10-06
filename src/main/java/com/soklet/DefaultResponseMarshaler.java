@@ -186,7 +186,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 			Map<String, List<String>> headers = new LinkedCaseInsensitiveMap<>(response.getHeaders());
 
 			// If no Content-Type specified, supply a default
-			if (!headers.containsKey("Content-Type"))
+			if (body != null && !headers.containsKey("Content-Type"))
 				headers.put("Content-Type", List.of(binaryResponse ? "application/octet-stream" : format("text/plain; charset=%s", getCharset().name())));
 
 			MarshaledResponse.Builder builder = MarshaledResponse.withStatusCode(response.getStatusCode())
@@ -568,7 +568,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 			finalMarshaledResponse = corsAllowedHandler.handle(request, cors, corsResponse, marshaledResponse);
 		} else {
 			// Mutate a copy of the downstream headers
-			Map<String, List<String>> mutableHeaders = new LinkedHashMap<>(marshaledResponse.getHeaders());
+			Map<String, List<String>> mutableHeaders = new LinkedCaseInsensitiveMap<>(marshaledResponse.getHeaders());
 
 			Boolean accessControlAllowCredentials = corsResponse.getAccessControlAllowCredentials().orElse(null);
 
@@ -586,9 +586,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 
 			// Always add Vary: Origin for specific origins (not "*"), and preserve any existing Vary values
 			if (!"*".equals(normalizedAccessControlAllowOrigin)) {
-				Set<String> vary = new LinkedHashSet<>(mutableHeaders.getOrDefault("Vary", List.of()));
-				vary.add("Origin");
-				mutableHeaders.put("Vary", List.copyOf(vary));
+				Utilities.addVaryHeader(mutableHeaders, "Origin");
 			}
 
 			Set<String> accessControlExposeHeaders = corsResponse.getAccessControlExposeHeaders();

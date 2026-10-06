@@ -46,6 +46,99 @@ import java.util.function.BooleanSupplier;
 @NotThreadSafe
 public class McpApplicationExecutionTests {
 	@Test
+	public void disconnect_callbacks_do_not_hold_transport_signaling_or_release_physical_capacity()
+			throws Exception {
+		assertExchangeCallbackIsolation(false);
+	}
+
+	@Test
+	public void deadline_callbacks_do_not_delay_other_deadlines_or_release_physical_capacity()
+			throws Exception {
+		assertExchangeCallbackIsolation(true);
+	}
+
+	private static void assertExchangeCallbackIsolation(boolean deadline) throws Exception {
+		for (McpProtocolProfile profile : List.of(Mcp20260728ProtocolProfile.INSTANCE,
+				Mcp2025ProtocolProfile.JUNE_18, Mcp2025ProtocolProfile.NOVEMBER_25)) {
+			AtomicLong now = new AtomicLong();
+			McpApplicationExecution execution = new McpApplicationExecution(
+					new McpApplicationExecutionConfiguration(2, 1, Duration.ofSeconds(30), Duration.ofDays(1)),
+					now::get);
+			MicrohttpRequest first = transportRequest();
+			CountDownLatch handlersEntered = new CountDownLatch(2);
+			CountDownLatch holdHandlers = new CountDownLatch(1);
+			CountDownLatch firstInterrupted = new CountDownLatch(1);
+			CountDownLatch hookEntered = new CountDownLatch(1);
+			CountDownLatch releaseHook = new CountDownLatch(1);
+			AtomicReference<Thread> hookThread = new AtomicReference<>();
+			AtomicReference<Throwable> triggerFailure = new AtomicReference<>();
+			AtomicReference<McpApplicationResponse> firstResponse = new AtomicReference<>();
+			AtomicReference<McpApplicationResponse> secondResponse = new AtomicReference<>();
+			AtomicInteger cleanups = new AtomicInteger();
+			AtomicInteger firstPhysicalExits = new AtomicInteger();
+			Thread trigger = new Thread(() -> {
+				try {
+					if (deadline) { now.set(100L); execution.runTimerCycle(); }
+					else execution.cancel(first, StreamTerminationReason.CLIENT_DISCONNECTED, null);
+				} catch (Throwable throwable) { triggerFailure.set(throwable); }
+			}, "mcp-cancellation-trigger-test");
+			try {
+				execution.start();
+				execution.dispatch(first, request("blocked-hook"), profile, admissionIdentity(), invocation -> {
+					invocation.cancelationToken().onCancel(() -> {
+						hookThread.set(Thread.currentThread());
+						hookEntered.countDown();
+						boolean interrupted = false;
+						while (releaseHook.getCount() != 0L) {
+							try { releaseHook.await(); }
+							catch (InterruptedException ignored) { interrupted = true; }
+						}
+						if (interrupted) Thread.currentThread().interrupt();
+					});
+					handlersEntered.countDown();
+					try { holdHandlers.await(); }
+					catch (InterruptedException ignored) { firstInterrupted.countDown(); Thread.currentThread().interrupt(); }
+					return McpWireResult.complete(McpJsonObject.empty());
+				}, 100L, new McpApplicationResponseWriter() {
+					@Override public boolean write(McpApplicationResponse response) { firstResponse.set(response); return true; }
+					@Override public void didFinishPhysicalWork() { firstPhysicalExits.incrementAndGet(); }
+				}, cleanups::incrementAndGet);
+				execution.dispatch(transportRequest(), request("second-deadline"), profile, admissionIdentity(), invocation -> {
+					handlersEntered.countDown();
+					holdHandlers.await();
+					return McpWireResult.complete(McpJsonObject.empty());
+				}, 200L, response -> { secondResponse.set(response); return true; }, cleanups::incrementAndGet);
+				Assertions.assertTrue(handlersEntered.await(3, TimeUnit.SECONDS));
+				trigger.start();
+				Assertions.assertTrue(hookEntered.await(3, TimeUnit.SECONDS));
+				trigger.join(1_000L);
+				Assertions.assertFalse(trigger.isAlive(), "An application hook held the cancellation/deadline caller.");
+				Assertions.assertNull(triggerFailure.get());
+				Assertions.assertNotSame(trigger, hookThread.get());
+				Assertions.assertTrue(firstInterrupted.await(3, TimeUnit.SECONDS));
+				Assertions.assertEquals(deadline ? 504 : null,
+						firstResponse.get() == null ? null : firstResponse.get().status());
+				now.set(200L);
+				execution.runTimerCycle();
+				Assertions.assertEquals(504, secondResponse.get().status());
+				Assertions.assertEquals(2, cleanups.get());
+				awaitCondition(() -> execution.snapshot().activeHandlerSlots() == 1);
+				Assertions.assertEquals(1, execution.snapshot().retainedExchanges());
+				Assertions.assertEquals(0, firstPhysicalExits.get(), "A blocking hook still owns physical work.");
+				execution.stop();
+				Assertions.assertFalse(execution.awaitTermination(Duration.ofMillis(10)));
+				releaseHook.countDown();
+				Assertions.assertTrue(execution.awaitTermination(Duration.ofSeconds(3)));
+				Assertions.assertEquals(1, firstPhysicalExits.get());
+			} finally {
+				releaseHook.countDown(); holdHandlers.countDown();
+				trigger.join(3_000L); execution.stop();
+				Assertions.assertTrue(execution.awaitTermination(Duration.ofSeconds(3)));
+			}
+		}
+	}
+
+	@Test
 	public void framework_protocol_errors_remain_protocol_observation_outcomes() {
 		McpJsonRpcId id = new McpJsonRpcId.StringId("conditional-capability");
 		McpJsonRpcError error = McpJsonRpcError.missingRequiredClientCapabilities(
@@ -1156,8 +1249,10 @@ public class McpApplicationExecutionTests {
 					"Stop did not reach the blocking Exchange cancellation callback.");
 			Assertions.assertEquals(1L, releaseExchangeCancel.getCount(),
 					"The Exchange cancellation callback must remain blocked for the probe.");
-			Assertions.assertTrue(stopThread.isAlive(),
-					"Stop must still be inside the blocking application callback.");
+			stopThread.join(TimeUnit.SECONDS.toMillis(3));
+			Assertions.assertFalse(stopThread.isAlive(),
+					"Stop must return while callback work remains physically retained.");
+			Assertions.assertFalse(execution.awaitTermination(Duration.ofMillis(10)));
 
 			Assertions.assertTrue(activePolicyInterrupted.await(5, TimeUnit.SECONDS),
 					"Active policy interruption was delayed behind an application callback.");

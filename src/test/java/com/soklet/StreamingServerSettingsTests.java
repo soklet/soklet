@@ -179,7 +179,8 @@ public class StreamingServerSettingsTests {
 			releaseObservers.countDown();
 			assertEventually(() -> fixture.coordinator().snapshot().reservations() == 0,
 					"Physical observer completion must release admission");
-			Assertions.assertEquals(3, observerCalls.get());
+			assertEventually(() -> observerCalls.get() == 4 && activeObservers.get() == 0,
+					"The rejected stream must report termination within the configured concurrency");
 			try (Socket recovered = fixture.request("ready")) {
 				assertStatus(recovered, 200);
 				Assertions.assertEquals("2\r\nok\r\n0\r\n\r\n", readRemainder(recovered));

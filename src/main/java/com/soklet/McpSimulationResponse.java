@@ -37,7 +37,7 @@ public interface McpSimulationResponse {
 	/**
 	 * Returns an immutable insertion-ordered header projection. Header names are
 	 * coalesced case-insensitively under the first observed spelling, and values
-	 * retain insertion order.
+	 * retain insertion order. Header-name lookups are also case-insensitive.
 	 *
 	 * @return immutable response headers
 	 */

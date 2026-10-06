@@ -144,8 +144,8 @@ public class RequestTests {
 		Assertions.assertEquals("text/plain", request.getContentType().orElse(null));
 		Assertions.assertEquals(StandardCharsets.UTF_8, request.getCharset().orElse(null));
 		Assertions.assertTrue(request.getCors().isPresent());
-		Assertions.assertEquals(List.of("no-cache", "no-store"), request.getHeaders().get("Cache-Control"));
-		Assertions.assertFalse(request.getHeaders().containsKey("X-Empty"));
+		Assertions.assertEquals(List.of("no-cache, no-store"), request.getHeaders().get("Cache-Control"));
+		Assertions.assertEquals(List.of(""), request.getHeaders().get("X-Empty"));
 		Assertions.assertThrows(UnsupportedOperationException.class, () -> request.getHeaders().put("X-Test", List.of("value")));
 		Assertions.assertThrows(UnsupportedOperationException.class, () -> request.getHeaders().get("X-Trace-Id").add("def456"));
 	}

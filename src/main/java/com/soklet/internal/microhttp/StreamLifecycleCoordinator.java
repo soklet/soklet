@@ -66,6 +66,9 @@ public final class StreamLifecycleCoordinator {
 	private final LongSupplier nanoClock;
 	private final Set<Reservation> reservations = new LinkedHashSet<>();
 	private final ThreadPoolExecutor callbackExecutor;
+	private final int rejectionObserverCapacity;
+	private int rejectionObservers;
+	private int queuedRejectionObservers;
 	private final ThreadPoolExecutor diagnosticExecutor;
 	private final ScheduledThreadPoolExecutor supervisor;
 	private boolean accepting = true;
@@ -96,8 +99,9 @@ public final class StreamLifecycleCoordinator {
 		this.capacity = capacity;
 		this.diagnostics = requireNonNull(diagnostics);
 		this.nanoClock = requireNonNull(nanoClock);
+		this.rejectionObserverCapacity = Math.min(capacity, Integer.MAX_VALUE - capacity * 2);
 		this.callbackExecutor = new ThreadPoolExecutor(callbackConcurrency, callbackConcurrency,
-				0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(capacity * 2),
+				0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(capacity * 2 + this.rejectionObserverCapacity),
 				threadFactory("stream-callback"), new ThreadPoolExecutor.AbortPolicy());
 		this.diagnosticExecutor = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
 				new ArrayBlockingQueue<>(capacity), threadFactory("stream-diagnostic"),
@@ -116,6 +120,42 @@ public final class StreamLifecycleCoordinator {
 			Reservation reservation = new Reservation(++this.nextId);
 			this.reservations.add(reservation);
 			return reservation;
+		}
+	}
+
+	/**
+	 * Offers an unadmitted stream's observational rejection to the bounded
+	 * callback executor. Its separate allowance cannot consume admitted streams'
+	 * two prepaid callback jobs. Returns false when that allowance is exhausted
+	 * or infrastructure has stopped; finite request observation still completes.
+	 */
+	public boolean dispatchRejectionObserver(@NonNull Runnable observer) {
+		requireNonNull(observer);
+		synchronized (this.lock) {
+			if (this.infrastructureStopping || this.rejectionObservers >= this.rejectionObserverCapacity)
+				return false;
+			this.rejectionObservers++;
+			this.queuedRejectionObservers++;
+		}
+		try {
+			this.callbackExecutor.execute(() -> {
+				synchronized (this.lock) { this.queuedRejectionObservers--; }
+				try { observer.run(); }
+				finally { finishRejectionObserver(false); }
+			});
+			return true;
+		} catch (RejectedExecutionException ignored) {
+			finishRejectionObserver(true);
+			return false;
+		}
+	}
+
+	private void finishRejectionObserver(boolean queued) {
+		synchronized (this.lock) {
+			if (queued) this.queuedRejectionObservers--;
+			this.rejectionObservers--;
+			stopInfrastructureIfDrained();
+			this.lock.notifyAll();
 		}
 	}
 
@@ -170,7 +210,7 @@ public final class StreamLifecycleCoordinator {
 	 */
 	public boolean awaitTermination(long absoluteNanoDeadline) throws InterruptedException {
 		synchronized (this.lock) {
-			while (this.accepting || !this.reservations.isEmpty()) {
+			while (this.accepting || !this.reservations.isEmpty() || this.rejectionObservers != 0) {
 				long remaining = absoluteNanoDeadline - System.nanoTime();
 				if (remaining <= 0L)
 					return false;
@@ -184,7 +224,7 @@ public final class StreamLifecycleCoordinator {
 
 	public boolean isTerminated() {
 		synchronized (this.lock) {
-			return !this.accepting && this.reservations.isEmpty()
+			return !this.accepting && this.reservations.isEmpty() && this.rejectionObservers == 0
 					&& this.callbackExecutor.isTerminated()
 					&& this.diagnosticExecutor.isTerminated()
 					&& this.supervisor.isTerminated();
@@ -197,8 +237,8 @@ public final class StreamLifecycleCoordinator {
 		synchronized (this.lock) {
 			int queued = 0;
 			int running = 0;
-			int callbacks = 0;
-			int queuedCallbacks = 0;
+			int callbacks = this.rejectionObservers;
+			int queuedCallbacks = this.queuedRejectionObservers;
 			int overdue = 0;
 			int diagnostics = 0;
 			int publisherLifetimes = 0;
@@ -355,6 +395,8 @@ public final class StreamLifecycleCoordinator {
 		private boolean retired;
 		private boolean cleanupStarted;
 		private long cleanupDeadline;
+		private int outputWaiters;
+		private long outputWaitStarted;
 		private boolean observerCleanupStarted;
 		private long observerCleanupDeadline;
 		@Nullable
@@ -554,6 +596,12 @@ public final class StreamLifecycleCoordinator {
 				return false;
 			this.reason = reason;
 			this.cause = cause;
+			if (this.cleanupStarted && this.outputWaiters != 0) {
+				// Healthy delivery could have paused the finalizer budget. Cancellation
+				// starts a finite cleanup budget even if that output wait is still live.
+				this.cleanupDeadline = nanoClock.getAsLong() + cleanupGraceNanos;
+				scheduleCleanupCheck(this.cleanupDeadline);
+			}
 			beginCleanupLocked();
 			if (!this.productionComplete && this.producerThread != null
 					&& !sameInstance(this.producerThread, Thread.currentThread()))
@@ -621,6 +669,27 @@ public final class StreamLifecycleCoordinator {
 			synchronized (lock) {
 				if (!this.retired)
 					beginCleanupLocked();
+			}
+		}
+
+		/** Excludes healthy queue backpressure from application-cleanup time. */
+		public void beginOutputWait() {
+			synchronized (lock) {
+				if (this.outputWaiters++ == 0)
+					this.outputWaitStarted = nanoClock.getAsLong();
+			}
+		}
+
+		/** Balanced with beginOutputWait, including on interruption/cancelation. */
+		public void endOutputWait() {
+			synchronized (lock) {
+				if (this.outputWaiters == 0)
+					throw new IllegalStateException("No streaming output wait is active");
+				if (--this.outputWaiters == 0 && this.cleanupStarted && this.reason == null
+						&& !this.productionComplete && !this.retired && !this.overdue) {
+					this.cleanupDeadline += Math.max(0L, nanoClock.getAsLong() - this.outputWaitStarted);
+					scheduleCleanupCheck(this.cleanupDeadline);
+				}
 			}
 		}
 
@@ -745,6 +814,8 @@ public final class StreamLifecycleCoordinator {
 				return;
 			this.cleanupStarted = true;
 			this.cleanupDeadline = nanoClock.getAsLong() + cleanupGraceNanos;
+			if (this.outputWaiters != 0)
+				this.outputWaitStarted = nanoClock.getAsLong();
 			scheduleCleanupCheck(this.cleanupDeadline);
 		}
 
@@ -778,6 +849,9 @@ public final class StreamLifecycleCoordinator {
 				long deadline = observerPhase ? this.observerCleanupDeadline : this.cleanupDeadline;
 				if (this.retired || !started || this.overdue || nowNanos - deadline < 0L)
 					return;
+				if (!observerPhase && this.reason == null && this.outputWaiters != 0
+						&& this.outputWaitStarted - deadline < 0L)
+					return; // Response/idle deadlines still supervise the healthy output wait.
 				boolean physicalWorkOutstanding = this.diagnosticPending || hasPublisherWork() || this.retainedWork != 0L;
 				if (!observerPhase)
 					physicalWorkOutstanding |= this.submissionPending || this.signalsRunning != 0
@@ -919,7 +993,7 @@ public final class StreamLifecycleCoordinator {
 	}
 
 	private void stopInfrastructureIfDrained() {
-		if (this.accepting || !this.reservations.isEmpty() || this.infrastructureStopping)
+		if (this.accepting || !this.reservations.isEmpty() || this.rejectionObservers != 0 || this.infrastructureStopping)
 			return;
 		this.infrastructureStopping = true;
 		this.callbackExecutor.shutdown();

@@ -83,8 +83,10 @@ public interface CancelationToken {
 	 * If the token is already canceled, the callback may run before this method returns. If the associated operation
 	 * already completed normally, the callback does not run and its reference is not retained.
 	 * <p>
-	 * Callback dispatch is selected by the runtime. HTTP streaming uses managed callback execution; other runtimes
-	 * may defer delivery until their operation releases callbacks. Late delivery may run inline on the registering
+	 * Callback dispatch is selected by the runtime. HTTP streaming uses managed callback execution. MCP application
+	 * requests and bounded policy work use a bounded callback executor, after handler interruption and terminal
+	 * response offering or transport detachment. Their physical capacity remains charged until callback delivery
+	 * exits. Other runtimes may defer delivery until their operation releases callbacks. Late delivery may run inline on the registering
 	 * application thread. Keep callbacks fast and non-blocking. Each callback is invoked at most once; failures
 	 * are isolated, and independent callbacks have no ordering guarantee.
 	 *

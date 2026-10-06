@@ -37,6 +37,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.zip.ZipEntry;
+import java.util.zip.GZIPOutputStream;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
@@ -173,6 +174,25 @@ public class ManagedResponseStreamOutputTests {
 		Assertions.assertThrows(IOException.class, retained.get()::close);
 		Assertions.assertDoesNotThrow(retained.get()::close);
 		Assertions.assertEquals("a", fixture.output.text());
+	}
+
+	@Test
+	public void canceled_owned_encoders_discard_their_tail_without_cleanup_failure() {
+		for (StreamTerminationReason reason : List.of(StreamTerminationReason.CLIENT_DISCONNECTED,
+				StreamTerminationReason.RESPONSE_TIMEOUT, StreamTerminationReason.SERVER_STOPPING)) {
+			Fixture fixture = new Fixture(4);
+			AtomicReference<Integer> writesAtCancel = new AtomicReference<>();
+			StreamingResponseCanceledException outcome = Assertions.assertThrows(StreamingResponseCanceledException.class,
+					() -> fixture.stream.run(stream -> {
+						GZIPOutputStream encoder = stream.own(new GZIPOutputStream(stream.asOutputStream()));
+						encoder.write("contents".getBytes(StandardCharsets.UTF_8));
+						writesAtCancel.set(fixture.output.writes);
+						fixture.token.cancel(reason, null);
+					}));
+			Assertions.assertEquals(reason, outcome.getCancelationReason());
+			Assertions.assertTrue(fixture.cleanupFailures.isEmpty(), fixture.cleanupFailures.toString());
+			Assertions.assertEquals(writesAtCancel.get(), fixture.output.writes);
+		}
 	}
 
 	@Test
@@ -383,6 +403,7 @@ public class ManagedResponseStreamOutputTests {
 		private final TestToken token = new TestToken();
 		private final TestOutput output;
 		private final AtomicReference<Throwable> failure = new AtomicReference<>();
+		private final List<Throwable> cleanupFailures = new ArrayList<>();
 		private final ManagedResponseStream stream;
 
 		private Fixture(int capacity) {
@@ -397,7 +418,7 @@ public class ManagedResponseStreamOutputTests {
 				} else {
 					this.token.cancel(StreamTerminationReason.PRODUCER_FAILED, throwable);
 				}
-			}, ignored -> {});
+			}, this.cleanupFailures::add);
 		}
 	}
 

@@ -553,7 +553,7 @@ public class McpApplicationHandlerDispatcherTests {
 	}
 
 	@Test
-	public void submission_failure_releases_the_slot_and_promotes_following_work()
+	public void rejected_promotion_reuses_the_worker_without_rejecting_admitted_work()
 			throws Exception {
 		RejectSecondSubmissionExecutor executor = new RejectSecondSubmissionExecutor();
 		RecordingExecutionObserver observer = new RecordingExecutionObserver();
@@ -568,9 +568,8 @@ public class McpApplicationHandlerDispatcherTests {
 			firstEntered.countDown();
 			releaseFirst.await();
 		}, unexpectedFailure::set);
-		McpApplicationHandlerDispatcher.Ticket rejected = dispatcher.newTicket(() -> {
-			throw new AssertionError("Rejected submission ran.");
-		}, failure -> {
+		AtomicInteger secondRuns = new AtomicInteger();
+		McpApplicationHandlerDispatcher.Ticket second = dispatcher.newTicket(secondRuns::incrementAndGet, failure -> {
 			observedSubmissionFailure.set(failure);
 			throw new IllegalStateException("Failure observer failed.");
 		});
@@ -580,16 +579,17 @@ public class McpApplicationHandlerDispatcherTests {
 		try {
 			dispatcher.admit(first);
 			Assertions.assertTrue(firstEntered.await(3, TimeUnit.SECONDS));
-			dispatcher.admit(rejected);
+			dispatcher.admit(second);
 			dispatcher.admit(third);
 			releaseFirst.countDown();
 
 			Assertions.assertTrue(thirdRan.await(3, TimeUnit.SECONDS));
 			awaitCondition(() -> dispatcher.snapshot().activeSlots() == 0);
-			Assertions.assertInstanceOf(RejectedExecutionException.class,
-					observedSubmissionFailure.get());
-			Assertions.assertEquals(McpApplicationHandlerDispatcher.TicketState.REJECTED,
-					rejected.state());
+			Assertions.assertNull(observedSubmissionFailure.get(),
+					"A rejected handoff must preserve the accepted ticket.");
+			Assertions.assertEquals(1, secondRuns.get());
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.TicketState.EXITED,
+					second.state());
 			Assertions.assertEquals(McpApplicationHandlerDispatcher.TicketState.EXITED,
 					third.state());
 			Assertions.assertEquals(3, executor.submissionCount());

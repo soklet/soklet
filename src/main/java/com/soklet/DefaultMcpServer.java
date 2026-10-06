@@ -82,6 +82,7 @@ import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -108,6 +109,7 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 final class DefaultMcpServer implements McpServer {
+	private static final int MAXIMUM_PENDING_MCP_METRIC_EVENTS = 4096;
 	private static final int MAXIMUM_BASE64_CHARACTERS =
 			maximumBase64Characters();
 	private static final int MAXIMUM_AGGREGATE_BASE64_CHARACTERS =
@@ -490,8 +492,8 @@ final class DefaultMcpServer implements McpServer {
 			}
 
 			@Override
-			public void beginRequestTransitionDeferral() {
-				mcpMetricEventDelivery.beginNonwaitingDeferral();
+			public McpApplicationExecutionObserver.@NonNull MetricDeferral beginRequestTransitionDeferral() {
+				return mcpMetricEventDelivery.beginTransitionDeferral();
 			}
 
 			@Override
@@ -560,7 +562,7 @@ final class DefaultMcpServer implements McpServer {
 					@NonNull String endpointPath,
 					McpMetricsEvent.SubscriptionMaintenance.@NonNull Work work,
 					McpMetricsEvent.SubscriptionMaintenance.@NonNull Outcome outcome) {
-				mcpMetricEventDelivery.record(
+				mcpMetricEventDelivery.recordForAsynchronousDrain(
 						McpMetricsEvent.subscriptionMaintenance(
 								requireNonNull(endpointPath), requireNonNull(work),
 								requireNonNull(outcome)));
@@ -2247,17 +2249,18 @@ final class DefaultMcpServer implements McpServer {
 			return new TaskSnapshot(task, Optional.empty(), Optional.empty(),
 					false);
 
+		// CompletedTask requires a result for both polling and notifications.
+		// Fail this read before sanitization, leaving durable state unchanged;
+		// advisory notification projection can suppress the unavailable snapshot.
 		boolean currentlyRegistered = requireNonNull(endpoint).getToolRegistrations().stream()
 				.anyMatch(tool -> tool.getName().equals(origin.toolName()));
 		if (!currentlyRegistered)
-			return new TaskSnapshot(task, Optional.empty(), Optional.empty(),
-					false);
+			throw new IllegalStateException("The completed MCP task result is unavailable.");
 		Optional<CatalogAccessSession> accessView =
 				requireNonNull(catalogAccessView);
 		if (accessView.isPresent() && !accessView.orElseThrow()
 				.isToolAccessible(origin.toolName()))
-			return new TaskSnapshot(task, Optional.empty(), Optional.empty(),
-					false);
+			throw new IllegalStateException("The completed MCP task result is unavailable.");
 
 		McpCompleteResult completedResult = task.getCompletedResult()
 				.orElseThrow();
@@ -2526,9 +2529,19 @@ final class DefaultMcpServer implements McpServer {
 				invocation.pastDeadline(), invocation.continuationLocale(),
 				invocation.selectedLocaleSlot(), Optional.empty(), Optional.empty(),
 				invocation.localizationContext());
-		McpOperationResult result = interceptHandler(requestContext,
-				invocation.handlerEntryGuard(), features,
-				() -> handler.handle(requestContext, completionContext, features));
+		McpOperationResult result;
+		try {
+			result = interceptHandler(requestContext,
+					invocation.handlerEntryGuard(), features, () -> {
+						try {
+							return handler.handle(requestContext, completionContext, features);
+						} catch (McpJsonRpcException exception) {
+							throw new ApplicationHandlerJsonRpcException(exception.getError());
+						}
+					});
+		} catch (ApplicationHandlerJsonRpcException exception) {
+			throw McpServerRuntimeBridge.applicationHandlerJsonRpcFailure(exception.getError());
+		}
 		if (!(result instanceof McpArgumentCompletionResult completionResult))
 			throw new IllegalArgumentException(
 					"An MCP Completion interceptor must return an argument-completion result.");
@@ -2605,6 +2618,9 @@ final class DefaultMcpServer implements McpServer {
 					});
 		} catch (ApplicationHandlerJsonRpcException exception) {
 			McpJsonRpcError error = exception.getError();
+			if (error.resourceNotFoundUri().isPresent())
+				return ResourceInvocationResult.resourceNotFound(
+						error.resourceNotFoundUri().orElseThrow());
 			return ResourceInvocationResult.jsonRpcError(error.getCode(),
 					error.getMessage(), error.getData());
 		}
@@ -3214,42 +3230,38 @@ final class DefaultMcpServer implements McpServer {
 		@Override
 		public void report(@NonNull McpProgressUpdate update) {
 			McpProgressUpdate requiredUpdate = requireNonNull(update);
-			DefaultMcpServer.this.mcpMetricEventDelivery.beginDeferral();
-			try {
-				synchronized (this) {
-					if (this.cancelationToken.isCanceled()
-							|| !this.progressEmitter.isActive())
+			synchronized (this) {
+				if (this.cancelationToken.isCanceled()
+						|| !this.progressEmitter.isActive())
+					return;
+
+				double progress = requiredUpdate.getProgress();
+				if (this.lastAcceptedProgress != null) {
+					int comparison = Double.compare(progress,
+							this.lastAcceptedProgress);
+					if (comparison < 0)
+						throw new IllegalArgumentException(
+								"MCP progress must not decrease.");
+					if (comparison == 0)
 						return;
-
-					double progress = requiredUpdate.getProgress();
-					if (this.lastAcceptedProgress != null) {
-						int comparison = Double.compare(progress,
-								this.lastAcceptedProgress);
-						if (comparison < 0)
-							throw new IllegalArgumentException(
-									"MCP progress must not decrease.");
-						if (comparison == 0)
-							return;
-					}
-
-					try {
-						if (!this.progressEmitter.emit(progress,
-								requiredUpdate.getTotal(),
-								requiredUpdate.getMessage()))
-							return;
-					} catch (InterruptedException exception) {
-						Thread.currentThread().interrupt();
-						return;
-					}
-
-					this.lastAcceptedProgress = progress;
-					mcpMetricEventDelivery.record(
-							McpMetricsEvent.progressEmitted(
-									this.endpointPath, this.jsonRpcMethod));
 				}
-			} finally {
-				DefaultMcpServer.this.mcpMetricEventDelivery.endDeferral();
+
+				try {
+					if (!this.progressEmitter.emit(progress,
+							requiredUpdate.getTotal(),
+							requiredUpdate.getMessage()))
+						return;
+				} catch (InterruptedException exception) {
+					Thread.currentThread().interrupt();
+					return;
+				}
+
+				this.lastAcceptedProgress = progress;
 			}
+			// The writer may block. Its progress lock never defers other operations'
+			// metrics, and collector callbacks run only after this lock is released.
+			DefaultMcpServer.this.mcpMetricEventDelivery.recordAndDrain(
+					McpMetricsEvent.progressEmitted(this.endpointPath, this.jsonRpcMethod));
 		}
 	}
 
@@ -4186,8 +4198,8 @@ final class DefaultMcpServer implements McpServer {
 	}
 
 	/**
-	 * Serializes semantic metric delivery while permitting nested runtime,
-	 * server, and Soklet lifecycle deferral.
+	 * Serializes eligible semantic metrics while withholding only records owned
+	 * by a pending transition. Server/Soklet lifecycle deferral is separate.
 	 */
 	@ThreadSafe
 	private final class McpMetricEventDelivery {
@@ -4195,6 +4207,10 @@ final class DefaultMcpServer implements McpServer {
 		private final Object lock;
 		@NonNull
 		private final Queue<@NonNull McpMetricEventDeliveryEntry> pendingEvents;
+		@NonNull
+		private final IdentityHashMap<@NonNull McpMetricEventDeliveryEntry, @NonNull MetricTransition> deferredEvents;
+		@NonNull
+		private final ThreadLocal<MetricTransition> currentTransition;
 		private int deferralDepth;
 		private boolean delivering;
 		private boolean asynchronousDrainRequired;
@@ -4203,23 +4219,55 @@ final class DefaultMcpServer implements McpServer {
 		private McpMetricEventDelivery() {
 			this.lock = new Object();
 			this.pendingEvents = new ArrayDeque<>();
+			this.deferredEvents = new IdentityHashMap<>();
+			this.currentTransition = new ThreadLocal<>();
+		}
+
+		private McpApplicationExecutionObserver.@NonNull MetricDeferral beginTransitionDeferral() {
+			MetricTransition transition;
+			synchronized (this.lock) {
+				transition = currentTransitionWhileLocked();
+				if (transition == null) {
+					transition = new MetricTransition();
+					this.currentTransition.set(transition);
+				}
+				transition.openScopes++;
+			}
+			MetricTransition ownedTransition = transition;
+			AtomicBoolean closed = new AtomicBoolean();
+			return () -> {
+				if (!closed.compareAndSet(false, true))
+					return;
+				synchronized (this.lock) {
+					ownedTransition.openScopes--;
+					if (ownedTransition.openScopes != 0)
+						return;
+					if (sameInstance(this.currentTransition.get(), ownedTransition))
+						this.currentTransition.remove();
+					if (!this.pendingEvents.isEmpty())
+						this.asynchronousDrainRequired = true;
+				}
+				// Release may be on a different thread (transport failure cleanup).
+				// No collector runs on either transition or connection thread here.
+				signalAsynchronousDrainIfNeeded();
+			};
+		}
+
+		@Nullable
+		private MetricTransition currentTransitionWhileLocked() {
+			MetricTransition transition = this.currentTransition.get();
+			if (transition != null && transition.openScopes == 0) {
+				// A cross-thread close leaves only this primitive scope marker behind.
+				this.currentTransition.remove();
+				return null;
+			}
+			return transition;
 		}
 
 		private void beginDeferral() {
-			boolean interrupted = false;
-			Thread currentThread = Thread.currentThread();
-			synchronized (this.lock) {
-				this.deferralDepth++;
-				while (this.delivering && !sameInstance(this.deliveryThread, currentThread)) {
-					try {
-						this.lock.wait();
-					} catch (InterruptedException exception) {
-						interrupted = true;
-					}
-				}
-			}
-			if (interrupted)
-				currentThread.interrupt();
+			// An application collector already in flight cannot hold up a runtime
+			// transition. Its next dequeue will observe this deferral.
+			beginNonwaitingDeferral();
 		}
 
 		private void beginNonwaitingDeferral() {
@@ -4231,10 +4279,50 @@ final class DefaultMcpServer implements McpServer {
 		@NonNull
 		private McpMetricEventDeliveryEntry record(
 				@NonNull McpMetricsEvent event) {
+			return record(event, false);
+		}
+
+		@NonNull
+		private McpMetricEventDeliveryEntry recordForAsynchronousDrain(
+				@NonNull McpMetricsEvent event) {
+			return record(event, true);
+		}
+
+		@NonNull
+		private McpMetricEventDeliveryEntry record(
+				@NonNull McpMetricsEvent event, boolean requireAsynchronousDrain) {
 			McpMetricEventDeliveryEntry entry =
 					new McpMetricEventDeliveryEntry(event);
 			synchronized (this.lock) {
+				if (this.pendingEvents.size() >= MAXIMUM_PENDING_MCP_METRIC_EVENTS) {
+					if (!(event instanceof McpMetricsEvent.ServerStarted)
+							&& !(event instanceof McpMetricsEvent.ServerStopped))
+						return entry;
+					// Preserve the two owner lifecycle outcomes even when an application
+					// collector stalls. Evict only an ordinary metric, keeping enqueue
+					// order for eligible retained entries.
+					Iterator<McpMetricEventDeliveryEntry> iterator = this.pendingEvents.iterator();
+					boolean reclaimed = false;
+					while (iterator.hasNext()) {
+						McpMetricEventDeliveryEntry pendingEntry = iterator.next();
+						McpMetricsEvent pending = pendingEntry.event();
+						if (!(pending instanceof McpMetricsEvent.ServerStarted)
+								&& !(pending instanceof McpMetricsEvent.ServerStopped)) {
+							iterator.remove();
+							this.deferredEvents.remove(pendingEntry);
+							reclaimed = true;
+							break;
+						}
+					}
+					if (!reclaimed)
+						return entry;
+				}
 				this.pendingEvents.add(entry);
+				MetricTransition transition = currentTransitionWhileLocked();
+				if (transition != null)
+					this.deferredEvents.put(entry, transition);
+				if (requireAsynchronousDrain)
+					this.asynchronousDrainRequired = true;
 			}
 			return entry;
 		}
@@ -4242,6 +4330,7 @@ final class DefaultMcpServer implements McpServer {
 		private void recordAndDrain(@NonNull McpMetricsEvent event) {
 			record(event);
 			drain();
+			signalAsynchronousDrainIfNeeded();
 		}
 
 		@SuppressWarnings("ReferenceEquality")
@@ -4255,12 +4344,13 @@ final class DefaultMcpServer implements McpServer {
 				while (iterator.hasNext()) {
 					if (iterator.next() == requiredEntry) {
 						iterator.remove();
+						this.deferredEvents.remove(requiredEntry);
 						return;
 					}
 				}
 			}
-			throw new IllegalStateException(
-					"The provisional MCP metric event is no longer pending.");
+			// A provisional record can have been omitted or evicted at the bound.
+			// Discarding observation state must not change the protocol outcome.
 		}
 
 		private void drain() {
@@ -4272,25 +4362,19 @@ final class DefaultMcpServer implements McpServer {
 		}
 
 		private void drain(boolean asynchronous) {
-			boolean interrupted = false;
 			boolean deliveryClaimed = false;
 			Thread currentThread = Thread.currentThread();
 			try {
 				synchronized (this.lock) {
+					if (currentTransitionWhileLocked() != null
+							|| this.deferralDepth != 0 || this.delivering) {
+						if (asynchronous)
+							this.asynchronousDrainRequired = true;
+						return;
+					}
 					if (asynchronous) {
-						while ((this.deferralDepth != 0 || this.delivering)
-								&& !sameInstance(this.deliveryThread, currentThread)) {
-							try {
-								this.lock.wait();
-							} catch (InterruptedException exception) {
-								interrupted = true;
-							}
-						}
-						if (this.deferralDepth != 0 || this.delivering)
-							return;
 						this.asynchronousDrainRequired = false;
-					} else if (this.asynchronousDrainRequired
-							|| this.deferralDepth != 0 || this.delivering)
+					} else if (this.asynchronousDrainRequired)
 						return;
 					if (this.pendingEvents.isEmpty())
 						return;
@@ -4311,7 +4395,11 @@ final class DefaultMcpServer implements McpServer {
 						}
 						if (asynchronous)
 							this.asynchronousDrainRequired = false;
-						entry = this.pendingEvents.remove();
+						entry = takeEligibleEntryWhileLocked();
+						if (entry == null) {
+							finishDeliveryLocked();
+							return;
+						}
 					}
 					safelyRecordMcpMetrics(entry.event());
 				}
@@ -4322,15 +4410,41 @@ final class DefaultMcpServer implements McpServer {
 								&& sameInstance(this.deliveryThread, currentThread))
 							finishDeliveryLocked();
 					}
+					signalAsynchronousDrainIfNeeded();
 				}
-				if (interrupted)
-					currentThread.interrupt();
 			}
 		}
 
+		@Nullable
+		private McpMetricEventDeliveryEntry takeEligibleEntryWhileLocked() {
+			Iterator<McpMetricEventDeliveryEntry> iterator = this.pendingEvents.iterator();
+			while (iterator.hasNext()) {
+				McpMetricEventDeliveryEntry entry = iterator.next();
+				MetricTransition transition = this.deferredEvents.get(entry);
+				if (transition != null && transition.openScopes != 0)
+					continue;
+				iterator.remove();
+				this.deferredEvents.remove(entry);
+				return entry;
+			}
+			return null;
+		}
+
 		private void endDeferral() {
-			if (releaseDeferral(false))
+			if (releaseDeferral(false)) {
 				drain();
+				signalAsynchronousDrainIfNeeded();
+			}
+		}
+
+		private void signalAsynchronousDrainIfNeeded() {
+			boolean signal;
+			synchronized (this.lock) {
+				signal = this.deferralDepth == 0 && !this.delivering
+						&& this.asynchronousDrainRequired && !this.pendingEvents.isEmpty();
+			}
+			if (signal)
+				DefaultMcpServer.this.runtimeBridge.scheduleTransportMetricsDrain();
 		}
 
 		private void endLifecycleDeferral() {
@@ -4360,6 +4474,11 @@ final class DefaultMcpServer implements McpServer {
 			this.deliveryThread = null;
 			this.lock.notifyAll();
 		}
+	}
+
+	/** Primitive ownership marker guarded by its metric-delivery lock. */
+	private static final class MetricTransition {
+		private int openScopes;
 	}
 
 	/** Immutable metric event without request-scoped application carriers. */

@@ -32,11 +32,15 @@ import static java.util.Objects.requireNonNull;
 /**
  * Thread-safe application rate limiter for MCP requests or tool invocations.
  * <p>
- * Soklet invokes the configured request limiter once for every admitted
+ * Soklet invokes the configured request limiter once for each admitted
  * request or notification. It additionally invokes the resolved tool limiter
  * for a tool call. A {@code null} result or exception fails closed. Successful
  * acquisitions are never refunded after later denial, failure, cancelation,
  * timeout, or response-write failure.
+ * Small, valid, owner-verified 2025 session ping, unsubscribe, initialized and
+ * cancellation messages instead use independent bounded framework control
+ * quotas. Their bodies must be at most 16 KiB; fresh admission and session
+ * verification still apply. See {@link McpServer.Builder#requestRateLimiter(McpRateLimiter)}.
  * <p>
  * Implementations may keep state in-process or delegate to a distributed
  * service. Soklet does not own or close application-supplied limiters.

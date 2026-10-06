@@ -247,8 +247,9 @@ public final class Utilities {
 	 * Parses a query string such as {@code "a=1&b=2&c=%20"} into a multimap of names to values.
 	 * <p>
 	 * Decodes percent-escapes using UTF-8, which is usually what you want (see {@link #extractQueryParametersFromQuery(String, QueryFormat, Charset)} if you need to specify a different charset).
+	 * Raw pairs are parsed directly: literal {@code #} and whitespace are data, not URL syntax, and names and values are not trimmed.
 	 * <p>
-	 * Pairs missing a name are ignored.
+	 * Explicit empty names (e.g. {@code =value}) are retained under {@code ""}; empty separator segments are ignored.
 	 * <p>
 	 * Multiple occurrences of the same name are collected into an immutable {@link List} in occurrence order, including identical repeated values.
 	 *
@@ -270,8 +271,9 @@ public final class Utilities {
 	 * Parses a query string such as {@code "a=1&b=2&c=%20"} into a multimap of names to values.
 	 * <p>
 	 * Decodes percent-escapes using the specified charset.
+	 * Raw pairs are parsed directly: literal {@code #} and whitespace are data, not URL syntax, and names and values are not trimmed.
 	 * <p>
-	 * Pairs missing a name are ignored.
+	 * Explicit empty names (e.g. {@code =value}) are retained under {@code ""}; empty separator segments are ignored.
 	 * <p>
 	 * Multiple occurrences of the same name are collected into an immutable {@link List} in occurrence order, including identical repeated values.
 	 *
@@ -289,9 +291,22 @@ public final class Utilities {
 		requireNonNull(queryFormat);
 		requireNonNull(charset);
 
-		// For form parameters, body will look like "One=Two&Three=Four" ...a query string.
-		String syntheticUrl = format("https://soklet.invalid?%s", query); // avoid referencing real domain
-		return extractQueryParametersFromUrl(syntheticUrl, queryFormat, charset);
+		Map<String, List<String>> queryParameters = new LinkedHashMap<>();
+		for (String pair : query.split("&", -1)) {
+			if (pair.isEmpty())
+				continue;
+
+			int separator = pair.indexOf('=');
+			String rawName = separator == -1 ? pair : pair.substring(0, separator);
+
+			String rawValue = separator == -1 ? "" : pair.substring(separator + 1);
+			String name = decodeQueryComponent(rawName, queryFormat, charset);
+			String value = decodeQueryComponent(rawValue, queryFormat, charset);
+			addStringValue(queryParameters, name, value);
+		}
+
+		freezeStringValueLists(queryParameters);
+		return Collections.unmodifiableMap(queryParameters);
 	}
 
 	@NonNull
@@ -303,8 +318,6 @@ public final class Utilities {
 		requireNonNull(name);
 		requireNonNull(queryFormat);
 		requireNonNull(charset);
-
-		query = trimAggressivelyToEmpty(query);
 
 		if (query.isEmpty())
 			return Optional.empty();
@@ -324,30 +337,25 @@ public final class Utilities {
 				if (separator == -1 || separator > pairEnd)
 					separator = pairEnd;
 
-				String rawName = trimAggressivelyToNull(query.substring(pairStart, separator));
+				String rawName = query.substring(pairStart, separator);
 
-				if (rawName != null) {
-					String decodedName = decodeQueryComponent(rawName, queryFormat, charset);
+				String decodedName = decodeQueryComponent(rawName, queryFormat, charset);
 
-					if (decodedName.equals(name)) {
-						String rawValue = separator < pairEnd ? trimAggressivelyToNull(query.substring(separator + 1, pairEnd)) : null;
+				if (decodedName.equals(name)) {
+					String rawValue = separator < pairEnd ? query.substring(separator + 1, pairEnd) : "";
 
-						if (rawValue == null)
-							rawValue = "";
+					String value = decodeQueryComponent(rawValue, queryFormat, charset);
 
-						String value = decodeQueryComponent(rawValue, queryFormat, charset);
-
-						if (!matched) {
-							singleValue = value;
-							matched = true;
-						} else {
-							if (values == null) {
-								values = new ArrayList<>();
-								values.add(singleValue);
-							}
-
-							values.add(value);
+					if (!matched) {
+						singleValue = value;
+						matched = true;
+					} else {
+						if (values == null) {
+							values = new ArrayList<>();
+							values.add(singleValue);
 						}
+
+						values.add(value);
 					}
 				}
 			}
@@ -372,7 +380,7 @@ public final class Utilities {
 	 * <p>
 	 * Decodes percent-escapes using UTF-8, which is usually what you want (see {@link #extractQueryParametersFromUrl(String, QueryFormat, Charset)} if you need to specify a different charset).
 	 * <p>
-	 * Pairs missing a name are ignored.
+	 * Explicit empty names (e.g. {@code =value}) are retained under {@code ""}; empty separator segments are ignored.
 	 * <p>
 	 * Multiple occurrences of the same name are collected into an immutable {@link List} in occurrence order, including identical repeated values.
 	 *
@@ -395,7 +403,7 @@ public final class Utilities {
 	 * <p>
 	 * Decodes percent-escapes using the specified charset.
 	 * <p>
-	 * Pairs missing a name are ignored.
+	 * Explicit empty names (e.g. {@code =value}) are retained under {@code ""}; empty separator segments are ignored.
 	 * <p>
 	 * Multiple occurrences of the same name are collected into an immutable {@link List} in occurrence order, including identical repeated values.
 	 *
@@ -416,40 +424,17 @@ public final class Utilities {
 		URI uri;
 
 		try {
-			uri = new URI(url);
+			uri = parseUrl(url);
 		} catch (URISyntaxException e) {
 			throw new IllegalRequestException("Invalid request URL.");
 		}
 
-		String query = trimAggressivelyToNull(uri.getRawQuery());
+		String query = uri.getRawQuery();
 
 		if (query == null)
 			return Map.of();
 
-		Map<String, List<String>> queryParameters = new LinkedHashMap<>();
-		for (String pair : query.split("&", -1)) {
-			if (pair.isEmpty())
-				continue;
-
-			String[] nv = pair.split("=", 2);
-			String rawName = trimAggressivelyToNull(nv.length > 0 ? nv[0] : null);
-			String rawValue = trimAggressivelyToNull(nv.length > 1 ? nv[1] : null);
-
-			if (rawName == null)
-				continue;
-
-			// Preserve empty values; it's what users probably expect
-			if (rawValue == null)
-				rawValue = "";
-
-			String name = decodeQueryComponent(rawName, queryFormat, charset);
-			String value = decodeQueryComponent(rawValue, queryFormat, charset);
-
-			addStringValue(queryParameters, name, value);
-		}
-
-		freezeStringValueLists(queryParameters);
-		return Collections.unmodifiableMap(queryParameters);
+		return extractQueryParametersFromQuery(query, queryFormat, charset);
 	}
 
 	/**
@@ -606,7 +591,7 @@ public final class Utilities {
 					String cookieValue = null;
 					if (rawValue != null) {
 						// If it's quoted, unquote+unescape first, then percent-decode (still no '+' -> space)
-						String unquoted = unquoteCookieValueIfNeeded(rawValue);
+						String unquoted = unquoteDoubleQuotedValueIfNeeded(rawValue);
 						cookieValue = percentDecodeCookieValue(unquoted);
 					}
 
@@ -715,11 +700,11 @@ public final class Utilities {
 	}
 
 	/**
-	 * If the cookie value is a quoted-string, remove surrounding quotes and unescape \" \\ and \; .
+	 * If the value is a quoted-string, remove surrounding quotes and unescape quoted pairs.
 	 * Otherwise returns the input as-is.
 	 */
 	@NonNull
-	private static String unquoteCookieValueIfNeeded(@NonNull String rawValue) {
+	private static String unquoteDoubleQuotedValueIfNeeded(@NonNull String rawValue) {
 		requireNonNull(rawValue);
 
 		if (rawValue.length() >= 2 && rawValue.charAt(0) == '"' && rawValue.charAt(rawValue.length() - 1) == '"') {
@@ -761,6 +746,8 @@ public final class Utilities {
 	 * For example, {@code "https://www.soklet.com/ab%20c?one=two"} would be normalized to {@code "/ab c"}.
 	 * <p>
 	 * The {@code OPTIONS *} special case returns {@code "*"}.
+	 * A leading {@code /} always denotes a path, including {@code //x/admin}; it is never interpreted as a URI authority.
+	 * When decoding is disabled, repeated and trailing slashes in that raw path are preserved.
 	 * <p>
 	 * Behavior:
 	 * <ul>
@@ -790,7 +777,7 @@ public final class Utilities {
 
 		// Parse with java.net.URI to isolate raw path; then percent-decode only the path
 		try {
-			URI uri = new URI(url);
+			URI uri = parseUrl(url);
 
 			String rawPath = uri.getRawPath(); // null => "/"
 
@@ -844,6 +831,15 @@ public final class Utilities {
 		}
 	}
 
+	@NonNull
+	private static URI parseUrl(@NonNull String url) throws URISyntaxException {
+		requireNonNull(url);
+
+		// An HTTP origin-form target may start with multiple slashes. Supply an authority
+		// so URI keeps all of those components in the path instead of consuming the first as a host.
+		return new URI(url.startsWith("/") ? "http://soklet.invalid" + url : url);
+	}
+
 	/**
 	 * Extracts the raw (un-decoded) query component from a URL.
 	 * <p>
@@ -862,7 +858,7 @@ public final class Utilities {
 			return Optional.empty();
 
 		try {
-			URI uri = new URI(url);
+			URI uri = parseUrl(url);
 			return Optional.ofNullable(trimAggressivelyToNull(uri.getRawQuery()));
 		} catch (URISyntaxException e) {
 			// Not a valid URI, try to extract query manually
@@ -885,7 +881,7 @@ public final class Utilities {
 			return Optional.empty();
 
 		try {
-			URI uri = new URI(url);
+			URI uri = parseUrl(url);
 			return Optional.ofNullable(trimAggressivelyToNull(uri.getRawQuery()));
 		} catch (URISyntaxException e) {
 			throw new IllegalRequestException("Invalid request URL.");
@@ -1089,6 +1085,20 @@ public final class Utilities {
 		return null;
 	}
 
+	static void addVaryHeader(@NonNull Map<String, List<String>> headers, @NonNull String fieldName) {
+		List<String> values = headers.getOrDefault("Vary", List.of());
+		for (String value : values) {
+			for (String token : value.split(",", -1)) {
+				String trimmed = trimHeaderWhitespace(token);
+				if (trimmed.equals("*") || trimmed.equalsIgnoreCase(fieldName))
+					return;
+			}
+		}
+		List<String> updated = new ArrayList<>(values);
+		updated.add(fieldName);
+		headers.put("Vary", List.copyOf(updated));
+	}
+
 	/**
 	 * Best-effort attempt to determine a client's effective origin by examining request headers.
 	 * <p>
@@ -1178,6 +1188,10 @@ public final class Utilities {
 		// Forwarded: by=<identifier>;for=<identifier>;host=<host>;proto=<http|https>
 		if (trustForwardedHeaders) {
 			List<String> forwardedHeaders = headers.get("Forwarded");
+			if (forwardedHeaders != null && effectiveOriginResolver.getTrustPolicy() == EffectiveOriginResolver.TrustPolicy.TRUST_PROXY_ALLOWLIST) {
+				String nearestEntry = nearestForwardedEntry(forwardedHeaders);
+				forwardedHeaders = nearestEntry == null ? List.of() : List.of(nearestEntry);
+			}
 			if (forwardedHeaders != null) {
 				forwardedHeaderLoop:
 				for (String forwardedHeader : forwardedHeaders) {
@@ -1247,42 +1261,42 @@ public final class Utilities {
 
 		// X-Forwarded-Proto: https
 		if (trustForwardedHeaders && protocol == null) {
-			String xForwardedProtoHeader = firstHeaderValue(headers.get("X-Forwarded-Proto"));
+			String xForwardedProtoHeader = forwardedOriginValue(headers.get("X-Forwarded-Proto"), effectiveOriginResolver.getTrustPolicy());
 			if (xForwardedProtoHeader != null)
 				protocol = stripOptionalQuotes(xForwardedProtoHeader);
 		}
 
 		// X-Forwarded-Protocol: https (Microsoft's alternate name)
 		if (trustForwardedHeaders && protocol == null) {
-			String xForwardedProtocolHeader = firstHeaderValue(headers.get("X-Forwarded-Protocol"));
+			String xForwardedProtocolHeader = forwardedOriginValue(headers.get("X-Forwarded-Protocol"), effectiveOriginResolver.getTrustPolicy());
 			if (xForwardedProtocolHeader != null)
 				protocol = stripOptionalQuotes(xForwardedProtocolHeader);
 		}
 
 		// X-Url-Scheme: https (Microsoft's alternate name)
 		if (trustForwardedHeaders && protocol == null) {
-			String xUrlSchemeHeader = firstHeaderValue(headers.get("X-Url-Scheme"));
+			String xUrlSchemeHeader = forwardedOriginValue(headers.get("X-Url-Scheme"), effectiveOriginResolver.getTrustPolicy());
 			if (xUrlSchemeHeader != null)
 				protocol = stripOptionalQuotes(xUrlSchemeHeader);
 		}
 
 		// Front-End-Https: on (Microsoft's alternate name)
 		if (trustForwardedHeaders && protocol == null) {
-			String frontEndHttpsHeader = firstHeaderValue(headers.get("Front-End-Https"));
+			String frontEndHttpsHeader = forwardedOriginValue(headers.get("Front-End-Https"), effectiveOriginResolver.getTrustPolicy());
 			if (frontEndHttpsHeader != null)
 				protocol = "on".equalsIgnoreCase(frontEndHttpsHeader) ? "https" : "http";
 		}
 
 		// X-Forwarded-Ssl: on (Microsoft's alternate name)
 		if (trustForwardedHeaders && protocol == null) {
-			String xForwardedSslHeader = firstHeaderValue(headers.get("X-Forwarded-Ssl"));
+			String xForwardedSslHeader = forwardedOriginValue(headers.get("X-Forwarded-Ssl"), effectiveOriginResolver.getTrustPolicy());
 			if (xForwardedSslHeader != null)
 				protocol = "on".equalsIgnoreCase(xForwardedSslHeader) ? "https" : "http";
 		}
 
 		// X-Forwarded-Host: id42.example-cdn.com (or with port / IPv6)
 		if (trustForwardedHeaders && host == null) {
-			String xForwardedHostHeader = firstHeaderValue(headers.get("X-Forwarded-Host"));
+			String xForwardedHostHeader = forwardedOriginValue(headers.get("X-Forwarded-Host"), effectiveOriginResolver.getTrustPolicy());
 			if (xForwardedHostHeader != null) {
 				HostPort hostPort = parseForwardedHostPort(xForwardedHostHeader).orElse(null);
 
@@ -1299,7 +1313,7 @@ public final class Utilities {
 
 		// X-Forwarded-Port: 443
 		if (trustForwardedHeaders && portAsString == null) {
-			String xForwardedPortHeader = firstHeaderValue(headers.get("X-Forwarded-Port"));
+			String xForwardedPortHeader = forwardedOriginValue(headers.get("X-Forwarded-Port"), effectiveOriginResolver.getTrustPolicy());
 			if (xForwardedPortHeader != null) {
 				portAsString = stripOptionalQuotes(xForwardedPortHeader);
 				portExplicit = true;
@@ -1323,6 +1337,9 @@ public final class Utilities {
 				}
 			}
 		}
+
+		if (protocol == null)
+			protocol = effectiveOriginResolver.getRequestTargetScheme();
 
 		// Origin: null OR <scheme>://<hostname> OR <scheme>://<hostname>:<port> (IPv6 supported)
 		// Use Origin only when host is missing or when it matches the Host-derived value.
@@ -1397,6 +1414,21 @@ public final class Utilities {
 		}
 
 		return Optional.empty();
+	}
+
+	@Nullable
+	private static String forwardedOriginValue(@Nullable List<String> values, EffectiveOriginResolver.@NonNull TrustPolicy trustPolicy) {
+		return trustPolicy == EffectiveOriginResolver.TrustPolicy.TRUST_PROXY_ALLOWLIST
+				? nearestForwardedEntry(values) : firstHeaderValue(values);
+	}
+
+	@Nullable
+	private static String nearestForwardedEntry(@Nullable List<String> values) {
+		if (values == null || values.isEmpty())
+			return null;
+		String lastValue = values.get(values.size() - 1);
+		List<String> entries = splitCommaAware(lastValue);
+		return entries.isEmpty() ? null : trimAggressivelyToNull(entries.get(entries.size() - 1));
 	}
 
 	/**
@@ -1769,6 +1801,7 @@ public final class Utilities {
 	 *
 	 * @param headers request/response headers (must be non-{@code null})
 	 * @return the charset declared by the header; otherwise {@link Optional#empty()}
+	 * @throws IllegalRequestException if the first Content-Type value contains multiple charset parameters
 	 * @see #extractCharsetFromHeaderValue(String)
 	 */
 	@NonNull
@@ -1788,9 +1821,12 @@ public final class Utilities {
 	 * <p>
 	 * Parsing is forgiving: parameters may appear in any order and with arbitrary spacing. If a charset is found,
 	 * it is validated via {@link Charset#forName(String)}; invalid names result in {@link Optional#empty()}.
+	 * Quoted strings and their escaped characters are respected when separating parameters.
+	 * Multiple charset parameters are rejected, even when their values are identical.
 	 *
 	 * @param contentTypeHeaderValue the raw header value; may be {@code null} or blank
 	 * @return the resolved charset if present and valid; otherwise {@link Optional#empty()}
+	 * @throws IllegalRequestException if multiple charset parameters are present
 	 */
 	@NonNull
 	public static Optional<@NonNull Charset> extractCharsetFromHeaderValue(@Nullable String contentTypeHeaderValue) {
@@ -1799,82 +1835,35 @@ public final class Utilities {
 		if (contentTypeHeaderValue == null)
 			return Optional.empty();
 
-		// Examples
-		// Content-Type: text/html; charset=UTF-8
-		// Content-Type: multipart/form-data; boundary=something
-
-		int indexOfSemicolon = contentTypeHeaderValue.indexOf(";");
-
-		// Simple case, e.g. "text/html"
-		if (indexOfSemicolon == -1)
-			return Optional.empty();
-
-		// More complex case, e.g. "text/html; charset=UTF-8" or "multipart/form-data; charset=UTF-8; boundary=something"
-		boolean finishedContentType = false;
-		boolean finishedCharsetName = false;
-		StringBuilder buffer = new StringBuilder();
+		List<String> parameters = splitSemicolonAware(contentTypeHeaderValue);
+		boolean charsetPresent = false;
 		String charsetName = null;
 
-		for (int i = 0; i < contentTypeHeaderValue.length(); i++) {
-			char c = contentTypeHeaderValue.charAt(i);
-
-			if (Character.isWhitespace(c))
+		// The first component is the media type, not a parameter.
+		for (int i = 1; i < parameters.size(); i++) {
+			String parameter = parameters.get(i);
+			int separator = parameter.indexOf('=');
+			if (separator == -1 || !parameter.substring(0, separator).trim().equalsIgnoreCase("charset"))
 				continue;
 
-			if (c == ';') {
-				// No content type yet?  This just be it...
-				if (!finishedContentType) {
-					finishedContentType = true;
-					buffer = new StringBuilder();
-				} else if (!finishedCharsetName) {
-					if (buffer.indexOf("charset=") == 0) {
-						charsetName = buffer.toString();
-						finishedCharsetName = true;
-						break;
-					}
-				}
-			} else {
-				buffer.append(Character.toLowerCase(c));
-			}
+			if (charsetPresent)
+				throw new IllegalRequestException("Multiple charset parameters in Content-Type.");
+
+			charsetPresent = true;
+			String rawValue = parameter.substring(separator + 1).trim();
+			// Retain acceptance of single-quoted charset names in addition to HTTP quoted strings.
+			String unquotedValue = rawValue.startsWith("'") ? stripOptionalQuotes(rawValue) : unquoteDoubleQuotedValueIfNeeded(rawValue);
+			charsetName = trimAggressivelyToNull(unquotedValue);
 		}
 
-		// Handle case where charset is the end of the string, e.g. "whatever;charset=UTF-8"
-		if (!finishedCharsetName) {
-			String potentialCharset = trimAggressivelyToNull(buffer.toString());
-			if (potentialCharset != null && potentialCharset.startsWith("charset=")) {
-				finishedCharsetName = true;
-				charsetName = potentialCharset;
-			}
+		if (charsetName == null)
+			return Optional.empty();
+
+		try {
+			return Optional.of(Charset.forName(charsetName));
+		} catch (IllegalCharsetNameException | UnsupportedCharsetException ignored) {
+			return Optional.empty();
 		}
-
-		if (finishedCharsetName) {
-			String specifiedCharsetName = charsetName;
-			if (specifiedCharsetName == null)
-				return Optional.empty();
-
-			// e.g. charset=UTF-8 or charset="UTF-8" or charset='UTF-8'
-			String possibleCharsetName = trimAggressivelyToNull(specifiedCharsetName.replace("charset=", ""));
-
-			if (possibleCharsetName != null) {
-				// strip optional surrounding quotes
-				if ((possibleCharsetName.length() >= 2) &&
-						((possibleCharsetName.charAt(0) == '"' && possibleCharsetName.charAt(possibleCharsetName.length() - 1) == '"') ||
-								(possibleCharsetName.charAt(0) == '\'' && possibleCharsetName.charAt(possibleCharsetName.length() - 1) == '\''))) {
-					possibleCharsetName = possibleCharsetName.substring(1, possibleCharsetName.length() - 1);
-					possibleCharsetName = trimAggressivelyToNull(possibleCharsetName);
-				}
-
-				if (possibleCharsetName != null) {
-					try {
-						return Optional.of(Charset.forName(possibleCharsetName));
-					} catch (IllegalCharsetNameException | UnsupportedCharsetException ignored) {
-						return Optional.empty();
-					}
-				}
-			}
-		}
-
-		return Optional.empty();
 	}
 
 	/**
@@ -2019,26 +2008,8 @@ public final class Utilities {
 		return String.valueOf(c);
 	}
 
-	@NonNull
-	private static final Set<String> COMMA_JOINABLE_HEADER_NAMES = Set.of(
-			// Common list-type headers (RFC 7230/9110)
-			"accept",
-			"accept-encoding",
-			"accept-language",
-			"cache-control",
-			"pragma",
-			"vary",
-			"connection",
-			"transfer-encoding",
-			"upgrade",
-			"allow",
-			"via",
-			"warning"
-			// intentionally NOT: set-cookie, authorization, cookie, content-disposition, location
-	);
-
 	/**
-	 * Given a list of raw HTTP header lines, convert them into a normalized case-insensitive, order-preserving map which "inflates" comma-separated headers into individual values where permitted according to RFC 7230/9110.
+	 * Given a list of raw HTTP header lines, convert them into a case-insensitive, order-preserving map with one value per field occurrence.
 	 * <p>
 	 * For example, given these raw header lines:
 	 * <pre>{@code List<String> lines = List.of(
@@ -2048,8 +2019,7 @@ public final class Utilities {
 	 * );}</pre>
 	 * The result of parsing would look like this:
 	 * <pre>{@code result.get("cache-control") -> [
-	 *   "no-cache",
-	 *   "no-store"
+	 *   "no-cache, no-store"
 	 * ]
 	 * result.get("set-cookie") -> [
 	 *   "a=b; Path=/; HttpOnly",
@@ -2059,6 +2029,9 @@ public final class Utilities {
 	 * Keys in the returned map are case-insensitive and are guaranteed to be in the same order as encountered in {@code rawHeaderLines}.
 	 * <p>
 	 * Values in the returned map are guaranteed to be in the same order as encountered in {@code rawHeaderLines}.
+	 * Commas remain part of each value; field-specific consumers are responsible for list parsing.
+	 * Surrounding HTTP optional whitespace (SP/HTAB) is removed, and empty field values are retained.
+	 * Obsolete folded lines are unfolded into their preceding field; the live HTTP and SSE parsers reject such folding.
 	 *
 	 * @param rawHeaderLines the raw HTTP header lines to parse
 	 * @return a normalized mapping of header name keys to values
@@ -2073,12 +2046,7 @@ public final class Utilities {
 		// 2) Parse into map
 		Map<String, List<String>> headers = new LinkedCaseInsensitiveMap<>();
 
-		for (String raw : lines) {
-			String line = trimAggressivelyToNull(raw);
-
-			if (line == null)
-				continue;
-
+		for (String line : lines) {
 			int idx = line.indexOf(':');
 
 			if (idx <= 0)
@@ -2097,42 +2065,31 @@ public final class Utilities {
 		requireNonNull(headers);
 
 		String key = trimAggressivelyToEmpty(name); // keep original case for display
-		String trimmedValue = trimAggressivelyToNull(value);
-		if (trimmedValue == null)
+		if (key.isEmpty() || value == null)
 			return;
 
-		if (COMMA_JOINABLE_HEADER_NAMES.contains(key.toLowerCase(Locale.ROOT))) {
-			for (String part : splitCommaAware(trimmedValue)) {
-				String v = trimAggressivelyToNull(part);
-				if (v != null)
-					addStringValue(headers, key, v);
-			}
-		} else {
-			addStringValue(headers, key, trimmedValue.trim());
-		}
+		addStringValue(headers, key, trimHeaderWhitespace(value));
 	}
 
 	static void addParsedHeaderValues(@NonNull List<@NonNull String> values,
-																		@Nullable String name,
 																		@Nullable String value) {
 		requireNonNull(values);
 
-		String key = trimAggressivelyToEmpty(name);
-		String keyLowercase = key.toLowerCase(Locale.ROOT);
-		value = trimAggressivelyToNull(value);
+		if (value != null)
+			values.add(trimHeaderWhitespace(value));
+	}
 
-		if (value == null)
-			return;
+	@NonNull
+	static String trimHeaderWhitespace(@NonNull String value) {
+		requireNonNull(value);
 
-		if (COMMA_JOINABLE_HEADER_NAMES.contains(keyLowercase)) {
-			for (String part : splitCommaAware(value)) {
-				String v = trimAggressivelyToNull(part);
-				if (v != null)
-					values.add(v);
-			}
-		} else {
-			values.add(value.trim());
-		}
+		int start = 0;
+		int end = value.length();
+		while (start < end && (value.charAt(start) == ' ' || value.charAt(start) == '\t'))
+			start++;
+		while (end > start && (value.charAt(end - 1) == ' ' || value.charAt(end - 1) == '\t'))
+			end--;
+		return value.substring(start, end);
 	}
 
 	static void freezeStringValueLists(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> valuesByName) {

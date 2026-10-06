@@ -157,7 +157,7 @@ public class McpLegacyCompletionPublicRuntimeTests {
 				assertFalse(initialize.body().contains("\"completions\""), initialize.body());
 				Capture completion = send(port(server), version, "completion/complete",
 						params(true, "modern-only", "value", "a", null), "disabled", null);
-				assertEquals(404, completion.status(), completion.body());
+				assertEquals(200, completion.status(), completion.body());
 				assertError(completion, -32601);
 			}
 			Capture discover = send(port(server), McpProtocolVersion.V2026_07_28,

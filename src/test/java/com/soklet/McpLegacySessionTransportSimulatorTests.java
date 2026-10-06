@@ -38,6 +38,44 @@ class McpLegacySessionTransportSimulatorTests {
 	private static final Set<McpProtocolVersion> ALL = Set.of(McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28);
 
 	@Test
+	void singleLegacyViewSupportsHeaderlessGetAndDeleteWithVerifiedSession() throws Exception {
+		for (McpProtocolVersion version : LEGACY)
+			SokletSimulator.run(configuration(new CopyOnWriteArrayList<>(), Set.of(version)), simulator -> {
+				String id = initialize(simulator, version);
+				try (McpSimulation get = simulator.startMcpRequest(request(HttpMethod.GET, null, id, ""))) {
+					assertEquals(McpSimulationBodyType.SSE, get.awaitResponse(WAIT).orElseThrow().getBodyType());
+					try (McpSimulation delete = simulator.startMcpRequest(request(HttpMethod.DELETE, null, id, ""))) {
+						assertEquals(204, delete.awaitResponse(WAIT).orElseThrow().getStatusCode());
+						delete.awaitCompletion(WAIT).orElseThrow();
+					}
+					assertEquals(McpStreamTerminationReason.SESSION_CLOSED, get.awaitCompletion(WAIT).orElseThrow().getReason());
+				}
+			});
+	}
+
+	@Test
+	void rejectedGetPublishesAFiniteEmptyResponseAndDiscardsTheUnopenedChannel() throws Exception {
+		for (McpProtocolVersion version : LEGACY) {
+			SokletSimulator.run(configuration(new CopyOnWriteArrayList<>()), simulator -> {
+				String id = initialize(simulator, version);
+				try (McpSimulation delete = simulator.startMcpRequest(request(HttpMethod.DELETE, version, id, ""))) {
+					assertEquals(204, delete.awaitResponse(WAIT).orElseThrow().getStatusCode());
+					delete.awaitCompletion(WAIT).orElseThrow();
+				}
+				for (String missing : List.of(id, "unknown-session"))
+					try (McpSimulation get = simulator.startMcpRequest(request(HttpMethod.GET, version, missing, ""))) {
+						McpSimulationResponse response = get.awaitResponse(WAIT).orElseThrow();
+						assertEquals(404, response.getStatusCode());
+						assertEquals(McpSimulationBodyType.EMPTY, response.getBodyType());
+						assertArrayEquals(new byte[0], response.getBody().orElseThrow());
+						assertEquals(McpStreamTerminationReason.COMPLETED, get.awaitCompletion(WAIT).orElseThrow().getReason());
+						assertTrue(get.awaitStreamItem(Duration.ZERO).isEmpty());
+					}
+			});
+		}
+	}
+
+	@Test
 	@Timeout(120)
 	void publishedBeforeAckSessionGetThenDeleteCompletesZeroMessageSseWithExactReason() throws Exception {
 		for (McpProtocolVersion version : LEGACY) {
@@ -119,8 +157,9 @@ class McpLegacySessionTransportSimulatorTests {
 			McpSimulationResponse response = initialization.awaitResponse(WAIT).orElseThrow();
 			assertEquals(200, response.getStatusCode());
 			assertEquals(McpStreamTerminationReason.COMPLETED, initialization.awaitCompletion(WAIT).orElseThrow().getReason());
-			return response.getHeaders().entrySet().stream().filter(entry -> entry.getKey().equalsIgnoreCase("Mcp-Session-Id"))
-					.findFirst().orElseThrow().getValue().iterator().next();
+			assertEquals(response.getHeaders().get("Mcp-Session-Id"), response.getHeaders().get("mcp-session-id"));
+			assertThrows(UnsupportedOperationException.class, () -> response.getHeaders().put("test", List.of("test")));
+			return response.getHeaders().get("mcp-session-id").get(0);
 		}
 	}
 
@@ -138,16 +177,22 @@ class McpLegacySessionTransportSimulatorTests {
 		headers.put("Host", List.of("127.0.0.1:0"));
 		headers.put("Accept", List.of("application/json, text/event-stream"));
 		headers.put("Content-Type", List.of("application/json"));
-		headers.put("MCP-Protocol-Version", List.of(version.getWireValue()));
+		if (version != null) headers.put("MCP-Protocol-Version", List.of(version.getWireValue()));
 		if (id != null) headers.put("Mcp-Session-Id", List.of(id));
 		return Request.withPath(method, "/mcp").headers(headers).body(body.getBytes(StandardCharsets.UTF_8)).build();
 	}
 
 	private static SimulatorConfig configuration(List<McpSessionTransportAdmissionContext> contexts) {
+		return configuration(contexts, ALL);
+	}
+
+	private static SimulatorConfig configuration(List<McpSessionTransportAdmissionContext> contexts, Set<McpProtocolVersion> versions) {
 		McpAdmissionIdentity identity = McpAdmissionIdentity.withRateLimitPartitionKey("owner")
 				.authorizationPartitionKey("owner").principal("owner").build();
-		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion("simulation", "1").build(), ALL)
-				.sessionProtocolVersions(Set.copyOf(LEGACY)).subscriptionProtocolVersions(Set.copyOf(LEGACY))
+		Set<McpProtocolVersion> legacyVersions = versions.stream().filter(LEGACY::contains)
+				.collect(java.util.stream.Collectors.toSet());
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion("simulation", "1").build(), versions)
+				.sessionProtocolVersions(legacyVersions).subscriptionProtocolVersions(legacyVersions)
 				.subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(McpSubscriptionEventPublisher.fromInMemoryDefaults(),
 						Set.of(McpSubscriptionNotificationType.TOOLS_LIST_CHANGED)).build()).build();
 		return SimulatorConfig.builder().configureMcpServer(builder -> builder.port(0).host("127.0.0.1")

@@ -1043,10 +1043,10 @@ public class McpResourcePublicRuntimeTests {
 				// An exact route assigned only to 2026 cannot shadow a legacy template.
 				HttpResponse<String> shadow = sendLegacy(port, revision, "resources/read", "\"uri\":\"" + SPECIAL_URI + "\"", null);
 				assertContains(shadow.body(), "\"text\":\"special\"");
-				assertError(sendLegacy(port, revision, "resources/read", "\"uri\":\"test://modern/item\"", null), 400, -32002, "legacy");
-				assertError(sendLegacy(port, revision, "resources/read", "\"uri\":\"test://missing\"", null), 400, -32002, "legacy");
-				assertError(sendLegacy(port, revision, "resources/list", "\"cursor\":\"\"", null), 400, -32602, "legacy");
-				assertError(sendLegacy(port, revision, "resources/templates/list", "\"cursor\":\"next\"", null), 400, -32602, "legacy");
+				assertError(sendLegacy(port, revision, "resources/read", "\"uri\":\"test://modern/item\"", null), 200, -32002, "legacy");
+				assertError(sendLegacy(port, revision, "resources/read", "\"uri\":\"test://missing\"", null), 200, -32002, "legacy");
+				assertError(sendLegacy(port, revision, "resources/list", "\"cursor\":\"\"", null), 200, -32602, "legacy");
+				assertError(sendLegacy(port, revision, "resources/templates/list", "\"cursor\":\"next\"", null), 200, -32602, "legacy");
 				for (HttpResponse<String> response : List.of(catalog, templates, exact, blob, unicode)) {
 					Assertions.assertFalse(response.body().contains("resultType"), response.body());
 					Assertions.assertFalse(response.body().contains("cacheScope"), response.body());
@@ -1104,10 +1104,10 @@ public class McpResourcePublicRuntimeTests {
 				HttpResponse<String> last = sendLegacy(port, revision, "resources/list", "\"cursor\":\"\"", "Bearer reader");
 				assertSuccess(last, "legacy");
 				Assertions.assertFalse(last.body().contains("nextCursor"), last.body());
-				assertError(sendLegacy(port, revision, "resources/list", "\"cursor\":\"世界語\"", "Bearer reader"), 400, -32602, "legacy");
+				assertError(sendLegacy(port, revision, "resources/list", "\"cursor\":\"世界語\"", "Bearer reader"), 200, -32602, "legacy");
 				for (String cursor : List.of("bad", "big", "throw")) {
 					HttpResponse<String> failure = sendLegacy(port, revision, "resources/list", "\"cursor\":\"" + cursor + "\"", "Bearer reader");
-					assertError(failure, 500, -32603, "legacy");
+					assertError(failure, 200, -32603, "legacy");
 					Assertions.assertFalse(failure.body().contains(BINARY_URI.toString()), failure.body());
 					Assertions.assertFalse(failure.body().contains("private canary"), failure.body());
 				}
@@ -1142,7 +1142,7 @@ public class McpResourcePublicRuntimeTests {
 			for (String revision : List.of("2025-06-18", "2025-11-25"))
 				for (URI uri : List.of(TEXT_URI, BINARY_URI)) {
 					HttpResponse<String> failure = sendLegacy(port, revision, "resources/read", "\"uri\":\"" + uri + "\"", null);
-					assertError(failure, 500, -32603, "legacy");
+					assertError(failure, 200, -32603, "legacy");
 					Assertions.assertFalse(failure.body().contains("private Apps canary"), failure.body());
 					Assertions.assertTrue(failure.body().getBytes(StandardCharsets.UTF_8).length <= 4_194_304);
 				}
@@ -1176,7 +1176,7 @@ public class McpResourcePublicRuntimeTests {
 				for (String method : List.of("resources/list", "resources/templates/list", "resources/read"))
 					assertError(sendLegacy(port, revision, method,
 							method.equals("resources/read") ? "\"uri\":\"" + TEXT_URI + "\"" : "", null),
-							404, -32601, "legacy");
+							200, -32601, "legacy");
 			}
 			Assertions.assertEquals(0, invocations.get());
 			assertContains(read(port, "modern", TEXT_URI.toString()).body(), "\"text\":\"modern\"");
@@ -1210,12 +1210,69 @@ public class McpResourcePublicRuntimeTests {
 				assertContains(list.body(), "\"resources\":[]");
 				HttpResponse<String> unavailable = sendLegacy(port, revision, "resources/read",
 						"\"uri\":\"" + skillUri + "\"", null);
-				assertError(unavailable, 400, -32002, "legacy");
+				assertError(unavailable, 200, -32002, "legacy");
 				Assertions.assertFalse(unavailable.body().contains("private skill canary"), unavailable.body());
 			}
 			HttpResponse<String> modern = read(port, "modern-skill", skillUri.toString());
 			assertSuccess(modern, "modern-skill");
 			assertContains(modern.body(), "private skill canary");
+		}
+	}
+
+	@Test
+	public void handlerResourceNotFoundUsesTheSelectedRevisionWithoutExposingInterceptorErrors() throws Exception {
+		Set<McpProtocolVersion> versions = Set.of(McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28);
+		AtomicInteger interceptorMode = new AtomicInteger();
+		AtomicInteger handlerEntries = new AtomicInteger();
+		McpResourceReadHandler missing = (requestContext, resourceReadContext, invocationFeatures) -> {
+			handlerEntries.incrementAndGet();
+			throw new McpJsonRpcException(McpJsonRpcError.fromResourceNotFound(resourceReadContext.getUri()));
+		};
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
+				McpImplementation.withNameAndVersion("not-found", "1").build(), versions)
+				.resourceRegistrations(List.of(
+						McpResourceRegistration.withUriAndName(TEXT_URI, "Exact", versions).handler(missing).build(),
+						McpResourceRegistration.withUriTemplateAndName(TEMPLATE_URI, "Template", versions).handler(missing).build(),
+						McpResourceRegistration.withUriAndName(BINARY_URI, "Invalid parameters", versions)
+								.handler((requestContext, resourceReadContext, invocationFeatures) -> {
+									throw new McpJsonRpcException(McpJsonRpcError.fromInvalidParameters(
+											"Resource not found", McpJsonObject.builder().put("uri", BINARY_URI.toString()).build()));
+								}).build()))
+				.build();
+		McpServer server = serverBuilder(endpoint).handlerInterceptor((requestContext, invocationFeatures, chain) -> {
+			if (interceptorMode.get() == 1)
+				throw new McpJsonRpcException(McpJsonRpcError.fromResourceNotFound(URI.create("test://private-interceptor")));
+			if (interceptorMode.get() == 2) {
+				try { return chain.proceed(); }
+				finally { throw new McpJsonRpcException(McpJsonRpcError.fromResourceNotFound(URI.create("test://private-interceptor"))); }
+			}
+			return chain.proceed();
+		}).build();
+		try (Soklet owner = managedSoklet(server)) {
+			owner.start();
+			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
+			for (McpProtocolVersion version : List.of(McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28)) {
+				boolean modern = version == McpProtocolVersion.V2026_07_28;
+				for (String uri : List.of(TEXT_URI.toString(), "test://template/missing/data", "test://unregistered")) {
+					HttpResponse<String> response = modern ? read(port, "missing", uri)
+							: sendLegacy(port, version.getWireValue(), "resources/read", "\"uri\":\"" + uri + "\"", null);
+					assertError(response, modern ? 400 : 200, modern ? -32602 : -32002, modern ? "missing" : "legacy");
+					assertContains(response.body(), "\"data\":{\"uri\":\"" + uri + "\"}");
+				}
+				HttpResponse<String> invalid = modern ? read(port, "invalid", BINARY_URI.toString())
+						: sendLegacy(port, version.getWireValue(), "resources/read", "\"uri\":\"" + BINARY_URI + "\"", null);
+				assertError(invalid, modern ? 400 : 200, -32602, modern ? "invalid" : "legacy");
+				for (int mode : List.of(1, 2)) {
+					interceptorMode.set(mode);
+					int before = handlerEntries.get();
+					HttpResponse<String> response = modern ? read(port, "private", TEXT_URI.toString())
+							: sendLegacy(port, version.getWireValue(), "resources/read", "\"uri\":\"" + TEXT_URI + "\"", null);
+					assertError(response, modern ? 500 : 200, -32603, modern ? "private" : "legacy");
+					Assertions.assertFalse(response.body().contains("private-interceptor"), response.body());
+					Assertions.assertEquals(before + (mode == 2 ? 1 : 0), handlerEntries.get());
+				}
+				interceptorMode.set(0);
+			}
 		}
 	}
 

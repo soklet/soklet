@@ -25,6 +25,7 @@ import com.soklet.StreamingResponseBody;
 import com.soklet.StreamingResponseCanceledException;
 import com.soklet.internal.streaming.ManagedResponseStream;
 import com.soklet.internal.streaming.PublisherResponseStream;
+import com.soklet.internal.streaming.StateChangeWaiters;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -44,6 +45,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
@@ -293,6 +295,8 @@ public final class StreamingMicrohttpResponses {
 		@NonNull
 		private final Object lock;
 		@NonNull
+		private final StateChangeWaiters stateChangeWaiters;
+		@NonNull
 		private final Queue<QueuedChunk> chunks;
 		@NonNull
 		private final AtomicBoolean started;
@@ -347,6 +351,7 @@ public final class StreamingMicrohttpResponses {
 			this.cancelationToken = new DefaultCancelationToken(cancelationCallbackFailureConsumer, reservation);
 			this.request = request;
 			this.lock = new Object();
+			this.stateChangeWaiters = new StateChangeWaiters(this.lock);
 			this.chunks = new ArrayDeque<>();
 			this.started = new AtomicBoolean(false);
 			this.terminationNotified = new AtomicBoolean(false);
@@ -374,7 +379,7 @@ public final class StreamingMicrohttpResponses {
 			if (this.reservation != null) {
 				synchronized (this.lock) {
 					this.producerStartReleased = true;
-					this.lock.notifyAll();
+					this.stateChangeWaiters.signalAll();
 				}
 				return;
 			}
@@ -398,9 +403,9 @@ public final class StreamingMicrohttpResponses {
 
 		private void awaitStartAndRun() {
 			try {
+				this.stateChangeWaiters.awaitWhile(() ->
+						!this.producerStartReleased && !this.closed && this.failure == null);
 				synchronized (this.lock) {
-					while (!this.producerStartReleased && !this.closed && this.failure == null)
-						this.lock.wait();
 					if (this.closed || this.failure != null)
 						return;
 				}
@@ -450,7 +455,14 @@ public final class StreamingMicrohttpResponses {
 						break;
 				}
 
-				long written = chunk.writeTo(socketChannel, maxBytes - totalWritten);
+				long written;
+				synchronized (this.lock) {
+					// Transport sockets are nonblocking. Keep progress publication atomic
+					// with the idle check so a recent write cannot lose to a stale timer.
+					written = chunk.writeTo(socketChannel, maxBytes - totalWritten);
+					if (written > 0L && this.idleTimeout != null && !this.timeoutsStopped)
+						this.lastIdleActivityNanos = testHooks.nanoTime();
+				}
 				totalWritten += written;
 
 				if (chunk.isComplete()) {
@@ -475,7 +487,7 @@ public final class StreamingMicrohttpResponses {
 							notifyCompleted = true;
 						}
 
-						this.lock.notifyAll();
+						this.stateChangeWaiters.signalAll();
 					}
 
 					if (notifyCompleted)
@@ -530,7 +542,7 @@ public final class StreamingMicrohttpResponses {
 				this.closed = true;
 				this.chunks.clear();
 				this.currentChunk = null;
-				this.lock.notifyAll();
+				this.stateChangeWaiters.signalAll();
 			}
 		}
 
@@ -567,7 +579,7 @@ public final class StreamingMicrohttpResponses {
 			} finally {
 				synchronized (this.lock) {
 					this.producerThread = null;
-					this.lock.notifyAll();
+					this.stateChangeWaiters.signalAll();
 				}
 			}
 		}
@@ -579,7 +591,7 @@ public final class StreamingMicrohttpResponses {
 					&& !sameInstance(throwable, this.cancelationToken.getCancelationCause().orElse(null))
 					&& !(throwable instanceof InterruptedException)
 					&& (!(throwable instanceof StreamingResponseCanceledException)
-							|| throwable.getSuppressed().length != 0))
+							|| hasUnexpectedCancelationSuppression(throwable)))
 				reportCleanupFailure(throwable);
 			if (throwable instanceof StreamingResponseCanceledException canceledException) {
 				fail(canceledException.getCancelationReason(), canceledException.getCancelationCause().orElse(null));
@@ -594,6 +606,32 @@ public final class StreamingMicrohttpResponses {
 			} else {
 				fail(StreamTerminationReason.PRODUCER_FAILED, throwable);
 			}
+		}
+
+		private boolean hasUnexpectedCancelationSuppression(@NonNull Throwable throwable) {
+			Queue<Throwable> pending = new ArrayDeque<>();
+			IdentityHashMap<Throwable, Boolean> visited = new IdentityHashMap<>();
+			visited.put(throwable, Boolean.TRUE);
+			for (Throwable suppressed : throwable.getSuppressed()) {
+				if (pending.size() == 64) return true;
+				pending.add(suppressed);
+			}
+			while (!pending.isEmpty()) {
+				Throwable suppressed = pending.remove();
+				if (visited.put(suppressed, Boolean.TRUE) != null) continue;
+				if (visited.size() > 64) return true;
+				boolean matchingCancelation = suppressed instanceof StreamingResponseCanceledException canceled
+						&& canceled.getCancelationReason() == this.cancelationToken.getCancelationReason().orElse(null)
+						&& sameInstance(canceled.getCancelationCause().orElse(null),
+								this.cancelationToken.getCancelationCause().orElse(null));
+				if (!(suppressed instanceof InterruptedException) && !matchingCancelation)
+					return true;
+				for (Throwable nested : suppressed.getSuppressed()) {
+					if (pending.size() == 64) return true;
+					pending.add(nested);
+				}
+			}
+			return false;
 		}
 
 		private void reportCleanupFailure(@NonNull Throwable throwable) {
@@ -697,7 +735,7 @@ public final class StreamingMicrohttpResponses {
 					return;
 				this.producerDone = true;
 				this.chunks.add(QueuedChunk.terminal());
-				this.lock.notifyAll();
+				this.stateChangeWaiters.signalAll();
 			}
 			releaseCallbacks.run();
 			wakeWriter();
@@ -738,7 +776,7 @@ public final class StreamingMicrohttpResponses {
 						effectiveCause);
 				cancelationCallbacks = this.cancelationToken.reserveCancelation(effectiveReason, effectiveCause);
 				this.producerDone = true;
-				this.lock.notifyAll();
+				this.stateChangeWaiters.signalAll();
 				// Pair the interrupt with physical producer ownership, never Future completion.
 				// Clearing producerThread in the same lock prevents interrupting a reused worker.
 				if (this.reservation == null && !this.cancelationToken.isCompleted()
@@ -922,30 +960,37 @@ public final class StreamingMicrohttpResponses {
 				if (payload.length == 0)
 					return;
 
-				synchronized (StreamingWritableSource.this.lock) {
-					if (Thread.currentThread().isInterrupted())
-						throw new InterruptedException("Response producer is interrupted");
-					while (!StreamingWritableSource.this.closed
-							&& StreamingWritableSource.this.failure == null
-							&& !StreamingWritableSource.this.cancelationToken.isCanceled()
-							&& (long) StreamingWritableSource.this.queuedPayloadBytes + payload.length
-								> StreamingWritableSource.this.queueCapacityInBytes)
-						StreamingWritableSource.this.lock.wait();
-
-					StreamingWritableSource.this.cancelationToken.throwIfCanceled();
-
-					if (StreamingWritableSource.this.closed)
-						throw new StreamingResponseCanceledException(StreamTerminationReason.CLIENT_DISCONNECTED);
-
-					if (StreamingWritableSource.this.failure != null)
-						throw toIOException(StreamingWritableSource.this.failure);
-
-					StreamingWritableSource.this.chunks.add(QueuedChunk.payload(payload));
-					StreamingWritableSource.this.queuedPayloadBytes += payload.length;
-					// Acceptance means queue ownership, not copying into a temporary
-					// payload. Preserve this prefix even if a following wakeup fails.
-					acceptedSource.position(acceptedSource.position() + payload.length);
-					StreamingWritableSource.this.lock.notifyAll();
+				while (true) {
+					synchronized (StreamingWritableSource.this.lock) {
+						if (Thread.currentThread().isInterrupted())
+							throw new InterruptedException("Response producer is interrupted");
+						StreamingWritableSource.this.cancelationToken.throwIfCanceled();
+						if (StreamingWritableSource.this.closed)
+							throw new StreamingResponseCanceledException(StreamTerminationReason.CLIENT_DISCONNECTED);
+						if (StreamingWritableSource.this.failure != null)
+							throw toIOException(StreamingWritableSource.this.failure);
+						if ((long) StreamingWritableSource.this.queuedPayloadBytes + payload.length
+								<= StreamingWritableSource.this.queueCapacityInBytes) {
+							StreamingWritableSource.this.chunks.add(QueuedChunk.payload(payload));
+							StreamingWritableSource.this.queuedPayloadBytes += payload.length;
+							// Queue ownership advances the accepted prefix before a wakeup can fail.
+							acceptedSource.position(acceptedSource.position() + payload.length);
+							StreamingWritableSource.this.stateChangeWaiters.signalAll();
+							break;
+						}
+					}
+					if (StreamingWritableSource.this.reservation != null)
+						StreamingWritableSource.this.reservation.beginOutputWait();
+					try {
+						StreamingWritableSource.this.stateChangeWaiters.awaitWhile(() ->
+								!StreamingWritableSource.this.closed && StreamingWritableSource.this.failure == null
+										&& !StreamingWritableSource.this.cancelationToken.isCanceled()
+										&& (long) StreamingWritableSource.this.queuedPayloadBytes + payload.length
+												> StreamingWritableSource.this.queueCapacityInBytes);
+					} finally {
+						if (StreamingWritableSource.this.reservation != null)
+							StreamingWritableSource.this.reservation.endOutputWait();
+					}
 				}
 
 				resetIdleTimeoutIfNeeded();

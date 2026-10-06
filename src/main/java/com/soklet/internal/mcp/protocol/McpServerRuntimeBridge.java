@@ -33,7 +33,6 @@ import com.soklet.McpJsonBoolean;
 import com.soklet.McpJsonNull;
 import com.soklet.McpJsonNumber;
 import com.soklet.McpJsonObject;
-import com.soklet.McpJsonRpcException;
 import com.soklet.McpJsonString;
 import com.soklet.McpJsonValue;
 import com.soklet.McpLocalizationContext;
@@ -897,6 +896,11 @@ public final class McpServerRuntimeBridge {
 		this.runtime.reconcileSubscriptions();
 	}
 
+	/** Signals metric delivery after a deferral or an in-flight collector ends. */
+	public void scheduleTransportMetricsDrain() {
+		this.runtime.scheduleTransportMetricsDrain();
+	}
+
 	@NonNull
 	private static Optional<@NonNull BiConsumer<@NonNull String, @NonNull String>>
 			nameDiagnosticConsumer(boolean enabled,
@@ -1521,7 +1525,14 @@ public final class McpServerRuntimeBridge {
 				throw new IllegalArgumentException(
 						"Duplicate MCP Completion reference.");
 		}
-		McpNormalizedEndpoint endpoint = endpointBuilder.build();
+		McpNormalizedEndpoint endpoint;
+		try {
+			endpoint = endpointBuilder.build();
+		} catch (IllegalStateException exception) {
+			throw new IllegalStateException(exception.getMessage() + " (endpoint " + publicEndpoint.getPath()
+					+ "; revisions " + publicEndpoint.getProtocolVersions().stream()
+							.map(McpProtocolVersion::getWireValue).sorted().toList() + ").", exception);
+		}
 		Map<String, McpNormalizedEndpoint> revisionEndpoints =
 				revisionEndpoints(endpoint, endpointPlan);
 		McpNormalizedEndpoint unpagedEndpoint = revisionEndpoints.get(
@@ -1857,7 +1868,12 @@ public final class McpServerRuntimeBridge {
 					view.serverExtension(TASKS_EXTENSION_IDENTIFIER,
 							complete.serverExtensions().get(TASKS_EXTENSION_IDENTIFIER));
 			}
-			views.put(version.getWireValue(), view.build());
+			try {
+				views.put(version.getWireValue(), view.build());
+			} catch (IllegalStateException exception) {
+				throw new IllegalStateException(exception.getMessage() + " (endpoint " + publicEndpoint.getPath()
+						+ "; revision " + version.getWireValue() + ").", exception);
+			}
 		}
 		return java.util.Collections.unmodifiableMap(views);
 	}
@@ -3087,6 +3103,7 @@ public final class McpServerRuntimeBridge {
 			permits ResourceInvocationResult.Complete,
 			ResourceInvocationResult.InputRequired,
 			ResourceInvocationResult.InvalidInput,
+			ResourceInvocationResult.ResourceNotFound,
 			ResourceInvocationResult.JsonRpcError {
 		/** @return completed resource result */
 		@NonNull
@@ -3105,6 +3122,12 @@ public final class McpServerRuntimeBridge {
 		@NonNull
 		static InvalidInput invalidInput() {
 			return InvalidInput.INSTANCE;
+		}
+
+		/** @return resource-not-found intent awaiting revision projection */
+		@NonNull
+		static ResourceNotFound resourceNotFound(@NonNull URI resourceUri) {
+			return new ResourceNotFound(resourceUri);
 		}
 
 		/** @return intentional client-visible JSON-RPC error */
@@ -3152,6 +3175,20 @@ public final class McpServerRuntimeBridge {
 		enum InvalidInput implements ResourceInvocationResult {
 			/** Shared invalid-input marker. */
 			INSTANCE
+		}
+
+		/**
+		 * Resource-not-found intent from a resource-read handler.
+		 *
+		 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+		 */
+		@ThreadSafe
+		record ResourceNotFound(@NonNull URI resourceUri)
+				implements ResourceInvocationResult {
+			/** Validates the resource URI. */
+			public ResourceNotFound {
+				requireNonNull(resourceUri);
+			}
 		}
 
 		/**
@@ -4672,13 +4709,13 @@ public final class McpServerRuntimeBridge {
 			case INPUT_REQUIRED -> fields.put("inputRequests",
 					inputRequests(task.getInputRequests()));
 			case COMPLETED -> {
-				// A task whose origin registration disappeared or is no longer
-				// accessible is intentionally projected as status-only.  The task
-				// itself remains visible, but its saved operation output must not be
-				// rendered through a registration that the current caller cannot use.
-				if (snapshot.completedResultFields().isPresent())
-					fields.put("result", completedTaskResult(snapshot,
-							includeStructuredContentTextMirror));
+				// Detailed completion requires the authorized, rendered result.
+				// Status-only snapshots remain valid for internal authorization and
+				// task-creation handles, but cannot be emitted as DetailedTask.
+				if (snapshot.completedResultFields().isEmpty())
+					throw new IllegalStateException("The completed MCP task result is unavailable.");
+				fields.put("result", completedTaskResult(snapshot,
+						includeStructuredContentTextMirror));
 			}
 			case FAILED -> fields.put("error", taskFailure(
 					task.getFailure().orElseThrow()));
@@ -4815,18 +4852,9 @@ public final class McpServerRuntimeBridge {
 				Optional.empty(), invocation.selectedLocale(),
 				invocation.catalogAccessView().flatMap(
 						CatalogAccessSession::localizationContext));
-		com.soklet.McpArgumentCompletionResult result;
-		try {
-			result = requireNonNull(completionPlan.invoker().invoke(
-					new CompletionInvocation(base, argumentName, argumentValue,
-							contextArguments)),
-					"The MCP Completion invoker returned null.");
-		} catch (McpJsonRpcException exception) {
-			com.soklet.McpJsonRpcError error = exception.getError();
-			throw new McpApplicationJsonRpcException(new McpJsonRpcError(
-					error.getCode(), error.getMessage(),
-					error.getData().map(McpServerRuntimeBridge::toInternal)));
-		}
+		com.soklet.McpArgumentCompletionResult result = requireNonNull(completionPlan.invoker().invoke(
+				new CompletionInvocation(base, argumentName, argumentValue, contextArguments)),
+				"The MCP Completion invoker returned null.");
 		List<com.soklet.internal.mcp.protocol.McpJsonValue> values =
 				result.getValues().stream()
 						.map(com.soklet.internal.mcp.protocol.McpJsonString::new)
@@ -4991,6 +5019,16 @@ public final class McpServerRuntimeBridge {
 
 		if (result instanceof ResourceInvocationResult.InvalidInput)
 			throw new McpInvalidApplicationInputException();
+		if (result instanceof ResourceInvocationResult.ResourceNotFound missing) {
+			McpJsonRpcError canonicalError = new McpJsonRpcError(
+					McpJsonRpcError.INVALID_PARAMS, "Resource not found",
+					Optional.of(new com.soklet.internal.mcp.protocol.McpJsonObject(Map.of(
+							"uri", new com.soklet.internal.mcp.protocol.McpJsonString(
+									missing.resourceUri().toString())))));
+			throw new McpApplicationJsonRpcException(invocation.protocolProfile()
+					.renderFrameworkError(McpProfileErrorKind.RESOURCE_NOT_FOUND,
+							canonicalError));
+		}
 		if (result instanceof ResourceInvocationResult.JsonRpcError error)
 			throw new McpApplicationJsonRpcException(toInternal(error));
 		if (result instanceof ResourceInvocationResult.InputRequired inputRequired)
@@ -5237,6 +5275,21 @@ public final class McpServerRuntimeBridge {
 			case REJECT_REQUESTS ->
 					McpUnknownMirroredHeaderPolicy.REJECT_REQUESTS;
 		};
+	}
+
+	/**
+	 * Converts an error already identified at the application handler boundary.
+	 * Interceptor failures must not enter this path.
+	 *
+	 * @param error intentional handler error
+	 * @return the internal dispatch control signal
+	 */
+	@NonNull
+	public static Exception applicationHandlerJsonRpcFailure(
+			com.soklet.@NonNull McpJsonRpcError error) {
+		requireNonNull(error);
+		return new McpApplicationJsonRpcException(new McpJsonRpcError(
+				error.getCode(), error.getMessage(), error.getData().map(McpServerRuntimeBridge::toInternal)));
 	}
 
 	@NonNull

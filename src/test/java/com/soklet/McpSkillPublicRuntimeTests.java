@@ -106,16 +106,16 @@ public class McpSkillPublicRuntimeTests {
 				for (McpSkillRegistration registration : List.of(standalone, grouped)) {
 					HttpResponse<String> get = sendLegacy(port, revision, "skill-get", "skills/get",
 							"\"uri\":\"" + registration.getUri() + "\"");
-					assertError(get, 404, -32601, "skill-get");
+					assertError(get, 200, -32601, "skill-get");
 					for (McpSkillRegistration.Resource resource : registration.getResources()) {
 						HttpResponse<String> file = sendLegacy(port, revision, "skill-read", "resources/read",
 								"\"uri\":\"" + resource.getUri() + "\"");
-						assertError(file, 400, -32002, "skill-read");
+						assertError(file, 200, -32002, "skill-read");
 						Assertions.assertFalse(file.body().contains("skill-private-marker"), file.body());
 					}
 				}
 				assertError(sendLegacy(port, revision, "skill-list", "skills/list", ""),
-						404, -32601, "skill-list");
+						200, -32601, "skill-list");
 			}
 			Assertions.assertEquals(0, skillCallbacks.get(), "Legacy requests must not invoke Skills callbacks.");
 

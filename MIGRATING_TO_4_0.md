@@ -86,6 +86,21 @@ existing request exceptions; default HTTP error handling returns a bad request.
 Use list accessors or annotated `List<T>` parameters when repetition is allowed.
 Header names remain case insensitive, while query, form, and cookie names remain
 case sensitive. Header and outgoing-cookie values retain their supplied order.
+
+Each request-header List entry now represents one complete field occurrence.
+For example, `Accept-Encoding: gzip, deflate, br` becomes
+`List.of("gzip, deflate, br")`, and a scalar `@RequestHeader String` receives
+the whole value. Physical header parsing no longer splits selected fields at
+commas. Media negotiation, locales, CORS, and compression parse their own lists.
+Empty field values are preserved, including repeated empties. Surrounding HTTP
+spaces and tabs are removed consistently in physical and map-backed requests;
+other whitespace is retained by the header accessors. A single empty field
+returns `Optional.of("")` from `getHeader()`, while default annotation conversion
+maps one blank `Optional<T>` value to `Optional.empty()`. Repeated fields still
+fail scalar access and binding, including identical or empty repeats. Servlet
+`getHeader()` keeps its first-occurrence contract, and `getHeaders()` exposes
+each complete occurrence.
+
 For signatures or ordering across different query names, use `Request.getRawQuery()`;
 a grouped map preserves per-name order rather than the entire interleaved query.
 
@@ -176,6 +191,43 @@ For binary payloads or application-defined text decoding, continue using
 Cookie `+` characters remain literal, and malformed cookie percent-escapes such
 as `%ZZ` remain literal text; syntactically valid escapes containing invalid
 UTF-8, such as `%FF`, are rejected.
+
+Request parsing also corrects these cases:
+
+- An origin-form target such as `//x/admin` retains every path component.
+  `getRawPath()` returns `//x/admin`; the existing decoded normalization makes
+  `getPath()` return `/x/admin`, preserving `x` when routing.
+- Absolute request URLs supply the effective `Host`, replacing the supplied field;
+  `EffectiveOriginResolver.withRequest` retains the target scheme as a fallback.
+  HTTP/1.1 still requires one syntactically valid physical `Host` field.
+- Explicit empty names (`=value`) are retained under the empty string in query and
+  form maps. Empty segments between `&` separators are ignored.
+- Form bodies are parsed as pairs directly. Literal `#`, spaces, quotes, and
+  similar characters remain data, and fields after them are retained. Low-level
+  names and values are not trimmed. Default annotation value conversion remains
+  unchanged: one blank value becomes `Optional.empty()`, while repeated blank
+  values still fail scalar binding.
+- `Content-Type` charset selection respects quoted parameters in any order.
+  Multiple charset parameters now raise `IllegalRequestException` (HTTP 400
+  through the default marshaler), even when identical. A single invalid or
+  unsupported charset retains the existing UTF-8 fallback.
+
+### HTTP and SSE framing
+
+The standard HTTP parser rejects HTTP/1.0 transfer encoding, malformed chunk
+extensions, and whitespace around a chunk size without a following extension.
+Method tokens are limited to 64 bytes; chunk-size lines, including extensions
+but excluding CRLF, are limited to 8,192 bytes. These are fixed bounds independent
+of the aggregate request-size setting. Malformed framing returns HTTP 400 and
+closes the connection before a resource method runs.
+
+SSE handshakes reject bare carriage returns, folded or whitespace-only header
+lines, signed content lengths, repeated content-length fields, and transfer
+encoding. An unsigned decimal zero, including leading zeros, is allowed.
+Rejected and ordinary finite responses on the SSE port discard application
+framing and hop-by-hop headers, including fields named by `Connection`, then
+emit one `Connection: close` and the actual body length. Bodyless status codes
+keep their body and length restrictions. Other headers and cookies remain.
 
 ### HTTP streaming callbacks and sources
 
@@ -284,6 +336,27 @@ cleanup expiry does not free a slot. Exhausted admission returns HTTP 503 before
 invoking the producer or committing streaming headers. Callback workers are
 separate from producer execution; normal managed finalization still runs on the
 producer thread.
+
+Precommit HTTP streaming rejection now reports the finite failsafe status to request write/finish observers and metrics, with bounded termination observation retaining the original rejected stream. The finite response and request finish do not wait for termination observers. These observers use a separate bounded allowance on the managed callback executor; accepted work remains tracked through shutdown. If that allowance is exhausted or infrastructure has stopped, Soklet logs the omitted unadmitted-stream notification. Admitted streams retain their reserved callback jobs. Transport handoff exceptions reach `didFailToWriteResponse` instead of being reported as successful writes.
+
+The default HTTP streaming executor uses one virtual thread per admitted producer
+on JDK 21+. Lifecycle admission bounds these tasks and retained cleanup. On JDK
+17, the default pool has four platform workers per event-loop concurrency unit
+and no pending producer queue: exhaustion returns 503 before streaming headers.
+A custom streaming executor must dispatch asynchronously and start accepted work
+promptly; use direct handoff and rejection to avoid queuing behind long-lived
+producers. Inline or caller-runs execution is rejected.
+
+HTTP and MCP output backpressure parks outside state monitors, including on JDK
+21. Synchronous publishers receive iterative one-item demand, without recursive
+`request()` calls. During healthy HTTP encoder finalization, queue backpressure
+pauses the remaining cleanup budget while response and idle deadlines continue
+to apply. Socket writes refresh idle activity after production ends; a stalled
+drain can still expire. Cancellation resumes finite cleanup supervision and
+encoder tail output is discarded while resources close. Cancelation interrupts the producer; output preserves the interrupt flag when translating an elected cancellation, and managed cleanup temporarily clears and restores it. Ordinary producer output
+continues to fail after cancellation, and unrelated close failures remain visible.
+
+The built-in HTTP server commits status and headers before invoking the writer. Producer failure, including failure before the first body byte, aborts delivery without changing that status. Perform fallible status selection before returning the response. Simulation materializes output and does not reproduce a committed socket head. Quiesce stops new streaming admission: a previously dispatched handler may finish its side effects but receive a finite 503 if it returns a new stream afterward; admitted streams and buffered responses may drain. Streaming response timeouts are server-wide; per-response overrides remain unavailable.
 
 `SimulatorConfig.fromSokletConfig(...)`, `withSokletConfig(...)`, and the
 corresponding `SokletSimulator.run(...)` overload inherit these immutable values
@@ -1030,3 +1103,39 @@ failure into a client error.
 - A real localhost listener passes discovery, list, call/read/get as applicable,
   and clean shutdown/port-release smoke.
 - Dashboards and alerts use the six current shutdown outcome labels.
+
+### Forwarded origin and servlet client addresses
+
+`TRUST_PROXY_ALLOWLIST` origin resolution uses the rightmost proxy-supplied
+`Forwarded` entry and the rightmost values of the `X-Forwarded-*` origin fields.
+Missing or invalid nearest origin metadata cannot fall back to an earlier,
+client-controlled entry. `TRUST_ALL` retains leftmost selection. Configure the
+trusted edge to overwrite all forwarded families it accepts.
+
+Both servlet adapters use `EffectiveClientIpResolver` for client address
+selection. A forwarded client port comes from that same selected entry, or is
+zero when absent; it is never borrowed from another entry or the proxy socket.
+Without usable trusted forwarding, the socket address and port are returned.
+IP literals are normalized with `InetAddress.getHostAddress()`, including IPv6.
+
+### Static-file identity and cache metadata
+
+Static-file resolvers receive actual directory-entry spelling for case and Unicode
+normalization aliases. Distinct hard-link names keep their own policies. Unsupported
+aliases fail closed. No-follow mode retains link checks and revalidates file identity
+after application resolvers. Keep the served directory namespace stable during
+response delivery; path-backed bodies do not provide an atomic filesystem snapshot.
+
+The default response marshaler supplies Content-Type only when a body exists.
+Explicit representation headers, including headers for HEAD, are retained.
+Origin-dependent CORS responses vary by Origin across allowed, denied, and absent-Origin
+requests. Controlled CORS fields are updated case-insensitively; existing Vary tokens
+and wildcard variation are preserved.
+
+When transport compression is enabled, 304 responses retain Vary: Accept-Encoding
+without invoking a compressor or its body provider. Applications own representation
+validators: use the same weak ETag in 200 and 304 responses when one semantic version
+covers identity and compressed bytes. Automatic weakening of an encoded 200 does not
+make a separately constructed strong 304 validator correct. Weak tags are valid for
+If-None-Match cache validation; If-Match requires a strong, representation-specific
+validator. Bodyless responses retain the application's declared validator.

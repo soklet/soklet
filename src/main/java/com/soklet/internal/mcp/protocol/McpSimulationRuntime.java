@@ -30,6 +30,7 @@ import com.soklet.StreamTerminationReason;
 import com.soklet.internal.mcp.transport.McpOutboundChannel;
 import com.soklet.internal.microhttp.Header;
 import com.soklet.internal.microhttp.MicrohttpResponse;
+import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -94,6 +95,7 @@ final class McpSimulationRuntime implements McpSimulation,
 	private boolean clientCancellationReserved;
 	private boolean noMessageCompletionReserved;
 	private @Nullable MicrohttpResponse clientCancellationResponse;
+	private @Nullable MicrohttpResponse channelResponse;
 
 	McpSimulationRuntime(@NonNull McpSimulationOptions options,
 			@NonNull Runnable completionCallback) {
@@ -144,6 +146,22 @@ final class McpSimulationRuntime implements McpSimulation,
 				return;
 			this.responsePublished = true;
 			this.clientCancellationResponse = null;
+			boolean streamingHead = requiredResponse == this.channelResponse
+					|| requiredResponse.headers().stream().anyMatch(header ->
+							header.name().equalsIgnoreCase("Content-Type")
+									&& header.value().split(";", 2)[0].trim().equalsIgnoreCase("text/event-stream"));
+			if (this.sseResponse && !streamingHead) {
+				// Preparing a channel does not own the response head. A finite
+				// rejection can win instead; discard the abandoned channel's state.
+				this.pendingReason = null;
+				this.pendingPreResponseTermination = null;
+				this.terminalMessage = null;
+				this.items.clear();
+				this.preResponseItems.clear();
+				this.pendingCoalescingKeys.clear();
+				this.channelTerminal = true;
+			}
+			this.sseResponse = streamingHead;
 			if (this.sseResponse) {
 				this.response = new DefaultResponse(requiredResponse.status(),
 						headers(requiredResponse.headers()),
@@ -211,6 +229,14 @@ final class McpSimulationRuntime implements McpSimulation,
 				return;
 			this.pendingReason = requireNonNull(reason);
 			this.cancelWon = true;
+		}
+	}
+
+	/** Preserves a server-owned end without forbidding its closing frame. */
+	void reserveServerCompletionReason(@NonNull McpStreamTerminationReason reason) {
+		synchronized (this.lock) {
+			if (!this.cancelWon && !this.channelTerminal && this.completion == null)
+				this.pendingReason = requireNonNull(reason);
 		}
 	}
 
@@ -322,6 +348,7 @@ final class McpSimulationRuntime implements McpSimulation,
 		List<Header> copiedHeaders = List.copyOf(requireNonNull(headers));
 		MicrohttpResponse response = new MicrohttpResponse(200, "OK", copiedHeaders, new byte[0]);
 		synchronized (this.lock) {
+			this.channelResponse = response;
 			if (this.clientCancellationReserved && this.noMessageCompletionReserved
 					&& this.sseResponse && copiedHeaders.stream().anyMatch(header ->
 						header.name().equalsIgnoreCase("Content-Type")
@@ -643,7 +670,7 @@ final class McpSimulationRuntime implements McpSimulation,
 			mutable.computeIfAbsent(matchingName, ignored -> new ArrayList<>())
 					.add(header.value());
 		}
-		Map<String, List<String>> immutable = new LinkedHashMap<>();
+		Map<String, List<String>> immutable = new LinkedCaseInsensitiveMap<>();
 		mutable.forEach((name, values) -> immutable.put(name,
 				List.copyOf(values)));
 		return Collections.unmodifiableMap(immutable);

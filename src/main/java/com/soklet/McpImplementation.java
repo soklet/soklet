@@ -51,17 +51,18 @@ public final class McpImplementation {
 
 	/**
 	 * Vends a builder primed with the required implementation name and version.
+	 * Client-provided strings are preserved, including blank values. Endpoints
+	 * require a nonblank name and version for configured server information.
 	 *
-	 * @param name    the nonblank implementation name
-	 * @param version the nonblank implementation version
+	 * @param name    the implementation name
+	 * @param version the implementation version
 	 * @return a builder for implementation metadata
-	 * @throws IllegalArgumentException if {@code name} or {@code version} is blank
+	 * @throws NullPointerException if {@code name} or {@code version} is null
 	 */
 	@NonNull
 	public static Builder withNameAndVersion(@NonNull String name,
 																	@NonNull String version) {
-		return new Builder(requireNonBlank(name, "Implementation name"),
-				requireNonBlank(version, "Implementation version"));
+		return new Builder(name, version);
 	}
 
 	private McpImplementation(@NonNull Builder builder) {
@@ -76,7 +77,7 @@ public final class McpImplementation {
 	/**
 	 * The implementation name.
 	 *
-	 * @return the nonblank implementation name
+	 * @return the implementation name, which may be blank for client information
 	 */
 	@NonNull
 	public String getName() {
@@ -86,7 +87,7 @@ public final class McpImplementation {
 	/**
 	 * The implementation version.
 	 *
-	 * @return the nonblank implementation version
+	 * @return the implementation version, which may be blank for client information
 	 */
 	@NonNull
 	public String getVersion() {
@@ -142,18 +143,6 @@ public final class McpImplementation {
 	public int hashCode() {
 		return Objects.hash(this.name, this.version, this.title, this.description,
 				this.websiteUrl);
-	}
-
-	@NonNull
-	private static String requireNonBlank(@NonNull String value,
-																					@NonNull String description) {
-		requireNonNull(value);
-		requireNonNull(description);
-
-		if (value.isBlank())
-			throw new IllegalArgumentException(description + " must not be blank.");
-
-		return value;
 	}
 
 	@Nullable

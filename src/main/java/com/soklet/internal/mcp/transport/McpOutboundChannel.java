@@ -19,6 +19,7 @@ package com.soklet.internal.mcp.transport;
 import com.soklet.StreamTerminationReason;
 import com.soklet.StreamingResponseCanceledException;
 import com.soklet.internal.microhttp.WritableSource;
+import com.soklet.internal.streaming.StateChangeWaiters;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -30,11 +31,11 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
-import java.util.Set;
 import java.util.function.BooleanSupplier;
 import java.util.function.LongSupplier;
 
@@ -80,6 +81,8 @@ public final class McpOutboundChannel {
 
 	@NonNull
 	private final Object lock;
+	@NonNull
+	private final StateChangeWaiters stateChangeWaiters;
 	private final int frameCapacity;
 	private final int byteCapacity;
 	private final int terminalByteCapacity;
@@ -90,7 +93,7 @@ public final class McpOutboundChannel {
 	@NonNull
 	private final Queue<@NonNull Chunk> chunks;
 	@NonNull
-	private final Set<@NonNull Object> pendingCoalescingKeys;
+	private final Map<@NonNull Object, @NonNull Chunk> pendingCoalescingChunks;
 	@NonNull
 	private Runnable writeReadyCallback;
 	private @Nullable Chunk currentChunk;
@@ -122,13 +125,14 @@ public final class McpOutboundChannel {
 			throw new IllegalArgumentException("Terminal byte capacity must be > 0.");
 
 		this.lock = new Object();
+		this.stateChangeWaiters = new StateChangeWaiters(this.lock);
 		this.frameCapacity = frameCapacity;
 		this.byteCapacity = byteCapacity;
 		this.terminalByteCapacity = terminalByteCapacity;
 		this.nanoTimeSupplier = requireNonNull(nanoTimeSupplier);
 		this.listener = requireNonNull(listener);
 		this.chunks = new ArrayDeque<>(frameCapacity);
-		this.pendingCoalescingKeys = new HashSet<>(frameCapacity);
+		this.pendingCoalescingChunks = new HashMap<>(frameCapacity);
 		this.writeReadyCallback = McpOutboundChannel::noOp;
 	}
 
@@ -142,24 +146,25 @@ public final class McpOutboundChannel {
 		boolean observedBackpressure = false;
 		Runnable wake;
 
-		synchronized (lock) {
-			if (ownedPayload.length > byteCapacity)
-				throw new IllegalArgumentException("Outbound frame exceeds the configured byte capacity.");
+		if (ownedPayload.length > byteCapacity)
+			throw new IllegalArgumentException("Outbound frame exceeds the configured byte capacity.");
 
-			while (!closed && failure == null && !terminalReserved && !hasRegularCapacity(ownedPayload.length)) {
-				if (!observedBackpressure) {
-					observedBackpressure = true;
-					listener.didApplyBackpressure();
+		while (true) {
+			synchronized (lock) {
+				if (closed || failure != null || terminalReserved)
+					return false;
+				if (hasRegularCapacity(ownedPayload.length)) {
+					addRegularChunk(ownedPayload, null);
+					wake = reserveWakeIfNeeded();
+					break;
 				}
-
-				lock.wait();
 			}
-
-			if (closed || failure != null || terminalReserved)
-				return false;
-
-			addRegularChunk(ownedPayload, null);
-			wake = reserveWakeIfNeeded();
+			if (!observedBackpressure) {
+				observedBackpressure = true;
+				listener.didApplyBackpressure();
+			}
+			stateChangeWaiters.awaitWhile(() ->
+					!closed && failure == null && !terminalReserved && !hasRegularCapacity(ownedPayload.length));
 		}
 
 		wake.run();
@@ -188,8 +193,11 @@ public final class McpOutboundChannel {
 
 	/**
 	 * Offers a coalesced frame only when a caller-owned boundary still permits
-	 * mutation after this method acquires the channel lock. The predicate must be
-	 * bounded and must not call back into this channel.
+	 * mutation after this method acquires the channel lock. Coalescing covers only
+	 * a wholly unwritten frame: a started frame may already be visible to the
+	 * client, so a later observation needs a queued successor. Successors obey the
+	 * same frame/byte capacity and coalesce until they start writing. The predicate
+	 * must be bounded and must not call back into this channel.
 	 *
 	 * @param payload frame payload
 	 * @param coalescingKey semantic duplicate key
@@ -215,7 +223,8 @@ public final class McpOutboundChannel {
 				return Optional.empty();
 			if (closed || failure != null || terminalReserved)
 				return Optional.of(OfferResult.CLOSED);
-			if (pendingCoalescingKeys.contains(coalescingKey))
+			Chunk pending = pendingCoalescingChunks.get(coalescingKey);
+			if (pending != null && !pending.hasWrittenBytes)
 				return Optional.of(OfferResult.COALESCED);
 			if (ownedPayload.length > byteCapacity)
 				return Optional.of(OfferResult.TOO_LARGE);
@@ -241,9 +250,24 @@ public final class McpOutboundChannel {
 	public Optional<@NonNull OfferResult> offerGuardedCoalescing(
 			byte @NonNull [] payload, @NonNull Object coalescingKey,
 			@NonNull BooleanSupplier writeAllowed, @NonNull Runnable payloadReleased) {
+		return offerGuardedCoalescing(payload, coalescingKey, writeAllowed,
+				McpOutboundChannel::noOp, payloadReleased);
+	}
+
+	/**
+	 * The internal written observer runs only after the entire HTTP chunk has
+	 * been written, before release, outside the channel lock. A dropped or
+	 * partially written frame invokes release alone.
+	 */
+	@NonNull
+	public Optional<@NonNull OfferResult> offerGuardedCoalescing(
+			byte @NonNull [] payload, @NonNull Object coalescingKey,
+			@NonNull BooleanSupplier writeAllowed, @NonNull Runnable payloadWritten,
+			@NonNull Runnable payloadReleased) {
 		requireNonNull(payload);
 		requireNonNull(coalescingKey);
 		requireNonNull(writeAllowed);
+		requireNonNull(payloadWritten);
 		requireNonNull(payloadReleased);
 		boolean retained = false;
 		Runnable wake = McpOutboundChannel::noOp;
@@ -257,7 +281,7 @@ public final class McpOutboundChannel {
 					result = Optional.empty();
 				else if (closed || failure != null || terminalReserved)
 					result = Optional.of(OfferResult.CLOSED);
-				else if (pendingCoalescingKeys.contains(coalescingKey))
+				else if (pendingCoalescingChunks.containsKey(coalescingKey))
 					result = Optional.of(OfferResult.COALESCED);
 				else if (ownedPayload.length > byteCapacity)
 					result = Optional.of(OfferResult.TOO_LARGE);
@@ -265,7 +289,7 @@ public final class McpOutboundChannel {
 					result = Optional.of(OfferResult.FULL);
 				else {
 					addRegularChunk(ownedPayload, coalescingKey, writeAllowed,
-							payloadReleased);
+							payloadWritten, payloadReleased);
 					retained = true;
 					wake = reserveWakeIfNeeded();
 					result = Optional.of(OfferResult.ACCEPTED);
@@ -389,7 +413,7 @@ public final class McpOutboundChannel {
 				return OfferResult.CLOSED;
 
 			if (coalescingKey != null
-					&& pendingCoalescingKeys.contains(coalescingKey))
+					&& pendingCoalescingChunks.containsKey(coalescingKey))
 				return OfferResult.COALESCED;
 
 			if (ownedPayload.length > byteCapacity)
@@ -407,28 +431,68 @@ public final class McpOutboundChannel {
 	}
 
 	public boolean complete(byte @NonNull [] terminalPayload) {
+		return complete(terminalPayload, false);
+	}
+
+	/**
+	 * Reserves completion after dropping keyed notification frames. Unkeyed
+	 * acknowledgment and keep-alive frames retain their order. A started keyed
+	 * frame cannot be recalled, so its remainder is aborted instead. Release
+	 * callbacks and lifecycle notification run outside the channel lock.
+	 */
+	public boolean completeDiscardingUnwrittenNotifications(byte @NonNull [] terminalPayload) {
+		return complete(terminalPayload, true);
+	}
+
+	private boolean complete(byte @NonNull [] terminalPayload, boolean discardNotifications) {
 		requireNonNull(terminalPayload);
 		Runnable wake;
-
+		boolean notify = false;
+		boolean accepted;
+		List<Runnable> releases = new ArrayList<>();
 		synchronized (lock) {
 			if (closed || failure != null || terminalReserved)
 				return false;
-
 			if (terminalPayload.length == 0)
 				throw new IllegalArgumentException("Terminal frames must not be empty.");
-
 			if (terminalPayload.length > terminalByteCapacity)
 				throw new IllegalArgumentException("Terminal frame exceeds the configured terminal byte capacity.");
-
-			byte[] ownedPayload = Arrays.copyOf(terminalPayload, terminalPayload.length);
-			terminalReserved = true;
-			terminalBytes = ownedPayload.length;
-			terminalChunk = Chunk.terminal(ownedPayload);
+			if (discardNotifications && currentChunk != null
+					&& currentChunk.coalescingKey != null && currentChunk.hasWrittenBytes) {
+				releases.addAll(reserveFailure(StreamTerminationReason.APPLICATION_CANCELED, null));
+				notify = reserveTerminationNotification();
+				accepted = false;
+			} else {
+				if (discardNotifications) {
+					if (currentChunk != null && currentChunk.coalescingKey != null) {
+						releaseRegularChunk(currentChunk, releases);
+						currentChunk = null;
+					}
+					var iterator = chunks.iterator();
+					while (iterator.hasNext()) {
+						Chunk chunk = iterator.next();
+						if (chunk.coalescingKey != null) {
+							iterator.remove();
+							releaseRegularChunk(chunk, releases);
+						}
+					}
+				}
+				byte[] ownedPayload = Arrays.copyOf(terminalPayload, terminalPayload.length);
+				terminalReserved = true;
+				terminalBytes = ownedPayload.length;
+				terminalChunk = Chunk.terminal(ownedPayload);
+				stateChangeWaiters.signalAll();
+				accepted = true;
+			}
 			wake = reserveWakeIfNeeded();
 		}
-
-		wake.run();
-		return true;
+		if (accepted) {
+			try { runPayloadReleases(releases); }
+			finally { wake.run(); }
+		} else {
+			finishFailure(StreamTerminationReason.APPLICATION_CANCELED, null, wake, notify, releases);
+		}
+		return accepted;
 	}
 
 	/**
@@ -464,7 +528,7 @@ public final class McpOutboundChannel {
 			}
 			terminalReserved = true;
 			terminalChunk = Chunk.terminalWithoutPayload();
-			lock.notifyAll();
+			stateChangeWaiters.signalAll();
 			wake = reserveWakeIfNeeded();
 		}
 		try { runPayloadReleases(releases); }
@@ -660,7 +724,7 @@ public final class McpOutboundChannel {
 					if (chunk.isComplete()) {
 						currentChunk = null;
 						if (chunk.regularPayloadBytes > 0)
-							releaseRegularChunk(chunk, releases);
+							releaseRegularChunk(chunk, releases, true);
 						if (chunk.terminal) {
 							terminalWritten = true;
 							terminalBytes = 0;
@@ -732,7 +796,7 @@ public final class McpOutboundChannel {
 			// force-phase selector wakeup.
 			wake = reserveTerminalWakeIfNeeded();
 			notify = reserveTerminationNotification();
-			lock.notifyAll();
+			stateChangeWaiters.signalAll();
 		}
 
 		try {
@@ -789,15 +853,16 @@ public final class McpOutboundChannel {
 
 	private void addRegularChunk(byte @NonNull [] payload,
 			@Nullable Object coalescingKey) {
-		addRegularChunk(payload, coalescingKey, null, null);
+		addRegularChunk(payload, coalescingKey, null, null, null);
 	}
 
 	private void addRegularChunk(byte @NonNull [] payload,
 			@Nullable Object coalescingKey, @Nullable BooleanSupplier writeAllowed,
-			@Nullable Runnable payloadReleased) {
-		chunks.add(Chunk.payload(payload, coalescingKey, writeAllowed, payloadReleased));
+			@Nullable Runnable payloadWritten, @Nullable Runnable payloadReleased) {
+		Chunk chunk = Chunk.payload(payload, coalescingKey, writeAllowed, payloadWritten, payloadReleased);
+		chunks.add(chunk);
 		if (coalescingKey != null)
-			pendingCoalescingKeys.add(coalescingKey);
+			pendingCoalescingChunks.put(coalescingKey, chunk);
 		bufferedFrames++;
 		bufferedBytes += payload.length;
 		maximumObservedBufferedFrames = Math.max(maximumObservedBufferedFrames, bufferedFrames);
@@ -843,7 +908,7 @@ public final class McpOutboundChannel {
 		failure = new StreamingResponseCanceledException(reason, cause);
 		terminalReserved = true;
 		List<Runnable> releases = clearBufferedData();
-		lock.notifyAll();
+		stateChangeWaiters.signalAll();
 		return releases;
 	}
 
@@ -869,7 +934,7 @@ public final class McpOutboundChannel {
 		if (terminalChunk != null)
 			terminalChunk.reservePayloadRelease(releases);
 		chunks.clear();
-		pendingCoalescingKeys.clear();
+		pendingCoalescingChunks.clear();
 		currentChunk = null;
 		terminalChunk = null;
 		bufferedFrames = 0;
@@ -880,12 +945,17 @@ public final class McpOutboundChannel {
 
 	private void releaseRegularChunk(@NonNull Chunk chunk,
 			@NonNull List<@NonNull Runnable> releases) {
+		releaseRegularChunk(chunk, releases, false);
+	}
+
+	private void releaseRegularChunk(@NonNull Chunk chunk,
+			@NonNull List<@NonNull Runnable> releases, boolean written) {
 		bufferedFrames--;
 		bufferedBytes -= chunk.regularPayloadBytes;
 		if (chunk.coalescingKey != null)
-			pendingCoalescingKeys.remove(chunk.coalescingKey);
-		chunk.reservePayloadRelease(releases);
-		lock.notifyAll();
+			pendingCoalescingChunks.remove(chunk.coalescingKey, chunk);
+		chunk.reservePayloadRelease(releases, written);
+		stateChangeWaiters.signalAll();
 	}
 
 	// Throwable identity is required to avoid illegal self-suppression.
@@ -915,6 +985,7 @@ public final class McpOutboundChannel {
 		private final @Nullable Object coalescingKey;
 		private int bufferIndex;
 		private final @Nullable BooleanSupplier writeAllowed;
+		private final @Nullable Runnable payloadWritten;
 		private @Nullable Runnable payloadReleased;
 		private boolean hasWrittenBytes;
 		private boolean guardRevoked;
@@ -922,33 +993,34 @@ public final class McpOutboundChannel {
 		private Chunk(@NonNull List<@NonNull ByteBuffer> buffers,
 				int regularPayloadBytes, boolean terminal,
 				@Nullable Object coalescingKey, @Nullable BooleanSupplier writeAllowed,
-				@Nullable Runnable payloadReleased) {
+				@Nullable Runnable payloadWritten, @Nullable Runnable payloadReleased) {
 			this.buffers = requireNonNull(buffers);
 			this.regularPayloadBytes = regularPayloadBytes;
 			this.terminal = terminal;
 			this.coalescingKey = coalescingKey;
 			this.writeAllowed = writeAllowed;
+			this.payloadWritten = payloadWritten;
 			this.payloadReleased = payloadReleased;
 		}
 
 		@NonNull
 		private static Chunk payload(byte @NonNull [] payload,
 				@Nullable Object coalescingKey, @Nullable BooleanSupplier writeAllowed,
-				@Nullable Runnable payloadReleased) {
+				@Nullable Runnable payloadWritten, @Nullable Runnable payloadReleased) {
 			return new Chunk(framedPayload(payload), payload.length, false,
-					coalescingKey, writeAllowed, payloadReleased);
+					coalescingKey, writeAllowed, payloadWritten, payloadReleased);
 		}
 
 		@NonNull
 		private static Chunk terminal(byte @NonNull [] payload) {
 			List<@NonNull ByteBuffer> buffers = framedPayload(payload);
 			buffers.add(ByteBuffer.wrap(TERMINAL_CHUNK));
-			return new Chunk(buffers, 0, true, null, null, null);
+			return new Chunk(buffers, 0, true, null, null, null, null);
 		}
 
 		@NonNull
 		private static Chunk terminalWithoutPayload() {
-			return new Chunk(List.of(ByteBuffer.wrap(TERMINAL_CHUNK)), 0, true, null, null, null);
+			return new Chunk(List.of(ByteBuffer.wrap(TERMINAL_CHUNK)), 0, true, null, null, null, null);
 		}
 
 		@NonNull
@@ -1005,8 +1077,16 @@ public final class McpOutboundChannel {
 		}
 
 		private void reservePayloadRelease(@NonNull List<@NonNull Runnable> releases) {
+			reservePayloadRelease(releases, false);
+		}
+
+		private void reservePayloadRelease(@NonNull List<@NonNull Runnable> releases, boolean written) {
 			if (payloadReleased != null) {
-				releases.add(payloadReleased);
+				Runnable release = payloadReleased;
+				releases.add(() -> {
+					try { if (written && payloadWritten != null) payloadWritten.run(); }
+					finally { release.run(); }
+				});
 				payloadReleased = null;
 			}
 		}

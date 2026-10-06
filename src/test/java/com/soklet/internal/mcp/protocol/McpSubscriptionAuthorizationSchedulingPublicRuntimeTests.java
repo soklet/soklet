@@ -139,9 +139,9 @@ public class McpSubscriptionAuthorizationSchedulingPublicRuntimeTests {
 
 			metrics.awaitMaintenance(
 					McpMetricsEvent.SubscriptionMaintenance.Work.RECONCILIATION,
-					McpMetricsEvent.SubscriptionMaintenance.Outcome.FAILED);
+					McpMetricsEvent.SubscriptionMaintenance.Outcome.DENIED);
 			metrics.awaitSubscriptionClosed(McpStreamTerminationReason
-					.SUBSCRIPTION_RECONCILIATION_FAILED);
+					.SUBSCRIPTION_AUTHORIZATION_DENIED);
 			Assertions.assertEquals(2, authorizations.get());
 		} finally {
 			releaseRenewalSchedule.countDown();

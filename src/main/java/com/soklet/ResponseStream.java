@@ -36,6 +36,12 @@ import java.util.Optional;
  * The request, deadline, idle timeout, and thread-safe cancelation token may be read from other threads.
  * Each response execution receives its own stream. Applications must not manually close owned resources or use
  * them after their owning lifetime. Duplicate active ownership of the same resource instance is rejected.
+ * <p>
+ * The built-in HTTP server commits status and headers before invoking the producer. A later producer failure
+ * aborts delivery and cannot replace that status. Perform fallible status selection before returning the response.
+ * Cancelation cooperatively interrupts the producer thread. Output that observes an elected cancelation preserves
+ * the interrupt flag when translating an interruption into {@link StreamingResponseCanceledException}; cleanup
+ * temporarily clears and subsequently restores it so owned resources can close.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -197,6 +203,11 @@ public interface ResponseStream {
 	 * resource is disposed if cancelation has already won. Calls before production, during cleanup, after lifetime
 	 * completion, or from another thread are rejected before ownership transfers; the caller remains responsible
 	 * for the resource in those cases.
+	 * <p>
+	 * Healthy encoder tail writes remain subject to response and idle deadlines. Time waiting for the HTTP
+	 * output queue does not consume application-cleanup grace. After failure or cancelation, output attempted
+	 * by managed resource close is discarded while close still releases the resource; ordinary producer writes
+	 * continue to report the terminal outcome. Independent resource-close failures remain diagnostic errors.
 	 *
 	 * @param resource the resource whose ownership is transferred
 	 * @param <T> the resource type

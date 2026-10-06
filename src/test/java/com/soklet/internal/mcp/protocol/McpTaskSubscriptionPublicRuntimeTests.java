@@ -23,6 +23,7 @@ import com.soklet.McpAdmissionDecision;
 import com.soklet.McpAdmissionContext;
 import com.soklet.McpAdmissionIdentity;
 import com.soklet.McpAdmissionRejection;
+import com.soklet.McpCatalogAccessPolicy;
 import com.soklet.McpCompleteResult;
 import com.soklet.McpEndpoint;
 import com.soklet.McpEndpointRegistry;
@@ -126,6 +127,354 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 			Instant.parse("2026-09-01T12:05:00Z");
 	private static final Duration TASK_TIME_TO_LIVE = Duration.ofMinutes(1);
 	private static final Duration POLL_INTERVAL = Duration.ofMillis(250);
+
+	@Test
+	public void lateTaskOfferSuppressesExpiredProjectionWithoutAbsorbingTerminal() throws Exception {
+		ScriptedTaskManager manager = new ScriptedTaskManager();
+		AtomicInteger offers = new AtomicInteger();
+		CountDownLatch entered = new CountDownLatch(1);
+		CountDownLatch release = new CountDownLatch(1);
+		McpRequestSseStream.setTestHooks(new McpRequestSseStream.TestHooks() {
+			@Override public void beforeTerminalReservation() {}
+			@Override public void beforeCoalescingMessageOffer() {
+				if (offers.incrementAndGet() == 1) {
+					entered.countDown(); awaitIgnoringInterrupts(release);
+				}
+			}
+		});
+		McpServer server = serverBuilder(manager, new AtomicInteger())
+				.subscriptionAuthorizationTimeout(Duration.ofMillis(250)).build();
+		Soklet soklet = managedSoklet(server);
+		McpChunkedHttpClient client = null;
+		try {
+			soklet.start();
+			int port = boundPort(server);
+			seedTask(port, "late-terminal", ALPHA);
+			seedTask(port, "late-peer", ALPHA);
+			client = listen(port, "\"late-offer\"", ALPHA, true,
+					taskIdsFilter(List.of("late-terminal", "late-peer")));
+			assertSseHead(client.readHead());
+			Assertions.assertEquals(acknowledgment("\"late-offer\"", List.of("late-terminal", "late-peer")), client.readChunkText());
+			manager.replaceTask(completedTask(manager.requireTask("late-terminal")));
+			manager.publishTaskChanged("late-terminal");
+			Assertions.assertTrue(entered.await(5, TimeUnit.SECONDS));
+			// Cross the actual callback budget while paused after encoding, before channel admission.
+			Thread.sleep(350);
+			manager.publishTaskChanged("late-peer");
+			release.countDown();
+			Assertions.assertEquals(workingNotification("\"late-offer\"", "late-peer"), client.readChunkText());
+			manager.publishTaskChanged("late-terminal");
+			Assertions.assertEquals(completedNotification("\"late-offer\"", "late-terminal"), client.readChunkText());
+		} finally {
+			release.countDown(); McpRequestSseStream.setTestHooks(null);
+			if (client != null) client.closeWithReset();
+			soklet.close();
+		}
+	}
+
+	@Test
+	public void timedOutTaskPolicyRetainsOwnerUntilPhysicalExitAndAllowsPeerProgress() throws Exception {
+		ScriptedTaskManager manager = new ScriptedTaskManager();
+		AtomicBoolean block = new AtomicBoolean(false);
+		AtomicInteger policyCalls = new AtomicInteger();
+		CountDownLatch entered = new CountDownLatch(1);
+		CountDownLatch canceled = new CountDownLatch(1);
+		CountDownLatch release = new CountDownLatch(1);
+		McpServer server = serverBuilder(manager, new AtomicInteger())
+				.subscriptionAuthorizationTimeout(Duration.ofMillis(250))
+				.catalogAccessPolicy(McpCatalogAccessPolicy.fromEvaluators((requestContext, tool, features) -> {
+					policyCalls.incrementAndGet();
+					if (block.compareAndSet(true, false)) {
+						features.getCancelationToken().onCancel(canceled::countDown);
+						entered.countDown();
+						awaitIgnoringInterrupts(release);
+					}
+					return true;
+				}, (requestContext, prompt, features) -> true)).build();
+		Soklet soklet = managedSoklet(server);
+		McpChunkedHttpClient client = null;
+		McpChunkedHttpClient peer = null;
+		try {
+			soklet.start();
+			int port = boundPort(server);
+			seedTask(port, "slow-policy", ALPHA);
+			seedTask(port, "policy-peer", ALPHA);
+			client = listen(port, "\"slow-policy\"", ALPHA, true, taskIdsFilter(List.of("slow-policy")));
+			peer = listen(port, "\"policy-peer\"", ALPHA, true, taskIdsFilter(List.of("policy-peer")));
+			assertSseHead(client.readHead());
+			assertSseHead(peer.readHead());
+			Assertions.assertEquals(acknowledgment("\"slow-policy\"", List.of("slow-policy")), client.readChunkText());
+			Assertions.assertEquals(acknowledgment("\"policy-peer\"", List.of("policy-peer")), peer.readChunkText());
+			policyCalls.set(0);
+			manager.resetFindInvocations();
+			manager.replaceTask(completedTask(manager.requireTask("slow-policy")));
+			block.set(true);
+			manager.publishTaskChanged("slow-policy");
+			Assertions.assertTrue(entered.await(5, TimeUnit.SECONDS));
+			Assertions.assertTrue(canceled.await(5, TimeUnit.SECONDS), "The task policy must receive its bounded deadline cancellation.");
+			for (int i = 0; i < 50; i++) manager.publishTaskChanged("slow-policy");
+			manager.publishTaskChanged("policy-peer");
+			Assertions.assertEquals(workingNotification("\"policy-peer\"", "policy-peer"), peer.readChunkText());
+			Assertions.assertEquals(1, policyCalls.get(), "A canceled callback still running must retain the task owner.");
+			Assertions.assertEquals(1, manager.findInvocations("slow-policy"));
+			release.countDown();
+			Assertions.assertEquals(completedNotification("\"slow-policy\"", "slow-policy"), client.readChunkText());
+			Assertions.assertEquals(2, policyCalls.get(), "The retained burst should cause one fresh projection after physical exit.");
+		} finally {
+			release.countDown();
+			if (client != null) client.closeWithReset();
+			if (peer != null) peer.closeWithReset();
+			soklet.close();
+		}
+	}
+
+	@Test
+	public void taskResultFencedBeforeOfferIsReprojectedWithReplacementPolicyContext() throws Exception {
+		ScriptedTaskManager manager = new ScriptedTaskManager();
+		AtomicBoolean restored = new AtomicBoolean();
+		AtomicInteger grants = new AtomicInteger();
+		AtomicInteger offers = new AtomicInteger();
+		CountDownLatch entered = new CountDownLatch(1);
+		CountDownLatch release = new CountDownLatch(1);
+		CountDownLatch replacement = new CountDownLatch(1);
+		List<Object> policyContexts = new CopyOnWriteArrayList<>();
+		McpRequestSseStream.setTestHooks(new McpRequestSseStream.TestHooks() {
+			@Override public void beforeTerminalReservation() {}
+			@Override public void beforeCoalescingMessageOffer() {
+				if (offers.incrementAndGet() == 1) {
+					entered.countDown(); awaitIgnoringInterrupts(release);
+				}
+			}
+		});
+		McpServer server = serverBuilder(manager, new AtomicInteger())
+				.subscriptionAuthorizer((authorizationContext, features) -> {
+					boolean first = grants.incrementAndGet() == 1;
+					if (!first) replacement.countDown();
+					return McpSubscriptionAuthorization.Allowed.withValidUntil(Instant.now().plusSeconds(300))
+							.applicationContext(first ? "old-grant" : "replacement-grant").build();
+				})
+				.catalogAccessPolicy(McpCatalogAccessPolicy.fromEvaluators((requestContext, tool, features) -> {
+					Object context = requestContext.getAdmissionIdentity().getApplicationContext().orElse("admission");
+					policyContexts.add(context);
+					return restored.get() || !context.equals("replacement-grant");
+				}, (requestContext, prompt, features) -> true)).build();
+		Soklet soklet = managedSoklet(server);
+		McpChunkedHttpClient client = null;
+		try {
+			soklet.start();
+			int port = boundPort(server);
+			seedTask(port, "fenced-result", ALPHA);
+			seedTask(port, "fenced-peer", ALPHA);
+			client = listen(port, "\"fenced-result\"", ALPHA, true, taskIdsFilter(List.of("fenced-result", "fenced-peer")));
+			assertSseHead(client.readHead());
+			Assertions.assertEquals(acknowledgment("\"fenced-result\"", List.of("fenced-result", "fenced-peer")), client.readChunkText());
+			policyContexts.clear();
+			manager.replaceTask(completedTask(manager.requireTask("fenced-result")));
+			manager.publishTaskChanged("fenced-result");
+			Assertions.assertTrue(entered.await(5, TimeUnit.SECONDS));
+			server.getSubscriptionReconciler().reconcileSubscriptions();
+			Assertions.assertTrue(replacement.await(5, TimeUnit.SECONDS));
+			release.countDown();
+			manager.publishTaskChanged("fenced-peer");
+			Assertions.assertEquals(workingNotification("\"fenced-result\"", "fenced-peer"),
+					client.readChunkText(), "A revoked result must not consume terminal delivery.");
+			Assertions.assertEquals(List.of("old-grant", "replacement-grant"), policyContexts);
+			restored.set(true);
+			server.getSubscriptionReconciler().reconcileSubscriptions();
+			Assertions.assertEquals(completedNotification("\"fenced-result\"", "fenced-result"),
+					client.readChunkText(), "Reconciliation must recover the undelivered result.");
+		} finally {
+			release.countDown(); McpRequestSseStream.setTestHooks(null);
+			if (client != null) client.closeWithReset();
+			soklet.close();
+		}
+	}
+
+	private static void awaitIgnoringInterrupts(CountDownLatch latch) {
+		boolean interrupted = false;
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+		try {
+			while (true) {
+				try {
+					Assertions.assertTrue(latch.await(Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS), "The test barrier timed out.");
+					return;
+				} catch (InterruptedException exception) { interrupted = true; }
+			}
+		} finally { if (interrupted) Thread.currentThread().interrupt(); }
+	}
+
+	@Test
+	public void taskChangeDuringAuthorizationIsProjectedAfterActivation() throws Exception {
+		ScriptedTaskManager manager = new ScriptedTaskManager();
+		McpServer server = server(manager, new AtomicInteger());
+		try (Soklet soklet = managedSoklet(server)) {
+			soklet.start();
+			int port = boundPort(server);
+			seedTask(port, "activation-race", ALPHA);
+			seedTask(port, "activation-control", ALPHA);
+			seedTask(port, "activation-private", BETA);
+			manager.blockTaskFindsAfterSnapshot(Set.of("activation-race"));
+			try (McpChunkedHttpClient client = listen(port, "\"activation\"", ALPHA,
+					true, taskIdsFilter(List.of("activation-race", "activation-control", "activation-private")))) {
+				manager.awaitBlockedTaskFinds();
+				manager.replaceTask(completedTask(manager.requireTask("activation-race")));
+				for (int i = 0; i < 5; i++) manager.publishTaskChanged("activation-race");
+				manager.publishTaskChanged("activation-private");
+				manager.publishTaskChanged("activation-control");
+				manager.releaseBlockedTaskFinds();
+				assertSseHead(client.readHead());
+				Assertions.assertEquals(acknowledgment("\"activation\"",
+						List.of("activation-race", "activation-control")), client.readChunkText());
+				Assertions.assertEquals(completedNotification("\"activation\"", "activation-race"), client.readChunkText());
+				Assertions.assertEquals(workingNotification("\"activation\"", "activation-control"), client.readChunkText());
+				client.closeWithReset();
+			} finally { manager.releaseBlockedTaskFinds(); }
+		}
+	}
+
+	@Test
+	public void activationCatchUpChecksCurrentInputCapabilities() throws Exception {
+		ScriptedTaskManager manager = new ScriptedTaskManager();
+		McpServer server = server(manager, new AtomicInteger());
+		try (Soklet soklet = managedSoklet(server)) {
+			soklet.start();
+			int port = boundPort(server);
+			seedTask(port, "activation-input", ALPHA);
+			seedTask(port, "activation-peer", ALPHA);
+			manager.blockTaskFindsAfterSnapshot(Set.of("activation-input"));
+			try (McpChunkedHttpClient client = listen(port, "\"activation-input\"", ALPHA,
+					true, taskIdsFilter(List.of("activation-input", "activation-peer")))) {
+				manager.awaitBlockedTaskFinds();
+				manager.replaceTask(inputRequiredTask(manager.requireTask("activation-input")));
+				manager.publishTaskChanged("activation-input");
+				manager.publishTaskChanged("activation-peer");
+				manager.releaseBlockedTaskFinds();
+				assertSseHead(client.readHead());
+				Assertions.assertEquals(acknowledgment("\"activation-input\"",
+						List.of("activation-input", "activation-peer")), client.readChunkText());
+				Assertions.assertEquals(workingNotification("\"activation-input\"", "activation-peer"), client.readChunkText());
+				manager.replaceTask(completedTask(manager.requireTask("activation-input")));
+				manager.publishTaskChanged("activation-input");
+				Assertions.assertEquals(completedNotification("\"activation-input\"", "activation-input"), client.readChunkText());
+				client.closeWithReset();
+			} finally { manager.releaseBlockedTaskFinds(); }
+		}
+	}
+
+	@Test
+	public void taskNotificationUsesCurrentCatalogPolicyLikePolling() throws Exception {
+		ScriptedTaskManager manager = new ScriptedTaskManager();
+		AtomicBoolean visible = new AtomicBoolean(true);
+		AtomicInteger sanitizations = new AtomicInteger();
+		McpServer server = serverBuilder(manager, new AtomicInteger())
+				.catalogAccessPolicy(McpCatalogAccessPolicy.fromEvaluators(
+						(requestContext, tool, features) -> visible.get(),
+						(requestContext, prompt, features) -> true))
+				.toolResultSanitizer((requestContext, toolName, arguments, output) -> {
+					sanitizations.incrementAndGet(); return output;
+				}).build();
+		try (Soklet soklet = managedSoklet(server)) {
+			soklet.start();
+			int port = boundPort(server);
+			seedTask(port, "hidden-output", ALPHA);
+			seedTask(port, "hidden-peer", ALPHA);
+			try (McpChunkedHttpClient client = listen(port, "\"hidden\"", ALPHA,
+					true, taskIdsFilter(List.of("hidden-output", "hidden-peer")))) {
+				assertSseHead(client.readHead());
+				Assertions.assertEquals(acknowledgment("\"hidden\"", List.of("hidden-output", "hidden-peer")), client.readChunkText());
+				manager.resetFindInvocations();
+				visible.set(false);
+				McpTask persisted = completedTask(manager.requireTask("hidden-output"));
+				manager.replaceTask(persisted);
+				manager.publishTaskChanged("hidden-output");
+				manager.awaitFindCompletions("hidden-output", 1);
+				manager.publishTaskChanged("hidden-peer");
+				Assertions.assertEquals(workingNotification("\"hidden\"", "hidden-peer"),
+						client.readChunkText(), "An inaccessible result must not block healthy task notifications.");
+				Assertions.assertEquals(0, sanitizations.get());
+				assertTaskReadUnavailable(pollTask(port, "hidden-output"));
+				Assertions.assertEquals(0, sanitizations.get());
+				Assertions.assertSame(persisted, manager.requireTask("hidden-output"));
+				visible.set(true);
+				manager.publishTaskChanged("hidden-output");
+				Assertions.assertEquals(completedNotification("\"hidden\"", "hidden-output"), client.readChunkText());
+				HttpResponse<String> recovered = pollTask(port, "hidden-output");
+				Assertions.assertEquals(200, recovered.statusCode(), recovered.body());
+				Assertions.assertTrue(recovered.body().contains("completed-output"), recovered.body());
+				Assertions.assertEquals(2, sanitizations.get());
+				Assertions.assertSame(persisted, manager.requireTask("hidden-output"));
+				client.closeWithReset();
+			}
+		}
+	}
+
+	@Test
+	public void missingOriginSuppressesCompletedNotificationWithoutMutatingStoredTask()
+			throws Exception {
+		ScriptedTaskManager manager = new ScriptedTaskManager();
+		McpServer creator = server(manager, new AtomicInteger());
+		try (Soklet soklet = managedSoklet(creator)) {
+			soklet.start();
+			seedTask(boundPort(creator), "removed-output", ALPHA);
+			seedTask(boundPort(creator), "removed-peer", ALPHA);
+		}
+		McpEndpoint readerEndpoint = McpEndpoint.withPath(MCP_PATH,
+				McpImplementation.withNameAndVersion("task-subscription-reader", "4.0.0").build(),
+				Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.taskProtocolVersions(Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
+				.subscriptionProtocolVersions(Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build();
+		AtomicInteger sanitizations = new AtomicInteger();
+		McpServer reader = serverBuilder(List.of(readerEndpoint), manager, new AtomicInteger())
+				.toolResultSanitizer((requestContext, toolName, arguments, output) -> {
+					sanitizations.incrementAndGet(); return output;
+				}).build();
+		try (Soklet soklet = managedSoklet(reader)) {
+			soklet.start();
+			int port = boundPort(reader);
+			try (McpChunkedHttpClient client = listen(port, "\"removed\"", ALPHA,
+					true, taskIdsFilter(List.of("removed-output", "removed-peer")))) {
+				assertSseHead(client.readHead());
+				Assertions.assertEquals(acknowledgment("\"removed\"", List.of("removed-output", "removed-peer")), client.readChunkText());
+				manager.resetFindInvocations();
+				McpTask persisted = completedTask(manager.requireTask("removed-output"));
+				manager.replaceTask(persisted);
+				Assertions.assertThrows(IllegalStateException.class, () ->
+						McpServerRuntimeBridge.taskNotificationParams(
+								new McpServerRuntimeBridge.TaskSnapshot(persisted,
+										Optional.empty(), Optional.empty(), false),
+								com.soklet.internal.mcp.protocol.McpJsonObject.empty()),
+						"The wire boundary must reject an internal status-only completed snapshot.");
+				manager.publishTaskChanged("removed-output");
+				manager.awaitFindCompletions("removed-output", 1);
+				manager.publishTaskChanged("removed-peer");
+				Assertions.assertEquals(workingNotification("\"removed\"", "removed-peer"), client.readChunkText());
+				assertTaskReadUnavailable(pollTask(port, "removed-output"));
+				Assertions.assertEquals(0, sanitizations.get());
+				Assertions.assertSame(persisted, manager.requireTask("removed-output"));
+				client.closeWithReset();
+			}
+		}
+	}
+
+	private static HttpResponse<String> pollTask(int port, @NonNull String taskId)
+			throws Exception {
+		return HttpClient.newHttpClient().send(HttpRequest.newBuilder()
+				.uri(URI.create("http://" + LOOPBACK + ":" + port + MCP_PATH))
+				.timeout(Duration.ofSeconds(5)).header("Content-Type", "application/json")
+				.header("Accept", "application/json, text/event-stream")
+				.header("MCP-Protocol-Version", PROTOCOL_VERSION).header("Mcp-Method", "tasks/get")
+				.header("Mcp-Name", taskId).header("X-Test-Tenant", ALPHA)
+				.POST(HttpRequest.BodyPublishers.ofString("{\"jsonrpc\":\"2.0\",\"id\":\"poll\","
+						+ "\"method\":\"tasks/get\",\"params\":{" + taskMetadata(true)
+						+ ",\"taskId\":\"" + taskId + "\"}}" )).build(), HttpResponse.BodyHandlers.ofString());
+	}
+
+	private static void assertTaskReadUnavailable(@NonNull HttpResponse<String> response) {
+		Assertions.assertEquals(500, response.statusCode(), response.body());
+		Assertions.assertEquals("no-store", response.headers().firstValue("Cache-Control").orElseThrow());
+		Assertions.assertEquals("{\"jsonrpc\":\"2.0\",\"id\":\"poll\","
+				+ "\"error\":{\"code\":-32603,\"message\":\"Internal error\"}}", response.body());
+	}
 
 	@Test
 	public void admissionCanChallengeForValidatedTaskSubscriptionSelection()

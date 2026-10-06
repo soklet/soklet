@@ -55,6 +55,63 @@ import static com.google.testing.compile.CompilationSubject.assertThat;
 @ThreadSafe
 public class McpAnnotationProcessorValidationTests {
 	@Test
+	void rejectsEndpointPathsThatWouldRewriteTheDeclaredUrl() {
+		for (String path : List.of("/mcp/", "/catalog//mcp", " /mcp", "/mcp ",
+				"//mcp", "/catalog/../mcp", "/catalog/./mcp")) {
+			Compilation compilation = compileEndpointPath(path);
+			assertThat(compilation).failed();
+			assertThat(compilation).hadErrorContaining("MCP endpoint path");
+		}
+		for (String path : List.of("/mcp", "/catalog/mcp", "/caf%C3%A9/mcp", "/catalog%2Fmcp"))
+			assertThat(compileEndpointPath(path)).succeeded();
+	}
+
+	@Test
+	void rejectsLegacyToolFacilitiesAtCompileTimeForBothRevisionsAndMixedEndpoints() {
+		for (String legacy : List.of("V2025_06_18", "V2025_11_25")) {
+			String versions = "{McpProtocolVersion." + legacy + ", McpProtocolVersion.V2026_07_28}";
+			for (String[] invalid : List.of(
+					new String[]{"mayRequestInput = @McpMayRequestInput(type = McpInputRequestType.ELICITATION_URL, requirement = McpInputRequirement.CONDITIONAL)", "", "McpOperationResult", "", "input requests or request state"},
+					new String[]{"requestStateMode = McpRequestStateMode.APPLICATION_PROTECTED", "", "McpOperationResult", "", "input requests or request state"},
+					new String[]{"", "", "Result", "@McpToolArgument @McpHeader(name = \"X-Mcp-Value\") String value", "mirrored headers"},
+					new String[]{"", "@McpAppTool(protocolVersions = McpProtocolVersion.V2026_07_28, visibility = McpAppToolMetadata.Visibility.APP)", "Result", "", "App-only tools"},
+					new String[]{"", "", "java.util.List<String>", "", "output schema must have object type"})) {
+				JavaFileObject source = JavaFileObjects.forSourceString("example.LegacyTool", """
+						package example;
+						import com.soklet.*;
+						import com.soklet.annotation.*;
+						@McpServerEndpoint(path = "/mcp", name = "test", version = "1", protocolVersions = %s)
+						public final class LegacyTool {
+						  @McpTool(name = "work", protocolVersions = %s %s)
+						  %s
+						  public %s work(%s) { return null; }
+						  public record Result(String value) {}
+						}
+						""".formatted(versions, versions, invalid[0].isEmpty() ? "" : ", " + invalid[0],
+								invalid[1], invalid[2], invalid[3]));
+				Compilation compilation = Compiler.javac().withProcessors(new SokletProcessor()).compile(source);
+				assertThat(compilation).failed();
+				assertThat(compilation).hadErrorContaining(invalid[4]).inFile(source);
+			}
+		}
+	}
+
+	@Test
+	void modernTypedToolCanStillReturnAnArraySchema() {
+		JavaFileObject source = JavaFileObjects.forSourceString("example.ModernArrayTool", """
+				package example;
+				import com.soklet.*;
+				import com.soklet.annotation.*;
+				@McpServerEndpoint(path = "/mcp", name = "test", version = "1", protocolVersions = McpProtocolVersion.V2026_07_28)
+				public final class ModernArrayTool {
+				  @McpTool(name = "work", protocolVersions = McpProtocolVersion.V2026_07_28)
+				  public java.util.List<String> work() { return java.util.List.of("ok"); }
+				}
+				""");
+		assertThat(Compiler.javac().withProcessors(new SokletProcessor()).compile(source)).succeeded();
+	}
+
+	@Test
 	void generatesEndpointWithExplicitDualEraToolAndPromptAndModernFeatureGates() {
 		JavaFileObject source = JavaFileObjects.forSourceString(
 				"example.VersionedEndpoint", """

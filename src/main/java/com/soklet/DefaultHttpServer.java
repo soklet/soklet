@@ -57,12 +57,14 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.CountDownLatch;
 import java.util.IdentityHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -435,33 +437,23 @@ final class DefaultHttpServer implements HttpServer {
 
 		this.streamingExecutorServiceSupplier = builder.streamingExecutorServiceSupplier != null ? builder.streamingExecutorServiceSupplier : () -> {
 			String threadNamePrefix = "streaming-";
-			int threadPoolSize = Utilities.virtualThreadsAvailable()
-					? Math.max(1, getConcurrency() * DEFAULT_VIRTUAL_REQUEST_HANDLER_CONCURRENCY_MULTIPLIER)
-					: Math.max(1, getConcurrency() * DEFAULT_NONVIRTUAL_STREAMING_CONCURRENCY_MULTIPLIER);
-			int queueCapacity = Math.max(1, threadPoolSize * DEFAULT_REQUEST_HANDLER_QUEUE_CAPACITY_MULTIPLIER);
-
 			if (Utilities.virtualThreadsAvailable()) {
-				ThreadFactory threadFactory = Utilities.createVirtualThreadFactory(threadNamePrefix, (Thread thread, Throwable throwable) -> {
+				// Lifecycle admission bounds the number of producer tasks and retained
+				// cleanup lifetimes. Each admitted producer gets its own virtual thread.
+				return Utilities.createVirtualThreadsNewThreadPerTaskExecutor(threadNamePrefix, (Thread thread, Throwable throwable) -> {
 					safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unexpected exception occurred during server streaming response processing")
 							.throwable(throwable)
 							.build());
 				});
-
-				return new ThreadPoolExecutor(
-						threadPoolSize,
-						threadPoolSize,
-						0L,
-						TimeUnit.MILLISECONDS,
-						new ArrayBlockingQueue<>(queueCapacity),
-						threadFactory);
 			}
 
+			int threadPoolSize = Math.max(1, getConcurrency() * DEFAULT_NONVIRTUAL_STREAMING_CONCURRENCY_MULTIPLIER);
 			return new ThreadPoolExecutor(
 					threadPoolSize,
 					threadPoolSize,
 					0L,
 					TimeUnit.MILLISECONDS,
-					new ArrayBlockingQueue<>(queueCapacity),
+					new SynchronousQueue<>(),
 					new NonvirtualThreadFactory(threadNamePrefix));
 		};
 
@@ -704,45 +696,67 @@ final class DefaultHttpServer implements HttpServer {
 
 								Request requestForResponse = request;
 
-								requestHandler.handleRequest(requestForResponse, (requestResult -> {
+								requestHandler.handleRequest(requestForResponse, requestResult -> {
+									MicrohttpResponse microhttpResponse;
+									StreamLifecycleCoordinator terminationCoordinator = this.streamLifecycleCoordinator;
 									try {
-										MicrohttpResponse microhttpResponse = toMicrohttpResponse(requestForResponse,
+										microhttpResponse = toMicrohttpResponse(requestForResponse,
 												requestResult.getResourceMethod().orElse(null),
 												requestResult.getMarshaledResponse(),
 												requestResult.getHeadResponseCompressionBody().orElse(null),
 												streamingForcedShutdownStarted::get);
-										if (responseWritten.compareAndSet(false, true)) {
+									} catch (Throwable preparationFailure) {
+										Runnable reportRejection = () -> {
+											if (requestResult.getMarshaledResponse().isStreaming()) {
+												Runnable notification = () -> notifyDidTerminateResponseStream(requestForResponse,
+														requestResult.getResourceMethod().orElse(null), requestResult.getMarshaledResponse(),
+														Instant.now(), Duration.ZERO, streamingForcedShutdownStarted.get()
+																? StreamTerminationReason.SERVER_STOPPING
+																: preparationFailure instanceof RejectedExecutionException
+																		? StreamTerminationReason.BACKPRESSURE : StreamTerminationReason.PRODUCER_FAILED,
+														preparationFailure);
+												if (terminationCoordinator == null || !terminationCoordinator.dispatchRejectionObserver(notification))
+													safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_TERMINATE_RESPONSE_STREAM_FAILED,
+															"Unadmitted stream rejection observer capacity was unavailable.")
+															.request(requestForResponse).build());
+											} else
+												safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unable to prepare response")
+														.throwable(preparationFailure).build());
+										};
+										try {
+											if (!responseWritten.compareAndSet(false, true))
+												throw propagateResponseWriteFailure(preparationFailure);
 											cancelTimeout(timeoutFutureRef.getAndSet(null));
-											try {
-												microHttpCallback.accept(microhttpResponse);
-											} catch (Throwable t) {
-												StreamingMicrohttpResponses.discard(microhttpResponse);
-												safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unable to write response")
-														.throwable(t)
-														.build());
-											}
-										} else {
-											StreamingMicrohttpResponses.discard(microhttpResponse);
-										}
-									} catch (Throwable t) {
-										safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while marshaling to a response")
-												.throwable(t)
-												.build());
-
-										if (responseWritten.compareAndSet(false, true)) {
-											cancelTimeout(timeoutFutureRef.getAndSet(null));
-											try {
-												int statusCode = t instanceof RejectedExecutionException ? 503 : 500;
-												MicrohttpResponse failsafeResponse = provideMicrohttpFailsafeResponse(statusCode, microhttpRequest, t);
-												microHttpCallback.accept(statusCode == 503 ? withConnectionClose(failsafeResponse) : failsafeResponse);
-											} catch (Throwable t2) {
-												safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while writing a failsafe response")
-														.throwable(t2)
-														.build());
-											}
+											int statusCode = preparationFailure instanceof RejectedExecutionException ? 503 : 500;
+											MicrohttpResponse failsafeResponse = provideMicrohttpFailsafeResponse(statusCode, microhttpRequest, preparationFailure);
+											if (statusCode == 503) failsafeResponse = withConnectionClose(failsafeResponse);
+											MarshaledResponse replacement = describeFiniteTransportResponse(failsafeResponse);
+											Throwable writeFailure = null;
+											try { microHttpCallback.accept(failsafeResponse); }
+											catch (Throwable throwable) { writeFailure = throwable; }
+											throw new HttpTransportResponseReplacement(replacement, preparationFailure, writeFailure);
+										} finally {
+											// Offer the wire response before application observer entry, and
+											// dispatch rejection through bounded callback work. Finite
+											// handling finish never waits for application observers.
+											reportRejection.run();
 										}
 									}
-								}));
+
+									if (!responseWritten.compareAndSet(false, true)) {
+										StreamingMicrohttpResponses.discard(microhttpResponse);
+										throw new RejectedExecutionException("Response ownership has already been claimed.");
+									}
+									cancelTimeout(timeoutFutureRef.getAndSet(null));
+									try { microHttpCallback.accept(microhttpResponse); }
+									catch (Throwable throwable) {
+										StreamingMicrohttpResponses.discard(microhttpResponse);
+										throw propagateResponseWriteFailure(throwable);
+									}
+									if (!microhttpResponse.streaming()
+											&& microhttpResponse.status() != requestResult.getMarshaledResponse().getStatusCode())
+										throw new HttpTransportResponseReplacement(describeFiniteTransportResponse(microhttpResponse), null, null);
+								});
 							} catch (Throwable t) {
 								Integer failsafeStatusCode = 500;
 								RequestReadFailureReason failureReason = RequestReadFailureReason.INTERNAL_ERROR;
@@ -973,6 +987,25 @@ final class DefaultHttpServer implements HttpServer {
 		byte[] body = format("HTTP %s: %s", statusCode, reasonPhrase).getBytes(charset);
 
 		return new MicrohttpResponse(statusCode, reasonPhrase, headers, body);
+	}
+
+	private static MarshaledResponse describeFiniteTransportResponse(MicrohttpResponse response) {
+		Map<String, List<String>> headers = new LinkedCaseInsensitiveMap<>();
+		for (Header header : response.headers())
+			Utilities.addParsedHeader(headers, header.name(), header.value());
+		MarshaledResponse.Builder builder = MarshaledResponse.withStatusCode(response.status()).headers(headers);
+		try { builder.body(response.body()); }
+		catch (IllegalStateException ignored) {
+			// Custom failsafe providers may use lazy bodies. Do not open/capture one
+			// for observation; status and headers still describe the actual response.
+		}
+		return builder.build();
+	}
+
+	private static RuntimeException propagateResponseWriteFailure(Throwable throwable) {
+		if (throwable instanceof Error error) throw error;
+		return throwable instanceof RuntimeException runtimeException ? runtimeException
+				: new IllegalStateException("Unable to hand response to HTTP transport.", throwable);
 	}
 
 	private void cancelTimeout(TimeoutScheduler.@Nullable ScheduledTask timeoutTask) {
@@ -1529,7 +1562,7 @@ final class DefaultHttpServer implements HttpServer {
 
 		if (streamingResponseBody != null) {
 			Request streamingRequest = requireNonNull(request);
-			ResourceMethod streamingResourceMethod = requireNonNull(resourceMethod);
+			ResourceMethod streamingResourceMethod = resourceMethod;
 			ExecutorService streamingExecutorService = getStreamingExecutorService().orElse(null);
 			ScheduledExecutorService streamingTimeoutExecutorService = getStreamingTimeoutExecutorService().orElse(null);
 
@@ -1554,8 +1587,10 @@ final class DefaultHttpServer implements HttpServer {
 			if (reservation == null)
 				throw new RejectedExecutionException("Streaming lifecycle capacity is unavailable.");
 
+			CountDownLatch preparationFinished = new CountDownLatch(1);
+			AtomicBoolean preparationSucceeded = new AtomicBoolean();
 			try {
-				return StreamingMicrohttpResponses.withStreamingBody(
+				MicrohttpResponse response = StreamingMicrohttpResponses.withStreamingBody(
 						marshaledResponse.getStatusCode(),
 						reasonPhrase,
 						headers,
@@ -1568,8 +1603,17 @@ final class DefaultHttpServer implements HttpServer {
 						deadline,
 						idleTimeout,
 						streamingForcedShutdownStarted,
-						(establishedAt, streamDuration, cancelationReason, throwable) ->
-								notifyDidTerminateResponseStream(streamingRequest, streamingResourceMethod, marshaledResponse, establishedAt, streamDuration, cancelationReason, throwable),
+						(establishedAt, streamDuration, cancelationReason, throwable) -> {
+							boolean interrupted = false;
+							while (true) {
+								try { preparationFinished.await(); break; }
+								catch (InterruptedException ignored) { interrupted = true; }
+							}
+							if (interrupted) Thread.currentThread().interrupt();
+							if (preparationSucceeded.get())
+								notifyDidTerminateResponseStream(streamingRequest, streamingResourceMethod, marshaledResponse,
+										establishedAt, streamDuration, cancelationReason, throwable);
+						},
 						(throwable) -> safelyLog(LogEvent.with(LogEventType.RESPONSE_STREAM_CANCELATION_CALLBACK_FAILED,
 										"An exception occurred while invoking a streaming response cancelation callback")
 								.throwable(throwable)
@@ -1577,9 +1621,13 @@ final class DefaultHttpServer implements HttpServer {
 								.resourceMethod(streamingResourceMethod)
 								.marshaledResponse(marshaledResponse)
 								.build()), reservation);
+				preparationSucceeded.set(true);
+				return response;
 			} catch (RuntimeException | Error throwable) {
 				reservation.abandon();
 				throw throwable;
+			} finally {
+				preparationFinished.countDown();
 			}
 		}
 
@@ -1588,6 +1636,16 @@ final class DefaultHttpServer implements HttpServer {
 		MarshaledResponseBody compressionBody = head && body == null
 				? headResponseCompressionBody
 				: body;
+
+		// A 304 validates a selected representation without supplying bytes to a planner.
+		// Retain encoding variation whenever transport compression could have produced
+		// the cached representation. Validators remain application-owned: a bodyless
+		// response cannot reveal whether its representation would pass the planner.
+		if (request != null && marshaledResponse.getStatusCode() == 304
+				&& !sameInstance(getResponseCompressor(), ResponseCompressor.disabledInstance())
+				&& !hasHeader(headers, "Content-Encoding") && !hasHeader(headers, "Content-Range")) {
+			headers = varyAcceptEncodingHeaders(headers);
+		}
 
 		if (isResponseCompressionCandidate(request, marshaledResponse, headers, compressionBody)) {
 			Request compressionRequest = requireNonNull(request);

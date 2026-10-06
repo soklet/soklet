@@ -17,9 +17,10 @@
 package com.soklet.internal.mcp.protocol;
 
 import com.soklet.CorsAuthorizer;
+import com.soklet.HttpMethod;
 import com.soklet.LifecyclePolicy;
-import com.soklet.McpAdmissionDecision;
 import com.soklet.McpAdmissionContext;
+import com.soklet.McpAdmissionDecision;
 import com.soklet.McpAdmissionIdentity;
 import com.soklet.McpCompleteResult;
 import com.soklet.McpEndpoint;
@@ -33,18 +34,23 @@ import com.soklet.McpRequestContext;
 import com.soklet.McpResourceOutput;
 import com.soklet.McpResourceRegistration;
 import com.soklet.McpServer;
+import com.soklet.McpSimulation;
+import com.soklet.McpSimulationCompletion;
+import com.soklet.McpStreamTerminationReason;
 import com.soklet.McpSubscriptionAuthorization;
 import com.soklet.McpSubscriptionAuthorizationContext;
 import com.soklet.McpSubscriptionAuthorizer;
 import com.soklet.McpSubscriptionConfig;
 import com.soklet.McpSubscriptionEventPublisher;
 import com.soklet.McpSubscriptionNotificationType;
-import com.soklet.McpStreamTerminationReason;
 import com.soklet.McpTextResourceContents;
 import com.soklet.MetricsCollector;
+import com.soklet.Request;
 import com.soklet.ResourceMethodResolver;
+import com.soklet.SimulatorConfig;
 import com.soklet.Soklet;
 import com.soklet.SokletConfig;
+import com.soklet.SokletSimulator;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
@@ -52,10 +58,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 import javax.annotation.concurrent.ThreadSafe;
+import javax.annotation.concurrent.NotThreadSafe;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
@@ -75,6 +84,7 @@ import java.util.function.Consumer;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @Timeout(60)
+@NotThreadSafe
 public class McpSubscriptionAuthorizationPublicRuntimeTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final String MCP_PATH = "/mcp";
@@ -548,10 +558,12 @@ public class McpSubscriptionAuthorizationPublicRuntimeTests {
 			Assertions.assertTrue(staleToken.get().isCanceled(),
 					"Superseded reconciliation did not cancel its public token.");
 
-			publisher.publishResourceUpdated(SECOND_RESOURCE_URI);
 			Assertions.assertEquals(resourceUpdated("\"reconcile\"",
-					SECOND_RESOURCE_URI), nextFrame.get(5, TimeUnit.SECONDS),
-					"An event published under the fenced grant escaped after refresh.");
+					FIRST_RESOURCE_URI), nextFrame.get(5, TimeUnit.SECONDS),
+					"The fenced invalidation must catch up only after the fresh grant is accepted.");
+			publisher.publishResourceUpdated(SECOND_RESOURCE_URI);
+			Assertions.assertEquals(resourceUpdated("\"reconcile\"", SECOND_RESOURCE_URI),
+					client.readChunkText());
 			Assertions.assertEquals(1, maximumActiveAuthorizers.get(),
 					"One subscription ran overlapping authorization callbacks.");
 			Assertions.assertEquals(3, authorizations.get());
@@ -883,6 +895,8 @@ public class McpSubscriptionAuthorizationPublicRuntimeTests {
 					"Reconciliation did not cancel the resistant renewal token.");
 			metrics.awaitSubscriptionClosed(
 					McpStreamTerminationReason.SUBSCRIPTION_AUTHORIZATION_EXPIRED);
+			Assertions.assertEquals(terminal("\"resistant-renewal\""), client.readChunkText());
+			Assertions.assertNull(client.readChunk());
 			Assertions.assertEquals(2, authorizations.get(),
 					"A replacement callback overlapped the resistant renewal.");
 			Assertions.assertEquals(1, maximumActiveAuthorizers.get(),
@@ -947,6 +961,8 @@ public class McpSubscriptionAuthorizationPublicRuntimeTests {
 					McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED, 2);
 			metrics.awaitSubscriptionClosed(
 					McpStreamTerminationReason.SUBSCRIPTION_AUTHORIZATION_EXPIRED);
+			Assertions.assertEquals(terminal("\"same-expiration-renewal\""), client.readChunkText());
+			Assertions.assertNull(client.readChunk());
 			Assertions.assertEquals(2, authorizations.get(),
 					"A same-expiration grant scheduled another renewal.");
 		} finally {
@@ -954,6 +970,181 @@ public class McpSubscriptionAuthorizationPublicRuntimeTests {
 				client.closeWithReset();
 			owner.close();
 		}
+	}
+
+	@Test
+	public void simulatedReconciliationDenialPreservesTheCompletionAndCloseReason() {
+		AtomicInteger authorizations = new AtomicInteger();
+		RecordingMetrics metrics = new RecordingMetrics();
+		McpServer source = server(McpSubscriptionEventPublisher.fromInMemoryDefaults(),
+				(authorizationContext, invocationFeatures) -> authorizations.incrementAndGet() == 1
+						? allowed(null) : McpSubscriptionAuthorization.deniedInstance(), null);
+		SimulatorConfig config = SimulatorConfig.withSokletConfig(
+				SokletConfig.withMcpServer(source)
+						.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+						.metricsCollector(metrics).build()).build();
+		SokletSimulator.run(config, simulator -> {
+			String id = "\"simulated-end\"";
+			Request request = Request.withPath(HttpMethod.POST, MCP_PATH)
+					.headers(Map.of(
+							"Host", List.of(LOOPBACK + ":0"),
+							"Content-Type", List.of("application/json"),
+							"Accept", List.of("application/json, text/event-stream"),
+							"MCP-Protocol-Version", List.of(PROTOCOL_VERSION),
+							"Mcp-Method", List.of("subscriptions/listen")))
+					.body(listenBody(id).getBytes(StandardCharsets.UTF_8)).build();
+			McpSimulation simulation = simulator.startMcpRequest(request);
+			try {
+				Assertions.assertEquals(200, simulation.awaitResponse(Duration.ofSeconds(5)).orElseThrow().getStatusCode());
+				Assertions.assertEquals(acknowledgment(id), new String(
+						simulation.awaitStreamItem(Duration.ofSeconds(5)).orElseThrow().getEncodedBytes(),
+						StandardCharsets.UTF_8));
+				simulator.getMcpServer().orElseThrow().getSubscriptionReconciler().reconcileSubscriptions();
+				Assertions.assertEquals(terminal(id), new String(
+						simulation.awaitStreamItem(Duration.ofSeconds(5)).orElseThrow().getEncodedBytes(),
+						StandardCharsets.UTF_8));
+				McpSimulationCompletion completion = simulation.awaitCompletion(Duration.ofSeconds(5)).orElseThrow();
+				Assertions.assertEquals(McpStreamTerminationReason.SUBSCRIPTION_AUTHORIZATION_DENIED, completion.getReason());
+				Assertions.assertTrue(completion.getTerminalMessage().isPresent());
+				Assertions.assertTrue(simulation.awaitStreamItem(Duration.ofMillis(20)).isEmpty());
+				metrics.awaitSubscriptionClosed(McpStreamTerminationReason.SUBSCRIPTION_AUTHORIZATION_DENIED);
+			} catch (InterruptedException exception) {
+				Thread.currentThread().interrupt();
+				throw new AssertionError(exception);
+			}
+		});
+	}
+
+	@Test
+	public void renewalDenialCompletesTheListenAndPreservesItsReason() throws Exception {
+		assertServerInitiatedClosure(false, true);
+	}
+
+	@Test
+	public void disconnectWhileTheClosingFrameIsReservedKeepsTheTransportReason() throws Exception {
+		CountDownLatch terminalReady = new CountDownLatch(1);
+		CountDownLatch releaseTerminal = new CountDownLatch(1);
+		CountDownLatch terminalResumed = new CountDownLatch(1);
+		AtomicInteger authorizations = new AtomicInteger();
+		RecordingMetrics metrics = new RecordingMetrics();
+		McpServer server = server(McpSubscriptionEventPublisher.fromInMemoryDefaults(),
+				(authorizationContext, invocationFeatures) -> authorizations.incrementAndGet() == 1
+						? allowed(null) : McpSubscriptionAuthorization.deniedInstance(), null);
+		Soklet owner = managedSoklet(server, metrics);
+		McpChunkedHttpClient client = null;
+		McpRequestSseStream.setTestHooks(() -> {
+			terminalReady.countDown();
+			try {
+				Assertions.assertTrue(releaseTerminal.await(10, TimeUnit.SECONDS));
+			} catch (InterruptedException exception) {
+				Thread.currentThread().interrupt();
+				throw new AssertionError(exception);
+			} finally {
+				terminalResumed.countDown();
+			}
+		});
+		try {
+			owner.start();
+			client = listen(boundPort(server), "\"disconnect-at-terminal\"");
+			assertSseHead(client.readHead());
+			Assertions.assertEquals(acknowledgment("\"disconnect-at-terminal\""), client.readChunkText());
+			server.getSubscriptionReconciler().reconcileSubscriptions();
+			Assertions.assertTrue(terminalReady.await(5, TimeUnit.SECONDS));
+			client.closeWithReset();
+			client = null;
+			metrics.awaitSubscriptionClosed(McpStreamTerminationReason.CLIENT_DISCONNECTED);
+			releaseTerminal.countDown();
+			Assertions.assertTrue(terminalResumed.await(5, TimeUnit.SECONDS));
+			Assertions.assertEquals(1L, metrics.subscriptionClosedCount());
+			Assertions.assertFalse(metrics.hasSubscriptionClose(McpStreamTerminationReason.SUBSCRIPTION_AUTHORIZATION_DENIED),
+					"A closing-frame attempt must not overwrite the winning physical disconnect.");
+			Assertions.assertEquals(0, server.getDiagnostics().getActiveSubscriptions());
+		} finally {
+			releaseTerminal.countDown();
+			McpRequestSseStream.setTestHooks(null);
+			if (client != null) client.closeWithReset();
+			owner.close();
+		}
+	}
+
+	@Test
+	public void reconciliationDenialCompletesTheListenAndPreservesItsReason() throws Exception {
+		assertServerInitiatedClosure(true, true);
+	}
+
+	@Test
+	public void renewalFailureCompletesTheListenWithoutDisclosingTheException() throws Exception {
+		assertServerInitiatedClosure(false, false);
+	}
+
+	@Test
+	public void reconciliationFailureCompletesTheListenWithoutDisclosingTheException() throws Exception {
+		assertServerInitiatedClosure(true, false);
+	}
+
+	private static void assertServerInitiatedClosure(boolean reconciliation, boolean denied)
+			throws Exception {
+		for (String id : List.of("\"server-end\"", "17")) {
+			AtomicInteger authorizations = new AtomicInteger();
+			RecordingMetrics metrics = new RecordingMetrics();
+			McpSubscriptionEventPublisher publisher =
+					McpSubscriptionEventPublisher.fromInMemoryDefaults();
+			McpServer server = server(publisher, (authorizationContext, invocationFeatures) -> {
+				int invocation = authorizations.incrementAndGet();
+				if (invocation == 1)
+					return allowed(Instant.now().plus(reconciliation
+							? Duration.ofHours(1) : Duration.ofMillis(600)), null);
+				if (invocation == 2) {
+					if (denied) return McpSubscriptionAuthorization.deniedInstance();
+					throw new IllegalStateException("private-authorization-failure");
+				}
+				return allowed(null);
+			}, null);
+			Soklet owner = managedSoklet(server, metrics);
+			try {
+				owner.start();
+				try (McpChunkedHttpClient client = listen(boundPort(server), id)) {
+					assertSseHead(client.readHead());
+					Assertions.assertEquals(acknowledgment(id), client.readChunkText());
+					if (reconciliation) server.getSubscriptionReconciler().reconcileSubscriptions();
+					Assertions.assertEquals(terminal(id), client.readChunkText(),
+							"A server-initiated end must complete the original listen request.");
+					Assertions.assertNull(client.readChunk(),
+							"The completion must be followed by clean HTTP chunk termination.");
+				}
+				McpStreamTerminationReason expected = denied
+						? McpStreamTerminationReason.SUBSCRIPTION_AUTHORIZATION_DENIED
+						: reconciliation ? McpStreamTerminationReason.SUBSCRIPTION_RECONCILIATION_FAILED
+								: McpStreamTerminationReason.SUBSCRIPTION_AUTHORIZATION_CHECK_FAILED;
+				metrics.awaitSubscriptionClosed(expected);
+				Assertions.assertEquals(1L, metrics.subscriptionClosedCount());
+				metrics.awaitRequestOutcome(denied ? com.soklet.McpRequestOutcome.CANCELED
+						: com.soklet.McpRequestOutcome.INTERNAL_ERROR);
+				metrics.awaitMaintenance(reconciliation
+						? McpMetricsEvent.SubscriptionMaintenance.Work.RECONCILIATION
+						: McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
+						denied ? McpMetricsEvent.SubscriptionMaintenance.Outcome.DENIED
+								: McpMetricsEvent.SubscriptionMaintenance.Outcome.FAILED, 1);
+				try (McpChunkedHttpClient replacement = listen(boundPort(server), "\"replacement\"")) {
+					assertSseHead(replacement.readHead());
+					Assertions.assertEquals(acknowledgment("\"replacement\""), replacement.readChunkText());
+					publisher.publishResourcesListChanged();
+					Assertions.assertTrue(replacement.readChunkText().contains("notifications/resources/list_changed"));
+					Assertions.assertEquals(3, authorizations.get(),
+							"The closed listen must release capacity without reviving authorization.");
+				}
+			} finally {
+				owner.close();
+			}
+		}
+	}
+
+	private static String terminal(String id) {
+		return "data: {\"jsonrpc\":\"2.0\",\"id\":" + id
+				+ ",\"result\":{\"resultType\":\"complete\",\"_meta\":{"
+				+ "\"io.modelcontextprotocol/subscriptionId\":" + id
+				+ ",\"io.modelcontextprotocol/serverInfo\":{\"name\":"
+				+ "\"subscription-authorization-runtime-test\",\"version\":\"4.0.0\"}}}}\n\n";
 	}
 
 	private static void assertFailedInitialAuthorizationDoesNotLeakQuota(
@@ -1150,16 +1341,7 @@ public class McpSubscriptionAuthorizationPublicRuntimeTests {
 	@NonNull
 	private static McpChunkedHttpClient listen(int port,
 			@NonNull String idJson) throws Exception {
-		String notifications = "{\"resourcesListChanged\":true,"
-				+ "\"resourceSubscriptions\":[\"" + FIRST_RESOURCE_URI
-				+ "\",\"" + SECOND_RESOURCE_URI + "\",\""
-				+ FIRST_RESOURCE_URI + "\"]}";
-		String body = "{\"jsonrpc\":\"2.0\",\"id\":" + idJson
-				+ ",\"method\":\"subscriptions/listen\",\"params\":{\"_meta\":{"
-				+ "\"io.modelcontextprotocol/protocolVersion\":\""
-				+ PROTOCOL_VERSION + "\","
-				+ "\"io.modelcontextprotocol/clientCapabilities\":{}},"
-				+ "\"notifications\":" + notifications + "}}";
+		String body = listenBody(idJson);
 		return McpChunkedHttpClient.postMcpMessage(port, body, List.of(
 				new McpChunkedHttpClient.RequestHeader(
 						"MCP-Protocol-Version", PROTOCOL_VERSION),
@@ -1167,6 +1349,19 @@ public class McpSubscriptionAuthorizationPublicRuntimeTests {
 						"Mcp-Method", "subscriptions/listen"),
 				new McpChunkedHttpClient.RequestHeader(
 						"Authorization", "Bearer admission-secret")));
+	}
+
+	private static String listenBody(String idJson) {
+		String notifications = "{\"resourcesListChanged\":true,"
+				+ "\"resourceSubscriptions\":[\"" + FIRST_RESOURCE_URI
+				+ "\",\"" + SECOND_RESOURCE_URI + "\",\""
+				+ FIRST_RESOURCE_URI + "\"]}";
+		return "{\"jsonrpc\":\"2.0\",\"id\":" + idJson
+				+ ",\"method\":\"subscriptions/listen\",\"params\":{\"_meta\":{"
+				+ "\"io.modelcontextprotocol/protocolVersion\":\""
+				+ PROTOCOL_VERSION + "\","
+				+ "\"io.modelcontextprotocol/clientCapabilities\":{}},"
+				+ "\"notifications\":" + notifications + "}}";
 	}
 
 	private static String acknowledgment(@NonNull String subscriptionIdJson) {
@@ -1253,6 +1448,17 @@ public class McpSubscriptionAuthorizationPublicRuntimeTests {
 			Assertions.assertTrue(hasSubscriptionClose(expectedReason),
 					"Missing subscription close reason " + expectedReason
 							+ "; events=" + this.events);
+		}
+
+		private void awaitRequestOutcome(com.soklet.McpRequestOutcome expected) throws InterruptedException {
+			long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+			while (System.nanoTime() - deadline < 0L) {
+				if (this.events.stream().filter(McpMetricsEvent.RequestFinished.class::isInstance)
+						.map(McpMetricsEvent.RequestFinished.class::cast)
+						.anyMatch(event -> event.getOutcome() == expected)) return;
+				Thread.sleep(1L);
+			}
+			Assertions.fail("Missing request outcome " + expected + "; events=" + this.events);
 		}
 
 		private boolean hasSubscriptionClose(

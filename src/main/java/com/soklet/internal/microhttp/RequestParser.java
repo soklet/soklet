@@ -32,6 +32,8 @@ class RequestParser {
     private static final byte[] EMPTY_BODY = new byte[]{};
 
     private static final int RADIX_HEX = 16;
+    private static final int MAXIMUM_METHOD_LENGTH = 64;
+    private static final int MAXIMUM_CHUNK_SIZE_LINE_LENGTH = 8192;
 
     enum State {
         METHOD,
@@ -211,6 +213,16 @@ class RequestParser {
     }
 
     private boolean parseMethod() {
+        int start = tokenizer.rawPosition();
+        int delimiterStart = tokenizer.indexOf(SPACE);
+        int lineEnd = tokenizer.indexOf(CRLF);
+        int length = delimiterStart < 0 ? tokenizer.remaining() : delimiterStart - start;
+        // A short malformed line ends this request before any separator from
+        // a following pipelined request. Preserve that earlier capture boundary.
+        if (length > MAXIMUM_METHOD_LENGTH && (lineEnd < 0 || lineEnd - start >= MAXIMUM_METHOD_LENGTH)) {
+            failureBoundaryExclusive = start + MAXIMUM_METHOD_LENGTH + 1;
+            throw new MalformedRequestException("http method too long");
+        }
         markRequestLineTokenFailureBoundary();
         String token = tokenizer.nextAsciiString(SPACE, "method");
         if (token == null) {
@@ -319,6 +331,10 @@ class RequestParser {
 
             if (contentLengthHeaderPresent && transferEncodingHeaderPresent) {
                 throw new MalformedRequestException("multiple message lengths");
+            }
+
+            if (transferEncodingHeaderPresent && "HTTP/1.0".equalsIgnoreCase(version)) {
+                throw new MalformedRequestException("transfer-encoding requires http/1.1");
             }
 
             if (!contentLengthHeaderPresent) {
@@ -497,19 +513,24 @@ class RequestParser {
     private boolean parseChunkSize() {
         int start = tokenizer.rawPosition();
         int end = tokenizer.indexOf(CRLF);
+        int lineLength = end < 0 ? tokenizer.remaining() : end - start;
+        boolean pendingLineTerminator = end < 0
+                && lineLength == MAXIMUM_CHUNK_SIZE_LINE_LENGTH + 1
+                && tokenizer.rawByte(start + lineLength - 1) == '\r';
+        if (lineLength > MAXIMUM_CHUNK_SIZE_LINE_LENGTH && !pendingLineTerminator) {
+            failureBoundaryExclusive = start + MAXIMUM_CHUNK_SIZE_LINE_LENGTH + 1;
+            throw new MalformedRequestException("chunk size line too long");
+        }
         if (end < 0) {
             return false;
         }
         this.failureBoundaryExclusive = end + CRLF.length;
 
-        int sizeEnd = end;
-        for (int i = start; i < end; i++) {
-            if (tokenizer.rawByte(i) == ';') {
-                sizeEnd = i;
-                break;
-            }
-        }
-        String sizeToken = tokenizer.string(start, sizeEnd, StandardCharsets.US_ASCII).trim();
+        int sizeEnd = start;
+        while (sizeEnd < end && isHexDigit(tokenizer.rawByte(sizeEnd) & 0xFF))
+            sizeEnd++;
+        validateChunkExtensions(sizeEnd, end);
+        String sizeToken = tokenizer.string(start, sizeEnd, StandardCharsets.US_ASCII);
         chunkSize = parseChunkSizeToken(sizeToken, maxRequestSize);
         if (chunkSize < 0) {
             throw new MalformedRequestException("invalid chunk size");
@@ -522,6 +543,72 @@ class RequestParser {
             state = State.CHUNK_DATA;
         }
         return true;
+    }
+
+    private static boolean isHexDigit(int value) {
+        return (value >= '0' && value <= '9') || (value >= 'a' && value <= 'f')
+                || (value >= 'A' && value <= 'F');
+    }
+
+    private void validateChunkExtensions(int start, int end) {
+        int position = start;
+        while (position < end) {
+            position = skipChunkWhitespace(position, end);
+            if (position == end || tokenizer.rawByte(position++) != ';')
+                throw new MalformedRequestException("invalid chunk extension");
+            position = skipChunkWhitespace(position, end);
+            int nameStart = position;
+            while (position < end && isTchar(tokenizer.rawByte(position) & 0xFF))
+                position++;
+            if (position == nameStart)
+                throw new MalformedRequestException("invalid chunk extension");
+
+            int afterName = position;
+            position = skipChunkWhitespace(position, end);
+            if (position < end && tokenizer.rawByte(position) == '=') {
+                position = skipChunkWhitespace(position + 1, end);
+                if (position < end && tokenizer.rawByte(position) == '"') {
+                    position = parseChunkQuotedString(position + 1, end);
+                } else {
+                    int valueStart = position;
+                    while (position < end && isTchar(tokenizer.rawByte(position) & 0xFF))
+                        position++;
+                    if (position == valueStart)
+                        throw new MalformedRequestException("invalid chunk extension");
+                }
+            } else {
+                // Whitespace after a name belongs to the next semicolon production.
+                position = afterName;
+            }
+        }
+    }
+
+    private int skipChunkWhitespace(int start, int end) {
+        int position = start;
+        while (position < end && (tokenizer.rawByte(position) == ' ' || tokenizer.rawByte(position) == '\t'))
+            position++;
+        return position;
+    }
+
+    private int parseChunkQuotedString(int start, int end) {
+        int position = start;
+        while (position < end) {
+            int value = tokenizer.rawByte(position++) & 0xFF;
+            if (value == '"')
+                return position;
+            if (value == '\\') {
+                if (position == end)
+                    throw new MalformedRequestException("invalid chunk extension");
+                value = tokenizer.rawByte(position++) & 0xFF;
+                if (value == '\t' || value == ' ' || (value >= 0x21 && value != 0x7F))
+                    continue;
+            } else if (value == '\t' || value == ' ' || value == 0x21
+                    || (value >= 0x23 && value <= 0x5B) || (value >= 0x5D && value != 0x7F)) {
+                continue;
+            }
+            throw new MalformedRequestException("invalid chunk extension");
+        }
+        throw new MalformedRequestException("invalid chunk extension");
     }
 
     static int parseChunkSizeToken(String sizeToken, long maxRequestSize) {

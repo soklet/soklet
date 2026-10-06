@@ -28,6 +28,7 @@ import java.time.Instant;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -38,6 +39,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 import static java.util.Objects.requireNonNull;
 
@@ -126,6 +128,240 @@ public class McpSubscriptionCatalogProjectionPublicRuntimeTests {
 				simulation.close();
 			}
 		});
+	}
+
+	@Test
+	public void providerFailureUsesCanonicalCatalogBaselineAndRecovers() {
+		assertCatalogLocalizationFallback(true);
+	}
+
+	@Test
+	public void lookupFailureUsesCanonicalCatalogBaselineAndRecovers() {
+		assertCatalogLocalizationFallback(false);
+	}
+
+	private static void assertCatalogLocalizationFallback(boolean providerFailure) {
+		for (boolean prompts : List.of(false, true)) {
+			McpSubscriptionEventPublisher publisher = McpSubscriptionEventPublisher.fromInMemoryDefaults();
+			CatalogProjectionMetrics metrics = new CatalogProjectionMetrics();
+			AtomicBoolean failing = new AtomicBoolean(true);
+			AtomicInteger authorizations = new AtomicInteger();
+			McpLocalizer localizer = failingLocalizer(failing, providerFailure, McpLocalizationFailurePolicy.USE_DEFAULT_TEXT);
+			SimulatorConfig config = simulatorConfig(publisher, McpCatalogAccessPolicy.allowAllInstance(),
+					(context, features) -> { authorizations.incrementAndGet(); return allowed("owner"); },
+					metrics, WAIT, prompts, builder -> builder.localizer(localizer).catalogAccessPolicy(null));
+			SokletSimulator.run(config, simulator -> {
+				String id = "catalog-fallback";
+				try (McpSimulation subscription = simulator.startMcpRequest(subscriptionRequest(id, prompts))) {
+					assertSseResponse(awaitResponse(subscription));
+					assertAcknowledgment(nextItem(subscription), id, prompts);
+					metrics.awaitOutcome(McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED);
+					assertLocalizedCatalog(simulator, prompts, false);
+					publishCatalog(publisher, prompts);
+					metrics.awaitOutcome(McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED);
+					Assertions.assertTrue(pollItem(subscription, NO_ITEM_WAIT).isEmpty(), "An unchanged fallback catalog emitted a hint.");
+					failing.set(false); publishCatalog(publisher, prompts);
+					metrics.awaitOutcome(McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED);
+					assertNotification(nextItem(subscription), catalogNotification(prompts), id);
+					assertLocalizedCatalog(simulator, prompts, true);
+					failing.set(true); publishCatalog(publisher, prompts);
+					metrics.awaitOutcome(McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED);
+					assertNotification(nextItem(subscription), catalogNotification(prompts), id);
+					assertLocalizedCatalog(simulator, prompts, false);
+					Assertions.assertEquals(1, authorizations.get(), "Localization fallback or recovery must not repeat authorization.");
+					publisher.publishResourcesListChanged();
+					assertNotification(nextItem(subscription), "notifications/resources/list_changed", id);
+				}
+			});
+		}
+	}
+
+	@Test
+	public void failRequestCatalogBaselineIsSanitizedAndReleasesCapacity() {
+		for (boolean prompts : List.of(false, true)) for (boolean providerFailure : List.of(false, true)) {
+			AtomicBoolean failing = new AtomicBoolean(true);
+			McpLocalizer localizer = failingLocalizer(failing, providerFailure, McpLocalizationFailurePolicy.FAIL_REQUEST);
+			SimulatorConfig config = simulatorConfig(McpSubscriptionEventPublisher.fromInMemoryDefaults(),
+					McpCatalogAccessPolicy.allowAllInstance(), (context, features) -> allowed("owner"),
+					new CatalogProjectionMetrics(), WAIT, prompts,
+					builder -> builder.localizer(localizer).catalogAccessPolicy(null).maximumSubscriptionsPerPartition(1));
+			SokletSimulator.run(config, simulator -> {
+				for (int attempt = 0; attempt < 3; attempt++) {
+					try (McpSimulation subscription = simulator.startMcpRequest(subscriptionRequest("failed-baseline-" + attempt, prompts))) {
+						McpSimulationResponse response = awaitResponse(subscription);
+						Assertions.assertEquals(500, response.getStatusCode());
+						String body = new String(response.getBody().orElseThrow(), StandardCharsets.UTF_8);
+						Assertions.assertTrue(body.contains("\"code\":-32603"), body);
+						Assertions.assertFalse(body.contains("private-catalog-provider"), body);
+						awaitCompletion(subscription);
+						Assertions.assertEquals(0, simulator.getMcpServer().orElseThrow().getDiagnostics().getActiveSubscriptions());
+					}
+				}
+				failing.set(false);
+				try (McpSimulation subscription = simulator.startMcpRequest(subscriptionRequest("recovered-baseline", prompts))) {
+					assertSseResponse(awaitResponse(subscription));
+					assertAcknowledgment(nextItem(subscription), "recovered-baseline", prompts);
+				}
+			});
+		}
+	}
+
+	private static McpLocalizer failingLocalizer(AtomicBoolean failing, boolean providerFailure,
+			McpLocalizationFailurePolicy policy) {
+		return McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> {
+			if (failing.get() && providerFailure) throw new IllegalStateException("private-catalog-provider");
+			return McpLocalizationContext.withLocale(Locale.FRENCH, text -> failing.get()
+					? McpLocalizationResult.failure() : McpLocalizationResult.localized("FR:" + text.getDefaultText())).build();
+		}).failurePolicy(policy).build();
+	}
+
+	private static void assertLocalizedCatalog(Simulator simulator, boolean prompts, boolean localized) {
+		try (McpSimulation request = simulator.startMcpRequest(catalogRequest(prompts))) {
+			McpSimulationResponse response = awaitResponse(request);
+			Assertions.assertEquals(200, response.getStatusCode());
+			String body = new String(response.getBody().orElseThrow(), StandardCharsets.UTF_8);
+			Assertions.assertTrue(body.contains("\"title\":\"" + (localized ? "FR:" : "") + "Canonical " + STABLE_TOOL + "\""), body);
+			Assertions.assertFalse(body.contains("private-catalog-provider"), body);
+			awaitCompletion(request);
+		}
+	}
+
+	@Test
+	public void explicitCatalogPolicyContextFailureStillFailsBeforeEvaluation() {
+		for (boolean prompts : List.of(false, true)) {
+			AtomicBoolean failing = new AtomicBoolean(true); AtomicInteger evaluations = new AtomicInteger();
+			McpLocalizer localizer = failingLocalizer(failing, true, McpLocalizationFailurePolicy.USE_DEFAULT_TEXT);
+			McpCatalogAccessPolicy policy = McpCatalogAccessPolicy.fromEvaluators(
+					(requestContext, registration, features) -> { evaluations.incrementAndGet(); return STABLE_TOOL.equals(registration.getName()); },
+					(requestContext, registration, features) -> { evaluations.incrementAndGet(); return STABLE_TOOL.equals(registration.getName()); });
+			SimulatorConfig config = simulatorConfig(McpSubscriptionEventPublisher.fromInMemoryDefaults(), policy,
+					(context, features) -> allowed("owner"), new CatalogProjectionMetrics(), WAIT, prompts,
+					builder -> builder.localizer(localizer).maximumSubscriptionsPerPartition(1));
+			SokletSimulator.run(config, simulator -> {
+				try (McpSimulation subscription = simulator.startMcpRequest(subscriptionRequest("context-unavailable", prompts))) {
+					McpSimulationResponse response = awaitResponse(subscription);
+					Assertions.assertEquals(500, response.getStatusCode());
+					String body = new String(response.getBody().orElseThrow(), StandardCharsets.UTF_8);
+					Assertions.assertTrue(body.contains("\"code\":-32603"), body);
+					Assertions.assertFalse(body.contains("private-catalog-provider"), body);
+					awaitCompletion(subscription);
+					Assertions.assertEquals(0, evaluations.get(), "Do not run policy with an invented localization context.");
+				}
+				failing.set(false);
+				try (McpSimulation subscription = simulator.startMcpRequest(subscriptionRequest("context-recovered", prompts))) {
+					assertSseResponse(awaitResponse(subscription));
+					assertAcknowledgment(nextItem(subscription), "context-recovered", prompts);
+					Assertions.assertTrue(evaluations.get() > 0);
+					assertCurrentCatalog(simulator, prompts, false);
+				}
+			});
+		}
+	}
+
+	@Test
+	public void localizedInvalidationDuringBaselineCatchesUpAndDropsStaleTerminal() {
+		for (boolean prompts : List.of(false, true)) {
+			AtomicReference<McpServer> server = new AtomicReference<>();
+			AtomicReference<String> prefix = new AtomicReference<>("OLD:");
+			AtomicBoolean changed = new AtomicBoolean(); AtomicInteger authorizations = new AtomicInteger();
+			McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> {
+				String snapshot = prefix.get();
+				if (request.getRequestContext().getOperationType() == (prompts ? McpOperationType.PROMPTS_LIST : McpOperationType.TOOLS_LIST)
+						&& changed.compareAndSet(false, true)) {
+					prefix.set("NEW:"); server.get().getLocalizationCatalogInvalidator().invalidateCatalogs();
+				}
+				return McpLocalizationContext.withLocale(Locale.FRENCH,
+						text -> McpLocalizationResult.localized(snapshot + text.getDefaultText())).build();
+			}).build();
+			SimulatorConfig config = simulatorConfig(McpSubscriptionEventPublisher.fromInMemoryDefaults(),
+					McpCatalogAccessPolicy.allowAllInstance(),
+					(context, features) -> { authorizations.incrementAndGet(); return allowed("owner"); },
+					new CatalogProjectionMetrics(), WAIT, prompts, builder -> builder.localizer(localizer)
+							.catalogAccessPolicy(null).maximumSubscriptionDuration(Duration.ofMillis(500)), true);
+			SokletSimulator.run(config, simulator -> {
+				server.set(simulator.getMcpServer().orElseThrow());
+				try (McpSimulation subscription = simulator.startMcpRequest(subscriptionRequest("localized-opening-change", prompts))) {
+					McpSimulationResponse response = awaitResponse(subscription); assertSseResponse(response);
+					Assertions.assertEquals(List.of("fr"), response.getHeaders().get("Content-Language"));
+					assertAcknowledgment(nextItem(subscription), "localized-opening-change", prompts);
+					Assertions.assertEquals(1, authorizations.get());
+					assertNotification(nextItem(subscription), catalogNotification(prompts), "localized-opening-change");
+					Assertions.assertEquals(McpStreamTerminationReason.COMPLETED, awaitCompletion(subscription).getReason());
+					String terminal = new String(nextItem(subscription).getEncodedBytes(), StandardCharsets.UTF_8);
+					Assertions.assertTrue(terminal.contains("\"title\":\"Canonical server title\""), terminal);
+					Assertions.assertFalse(terminal.contains("OLD:"), "Do not retain terminal text from the invalidated snapshot.");
+				}
+			});
+		}
+	}
+
+	@Test
+	public void catalogChurnDuringOpeningDoesNotRepeatAuthorization() {
+		for (boolean prompts : List.of(false, true)) {
+			McpSubscriptionEventPublisher publisher = McpSubscriptionEventPublisher.fromInMemoryDefaults();
+			AtomicInteger projections = new AtomicInteger(); AtomicInteger authorizations = new AtomicInteger();
+			CatalogProjectionMetrics metrics = new CatalogProjectionMetrics();
+			java.util.function.Predicate<String> visible = name -> {
+				if (CONDITIONAL_TOOL.equals(name) && projections.incrementAndGet() <= 3) publishCatalog(publisher, prompts);
+				return STABLE_TOOL.equals(name);
+			};
+			McpCatalogAccessPolicy policy = McpCatalogAccessPolicy.fromEvaluators(
+					(requestContext, registration, features) -> visible.test(registration.getName()),
+					(requestContext, registration, features) -> visible.test(registration.getName()));
+			SimulatorConfig config = simulatorConfig(publisher, policy,
+					(context, features) -> { authorizations.incrementAndGet(); return allowed("owner"); }, metrics, WAIT, prompts);
+			SokletSimulator.run(config, simulator -> {
+				try (McpSimulation subscription = simulator.startMcpRequest(subscriptionRequest("catalog-churn", prompts))) {
+					assertSseResponse(awaitResponse(subscription));
+					assertAcknowledgment(nextItem(subscription), "catalog-churn", prompts);
+					metrics.awaitSuccessfulCatalogProjections(4);
+					Assertions.assertEquals(1, authorizations.get(), "Catalog invalidation must not restart the application authorizer.");
+					Assertions.assertEquals(4, projections.get(), "Catalog churn must use the bounded post-ack projection queue.");
+					Assertions.assertTrue(pollItem(subscription, NO_ITEM_WAIT).isEmpty(), "An unchanged view must not emit a hint.");
+				}
+			});
+		}
+	}
+
+	@Test
+	public void catalogChangeDuringBaselineCatchesUpAfterAcknowledgment() {
+		for (boolean prompts : List.of(false, true)) {
+			McpSubscriptionEventPublisher publisher = McpSubscriptionEventPublisher.fromInMemoryDefaults();
+			AtomicBoolean changed = new AtomicBoolean(); AtomicInteger authorizations = new AtomicInteger();
+			CatalogProjectionMetrics metrics = new CatalogProjectionMetrics();
+			java.util.function.Predicate<String> visible = name -> {
+				if (!CONDITIONAL_TOOL.equals(name)) return true;
+				if (changed.compareAndSet(false, true)) { publishCatalog(publisher, prompts); return false; }
+				return true;
+			};
+			McpCatalogAccessPolicy policy = McpCatalogAccessPolicy.fromEvaluators(
+					(requestContext, registration, features) -> visible.test(registration.getName()),
+					(requestContext, registration, features) -> visible.test(registration.getName()));
+			SimulatorConfig config = simulatorConfig(publisher, policy,
+					(context, features) -> { authorizations.incrementAndGet(); return allowed("owner"); }, metrics, WAIT, prompts);
+			SokletSimulator.run(config, simulator -> {
+				try (McpSimulation subscription = simulator.startMcpRequest(subscriptionRequest("catalog-opening-change", prompts))) {
+					assertSseResponse(awaitResponse(subscription));
+					assertAcknowledgment(nextItem(subscription), "catalog-opening-change", prompts);
+					Assertions.assertEquals(1, authorizations.get(), "A catalog change must not repeat authorization.");
+					assertNotification(nextItem(subscription), catalogNotification(prompts), "catalog-opening-change");
+					assertCurrentCatalog(simulator, prompts, true);
+					metrics.awaitOutcome(McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED);
+					metrics.awaitOutcome(McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED);
+					publishCatalog(publisher, prompts);
+					metrics.awaitOutcome(McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED);
+					Assertions.assertTrue(pollItem(subscription, NO_ITEM_WAIT).isEmpty());
+				}
+			});
+		}
+	}
+
+	private static void publishCatalog(McpSubscriptionEventPublisher publisher, boolean prompts) {
+		if (prompts) publisher.publishPromptsListChanged(); else publisher.publishToolsListChanged();
+	}
+
+	private static String catalogNotification(boolean prompts) {
+		return prompts ? "notifications/prompts/list_changed" : "notifications/tools/list_changed";
 	}
 
 	@Test
@@ -464,58 +700,116 @@ public class McpSubscriptionCatalogProjectionPublicRuntimeTests {
 	}
 
 	@Test
-	@Timeout(70)
-	public void coalescedTransportOfferDoesNotAdvanceCatalogBaseline() {
+	public void coalescedToolOfferAdvancesBaselineWithoutLosingOscillatingChanges() {
+		assertCoalescedCatalogOscillation(false);
+	}
+
+	@Test
+	public void coalescedPromptOfferAdvancesBaselineWithoutLosingOscillatingChanges() {
+		assertCoalescedCatalogOscillation(true);
+	}
+
+	private static void assertCoalescedCatalogOscillation(boolean prompts) {
 		McpSubscriptionEventPublisher publisher =
 				McpSubscriptionEventPublisher.fromInMemoryDefaults();
 		CatalogState catalog = new CatalogState(false);
 		CatalogProjectionMetrics metrics = new CatalogProjectionMetrics();
-		SimulatorConfig config = simulatorConfig(publisher, catalog, metrics);
+		McpCatalogAccessPolicy accessPolicy = McpCatalogAccessPolicy.fromEvaluators(
+				(requestContext, toolRegistration, invocationFeatures) -> catalog.isToolVisible(
+						toolRegistration.getName(), invocationFeatures.getCancelationToken()),
+				(requestContext, promptRegistration, invocationFeatures) -> catalog.isToolVisible(
+						promptRegistration.getName(), invocationFeatures.getCancelationToken()));
+		McpSubscriptionAuthorizer authorizer = (authorizationContext, invocationFeatures) ->
+				McpSubscriptionAuthorization.Allowed.fromValidUntil(
+						Instant.now().plus(Duration.ofMinutes(5)));
+		SimulatorConfig config = simulatorConfig(publisher, accessPolicy, authorizer,
+				metrics, Duration.ofSeconds(5), prompts);
+		Runnable publish = prompts ? publisher::publishPromptsListChanged
+				: publisher::publishToolsListChanged;
+		String method = prompts ? "notifications/prompts/list_changed"
+				: "notifications/tools/list_changed";
+		String subscriptionId = "catalog-coalescing";
 
 		SokletSimulator.run(config, simulator -> {
-			McpSimulation simulation = simulator.startMcpRequest(
-					subscriptionRequest("catalog-coalescing"));
-			try {
+			try (McpSimulation simulation = simulator.startMcpRequest(
+					subscriptionRequest(subscriptionId, prompts))) {
 				assertSseResponse(awaitResponse(simulation));
-				assertAcknowledgment(nextItem(simulation), "catalog-coalescing");
-				metrics.awaitOutcome(
-						McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED);
+				assertAcknowledgment(nextItem(simulation), subscriptionId, prompts);
+				metrics.awaitOutcome(McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED);
 
+				// A -> B -> A while the first hint stays unread. Its coalescing key
+				// remains pending, just as a not-yet-written transport frame's does.
 				catalog.setConditionalVisible(true);
-				publisher.publishToolsListChanged();
-				metrics.awaitOutcome(
-						McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED);
-
-				// Leave the accepted notification in the simulator capture queue so its
-				// coalescing key remains pending while the next projection is offered.
+				publish.run();
+				metrics.awaitOutcome(McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED);
 				catalog.setConditionalVisible(false);
-				publisher.publishToolsListChanged();
-				metrics.awaitOutcome(
-						McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED);
-				metrics.awaitOutcome(
-						McpMetricsEvent.SubscriptionMaintenance.Outcome.COALESCED);
-				assertNotification(nextItem(simulation),
-						"notifications/tools/list_changed", "catalog-coalescing");
+				publish.run();
+				metrics.awaitOutcome(McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED);
+				metrics.awaitOutcome(McpMetricsEvent.SubscriptionMaintenance.Outcome.COALESCED);
+				assertNotification(nextItem(simulation), method, subscriptionId);
+				assertCurrentCatalog(simulator, prompts, false);
 				Assertions.assertTrue(pollItem(simulation, Duration.ZERO).isEmpty(),
 						"A coalesced offer retained a duplicate wire notification.");
 
-				// The second projection saw the original catalog. Because COALESCED may
-				// not commit that digest, the same invalidation must detect it again now
-				// that the prior wire notification has left the capture queue.
-				publisher.publishToolsListChanged();
-				metrics.awaitOutcome(
-						McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED);
-				assertNotification(nextItem(simulation),
-						"notifications/tools/list_changed", "catalog-coalescing");
+				// The client now sees A. Returning to B must notify it again; leaving
+				// the baseline at the first accepted B loses this update indefinitely.
+				catalog.setConditionalVisible(true);
+				publish.run();
+				metrics.awaitOutcome(McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED);
+				assertNotification(nextItem(simulation), method, subscriptionId);
+				assertCurrentCatalog(simulator, prompts, true);
 
-				simulation.close();
-				Assertions.assertEquals(
-						McpStreamTerminationReason.CLIENT_DISCONNECTED,
-						awaitCompletion(simulation).getReason());
-			} finally {
-				simulation.close();
+				// Repeat the reverse oscillation with another pending hint.
+				catalog.setConditionalVisible(false);
+				publish.run();
+				metrics.awaitOutcome(McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED);
+				catalog.setConditionalVisible(true);
+				publish.run();
+				metrics.awaitOutcome(McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED);
+				metrics.awaitOutcome(McpMetricsEvent.SubscriptionMaintenance.Outcome.COALESCED);
+				assertNotification(nextItem(simulation), method, subscriptionId);
+				assertCurrentCatalog(simulator, prompts, true);
+				catalog.setConditionalVisible(false);
+				publish.run();
+				metrics.awaitOutcome(McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED);
+				assertNotification(nextItem(simulation), method, subscriptionId);
+				assertCurrentCatalog(simulator, prompts, false);
+
+				publish.run();
+				metrics.awaitOutcome(McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED);
+				Assertions.assertTrue(pollItem(simulation, NO_ITEM_WAIT).isEmpty(),
+						"An unchanged catalog emitted a redundant hint after coalescing.");
 			}
 		});
+	}
+
+	private static void assertCurrentCatalog(@NonNull Simulator simulator,
+			boolean prompts, boolean conditionalVisible) {
+		Request request = catalogRequest(prompts);
+		try (McpSimulation simulation = simulator.startMcpRequest(request)) {
+			McpSimulationResponse response = awaitResponse(simulation);
+			Assertions.assertEquals(200, response.getStatusCode());
+			String result = new String(response.getBody().orElseThrow(), StandardCharsets.UTF_8);
+			Assertions.assertTrue(result.contains("\"name\":\"" + STABLE_TOOL + "\""), result);
+			Assertions.assertEquals(conditionalVisible,
+					result.contains("\"name\":\"" + CONDITIONAL_TOOL + "\""), result);
+			Assertions.assertEquals(McpStreamTerminationReason.COMPLETED,
+					awaitCompletion(simulation).getReason());
+		}
+	}
+
+	private static Request catalogRequest(boolean prompts) {
+		String method = prompts ? "prompts/list" : "tools/list";
+		String body = "{\"jsonrpc\":\"2.0\",\"id\":\"list\",\"method\":\"" + method
+				+ "\",\"params\":{\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\""
+				+ PROTOCOL_VERSION + "\",\"io.modelcontextprotocol/clientCapabilities\":{}}}}";
+		return Request.withPath(HttpMethod.POST, MCP_PATH)
+				.headers(Map.of("Host", List.of(LOOPBACK + ":0"),
+						"Content-Type", List.of("application/json"),
+						"Accept", List.of("application/json, text/event-stream"),
+						"MCP-Protocol-Version", List.of(PROTOCOL_VERSION),
+						"Mcp-Method", List.of(method)))
+				.body(body.getBytes(StandardCharsets.UTF_8)).build();
 	}
 
 	@NonNull
@@ -550,17 +844,53 @@ public class McpSubscriptionCatalogProjectionPublicRuntimeTests {
 			@NonNull McpSubscriptionAuthorizer authorizer,
 			@NonNull MetricsCollector metrics,
 			@NonNull Duration projectionTimeout) {
+		return simulatorConfig(publisher, accessPolicy, authorizer, metrics, projectionTimeout, false);
+	}
+
+	@NonNull
+	private static SimulatorConfig simulatorConfig(
+			@NonNull McpSubscriptionEventPublisher publisher,
+			@NonNull McpCatalogAccessPolicy accessPolicy,
+			@NonNull McpSubscriptionAuthorizer authorizer,
+			@NonNull MetricsCollector metrics,
+			@NonNull Duration projectionTimeout, boolean prompts) {
+		return simulatorConfig(publisher, accessPolicy, authorizer, metrics, projectionTimeout, prompts, ignored -> {});
+	}
+
+	@NonNull
+	private static SimulatorConfig simulatorConfig(
+			@NonNull McpSubscriptionEventPublisher publisher,
+			@NonNull McpCatalogAccessPolicy accessPolicy,
+			@NonNull McpSubscriptionAuthorizer authorizer,
+			@NonNull MetricsCollector metrics,
+			@NonNull Duration projectionTimeout, boolean prompts,
+			@NonNull Consumer<McpServer.Builder> options) {
+		return simulatorConfig(publisher, accessPolicy, authorizer, metrics, projectionTimeout, prompts, options, false);
+	}
+
+	@NonNull
+	private static SimulatorConfig simulatorConfig(
+			@NonNull McpSubscriptionEventPublisher publisher,
+			@NonNull McpCatalogAccessPolicy accessPolicy,
+			@NonNull McpSubscriptionAuthorizer authorizer,
+			@NonNull MetricsCollector metrics,
+			@NonNull Duration projectionTimeout, boolean prompts,
+			@NonNull Consumer<McpServer.Builder> options, boolean serverInfoIncluded) {
 		McpSubscriptionConfig subscriptions = McpSubscriptionConfig
 				.withEventPublisherAndNotificationTypes(publisher, EnumSet.of(
 						McpSubscriptionNotificationType.TOOLS_LIST_CHANGED,
+						McpSubscriptionNotificationType.PROMPTS_LIST_CHANGED,
 						McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED))
 				.build();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
 					McpImplementation.withNameAndVersion(
 							"catalog-projection-runtime-test", "4.0.0")
+							.title("Canonical server title")
 							.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
-				.serverInfoIncluded(false)
+				.serverInfoIncluded(serverInfoIncluded)
 				.toolRegistrations(java.util.List.of(tool(STABLE_TOOL), tool(CONDITIONAL_TOOL)))
+				.promptRegistrations(prompts ? List.of(prompt(STABLE_TOOL), prompt(CONDITIONAL_TOOL))
+						: List.of())
 				.resourceRegistrations(java.util.List.of(McpResourceRegistration.withUriAndName(
 						RESOURCE_URI, "Projection resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 						.handler((request, resource, features) ->
@@ -574,7 +904,8 @@ public class McpSubscriptionCatalogProjectionPublicRuntimeTests {
 				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(subscriptions)
 				.build();
 		return SimulatorConfig.builder()
-				.configureMcpServer(builder -> builder
+				.configureMcpServer(builder -> {
+					builder
 						.port(0)
 						.host(LOOPBACK)
 						.endpointRegistry(McpEndpointRegistry.fromEndpoints(
@@ -590,7 +921,9 @@ public class McpSubscriptionCatalogProjectionPublicRuntimeTests {
 								projectionTimeout)
 						.catalogAccessPolicy(accessPolicy)
 						.corsAuthorizer(CorsAuthorizer.acceptAllInstance())
-						.allowedHosts(Set.of(LOOPBACK)))
+						.allowedHosts(Set.of(LOOPBACK));
+					options.accept(builder);
+				})
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
 				.metricsCollector(metrics)
@@ -606,6 +939,16 @@ public class McpSubscriptionCatalogProjectionPublicRuntimeTests {
 				.jsonObjectArguments()
 				.handler((request, arguments, features) ->
 						McpCompleteResult.fromToolText("unused"))
+				.title("Canonical " + name)
+				.build();
+	}
+
+	@NonNull
+	private static McpPromptRegistration prompt(@NonNull String name) {
+		return McpPromptRegistration.withName(name, Set.of(McpProtocolVersion.V2026_07_28))
+				.handler((requestContext, promptGetContext, invocationFeatures) ->
+						McpCompleteResult.fromPromptOutput(McpPromptOutput.fromMessages()))
+				.title("Canonical " + name)
 				.build();
 	}
 
@@ -620,12 +963,18 @@ public class McpSubscriptionCatalogProjectionPublicRuntimeTests {
 
 	@NonNull
 	private static Request subscriptionRequest(@NonNull String id) {
+		return subscriptionRequest(id, false);
+	}
+
+	@NonNull
+	private static Request subscriptionRequest(@NonNull String id, boolean prompts) {
+		String catalogFilter = prompts ? "promptsListChanged" : "toolsListChanged";
 		String body = "{\"jsonrpc\":\"2.0\",\"id\":\"" + id
 				+ "\",\"method\":\"subscriptions/listen\",\"params\":{"
 				+ "\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\""
 				+ PROTOCOL_VERSION + "\","
 				+ "\"io.modelcontextprotocol/clientCapabilities\":{}},"
-				+ "\"notifications\":{\"toolsListChanged\":true,"
+				+ "\"notifications\":{\"" + catalogFilter + "\":true,"
 				+ "\"resourcesListChanged\":true}}}";
 		return Request.withPath(HttpMethod.POST, MCP_PATH)
 				.headers(Map.of(
@@ -651,16 +1000,22 @@ public class McpSubscriptionCatalogProjectionPublicRuntimeTests {
 	private static void assertAcknowledgment(
 			@NonNull McpSimulationStreamItem item,
 			@NonNull String subscriptionId) {
+		assertAcknowledgment(item, subscriptionId, false);
+	}
+
+	private static void assertAcknowledgment(
+			@NonNull McpSimulationStreamItem item,
+			@NonNull String subscriptionId, boolean prompts) {
 		McpJsonObject message = message(item);
 		Assertions.assertEquals("notifications/subscriptions/acknowledged",
 				stringMember(message, "method"));
 		McpJsonObject params = objectMember(message, "params");
 		assertSubscriptionId(params, subscriptionId);
 		McpJsonObject notifications = objectMember(params, "notifications");
-		Assertions.assertEquals(Set.of("toolsListChanged",
+		Assertions.assertEquals(Set.of(prompts ? "promptsListChanged" : "toolsListChanged",
 				"resourcesListChanged"), notifications.getMembers().keySet());
 		Assertions.assertTrue(booleanMember(notifications,
-				"toolsListChanged"));
+				prompts ? "promptsListChanged" : "toolsListChanged"));
 		Assertions.assertTrue(booleanMember(notifications,
 				"resourcesListChanged"));
 	}
@@ -1230,6 +1585,17 @@ public class McpSubscriptionCatalogProjectionPublicRuntimeTests {
 			if (event instanceof McpMetricsEvent.SubscriptionMaintenance maintenance)
 				requireNonNull(this.events.get(maintenance.getWork()))
 						.add(maintenance);
+		}
+
+		private void awaitSuccessfulCatalogProjections(int expected) {
+			int succeeded = 0;
+			for (int seen = 0; succeeded < expected && seen < 2 * expected; seen++) {
+				McpMetricsEvent.SubscriptionMaintenance event = pollCatalog(WAIT).orElseThrow(() ->
+						new AssertionError("Timed out waiting for a catalog projection."));
+				if (event.getOutcome() == McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED) succeeded++;
+				else Assertions.assertEquals(McpMetricsEvent.SubscriptionMaintenance.Outcome.COALESCED, event.getOutcome());
+			}
+			Assertions.assertEquals(expected, succeeded);
 		}
 
 		private void awaitOutcome(

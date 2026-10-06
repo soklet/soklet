@@ -37,7 +37,19 @@ import static java.util.Objects.requireNonNull;
  * Configuration alone does not enable sessions on every endpoint. Sessions
  * are bounded, node-local state owned by the MCP server's lifecycle; session
  * IDs are correlation handles, not credentials. Every use requires fresh
- * admission and owner verification.
+ * admission and owner verification. Multi-node deployments require affinity to
+ * the initializing node for all session traffic. There is no application-supplied
+ * session-store hook; node loss requires client reinitialization and resubscription.
+ * Application-owned task storage, publishers, and authorization services may be
+ * distributed independently of these local sessions.
+ * <p>
+ * Capacity reclamation replaces only the initializing owner's quiescent
+ * sessions. There is no global fair-share reclamation: the default 256 slots
+ * can be filled by 16 owners at their 16-session limits, denying new owners
+ * until slots are released or abandoned sessions reach the 24-hour idle limit.
+ * Configure counts for the owner population and idle duration for abandoned
+ * clients. Session capacity failures do not supply an invented retry delay.
+ * Anonymous sessions, when enabled, also share a 64-session global ceiling.
  * <p>
  * Instances retain reference identity because the application-owned resolver
  * is a live callback. Configuration does not make its state immutable or
@@ -106,8 +118,11 @@ public final class McpSessionConfig {
 
 	/**
 	 * Returns the lifetime of a quiescent session without accepted owner-bound
-	 * activity. In-flight admitted work prevents idle expiry. Invalid requests
-	 * and transport keep-alives do not refresh this lifetime.
+	 * activity. Physically active initialization, POST and GET work prevents idle
+	 * expiry. Background URI authorization renewal does not refresh this lifetime
+	 * or prevent logical expiry; unfinished callbacks retain their evidence until
+	 * they exit. Invalid requests and transport keep-alives do not refresh this
+	 * lifetime.
 	 *
 	 * @return positive idle lifetime; default 24 hours
 	 */

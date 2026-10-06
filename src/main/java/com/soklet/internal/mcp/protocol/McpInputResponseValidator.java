@@ -36,8 +36,8 @@ final class McpInputResponseValidator {
 	@NonNull
 	private static final String INVALID_MESSAGE = "MCP input response is invalid.";
 	@NonNull
-	private static final McpJsonLimits JSON_LIMITS =
-			McpJsonLimits.productionDefaults();
+	private static final McpJsonCodec JSON_CODEC =
+			new McpJsonCodec(McpJsonLimits.productionDefaults());
 
 	private McpInputResponseValidator() {
 	}
@@ -86,7 +86,8 @@ final class McpInputResponseValidator {
 		if (value instanceof McpJsonString || value instanceof McpJsonBoolean)
 			return;
 		if (value instanceof McpJsonNumber number) {
-			McpJsonIntegerSupport.toSerializableInteger(number.value(), JSON_LIMITS);
+			// ElicitResult.content permits numbers, including decimals, rather than only integers.
+			JSON_CODEC.validateNumberForSerialization(number.value());
 			return;
 		}
 		throw invalid();

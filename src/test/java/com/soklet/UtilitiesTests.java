@@ -125,7 +125,7 @@ public class UtilitiesTests {
 
 	@Test
 	public void acceptLanguagesRejectInvalidQualityValues() {
-		List<Locale> locales = Utilities.extractLocalesFromAcceptLanguageHeaderValue("en;q=bogus");
+		List<Locale> locales = Utilities.extractLocalesFromAcceptLanguageHeaderValue("fr;q=0.9,en;q=bogus");
 
 		assertEquals(List.of(), locales, "Malformed locale string mishandled");
 	}
@@ -549,7 +549,7 @@ public class UtilitiesTests {
 	}
 
 	@Test
-	void cacheControl_singleLineCommaSeparated_equals_multiLine() {
+	void cacheControl_singleLineAndMultipleLinesRetainTheirPhysicalOccurrences() {
 		Map<String, List<String>> a = Utilities.extractHeadersFromRawHeaderLines(lines(
 				"Cache-Control: no-cache, no-store"
 		));
@@ -558,10 +558,8 @@ public class UtilitiesTests {
 				"Cache-Control: no-store"
 		));
 
-		Map<String, List<String>> expected = Map.of("cache-control", List.of("no-cache", "no-store"));
-
-		assertEquals(expected, a);
-		assertEquals(expected, b);
+		assertEquals(Map.of("cache-control", List.of("no-cache, no-store")), a);
+		assertEquals(Map.of("cache-control", List.of("no-cache", "no-store")), b);
 	}
 
 	@Test
@@ -571,17 +569,17 @@ public class UtilitiesTests {
 				"  no-store"
 		));
 
-		assertEquals(List.of("no-cache", "no-store"), m.get("cache-control"));
+		assertEquals(List.of("no-cache, no-store"), m.get("cache-control"));
 	}
 
 	@Test
-	void accept_isCommaSplit_preservingRepeatedValuesAndOrder() {
+	void accept_preservesTheWholeFieldValueIncludingRepeatedCommaItems() {
 		Map<String, List<String>> m = Utilities.extractHeadersFromRawHeaderLines(lines(
 				"Accept: text/html, application/json, text/html  "
 		));
 
-		assertEquals(List.of("text/html", "application/json", "text/html"), m.get("accept"));
-			}
+		assertEquals(List.of("text/html, application/json, text/html"), m.get("accept"));
+	}
 
 	@Test
 	void vary_mergesCaseInsensitiveNamesAndPreservesRepeatedValues() {
@@ -591,7 +589,7 @@ public class UtilitiesTests {
 				"VARY: Accept" // repeated values remain visible
 		));
 
-		assertEquals(List.of("Accept-Encoding", "Accept-Encoding", "Accept", "Accept"), m.get("vary"));
+		assertEquals(List.of("Accept-Encoding", "Accept-Encoding, Accept", "Accept"), m.get("vary"));
 		assertEquals(1, m.size(), "vary entries should merge despite case differences");
 	}
 
@@ -628,20 +626,23 @@ public class UtilitiesTests {
 				"Warning: 199 example \"quote: \\\"inside\\\"\" , 299 example2 \"ok\""
 		));
 
-		// Two Warning values separated by a real comma outside quotes
+		// The comma outside quotes is still part of the single physical field value.
 		List<String> values = m.get("warning");
 		assertNotNull(values);
-		assertEquals(2, values.size());
+		assertEquals(1, values.size());
 		assertTrue(values.stream().anyMatch(v -> v.contains("quote: \\\"inside\\\"")));
+		assertTrue(values.get(0).contains(", 299 example2 \"ok\""));
 	}
 
 	@Test
-	void whitespace_isTrimmed_and_emptyValuesIgnored() {
+	void outerWhitespaceIsTrimmedAndEmptyFieldValuesAreRetained() {
 		Map<String, List<String>> m = Utilities.extractHeadersFromRawHeaderLines(lines(
 				"Cache-Control:   no-cache   ",
-				"Cache-Control:    ,   ,   no-store   "  // empties ignored
+				"Cache-Control:    ,   ,   no-store   ",
+				"Cache-Control:",
+				"Cache-Control:\t \t"
 		));
-		assertEquals(List.of("no-cache", "no-store"), m.get("cache-control"));
+		assertEquals(List.of("no-cache", ",   ,   no-store", "", ""), m.get("cache-control"));
 	}
 
 	@Test
@@ -656,13 +657,13 @@ public class UtilitiesTests {
 	}
 
 	@Test
-	void connection_and_transferEncoding_are_joinable() {
+	void connectionAndTransferEncodingKeepTheirWholeFieldValues() {
 		Map<String, List<String>> m = Utilities.extractHeadersFromRawHeaderLines(lines(
 				"Connection: keep-alive, Upgrade",
 				"Transfer-Encoding: chunked, gzip"
 		));
-		assertEquals(List.of("keep-alive", "Upgrade"), m.get("connection"));
-		assertEquals(List.of("chunked", "gzip"), m.get("transfer-encoding"));
+		assertEquals(List.of("keep-alive, Upgrade"), m.get("connection"));
+		assertEquals(List.of("chunked, gzip"), m.get("transfer-encoding"));
 	}
 
 	@Test
@@ -836,13 +837,14 @@ public class UtilitiesTests {
 	}
 
 	@Test
-	public void commaJoinableHeaders_splitOutsideQuotes() {
+	public void commaListHeadersKeepTheirWholeFieldValues() {
 		List<String> lines = List.of(
 				"Cache-Control: no-cache, no-store",
 				"Warning: \"c,omma inside quotes\", 199 Misc"
 		);
 		Map<String, List<String>> parsed = Utilities.extractHeadersFromRawHeaderLines(lines);
-		Assertions.assertEquals(List.of("no-cache", "no-store"), parsed.get("cache-control"));
+		Assertions.assertEquals(List.of("no-cache, no-store"), parsed.get("cache-control"));
+		Assertions.assertEquals(List.of("\"c,omma inside quotes\", 199 Misc"), parsed.get("Warning"));
 	}
 
 	@Test
@@ -874,7 +876,7 @@ public class UtilitiesTests {
 	}
 
 	@Test
-	void unfoldsObsFold_andSplitsCommaJoinable_andKeepsSetCookieDistinct() {
+	void unfoldsObsFoldAndKeepsEveryFieldOccurrenceDistinct() {
 		var raw = List.of(
 				"Cache-Control: no-cache, no-store",
 				"Set-Cookie: a=b; Path=/; HttpOnly",
@@ -886,7 +888,7 @@ public class UtilitiesTests {
 		var headers = Utilities.extractHeadersFromRawHeaderLines(raw);
 
 		// case-insensitive key access + insertion order preserved
-		assertEquals(Set.of("no-cache", "no-store"), new LinkedHashSet<>(headers.get("Cache-Control")));
+		assertEquals(List.of("no-cache, no-store"), headers.get("Cache-Control"));
 		assertEquals(
 				List.of(
 						"a=b; Path=/; HttpOnly",
@@ -901,7 +903,7 @@ public class UtilitiesTests {
 	void quotedCommasAreNotSplit() {
 		var raw = List.of("Cache-Control: foo=\"a,b\", bar=c");
 		var headers = Utilities.extractHeadersFromRawHeaderLines(raw);
-		assertEquals(List.of("foo=\"a,b\"", "bar=c"), headers.get("Cache-Control"));
+		assertEquals(List.of("foo=\"a,b\", bar=c"), headers.get("Cache-Control"));
 	}
 
 	@Test

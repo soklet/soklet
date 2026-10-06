@@ -222,9 +222,9 @@ final class McpCatalogProjectionQueue {
 	}
 
 	/**
-	 * Installs a digest only after the projection's notification is accepted by
-	 * the transport. Ownership is enforced here; acceptance is a caller-owned
-	 * transport outcome.
+	 * Installs the latest digest covered by an accepted or wholly unwritten coalesced
+	 * transport hint. This is an invalidation baseline, not a delivery receipt.
+	 * Ownership is enforced here; the covering transport outcome is caller-owned.
 	 */
 	void advanceBaseline(@NonNull Projection projection,
 			@NonNull Digest baseline) {

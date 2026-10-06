@@ -27,6 +27,9 @@ import org.junit.jupiter.api.Timeout;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.net.Socket;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -35,6 +38,8 @@ import java.net.http.HttpResponse;
 import java.nio.channels.Selector;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -61,6 +66,116 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 	private static final String HOST = "127.0.0.1";
 	private static final String PROTOCOL_VERSION = "2026-07-28";
 	private static final String JSON_MEDIA_TYPE = "application/json";
+
+	@Test
+	public void twoSubscriptionsCanShutDownWhileTheirMaintenanceCollectorIsBlocked()
+			throws Exception {
+		McpSubscriptionEventPublisher publisher = McpSubscriptionEventPublisher.fromInMemoryDefaults();
+		Set<McpProtocolVersion> versions = Set.of(McpProtocolVersion.V2026_07_28);
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp/metric-shutdown",
+				McpImplementation.withNameAndVersion("metric-shutdown-test", "4.0.0").build(), versions)
+				.toolRegistrations(List.of(McpToolRegistration.withName("metric_shutdown_tool", versions)
+						.jsonObjectArguments()
+						.handler((requestContext, arguments, invocationFeatures) ->
+								McpCompleteResult.fromToolText("unused")).build()))
+				.subscriptionProtocolVersions(versions)
+				.subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(
+						publisher, Set.of(McpSubscriptionNotificationType.TOOLS_LIST_CHANGED)).build())
+				.build();
+		McpServer server = McpServer.withPort(0).host(HOST).allowedHosts(Set.of(HOST))
+				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
+				.admissionController(McpAdmissionController.acceptAllInstance())
+				.toolRateLimiter(rateLimitContext -> McpRateLimitDecision.allowed())
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.subscriptionAuthorizer((authorizationContext, invocationFeatures) ->
+						McpSubscriptionAuthorization.Allowed.fromValidUntil(
+								Instant.now().plus(Duration.ofMinutes(5))))
+				.build();
+		CountDownLatch initialProjections = new CountDownLatch(2);
+		CountDownLatch collectorEntered = new CountDownLatch(1);
+		CountDownLatch collectorRelease = new CountDownLatch(1);
+		CountDownLatch collectorExited = new CountDownLatch(1);
+		AtomicBoolean blockMaintenance = new AtomicBoolean();
+		MetricsCollector collector = new MetricsCollector() {
+			@Override
+			public void didRecordMcpMetricsEvent(McpMetricsEvent event) {
+				if (!(event instanceof McpMetricsEvent.SubscriptionMaintenance maintenance)
+						|| maintenance.getWork() != McpMetricsEvent.SubscriptionMaintenance.Work.CATALOG_PROJECTION)
+					return;
+				if (!blockMaintenance.get()) {
+					initialProjections.countDown();
+					return;
+				}
+				collectorEntered.countDown();
+				try {
+					Assertions.assertTrue(collectorRelease.await(5, TimeUnit.SECONDS));
+				} catch (InterruptedException exception) {
+					Thread.currentThread().interrupt();
+					throw new AssertionError(exception);
+				} finally {
+					collectorExited.countDown();
+				}
+			}
+		};
+		Soklet owner = soklet(server, collector, LifecycleObserver.defaultInstance());
+		ExecutorService executor = Executors.newSingleThreadExecutor();
+		List<InputStream> bodies = new ArrayList<>();
+		try {
+			owner.start();
+			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
+			HttpClient client = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build();
+			for (int index = 0; index < 2; index++) {
+				String id = "metric-shutdown-" + index;
+				String body = "{\"jsonrpc\":\"2.0\",\"id\":\"" + id
+						+ "\",\"method\":\"subscriptions/listen\",\"params\":{"
+						+ "\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\","
+						+ "\"io.modelcontextprotocol/clientCapabilities\":{}},"
+						+ "\"notifications\":{\"toolsListChanged\":true}}}";
+				HttpRequest request = HttpRequest.newBuilder(URI.create(
+						"http://" + HOST + ":" + port + endpoint.getPath()))
+						.timeout(Duration.ofSeconds(5))
+						.header("Content-Type", JSON_MEDIA_TYPE)
+						.header("Accept", "application/json, text/event-stream")
+						.header("MCP-Protocol-Version", PROTOCOL_VERSION)
+						.header("Mcp-Method", "subscriptions/listen")
+						.POST(HttpRequest.BodyPublishers.ofString(body)).build();
+				HttpResponse<InputStream> response = client.send(request, HttpResponse.BodyHandlers.ofInputStream());
+				bodies.add(response.body());
+				Assertions.assertEquals(200, response.statusCode());
+				BufferedReader reader = new BufferedReader(new InputStreamReader(response.body(), StandardCharsets.UTF_8));
+				executor.submit(() -> {
+					String line;
+					while ((line = reader.readLine()) != null)
+						if (line.startsWith("data:")) {
+							Assertions.assertTrue(line.contains("notifications/subscriptions/acknowledged"), line);
+							Assertions.assertTrue(line.contains(
+									"\"io.modelcontextprotocol/subscriptionId\":\"" + id + "\""), line);
+							return null;
+						}
+					throw new AssertionError("The subscription closed before acknowledging.");
+				}).get(5, TimeUnit.SECONDS);
+			}
+			Assertions.assertTrue(initialProjections.await(5, TimeUnit.SECONDS));
+			blockMaintenance.set(true);
+			publisher.publishToolsListChanged();
+			Assertions.assertTrue(collectorEntered.await(5, TimeUnit.SECONDS));
+			executor.submit(owner::close).get(4, TimeUnit.SECONDS);
+			Assertions.assertEquals(ShutdownComponentDisposition.GRACEFUL_TERMINATION,
+					owner.getShutdownResult().orElseThrow()
+							.getShutdownComponentResult(ShutdownComponentType.MCP).orElseThrow()
+							.getShutdownComponentDisposition());
+			Assertions.assertEquals(1L, collectorRelease.getCount(),
+					"Clean shutdown must finish before the stalled collector is released.");
+		} finally {
+			collectorRelease.countDown();
+			for (InputStream body : bodies)
+				body.close();
+			executor.shutdownNow();
+			Assertions.assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
+			owner.close();
+		}
+		Assertions.assertTrue(collectorExited.await(5, TimeUnit.SECONDS));
+	}
 
 	@Test
 	public void queuedMetricEntriesRetainOnlyTheBoundedMetricEvent() {

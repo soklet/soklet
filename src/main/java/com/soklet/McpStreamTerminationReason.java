@@ -50,7 +50,7 @@ public enum McpStreamTerminationReason {
 	SUBSCRIPTION_AUTHORIZATION_EXPIRED,
 	/** A required subscription authorization check failed. */
 	SUBSCRIPTION_AUTHORIZATION_CHECK_FAILED,
-	/** Subscription reconciliation could not establish fresh authorization. */
+	/** Reconciliation failed to check fresh authorization; an explicit denial uses SUBSCRIPTION_AUTHORIZATION_DENIED. */
 	SUBSCRIPTION_RECONCILIATION_FAILED,
 	/** Soklet contained an unexpected stream failure. */
 	INTERNAL_ERROR

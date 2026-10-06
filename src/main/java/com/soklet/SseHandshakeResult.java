@@ -368,6 +368,11 @@ public sealed interface SseHandshakeResult permits SseHandshakeResult.Accepted, 
 	 * <p>
 	 * Instances can be acquired via the {@link SseHandshakeResult#rejectWithResponse(Response)} factory method.
 	 * <p>
+	 * The standard SSE transport closes the connection after writing a rejected handshake.
+	 * It replaces application framing headers with {@code Connection: close} and the actual
+	 * finite body length, omitting a length where the status forbids it. Application hop-by-hop
+	 * headers and fields named by {@code Connection} are removed; other headers and cookies remain.
+	 * <p>
 	 * Full documentation is available at <a href="https://www.soklet.com/docs/server-sent-events#rejecting-handshakes">https://www.soklet.com/docs/server-sent-events#rejecting-handshakes</a>.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>

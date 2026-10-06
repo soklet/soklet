@@ -95,16 +95,18 @@ public final class McpEndpoint {
 	/**
 	 * Vends a builder primed with its required construction values.
 	 *
-	 * @param path the absolute endpoint path in ASCII raw URI form; percent-encode
-	 *             non-ASCII characters
+	 * @param path the normalized absolute endpoint path in ASCII raw URI form;
+	 *             percent-encode non-ASCII characters. The path is not rewritten.
 	 * @param implementation implementation information advertised by the endpoint
 	 * @param protocolVersions nonempty exact revisions served at this URL
 	 * @return a builder for endpoint registrations
 	 * @throws NullPointerException if an argument is null
 	 * @throws IllegalArgumentException if the path is not a non-root absolute
 	 *                                  path, is not valid ASCII raw URI form,
-	 *                                  contains a query or fragment, or exceeds
-	 *                                  8192 bytes after normalization
+	 *                                  contains a query or fragment, has a trailing
+	 *                                  slash, repeated slashes, whitespace or dot
+	 *                                  segments, or exceeds 8192 bytes, or the
+	 *                                  server name or version is blank
 	 */
 	@NonNull
 	public static Builder withPath(@NonNull String path,
@@ -145,14 +147,14 @@ public final class McpEndpoint {
 		this.subscriptionConfig = builder.subscriptionConfig;
 		if (this.protocolVersions.contains(McpProtocolVersion.V2025_03_26))
 			throw new IllegalStateException(
-					"MCP 2025-03-26 is not implemented by this adapter.");
+					"MCP 2025-03-26 is not implemented by this adapter" + versionContext(Set.of(McpProtocolVersion.V2025_03_26)));
 
 		requireSubset(this.taskProtocolVersions, this.protocolVersions, "Tasks");
 		requireSubset(this.sessionProtocolVersions, this.protocolVersions, "sessions");
 		if (!Set.of(McpProtocolVersion.V2025_06_18,
 				McpProtocolVersion.V2025_11_25).containsAll(this.sessionProtocolVersions))
 			throw new IllegalStateException(
-					"Sessions currently require MCP 2025-06-18 or 2025-11-25.");
+					"Sessions currently require MCP 2025-06-18 or 2025-11-25" + versionContext(this.sessionProtocolVersions));
 		requireSubset(this.subscriptionProtocolVersions, this.protocolVersions,
 				"subscriptions");
 		requireSubset(this.skillListHandlerProtocolVersions, this.protocolVersions,
@@ -162,40 +164,49 @@ public final class McpEndpoint {
 		if (!Set.of(McpProtocolVersion.V2026_07_28).containsAll(
 				this.taskProtocolVersions))
 			throw new IllegalStateException(
-					"Tasks currently require MCP 2026-07-28.");
+					"Tasks currently require MCP 2026-07-28" + versionContext(this.taskProtocolVersions));
 		if (!Set.of(McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25,
 				McpProtocolVersion.V2026_07_28).containsAll(
 				this.subscriptionProtocolVersions))
 			throw new IllegalStateException(
-					"Subscriptions currently require MCP 2025-06-18, 2025-11-25, or 2026-07-28.");
+					"Subscriptions currently require MCP 2025-06-18, 2025-11-25, or 2026-07-28" + versionContext(this.subscriptionProtocolVersions));
 		for (McpProtocolVersion subscriptionProtocolVersion : this.subscriptionProtocolVersions)
 			if (subscriptionProtocolVersion != McpProtocolVersion.V2026_07_28
 					&& !this.sessionProtocolVersions.contains(subscriptionProtocolVersion))
 				throw new IllegalStateException(
-						"Legacy subscription revisions must also enable sessions.");
+						"Legacy subscription revisions must also enable sessions" + versionContext(Set.of(subscriptionProtocolVersion)));
 		if (this.subscriptionConfig != null && this.subscriptionProtocolVersions.isEmpty())
 			throw new IllegalStateException(
-					"MCP subscription configuration requires an enabled protocol revision.");
+					"MCP subscription configuration requires an enabled protocol revision" + versionContext(this.protocolVersions));
 
 		Set<String> toolNames = new LinkedHashSet<>();
 		for (McpToolRegistration<?> tool : this.toolRegistrations) {
 			requireSubset(tool.getProtocolVersions(), this.protocolVersions,
 					"tool " + tool.getName());
 			if (containsLegacyVersion(tool.getProtocolVersions())
+					&& tool.getOutputSchema().isPresent()
+					&& !McpJsonString.fromValue("object").equals(tool.getOutputSchema().orElseThrow()
+							.getDocument().getMembers().get("type")))
+				throw new IllegalStateException("MCP tool '" + tool.getName()
+						+ "' output schema must have object type for the 2025 adapter"
+						+ versionContext(tool.getProtocolVersions()));
+			if (containsLegacyVersion(tool.getProtocolVersions())
 					&& (!tool.getInputRequestDeclarations().isEmpty()
 						|| tool.getRequestStateMode() != McpRequestStateMode.NONE
 						|| !tool.getMirroredHeaderPlan().declarations().isEmpty()))
 				throw new IllegalStateException(
 						"The 2025 tools adapter cannot serve input requests, request state, or mirrored headers for tool "
-								+ tool.getName() + ".");
+								+ tool.getName() + versionContext(tool.getProtocolVersions()));
 			tool.getAppToolMetadata().ifPresent(metadata -> {
 				if (containsLegacyVersion(metadata.getProtocolVersions()))
 					throw new IllegalStateException(
-							"MCP Apps metadata is not implemented by the 2025 adapter.");
+							"MCP Apps metadata for tool '" + tool.getName() + "' is not implemented by the 2025 adapter"
+									+ versionContext(metadata.getProtocolVersions()));
 				if (!metadata.getVisibility().contains(McpAppToolMetadata.Visibility.MODEL)
 						&& containsLegacyVersion(tool.getProtocolVersions()))
 					throw new IllegalStateException(
-							"App-only tools cannot be exposed by the 2025 tools-only adapter.");
+							"App-only tools cannot be exposed by the 2025 tools-only adapter: " + tool.getName()
+									+ versionContext(tool.getProtocolVersions()));
 			});
 			if (tool.isTaskRequired())
 				requireSubset(tool.getProtocolVersions(), this.taskProtocolVersions,
@@ -213,7 +224,7 @@ public final class McpEndpoint {
 						|| prompt.getRequestStateMode() != McpRequestStateMode.NONE))
 				throw new IllegalStateException(
 						"The 2025 prompt adapter cannot serve input requests or request state for prompt "
-								+ prompt.getName() + ".");
+								+ prompt.getName() + versionContext(prompt.getProtocolVersions()));
 			if (!promptNames.add(prompt.getName()))
 				throw new IllegalStateException(
 						"Duplicate MCP prompt name: " + prompt.getName());
@@ -228,11 +239,12 @@ public final class McpEndpoint {
 						|| resource.getRequestStateMode() != McpRequestStateMode.NONE)
 					throw new IllegalStateException(
 							"The 2025 resource adapter cannot serve input requests or request state for resource "
-									+ resource.getName() + ".");
+									+ resource.getName() + versionContext(resource.getProtocolVersions()));
 				if (hasAppsMimeType(resource)
 						|| resource.getMetadata().getMembers().containsKey("ui"))
 					throw new IllegalStateException(
-							"MCP Apps resources are not implemented by the 2025 adapter.");
+							"MCP Apps resources are not implemented by the 2025 adapter: " + resource.getName()
+									+ versionContext(resource.getProtocolVersions()));
 			}
 			if (resource.getAddressType() == McpResourceAddressType.URI) {
 				URI uri = resource.getUri().orElseThrow();
@@ -278,15 +290,16 @@ public final class McpEndpoint {
 		if (!Set.of(McpProtocolVersion.V2026_07_28).containsAll(
 				skill.getProtocolVersions()))
 			throw new IllegalStateException(
-					"Skills currently require MCP 2026-07-28.");
+					"Skills currently require MCP 2026-07-28: " + skill.getSkillBundle().getName()
+							+ versionContext(skill.getProtocolVersions()));
 	}
 
-	private static void requireModernOnly(
+	private void requireModernOnly(
 			@NonNull Set<@NonNull McpProtocolVersion> protocolVersions,
 			@NonNull String feature) {
 		if (containsLegacyVersion(protocolVersions))
 			throw new IllegalStateException("The 2025 adapter does not implement MCP "
-					+ feature + ".");
+					+ feature + versionContext(protocolVersions));
 	}
 
 	private static boolean containsLegacyVersion(
@@ -295,13 +308,20 @@ public final class McpEndpoint {
 				version != McpProtocolVersion.V2026_07_28);
 	}
 
-	private static void requireSubset(
+	private void requireSubset(
 			@NonNull Set<@NonNull McpProtocolVersion> selected,
 			@NonNull Set<@NonNull McpProtocolVersion> owner,
 			@NonNull String feature) {
 		if (!owner.containsAll(selected))
 			throw new IllegalStateException("MCP " + feature
-					+ " revisions must be a subset of their owner revisions.");
+					+ " revisions must be a subset of their owner revisions"
+					+ versionContext(selected.stream().filter(version -> !owner.contains(version))
+							.collect(java.util.stream.Collectors.toSet())));
+	}
+
+	private String versionContext(Set<McpProtocolVersion> versions) {
+		return " (endpoint " + this.path + "; revisions " + versions.stream()
+				.map(McpProtocolVersion::getWireValue).sorted().collect(java.util.stream.Collectors.joining(", ")) + ").";
 	}
 
 	private static boolean hasAppsMimeType(@NonNull McpResourceRegistration resource) {
@@ -631,20 +651,7 @@ public final class McpEndpoint {
 
 	@NonNull
 	static String normalizePath(@NonNull String path) {
-		requireNonNull(path);
-		String strippedPath = path.strip();
-
-		if (!strippedPath.startsWith("/") || strippedPath.length() == 1
-				|| strippedPath.contains("?") || strippedPath.contains("#"))
-			throw new IllegalArgumentException(
-					"MCP endpoint path must be a non-root absolute path without a query or fragment.");
-
-		String normalizedPath = ResourcePathDeclaration.normalizePath(strippedPath);
-
-		if (normalizedPath.length() == 1)
-			throw new IllegalArgumentException("MCP endpoint path must not be the root path.");
-
-		return McpEndpointPathLimit.requireValidWirePath(normalizedPath);
+		return McpEndpointPathLimit.requireValidWirePath(path);
 	}
 
 	/**
@@ -707,7 +714,7 @@ public final class McpEndpoint {
 				@NonNull Set<@NonNull McpProtocolVersion> protocolVersions) {
 			this.path = requireNonNull(path);
 			this.protocolVersions = requireNonNull(protocolVersions);
-			this.serverInformation = requireNonNull(implementation);
+			this.serverInformation = requireServerInformation(implementation);
 			this.serverInformationIncluded = true;
 			this.toolRegistrations = List.of();
 			this.promptRegistrations = List.of();
@@ -777,12 +784,23 @@ public final class McpEndpoint {
 		 *
 		 * @param implementation the server implementation information
 		 * @return this builder
+		 * @throws IllegalArgumentException if the server name or version is blank
 		 */
 		@NonNull
 		public Builder serverInfo(
 				@NonNull McpImplementation implementation) {
-			this.serverInformation = requireNonNull(implementation);
+			this.serverInformation = requireServerInformation(implementation);
 			return this;
+		}
+
+		@NonNull
+		private static McpImplementation requireServerInformation(
+				@NonNull McpImplementation implementation) {
+			requireNonNull(implementation);
+			if (implementation.getName().isBlank() || implementation.getVersion().isBlank())
+				throw new IllegalArgumentException(
+						"MCP server implementation name and version must not be blank.");
+			return implementation;
 		}
 
 		/**

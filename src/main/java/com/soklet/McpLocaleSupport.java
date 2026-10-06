@@ -65,19 +65,29 @@ final class McpLocaleSupport {
 			return List.of();
 
 		StringBuilder combined = new StringBuilder();
+		long rawCodeUnits = 0;
+		boolean firstValue = true;
 
 		for (String rawAcceptLanguageValue : rawAcceptLanguageValues) {
 			if (rawAcceptLanguageValue == null)
 				continue;
 
+			rawCodeUnits += rawAcceptLanguageValue.length() + (firstValue ? 0L : 1L);
+			firstValue = false;
+
+			// Bound the raw input, including fields that parsing will ignore.
+			if (rawCodeUnits > MAXIMUM_ACCEPT_LANGUAGE_CODE_UNITS)
+				return List.of();
+
+			String value = Utilities.trimHeaderWhitespace(rawAcceptLanguageValue);
+
+			if (value.isEmpty())
+				continue;
+
 			if (combined.length() > 0)
 				combined.append(',');
 
-			combined.append(rawAcceptLanguageValue);
-
-			// Bail before materializing more than the bound permits.
-			if (combined.length() > MAXIMUM_ACCEPT_LANGUAGE_CODE_UNITS)
-				return List.of();
+			combined.append(value);
 		}
 
 		if (combined.isEmpty() || combined.toString().isBlank())

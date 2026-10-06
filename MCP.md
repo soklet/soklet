@@ -47,7 +47,7 @@ exactly which host/tool versions were manually exercised.
 | Invocation control | Request-scoped progress over the MCP response stream plus cooperative cancelation for every application handler |
 | Subscriptions | Long-lived `subscriptions/listen` streams for resource-list changes, requested-resource updates, and authorized task IDs; application-owned local or distributed broadcast publishing |
 | Localization | Request-scoped library-neutral localization for framework-owned server, tool, prompt, resource, and schema text; no protocol capability or `_meta` extension |
-| Simulation | Asynchronous off-network MCP POST through the real processor/lifecycle with bounded JSON and exact SSE capture; no listener, bound address, or public diagnostic activity |
+| Simulation | Asynchronous off-network MCP HTTP requests, including POST, session-enabled 2025 GET/DELETE, and OPTIONS preflight, through the real processor/lifecycle with bounded JSON and exact SSE capture; no listener, bound address, or public diagnostic activity |
 | Bounded observation | Exactly one clean/residual outcome per successfully started listener generation, plus server-wide active-handler, queued-request, queue-full-rejection, and immutable handler-capacity, live-stream, protection, and trace-configuration diagnostics |
 | Trace logging | Default-off pseudonymous correlation and a separate raw-validated-trace-ID opt-in through bounded `MCP_TRACE_CORRELATION` log records; no trace metric dimensions |
 | Policy | Host and Origin checks, application admission, optional request limiting, mandatory fallback tool limiting for tool-bearing servers, bounded execution, and shared Soklet observation hosts |
@@ -110,6 +110,29 @@ start with `initialize`, may send `notifications/initialized`, and can call
 `ping`. Later POST requests use their selected `MCP-Protocol-Version` header;
 the default stateless view does not issue a session ID. Explicit endpoint and
 server configuration enables the [minimum 2025 session package](#explicitly-enabled-2025-sessions).
+
+Initialization negotiates from `params.protocolVersion`: a supported body
+version is returned unchanged. If that proposal is unsupported, a supplied,
+supported 2025 `MCP-Protocol-Version` header can guide the counteroffer;
+otherwise Soklet offers its newest configured 2025 revision. A present invalid
+or unsupported header still fails with HTTP 400. For example, a June-only
+endpoint accepts a November proposal with a static June header and replies
+with June. This does not enable March support or reinterpret modern framing.
+
+Later legacy-shaped requests may omit the version header only when the endpoint
+serves exactly one protocol revision and that revision is supported 2025.
+That explicit endpoint configuration identifies the revision for POST,
+notifications, and configured session GET/DELETE. A multi-version or modern
+endpoint still requires the header, including when a session ID is present;
+Soklet does not inspect an unauthenticated session to select an admission view.
+Clients should send the negotiated version on every subsequent request.
+Well-formed unsupported 2025 client notifications, including
+`notifications/roots/list_changed`, are admitted, request-limited, and ignored
+with empty HTTP 202. Session-enabled views verify the session first, so retired
+or wrong-owner sessions receive the same neutral HTTP 404. This acknowledgment
+does not enable roots, sampling, or other server-initiated calls. Modern
+unsupported notifications retain their HTTP 400 behavior.
+
 An optional HTTP transport admission controller enables leased GET opening and
 verified DELETE retirement on configured session views. Selected legacy subscriptions
 also enable session-owned URI grants and resource/catalog invalidations over GET. The implemented compatibility surface covers synchronous
@@ -482,7 +505,10 @@ value. Because the recognized operation set may grow with later MCP
 profiles, enum switches should retain a forward-compatible default.
 
 One server may host multiple `McpEndpoint` instances. Endpoint selection uses
-the normalized exact request path. Tool, prompt, and resource names may repeat
+the exact raw request path. Both builders and annotations require normalized
+ASCII raw URI paths and reject trailing slashes, repeated slashes, whitespace
+and dot segments rather than rewriting a declared URL. Clients must use the
+configured path verbatim, including percent encoding. Tool, prompt, and resource names may repeat
 on different endpoint paths without leaking across them, while handler slots,
 the admitted queue, and the server lifecycle remain server-wide.
 
@@ -539,6 +565,12 @@ The listener binds to `127.0.0.1` by default. A loopback literal or
 `host(...)` requires at least one explicit deployment hostname or IP literal
 in `allowedHosts(...)`, or server construction fails. Soklet does not
 terminate TLS.
+
+Explicitly allowlisted names accept a valid public port or an omitted port;
+the public port need not match the private listener's port. Automatically
+allowed loopback aliases still require the listener port. Host syntax, one
+physical Host occurrence and independent Origin authorization remain required.
+Forwarded headers cannot authorize an otherwise unlisted hostname.
 
 ## Construction and builder conventions
 
@@ -601,7 +633,27 @@ handler methods. Load selected generated endpoint classes through
 `McpEndpointRegistry.fromClasses(...)`.
 
 Compile annotated endpoints with `SokletProcessor`, retain parameter names,
-and preserve the generated endpoint provider/index resources when shading.
+and preserve the generated endpoint provider classes when shading. Combine all
+`META-INF/soklet/mcp-endpoint-descriptor-providers` indexes from the input
+modules into one newline-delimited index. Overwriting one index with another
+silently removes those modules' endpoints from classpath discovery; having one
+surviving index does not prove the catalog is complete. A service-file merger
+alone does not handle this Soklet-specific resource.
+
+For Maven Shade, add this transformer inside the plugin's
+`<configuration><transformers>` element:
+
+```xml
+<transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+  <resource>META-INF/soklet/mcp-endpoint-descriptor-providers</resource>
+</transformer>
+```
+
+For other packaging tools, configure concatenation for the same exact path.
+Check that the packaged index contains every expected provider and that the
+packaged application exposes every configured endpoint. See the
+[Maven Shade resource transformer documentation](https://maven.apache.org/plugins/maven-shade-plugin/examples/resource-transformers.html).
+
 For a named Java module, open or export the endpoint package to Soklet. A
 package containing a non-public record used for runtime conversion must be
 open to Soklet.
@@ -740,6 +792,13 @@ rejected because it is ambiguous with text content. Arbitrary beans,
 variables, unsupported `CharSequence` implementations, and unsafe recursive
 record shapes fail at registration or annotation processing.
 
+A tool selecting either 2025 revision must publish an object-root output
+schema. Annotated non-object outputs fail at compile time; programmatic typed
+registrations fail when the endpoint is built, with the tool name, path and
+selected revisions in the error. Modern-only tools may retain array and other
+supported output roots. Advanced handlers serving 2025 must also return
+object-valued structured content when they include it.
+
 Runtime schema evaluation deliberately exposes only the generic
 invalid-arguments result; its internal, bounded instance-free diagnostics are
 not projected into the public exception or JSON-RPC error. A reviewed
@@ -845,9 +904,13 @@ target, preserving the hidden/unknown response and limiter boundary. A
 localization-context creation failure instead uses the fixed redacted internal-
 error path because no evaluator can receive its required context. A detailed
 completed-task read rechecks the current origin-tool registration before
-sanitizing its result. A missing or newly hidden origin still returns the
-successful task status but omits the result and its metadata. Null or throwing
-policy decisions likewise fail through the fixed redacted internal-error path.
+sanitizing its result. A missing or newly hidden origin fails the detailed read
+with HTTP 500 and the fixed redacted JSON-RPC internal error (`-32603`). It does
+not emit `status: "completed"` without the required result, run the sanitizer,
+or change the persisted task. An explicit later poll can recover after access
+is restored or on a node with the origin registration; the error does not
+promise automatic client retries. Null or throwing policy decisions likewise
+fail through the fixed redacted internal-error path.
 This reauthorization runs inside the active `tasks/get` application Exchange
 with that Exchange's cancellation token and absolute deadline. Soklet checks
 cancellation and deadline state again after the evaluator returns, so a callback
@@ -876,6 +939,26 @@ only after that policy permits the target. This list/call distinction must not
 be used as an authorization boundary.
 
 ## Resources and pagination
+
+A resource-read handler that cannot find the selected URI can report the standard
+revision-specific error explicitly:
+
+```java
+throw new McpJsonRpcException(
+    McpJsonRpcError.fromResourceNotFound(resourceReadContext.getUri()));
+```
+
+`fromResourceNotFound(URI resourceUri)` requires an absolute, normalized URI in
+ASCII wire form. The immutable error has canonical code `-32602`, message
+`"Resource not found"`, and `data.uri`. At the resource-read handler boundary,
+Soklet renders `-32002` for `2025-06-18` and `2025-11-25`, and `-32602` for
+`2026-07-28`. Accepted 2025 operation errors use HTTP 200; modern invalid-parameter
+errors use HTTP 400. A plain `fromInvalidParameters(...)` error retains `-32602`
+on every revision, even with the same message and URI data. These two errors
+are unequal because their revision intent differs. Interceptor failures remain
+private internal errors; the factory does not turn an interceptor failure into
+a client-visible resource error.
+
 
 An exact resource registration has one concrete URI and contributes to the
 static `resources/list` fallback. A URI-template registration uses bounded RFC
@@ -1073,6 +1156,17 @@ for URL flows, and side-effect authorization. The public-API-only
 [input-security examples](src/test/java/examples/mcp/McpInputSecurityApplicationPatternsTests.java)
 compile-check each of those patterns; [SECURITY.md](SECURITY.md#mcp-deployment-security)
 defines the deployment boundary.
+
+Elicitation `content` values may be strings, numbers (including decimals),
+booleans, or arrays of strings. A decimal such as `3.50` reaches the application
+as an exact `BigDecimal` through `McpJsonNumber.getValue()`; Soklet does not
+coerce it to an integer or floating-point value. Numbers must fit the production
+JSON limits: at most 1,024 characters per number token and an absolute exponent
+magnitude of at most 10,000, including the serialization preflight. Nulls,
+nested objects, and arrays containing non-string elements do not match this
+content union. `McpInputRequest.matchesInputResponse(...)` checks that union,
+not the requested schema: enforcing an `integer` field, range, required field,
+or other application constraint remains the application's responsibility.
 
 For example, this raw-JSON tool requests active form Elicitation and lets Soklet
 carry JSON state between calls:
@@ -1464,6 +1558,25 @@ complete current snapshot as `notifications/tasks`. Event payloads never
 override manager state, and delayed or duplicate events cannot regress a task
 after a terminal snapshot has been sent.
 
+After reserving listen capacity, Soklet retains task-change hints received during
+initial authorization and projects only the acknowledged IDs after the
+acknowledgment. This closes the authorization-to-activation gap without adding an
+initial snapshot or replaying events from before the listen. Clients should still
+subscribe first, buffer new notifications, and poll authoritative task state.
+
+Completed notification results pass through a fresh catalog-access policy using
+the subscription's current authorized identity, just as polling results do. If
+the originating tool is missing or hidden, Soklet suppresses the completed
+notification and does not run the result sanitizer. The stored task remains
+unchanged, and other eligible task notifications continue. A later task-change
+hint or subscription reconciliation can retry projection after access is
+restored. Suppression does not consume terminal delivery or start an automatic
+retry loop. Current input-capability checks also apply. Reconciliation and
+lease expiry fence queued task frames; an unwritten suppressed terminal can be
+projected again under a fresh grant. The [Tasks schema](https://github.com/modelcontextprotocol/ext-tasks/blob/main/schema/2026-07-28/schema.ts)
+requires the final result in a detailed completed task for both polling and
+notifications.
+
 [`McpTaskEventPublisher`](https://javadoc.soklet.com/com/soklet/McpTaskEventPublisher.html)
 has broadcast, not competing-consumer, semantics. A fleet implementation must
 reach every eligible Soklet node; it must not let one node consume an event on
@@ -1475,20 +1588,33 @@ its listener registration during shutdown and never closes the
 application-owned publisher.
 
 Each subscription owns a bounded FIFO over its accepted task IDs and contributes
-at most one queued or running job to the shared task-projection scheduler.
-Distinct IDs retain first-event order. Repeated hints for one ID coalesce to its
-newest generation, including one that arrives while the manager lookup is in
-progress, and each continuation returns to the scheduler tail. A conforming
-256-ID subscription therefore cannot fill the shared queue by itself. The
-scheduler admits at most 128 queued subscription owners and up to four workers;
-either bound may be lower when the request-processor configuration is lower.
+at most one queued or running task-projection job. Distinct IDs retain first-event
+order. Repeated hints for one ID coalesce to its newest generation, including one
+that arrives while the manager lookup is in progress. Each continuation returns
+behind waiting peers and to the protocol executor's tail.
 
-Manager lookups are serialized within one subscription, so a slow or hung
-lookup delays that subscription's other task IDs. Other subscriptions retain
-bounded parallel progress, and ordinary `tasks/get` work keeps separately
-reserved execution capacity. Shared scheduler or per-stream output exhaustion
-can still close only the affected subscription with a backpressure reason.
-Clients must continue to treat `tasks/get` polling as authoritative.
+Subscription admission reserves separate coalesced work slots for task projection,
+catalog projection, authorization, and resource invalidations. The aggregate
+modern-subscription admission limit follows `concurrentConnectionLimit`, with an
+8,192-subscription bound when that transport limit is disabled. Pending and active
+subscriptions both count; the per-partition limit still applies. Capacity rejects
+new listen requests before a stream opens, rather than retiring admitted peers
+when a publisher fans out. The shared scheduler uses up to four workers, with
+ordinary request-processing capacity reserved when concurrency exceeds one.
+
+Manager lookups are serialized within one subscription. Task notification lookup,
+catalog policy and result sanitization share a bounded application invocation
+using `subscriptionAuthorizationTimeout`, also bounded by the remaining lease and
+stream lifetime. Failure or timeout suppresses that generation; a later hint or
+reauthorization can request a fresh projection. A callback that ignores
+cancelation retains the subscription's task-projection slot until it physically
+exits, so it cannot accumulate concurrent replacement callbacks. Other
+subscriptions retain bounded parallel progress while application capacity is
+available. Authorization, task and catalog callback timeouts begin at dispatch;
+waiting work cannot extend an existing authorization lease or total stream lifetime.
+An expired lease fences delivery even while its renewal is waiting. Per-stream
+output exhaustion or an oversized notification still closes the affected stream
+with a backpressure reason. Clients must treat `tasks/get` polling as authoritative.
 
 ### Public Tasks API map
 
@@ -1516,6 +1642,13 @@ partition keys and may attach an application principal. Those keys must not be
 self-reported client values. Client information, client capabilities, request
 `_meta`, and server information are informational rather than authenticated
 identity.
+
+Client implementation `name` and `version` must be strings but may be blank.
+`McpImplementation.withNameAndVersion(...)` preserves those strings exactly;
+legacy sessions remember them without treating them as identity. Missing or
+non-string required fields remain protocol errors. Configured endpoint server
+information requires nonblank names and versions in both programmatic and
+annotation configuration.
 
 An admission rejection may carry an application-authored
 `WWW-Authenticate` Bearer challenge, including an absolute
@@ -1615,6 +1748,27 @@ frame. Only an unwritable terminal falls back to stream failure. These
 transitions produce one queue-depth removal and one observable request outcome
 even when a reserved deadline response becomes unwritable before transport
 handoff.
+
+A custom executor must execute accepted work or throw on rejection; silent
+discard policies are unsupported. Initial executor rejection, including an
+attempt to run application code inline on the protocol submitting thread,
+returns the fixed capacity response before application entry. This applies to
+bounded request-policy callbacks as well as operation handlers. An application
+callback that itself throws `RejectedExecutionException` retains ordinary
+application-failure handling.
+
+When a slot releases, Soklet first attempts the normal executor handoff for
+the next queued ticket. If that handoff rejects, the already-accepted worker
+continues with that ticket before returning to the executor. This lets a
+direct-handoff pool drain the admitted queue without rejecting every queued
+request. It also preserves admitted work during graceful drain if the executor
+has stopped accepting new submissions. Forced cancelation and the original
+request deadlines still apply. Worker reuse is iterative, retains the handler
+and queue bounds, and adds no retry jobs or replacement workers. Soklet clears
+interrupt status between tickets and reapplies each ticket's own requested
+interruption. Executor task boundaries may cover multiple application
+invocations; application-owned thread-local cleanup remains the application's
+responsibility.
 
 That application-handler mapping is distinct from a deadline that expires
 while Soklet still owns framework protocol work, before an application handoff.
@@ -1776,8 +1930,14 @@ timeout, internal failure, or backpressure failure. Disconnect cancellation
 follows the revision and commitment rules below. Beginning graceful drain does
 not signal it for an already-admitted finite request. Cancelation is cooperative: handlers should
 check between expensive operations, register a short nonblocking callback with
-`onCancel(...)`, or call `throwIfCanceled()`. Reports made after cancelation or
-terminal completion have no effect.
+`onCancel(...)`, or call `throwIfCanceled()`. MCP application and bounded-policy
+cancelation callbacks run on Soklet's bounded callback executor, after the
+handler is signaled and the terminal response is offered or transport ownership
+is detached. A callback cannot delay the network event loop or other request
+deadlines. The handler's physical capacity remains charged until both handler
+work and callback delivery exit, including during shutdown. Registering after
+callback delivery has begun may invoke inline on the registering application
+thread. Reports made after cancelation or terminal completion have no effect.
 
 For framework-supplied MCP tokens, `getCancelationReason()` exposes one fixed
 `StreamTerminationReason`, while `getCancelationCause()` is always empty.
@@ -1882,6 +2042,45 @@ and wire serialization. Publisher events contain no endpoint, principal,
 authorization partition, or connected-client target. Two subscriptions to the same URI in different admitted partitions therefore receive the same coarse event.
 The stored partition scopes registration, quota accounting, and stream isolation; it is not a per-event authorization check and does not establish semantic authority to read a URI.
 
+Tool and prompt projections advance their comparison digest when a list-change
+hint is accepted or folded into a wholly unwritten hint for the same family. Once
+writing starts, a later observation needs a bounded successor hint because the
+client may already have consumed the earlier event. Releasing the earlier frame
+preserves the successor's coalescing key. This prevents a catalog that changes
+back and forth from silently leaving the client on an earlier view. The baseline
+is an invalidation comparison, not a client receipt or a retained catalog snapshot;
+clients re-list under current authorization when they receive a hint.
+
+Resource invalidations received during authorization reconciliation retain bounded,
+coalesced dirty markers: at most one resource-list marker and one per accepted URI
+(up to 256). Successful reauthorization sends catch-up hints under the current
+grant; denial, expiry, or termination discards them. A renewed registration cannot
+lose a resource hint merely because it replaces an earlier registration object.
+Queued frames check the current authorization fence and lease before socket writes.
+Revoked unwritten frames are removed; a partially written revoked frame closes
+before further bytes. This is invalidation catch-up, not an event history, durable
+replay, or a client receipt guarantee.
+
+When Soklet ends an established modern listen because of denial, authorization
+expiry, a required-check failure or bounded queue pressure, it fences delivery
+and cancels maintenance work. A usable stream receives the tagged empty
+`complete` result for the original listen request before HTTP chunk termination,
+following the [modern subscription closure rule](https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/subscriptions#graceful-closure).
+The closing transition removes unwritten notifications while retaining the
+acknowledgment before the terminal. The terminal has a separate bounded
+reservation even when regular frames fill the output queue. A stalled writer remains subject to its write-idle timeout;
+a disconnect, failed writer or partially written revoked frame can end abruptly.
+
+The completion contains no authorization exception or policy data. Stream and
+subscription metrics retain the actual reason: denial, expired lease, failed
+check, failed reconciliation or backpressure. An explicit denial during
+reconciliation is `SUBSCRIPTION_AUTHORIZATION_DENIED`, and its reconciliation
+maintenance event is `DENIED`; it is not a failed-check classification. Request
+outcomes and diagnostics also retain the underlying cancellation or failure.
+The simulator keeps that reason together with the terminal message. Exact
+2025-era GET streams have no listen request to complete and retain their
+existing close behavior.
+
 Admission receives the immutable validated, deduplicated requested-resource URI list when authorizing a listen request.
 `McpAdmissionContext.getRequestedResourceSubscriptionUris()` preserves first-encounter order and is empty outside applicable subscription requests.
 Applications must authorize confidential or capability-bearing subscription URIs during admission and must not infer secrecy merely because a URI is difficult to guess.
@@ -1891,13 +2090,30 @@ With `McpAdmissionController.acceptAllInstance()`, all anonymous callers on one 
 The listener parses all protocol filter fields. It acknowledges the configured
 resource-list and requested-resource update families plus authorized task IDs
 when Tasks and its event publisher are enabled. Task filtering and notification
-semantics are described under [Task notifications](#task-notifications). Tool
-and prompt catalogs remain immutable, so their list-change filters are never
-acknowledged or advertised. The acknowledgment is always the first stream
-message. Every subscription message carries the listen request's exact string
+semantics are described under [Task notifications](#task-notifications). Tool and
+prompt list-change filters require an effective configured source and caller-visible
+catalog projection support; registration structure remains immutable, while access
+policy or localization can change the caller's view. The acknowledgment is always
+the first stream message. Every subscription message carries the listen request's exact string
 or integer ID as `io.modelcontextprotocol/subscriptionId`. That reuse does not
 make the ID listener-global: independent subscriptions with equal IDs remain
 separate streams and may coexist, including across authorization partitions.
+
+Soklet computes the accepted tool and prompt catalog baselines before
+acknowledgment. A catalog invalidation during opening keeps the current
+application grant and schedules a bounded comparison after acknowledgment;
+it does not repeat subscription authorization merely because the catalog
+changed. Actual authorization reconciliation still fences activation and
+requires a fresh grant. An unchanged view emits no list-change hint.
+
+Catalog localization fallback under `USE_DEFAULT_TEXT` uses canonical source
+text for both the initial baseline and subsequent comparisons. Recovery to
+translated text, or a later return to canonical fallback, can emit a hint when
+the caller's catalog changes. `FAIL_REQUEST` still rejects a failed initial
+render with a sanitized internal error and releases the subscription capacity.
+Rendering fallback does not replace the required context for an explicitly
+configured catalog access policy: failure to create that context still fails
+before evaluation, and policy failures do not become an allow decision.
 
 One filter may contain at most 256 distinct normalized resource-subscription
 URIs and, when Tasks is negotiated, at most 256 distinct task IDs. Duplicate
@@ -2046,8 +2262,56 @@ share a neutral `404`; a verified owner/path with the wrong stored revision
 returns `400` and preserves the record. Session-path admission rejections remap
 application `400`/`404`/`405` to neutral `403`, preserving validated safe headers.
 Accepted JSON-RPC operation results/errors use `200`. Per-owner capacity returns
-`429`, global allocation pressure returns `503`, with bounded Retry-After;
-there is no implicit stateless downgrade or unrelated-owner eviction.
+`429`, global allocation pressure returns `503`. Session capacity failures do
+not invent a `Retry-After` delay: recovery depends on expiry, DELETE, or actual
+physical work exit. Application rate-limit decisions retain their supplied
+retry hints. There is no implicit stateless downgrade or unrelated-owner eviction.
+
+The default 256-session count can be filled by 16 owners with 16 sessions each;
+new owners then receive `503`. Abandoned, acknowledged sessions can occupy those
+slots for the default 24-hour idle window. Existing owners can reclaim their own
+quiescent records without freeing space for another owner. Opted-in anonymous
+sessions additionally share a 64-session global count. This policy provides
+owner isolation, not a fair share of global capacity. Size both count limits for
+the expected owner population and shorten idle retention for abandoned clients.
+For example, these bounds allow up to four sessions per owner, 1,024 globally,
+with abandoned sessions expiring after 15 minutes of actual quiescence:
+
+```java
+McpSessionConfig sessionConfig = McpSessionConfig
+    .withOwnerKeyResolver(sessionOwnerKeyResolver)
+    .maximumSessions(1024)
+    .maximumSessionsPerOwner(4)
+    .maximumSessionIdleDuration(Duration.ofMinutes(15))
+    .build();
+```
+
+This still has a finite global ceiling and separate byte/anonymous limits;
+256 owners at their four-session cap fill it. Active clients prevent idle
+expiry, and absolute lifetime remains separately bounded. Configure routing,
+capacity and client reconnection for the deployment's actual traffic.
+
+Physically active initialization, POST and GET work prevents session idle
+expiry. Background URI authorization renewal does not count as client activity:
+an abandoned session can expire or be evicted for a new initialization by the
+same owner even while renewal is unfinished. Logical retirement fences its
+grants immediately; unfinished callbacks retain their metadata/evidence and
+physical accounting until they actually exit. Neither renewal completion nor
+transport keep-alives refresh the client's idle lifetime.
+
+The HTTP `200` operation-result rule also applies to session-disabled 2025
+views. HTTP framing/decoding, unsupported protocol selection, admission-hook
+failures/rejections, rate/capacity limits and session lookup failures retain
+their HTTP failure statuses. A committed POST SSE carries its terminal RPC
+outcome in the stream.
+
+For 2025 tools, structured content and declared output schemas require object
+shape. Raw/advanced handlers must return a representable shape; arrays,
+scalars and null fail projection rather than being silently wrapped or omitted.
+Soklet never retries the handler to obtain another shape. Modern tool results
+permit other JSON shapes. June tool resource links omit optional icons while
+November and modern tool links retain them, without mutating application values
+or discarding the completed tool result.
 
 Initial defaults are 256 sessions per server, 16 per owner, 24 hours of actual
 quiescence, seven days absolute lifetime, and a 64 KiB initialization projection
@@ -2055,10 +2319,46 @@ also capped at 4,096 nodes and existing JSON limits. Active calls are capped at
 32 per session. Request IDs and progress tokens retained for correlation have
 separate 256-byte UTF-8 bounds; integer `1` and string `"1"` remain distinct.
 Anonymous allocation additionally shares a 64-session global sub-budget.
-Metadata and retained request evidence have independent session/owner/global
-byte accounting. Limits are ceilings, not reserved memory entitlements or a
-bound on graphs retained by application-owned principals/callbacks. Positive
-configurable values are required; null tuning arguments restore defaults.
+Persistent session metadata, GET evidence, and historical subscribe requests
+have session/owner/global byte bounds separate from transient initialization
+and POST evidence. Persistent session bytes have a 1 MiB floor, owner bytes a
+2 MiB floor, and global bytes a 16 MiB floor; these bounds also scale with the
+configured header ceiling. For transient evidence, let `R` be the configured
+maximum body bytes plus maximum header bytes plus 16,384 bytes of accounting
+allowance. The session, owner, and global ceilings are `2R`, `4R`, and `32R`.
+Exhausting a transient memory ceiling returns HTTP 503 and recovers when the
+physical request exits. Thus a valid large call is not rejected solely because
+its body exceeds the persistent session ceiling.
+
+When a URI grant retains a subscribe request for renewal, its full evidence is
+atomically moved into the persistent budget; no request body or credentials
+are discarded from the authorizer's historical context. Failed promotion
+changes no accounting or grant. A full persistent budget does not consume the
+transient budget needed for unsubscribe, ping, notifications, or DELETE.
+Verified session controls have a separate finite reservation. Valid `ping`,
+`resources/unsubscribe`, `notifications/initialized`, and
+`notifications/cancelled` bodies of at most 16 KiB bypass the ordinary request
+limiter after fresh admission, identity/owner verification, and session binding.
+Envelope, selector, session, request-ID and collision checks still apply.
+Malformed, oversized, stateless, and unsupported notification traffic does not
+receive this exemption. Control requests do not need an ordinary handler slot.
+DELETE transport admission and owner resolution also use the independent
+bounded policy dispatcher, so a full tool handler queue cannot block termination.
+
+The separate evidence ceiling per control is maximum header bytes plus 32,768
+bytes. At most four physical controls per session, eight per owner, and 64
+globally may retain this evidence. Independently, cleanup traffic shares four
+simultaneous reservations and 64 attempts in a sliding second per effective
+authorization partition; at most 256 partitions are retained. GET/URI maintenance
+uses a separate demand budget. Exhausted control capacity returns HTTP 503.
+Fresh admission or owner-policy rejection still fails closed; control capacity
+does not make a blocked application authorization callback unbounded.
+
+All evidence budgets retain physical accounting through logical cancellation or
+session retirement until the actual callback/request exits. Limits are
+ceilings, not reserved memory entitlements or a bound on graphs retained by
+application-owned principals/callbacks. Positive configurable values are
+required; null tuning arguments restore defaults.
 
 Idle expiry requires actual quiescence; invalid/foreign messages and keepalive
 bytes do not refresh activity. Capacity reclamation may retire only expired or
@@ -2070,7 +2370,7 @@ preserved; otherwise server expiry attempts a neutral correlated `-32603` on a
 usable POST and signals the token's `RESPONSE_TIMEOUT`, with MCP stream reason
 `SESSION_EXPIRED`.
 
-After successful framing, fresh admission/request limiting, and session binding,
+After successful framing, fresh admission, applicable request/control limiting, and session binding,
 `notifications/cancelled` receives its own empty `202`. Within that verified
 session, a usable request ID can cancel matching logically active client work if cancellation wins the terminal reservation. Unknown,
 completed, initialization, and otherwise uncancellable targets are ignored.
@@ -2091,6 +2391,34 @@ loss yields neutral `404`. Transparent recovery and operational defaults remain
 pending real-host qualification; document manual reconnection until verified.
 No shared store, event history, `Last-Event-ID` recovery, GET result recovery, or
 restoration of the 3.5.1 session-store/context/ID-generator APIs is provided.
+
+#### Multi-node deployments
+
+Modern and session-disabled legacy requests can reach any eligible node, provided
+application data, authorization policy, protected-state keys, and catalog
+configuration are available there. Application-owned resource cursors also need
+shared or replicated snapshots and keys. Framework legacy catalog cursors carry
+navigation state rather than a server-side session; eligible nodes must have the
+matching endpoint/revision/catalog fingerprint and negotiated locale.
+
+Session-enabled legacy deployments require affinity to the initializing node for
+POST, GET, DELETE, and cancellation messages. Soklet owns the local session ID,
+remembered client metadata, active request IDs, and resource grants. The owner
+resolver and transport admission controller authorize that state; neither is a
+shared-store hook. Adding application storage does not make these sessions
+portable. A rolling replacement or node failure loses the affected sessions;
+clients must initialize again and recreate their subscriptions. An open stream
+cannot move between nodes, and reconnecting provides no event replay.
+
+Applications can supply a durable `McpTaskManager`, distributed
+`McpSubscriptionEventPublisher` and `McpTaskEventPublisher` implementations,
+authorization callbacks backed by shared policy, and a distributed `McpRateLimiter`.
+Publish change events to every eligible node, rather than distributing them among
+competing consumers. Broadcast policy invalidation to each server's
+`getSubscriptionReconciler().reconcileSubscriptions()`; localization invalidation
+also needs to reach every applicable server after its local snapshot is installed.
+Soklet's session, connection, subscription, and maintenance-capacity bounds apply
+to one server instance. Fleet-wide quotas and coordination remain application-owned.
 
 ### Leased GET and verified DELETE
 
@@ -2145,8 +2473,9 @@ active GET leases prevent quiescent session reclamation.
 ### Legacy URI grants and catalog invalidations
 
 On an explicitly subscription-enabled 2025 session view, `resources/subscribe`
-and `resources/unsubscribe` are real POST requests through fresh admission,
-request limiting, and session verification. Subscribe exposes the one validated
+and `resources/unsubscribe` are real POST requests through fresh admission
+and session verification. Subscribe uses ordinary request limiting; small,
+valid unsubscribe uses the reserved control quota. Subscribe exposes the one validated
 URI through `McpAdmissionContext.getResourceSubscriptionUris()` and requires a
 readable route in that revision. Unsubscribe exposes its validated URI through
 `getOperationName()` with an empty selection. Both successful operations return
@@ -2173,16 +2502,37 @@ request reconciliation when permission changes need prompt reevaluation.
 URI grants belong to the session and survive GET loss within their lease,
 fixed total lifetime, and session deadlines. A new GET needs fresh HTTP admission
 and receives notifications only for its admitted families and current URI grants.
-The newest eligible GET is preferred, with one selected writer per session.
+Transient URI renewal exceptions or timeouts fence delivery and allow at most
+three consecutive failed attempts under the unchanged lease, with 50 ms then
+100 ms retry delays. A successful authorization resets the failure count.
+Capacity retries remain bounded by control/maintenance quotas and lease expiry.
+An unfinished callback keeps its physical slot and prevents overlapping checks
+for that URI; a timeout cannot extend permission or release its retained evidence.
+
+Explicit renewal denial, exhausted failure retries, or an expired lease/total
+lifetime on an established URI grant retires the whole session. Its GETs close,
+current calls are cancelled, and subsequent verified session lookup returns
+neutral HTTP 404. The client can reinitialize, refresh credentials as needed,
+and resubscribe. This avoids an apparently healthy stream silently forgetting a
+subscription. Initial subscribe rejection and explicit unsubscribe do not
+themselves retire a session, and stale callbacks cannot retire a newer grant.
+The newest eligible GET is preferred. Each invalidation uses only one connected
+stream per session, including when GETs overlap.
 Resource updates carry only the URI; resource, tool, and prompt catalog changes
 are coarse invalidation hints. Configured publisher hints and applicable
 localization/caller-dependent catalogs determine the advertised `subscribe` and
 `listChanged` capabilities; immutable caller-independent catalogs do not
 advertise a false change source. Modern `subscriptions/listen` remains separate.
 
-One dirty bit per catalog family or URI grant survives GET gaps. A newly admitted
-GET may receive a newly synthesized hint for current state. Catalog hints remain
-coalesced until a freshly admitted corresponding list operation rearms them.
+One pending dirty bit per catalog family or URI grant survives GET gaps when
+no stream has completed the notification write. A new authorized GET can receive
+that pending invalidation. A message fully written to one GET is not resent to
+another GET or on reconnect. A failed offer or dropped unwritten frame leaves
+its invalidation pending; another writer must wait until the original frame's
+write/drop outcome is known. URI changes arriving during a queued frame remain
+pending for a subsequent hint. Catalog hints remain coalesced until a freshly
+admitted corresponding list operation rearms them. This follows the
+[2025 single-stream rule](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#multiple-connections).
 These bits provide neither event history nor receipt guarantees. No legacy
 subscription acknowledgement, subscription-ended, or Tasks notification is sent.
 
@@ -2253,7 +2603,7 @@ replay position. Both names remain forbidden in application-authored MCP respons
 headers; only the framework may publish a session ID on successful initialization.
 
 An identifiable HTTP `notifications/cancelled` message still traverses version
-validation, admission, and request limiting. An accepted notification returns an
+validation, admission, and applicable request/control limiting. An accepted notification returns an
 empty HTTP 202; session-enabled paths also verify framing and session binding.
 Modern and session-disabled 2025 views ignore its payload. A verified 2025
 session can target a matching active client request, subject to its atomic
@@ -2294,6 +2644,9 @@ limits, routing, Host, Origin/CORS, POST/media/Accept, strict JSON, and envelope
 A classified notification then validates protocol-selector cardinality/form and exact registry membership
 before any profile-specific present `_meta`, admission, and the optional request limiter.
 Unsupported selectors return an empty HTTP 400 without profile mapping. An identifiable `notifications/cancelled` skips parameter and present-`_meta` validation, but traverses the other stages before its empty HTTP 202 result.
+The small, valid, owner-verified legacy control subset described above uses the
+independent cleanup quota instead of the ordinary request limiter. Malformed or
+unsupported notifications and session-disabled views retain ordinary limiting.
 Notifications do not acquire request-only mirrored-header, required-`_meta`/capability, tool-limiter, queue/slot, interceptor, handler, sanitizer, or response-envelope semantics.
 
 The `2026-07-28` request path does not implement `initialize`, an
@@ -2663,7 +3016,8 @@ Exact delivered `RequestStreamOpened` increments
 decrements it and records `soklet_mcp_request_stream_duration_nanos`. The
 stream-transition authority records open before accepted progress/keepalive
 observations and records the single close before terminal `RequestFinished`;
-this is FIFO record/enqueue order, not a universal cross-thread total order.
+these are enqueue relationships, with delivery ordered among eligible records
+as described below, rather than a cross-thread causal or per-request total order.
 The HELP text is respectively `Currently active MCP request streams` and `MCP
 request-stream duration in nanoseconds`. Histogram samples use only bounded
 `endpoint`, `method`, and lower-snake `reason` labels for the ten fixed
@@ -2732,8 +3086,9 @@ subscription-close counters.
 
 For a produced subscription, `RequestStreamOpened` precedes
 `SubscriptionOpened`; terminal order is `RequestStreamClosed`, then
-`SubscriptionClosed`, then `RequestFinished`. These are FIFO record/enqueue
-orders, not a universal cross-thread total order or an atomic relationship
+`SubscriptionClosed`, then `RequestFinished`. These are enqueue relationships;
+delivery follows eligible-record order as described below. They are not a
+cross-thread causal or per-request total order, or an atomic relationship
 between the separately delivered gauges. Configured collectors and either
 direct subscription event activate the live gauge; configured empty state
 renders zero, while the duration histogram stays sparse and emits no orphan
@@ -2897,8 +3252,9 @@ identity, trace ID/token/key material, tracestate, baggage, and generic labels
 never enter either aggregate. Same-request sequences such as
 `RequestAccepted` -> unknown occurrences -> `ProtocolError` ->
 `RequestRejected`, and admitted `RequestStarted` -> `ProtocolError` ->
-`RequestFinished`, preserve shared FIFO record/enqueue order only; they are not
-universal cross-thread order or conservation equations.
+`RequestFinished`, describe enqueue relationships, with delivery ordered among
+eligible records as described below; they are not cross-thread causal or
+per-request total-order guarantees or conservation equations.
 
 The two `DefaultMetricsCollector` maps have independent 8,192-entry retention
 bounds. The provisional public builder maps are deliberately uncapped value
@@ -3098,14 +3454,15 @@ zero public diagnostics, and produces no server-start/stop,
 connection-accepted/rejected, or transport-failure event. Live start and
 ordinary stop do not interleave with the private simulation generation. The
 supplied `Request` is not rewritten: Host, Origin, headers, and body remain
-caller values. Policy evaluation uses the configured host and literal
-configured port, including port `0`; no default Host is injected and
-`127.0.0.1:0`, not a repaired authority, is the exact default-loopback
-port-zero form.
+caller values. Automatic loopback aliases require the literal configured
+port, including port `0`: `127.0.0.1:0` is the default loopback form.
+Explicitly allowlisted hostname/IP authorities use the same valid-public-port
+or omitted-port behavior as the live listener. No default Host is injected.
 
 The immutable response projection preserves status, case-insensitively
-coalesced insertion-ordered headers, body mode, and a defensive JSON/empty-body
-copy. SSE projections retain exact canonical unchunked frame bytes and their
+coalesced insertion-ordered headers with case-insensitive lookups, body mode,
+and a defensive JSON/empty-body copy. SSE projections retain exact canonical
+unchunked frame bytes and their
 mutually exclusive JSON-message or keep-alive-comment value. A terminal JSON
 frame is one ordinary counted queued item and is repeated by immutable
 completion as `terminalMessage` without consuming capacity again. If a bound
@@ -3286,19 +3643,44 @@ optional name-diagnostic quota.
 Collector callbacks are serialized and drain after the relevant dispatcher,
 exchange terminal/execution-boundary, progress-reporter, stream-transition,
 request-control, runtime, MCP-server, and Soklet lifecycle locks or monitors
-are released. Nonwaiting request-transition deferral preserves reentrant
-collector liveness without moving callbacks under those locks. The four
-pre-admission variants are request-free. Every queued delivery, including a
+are released. Each short request transition withholds only its own provisional
+records; nested transition scopes release their records together. Closing a
+transition signals the dedicated metrics worker, without invoking a collector
+on the closing thread. The four pre-admission variants are request-free.
+Every queued delivery, including a
 fixed `ProtocolError` produced after admitted request observation, retains only
-its immutable, bounded `McpMetricsEvent`; the metric FIFO does not retain an
+its immutable, bounded `McpMetricsEvent`; the metric queue does not retain an
 `McpRequestContext`, request, throwable, or application-owned carrier. An
 admitted request's application-lifecycle observation may independently retain
 its exact `McpRequestContext` while lifecycle and handler APIs require it; that
 ownership is separate from metric delivery. Collector-failure logging is
 context-free and redacted, and collector failures are contained without
-stalling the FIFO. The ordering guarantee is FIFO metric record/enqueue order;
-it is not a universal cross-thread causal or per-request total-order guarantee
-for independently racing producers.
+stalling the queue. Among records eligible for delivery, callbacks follow
+metric enqueue order. Records within a transition retain their order, but an
+independent operation can deliver its eligible records while that transition
+is still withheld. This is not a cross-thread causal or per-request total-order
+guarantee for independently racing producers.
+
+The built-in server retains at most 4,096 pending semantic metric records.
+When that queue is full, new ordinary records are omitted; `ServerStarted`
+and `ServerStopped` reclaim an ordinary record so owner lifecycle evidence
+remains deliverable. Withheld records count against the same queue bound, and
+retained eligible records keep their enqueue order. Discarding a provisional
+record that was omitted or evicted does not change its request's
+wire outcome. Metrics are observation, and counters or gauges can be incomplete
+after this overflow; custom collectors must remain nonblocking.
+
+Progress backpressure holds only the invocation's progress-reporter lock. It
+does not open a server-wide metric deferral, and its accepted-progress record
+is enqueued after that lock is released. Subscription-maintenance records
+signal the dedicated metrics worker rather than calling collectors from a
+projection worker. Opening a runtime/lifecycle deferral and attempting a drain
+never wait for an in-flight collector or another deferral. Pending asynchronous
+delivery is signaled again after the owning drain or the last deferral ends.
+Short runtime transitions use independent scopes, including failure observations
+released on another thread. Server and Soklet lifecycle deferral uses a separate
+server-wide gate to preserve start/shutdown ordering; closing a transition cannot
+release that gate.
 
 The eighth bounded Phase 6 vertical adds `ConnectionAccepted`,
 `ConnectionRejected`, and `TransportFailure` to the same FIFO, so the runtime
@@ -3669,7 +4051,13 @@ MCP lifecycle is owned by the one `Soklet` configured with the server;
 `McpServer` has no independent start, stop, close, or timeout surface. The
 owner's `LifecyclePolicy` supplies the graceful and forced phase boundaries.
 Graceful shutdown fences new admission and closes intentionally indefinite
-subscriptions, but retains every already-admitted finite unary or
+subscriptions. A validated modern listen still being admitted returns a finite
+HTTP `503` JSON-RPC error with its request ID and `Connection: close`; a
+session-enabled 2025 GET that has not opened returns a bodyless HTTP `503` with
+`Connection: close`. A GET paused in CORS or queued before shutdown cannot open
+a new SSE stream after quiesce. Established modern subscriptions receive their
+terminal result, and established 2025 GET streams finish with the closing HTTP
+chunk. Shutdown retains every already-admitted finite unary or
 request-scoped progress response path while active and queued work drains.
 Existing request deadlines and client disconnects can still win during that
 phase. At the force boundary, Soklet closes remaining transports, cancels

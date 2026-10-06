@@ -188,6 +188,10 @@ public final class ManagedResponseStream implements ResponseStream {
 
 	private void writeInternal(ByteBuffer byteBuffer) throws IOException, InterruptedException {
 		checkOutputLifetime();
+		if (discardTerminalCleanupOutput()) {
+			byteBuffer.position(byteBuffer.limit());
+			return;
+		}
 		try {
 			checkWritable();
 			drainStaging();
@@ -211,6 +215,8 @@ public final class ManagedResponseStream implements ResponseStream {
 	@Override
 	public void flush() throws IOException, InterruptedException {
 		checkOutputLifetime();
+		if (discardTerminalCleanupOutput())
+			return;
 		try {
 			checkWritable();
 			drainStaging();
@@ -225,6 +231,8 @@ public final class ManagedResponseStream implements ResponseStream {
 
 	private void writeScalar(int value) throws IOException, InterruptedException {
 		checkOutputLifetime();
+		if (discardTerminalCleanupOutput())
+			return;
 		try {
 			checkWritable();
 			if (this.staging == null) {
@@ -256,6 +264,15 @@ public final class ManagedResponseStream implements ResponseStream {
 	private void discardStaging() {
 		this.staging = null;
 		this.stagedBytes = 0;
+	}
+
+	private boolean discardTerminalCleanupOutput() {
+		// Encoder close still releases its resources after cancelation, but its
+		// trailer can no longer be delivered. Ordinary producer writes still fail.
+		if (this.cleanupDepth.get() == 0 || (this.failure == null && !this.cancelationToken.isCanceled()))
+			return false;
+		discardStaging();
+		return true;
 	}
 
 	private void outputInterrupted(InterruptedException interruptedException) throws IOException, InterruptedException {
@@ -314,7 +331,11 @@ public final class ManagedResponseStream implements ResponseStream {
 			if (this.closed)
 				return;
 			try {
-				flush();
+				if (ManagedResponseStream.this.phase != Phase.CLOSED
+						&& (ManagedResponseStream.this.failure != null || ManagedResponseStream.this.cancelationToken.isCanceled()))
+					discardStaging();
+				else
+					flush();
 			} finally {
 				this.closed = true;
 			}
@@ -569,6 +590,7 @@ public final class ManagedResponseStream implements ResponseStream {
 	}
 
 	private final class Owned<T extends AutoCloseable> {
+		private final StateChangeWaiters stateChangeWaiters = new StateChangeWaiters(this);
 		private T resource;
 		private final AbortMode abortMode;
 		private ResourceAborter<? super T> resourceAborter;
@@ -621,7 +643,7 @@ public final class ManagedResponseStream implements ResponseStream {
 				} finally {
 					synchronized (this) {
 						this.abortFinished = true;
-						notifyAll();
+						this.stateChangeWaiters.signalAll();
 					}
 				}
 			}
@@ -633,17 +655,21 @@ public final class ManagedResponseStream implements ResponseStream {
 				if (forceAbort || cancelationToken.isCanceled())
 					cancel();
 				T claimedResource = null;
-				synchronized (this) {
-					while ((this.abortClaimed && !this.abortFinished) || (this.closeClaimed && !this.closeFinished)) {
-						try {
-							wait();
-						} catch (InterruptedException ignored) {
-							restoreInterrupt = true;
-						}
+				while (true) {
+					try {
+						this.stateChangeWaiters.awaitWhile(() ->
+								(this.abortClaimed && !this.abortFinished) || (this.closeClaimed && !this.closeFinished));
+					} catch (InterruptedException ignored) {
+						restoreInterrupt = true;
 					}
-					if (!this.closeClaimed) {
-						this.closeClaimed = true;
-						claimedResource = this.resource;
+					synchronized (this) {
+						if ((this.abortClaimed && !this.abortFinished) || (this.closeClaimed && !this.closeFinished))
+							continue;
+						if (!this.closeClaimed) {
+							this.closeClaimed = true;
+							claimedResource = this.resource;
+						}
+						break;
 					}
 				}
 				if (claimedResource != null)
@@ -656,17 +682,20 @@ public final class ManagedResponseStream implements ResponseStream {
 						cleanupFailed(throwable);
 					}
 				}
-				synchronized (this) {
-					while (this.abortClaimed && !this.abortFinished) {
-						try {
-							wait();
-						} catch (InterruptedException ignored) {
-							restoreInterrupt = true;
-						}
+				while (true) {
+					try {
+						this.stateChangeWaiters.awaitWhile(() -> this.abortClaimed && !this.abortFinished);
+					} catch (InterruptedException ignored) {
+						restoreInterrupt = true;
 					}
-					this.resource = null;
-					this.resourceAborter = null;
-					this.registration = null;
+					synchronized (this) {
+						if (this.abortClaimed && !this.abortFinished)
+							continue;
+						this.resource = null;
+						this.resourceAborter = null;
+						this.registration = null;
+						break;
+					}
 				}
 			} finally {
 				restoreInterrupt |= Thread.interrupted();
@@ -683,7 +712,7 @@ public final class ManagedResponseStream implements ResponseStream {
 			} finally {
 				synchronized (this) {
 					this.closeFinished = true;
-					notifyAll();
+					this.stateChangeWaiters.signalAll();
 				}
 			}
 		}

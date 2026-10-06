@@ -46,6 +46,121 @@ import java.util.concurrent.atomic.AtomicReference;
 @Timeout(30)
 public class McpGuardedOutboundChannelTests {
 	@Test
+	public void server_completion_drops_unwritten_notifications_and_retains_acknowledgment_at_capacity() throws Exception {
+		RecordingListener listener = new RecordingListener();
+		McpOutboundChannel channel = channel(3, 64, listener);
+		Object lock = channelLock(channel);
+		AtomicInteger releases = new AtomicInteger();
+		AtomicInteger delivered = new AtomicInteger();
+		Assertions.assertEquals(McpOutboundChannel.OfferResult.ACCEPTED, channel.offer(ascii("ACK")));
+		channel.offerCoalescing(ascii("catalog"), "catalog");
+		channel.offerGuardedCoalescing(ascii("task"), "task", () -> true,
+				delivered::incrementAndGet, () -> {
+					Assertions.assertFalse(Thread.holdsLock(lock));
+					releases.incrementAndGet();
+				});
+		Assertions.assertEquals(McpOutboundChannel.OfferResult.FULL, channel.offer(ascii("extra")));
+		Assertions.assertTrue(channel.completeDiscardingUnwrittenNotifications(ascii("END")));
+		Assertions.assertEquals(1, releases.get());
+		Assertions.assertEquals(1, channel.snapshot().bufferedFrames());
+		Assertions.assertEquals(McpOutboundChannel.OfferResult.CLOSED, channel.offer(ascii("late")));
+		WritableSource source = channel.newWritableSource();
+		source.start();
+		TestSocketChannel socket = new TestSocketChannel(64);
+		source.writeTo(socket, 1024);
+		Assertions.assertEquals("3\r\nACK\r\n3\r\nEND\r\n0\r\n\r\n", new String(socket.writtenBytes(), StandardCharsets.US_ASCII));
+		Assertions.assertEquals(0, delivered.get());
+		Assertions.assertEquals(1, releases.get());
+		Assertions.assertEquals(0, channel.snapshot().bufferedBytes());
+		Assertions.assertEquals(StreamTerminationReason.COMPLETED, listener.reason.get());
+		source.close();
+	}
+
+	@Test
+	public void server_completion_aborts_a_partially_written_notification() throws Exception {
+		RecordingListener listener = new RecordingListener();
+		McpOutboundChannel channel = channel(2, 64, listener);
+		channel.offerCoalescing(ascii("catalog"), "catalog");
+		WritableSource source = channel.newWritableSource();
+		source.start();
+		TestSocketChannel socket = new TestSocketChannel(1);
+		source.writeTo(socket, 1);
+		byte[] prefix = socket.writtenBytes();
+		Assertions.assertFalse(channel.completeDiscardingUnwrittenNotifications(ascii("END")));
+		Assertions.assertEquals(StreamTerminationReason.APPLICATION_CANCELED, listener.reason.get());
+		Assertions.assertThrows(IOException.class, () -> source.writeTo(socket, 1024));
+		Assertions.assertArrayEquals(prefix, socket.writtenBytes());
+		Assertions.assertEquals(0, channel.snapshot().bufferedBytes());
+		source.close();
+		Assertions.assertEquals(1, listener.terminations.get());
+	}
+
+	@Test
+	public void written_observer_requires_complete_chunk_and_precedes_release_outside_lock() throws Exception {
+		McpOutboundChannel channel = channel(3, 64, new RecordingListener());
+		Object lock = channelLock(channel);
+		AtomicInteger writes = new AtomicInteger(); AtomicInteger releases = new AtomicInteger();
+		channel.offerGuardedCoalescing(ascii("one"), "one", () -> true, () -> {
+			Assertions.assertFalse(Thread.holdsLock(lock));
+			Assertions.assertEquals(0, releases.get()); writes.incrementAndGet();
+		}, releases::incrementAndGet);
+		WritableSource source = channel.newWritableSource(); source.start();
+		TestSocketChannel socket = new TestSocketChannel(1);
+		source.writeTo(socket, 7); // All payload bytes, but not the final chunk delimiter.
+		Assertions.assertEquals(0, writes.get()); Assertions.assertEquals(0, releases.get());
+		source.writeTo(socket, 1);
+		Assertions.assertEquals(1, writes.get()); Assertions.assertEquals(1, releases.get());
+		AtomicBoolean allowed = new AtomicBoolean(true);
+		channel.offerGuardedCoalescing(ascii("drop"), "drop", allowed::get, writes::incrementAndGet, releases::incrementAndGet);
+		allowed.set(false); channel.recheckGuardedFrames();
+		channel.offerGuardedCoalescing(ascii("partial"), "partial", () -> true, writes::incrementAndGet, releases::incrementAndGet);
+		source.writeTo(socket, 1); source.close();
+		Assertions.assertEquals(1, writes.get()); Assertions.assertEquals(3, releases.get());
+	}
+
+	@Test
+	public void catalog_offer_keeps_a_successor_after_the_prior_payload_is_visible() throws Exception {
+		McpOutboundChannel channel = channel(3, 64, new RecordingListener());
+		Assertions.assertEquals(Optional.of(McpOutboundChannel.OfferResult.ACCEPTED),
+				channel.offerCoalescingIf(ascii("one"), "catalog", () -> true));
+		WritableSource source = channel.newWritableSource();
+		TestSocketChannel socket = new TestSocketChannel(1);
+		source.start();
+		// A streaming HTTP client can already consume the entire event payload,
+		// even while the final chunk delimiter remains unwritten.
+		Assertions.assertEquals(7, source.writeTo(socket, 7));
+		Assertions.assertEquals(Optional.of(McpOutboundChannel.OfferResult.ACCEPTED),
+				channel.offerCoalescingIf(ascii("two"), "catalog", () -> true),
+				"A started hint cannot cover a later catalog observation.");
+		Assertions.assertEquals(Optional.of(McpOutboundChannel.OfferResult.COALESCED),
+				channel.offerCoalescingIf(ascii("copy"), "catalog", () -> true));
+		Assertions.assertEquals(2, channel.snapshot().bufferedFrames());
+		Assertions.assertEquals(1, source.writeTo(socket, 1));
+		Assertions.assertEquals(Optional.of(McpOutboundChannel.OfferResult.COALESCED),
+				channel.offerCoalescingIf(ascii("copy"), "catalog", () -> true),
+				"Releasing the old frame must preserve the unwritten successor's key.");
+		Assertions.assertEquals(1, channel.snapshot().bufferedFrames());
+		Assertions.assertEquals(8, source.writeTo(socket, 8));
+		Assertions.assertEquals(0, channel.snapshot().bufferedFrames());
+		Assertions.assertEquals(Optional.of(McpOutboundChannel.OfferResult.ACCEPTED),
+				channel.offerCoalescingIf(ascii("end"), "catalog", () -> true));
+		source.close();
+	}
+
+	@Test
+	public void catalog_successor_obeys_capacity_when_the_prior_hint_has_started() throws Exception {
+		McpOutboundChannel channel = channel(1, 64, new RecordingListener());
+		channel.offerCoalescingIf(ascii("one"), "catalog", () -> true);
+		WritableSource source = channel.newWritableSource();
+		source.start();
+		source.writeTo(new TestSocketChannel(1), 1);
+		Assertions.assertEquals(Optional.of(McpOutboundChannel.OfferResult.FULL),
+				channel.offerCoalescingIf(ascii("two"), "catalog", () -> true));
+		Assertions.assertEquals(1, channel.snapshot().bufferedFrames());
+		source.close();
+	}
+
+	@Test
 	public void rejected_offers_release_once_without_consuming_the_existing_key() throws Exception {
 		RecordingListener listener = new RecordingListener();
 		McpOutboundChannel channel = channel(1, 8, listener);

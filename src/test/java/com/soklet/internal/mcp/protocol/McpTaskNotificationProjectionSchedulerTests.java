@@ -23,6 +23,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Queue;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -31,6 +32,54 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static java.util.Objects.requireNonNull;
 
 public class McpTaskNotificationProjectionSchedulerTests {
+	@Test
+	public void activationRetainsOnlyAcceptedEventIdentitiesInEventOrder() {
+		McpHttpServerRuntime.TaskNotificationProjectionQueue queue =
+				new McpHttpServerRuntime.TaskNotificationProjectionQueue(3);
+		queue.request("private");
+		queue.request("beta");
+		queue.request("alpha");
+		queue.request("beta");
+		Assertions.assertTrue(queue.activatePending(Set.of("alpha", "beta")));
+		Assertions.assertEquals(2, queue.pendingTaskIdCount());
+		McpHttpServerRuntime.TaskNotificationProjection beta = projection(queue);
+		Assertions.assertEquals("beta", beta.taskId());
+		Assertions.assertEquals(2, beta.generation());
+		Assertions.assertTrue(queue.finish(beta, true));
+		McpHttpServerRuntime.TaskNotificationProjection alpha = projection(queue);
+		Assertions.assertEquals("alpha", alpha.taskId());
+		Assertions.assertFalse(queue.finish(alpha, true));
+	}
+
+	@Test
+	public void activationWithNoAcceptedPendingEventsDoesNotInventAnInitialSnapshot() {
+		McpHttpServerRuntime.TaskNotificationProjectionQueue queue =
+				new McpHttpServerRuntime.TaskNotificationProjectionQueue(1);
+		queue.request("private");
+		Assertions.assertFalse(queue.activatePending(Set.of("accepted")));
+		Assertions.assertEquals(0, queue.pendingTaskIdCount());
+		Assertions.assertFalse(queue.jobOutstanding());
+		Assertions.assertTrue(queue.request("accepted"), "Discarded private identities must not retain the filter capacity.");
+	}
+	@Test
+	public void admittedOwnerFanoutSurvivesBusyProjectionWorkers() {
+		CapturingExecutor executor = new CapturingExecutor();
+		McpHttpServerRuntime.TaskNotificationProjectionScheduler scheduler =
+				new McpHttpServerRuntime.TaskNotificationProjectionScheduler(executor, 1, 8);
+		AtomicInteger runs = new AtomicInteger();
+		AtomicInteger rejections = new AtomicInteger();
+		for (int index = 0; index < 8; index++) {
+			Object owner = new Object();
+			Assertions.assertTrue(scheduler.tryReserveOwners(List.of(owner)));
+			scheduler.execute(job(owner, runs, rejections));
+		}
+		Assertions.assertEquals(0, rejections.get(),
+				"One fan-out must not disconnect previously admitted peers.");
+		for (int index = 0; index < 8; index++)
+			executor.runNext();
+		Assertions.assertEquals(8, runs.get());
+	}
+
 	@Test
 	public void oneOwnerJobCoalescesQueuedAndRunningTaskGenerations() {
 		McpHttpServerRuntime.TaskNotificationProjectionQueue queue =
@@ -111,6 +160,7 @@ public class McpTaskNotificationProjectionSchedulerTests {
 				new McpHttpServerRuntime.TaskNotificationProjectionQueue(2);
 		Assertions.assertTrue(rejectedQueue.request("alpha"));
 		rejectedQueue.request("beta");
+		Assertions.assertTrue(scheduler.tryReserveOwners(List.of(rejectedQueue)));
 		scheduler.execute(new McpHttpServerRuntime.TaskNotificationProjectionJob(
 				rejectedQueue, () -> Assertions.fail("Rejected work ran."),
 				rejectedQueue::reset));
@@ -155,65 +205,122 @@ public class McpTaskNotificationProjectionSchedulerTests {
 	}
 
 	@Test
-	public void oneSubscriberOverflowCannotRejectAnUnrelatedSubscriber() {
+	public void duplicateOwnerWorkCoalescesWithoutDisplacingPeers() {
 		CapturingExecutor executor = new CapturingExecutor();
 		McpHttpServerRuntime.TaskNotificationProjectionScheduler scheduler =
-				new McpHttpServerRuntime.TaskNotificationProjectionScheduler(
-						executor, 1, 2);
-		Object noisySubscriber = new Object();
-		Object quietSubscriber = new Object();
-		AtomicInteger noisyRuns = new AtomicInteger();
-		AtomicInteger noisyRejections = new AtomicInteger();
-		AtomicInteger quietRuns = new AtomicInteger();
-		AtomicInteger quietRejections = new AtomicInteger();
-
-		for (int index = 0; index < 3; index++)
-			scheduler.execute(job(noisySubscriber, noisyRuns, noisyRejections));
-		Assertions.assertEquals(3, noisyRejections.get(),
-				"Overflow must retire the subscriber that occupied the bounded queue.");
-		Assertions.assertEquals(0, scheduler.queuedJobCount());
-
-		scheduler.execute(job(quietSubscriber, quietRuns, quietRejections));
-		Assertions.assertEquals(1, scheduler.queuedJobCount(),
-				"The global queue must remain bounded while admitting the quiet peer.");
+				new McpHttpServerRuntime.TaskNotificationProjectionScheduler(executor, 2, 2);
+		Object noisy = new Object();
+		Object quiet = new Object();
+		AtomicInteger runs = new AtomicInteger();
+		AtomicInteger rejections = new AtomicInteger();
+		Assertions.assertTrue(scheduler.tryReserveOwners(List.of(noisy, quiet)));
+		for (int index = 0; index < 20; index++) scheduler.execute(job(noisy, runs, rejections));
+		scheduler.execute(job(quiet, runs, rejections));
+		Assertions.assertEquals(2, scheduler.queuedJobCount());
 		executor.runNext();
-
-		Assertions.assertEquals(0, noisyRuns.get());
-		Assertions.assertEquals(1, quietRuns.get());
-		Assertions.assertEquals(0, quietRejections.get(),
-				"Another subscriber must not inherit the noisy subscriber's overflow.");
-		Assertions.assertEquals(0, scheduler.queuedJobCount());
+		executor.runNext();
+		Assertions.assertEquals(2, runs.get());
+		Assertions.assertEquals(0, rejections.get());
 	}
 
 	@Test
-	public void lightSubscriberOverflowRetiresTheSubscriberMonopolizingTheQueue() {
+	public void ownerReservationIsAtomicAndRetirementReclaimsCapacity() {
 		CapturingExecutor executor = new CapturingExecutor();
 		McpHttpServerRuntime.TaskNotificationProjectionScheduler scheduler =
-				new McpHttpServerRuntime.TaskNotificationProjectionScheduler(
-						executor, 1, 4);
-		Object heavySubscriber = new Object();
-		Object lightSubscriber = new Object();
-		AtomicInteger heavyRuns = new AtomicInteger();
-		AtomicInteger heavyRejections = new AtomicInteger();
-		AtomicInteger lightRuns = new AtomicInteger();
-		AtomicInteger lightRejections = new AtomicInteger();
-
-		for (int index = 0; index < 3; index++)
-			scheduler.execute(job(heavySubscriber, heavyRuns, heavyRejections));
-		scheduler.execute(job(lightSubscriber, lightRuns, lightRejections));
-		scheduler.execute(job(lightSubscriber, lightRuns, lightRejections));
-
-		Assertions.assertEquals(3, heavyRejections.get(),
-				"Overflow must retire the owner monopolizing the bounded queue.");
-		Assertions.assertEquals(0, lightRejections.get(),
-				"A lighter incoming owner must not be selected over a heavier owner.");
-		Assertions.assertEquals(2, scheduler.queuedJobCount());
-
-		executor.runNext();
-		executor.runNext();
-		Assertions.assertEquals(0, heavyRuns.get());
-		Assertions.assertEquals(2, lightRuns.get());
+				new McpHttpServerRuntime.TaskNotificationProjectionScheduler(executor, 1, 2);
+		Object first = new Object();
+		Object second = new Object();
+		Object third = new Object();
+		AtomicInteger rejections = new AtomicInteger();
+		Assertions.assertTrue(scheduler.tryReserveOwners(List.of(first)));
+		Assertions.assertFalse(scheduler.tryReserveOwners(List.of(second, third)));
+		Assertions.assertTrue(scheduler.tryReserveOwners(List.of(second)));
+		scheduler.execute(job(first, new AtomicInteger(), rejections));
+		scheduler.releaseOwners(List.of(first));
 		Assertions.assertEquals(0, scheduler.queuedJobCount());
+		Assertions.assertEquals(1, rejections.get());
+		Assertions.assertTrue(scheduler.tryReserveOwners(List.of(third)));
+		scheduler.execute(job(first, new AtomicInteger(), rejections));
+		Assertions.assertEquals(2, rejections.get());
+		executor.runNext();
+	}
+
+	@Test
+	public void runningOwnerContinuationCannotRunOnAnotherWorker() {
+		CapturingExecutor executor = new CapturingExecutor();
+		McpHttpServerRuntime.TaskNotificationProjectionScheduler scheduler =
+				new McpHttpServerRuntime.TaskNotificationProjectionScheduler(executor, 2, 2);
+		Object owner = new Object();
+		Object peer = new Object();
+		List<String> order = new ArrayList<>();
+		Assertions.assertTrue(scheduler.tryReserveOwners(List.of(owner, peer)));
+		scheduler.execute(new McpHttpServerRuntime.TaskNotificationProjectionJob(owner, () -> {
+			order.add("owner-start");
+			scheduler.execute(new McpHttpServerRuntime.TaskNotificationProjectionJob(owner,
+					() -> order.add("owner-continuation"), Assertions::fail));
+			executor.runNext();
+			Assertions.assertEquals(List.of("owner-start", "peer"), order);
+			order.add("owner-finish");
+		}, Assertions::fail));
+		scheduler.execute(new McpHttpServerRuntime.TaskNotificationProjectionJob(peer,
+				() -> order.add("peer"), Assertions::fail));
+		executor.runNext();
+		executor.runNext();
+		Assertions.assertEquals(List.of("owner-start", "peer", "owner-finish", "owner-continuation"), order);
+	}
+
+	@Test
+	public void shutdownRejectsContinuationBehindRunningOwner() {
+		CapturingExecutor executor = new CapturingExecutor();
+		McpHttpServerRuntime.TaskNotificationProjectionScheduler scheduler =
+				new McpHttpServerRuntime.TaskNotificationProjectionScheduler(executor, 1, 1);
+		Object owner = new Object();
+		AtomicInteger rejected = new AtomicInteger();
+		Assertions.assertTrue(scheduler.tryReserveOwners(List.of(owner)));
+		scheduler.execute(new McpHttpServerRuntime.TaskNotificationProjectionJob(owner, () -> {
+			scheduler.execute(job(owner, new AtomicInteger(), rejected));
+			scheduler.shutdown();
+		}, Assertions::fail));
+		executor.runNext();
+		Assertions.assertEquals(1, rejected.get());
+		Assertions.assertEquals(0, scheduler.queuedJobCount());
+		Assertions.assertFalse(scheduler.tryReserveOwners(List.of(new Object())));
+	}
+
+	@Test
+	public void retiredRunningOwnerCannotClearAReusedIdentity() {
+		CapturingExecutor executor = new CapturingExecutor();
+		McpHttpServerRuntime.TaskNotificationProjectionScheduler scheduler =
+				new McpHttpServerRuntime.TaskNotificationProjectionScheduler(executor, 1, 1);
+		Object owner = new Object();
+		AtomicInteger runs = new AtomicInteger();
+		AtomicInteger rejected = new AtomicInteger();
+		Assertions.assertTrue(scheduler.tryReserveOwners(List.of(owner)));
+		scheduler.execute(new McpHttpServerRuntime.TaskNotificationProjectionJob(owner, () -> {
+			scheduler.releaseOwners(List.of(owner));
+			Assertions.assertTrue(scheduler.tryReserveOwners(List.of(owner)));
+			scheduler.execute(job(owner, runs, rejected));
+		}, Assertions::fail));
+		executor.runNext();
+		executor.runNext();
+		Assertions.assertEquals(1, runs.get());
+		Assertions.assertEquals(0, rejected.get());
+	}
+
+	@Test
+	public void temporaryOwnerReleasesReservationAfterPhysicalJobExit() {
+		CapturingExecutor executor = new CapturingExecutor();
+		McpHttpServerRuntime.TaskNotificationProjectionScheduler scheduler =
+				new McpHttpServerRuntime.TaskNotificationProjectionScheduler(executor, 1, 1);
+		AtomicInteger runs = new AtomicInteger();
+		AtomicInteger rejected = new AtomicInteger();
+		scheduler.executeTemporary(job(new Object(), runs, rejected));
+		scheduler.executeTemporary(job(new Object(), runs, rejected));
+		Assertions.assertEquals(1, rejected.get());
+		executor.runNext();
+		scheduler.executeTemporary(job(new Object(), runs, rejected));
+		executor.runNext();
+		Assertions.assertEquals(2, runs.get());
 	}
 
 	@Test
@@ -225,7 +332,9 @@ public class McpTaskNotificationProjectionSchedulerTests {
 		AtomicInteger runs = new AtomicInteger();
 		AtomicInteger rejections = new AtomicInteger();
 
-		scheduler.execute(job(new Object(), runs, rejections));
+		Object owner = new Object();
+		Assertions.assertTrue(scheduler.tryReserveOwners(List.of(owner)));
+		scheduler.execute(job(owner, runs, rejections));
 		Assertions.assertEquals(1, scheduler.queuedJobCount());
 		Assertions.assertEquals(0, rejections.get(),
 				"A momentarily full executor must not fail queued subscribers.");
@@ -246,6 +355,7 @@ public class McpTaskNotificationProjectionSchedulerTests {
 		Object firstOwner = new Object();
 		Object secondOwner = new Object();
 		List<String> order = new ArrayList<>();
+		Assertions.assertTrue(scheduler.tryReserveOwners(List.of(firstOwner, secondOwner)));
 
 		scheduler.execute(new McpHttpServerRuntime.TaskNotificationProjectionJob(
 				firstOwner, () -> {

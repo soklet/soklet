@@ -27,12 +27,15 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
+import java.nio.file.DirectoryStream;
+import java.nio.file.DirectoryIteratorException;
 import java.nio.file.InvalidPathException;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.text.Normalizer;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.HexFormat;
@@ -130,8 +133,11 @@ public final class StaticFiles {
 			validateIndexFileName(indexFileName);
 
 		try {
-			this.noFollowRoot = this.root.toRealPath(LinkOption.NOFOLLOW_LINKS);
+			Path configuredNoFollowRoot = this.root.toRealPath(LinkOption.NOFOLLOW_LINKS);
 			this.followRoot = this.root.toRealPath();
+			// The configured root is trusted input. Retain a root symlink for validation,
+			// but use the actual root spelling for resolver identity on ordinary roots.
+			this.noFollowRoot = Files.isSymbolicLink(configuredNoFollowRoot) ? configuredNoFollowRoot : this.followRoot;
 		} catch (IOException e) {
 			throw new UncheckedIOException(format("Unable to resolve static file root '%s'.", this.root), e);
 		}
@@ -192,6 +198,15 @@ public final class StaticFiles {
 		FileResponse.rejectControlledHeaderConflicts(headers, "StaticFiles.HeadersResolver");
 		Boolean rangeRequests = requireNonNull(getRangeRequestsResolver().rangeRequestsFor(file, attributes), "rangeRequestsResolver returned null; return false to disable range requests.");
 		String contentType = requireNonNull(getMimeTypeResolver().contentTypeFor(file), "mimeTypeResolver returned null; use Optional.empty() to omit Content-Type.").orElse(null);
+
+		// Resolvers can execute application code. Fail closed if it replaced an accepted
+		// no-follow path with a link or changed the file identity before response creation.
+		if (!getFollowSymlinks()) {
+			ResolvedFile current = noFollowResolvedFileForCandidate(file).orElse(null);
+			if (current == null || !current.path().equals(file)
+					|| !sameFileIdentity(attributes, current.attributes()))
+				return Optional.empty();
+		}
 
 		MarshaledResponse response = MarshaledResponse.withFile(file, request, attributes)
 				.contentType(contentType)
@@ -312,14 +327,16 @@ public final class StaticFiles {
 	private Optional<ResolvedFile> noFollowResolvedFileForCandidate(@NonNull Path candidate) {
 		requireNonNull(candidate);
 
-		if (hasSymlinkComponent(candidate))
+		Path canonicalCandidate = canonicalNoFollowPath(candidate).orElse(null);
+		if (canonicalCandidate == null || hasSymlinkComponent(canonicalCandidate))
 			return Optional.empty();
+		candidate = canonicalCandidate;
 
 		if (Files.isDirectory(candidate, LinkOption.NOFOLLOW_LINKS)) {
 			for (String indexFileName : getIndexFileNames()) {
-				Path indexCandidate = candidate.resolve(indexFileName).normalize();
+				Path indexCandidate = canonicalNoFollowPath(candidate.resolve(indexFileName).normalize()).orElse(null);
 
-				if (!indexCandidate.startsWith(getResolutionRoot()) || hasSymlinkComponent(indexCandidate))
+				if (indexCandidate == null || !indexCandidate.startsWith(getResolutionRoot()) || hasSymlinkComponent(indexCandidate))
 					continue;
 
 				Optional<ResolvedFile> resolvedIndexFile = noFollowRegularFile(indexCandidate);
@@ -332,6 +349,53 @@ public final class StaticFiles {
 		}
 
 		return noFollowRegularFile(candidate);
+	}
+
+	@NonNull
+	private Optional<Path> canonicalNoFollowPath(@NonNull Path candidate) {
+		if (!candidate.startsWith(this.noFollowRoot) || hasSymlinkComponent(candidate))
+			return Optional.empty();
+		Path current = this.noFollowRoot;
+		try {
+			for (Path segment : this.noFollowRoot.relativize(candidate)) {
+				if (segment.toString().isEmpty())
+					continue;
+				Path requested = current.resolve(segment);
+				BasicFileAttributes requestedAttributes = Files.readAttributes(requested, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+				if (requestedAttributes.isSymbolicLink())
+					return Optional.empty();
+				Path matched = null;
+				try (DirectoryStream<Path> entries = Files.newDirectoryStream(current)) {
+					for (Path entry : entries) {
+						if (entry.getFileName().toString().equals(segment.toString())) {
+							matched = entry;
+							break;
+						}
+						// Other hard-link names are distinct policy paths, not spelling aliases.
+						if (!Normalizer.normalize(entry.getFileName().toString(), Normalizer.Form.NFC)
+								.equalsIgnoreCase(Normalizer.normalize(segment.toString(), Normalizer.Form.NFC)))
+							continue;
+						BasicFileAttributes entryAttributes = Files.readAttributes(entry, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+						if (!entryAttributes.isSymbolicLink() && requestedAttributes.fileKey() != null
+								&& requestedAttributes.fileKey().equals(entryAttributes.fileKey())) {
+							if (matched != null)
+								return Optional.empty();
+							matched = entry;
+						}
+					}
+				}
+				if (matched == null)
+					return Optional.empty();
+				current = matched;
+			}
+			return hasSymlinkComponent(current) ? Optional.empty() : Optional.of(current);
+		} catch (IOException | DirectoryIteratorException e) {
+			return Optional.empty();
+		}
+	}
+
+	private static boolean sameFileIdentity(@NonNull BasicFileAttributes first, @NonNull BasicFileAttributes second) {
+		return first.fileKey() == null ? second.fileKey() == null : first.fileKey().equals(second.fileKey());
 	}
 
 	@NonNull

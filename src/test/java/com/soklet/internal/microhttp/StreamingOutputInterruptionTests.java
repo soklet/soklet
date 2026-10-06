@@ -29,6 +29,7 @@ import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -132,6 +133,8 @@ public class StreamingOutputInterruptionTests {
 				Assertions.assertSame(originalCause, canceled.getCancelationCause().orElse(null));
 				Assertions.assertSame(originalCause, fixture.cause.get());
 				fixture.assertTerminatedAs(reason);
+				Assertions.assertTrue(fixture.diagnostics.isEmpty(),
+						"Routine cancellation claimed the stream's cleanup diagnostic: " + fixture.diagnostics);
 			}
 		}
 	}
@@ -222,8 +225,9 @@ public class StreamingOutputInterruptionTests {
 	private static final class Fixture implements AutoCloseable {
 		private final ExecutorService producers = Executors.newSingleThreadExecutor();
 		private final ScheduledExecutorService timeouts = Executors.newSingleThreadScheduledExecutor();
+		private final List<Throwable> diagnostics = new CopyOnWriteArrayList<>();
 		private final StreamLifecycleCoordinator coordinator = new StreamLifecycleCoordinator(
-				1, 1, Duration.ofSeconds(30), ignored -> {});
+				1, 1, Duration.ofSeconds(30), this.diagnostics::add);
 		private final AtomicReference<Thread> owner = new AtomicReference<>();
 		private final CountDownLatch fourAcceptedBytes = new CountDownLatch(2);
 		private final CountDownLatch terminated = new CountDownLatch(1);

@@ -148,7 +148,9 @@ class McpLocalizationRenderingRuntimeTests {
 					observed.set(request.getLanguageRanges());
 					return context(Locale.FRENCH,
 							text -> McpLocalizationResult.useDefaultText());
-				}).build(), Set.of("en-US" + " ".repeat(4_092)));
+				// Internal whitespace survives HTTP field normalization. The
+				// otherwise valid field is 4,097 code units, beyond the bound.
+				}).build(), Set.of("en-US," + " ".repeat(4_086) + "fr-CA"));
 
 		assertEquals(List.of(), observed.get(),
 				"Over-limit input must never be truncated into a partial view.");

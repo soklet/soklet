@@ -867,7 +867,10 @@ public sealed interface McpServer permits DefaultMcpServer {
 
 		/**
 		 * Sets the queue-inclusive deadline for one subscription-authorization
-		 * callback. The default is five seconds.
+		 * callback or task-notification projection. A task projection shares this
+		 * budget across its manager lookup, current catalog-access policy and result
+		 * sanitizer, bounded also by the remaining authorization lease and stream
+		 * lifetime. The default is five seconds.
 		 *
 		 * @param subscriptionAuthorizationTimeout positive finite authorization
 		 *                                         timeout, or null to restore the
@@ -984,6 +987,18 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 * and must return a fresh, running executor each time. Soklet owns and shuts
 		 * down every returned executor. Its own handler-slot and queue bounds remain
 		 * authoritative regardless of executor capacity.
+		 * <p>
+		 * The executor must execute accepted work or throw on rejection; silent
+		 * discard policies are unsupported. Soklet rejects inline execution on the
+		 * submitting thread before application entry. Initial submission rejection
+		 * produces the fixed capacity response. If a queued ticket's handoff rejects
+		 * while an accepted worker is exiting, that worker may execute the ticket
+		 * before returning to the executor. This retains the configured bounds and
+		 * avoids discarding already-admitted work. Executor task boundaries therefore
+		 * need not correspond one-to-one with application invocations. Soklet clears
+		 * interrupt status between tickets and applies each ticket's own requested
+		 * interruption; application-owned thread-local cleanup remains the application's
+		 * responsibility.
 		 *
 		 * @param requestHandlerExecutorServiceSupplier executor supplier, or null
 		 *                                              to use Soklet's default
@@ -1261,8 +1276,12 @@ public sealed interface McpServer permits DefaultMcpServer {
 		}
 
 		/**
-		 * Configures the optional limiter applied once to every admitted MCP
-		 * request or notification.
+		 * Configures the optional limiter applied once to admitted MCP requests
+		 * and notifications, except the bounded verified 2025 session control path.
+		 * Small, valid session ping, unsubscribe, initialized and cancellation messages
+		 * use independent framework quotas after fresh admission and owner verification;
+		 * ordinary quota exhaustion therefore cannot prevent session cleanup. Their
+		 * bodies must be at most 16 KiB. HTTP GET/DELETE use transport admission instead.
 		 * <p>
 		 * A request limiter is required when any endpoint configures argument
 		 * Completion. Server construction fails without one. This limiter covers
@@ -1477,8 +1496,11 @@ public sealed interface McpServer permits DefaultMcpServer {
 		}
 
 		/**
-		 * Replaces the hostname-only values accepted by MCP Host validation. Host
-		 * ports must still equal the effective bound port. Each invocation replaces,
+		 * Replaces the hostname-only values accepted by MCP Host validation.
+		 * Explicitly allowed names accept any syntactically valid public port, or
+		 * no port, so a proxy can preserve the external authority. Automatically
+		 * allowed loopback aliases still require the effective listener port.
+		 * Each invocation replaces,
 		 * rather than appends to, the previous set. Soklet snapshots the supplied
 		 * values during the call. The default is the empty set, which is valid only
 		 * when the configured bind host is a loopback literal or {@code localhost}.

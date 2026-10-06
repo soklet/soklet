@@ -5,7 +5,9 @@ import org.jspecify.annotations.Nullable;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * ByteTokenizer is an expandable, first-in first-out byte array that supports tokenization.
@@ -17,6 +19,9 @@ class ByteTokenizer {
     private int position;
     private int size;
     private long totalBytesAdded;
+    // The HTTP parser alternates between SPACE and CRLF at the same position.
+    // Remember both searches so fragmented tokens only scan newly added bytes.
+    private final List<DelimiterSearch> delimiterSearches = new ArrayList<>(2);
 
     int size() {
         return size - base;
@@ -44,6 +49,7 @@ class ByteTokenizer {
     }
 
     void compact() {
+        delimiterSearches.clear();
         if (position == size) {
             base = 0;
             position = 0;
@@ -87,6 +93,7 @@ class ByteTokenizer {
         base = 0;
         position = 0;
         size = 0;
+        delimiterSearches.clear();
 
         return new CapturedPrefix(capturedBytes, observedByteCount,
                 capturedByteCount < observedByteCount);
@@ -172,18 +179,64 @@ class ByteTokenizer {
     }
 
     int indexOf(byte[] delimiter) {
-        for (int i = position; i <= size - delimiter.length; i++) {
+        if (delimiter.length == 0)
+            return position;
+
+        DelimiterSearch search = null;
+        for (DelimiterSearch candidate : delimiterSearches) {
+            if (Arrays.equals(candidate.delimiter, delimiter)) {
+                search = candidate;
+                break;
+            }
+        }
+        // Other tokenizer callers may use arbitrary delimiters; keep the cache bounded.
+        if (search == null && delimiterSearches.size() < 2) {
+            search = new DelimiterSearch(delimiter);
+            delimiterSearches.add(search);
+        }
+
+        int searchStart = position;
+        if (search != null && search.position == position) {
+            if (search.foundIndex >= 0)
+                return search.foundIndex;
+            searchStart = search.nextSearchPosition;
+        }
+
+        for (int i = searchStart; i <= size - delimiter.length; i++) {
             if (Arrays.equals(delimiter, 0, delimiter.length, array, i, i + delimiter.length)) {
+                if (search != null) {
+                    search.position = position;
+                    search.foundIndex = i;
+                }
                 return i;
             }
         }
+        if (search != null) {
+            search.position = position;
+            search.foundIndex = -1;
+            // A delimiter may straddle the next read: keep its incomplete suffix.
+            search.nextSearchPosition = Math.max(position, size - delimiter.length + 1);
+        }
         return -1;
+    }
+
+    private static final class DelimiterSearch {
+        private final byte[] delimiter;
+        private int position = -1;
+        private int nextSearchPosition;
+        private int foundIndex = -1;
+
+        private DelimiterSearch(byte[] delimiter) {
+            this.delimiter = delimiter.clone();
+        }
     }
 
     private void compactInPlace() {
         if (base == 0) {
             return;
         }
+
+        delimiterSearches.clear();
 
         int newSize = size - base;
         int newPosition = position - base;

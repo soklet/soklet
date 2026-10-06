@@ -96,6 +96,11 @@ public final class McpInputRequest {
 	 * <p>This validates the protocol-level response shape for the declaration.
 	 * It does not validate accepted elicitation content against this request's
 	 * requested schema or against application-specific policy.
+	 * Content values may be strings, numbers (including decimals), booleans,
+	 * or arrays of strings. Numbers retain their exact {@link java.math.BigDecimal}
+	 * values and must satisfy Soklet's production JSON number limits. Matching
+	 * does not require a number to be integral, even when the requested schema
+	 * declares an integer field; the application must validate that schema.
 	 *
 	 * @param inputResponse client response to inspect
 	 * @return whether the response matches the declared MCP union branch

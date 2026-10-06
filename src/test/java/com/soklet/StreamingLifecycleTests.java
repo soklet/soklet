@@ -31,6 +31,7 @@ import java.io.StringReader;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -61,6 +62,40 @@ public class StreamingLifecycleTests {
 	private static final LifecyclePolicy SHUTDOWN_POLICY = LifecyclePolicy.builder()
 			.gracefulShutdownTimeout(Duration.ofMillis(200))
 			.forcedShutdownTimeout(Duration.ofMillis(200)).build();
+
+	@Test
+	public void lifecycleCapacityRejectionReportsActualFiniteResponseAndOneStreamTermination() throws Exception {
+		CountDownLatch release = new CountDownLatch(1);
+		Fixture fixture = new Fixture(1, 1, Duration.ofSeconds(2), Duration.ZERO, null);
+		fixture.body("held", StreamingResponseBody.fromWriter(stream -> release.await()));
+		fixture.body("rejected", StreamingResponseBody.fromWriter(stream -> Assertions.fail("Rejected writer entered")));
+		try {
+			fixture.start();
+			try (Socket held = fixture.request("/stream/held")) {
+				assertStatus(held, 200);
+				try (Socket rejected = fixture.request("/stream/rejected")) {
+					assertStatus(rejected, 503); readRemainder(rejected);
+				}
+				assertEventually(() -> fixture.finishedResponses.containsKey("/stream/rejected")
+						&& fixture.terminations.containsKey("/stream/rejected"), "No rejection evidence");
+				assertRejectedResponseEvidence(fixture);
+				release.countDown(); readRemainder(held);
+			}
+		} finally { release.countDown(); fixture.shutdown(); }
+		Assertions.assertEquals(1, fixture.terminationCounts.get("/stream/rejected").get());
+	}
+
+	private static void assertRejectedResponseEvidence(Fixture fixture) {
+		for (MarshaledResponse response : List.of(fixture.writtenResponses.get("/stream/rejected"),
+				fixture.finishedResponses.get("/stream/rejected"), fixture.metricsResponses.get("/stream/rejected"))) {
+			Assertions.assertEquals(503, response.getStatusCode());
+			Assertions.assertFalse(response.isStreaming());
+			Assertions.assertEquals("HTTP 503: Service Unavailable", new String(
+					((MarshaledResponseBody.Bytes) response.getBody().orElseThrow()).getBytes(), StandardCharsets.UTF_8));
+		}
+		Assertions.assertEquals(StreamTerminationReason.BACKPRESSURE, fixture.terminations.get("/stream/rejected").getReason());
+		Assertions.assertEquals(1, fixture.terminationCounts.get("/stream/rejected").get());
+	}
 
 	@Test
 	public void gracefulShutdownAllowsAdmittedWriterToRenewIdleTimeoutAndComplete()
@@ -111,6 +146,45 @@ public class StreamingLifecycleTests {
 	}
 
 	@Test
+	public void defaultProducerCapacityNeverCommitsAStreamQueuedBehindHeldProducers() throws Exception {
+		CountDownLatch release = new CountDownLatch(1);
+		AtomicInteger entered = new AtomicInteger();
+		int heldCount = Utilities.virtualThreadsAvailable() ? 17 : 4;
+		Fixture fixture = new Fixture(heldCount + 1, 1, Duration.ofSeconds(2), Duration.ZERO, null);
+		List<Socket> heldSockets = new ArrayList<>();
+		fixture.body("held", StreamingResponseBody.fromWriter(stream -> {
+			entered.incrementAndGet();
+			stream.write("ready".getBytes(StandardCharsets.UTF_8));
+			stream.flush();
+			release.await();
+		}));
+		try {
+			fixture.start();
+			for (int i = 0; i < heldCount; i++) {
+				Socket socket = fixture.request("/stream/held");
+				heldSockets.add(socket);
+				assertStatus(socket, 200);
+				Assertions.assertEquals("5\r\nready\r\n", new String(socket.getInputStream().readNBytes(10),
+						StandardCharsets.ISO_8859_1));
+			}
+			try (Socket extra = fixture.request("/stream/held")) {
+				assertStatus(extra, Utilities.virtualThreadsAvailable() ? 200 : 503);
+				if (Utilities.virtualThreadsAvailable())
+					Assertions.assertEquals("5\r\nready\r\n", new String(extra.getInputStream().readNBytes(10),
+							StandardCharsets.ISO_8859_1));
+				else
+					readRemainder(extra);
+			}
+			Assertions.assertEquals(Utilities.virtualThreadsAvailable() ? heldCount + 1 : heldCount, entered.get());
+		} finally {
+			release.countDown();
+			for (Socket socket : heldSockets)
+				socket.close();
+			fixture.shutdown();
+		}
+	}
+
+	@Test
 	public void saturatedCustomProducerExecutorRejectsBeforeStreamingHeaders()
 			throws Exception {
 		CountDownLatch entered = new CountDownLatch(1);
@@ -140,6 +214,9 @@ public class StreamingLifecycleTests {
 					readRemainder(rejected);
 				}
 				Assertions.assertEquals(0, rejectedWriterCalls.get());
+				assertEventually(() -> fixture.finishedResponses.containsKey("/stream/rejected")
+						&& fixture.terminations.containsKey("/stream/rejected"), "No rejection evidence");
+				assertRejectedResponseEvidence(fixture);
 				assertEventually(() -> fixture.coordinator().snapshot().reservations() == 1,
 						"Executor rejection leaked the rejected response's reservation");
 				release.countDown();
@@ -364,6 +441,7 @@ public class StreamingLifecycleTests {
 				firstProducerExited.countDown();
 			}
 		}));
+		fixture.body("capacity-rejected", StreamingResponseBody.fromWriter(stream -> Assertions.fail("Rejected writer entered")));
 		fixture.body("second-timeout", StreamingResponseBody.fromWriter(responseStream -> {
 			try {
 				new CountDownLatch(1).await();
@@ -389,7 +467,7 @@ public class StreamingLifecycleTests {
 				Assertions.assertEquals(1L, releaseCallback.getCount());
 				Assertions.assertEquals(2, fixture.coordinator().snapshot().reservations(),
 						"Queued or running terminal callbacks must retain their lifetime slots");
-				try (Socket rejected = fixture.request("/stream/second-timeout")) {
+				try (Socket rejected = fixture.request("/stream/capacity-rejected")) {
 					assertStatus(rejected, 503);
 					readRemainder(rejected);
 				}
@@ -472,6 +550,11 @@ public class StreamingLifecycleTests {
 		private final Map<String, StreamingResponseBody> bodies = new ConcurrentHashMap<>();
 		private final Map<String, StreamTermination> terminations = new ConcurrentHashMap<>();
 		private final ConcurrentLinkedQueue<Throwable> diagnostics = new ConcurrentLinkedQueue<>();
+		private final Map<String, AtomicInteger> terminationCounts = new ConcurrentHashMap<>();
+		private final Map<String, MarshaledResponse> writtenResponses = new ConcurrentHashMap<>();
+		private final Map<String, MarshaledResponse> finishedResponses = new ConcurrentHashMap<>();
+		private final Map<String, MarshaledResponse> metricsResponses = new ConcurrentHashMap<>();
+		private final Map<String, Boolean> terminatedBeforeFinish = new ConcurrentHashMap<>();
 
 		private Fixture(int capacity, int callbackConcurrency, Duration cleanupGrace,
 				Duration responseTimeout) throws IOException {
@@ -489,6 +572,7 @@ public class StreamingLifecycleTests {
 				Duration idleTimeout, LifecyclePolicy lifecyclePolicy) throws IOException {
 			this.port = findFreePort();
 			this.server = (DefaultHttpServer) HttpServer.withPort(this.port).host("127.0.0.1")
+					.concurrency(1)
 					.streamingResponseTimeout(responseTimeout).streamingResponseIdleTimeout(idleTimeout)
 					.streamingExecutorServiceSupplier(executorSupplier).build();
 			this.server.setStreamLifecycleCoordinatorFactoryForTests(() ->
@@ -506,11 +590,30 @@ public class StreamingLifecycleTests {
 						}
 					})
 					.lifecyclePolicy(lifecyclePolicy)
+					.metricsCollector(new MetricsCollector() {
+						@Override
+						public void didFinishRequestHandling(ServerType serverType, Request request, ResourceMethod resourceMethod,
+								MarshaledResponse response, Duration duration, List<Throwable> throwables) {
+							metricsResponses.put(request.getPath(), response);
+						}
+					})
 					.lifecycleObserver(new QuietObserver() {
+						@Override
+						public void didWriteResponse(ServerType serverType, Request request, ResourceMethod resourceMethod,
+								MarshaledResponse response, Duration duration) {
+							writtenResponses.put(request.getPath(), response);
+						}
+						@Override
+						public void didFinishRequestHandling(ServerType serverType, Request request, ResourceMethod resourceMethod,
+								MarshaledResponse response, Duration duration, List<Throwable> throwables) {
+							terminatedBeforeFinish.put(request.getPath(), terminations.containsKey(request.getPath()));
+							finishedResponses.put(request.getPath(), response);
+						}
 						@Override
 						public void didTerminateResponseStream(@NonNull StreamingResponseHandle handle,
 								@NonNull StreamTermination termination) {
 							terminations.put(handle.getRequest().getPath(), termination);
+							terminationCounts.computeIfAbsent(handle.getRequest().getPath(), ignored -> new AtomicInteger()).incrementAndGet();
 						}
 					}).build());
 		}
