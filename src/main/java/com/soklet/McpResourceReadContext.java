@@ -45,6 +45,11 @@ public interface McpResourceReadContext {
 
 	/**
 	 * Returns URI-template variables captured while routing this resource.
+	 * Values are UTF-8 percent-decoded exactly once: an encoded slash
+	 * ({@code %2F}) becomes {@code /}, while {@code %252F} becomes the literal
+	 * string {@code %2F}. {@link #getUri()} retains the original client URI.
+	 * Capturing a variable does not authorize filesystem access or establish
+	 * that a decoded path is safe.
 	 *
 	 * @return immutable variable map, empty for an exact-URI registration
 	 */

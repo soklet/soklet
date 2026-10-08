@@ -137,7 +137,21 @@ public interface SseServer {
 		 * <p>
 		 * The {@link SseServer} is responsible for converting its internal request representation into a {@link Request}, which a {@link com.soklet.Soklet} instance consumes and performs Soklet application request processing logic.
 		 * <p>
-		 * The {@link com.soklet.Soklet} instance will generate a {@link MarshaledResponse} for the request, which it "hands back" to the {@link SseServer} to be sent over the wire to the client.
+		 * The {@link com.soklet.Soklet} instance hands an {@link HttpRequestResult} to the
+		 * response consumer. Use {@link HttpRequestResult#getMarshaledResponse()} for the
+		 * offered HTTP response and {@link HttpRequestResult#getSseHandshakeResult()} for
+		 * the logical handshake decision. An absent or rejected handshake must not be
+		 * inferred to be accepted from an HTTP status code alone.
+		 * <p>
+		 * For an actually accepted connection, the transport preserves the
+		 * {@link SseHandshakeResult.Accepted#getClientContext() client context} and invokes
+		 * any {@link SseHandshakeResult.Accepted#getClientInitializer() initializer} once
+		 * after writing the accepted response. Initialization is bounded; queued catch-up
+		 * writes and broadcaster activation wait for successful return. Initializer failure,
+		 * admission failure or prior termination prevents activation. The transport owns
+		 * connection lifetime, queue bounds, shutdown and honest termination proof.
+		 * Establishment observation must precede termination observation even if
+		 * initialization fails. See {@link SseClientInitializer} for the failure contract.
 		 *
 		 * @param request               a Soklet {@link Request} representation of the {@link SseServer}'s internal HTTP request data
 		 * @param requestResultConsumer invoked by {@link com.soklet.Soklet} when it's time for the {@link SseServer} to write HTTP response data to the client
@@ -263,6 +277,12 @@ public interface SseServer {
 
 		/**
 		 * Sets the maximum duration for reading the SSE handshake request line and headers.
+		 * This independent budget begins when a handshake worker starts reading;
+		 * header reading and parsing do not consume the request-handler budget.
+		 * A read timeout after receiving bytes routes through
+		 * {@link ResponseMarshaler#forUnparsedRequest(UnparsedRequest)}, whose default
+		 * response is {@code 408}. An idle read timeout or EOF before complete headers
+		 * closes quietly.
 		 * <p>
 		 * Passing {@code null} restores the built-in default of 60 seconds.
 		 *
@@ -276,8 +296,15 @@ public interface SseServer {
 		}
 
 		/**
-		 * Sets the maximum duration of application handshake handling. Passing
-		 * {@code null} restores the built-in timeout of 60 seconds.
+		 * Sets the combined budget for handshake queue wait and application handling.
+		 * The budget starts when the connection is accepted, pauses during request-line
+		 * and header reading/parsing, and resumes with its remaining duration after
+		 * successful parsing. An input rejection uses the same remaining budget for
+		 * lifecycle observation and unparsed-request marshaling. Queue wait is not
+		 * refunded. Queue or parsed application expiry produces a {@code 503}; expiry
+		 * during rejection handling uses the original rejection's bodyless fallback.
+		 * Cancellation cooperatively interrupts a running application worker.
+		 * Passing {@code null} restores the built-in timeout of 60 seconds.
 		 *
 		 * @param requestHandlerTimeout request-handler timeout, or {@code null} for
 		 * the default
@@ -339,6 +366,10 @@ public interface SseServer {
 		/**
 		 * Sets the interval between SSE heartbeat comments. Passing {@code null}
 		 * restores the built-in interval of 15 seconds.
+		 * <p>
+		 * At {@link #build()}, the interval must be at least one millisecond and its whole-millisecond
+		 * value must fit in a {@code long}. Heartbeat waits discard fractional milliseconds.
+		 * {@link Duration#ZERO} is not accepted.
 		 *
 		 * @param heartbeatInterval heartbeat interval, or {@code null} for the
 		 * default
@@ -432,6 +463,8 @@ public interface SseServer {
 		 * shutdown, which may interrupt its tasks. Passing {@code null} restores the
 		 * framework-managed fixed-size executor with the effective
 		 * request-handler concurrency and queue capacity.
+		 * The executor must dispatch handshake work asynchronously; direct executors
+		 * and caller-runs rejection policies can block connection admission.
 		 *
 		 * @param requestHandlerExecutorServiceSupplier executor supplier, or
 		 * {@code null} for the default
@@ -446,8 +479,14 @@ public interface SseServer {
 		}
 
 		/**
-		 * Sets the maximum number of concurrent SSE connections. Zero disables the
-		 * cap. Passing {@code null} restores the built-in default of 8,192.
+		 * Sets the transport's maximum number of concurrent SSE connections. Zero disables this
+		 * connection cap. Passing {@code null} restores the built-in default of 8,192.
+		 * <p>
+		 * {@link #streamingLifecycleCapacity(Integer)} separately bounds retained SSE lifetimes and
+		 * defaults to 256. With both defaults, at most 256 SSE connections can be admitted.
+		 * When this connection cap is positive, the ceiling is the smaller of the two limits;
+		 * pending initialization or retained cleanup can reduce available lifecycle slots further.
+		 * Zero leaves lifecycle admission bounded. Configure both limits when increasing client capacity.
 		 *
 		 * @param concurrentConnectionLimit concurrent connection limit, or
 		 * {@code null} for the default
@@ -512,6 +551,11 @@ public interface SseServer {
 		 * A terminated connection retains its lifecycle slot while admitted initializer or connection work remains
 		 * physically outstanding. This bound is independent of {@link #concurrentConnectionLimit(Integer)}.
 		 * Passing {@code null} restores the current default of 256.
+		 * The two defaults together admit at most 256 SSE lifetimes.
+		 * <p>
+		 * Lifecycle admission occurs after application handshake handling, before writing an accepted response
+		 * or invoking its initializer. The handshake method may therefore run before a capacity {@code 503}.
+		 * Initializers should own work that requires an admitted connection.
 		 * <p>
 		 * At {@link #build()}, the effective capacity must be between 1 and {@code Integer.MAX_VALUE / 2}, inclusive.
 		 *

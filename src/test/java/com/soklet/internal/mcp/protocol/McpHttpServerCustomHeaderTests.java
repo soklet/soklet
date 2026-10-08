@@ -106,7 +106,7 @@ public class McpHttpServerCustomHeaderTests {
 	}
 
 	@Test
-	public void custom_mirror_failures_are_header_mismatches_before_admission()
+	public void custom_mirror_failures_are_header_mismatches_after_admission()
 			throws Exception {
 		AtomicInteger admissions = new AtomicInteger();
 		AtomicInteger handlers = new AtomicInteger();
@@ -145,7 +145,7 @@ public class McpHttpServerCustomHeaderTests {
 				assertError(response, failureCase.id(), -32_020);
 				Assertions.assertFalse(response.body().contains("secret"));
 			}
-			Assertions.assertEquals(0, admissions.get());
+			Assertions.assertEquals(cases.size(), admissions.get());
 			Assertions.assertEquals(0, handlers.get());
 		} finally {
 			runtime.close();
@@ -209,7 +209,7 @@ public class McpHttpServerCustomHeaderTests {
 			FixedResponse recognizedMismatch = send(port, "31", requiredArguments(),
 					compound);
 			assertError(recognizedMismatch, "31", -32_020);
-			Assertions.assertEquals(0, admissions.get());
+			Assertions.assertEquals(2, admissions.get());
 			Assertions.assertEquals(0, handlers.get());
 		} finally {
 			runtime.close();
@@ -217,7 +217,7 @@ public class McpHttpServerCustomHeaderTests {
 	}
 
 	@Test
-	public void unsupportedSelectorAddsOnlyBoundedDataToCustomHeaderWinners()
+	public void unsupportedSelectorPrecedesRegistrationDependentCustomHeaders()
 			throws Exception {
 		AtomicInteger admissions = new AtomicInteger();
 		AtomicInteger handlers = new AtomicInteger();
@@ -236,8 +236,7 @@ public class McpHttpServerCustomHeaderTests {
 			assertSupportedVersionsDiagnostic(recognizedMismatch);
 			Assertions.assertTrue(recognizedMismatch.body().contains(
 					"\"message\":\"Header mismatch\""), recognizedMismatch.body());
-			Assertions.assertFalse(recognizedMismatch.body().contains(
-					UNSUPPORTED_VERSION));
+			Assertions.assertFalse(recognizedMismatch.body().contains(UNSUPPORTED_VERSION));
 
 			List<McpChunkedHttpClient.RequestHeader> strictHeaders = new ArrayList<>(
 					withProtocolVersion(validRequiredHeaders("tenant", "true", "42"),
@@ -245,10 +244,10 @@ public class McpHttpServerCustomHeaderTests {
 			strictHeaders.add(new McpChunkedHttpClient.RequestHeader(
 					"Mcp-Param-Super-Secret-Name", "super-secret-value"));
 			FixedResponse strict = send(port, "33", requiredArguments(), strictHeaders);
-			assertError(strict, "33", -31_998);
+			assertError(strict, "33", -32_020);
 			assertSupportedVersionsDiagnostic(strict);
 			Assertions.assertTrue(strict.body().contains(
-					"\"message\":\"Unknown mirrored header\""), strict.body());
+					"\"message\":\"Header mismatch\""), strict.body());
 			Assertions.assertFalse(strict.body().contains("Super-Secret"));
 			Assertions.assertFalse(strict.body().contains("super-secret-value"));
 			Assertions.assertFalse(strict.body().contains(UNSUPPORTED_VERSION));
@@ -290,7 +289,7 @@ public class McpHttpServerCustomHeaderTests {
 			FixedResponse strict = send(port, "41", requiredArguments(), unknown);
 			assertError(strict, "41", -31_998);
 			assertCors(strict, origin);
-			Assertions.assertEquals(0, admissions.get());
+			Assertions.assertEquals(2, admissions.get());
 		} finally {
 			runtime.close();
 		}
@@ -348,7 +347,7 @@ public class McpHttpServerCustomHeaderTests {
 					new McpChunkedHttpClient.RequestHeader(
 							"Mcp-Param-Tenant", "belongs-to-another-tool")));
 			assertError(rejected, "51", -31_998);
-			Assertions.assertEquals(1, admissions.get());
+			Assertions.assertEquals(2, admissions.get());
 			Assertions.assertEquals(1, handlers.get());
 		} finally {
 			strict.close();

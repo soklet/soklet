@@ -47,7 +47,8 @@ import static java.util.Objects.requireNonNull;
 public interface McpRuntimeCatalogLocalizer {
 	/** Which framework-owned catalog response is being rendered. */
 	enum ResponseKind {
-		DISCOVERY, TOOLS_LIST, PROMPTS_LIST, RESOURCES_LIST,
+		DISCOVERY, INITIALIZE_2025_06_18, INITIALIZE_2025_11_25,
+		TOOLS_LIST, PROMPTS_LIST, RESOURCES_LIST,
 		RESOURCE_TEMPLATES_LIST, SUBSCRIPTION_TERMINAL
 	}
 

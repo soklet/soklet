@@ -24,7 +24,9 @@ package com.soklet;
  */
 public enum McpInputRequirement {
 	/**
-	 * The capability is required before Soklet admits the operation.
+	 * The capability is required after application admission succeeds and before
+	 * Soklet executes the operation. Rejected callers do not learn registered
+	 * capability requirements.
 	 */
 	REQUIRED,
 	/**

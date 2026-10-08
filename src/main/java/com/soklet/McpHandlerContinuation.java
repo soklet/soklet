@@ -28,6 +28,14 @@ import javax.annotation.concurrent.NotThreadSafe;
  * and must not be retained or passed to another thread. The first invocation
  * enters the remaining validation and handler chain. A second or later
  * invocation fails synchronously without re-entering downstream code.
+ * <p>
+ * If the downstream handler throws an {@link McpJsonRpcException},
+ * {@link #proceed()} throws that same exception instance. The interceptor may
+ * inspect it and rethrow it unchanged to preserve its intentional client-visible
+ * error, or recover by returning a method-compatible result that traverses
+ * normal result validation. A new exception, including one carrying the same
+ * {@link McpJsonRpcError}, a wrapper, or an exception from a previous invocation
+ * fails closed as an unexpected interception failure.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -41,6 +49,8 @@ public interface McpHandlerContinuation {
 	 * @throws IllegalStateException if this continuation was already invoked,
 	 *                               retained beyond its interceptor call, or
 	 *                               invoked from another thread
+	 * @throws McpJsonRpcException the exact intentional error exception thrown
+	 *                             by the downstream handler
 	 * @throws Exception if downstream validation or application handling fails
 	 */
 	@NonNull

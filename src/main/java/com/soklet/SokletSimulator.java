@@ -42,7 +42,15 @@ import java.util.concurrent.atomic.AtomicReference;
 import static com.soklet.internal.ObjectIdentity.sameInstance;
 import static java.util.Objects.requireNonNull;
 
-/** Runs single-use, off-network simulation configurations. */
+/**
+ * Runs single-use, off-network simulation configurations.
+ * <p>
+ * Incomplete teardown throws {@link SokletShutdownIncompleteException} after a
+ * successful simulation body, or suppresses it on the original body failure.
+ * Its message summarizes component dispositions and residual activity; inspect
+ * {@link SokletLifecycleException#getShutdownResult()} for the frozen typed
+ * evidence. Outstanding work alone does not invent a Throwable cause.
+ */
 @ThreadSafe
 public final class SokletSimulator {
 	/**

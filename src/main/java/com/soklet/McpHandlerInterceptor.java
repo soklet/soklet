@@ -51,8 +51,13 @@ import static java.util.Objects.requireNonNull;
  * canonical URI, MIME type, contents and representation must remain unchanged;
  * result metadata may be added, and freshness may be shortened but not widened
  * beyond the shared-file cache policy and applicable security clamps.
- * A {@code null} return or thrown exception fails closed without exposing
- * exception-derived data.
+ * A {@code null} return or an interceptor-authored exception fails closed
+ * without exposing exception-derived data. The continuation exposes a
+ * handler's intentional {@link McpJsonRpcException} as the original object.
+ * An interceptor may inspect and rethrow that same object to preserve the
+ * handler error, or return a method-compatible recovery result. Replacing or
+ * wrapping the exception, or throwing one retained from an earlier invocation,
+ * is an interception failure and does not expose its error to the client.
  * <p>
  * Implementations must be safe for concurrent invocation. Each supplied
  * continuation remains synchronous, one-shot, and bound to the invoking

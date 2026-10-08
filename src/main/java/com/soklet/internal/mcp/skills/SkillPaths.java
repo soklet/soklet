@@ -16,8 +16,9 @@ import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.List;
+import java.util.NavigableSet;
+import java.util.TreeSet;
 
 import static java.util.Objects.requireNonNull;
 
@@ -43,7 +44,7 @@ final class SkillPaths {
 		requireNonNull(logicalPaths, "Skills logical paths are required.");
 		if (logicalPaths.size() > MAXIMUM_FILES) throw invalid();
 		List<Path> validated = new ArrayList<>();
-		HashSet<String> unique = new HashSet<>();
+		NavigableSet<String> unique = new TreeSet<>();
 		for (String path : logicalPaths) {
 			if (validated.size() == MAXIMUM_FILES) throw invalid();
 			requireNonNull(path, "A Skills logical path is required.");
@@ -52,6 +53,15 @@ final class SkillPaths {
 			validated.add(new Path(path, bytes));
 		}
 		if (!unique.contains(ROOT)) throw invalid();
+		// Seek each file's directory prefix in the complete set, independently
+		// of insertion order. This avoids retaining every ancestor of deep paths.
+		// Logical names stay case-sensitive, matching exact resource identity.
+		for (String path : unique) {
+			String directoryPrefix = path + "/";
+			String descendant = unique.ceiling(directoryPrefix);
+			if (descendant != null && descendant.startsWith(directoryPrefix))
+				throw new IllegalArgumentException("Skills logical paths must not use a file as a directory.");
+		}
 		validated.sort((left, right) -> {
 			if (left.value().equals(ROOT)) return right.value().equals(ROOT) ? 0 : -1;
 			if (right.value().equals(ROOT)) return 1;

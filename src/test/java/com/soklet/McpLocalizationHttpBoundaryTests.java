@@ -165,6 +165,16 @@ class McpLocalizationHttpBoundaryTests {
 	}
 
 	@Test
+	void customResourceListRetainsCanonicalServerMetadata() {
+		Capture response = capture(localizer(), CorsAuthorizer.rejectAllInstance(),
+				request("resources/list", "custom-list-metadata", null, "", Set.of("fr"), null));
+		assertEquals(200, response.statusCode(), response.body());
+		assertTrue(response.body().contains("\"title\":\"Canonical title\""), response.body());
+		assertFalse(response.body().contains("FR:Canonical title"), response.body());
+		assertFalse(response.headers().containsKey("Content-Language"), response.headers().toString());
+	}
+
+	@Test
 	void dynamicApplicationOutputIsNeverPostProcessed() {
 		// The handler emits text that looks exactly like localizable JSON and
 		// also localizes for itself from the exact provider context.

@@ -348,7 +348,8 @@ public class McpResourceProtocolTests {
 			assertError(response, 400, -32602, "list-only-read");
 			Assertions.assertTrue(response.body().contains(
 					"\"data\":{\"uri\":\"catalog://items/1\"}"), response.body());
-			Assertions.assertEquals(0, admissions.get());
+			Assertions.assertEquals(1, admissions.get(),
+					"Admission precedes resource existence checks.");
 		}
 	}
 
@@ -413,6 +414,7 @@ public class McpResourceProtocolTests {
 		AtomicInteger admissions = new AtomicInteger();
 		AtomicInteger rateLimits = new AtomicInteger();
 		AtomicInteger exactInvocations = new AtomicInteger();
+		AtomicInteger templateInvocations = new AtomicInteger();
 		AtomicReference<Map<String, String>> templateVariables = new AtomicReference<>();
 		McpResourceCachePolicy exactCache =
 				new McpResourceCachePolicy(50L, McpCacheScope.PUBLIC);
@@ -434,6 +436,7 @@ public class McpResourceProtocolTests {
 				}, exactCache);
 		McpApplicationResourceReadRoute templateRoute =
 				new McpApplicationResourceReadRoute(invocation -> {
+					templateInvocations.incrementAndGet();
 					templateVariables.set(invocation.templateVariables());
 					return emptyReadResult();
 				}, templateCache);
@@ -468,13 +471,17 @@ public class McpResourceProtocolTests {
 			assertError(unknown, 400, -32602, "unknown");
 			Assertions.assertTrue(unknown.body().contains(
 					"\"data\":{\"uri\":\"catalog://other/1\"}"), unknown.body());
+			Assertions.assertEquals(3, admissions.get(), "Unknown routes are checked after admission.");
 			FixedResponse malformed = read(port, "malformed", "catalog://items/%ZZ");
 			assertError(malformed, 400, -32602, "malformed");
+			Assertions.assertEquals(3, admissions.get(), "Malformed URI syntax still fails before admission.");
 			FixedResponse malformedUtf8 = read(port, "malformed-utf8",
 					"catalog://items/%C3%28");
 			assertError(malformedUtf8, 400, -32602, "malformed-utf8");
-			Assertions.assertEquals(2, admissions.get());
+			Assertions.assertEquals(4, admissions.get(), "Template decoding follows admission.");
 			Assertions.assertEquals(2, rateLimits.get());
+			Assertions.assertEquals(1, exactInvocations.get());
+			Assertions.assertEquals(1, templateInvocations.get(), "Rejected reads cannot enter either handler.");
 		}
 	}
 

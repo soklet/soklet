@@ -110,13 +110,20 @@ final class DefaultMcpLocalizationCatalogExtractor {
 		for (McpEndpoint endpoint : endpointRegistry.getEndpoints()) {
 			List<McpCanonicalLocalizationPlan.ResponsePlan> responses =
 					new ArrayList<>();
-			List<McpCanonicalLocalizationPlan.Slot> discovery =
-					discoverySlots(endpoint, catalog);
-			addResponse(responses,
-					McpCanonicalLocalizationPlan.ResponseKind.DISCOVERY,
-					discovery, maximumLocalizableTextCountPerResponse);
+			if (endpoint.getProtocolVersions().contains(McpProtocolVersion.V2026_07_28))
+				addResponse(responses,
+						McpCanonicalLocalizationPlan.ResponseKind.DISCOVERY,
+						discoverySlots(endpoint, catalog), maximumLocalizableTextCountPerResponse);
+			if (endpoint.getProtocolVersions().contains(McpProtocolVersion.V2025_06_18))
+				addResponse(responses,
+						McpCanonicalLocalizationPlan.ResponseKind.INITIALIZE_2025_06_18,
+						initializationSlots(endpoint, catalog, false), maximumLocalizableTextCountPerResponse);
+			if (endpoint.getProtocolVersions().contains(McpProtocolVersion.V2025_11_25))
+				addResponse(responses,
+						McpCanonicalLocalizationPlan.ResponseKind.INITIALIZE_2025_11_25,
+						initializationSlots(endpoint, catalog, true), maximumLocalizableTextCountPerResponse);
 
-			addCatalogResponse(endpoint, responses,
+			addCatalogResponse(endpoint, catalog, responses,
 					McpCanonicalLocalizationPlan.ResponseKind.TOOLS_LIST,
 					toolSlots(endpoint, catalog),
 					maximumLocalizableTextCountPerResponse,
@@ -125,21 +132,21 @@ final class DefaultMcpLocalizationCatalogExtractor {
 									McpAppMetadataSupport.effectiveToolMetadata(
 											tool.getMetadata(), tool.getAppToolMetadata()
 													.orElse(null)).isPresent()));
-			addCatalogResponse(endpoint, responses,
+			addCatalogResponse(endpoint, catalog, responses,
 					McpCanonicalLocalizationPlan.ResponseKind.PROMPTS_LIST,
 					promptSlots(endpoint, catalog),
 					maximumLocalizableTextCountPerResponse,
 					deferCallerAwareCatalogResponseBounds);
-			addCatalogResponse(endpoint, responses,
+			addCatalogResponse(endpoint, catalog, responses,
 					McpCanonicalLocalizationPlan.ResponseKind.RESOURCES_LIST,
 					exactResourceSlots(endpoint, catalog),
 					maximumLocalizableTextCountPerResponse, false);
-			addCatalogResponse(endpoint, responses,
+			addCatalogResponse(endpoint, catalog, responses,
 					McpCanonicalLocalizationPlan.ResponseKind.RESOURCE_TEMPLATES_LIST,
 					resourceTemplateSlots(endpoint, catalog),
 					maximumLocalizableTextCountPerResponse, false);
 
-			if (endpoint.getSubscriptionConfig().isPresent()) {
+			if (endpoint.getSubscriptionProtocolVersions().contains(McpProtocolVersion.V2026_07_28)) {
 				List<McpCanonicalLocalizationPlan.Slot> terminal =
 						serverInformationSlots(endpoint, catalog);
 				addResponse(responses,
@@ -156,12 +163,17 @@ final class DefaultMcpLocalizationCatalogExtractor {
 
 	/** Retains all slots, but applies the aggregate guard only to the modern view. */
 	private static void addCatalogResponse(@NonNull McpEndpoint endpoint,
+			@NonNull CatalogAccumulator catalog,
 			@NonNull List<McpCanonicalLocalizationPlan.ResponsePlan> responses,
 			McpCanonicalLocalizationPlan.ResponseKind kind,
 			@NonNull List<McpCanonicalLocalizationPlan.Slot> slots,
 			int maximumLocalizableTextCountPerResponse,
 			boolean deferCallerProjectionBound) {
-		if (slots.isEmpty())
+		List<McpCanonicalLocalizationPlan.Slot> responseSlots = new ArrayList<>(slots);
+		if (endpoint.getProtocolVersions().contains(McpProtocolVersion.V2026_07_28)
+				&& hasModernFrameworkCatalog(endpoint, kind))
+			responseSlots.addAll(serverInformationSlots(endpoint, catalog));
+		if (responseSlots.isEmpty())
 			return;
 		int modernSlotCount = 0;
 		if (endpoint.getProtocolVersions().contains(McpProtocolVersion.V2026_07_28)) {
@@ -191,8 +203,9 @@ final class DefaultMcpLocalizationCatalogExtractor {
 				default -> throw new IllegalArgumentException(
 						"Only MCP list catalogs have page-local localization bounds.");
 			}
-			for (McpCanonicalLocalizationPlan.Slot slot : slots)
-				if (modernOwners.contains(slot.ownerId()))
+			for (McpCanonicalLocalizationPlan.Slot slot : responseSlots)
+				if (slot.ownerType() == McpTextOwnerType.SERVER_INFORMATION
+						|| modernOwners.contains(slot.ownerId()))
 					++modernSlotCount;
 		}
 		if (!deferCallerProjectionBound
@@ -202,7 +215,26 @@ final class DefaultMcpLocalizationCatalogExtractor {
 							+ "callback limit (kind=" + kind + ", count="
 							+ modernSlotCount + ", limit="
 							+ maximumLocalizableTextCountPerResponse + ").");
-		responses.add(new McpCanonicalLocalizationPlan.ResponsePlan(kind, slots));
+		responses.add(new McpCanonicalLocalizationPlan.ResponsePlan(kind, responseSlots));
+	}
+
+	/** Only framework-generated modern lists enter the catalog renderer. */
+	private static boolean hasModernFrameworkCatalog(@NonNull McpEndpoint endpoint,
+			McpCanonicalLocalizationPlan.@NonNull ResponseKind kind) {
+		McpProtocolVersion modern = McpProtocolVersion.V2026_07_28;
+		return switch (kind) {
+			case TOOLS_LIST -> endpoint.getToolRegistrations().stream()
+					.anyMatch(tool -> tool.getProtocolVersions().contains(modern));
+			case PROMPTS_LIST -> endpoint.getPromptRegistrations().stream()
+					.anyMatch(prompt -> prompt.getProtocolVersions().contains(modern));
+			case RESOURCES_LIST -> !endpoint.getResourceListHandlerProtocolVersions().contains(modern)
+					&& endpoint.getResourceRegistrations().stream()
+							.anyMatch(resource -> resource.getProtocolVersions().contains(modern));
+			case RESOURCE_TEMPLATES_LIST -> endpoint.getResourceListHandlerProtocolVersions().contains(modern)
+					|| endpoint.getResourceRegistrations().stream()
+							.anyMatch(resource -> resource.getProtocolVersions().contains(modern));
+			default -> false;
+		};
 	}
 
 	private static void addResponse(
@@ -252,17 +284,38 @@ final class DefaultMcpLocalizationCatalogExtractor {
 			@NonNull CatalogAccumulator catalog) {
 		if (!endpoint.isServerInfoIncluded())
 			return List.of();
+		return implementationSlots(endpoint, catalog, SERVER_INFORMATION_METADATA_POINTER, true);
+	}
+
+	/** Legacy initialization always publishes serverInfo, independently of result metadata. */
+	@NonNull
+	private static List<McpCanonicalLocalizationPlan.Slot> initializationSlots(
+			@NonNull McpEndpoint endpoint, @NonNull CatalogAccumulator catalog,
+			boolean descriptionIncluded) {
+		List<McpCanonicalLocalizationPlan.Slot> slots = new ArrayList<>(
+				implementationSlots(endpoint, catalog, "/serverInfo", descriptionIncluded));
+		endpoint.getInstructions().ifPresent(text -> addFixedIfNonblank(slots,
+				catalog, endpoint.getPath(), McpTextOwnerType.ENDPOINT,
+				endpoint.getPath(), "/instructions", "/instructions", text));
+		return List.copyOf(slots);
+	}
+
+	@NonNull
+	private static List<McpCanonicalLocalizationPlan.Slot> implementationSlots(
+			@NonNull McpEndpoint endpoint, @NonNull CatalogAccumulator catalog,
+			@NonNull String targetPointer, boolean descriptionIncluded) {
 		McpImplementation information = endpoint.getServerInfo();
 		List<McpCanonicalLocalizationPlan.Slot> slots = new ArrayList<>();
 		information.getTitle().ifPresent(text -> addFixedIfNonblank(slots, catalog,
 				endpoint.getPath(), McpTextOwnerType.SERVER_INFORMATION,
 				information.getName(), "/title",
-				SERVER_INFORMATION_METADATA_POINTER + "/title", text));
-		information.getDescription().ifPresent(text -> addFixedIfNonblank(slots,
-				catalog, endpoint.getPath(),
-				McpTextOwnerType.SERVER_INFORMATION,
-				information.getName(), "/description",
-				SERVER_INFORMATION_METADATA_POINTER + "/description", text));
+				targetPointer + "/title", text));
+		if (descriptionIncluded)
+			information.getDescription().ifPresent(text -> addFixedIfNonblank(slots,
+					catalog, endpoint.getPath(),
+					McpTextOwnerType.SERVER_INFORMATION,
+					information.getName(), "/description",
+					targetPointer + "/description", text));
 		return List.copyOf(slots);
 	}
 

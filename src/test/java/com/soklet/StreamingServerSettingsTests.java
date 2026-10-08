@@ -132,8 +132,53 @@ public class StreamingServerSettingsTests {
 	}
 
 	@Test
-	public void publicSettingsBoundCallbackWorkersAndRetainExpiredObserversInAdmission() throws Exception {
-		CountDownLatch observersEntered = new CountDownLatch(2);
+	public void responseTimeoutsRejectNegativeAndOverflowingDurationsAtBuild() {
+		for (Duration timeout : new Duration[]{Duration.ofNanos(-1),
+				Duration.ofNanos(Long.MAX_VALUE).plusNanos(1), Duration.ofSeconds(Long.MAX_VALUE)}) {
+			Assertions.assertThrows(IllegalArgumentException.class,
+					() -> builder().streamingResponseTimeout(timeout).build(), "total=" + timeout);
+			Assertions.assertThrows(IllegalArgumentException.class,
+					() -> builder().streamingResponseIdleTimeout(timeout).build(), "idle=" + timeout);
+		}
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> builder().requestBodyTimeout(Duration.ofSeconds(Long.MAX_VALUE)).build(),
+				"The inherited idle timeout must receive the same validation");
+	}
+
+	@Test
+	public void responseTimeoutBoundsAndNullResetsArePreserved() {
+		for (Duration timeout : new Duration[]{Duration.ZERO, Duration.ofNanos(1), Duration.ofNanos(Long.MAX_VALUE)}) {
+			DefaultHttpServer server = server(builder().streamingResponseTimeout(timeout).streamingResponseIdleTimeout(timeout));
+			Assertions.assertEquals(timeout, server.getStreamingResponseTimeout());
+			Assertions.assertEquals(timeout, server.getStreamingResponseIdleTimeout());
+		}
+		DefaultHttpServer reset = server(builder().streamingResponseTimeout(Duration.ofSeconds(1))
+				.streamingResponseIdleTimeout(Duration.ofSeconds(1)).streamingResponseTimeout(null)
+				.streamingResponseIdleTimeout(null).requestBodyTimeout(Duration.ofSeconds(7)));
+		Assertions.assertEquals(Duration.ZERO, reset.getStreamingResponseTimeout());
+		Assertions.assertEquals(Duration.ofSeconds(7), reset.getStreamingResponseIdleTimeout());
+		Assertions.assertDoesNotThrow(() -> builder().requestBodyTimeout(Duration.ofSeconds(Long.MAX_VALUE))
+				.streamingResponseIdleTimeout(Duration.ZERO).build(), "An explicit idle timeout overrides inheritance");
+	}
+
+	@Test
+	public void maximumResponseTimeoutsAllowARealStreamingResponse() throws Exception {
+		try (Fixture fixture = new Fixture(1, 1, Duration.ofSeconds(1), new QuietObserver() {},
+				Duration.ofNanos(Long.MAX_VALUE), Duration.ofNanos(Long.MAX_VALUE))) {
+			fixture.body("maximum", responseStream -> responseStream.write("ok".getBytes(StandardCharsets.UTF_8)));
+			fixture.start();
+			try (Socket socket = fixture.request("maximum")) {
+				assertStatus(socket, 200);
+				Assertions.assertEquals("2\r\nok\r\n0\r\n\r\n", readRemainder(socket));
+			}
+			assertEventually(() -> fixture.coordinator().snapshot().reservations() == 0,
+					"A maximum timer duration must not prevent physical retirement");
+		}
+	}
+
+	@Test
+	public void lifecycleCapacityIsolatesAdmittedObserversAndRetainsExpiredWork() throws Exception {
+		CountDownLatch observersEntered = new CountDownLatch(3);
 		CountDownLatch releaseObservers = new CountDownLatch(1);
 		AtomicInteger activeObservers = new AtomicInteger();
 		AtomicInteger maximumObservers = new AtomicInteger();
@@ -162,14 +207,13 @@ public class StreamingServerSettingsTests {
 					Assertions.assertEquals("2\r\nok\r\n0\r\n\r\n", readRemainder(socket));
 				}
 			}
-			await(observersEntered, "The configured two callback workers did not start");
-			assertEventually(() -> fixture.coordinator().snapshot().queuedCallbacks() == 1,
-					"The third observer must queue behind the configured two workers");
-			Assertions.assertEquals(2, observerCalls.get());
-			Assertions.assertEquals(2, maximumObservers.get());
+			await(observersEntered, "All three capacity-reserved observers must enter independently");
+			Assertions.assertEquals(0, fixture.coordinator().snapshot().queuedCallbacks());
+			Assertions.assertEquals(3, observerCalls.get());
+			Assertions.assertEquals(3, maximumObservers.get());
 			Assertions.assertEquals(3, fixture.coordinator().snapshot().reservations());
 			assertEventually(() -> fixture.coordinator().snapshot().overdue() == 3,
-					"The configured cleanup timeout must supervise running and queued observers");
+					"The configured cleanup timeout must supervise all admitted observers");
 			try (Socket rejected = fixture.request("ready")) {
 				String headers = assertStatus(rejected, 503);
 				Assertions.assertFalse(headers.toLowerCase(java.util.Locale.ROOT).contains("transfer-encoding:"), headers);
@@ -180,13 +224,14 @@ public class StreamingServerSettingsTests {
 			assertEventually(() -> fixture.coordinator().snapshot().reservations() == 0,
 					"Physical observer completion must release admission");
 			assertEventually(() -> observerCalls.get() == 4 && activeObservers.get() == 0,
-					"The rejected stream must report termination within the configured concurrency");
+					"The rejected stream must report termination through the separate bounded rejection pool");
 			try (Socket recovered = fixture.request("ready")) {
 				assertStatus(recovered, 200);
 				Assertions.assertEquals("2\r\nok\r\n0\r\n\r\n", readRemainder(recovered));
 			}
 			Assertions.assertEquals(4, producerCalls.get());
-			Assertions.assertEquals(2, maximumObservers.get());
+			Assertions.assertTrue(maximumObservers.get() >= 3 && maximumObservers.get() <= 4,
+					"Three admitted observations and one unadmitted rejection have independent bounds");
 		} finally {
 			releaseObservers.countDown();
 			fixture.close();
@@ -264,11 +309,16 @@ public class StreamingServerSettingsTests {
 		private final Map<String, StreamingResponseWriter> writers = new ConcurrentHashMap<>();
 
 		private Fixture(int capacity, int concurrency, Duration timeout, LifecycleObserver observer) throws IOException {
+			this(capacity, concurrency, timeout, observer, Duration.ZERO, Duration.ZERO);
+		}
+
+		private Fixture(int capacity, int concurrency, Duration timeout, LifecycleObserver observer,
+				Duration responseTimeout, Duration idleTimeout) throws IOException {
 			this.port = findFreePort();
 			this.server = (DefaultHttpServer) HttpServer.withPort(this.port).host("127.0.0.1")
 					.streamingLifecycleCapacity(capacity).streamingCallbackConcurrency(concurrency)
-					.streamingCleanupTimeout(timeout).streamingResponseTimeout(Duration.ZERO)
-					.streamingResponseIdleTimeout(Duration.ZERO).build();
+					.streamingCleanupTimeout(timeout).streamingResponseTimeout(responseTimeout)
+					.streamingResponseIdleTimeout(idleTimeout).build();
 			StreamingResource resource = new StreamingResource(this.writers);
 			this.soklet = Soklet.fromConfig(SokletConfig.withHttpServer(this.server)
 					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))

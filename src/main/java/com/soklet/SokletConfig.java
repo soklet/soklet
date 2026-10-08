@@ -551,6 +551,9 @@ public final class SokletConfig {
 
 		/**
 		 * Replaces the configured lifecycle observers with one observer.
+		 * The unconfigured default writes log events to stderr. A custom observer
+		 * replaces that default and inherits a no-op log callback unless it
+		 * overrides {@link LifecycleObserver#didReceiveLogEvent(LogEvent)}.
 		 *
 		 * @param lifecycleObserver the sole lifecycle observer, or {@code null} to configure no observers
 		 * @return this builder
@@ -563,6 +566,9 @@ public final class SokletConfig {
 
 		/**
 		 * Replaces the configured lifecycle observers, preserving iteration order.
+		 * Include {@link LifecycleObserver#defaultInstance()} explicitly if this
+		 * collection should retain default stderr logging. Other observers do
+		 * not inherit an implicit stderr logger.
 		 *
 		 * @param lifecycleObservers the lifecycle observers, or {@code null} to configure no observers
 		 * @return this builder

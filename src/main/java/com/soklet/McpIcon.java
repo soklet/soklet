@@ -31,6 +31,17 @@ import static java.util.Objects.requireNonNull;
 /**
  * Immutable icon descriptor for an MCP tool, prompt, or resource.
  *
+ * <p>The source must be absolute and contain well-formed UTF-16. Its spelling
+ * is retained without URI normalization or a scheme allowlist. MIME types use
+ * the same ASCII media-type syntax parser as MCP content. Size hints must use
+ * ASCII decimal {@code WxH} dimensions with a lowercase {@code x}, or exactly
+ * {@code any}; order, duplicates, and decimal spelling are retained.</p>
+ *
+ * <p>Soklet does not fetch icons, verify dimensions or media bytes, establish
+ * trusted source domains, or sanitize SVG. Applications and consuming clients
+ * own source and rendering policy; prefer trusted HTTPS sources or image data
+ * URIs. Construction does not prevalidate the eventual JSON response size.</p>
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
@@ -47,8 +58,9 @@ public final class McpIcon {
 	/**
 	 * Vends a builder primed with the icon source URI.
 	 *
-	 * @param source icon source URI
+	 * @param source absolute icon source URI
 	 * @return icon builder
+	 * @throws IllegalArgumentException if the source is relative or contains an unpaired surrogate
 	 */
 	@NonNull
 	public static Builder withSource(@NonNull URI source) {
@@ -60,6 +72,37 @@ public final class McpIcon {
 		this.mimeType = builder.mimeType;
 		this.sizes = List.copyOf(builder.sizes);
 		this.theme = builder.theme;
+	}
+
+	@NonNull
+	private static URI requireSource(@NonNull URI source) {
+		requireNonNull(source);
+		if (!source.isAbsolute())
+			throw new IllegalArgumentException("MCP icon sources must be absolute URIs.");
+		McpContentValueSupport.requireWellFormedString(source.toString());
+		return source;
+	}
+
+	private static void requireSize(@NonNull String size) {
+		requireNonNull(size);
+		if (size.equals("any"))
+			return;
+		int separator = size.indexOf('x');
+		if (separator <= 0 || separator == size.length() - 1)
+			throw invalidSize();
+		for (int index = 0; index < size.length(); ++index) {
+			if (index == separator)
+				continue;
+			char character = size.charAt(index);
+			if (character < '0' || character > '9')
+				throw invalidSize();
+		}
+	}
+
+	@NonNull
+	private static IllegalArgumentException invalidSize() {
+		return new IllegalArgumentException(
+				"MCP icon sizes must use ASCII WxH dimensions or 'any'.");
 	}
 
 	/** @return icon source URI */
@@ -122,7 +165,7 @@ public final class McpIcon {
 		private McpIconTheme theme;
 
 		private Builder(@NonNull URI source) {
-			this.source = requireNonNull(source);
+			this.source = requireSource(source);
 		}
 
 		/**
@@ -130,10 +173,11 @@ public final class McpIcon {
 		 *
 		 * @param mimeType MIME type
 		 * @return this builder
+		 * @throws IllegalArgumentException if the MIME type has malformed syntax
 		 */
 		@NonNull
 		public Builder mimeType(@NonNull String mimeType) {
-			this.mimeType = requireNonNull(mimeType);
+			this.mimeType = McpContentValueSupport.requireMimeType(mimeType);
 			return this;
 		}
 
@@ -142,15 +186,17 @@ public final class McpIcon {
 		 * Null or empty clears the property. The complete list is validated and
 		 * snapshotted before replacing the prior value.
 		 *
-		 * @param sizes advertised icon sizes, or null to clear
+		 * @param sizes ASCII decimal WxH dimensions or {@code any}, or null to clear
 		 * @return this builder
+		 * @throws IllegalArgumentException if a size has malformed syntax
 		 * @throws NullPointerException if a list element is null
 		 */
 		@NonNull
 		public Builder sizes(
 				@Nullable List<@NonNull String> sizes) {
-			this.sizes = sizes == null ? List.of()
-					: List.copyOf(sizes);
+			List<String> replacement = sizes == null ? List.of() : List.copyOf(sizes);
+			replacement.forEach(McpIcon::requireSize);
+			this.sizes = replacement;
 			return this;
 		}
 

@@ -87,6 +87,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	private final ConcurrentLruMap<HttpServerRouteStatusKey, Histogram> httpTimeToFirstByteByRouteStatus;
 	private final ConcurrentLruMap<HttpServerRouteKey, Histogram> httpRequestBodyBytesByRoute;
 	private final ConcurrentLruMap<HttpServerRouteStatusKey, Histogram> httpResponseBodyBytesByRouteStatus;
+	private final ConcurrentLruMap<HttpResponseStreamTerminationKey, LongAdder> httpResponseStreamTerminations;
 	private final ConcurrentHashMap<IdentityKey<SseConnection>, SseConnectionState> sseConnectionsByIdentity;
 	private final ConcurrentLruMap<SseEventRouteKey, LongAdder> sseHandshakesAcceptedByRoute;
 	private final ConcurrentLruMap<SseEventRouteHandshakeFailureKey, LongAdder> sseHandshakesRejectedByRouteAndReason;
@@ -133,6 +134,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	private final AtomicLong mcpActiveSubscriptions;
 	private final ConcurrentLruMap<McpMetricsSnapshot.SubscriptionTerminationKey,
 			Histogram> mcpSubscriptionDurationsByReason;
+	private final ConcurrentLruMap<McpMetricsSnapshot.SubscriptionMaintenanceKey,
+			LongAdder> mcpSubscriptionMaintenanceByWorkAndOutcome;
 	private final ConcurrentLruMap<McpMetricsSnapshot.EndpointMethodKey,
 			LongAdder> mcpCancelationsSignaledByEndpointAndMethod;
 	private final ConcurrentLruMap<McpMetricsSnapshot.EndpointMethodKey,
@@ -169,6 +172,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		this.httpTimeToFirstByteByRouteStatus = new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
 		this.httpRequestBodyBytesByRoute = new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
 		this.httpResponseBodyBytesByRouteStatus = new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
+		this.httpResponseStreamTerminations = new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
 		this.sseConnectionsByIdentity = new ConcurrentHashMap<>();
 		this.sseHandshakesAcceptedByRoute = new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
 		this.sseHandshakesRejectedByRouteAndReason = new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
@@ -223,6 +227,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
 		this.mcpActiveSubscriptions = new AtomicLong();
 		this.mcpSubscriptionDurationsByReason =
+				new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
+		this.mcpSubscriptionMaintenanceByWorkAndOutcome =
 				new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
 		this.mcpCancelationsSignaledByEndpointAndMethod =
 				new ConcurrentLruMap<>(DEFAULT_METRICS_MAP_CAPACITY);
@@ -377,7 +383,17 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		if (serverType != ServerType.HTTP)
 			return;
 
-		RouteContext routeContext = routeFor(resourceMethod);
+		startHttpRequestHandling(request, routeFor(resourceMethod));
+	}
+
+	// The MCP runtime supplies a selected configured endpoint, never a raw request target.
+	void didStartMcpHttpRequestHandling(@NonNull Request request, @NonNull String endpointPath) {
+		requireNonNull(request);
+		startHttpRequestHandling(request, new RouteContext(RouteType.MATCHED,
+				ResourcePathDeclaration.fromPath(requireNonNull(endpointPath))));
+	}
+
+	private void startHttpRequestHandling(@NonNull Request request, @NonNull RouteContext routeContext) {
 		HttpMethod method = request.getHttpMethod();
 
 		RequestState state = new RequestState(new IdentityKey<>(request), request.getId(), System.nanoTime(), method,
@@ -452,6 +468,11 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		if (serverType != ServerType.HTTP)
 			return;
 
+		if (marshaledResponse.isStreaming()) {
+			this.requestStateByThread.remove();
+			return;
+		}
+
 		RequestState state = removeRequestState(request);
 		if (state == null)
 			return;
@@ -468,6 +489,27 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 		histogramFor(this.httpResponseBodyBytesByRouteStatus, key, HTTP_BODY_BYTES_BUCKETS)
 				.record(responseBodyBytes);
+	}
+
+	@Override
+	public void didTerminateResponseStream(@NonNull StreamingResponseHandle streamingResponseHandle,
+			@NonNull StreamTermination streamTermination, @NonNull Duration requestDuration,
+			@NonNull Long responseBodySizeInBytes) {
+		requireNonNull(streamingResponseHandle);
+		requireNonNull(streamTermination);
+		requireNonNull(requestDuration);
+		requireNonNull(responseBodySizeInBytes);
+		if (responseBodySizeInBytes < 0L) throw new IllegalArgumentException("Response body size must be nonnegative.");
+		if (streamingResponseHandle.getServerType() != ServerType.HTTP) return;
+		RequestState state = removeRequestState(streamingResponseHandle.getRequest(), true);
+		if (state == null) return;
+		this.activeRequests.decrement();
+		HttpServerRouteStatusKey statusKey = new HttpServerRouteStatusKey(state.getMethod(), state.getRouteType(),
+				state.getRoute(), statusClassFor(streamingResponseHandle.getMarshaledResponse().getStatusCode()));
+		histogramFor(this.httpRequestDurationByRouteStatus, statusKey, HTTP_LATENCY_BUCKETS_NANOS).record(nonNegativeNanos(requestDuration));
+		histogramFor(this.httpResponseBodyBytesByRouteStatus, statusKey, HTTP_BODY_BYTES_BUCKETS).record(responseBodySizeInBytes);
+		counterFor(this.httpResponseStreamTerminations,
+				HttpResponseStreamTerminationKey.fromDimensions(statusKey, streamTermination.getReason())).increment();
 	}
 
 
@@ -848,6 +890,12 @@ final class DefaultMetricsCollector implements MetricsCollector {
 			histogramFor(this.mcpSubscriptionDurationsByReason, key,
 					SSE_STREAM_DURATION_BUCKETS_NANOS)
 					.record(nonNegativeNanos(subscriptionClosed.getDuration()));
+		} else if (event instanceof McpMetricsEvent.SubscriptionMaintenance maintenance) {
+			McpMetricsSnapshot.SubscriptionMaintenanceKey key =
+					McpMetricsSnapshot.SubscriptionMaintenanceKey.fromDimensions(
+							maintenance.getEndpointPath(), maintenance.getWork(),
+							maintenance.getOutcome());
+			counterFor(this.mcpSubscriptionMaintenanceByWorkAndOutcome, key).increment();
 		} else if (event instanceof McpMetricsEvent.CancelationSignaled
 				cancelationSignaled) {
 			McpMetricsSnapshot.EndpointMethodKey key =
@@ -938,6 +986,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				.httpTimeToFirstByte(snapshotHttpTimeToFirstByte())
 				.httpRequestBodyBytes(snapshotHttpRequestBodyBytes())
 				.httpResponseBodyBytes(snapshotHttpResponseBodyBytes())
+				.httpResponseStreamTerminations(snapshotCounterMap(this.httpResponseStreamTerminations))
 				.sseTimeToFirstEvent(snapshotSseTimeToFirstEvent())
 				.sseEventWriteDurations(snapshotSseEventWriteDurations())
 				.sseEventDeliveryLag(snapshotSseEventDeliveryLag())
@@ -1021,6 +1070,10 @@ final class DefaultMetricsCollector implements MetricsCollector {
 					DefaultMetricsCollector::labelsForMcpSubscriptionTerminationKey,
 					options);
 		}
+		appendCounter(sb, "soklet_mcp_subscription_maintenance_total",
+				"Total delivered MCP subscription-maintenance events by endpoint, work and outcome",
+				snapshot.getMcpMetrics().getSubscriptionMaintenance(),
+				DefaultMetricsCollector::labelsForMcpSubscriptionMaintenanceKey, options);
 		appendCounter(sb, "soklet_mcp_cancelations_signaled_total",
 				"Total cooperative MCP request cancelations signaled by endpoint and method",
 				snapshot.getMcpMetrics().getCancelationsSignaled(),
@@ -1075,6 +1128,17 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				snapshot.getHttpRequestBodyBytes(), DefaultMetricsCollector::labelsForHttpRouteKey, options);
 		appendHistogram(sb, "soklet_http_response_body_bytes", "HTTP response body size in bytes",
 				snapshot.getHttpResponseBodyBytes(), DefaultMetricsCollector::labelsForHttpStatusKey, options);
+		appendCounter(sb, "soklet_http_response_stream_terminations_total", "Total admitted HTTP response stream terminations",
+				snapshot.getHttpResponseStreamTerminations(), key -> {
+					HttpServerRouteStatusKey statusKey = key.getHttpServerRouteStatusKey();
+					Map<String, String> labels = new LinkedHashMap<>();
+					labels.put("method", statusKey.getHttpMethod().name());
+					labels.put("route", routeLabel(statusKey.getRouteType(), statusKey.getResourcePathDeclaration()));
+					labels.put("status_class", statusKey.getStatusClass());
+					labels.put("reason", key.getReason().name());
+					return new LabelSet(labels);
+				}, options);
+
 
 
 		if (this.includeSseMetrics.get()) {
@@ -1329,6 +1393,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		Map<McpMetricsSnapshot.SubscriptionTerminationKey, HistogramSnapshot>
 				subscriptionDurations =
 				snapshotMap(this.mcpSubscriptionDurationsByReason);
+		Map<McpMetricsSnapshot.SubscriptionMaintenanceKey, Long> subscriptionMaintenance =
+				snapshotCounterMap(this.mcpSubscriptionMaintenanceByWorkAndOutcome);
 		Map<McpMetricsSnapshot.EndpointMethodKey, Long> cancelationsSignaled =
 				snapshotCounterMap(this.mcpCancelationsSignaledByEndpointAndMethod);
 		Map<McpMetricsSnapshot.EndpointMethodKey, Long> progressEmitted =
@@ -1347,7 +1413,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				&& activeRequests == 0L && requests.isEmpty()
 				&& requestDurations.isEmpty() && activeRequestStreams == 0L
 				&& requestStreamDurations.isEmpty() && activeSubscriptions == 0L
-				&& subscriptionDurations.isEmpty()
+				&& subscriptionDurations.isEmpty() && subscriptionMaintenance.isEmpty()
 				&& cancelationsSignaled.isEmpty() && progressEmitted.isEmpty()
 				&& keepAlivesEmitted == 0L && protocolErrors.isEmpty()
 				&& unknownMirroredHeaders.isEmpty())
@@ -1370,6 +1436,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				.requestStreamDurations(requestStreamDurations)
 				.activeSubscriptions(activeSubscriptions)
 				.subscriptionDurations(subscriptionDurations)
+				.subscriptionMaintenance(subscriptionMaintenance)
 				.cancelationsSignaled(cancelationsSignaled)
 				.progressEmitted(progressEmitted)
 				.keepAlivesEmitted(keepAlivesEmitted)
@@ -1401,6 +1468,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		this.mcpRequestDurationsByOutcome.clear();
 		this.mcpRequestStreamDurationsByReason.clear();
 		this.mcpSubscriptionDurationsByReason.clear();
+		this.mcpSubscriptionMaintenanceByWorkAndOutcome.clear();
 		this.mcpCancelationsSignaledByEndpointAndMethod.clear();
 		this.mcpProgressEmittedByEndpointAndMethod.clear();
 		this.mcpKeepAlivesEmitted.reset();
@@ -1422,6 +1490,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		resetMap(this.httpTimeToFirstByteByRouteStatus);
 		resetMap(this.httpRequestBodyBytesByRoute);
 		resetMap(this.httpResponseBodyBytesByRouteStatus);
+		this.httpResponseStreamTerminations.clear();
 		resetMap(this.sseTimeToFirstEventByRoute);
 		resetMap(this.sseEventWriteDurationByRoute);
 		resetMap(this.sseEventDeliveryLagByRoute);
@@ -1769,7 +1838,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 				long boundary = histogram.getBucketBoundary(i);
 				String le = boundary == Long.MAX_VALUE
-						? positiveInfinity : String.valueOf(boundary);
+						? positiveInfinity : (openMetrics
+								? openMetricsBucketBoundary(boundary) : String.valueOf(boundary));
 				String labelsWithLe = labelsWithLe(labels.getEncoded(), le);
 
 				if (!(openMetrics && overflowBucket)
@@ -1802,10 +1872,41 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		}
 	}
 
+	/** Exact integer boundaries with OpenMetrics 1.0 canonical-number formatting. */
+	@NonNull
+	private static String openMetricsBucketBoundary(long boundary) {
+		String digits = Long.toString(boundary);
+		int firstDigit = boundary < 0 ? 1 : 0;
+		int exponent = digits.length() - firstDigit - 1;
+		if (exponent < 6)
+			return digits + ".0";
+
+		int significantEnd = digits.length();
+		while (digits.charAt(significantEnd - 1) == '0')
+			significantEnd--;
+		String mantissa = digits.substring(0, firstDigit + 1);
+		if (significantEnd > firstDigit + 1)
+			mantissa += "." + digits.substring(firstDigit + 1, significantEnd);
+
+		return mantissa + "e+" + (exponent < 10 ? "0" : "") + exponent;
+	}
+
 	private static void appendSample(@NonNull StringBuilder sb,
 																	 @NonNull String name,
 																	 @NonNull String labels,
 																	 long value) {
+		requireNonNull(sb);
+		requireNonNull(name);
+		requireNonNull(labels);
+
+		sb.append(name);
+		if (!labels.isEmpty())
+			sb.append('{').append(labels).append('}');
+		sb.append(' ').append(value).append('\n');
+	}
+
+	private static void appendSample(@NonNull StringBuilder sb,
+			@NonNull String name, @NonNull String labels, double value) {
 		requireNonNull(sb);
 		requireNonNull(name);
 		requireNonNull(labels);
@@ -1971,6 +2072,17 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		Map<String, String> labels = new LinkedHashMap<>(2);
 		labels.put("endpoint", key.getEndpointPath());
 		labels.put("reason", key.getReason().name().toLowerCase(Locale.ROOT));
+		return new LabelSet(labels);
+	}
+
+	@NonNull
+	private static LabelSet labelsForMcpSubscriptionMaintenanceKey(
+			McpMetricsSnapshot.@NonNull SubscriptionMaintenanceKey key) {
+		requireNonNull(key);
+		Map<String, String> labels = new LinkedHashMap<>(3);
+		labels.put("endpoint", key.getEndpointPath());
+		labels.put("work", key.getWork().name().toLowerCase(Locale.ROOT));
+		labels.put("outcome", key.getOutcome().name().toLowerCase(Locale.ROOT));
 		return new LabelSet(labels);
 	}
 
@@ -2415,10 +2527,16 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 	@Nullable
 	private RequestState removeRequestState(@NonNull Request request) {
+		return removeRequestState(request, false);
+	}
+
+	@Nullable
+	private RequestState removeRequestState(@NonNull Request request, boolean identityOnly) {
 		requireNonNull(request);
 
 		IdentityKey<Request> currentIdentityKey = new IdentityKey<>(request);
 		RequestState state = this.requestsInFlightByIdentity.get(currentIdentityKey);
+		if (state == null && identityOnly) return null;
 
 		if (state == null)
 			state = uniqueRequestStateForId(request.getId());

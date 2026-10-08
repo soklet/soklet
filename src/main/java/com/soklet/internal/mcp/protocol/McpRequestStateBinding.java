@@ -85,7 +85,7 @@ final class McpRequestStateBinding {
 				filterParameters(completeValidatedParameters);
 		byte[] canonicalParameters = McpRequestStateCanonicalJson.canonicalize(
 				filteredParameters,
-				McpJsonLimits.productionDefaults().maximumOutputBytes());
+				McpJsonLimits.requestStateBindingParameters());
 		byte[] parametersDigest = digest(framed(
 				PARAMETERS_DOMAIN, canonicalParameters));
 

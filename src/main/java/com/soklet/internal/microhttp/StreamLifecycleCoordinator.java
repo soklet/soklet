@@ -66,12 +66,14 @@ public final class StreamLifecycleCoordinator {
 	private final LongSupplier nanoClock;
 	private final Set<Reservation> reservations = new LinkedHashSet<>();
 	private final ThreadPoolExecutor callbackExecutor;
+	private final ThreadPoolExecutor terminationExecutor;
 	private final int rejectionObserverCapacity;
 	private int rejectionObservers;
 	private int queuedRejectionObservers;
 	private final ThreadPoolExecutor diagnosticExecutor;
 	private final ScheduledThreadPoolExecutor supervisor;
 	private boolean accepting = true;
+	private boolean forced;
 	private boolean infrastructureStopping;
 	private long nextId;
 
@@ -101,11 +103,13 @@ public final class StreamLifecycleCoordinator {
 		this.nanoClock = requireNonNull(nanoClock);
 		this.rejectionObserverCapacity = Math.min(capacity, Integer.MAX_VALUE - capacity * 2);
 		this.callbackExecutor = new ThreadPoolExecutor(callbackConcurrency, callbackConcurrency,
-				0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(capacity * 2 + this.rejectionObserverCapacity),
+				0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(capacity + this.rejectionObserverCapacity),
 				threadFactory("stream-callback"), new ThreadPoolExecutor.AbortPolicy());
-		this.diagnosticExecutor = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
-				new ArrayBlockingQueue<>(capacity), threadFactory("stream-diagnostic"),
-				new ThreadPoolExecutor.AbortPolicy());
+		// Each reservation prepays one termination notification and one diagnostic.
+		// Independent workers prevent blocked application observations from queuing
+		// another reservation's work behind them. Admission remains the work bound.
+		this.terminationExecutor = new ObservationExecutor(capacity, "stream-termination");
+		this.diagnosticExecutor = new ObservationExecutor(capacity, "stream-diagnostic");
 		this.supervisor = new ScheduledThreadPoolExecutor(1, threadFactory("stream-supervisor"));
 		this.supervisor.setRemoveOnCancelPolicy(true);
 		this.supervisor.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
@@ -126,7 +130,8 @@ public final class StreamLifecycleCoordinator {
 	/**
 	 * Offers an unadmitted stream's observational rejection to the bounded
 	 * callback executor. Its separate allowance cannot consume admitted streams'
-	 * two prepaid callback jobs. Returns false when that allowance is exhausted
+	 * prepaid cancelation jobs. Admitted termination has its own executor.
+	 * Returns false when that allowance is exhausted
 	 * or infrastructure has stopped; finite request observation still completes.
 	 */
 	public boolean dispatchRejectionObserver(@NonNull Runnable observer) {
@@ -168,11 +173,34 @@ public final class StreamLifecycleCoordinator {
 		}
 	}
 
+	/**
+	 * Seals admission and publishes an advisory graceful-completion request to live producers.
+	 * This does not elect cancelation, invoke application code or begin cleanup supervision.
+	 * A force election that won first prevents a late graceful request.
+	 */
+	public void requestGracefulShutdown() {
+		synchronized (this.lock) {
+			this.accepting = false;
+			if (!this.forced) {
+				for (Reservation reservation : this.reservations) {
+					if (!reservation.retired && !reservation.publicationComplete
+							&& !reservation.productionComplete && reservation.reason == null
+							&& reservation.producerState != ProducerState.EXITED
+							&& reservation.producerState != ProducerState.RETIRED)
+						reservation.gracefulShutdownRequested = true;
+				}
+			}
+			stopInfrastructureIfDrained();
+			this.lock.notifyAll();
+		}
+	}
+
 	/** Stops admission and signals all admitted lifetimes without waiting for cleanup. */
 	public void force() {
 		List<Reservation> retained;
 		synchronized (this.lock) {
 			this.accepting = false;
+			this.forced = true;
 			retained = new ArrayList<>(this.reservations);
 			stopInfrastructureIfDrained();
 		}
@@ -218,6 +246,7 @@ public final class StreamLifecycleCoordinator {
 			}
 		}
 		return awaitExecutor(this.callbackExecutor, absoluteNanoDeadline)
+				&& awaitExecutor(this.terminationExecutor, absoluteNanoDeadline)
 				&& awaitExecutor(this.diagnosticExecutor, absoluteNanoDeadline)
 				&& awaitExecutor(this.supervisor, absoluteNanoDeadline);
 	}
@@ -226,6 +255,7 @@ public final class StreamLifecycleCoordinator {
 		synchronized (this.lock) {
 			return !this.accepting && this.reservations.isEmpty() && this.rejectionObservers == 0
 					&& this.callbackExecutor.isTerminated()
+					&& this.terminationExecutor.isTerminated()
 					&& this.diagnosticExecutor.isTerminated()
 					&& this.supervisor.isTerminated();
 		}
@@ -371,6 +401,7 @@ public final class StreamLifecycleCoordinator {
 	@ThreadSafe
 	public final class Reservation {
 		private final long id;
+		private volatile boolean gracefulShutdownRequested;
 		private final JobState[] jobs = {JobState.ABSENT, JobState.ABSENT};
 		private ProducerState producerState = ProducerState.RESERVED;
 		private PublisherState publisherState = PublisherState.ABSENT;
@@ -392,6 +423,7 @@ public final class StreamLifecycleCoordinator {
 		private boolean completionRequested;
 		private volatile boolean productionComplete;
 		private boolean transportComplete;
+		private long transportTerminatedNanos;
 		private boolean retired;
 		private boolean cleanupStarted;
 		private long cleanupDeadline;
@@ -404,9 +436,16 @@ public final class StreamLifecycleCoordinator {
 		private boolean overdue;
 		private boolean diagnosticClaimed;
 		private boolean diagnosticPending;
+		@Nullable
+		private Consumer<Throwable> cleanupFailureObserver;
 
 		private Reservation(long id) {
 			this.id = id;
+		}
+
+		/** Thread-safe advisory state, retained even after this execution ends. */
+		public boolean isGracefulShutdownRequested() {
+			return this.gracefulShutdownRequested;
 		}
 
 		/**
@@ -595,6 +634,7 @@ public final class StreamLifecycleCoordinator {
 			if (this.retired || this.publicationComplete || this.transportComplete || this.reason != null)
 				return false;
 			this.reason = reason;
+			this.transportTerminatedNanos = System.nanoTime();
 			this.cause = cause;
 			if (this.cleanupStarted && this.outputWaiters != 0) {
 				// Healthy delivery could have paused the finalizer budget. Cancellation
@@ -645,8 +685,24 @@ public final class StreamLifecycleCoordinator {
 				if (this.reason != null)
 					return false;
 				this.transportComplete = true;
+				this.transportTerminatedNanos = System.nanoTime();
 				return true;
 			}
+		}
+
+		/** Serializes a bounded simulator output append against logical transport termination. */
+		public boolean acceptTransportOutput(@NonNull Runnable output) {
+			requireNonNull(output);
+			synchronized (lock) {
+				if (this.transportComplete || this.reason != null) return false;
+				output.run();
+				return true;
+			}
+		}
+
+		/** Internal monotonic logical transport termination timestamp, zero while live. */
+		public long transportTerminatedNanos() {
+			synchronized (lock) { return this.transportTerminatedNanos; }
 		}
 
 		@NonNull
@@ -659,9 +715,28 @@ public final class StreamLifecycleCoordinator {
 			synchronized (lock) { return Optional.ofNullable(this.cause); }
 		}
 
+		/**
+		 * Binds the owner's application-cleanup diagnostic before accepting producer work.
+		 * It runs on the existing bounded diagnostic executor, with the reservation retained
+		 * until observer exit. Framework failures and deadline evidence still use the coordinator's
+		 * diagnostic consumer. The binding is cleared on physical retirement.
+		 */
+		public void bindCleanupFailureObserver(@NonNull Consumer<Throwable> observer) {
+			requireNonNull(observer);
+			synchronized (lock) {
+				if (this.retired || this.producerState != ProducerState.RESERVED || this.cleanupFailureObserver != null)
+					throw new IllegalStateException("Cleanup failure observation must be bound once before producer admission");
+				this.cleanupFailureObserver = observer;
+			}
+		}
+
 		/** Reports a failed cleanup attempt through the bounded diagnostic owner without changing the outcome. */
 		public void reportCleanupFailure(@NonNull Throwable failure) {
-			report(requireNonNull(failure));
+			Consumer<Throwable> observer;
+			synchronized (lock) {
+				observer = this.cleanupFailureObserver == null ? diagnostics : this.cleanupFailureObserver;
+			}
+			report(requireNonNull(failure), observer);
 		}
 
 		/** Starts one non-resetting terminal-cleanup grace, including normal finalization. */
@@ -784,7 +859,8 @@ public final class StreamLifecycleCoordinator {
 				}
 			}
 			try {
-				callbackExecutor.execute(() -> {
+				ThreadPoolExecutor executor = index == 0 ? callbackExecutor : terminationExecutor;
+				executor.execute(() -> {
 					synchronized (lock) { this.jobs[index] = JobState.RUNNING; }
 					try {
 						action.run();
@@ -869,8 +945,8 @@ public final class StreamLifecycleCoordinator {
 						this.jobs[0].name(), this.jobs[1].name(), this.publisherState.name(),
 						hasPublisherWork() ? 1 : 0, this.publisherState == PublisherState.PENDING ? 1 : 0,
 						this.retainedWork,
-						callbackExecutor.getActiveCount(),
-						callbackExecutor.getQueue().size());
+						callbackExecutor.getActiveCount() + terminationExecutor.getActiveCount(),
+						callbackExecutor.getQueue().size() + terminationExecutor.getQueue().size());
 				publishDiagnostic = claimDiagnostic();
 				if (!observerPhase && reserveCancelation(StreamTerminationReason.CLEANUP_TIMEOUT, null)) {
 					handler = this.terminationHandler;
@@ -886,11 +962,15 @@ public final class StreamLifecycleCoordinator {
 		}
 
 		private void report(Throwable failure) {
+			report(failure, diagnostics);
+		}
+
+		private void report(Throwable failure, Consumer<Throwable> observer) {
 			synchronized (lock) {
 				if (!claimDiagnostic())
 					return;
 			}
-			publishDiagnostic(failure);
+			publishDiagnostic(failure, observer);
 		}
 
 		private boolean claimDiagnostic() {
@@ -905,10 +985,14 @@ public final class StreamLifecycleCoordinator {
 		}
 
 		private void publishDiagnostic(Throwable failure) {
+			publishDiagnostic(failure, diagnostics);
+		}
+
+		private void publishDiagnostic(Throwable failure, Consumer<Throwable> observer) {
 			try {
 				diagnosticExecutor.execute(() -> {
 					try {
-						diagnostics.accept(failure);
+						observer.accept(failure);
 					} catch (Throwable ignored) {
 						// Diagnostics must not compromise state publication or accounting.
 					} finally {
@@ -938,6 +1022,7 @@ public final class StreamLifecycleCoordinator {
 			if (this.cleanupTimer != null)
 				this.cleanupTimer.cancel(false);
 			this.terminationHandler = null;
+			this.cleanupFailureObserver = null;
 			this.producerTask = null;
 			reservations.remove(this);
 			stopInfrastructureIfDrained();
@@ -997,6 +1082,7 @@ public final class StreamLifecycleCoordinator {
 			return;
 		this.infrastructureStopping = true;
 		this.callbackExecutor.shutdown();
+		this.terminationExecutor.shutdown();
 		this.diagnosticExecutor.shutdown();
 		this.supervisor.shutdown();
 	}
@@ -1008,10 +1094,56 @@ public final class StreamLifecycleCoordinator {
 		return remaining > 0L && executor.awaitTermination(remaining, TimeUnit.NANOSECONDS);
 	}
 
+	/**
+	 * One observation per admitted lifetime, with at most capacity workers and a
+	 * capacity-sized queue. Core size follows accepted envelopes, including jobs
+	 * whose framework wrapper is still returning after reservation retirement.
+	 * A new observation therefore gets a worker even when older observers block.
+	 * Queuing can cover a returning framework wrapper, never a missing worker
+	 * budget for another admitted application's blocked observation. Idle workers
+	 * are reused and expire; a capacity-sized fixed core is not eagerly created.
+	 * No application code runs under the dispatch lock or inline.
+	 */
+	private static final class ObservationExecutor extends ThreadPoolExecutor {
+		private final Object dispatchLock = new Object();
+		private int pendingTasks;
+
+		private ObservationExecutor(int capacity, String prefix) {
+			super(0, capacity, 30L, TimeUnit.SECONDS, new ArrayBlockingQueue<>(capacity),
+					threadFactory(prefix), new AbortPolicy());
+			allowCoreThreadTimeOut(true);
+		}
+
+		@Override
+		public void execute(@NonNull Runnable action) {
+			requireNonNull(action);
+			synchronized (this.dispatchLock) {
+				this.pendingTasks++;
+				setCorePoolSize(Math.min(getMaximumPoolSize(), this.pendingTasks));
+				try {
+					super.execute(() -> {
+						try { action.run(); }
+						finally { finishTask(); }
+					});
+				} catch (RuntimeException | Error failure) {
+					finishTask();
+					throw failure;
+				}
+			}
+		}
+
+		private void finishTask() {
+			synchronized (this.dispatchLock) {
+				this.pendingTasks--;
+				setCorePoolSize(Math.min(getMaximumPoolSize(), this.pendingTasks));
+			}
+		}
+	}
+
 	private static ThreadFactory threadFactory(String prefix) {
 		return runnable -> {
 			Thread thread = new Thread(runnable, prefix + "-" + THREAD_SEQUENCE.incrementAndGet());
-			thread.setDaemon(false);
+			thread.setDaemon(true);
 			return thread;
 		};
 	}

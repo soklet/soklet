@@ -69,7 +69,10 @@ public interface McpAdmissionContext {
 	@NonNull McpProtocolVersion getProtocolVersion();
 
 	/**
-	 * @return the selected tool, prompt, resource URI, or task ID, when applicable;
+	 * Operation spelling is validated, but tool, prompt and resource membership
+	 * and descriptor requirements are checked only after admission succeeds.
+	 *
+	 * @return the requested tool, prompt, resource URI, or task ID, when applicable;
 	 *         both legacy resource subscription operations expose their URI
 	 */
 	@NonNull Optional<@NonNull String> getOperationName();

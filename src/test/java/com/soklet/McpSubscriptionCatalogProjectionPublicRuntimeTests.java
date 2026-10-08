@@ -1567,6 +1567,7 @@ public class McpSubscriptionCatalogProjectionPublicRuntimeTests {
 
 	private static final class CatalogProjectionMetrics
 			implements MetricsCollector {
+		private final DefaultMetricsCollector aggregates = DefaultMetricsCollector.defaultInstance();
 		@NonNull
 		private final EnumMap<McpMetricsEvent.SubscriptionMaintenance.Work,
 				BlockingQueue<McpMetricsEvent.@NonNull SubscriptionMaintenance>>
@@ -1582,6 +1583,7 @@ public class McpSubscriptionCatalogProjectionPublicRuntimeTests {
 
 		@Override
 		public void didRecordMcpMetricsEvent(@NonNull McpMetricsEvent event) {
+			this.aggregates.didRecordMcpMetricsEvent(event);
 			if (event instanceof McpMetricsEvent.SubscriptionMaintenance maintenance)
 				requireNonNull(this.events.get(maintenance.getWork()))
 						.add(maintenance);
@@ -1621,6 +1623,18 @@ public class McpSubscriptionCatalogProjectionPublicRuntimeTests {
 			Assertions.assertEquals(MCP_PATH, event.getEndpointPath());
 			Assertions.assertEquals(work, event.getWork());
 			Assertions.assertEquals(outcome, event.getOutcome());
+			McpMetricsSnapshot.SubscriptionMaintenanceKey key = McpMetricsSnapshot.SubscriptionMaintenanceKey
+					.fromDimensions(MCP_PATH, work, outcome);
+			Assertions.assertTrue(this.aggregates.snapshot().orElseThrow().getMcpMetrics()
+					.getSubscriptionMaintenance().getOrDefault(key, 0L) > 0L);
+			for (MetricsCollector.MetricsFormat format : MetricsCollector.MetricsFormat.values()) {
+				String text = this.aggregates.snapshotText(MetricsCollector.SnapshotTextOptions.withMetricsFormat(format).build()).orElseThrow();
+				Assertions.assertTrue(text.contains(
+						"soklet_mcp_subscription_maintenance_total{endpoint=\"/mcp\",work=\""
+								+ work.name().toLowerCase(Locale.ROOT) + "\",outcome=\""
+								+ outcome.name().toLowerCase(Locale.ROOT) + "\"} "),
+						"A delivered runtime maintenance event was dropped from the export.");
+			}
 		}
 
 		@NonNull

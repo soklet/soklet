@@ -40,7 +40,11 @@ class ResponseMarshalerTests {
 				UnparsedRequestReason.MALFORMED_REQUEST,
 				UnparsedRequestReason.REQUEST_TARGET_TOO_LONG,
 				UnparsedRequestReason.EXPECTATION_FAILED,
-				UnparsedRequestReason.REQUEST_HEADERS_TOO_LARGE),
+				UnparsedRequestReason.REQUEST_HEADERS_TOO_LARGE,
+				UnparsedRequestReason.REQUEST_READ_TIMEOUT,
+				UnparsedRequestReason.REQUEST_TOO_LARGE,
+				UnparsedRequestReason.UNSUPPORTED_CONTENT_ENCODING,
+				UnparsedRequestReason.REQUEST_BODY_DECOMPRESSION_FAILED),
 				Set.of(UnparsedRequestReason.values()));
 		Assertions.assertThrows(NoSuchMethodException.class, () ->
 				UnparsedRequestReason.class.getMethod("getStatusCode"));
@@ -174,6 +178,10 @@ class ResponseMarshalerTests {
 		expected.put(UnparsedRequestReason.REQUEST_TARGET_TOO_LONG, 414);
 		expected.put(UnparsedRequestReason.EXPECTATION_FAILED, 417);
 		expected.put(UnparsedRequestReason.REQUEST_HEADERS_TOO_LARGE, 431);
+		expected.put(UnparsedRequestReason.REQUEST_READ_TIMEOUT, 408);
+		expected.put(UnparsedRequestReason.REQUEST_TOO_LARGE, 413);
+		expected.put(UnparsedRequestReason.UNSUPPORTED_CONTENT_ENCODING, 415);
+		expected.put(UnparsedRequestReason.REQUEST_BODY_DECOMPRESSION_FAILED, 400);
 
 		for (ServerType serverType : ServerType.values()) {
 			expected.forEach((reason, statusCode) -> {

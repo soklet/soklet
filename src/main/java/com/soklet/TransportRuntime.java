@@ -31,9 +31,18 @@ import javax.annotation.concurrent.ThreadSafe;
  * termination proof through the {@link TransportTerminationSignal} borrowed
  * from its attachment context.
  * <p>
- * Implementations must make shutdown phase methods prompt, nonblocking,
- * idempotent, thread-safe, and monotonic. A shutdown method initiates work; it
- * does not itself constitute termination proof.
+	 * Implementations must make shutdown phase methods prompt, nonblocking,
+	 * idempotent, thread-safe, and monotonic. A shutdown method initiates work; it
+	 * does not itself constitute termination proof.
+	 * <p>
+	 * Soklet defers phase delivery while the configured runtime's start call is
+	 * still running. If that call returns or throws after the forced boundary,
+	 * Soklet makes one best-effort forced shutdown invocation on that same
+	 * lifecycle worker, with the original deadline (remaining time may be zero).
+	 * This does not extend shutdown or change its frozen result, including its
+	 * recorded causes. A blocking or failed compensation cannot establish complete
+	 * termination. Runtime implementations must still honor startup cancelation
+	 * and initiate shutdown promptly.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -42,6 +51,18 @@ public interface TransportRuntime {
 	/**
 	 * Binds the transport and returns only after it is ready. The runtime owner
 	 * invokes this method at most once.
+	 * <p>
+	 * For a synchronous startup failure, throw the original runtime exception or
+	 * error (retain a checked failure as the cause of a runtime exception). Do not
+	 * report that same failure or termination proof through the signal before
+	 * throwing: a signal before the owner's shutdown intent describes independent
+	 * premature termination. The owner delivers shutdown phases after a failed
+	 * start, including a partially completed bind. Those methods must remain safe
+	 * and report affirmative proof once every owned resource and activity ends.
+	 * <p>
+	 * An independent worker failure must still be signaled when observed, even
+	 * before readiness; an earlier independent failure can control the outcome
+	 * instead of a later synchronous throw.
 	 *
 	 * @param startupContext startup timing and cancelation information
 	 */

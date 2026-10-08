@@ -288,6 +288,65 @@ public class McpJsonCodecTests {
 	}
 
 	@Test
+	public void productionStringTokenCountsEscapesAtExactBoundary() {
+		McpJsonCodec production = new McpJsonCodec(McpJsonLimits.productionDefaults());
+		int tokenLimit = McpJsonLimits.productionDefaults().maximumTokenLengthInCharacters();
+		for (String unit : List.of("a", "\"", "\\", "\n", "\t", "\r", "\b", "\f", "\u0001")) {
+			int cost = unit.equals("a") ? 1 : unit.equals("\u0001") ? 6 : 2;
+			String exact = unit.repeat(tokenLimit / cost) + "a".repeat(tokenLimit % cost);
+			McpJsonString value = new McpJsonString(exact);
+			byte[] wire = production.toUtf8Bytes(value);
+			Assertions.assertEquals(tokenLimit + 2, wire.length);
+			Assertions.assertEquals(value, production.parse(wire));
+			Assertions.assertThrows(IllegalArgumentException.class,
+					() -> production.toUtf8Bytes(new McpJsonString(exact + "a")));
+			String oneOver = new String(wire, StandardCharsets.UTF_8);
+			oneOver = oneOver.substring(0, oneOver.length() - 1) + "a\"";
+			String rejectedWire = oneOver;
+			Assertions.assertThrows(IllegalArgumentException.class,
+					() -> production.parse(rejectedWire));
+		}
+	}
+
+	@Test
+	public void stringTokenCountsWireSpellingAndUtf16RatherThanUtf8Bytes() {
+		McpJsonCodec exact = new McpJsonCodec(
+				new McpJsonLimits(64, 4, 12, 4, 16, 16, 16, 64));
+		McpJsonString rocket = new McpJsonString("🚀");
+		Assertions.assertEquals(rocket, exact.parse("\"\\uD83D\\uDE80\""));
+		Assertions.assertEquals("\"🚀\"", exact.toJson(rocket));
+		Assertions.assertEquals(6, exact.toUtf8Bytes(rocket).length);
+		McpJsonCodec eleven = new McpJsonCodec(
+				new McpJsonLimits(64, 4, 11, 4, 16, 16, 16, 64));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> eleven.parse("\"\\uD83D\\uDE80\""));
+		Assertions.assertEquals(rocket, eleven.parse("\"🚀\""));
+		Assertions.assertEquals(new McpJsonString("aa"), exact.parse("\"\\u0061\\u0061\""));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> eleven.parse("\"\\u0061\\u0061\""));
+		Assertions.assertEquals("\"aa\"", eleven.toJson(new McpJsonString("aa")));
+		McpJsonCodec decodedOne = new McpJsonCodec(
+				new McpJsonLimits(64, 4, 12, 1, 16, 16, 16, 64));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> decodedOne.parse("\"🚀\""));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> decodedOne.toJson(rocket));
+	}
+
+	@Test
+	public void stringAndEscapedTokenLimitsAlsoApplyToObjectKeys() {
+		McpJsonCodec exact = new McpJsonCodec(
+				new McpJsonLimits(64, 4, 4, 4, 16, 16, 16, 64));
+		McpJsonObject object = new McpJsonObject(Map.of("\n\n", McpJsonNull.INSTANCE));
+		Assertions.assertEquals(object, exact.parse("{\"\\n\\n\":null}"));
+		Assertions.assertEquals("{\"\\n\\n\":null}", exact.toJson(object));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> exact.parse("{\"\\n\\nq\":null}"));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> exact.toJson(new McpJsonObject(Map.of("\n\nq", McpJsonNull.INSTANCE))));
+	}
+
+	@Test
 	public void strictJsonParserAndWriterEnforceExactNodeCounts() {
 		McpJsonArray threeNodes = new McpJsonArray(List.of(
 				McpJsonNull.INSTANCE, McpJsonBoolean.TRUE));

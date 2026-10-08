@@ -454,16 +454,13 @@ final class McpSimulationRuntime implements McpSimulation,
 
 	@Override
 	public boolean complete(McpRequestSseStream.@NonNull Frame terminalFrame) {
-		McpRequestSseStream.Listener listener;
+		McpRequestSseStream.Listener listener = null;
 		Termination termination;
 		synchronized (this.lock) {
 			if (this.channelTerminal || this.cancelWon)
 				return false;
-			if (!this.responsePublished)
-				throw new IllegalStateException(
-						"An MCP simulation cannot complete before its SSE response head.");
 			termination = captureFrameWhileLocked(requireNonNull(terminalFrame),
-					null, this.items);
+					null, this.responsePublished ? this.items : this.preResponseItems);
 			if (termination == null) {
 				this.channelTerminal = true;
 				if (this.pendingReason == null)
@@ -473,10 +470,16 @@ final class McpSimulationRuntime implements McpSimulation,
 				termination = new Termination(StreamTerminationReason.COMPLETED,
 						this.pendingReason);
 			}
-			listener = requireNonNull(this.streamListener);
+			if (this.responsePublished)
+				listener = requireNonNull(this.streamListener);
+			else
+				// Publish the response head before observing the terminal result
+				// or a capture limit failure.
+				this.pendingPreResponseTermination = termination;
 		}
-		listener.didTerminate(termination.cancellationReason(),
-				termination.observationReason(), null);
+		if (listener != null)
+			listener.didTerminate(termination.cancellationReason(),
+					termination.observationReason(), null);
 		return termination.cancellationReason() == StreamTerminationReason.COMPLETED;
 	}
 
@@ -516,12 +519,26 @@ final class McpSimulationRuntime implements McpSimulation,
 		McpRequestSseStream.Listener listener;
 		McpStreamTerminationReason publicReason;
 		synchronized (this.lock) {
-			if (this.channelTerminal)
+			boolean unpublishedCompletion = !this.responsePublished
+					&& this.pendingPreResponseTermination != null
+					&& this.pendingPreResponseTermination.cancellationReason()
+							== StreamTerminationReason.COMPLETED;
+			if (this.channelTerminal && !unpublishedCompletion)
 				return false;
 			this.channelTerminal = true;
 			publicReason = McpServerRuntimeBridge.toPublicTerminationReason(
 					requireNonNull(reason));
-			if (this.pendingReason == null)
+			if (unpublishedCompletion) {
+				// Reserved output has not crossed its response-head boundary.
+				// An abrupt runtime end can still abandon it before delivery.
+				this.pendingPreResponseTermination = null;
+				this.terminalMessage = null;
+				this.noMessageCompletionReserved = false;
+				this.items.clear();
+				this.preResponseItems.clear();
+				this.pendingCoalescingKeys.clear();
+				this.pendingReason = publicReason;
+			} else if (this.pendingReason == null)
 				this.pendingReason = publicReason;
 			listener = requireNonNull(this.streamListener);
 		}
@@ -561,10 +578,10 @@ final class McpSimulationRuntime implements McpSimulation,
 	@Override
 	public boolean isTerminalWritten() {
 		synchronized (this.lock) {
-			return this.channelTerminal
+			return this.responsePublished && this.sseResponse && this.channelTerminal
 					&& (this.pendingReason == McpStreamTerminationReason.COMPLETED
 							|| this.terminalMessage != null
-							|| (this.noMessageCompletionReserved && this.responsePublished));
+							|| this.noMessageCompletionReserved);
 		}
 	}
 

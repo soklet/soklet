@@ -141,10 +141,14 @@ public interface McpInvocationFeatures {
 	 * Returns the context for durably creating an MCP task from this invocation.
 	 *
 	 * <p>The context is present only when the current operation supports task
-	 * augmentation and the client declared the MCP Tasks extension capability on
-	 * this request. Presence does not mean that the client prefers or requires a
-	 * task; the server remains the sole per-request decision maker. An absent
-	 * task creation context requires inline completion.
+	 * augmentation, a task manager is configured, the selected endpoint enables
+	 * Tasks for this revision, and the client declared the MCP Tasks extension
+	 * capability on this request. Presence does not mean that the client prefers
+	 * or requires a task; the server remains the sole per-request decision maker.
+	 * An absent task creation context requires inline completion. A handler or
+	 * interceptor that nevertheless returns a task handle fails with the fixed
+	 * JSON-RPC internal error. Statically task-required tools reject a missing
+	 * client capability before application execution.
 	 *
 	 * @return invocation task creation context, if task creation is permitted
 	 */

@@ -141,6 +141,10 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 				case REQUEST_TARGET_TOO_LONG -> StatusCode.HTTP_414.getStatusCode();
 				case EXPECTATION_FAILED -> StatusCode.HTTP_417.getStatusCode();
 				case REQUEST_HEADERS_TOO_LARGE -> StatusCode.HTTP_431.getStatusCode();
+				case REQUEST_READ_TIMEOUT -> StatusCode.HTTP_408.getStatusCode();
+				case REQUEST_TOO_LARGE -> StatusCode.HTTP_413.getStatusCode();
+				case UNSUPPORTED_CONTENT_ENCODING -> StatusCode.HTTP_415.getStatusCode();
+				case REQUEST_BODY_DECOMPRESSION_FAILED -> StatusCode.HTTP_400.getStatusCode();
 			};
 			marshaledResponse = MarshaledResponse.fromStatusCode(statusCode);
 		}

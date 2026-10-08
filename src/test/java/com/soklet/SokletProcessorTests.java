@@ -262,7 +262,7 @@ public class SokletProcessorTests {
 				.compile(src);
 
 		assertThat(compilation).failed();
-		assertThat(compilation).hadErrorContaining("Duplicate @PathParameter name: id");
+		assertThat(compilation).hadErrorContaining("Duplicate placeholder names are not allowed");
 	}
 
 	@Test

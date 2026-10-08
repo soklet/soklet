@@ -42,6 +42,12 @@ import java.util.Optional;
  * request deadline and forced shutdown can still cancel the retained work.
  * Disconnects before SSE commitment continue to cancel the token. MCP
  * 2026-07-28 progress retains its disconnect cancelation behavior.
+ * <p>
+ * The built-in MCP listener treats input EOF as response-channel loss, including
+ * both a normal TCP close and a deliberate client {@code shutdownOutput()}.
+ * Clients must keep their sending side open while awaiting a response.
+ * Modern work and finite/uncommitted legacy work are canceled; an already
+ * committed legacy POST SSE writer is detached as described above.
  *
  * <p>Normal completion does not mark the token canceled. Tokens
  * release registered callbacks when the associated operation completes normally,

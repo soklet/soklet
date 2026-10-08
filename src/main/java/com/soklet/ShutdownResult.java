@@ -186,6 +186,30 @@ public final class ShutdownResult {
 		return getShutdownDisposition() != ShutdownDisposition.INCOMPLETE;
 	}
 
+	/**
+	 * Returns a bounded, single-line diagnostic with dispositions, component
+	 * results, failure presence and retained-activity counts when available.
+	 * Does not render Throwable instances, residual-summary text or retained
+	 * runtime objects. Inspect the typed accessors for full evidence.
+	 *
+	 * @return compact lifecycle diagnostic; not a serialization format
+	 */
+	@Override
+	@NonNull
+	public String toString() {
+		StringBuilder diagnostic = new StringBuilder("ShutdownResult{shutdownDisposition=")
+				.append(this.shutdownDisposition.name())
+				.append(", startupDisposition=").append(this.startupDisposition.name())
+				.append(", shutdownComponentResults=").append(this.shutdownComponentResults)
+				.append(", startupFailurePresent=").append(this.startupFailureCause != null)
+				.append(", unexpectedShutdownComponentType=")
+				.append(this.unexpectedShutdownComponentTermination == null ? "none"
+						: this.unexpectedShutdownComponentTermination.getShutdownComponentType().name());
+		this.internalResult.retentionSummary().ifPresent(retention -> diagnostic
+				.append(", retainedActivityCounts=").append(retention.counts()));
+		return diagnostic.append('}').toString();
+	}
+
 	@NonNull
 	InternalShutdownResult internalResult() {
 		return this.internalResult;

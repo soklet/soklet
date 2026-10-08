@@ -27,6 +27,9 @@ import static java.util.Objects.requireNonNull;
  * Contract for concrete instance generation given type information.
  * <p>
  * A standard threadsafe implementation can be acquired via the {@link #defaultInstance()} factory method.
+ * It requires concrete types with a no-argument constructor accessible to Soklet, normally a public class and public constructor.
+ * Soklet checks HTTP/SSE resource classes during setup when this default is configured, without constructing instances.
+ * A custom provider retains control of construction and is not subject to this default-constructor check.
  * An implementation configured on {@link SokletConfig} may be called
  * concurrently to create HTTP, SSE, and MCP handler instances as well as
  * application parameter values, so it must support concurrent invocation.

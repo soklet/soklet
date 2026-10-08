@@ -1592,6 +1592,9 @@ class McpLifecycleB3Tests {
 			Throwable exactCause = Assertions.assertInstanceOf(
 					java.net.BindException.class, observed.getCause());
 			InternalShutdownResult failed = observed.getInternalShutdownResult();
+			Assertions.assertEquals(InternalLifecycleComponentShutdownDisposition.GRACEFUL_TERMINATION,
+					mcpParticipant(failed).disposition());
+			Assertions.assertTrue(observed.getShutdownResult().getUnexpectedShutdownComponentTermination().isEmpty());
 			Assertions.assertSame(failed,
 					adapter(failedServer).result().orElseThrow());
 			Assertions.assertEquals(InternalStartupDisposition.FAILED,
@@ -1659,6 +1662,9 @@ class McpLifecycleB3Tests {
 			Assertions.assertSame(expected, observed.getCause());
 			InetSocketAddress failedAddress = boundAddress(failedServer);
 			InternalShutdownResult failed = observed.getInternalShutdownResult();
+			Assertions.assertEquals(InternalLifecycleComponentShutdownDisposition.GRACEFUL_TERMINATION,
+					mcpParticipant(failed).disposition());
+			Assertions.assertTrue(observed.getShutdownResult().getUnexpectedShutdownComponentTermination().isEmpty());
 			Assertions.assertSame(failed,
 					adapter(failedServer).result().orElseThrow());
 			Assertions.assertEquals(InternalStartupDisposition.FAILED,

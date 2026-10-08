@@ -245,6 +245,11 @@ final class BuiltInTransportLifecycleAdapter {
 		boolean startAttempted() {
 			return this.transportStartClaimed.get();
 		}
+
+		@Nullable
+		Throwable startupFailureCause() {
+			return this.startupFailure.get();
+		}
 	}
 
 	@ThreadSafe
@@ -767,17 +772,16 @@ final class BuiltInTransportLifecycleAdapter {
 			boolean terminationProven) {
 		requireCurrent(generation);
 		Throwable exactCause = requireNonNull(cause);
-		if (generation.externallyCoordinated()
-				&& this.externalStartInvocation.get() == generation)
-			// The direct owner's tracked call records this synchronous failure
-			// after the transport call unwinds.  Establish rollback intent first
-			// so the exact event remains evidence without becoming an unexpected
-			// termination controlling event.
-			generation.group.recordShutdownIntent();
+		// A synchronous start failure owns rollback. Establish local intent
+		// before recording it; an independent failure that already won remains
+		// controlling. The enclosing owner observes the throw before delivering
+		// shutdown and receiving delegated termination proof.
+		generation.group.recordShutdownIntent();
 		recordStartupFailure(generation, exactCause);
 		if (terminationProven)
 			generation.signal.signalTerminated();
-		if (generation.externallyCoordinated())
+		if (generation.externallyCoordinated()
+				|| generation.delegatedTerminationSignal != null)
 			return;
 		requestShutdown(generation);
 		awaitResultUninterruptibly(generation);

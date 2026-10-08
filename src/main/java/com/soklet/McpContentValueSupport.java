@@ -16,6 +16,7 @@
 
 package com.soklet;
 
+import com.soklet.internal.mcp.protocol.McpAppMimeType;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -27,13 +28,47 @@ import static com.soklet.internal.ObjectIdentity.sameInstance;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Structural equality support for values nested by public MCP content blocks.
+ * Scalar validation and structural equality support for public MCP content values.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
 final class McpContentValueSupport {
 	private McpContentValueSupport() {
+	}
+
+	@NonNull
+	static String requireWellFormedString(@NonNull String value) {
+		requireNonNull(value);
+		for (int index = 0; index < value.length(); ++index) {
+			char character = value.charAt(index);
+			if (Character.isHighSurrogate(character)) {
+				if (index + 1 >= value.length()
+						|| !Character.isLowSurrogate(value.charAt(index + 1)))
+					throw invalidString();
+				++index;
+			} else if (Character.isLowSurrogate(character)) {
+				throw invalidString();
+			}
+		}
+		return value;
+	}
+
+	@NonNull
+	private static IllegalArgumentException invalidString() {
+		return new IllegalArgumentException(
+				"MCP strings must not contain unpaired UTF-16 surrogates.");
+	}
+
+	@NonNull
+	static String requireMimeType(@NonNull String mimeType) {
+		requireNonNull(mimeType);
+		try {
+			McpAppMimeType.canonicalize(mimeType);
+		} catch (IllegalArgumentException exception) {
+			throw new IllegalArgumentException("Invalid MCP content MIME type.");
+		}
+		return mimeType;
 	}
 
 	static boolean annotationsEqual(@Nullable McpContentAnnotations first,

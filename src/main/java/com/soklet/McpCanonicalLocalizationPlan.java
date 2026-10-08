@@ -71,6 +71,8 @@ final class McpCanonicalLocalizationPlan {
 	 */
 	enum ResponseKind {
 		DISCOVERY,
+		INITIALIZE_2025_06_18,
+		INITIALIZE_2025_11_25,
 		TOOLS_LIST,
 		PROMPTS_LIST,
 		RESOURCES_LIST,
@@ -168,7 +170,19 @@ final class McpCanonicalLocalizationPlan {
 					projectedDocument);
 			// Look up only owners present in this page. Retain the construction-time
 			// callback order for existing callers without walking omitted owners.
-			List<IndexedSlot> selected = new ArrayList<>(this.fixedSlots);
+			// The validated modern framework result carries resultType. Legacy
+			// projections remove that field and framework server metadata; retain
+			// only their descriptor slots without charging metadata lookups.
+			boolean includeServerInformation = switch (kind) {
+				case TOOLS_LIST, PROMPTS_LIST, RESOURCES_LIST, RESOURCE_TEMPLATES_LIST ->
+						projectedDocument.members().containsKey("resultType");
+				default -> true;
+			};
+			List<IndexedSlot> selected = new ArrayList<>();
+			for (IndexedSlot fixedSlot : this.fixedSlots)
+				if (includeServerInformation
+						|| fixedSlot.slot().ownerType() != McpTextOwnerType.SERVER_INFORMATION)
+					selected.add(fixedSlot);
 			for (String ownerId : projectionIndex.ownerIndexes().keySet()) {
 				List<IndexedSlot> ownedSlots = this.ownerSlots.get(ownerId);
 				if (ownedSlots != null)
@@ -371,7 +385,8 @@ final class McpCanonicalLocalizationPlan {
 		static ProjectionIndex from(@NonNull ResponseKind kind,
 				@NonNull McpJsonObject projectedDocument) {
 			return switch (kind) {
-				case DISCOVERY, SUBSCRIPTION_TERMINAL ->
+				case DISCOVERY, INITIALIZE_2025_06_18, INITIALIZE_2025_11_25,
+						SUBSCRIPTION_TERMINAL ->
 						new ProjectionIndex("", Map.of(), Map.of());
 				case TOOLS_LIST -> fromCollection(projectedDocument, "tools",
 						"name", false);

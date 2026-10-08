@@ -49,7 +49,9 @@ final class McpLocaleSupport {
 	 * the parsed result is bounded to 32 ranges after JDK alias expansion. Neither
 	 * bound truncates: missing, blank, malformed, or over-limit input becomes an
 	 * empty list, which reaches the provider's own fallback behavior. Zero-weight
-	 * exclusions are preserved exactly as parsed.
+	 * exclusions are preserved exactly as parsed. Within that raw bound, empty
+	 * comma-separated elements are ignored and SP/HTAB around ranges and the
+	 * quality-value semicolon are normalized before the JDK parses the tokens.
 	 * <p>
 	 * This deliberately does not delegate to the general-purpose
 	 * {@code Request.getLanguageRanges()} accessor, which parses before applying
@@ -94,9 +96,12 @@ final class McpLocaleSupport {
 			return List.of();
 
 		List<Locale.LanguageRange> languageRanges;
+		String normalized = normalizeLanguageList(combined.toString());
+		if (normalized == null)
+			return List.of();
 
 		try {
-			languageRanges = Locale.LanguageRange.parse(combined.toString());
+			languageRanges = Locale.LanguageRange.parse(normalized);
 		} catch (RuntimeException ignored) {
 			// Malformed input is indistinguishable from absent input by contract.
 			return List.of();
@@ -106,6 +111,39 @@ final class McpLocaleSupport {
 			return List.of();
 
 		return List.copyOf(languageRanges);
+	}
+
+	/** Normalizes only HTTP list empties and SP/HTAB around a range or semicolon. */
+	@Nullable
+	private static String normalizeLanguageList(@NonNull String value) {
+		StringBuilder normalized = new StringBuilder(value.length());
+		int start = 0;
+		for (int index = 0; index <= value.length(); ++index) {
+			if (index < value.length() && value.charAt(index) != ',')
+				continue;
+			String element = Utilities.trimHeaderWhitespace(value.substring(start, index));
+			start = index + 1;
+			if (element.isEmpty())
+				continue;
+			if (!normalized.isEmpty())
+				normalized.append(',');
+			int separator = element.indexOf(';');
+			if (separator < 0) {
+				normalized.append(element);
+			} else {
+				normalized.append(Utilities.trimHeaderWhitespace(element.substring(0, separator)))
+						.append(';')
+						.append(Utilities.trimHeaderWhitespace(element.substring(separator + 1)));
+			}
+		}
+		// Remaining controls are inside a token, not HTTP optional whitespace.
+		// In particular, Double.parseDouble would otherwise trim a tab after q=.
+		for (int index = 0; index < normalized.length(); ++index) {
+			char character = normalized.charAt(index);
+			if (character < 0x20 || character == 0x7F)
+				return null;
+		}
+		return normalized.toString();
 	}
 
 	@NonNull

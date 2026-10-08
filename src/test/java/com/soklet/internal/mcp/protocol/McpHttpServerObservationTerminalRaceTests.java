@@ -50,11 +50,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -246,9 +244,9 @@ class McpHttpServerObservationTerminalRaceTests {
 
 	@Test
 	@Timeout(120)
-	void protocol_completion_cannot_preempt_inline_stream_terminal_owner()
+	void protocol_completion_cannot_preempt_early_stream_terminal_owner()
 			throws Exception {
-		InlineExecutorService executor = new InlineExecutorService();
+		McpEarlyCompletionExecutor executor = new McpEarlyCompletionExecutor();
 		RecordingObservation observation = new RecordingObservation();
 		AtomicReference<MicrohttpResponse> streamingResponse =
 				new AtomicReference<>();
@@ -256,27 +254,27 @@ class McpHttpServerObservationTerminalRaceTests {
 		RecordingSocketChannel socket = null;
 		McpHttpServerRuntime runtime = runtime(acceptingPolicy(), invocation -> {
 			Assertions.assertTrue(invocation.sendNotification(
-					progress("inline-terminal-owner")));
-			return completeResult("inline-terminal-owner");
+					progress("early-terminal-owner")));
+			return completeResult("early-terminal-owner");
 		}, observation, McpApplicationClock.SYSTEM,
 				McpJsonLimits.productionDefaults(), ignored -> executor);
 
 		try {
 			InetSocketAddress address = runtime.start();
-			submit(runtime, address, request(address, "inline-terminal-owner"),
+			submit(runtime, address, request(address, "early-terminal-owner"),
 					response -> Assertions.assertTrue(
 							streamingResponse.compareAndSet(null, response),
-							"The inline SSE response callback must be offered once."));
+							"The early SSE response callback must be offered once."));
 			MicrohttpResponse response = awaitValue(streamingResponse,
-					"The inline SSE response was not offered.");
+					"The early SSE response was not offered.");
 			Assertions.assertTrue(response.streaming());
 
 			// Do not give the transport a body source until the protocol task has
-			// returned. This deterministically exercises the handoff in which an
-			// inline handler already owns a reserved stream terminal.
+			// returned. This deterministically exercises the handoff in which a
+			// finished handler already owns a reserved stream terminal.
 			ThreadPoolExecutor processor = processor(runtime);
 			awaitCondition(() -> processor.getActiveCount() == 0,
-					"The inline protocol task did not complete.");
+					"The early protocol task did not complete.");
 
 			source = newBodySource(response);
 			socket = new RecordingSocketChannel();
@@ -287,11 +285,11 @@ class McpHttpServerObservationTerminalRaceTests {
 			for (int write = 0; write < 8 && source.isReadyToWrite(); write++)
 				source.writeTo(socket, Long.MAX_VALUE);
 			Assertions.assertFalse(source.hasRemaining(),
-					"The inline terminal response did not finish writing.");
+					"The early terminal response did not finish writing.");
 
 			String body = socket.writtenText();
 			Assertions.assertTrue(body.contains(
-					"\"value\":\"inline-terminal-owner\""), body);
+					"\"value\":\"early-terminal-owner\""), body);
 			Assertions.assertTrue(body.endsWith("0\r\n\r\n"), body);
 			observation.awaitFinished();
 			awaitClean(runtime);
@@ -1338,44 +1336,6 @@ class McpHttpServerObservationTerminalRaceTests {
 			Assertions.assertEquals(1, streamCloses.get());
 			Assertions.assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED,
 					streamCloseReason.get());
-		}
-	}
-
-	private static final class InlineExecutorService
-			extends AbstractExecutorService {
-		private final AtomicBoolean shutdown = new AtomicBoolean();
-
-		@Override
-		public void shutdown() {
-			this.shutdown.set(true);
-		}
-
-		@Override
-		public List<Runnable> shutdownNow() {
-			this.shutdown.set(true);
-			return List.of();
-		}
-
-		@Override
-		public boolean isShutdown() {
-			return this.shutdown.get();
-		}
-
-		@Override
-		public boolean isTerminated() {
-			return this.shutdown.get();
-		}
-
-		@Override
-		public boolean awaitTermination(long timeout, TimeUnit unit) {
-			return this.shutdown.get();
-		}
-
-		@Override
-		public void execute(Runnable command) {
-			if (this.shutdown.get())
-				throw new RejectedExecutionException("Executor is shut down.");
-			command.run();
 		}
 	}
 

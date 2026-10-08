@@ -266,7 +266,7 @@ public class McpResourcePublicRuntimeTests {
 			HttpResponse<String> rawSlashRead = read(port,
 					"read-template-raw-slash", "test://template/a/b/data");
 			assertError(rawSlashRead, 400, -32602, "read-template-raw-slash");
-			Assertions.assertTrue(stages.isEmpty(), stages.toString());
+			Assertions.assertEquals(List.of("admission:test://template/a/b/data"), stages);
 			Assertions.assertEquals(2, templateInvocations.get());
 
 			stages.clear();
@@ -275,7 +275,7 @@ public class McpResourcePublicRuntimeTests {
 			assertError(unknown, 400, -32602, "read-unknown");
 			assertContains(unknown.body(),
 					"\"data\":{\"uri\":\"test://unknown-resource\"}");
-			Assertions.assertTrue(stages.isEmpty(), stages.toString());
+			Assertions.assertEquals(List.of("admission:test://unknown-resource"), stages);
 			Assertions.assertEquals(6, handlerInvocations.get());
 			Assertions.assertEquals(0, toolLimiterInvocations.get());
 		} finally {
@@ -1274,6 +1274,75 @@ public class McpResourcePublicRuntimeTests {
 				interceptorMode.set(0);
 			}
 		}
+	}
+
+	@Test
+	public void fileTemplateVariablesEncodeSlashesAndDecodeExactlyOnceOnEveryRevision() throws Exception {
+		Set<McpProtocolVersion> versions = Set.of(McpProtocolVersion.V2025_06_18,
+				McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28);
+		AtomicInteger templateReads = new AtomicInteger();
+		AtomicInteger exactReads = new AtomicInteger();
+		AtomicReference<McpResourceReadContext> observed = new AtomicReference<>();
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
+				McpImplementation.withNameAndVersion("file-template-contract", "1").build(), versions)
+				.resourceRegistrations(List.of(
+						McpResourceRegistration.withUriTemplateAndName("file:///{path}", "Files", versions)
+								.handler((requestContext, resourceReadContext, invocationFeatures) -> {
+									templateReads.incrementAndGet();
+									observed.set(resourceReadContext);
+									return completeText(resourceReadContext.getUri(), "template", "text/plain");
+								}).build(),
+						McpResourceRegistration.withUriAndName(URI.create("file:///src/pinned.rs"), "Pinned", versions)
+								.handler((requestContext, resourceReadContext, invocationFeatures) -> {
+									exactReads.incrementAndGet();
+									Assertions.assertTrue(resourceReadContext.getUriTemplateVariables().isEmpty());
+									return completeText(resourceReadContext.getUri(), "exact", "text/plain");
+								}).build())).build();
+		McpServer server = serverBuilder(endpoint).requestRateLimiter(rateLimitContext -> McpRateLimitDecision.allowed()).build();
+		try (Soklet owner = managedSoklet(server)) {
+			owner.start();
+			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
+			for (McpProtocolVersion version : List.of(McpProtocolVersion.V2025_06_18,
+					McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28)) {
+				boolean modern = version == McpProtocolVersion.V2026_07_28;
+				int before = templateReads.get();
+				HttpResponse<String> rawPath = fileRead(port, version, "file:///src/main.rs");
+				assertError(rawPath, modern ? 400 : 200, modern ? -32602 : -32002, modern ? "file" : "legacy");
+				Assertions.assertEquals(before, templateReads.get());
+				for (Map.Entry<String, String> example : Map.of(
+						"file:///src%2Fmain.rs", "src/main.rs",
+						"file:///src%2fmain.rs", "src/main.rs",
+						"file:///src%252Fmain.rs", "src%2Fmain.rs",
+						"file:///src%2Fcaf%C3%A9.rs", "src/café.rs",
+						"file:///README.md", "README.md").entrySet()) {
+					HttpResponse<String> response = fileRead(port, version, example.getKey());
+					Assertions.assertEquals(200, response.statusCode(), response.body());
+					assertContains(response.body(), "\"uri\":\"" + example.getKey() + "\"");
+					Assertions.assertEquals(URI.create(example.getKey()), observed.get().getUri());
+					Assertions.assertEquals(Map.of("path", example.getValue()), observed.get().getUriTemplateVariables());
+					Assertions.assertThrows(UnsupportedOperationException.class,
+							() -> observed.get().getUriTemplateVariables().clear());
+				}
+				Assertions.assertEquals(before + 5, templateReads.get());
+				HttpResponse<String> exact = fileRead(port, version, "file:///src/pinned.rs");
+				Assertions.assertEquals(200, exact.statusCode(), exact.body());
+				assertContains(exact.body(), "\"text\":\"exact\"");
+			}
+			Assertions.assertEquals(15, templateReads.get());
+			Assertions.assertEquals(3, exactReads.get());
+		}
+		for (String unsupported : List.of("file:///{+path}", "file:///{path*}", "file:///{path:5}")) {
+			McpEndpoint unsupportedEndpoint = McpEndpoint.withPath(MCP_PATH,
+					McpImplementation.withNameAndVersion("unsupported-template", "1").build(), versions)
+					.resourceRegistrations(List.of(McpResourceRegistration.withUriTemplateAndName(unsupported, "Unsupported", versions)
+							.handler(resourceHandler()).build())).build();
+			Assertions.assertThrows(IllegalArgumentException.class, () -> serverBuilder(unsupportedEndpoint).build());
+		}
+	}
+
+	private static HttpResponse<String> fileRead(int port, McpProtocolVersion protocolVersion, String uri) throws Exception {
+		return protocolVersion == McpProtocolVersion.V2026_07_28 ? read(port, "file", uri)
+				: sendLegacy(port, protocolVersion.getWireValue(), "resources/read", "\"uri\":\"" + uri + "\"", null);
 	}
 
 	private static HttpResponse<String> sendLegacy(int port, String revision, String method,

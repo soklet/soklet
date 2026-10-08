@@ -24,13 +24,19 @@ import javax.annotation.concurrent.ThreadSafe;
 /**
  * Explicit resource bounds for the internal JSON codec.
  *
+ * <p>String lengths count decoded UTF-16 code units. String token lengths
+ * independently count the UTF-16 spelling between quotes, including escape
+ * sequences: incoming spelling for parsing, generated spelling for writing.
+ * Both limits also apply to object member names. UTF-8 input/output byte limits
+ * are separate from these character limits.</p>
+ *
  * <p>The production and maximum-supported profiles are fixed from
  * pinned-corpus, adversarial-boundary, and cross-JDK evidence. The
  * maximum-supported profile is the 16 MiB public transport ceiling. The public
  * constructor enforces that ceiling for every field. Dedicated package-private
- * factories create the two larger durable-task profiles needed to retain an
+ * factories create the larger internal profiles needed to bind or retain an
  * accepted request with framework schema and wrapper state; those profiles do
- * not widen transport acceptance.</p>
+ * not widen transport acceptance or response output.</p>
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -283,6 +289,22 @@ public final class McpJsonLimits {
 				DEFAULT_MAXIMUM_EXPONENT_MAGNITUDE,
 				DEFAULT_MAXIMUM_NODE_COUNT,
 				DURABLE_TASK_ORIGIN_MAXIMUM_BYTES, true);
+	}
+
+	/**
+	 * Returns the internal profile for canonical stable request parameters.
+	 * It shares the reviewed accepted-argument profile: production structural
+	 * and scalar limits, the 16 MiB input ceiling, and 32 MiB canonical output
+	 * headroom. The canonical representation can exceed the admitted wire
+	 * length, so neither the 4 MiB response limit nor the input-byte ceiling
+	 * alone is an appropriate binding-output limit. State-envelope limits and
+	 * transport acceptance remain independent.
+	 *
+	 * @return canonical request-state parameter limit profile
+	 */
+	@NonNull
+	static McpJsonLimits requestStateBindingParameters() {
+		return durableTaskArguments();
 	}
 
 	/**

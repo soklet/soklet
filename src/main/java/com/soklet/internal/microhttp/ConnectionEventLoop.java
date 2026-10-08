@@ -67,6 +67,7 @@ import static com.soklet.internal.ObjectIdentity.sameInstance;
 class ConnectionEventLoop {
     private static final long MAX_RESPONSE_BYTES_PER_WRITE_TURN = 1024L * 1024L;
     private static final int MAX_QUEUED_TASKS_PER_TURN = 256;
+    private static final int MAX_REMOTE_CLOSE_CAUSE_DEPTH = 32;
 
     @FunctionalInterface
     private interface ThrowingTask {
@@ -138,14 +139,17 @@ class ConnectionEventLoop {
     private static final class InFlightDispatch {
         final MicrohttpRequest request;
         final boolean monitorClientDisconnects;
+        final boolean closeConnectionOnInputEnd;
         private DispatchState state;
         private @Nullable MicrohttpResponse pendingResponse;
         private @Nullable StreamTerminationReason cancelationReason;
         private @Nullable Throwable cancelationCause;
 
-        private InFlightDispatch(MicrohttpRequest request, boolean monitorClientDisconnects) {
+        private InFlightDispatch(MicrohttpRequest request, boolean monitorClientDisconnects,
+                                 boolean closeConnectionOnInputEnd) {
             this.request = request;
             this.monitorClientDisconnects = monitorClientDisconnects;
+            this.closeConnectionOnInputEnd = closeConnectionOnInputEnd;
             this.state = DispatchState.HANDLING;
         }
 
@@ -281,6 +285,7 @@ class ConnectionEventLoop {
         Thread eventLoopThread;
         try {
             eventLoopThread = new Thread(this::run, "connection-event-loop");
+            eventLoopThread.setDaemon(false);
         } catch (RuntimeException | Error throwable) {
             CloseUtils.closeQuietly(openedSelector);
             throw throwable;
@@ -333,6 +338,7 @@ class ConnectionEventLoop {
         boolean keepAlive;
         boolean closeAfterResponse;
         boolean inputHalfClosed;
+        boolean streamingResponseClosesOnInputEnd;
         Handler.StreamingResponseInputPolicy streamingResponseInputPolicy =
                 Handler.StreamingResponseInputPolicy.NONE;
         final AtomicBoolean writeReadyTaskQueued = new AtomicBoolean();
@@ -370,7 +376,9 @@ class ConnectionEventLoop {
                                 new LogEntry("event", "request_timeout"),
                                 new LogEntry("id", id));
                     }
-                    failSafeClose();
+                    respondToUnparsedRequest(UnparsedRequestRejection.Reason.REQUEST_READ_TIMEOUT,
+                            rawErrorResponse(408, "Request Timeout"),
+                            byteTokenizer.rawPosition() + byteTokenizer.remaining());
                 }
                 return;
             }
@@ -553,6 +561,10 @@ class ConnectionEventLoop {
                             new LogEntry("event", "read_half_close_while_response_pending"),
                             new LogEntry("id", id));
                 }
+                if (dispatch.closeConnectionOnInputEnd) {
+                    failSafeClose(StreamTerminationReason.CLIENT_DISCONNECTED, null);
+                    return;
+                }
                 // EOF is only a half-close of the client's sending side. The client may still be waiting
                 // to read responses. Retain and drain complete pipelined requests already in memory, but
                 // never return to socket reads once those bytes are exhausted.
@@ -616,6 +628,10 @@ class ConnectionEventLoop {
                     logger.log(
                             new LogEntry("event", "read_half_close_during_streaming_response"),
                             new LogEntry("id", id));
+                }
+                if (streamingResponseClosesOnInputEnd) {
+                    failSafeClose(StreamTerminationReason.CLIENT_DISCONNECTED, null);
+                    return;
                 }
                 // EOF closes only the client's sending side. The committed response may continue
                 // writing. Retained, complete pipelined requests may still follow that response.
@@ -708,12 +724,17 @@ class ConnectionEventLoop {
             MicrohttpRequest request = requestParser.request();
 
             if (request.method() == null || request.uri() == null || request.version() == null) {
-                failSafeClose();
+                int base = byteTokenizer.rawPosition() - byteTokenizer.position();
+                int boundary = (int) Math.min((long) byteTokenizer.rawPosition() + byteTokenizer.remaining(),
+                        (long) base + options.maxRequestSize() + 1L);
+                respondToUnparsedRequest(UnparsedRequestRejection.Reason.REQUEST_TOO_LARGE,
+                        rawErrorResponse(413, "Content Too Large"), boundary);
                 return;
             }
 
             List<Header> headers = request.headers() == null ? new ArrayList<>(0) : new ArrayList<>(request.headers());
-            MicrohttpRequest tooLargeRequest = new MicrohttpRequest(request.method(), request.uri(), request.version(), headers, new byte[0], true, remoteAddress);
+            MicrohttpRequest tooLargeRequest = new MicrohttpRequest(request.method(), request.uri(), request.version(), headers, new byte[0], true, remoteAddress,
+                    request.observedWireByteCount());
 
             applyConnectionPolicy(tooLargeRequest);
             closeAfterResponse = true;
@@ -736,9 +757,12 @@ class ConnectionEventLoop {
 
         private void respondToUnparsedRequest(
                 UnparsedRequestRejection.Reason reason, byte[] fallbackResponse) {
-            prepareForRawErrorResponse();
+            respondToUnparsedRequest(reason, fallbackResponse, requestParser.failureBoundaryExclusive());
+        }
 
-            int failureBoundaryExclusive = requestParser.failureBoundaryExclusive();
+        private void respondToUnparsedRequest(UnparsedRequestRejection.Reason reason,
+                                             byte[] fallbackResponse, int failureBoundaryExclusive) {
+            prepareForRawErrorResponse();
             ByteTokenizer.CapturedPrefix capture = byteTokenizer.capturePrefixAndRelease(
                     failureBoundaryExclusive,
                     options.unparsedRequestCaptureLimitInBytes());
@@ -829,12 +853,14 @@ class ConnectionEventLoop {
 
         private void dispatchRequest(MicrohttpRequest request) {
             boolean monitorClientDisconnects;
+            boolean closeConnectionOnInputEnd;
 
             try (TransportFailureObserver.Observation observation =
                          beginTransportFailure(TransportFailureReason.UNKNOWN)) {
                 try {
                     monitorClientDisconnects =
                             handler.monitorClientDisconnectsBeforeResponse(request);
+                    closeConnectionOnInputEnd = handler.closeConnectionOnInputEnd(request);
                     observation.discard();
                 } catch (Throwable throwable) {
                     logThrowable(throwable,
@@ -853,8 +879,14 @@ class ConnectionEventLoop {
             monitorClientDisconnects = monitorClientDisconnects
                     && !request.contentTooLarge();
 
-            InFlightDispatch dispatch = new InFlightDispatch(request, monitorClientDisconnects);
+            InFlightDispatch dispatch = new InFlightDispatch(request, monitorClientDisconnects,
+                    closeConnectionOnInputEnd);
             inFlightDispatch = dispatch;
+
+            if (monitorClientDisconnects && inputHalfClosed && closeConnectionOnInputEnd) {
+                failSafeClose(StreamTerminationReason.CLIENT_DISCONNECTED, null);
+                return;
+            }
 
             if (monitorClientDisconnects) {
                 enableReadInterestForDisconnectMonitoring();
@@ -973,9 +1005,8 @@ class ConnectionEventLoop {
             try {
                 if (microhttpResponse.streaming() && httpOneDotZero) {
                     bodyOwnershipAttempted = true;
-                    microhttpResponse.closeStreamingBody(StreamTerminationReason.PROTOCOL_UNSUPPORTED, null);
-                    microhttpResponse = new MicrohttpResponse(505, "HTTP Version Not Supported",
-                            List.of(new Header(HEADER_CONNECTION, CLOSE)), new byte[0]);
+                    microhttpResponse = StreamingMicrohttpResponses.forRequestVersion(microhttpResponse, HTTP_1_0);
+                    responseInDelivery = microhttpResponse;
                     closeAfterResponse = true;
                 }
                 if (mustNotSendBody(microhttpResponse.status())) {
@@ -1080,6 +1111,7 @@ class ConnectionEventLoop {
                     inFlightDispatch = null;
                 }
                 streamingResponseInputPolicy = nextStreamingInputPolicy;
+                streamingResponseClosesOnInputEnd = dispatch.closeConnectionOnInputEnd;
                 streamingResponseBytesDiscarded = 0;
                 if (nextStreamingInputPolicy != Handler.StreamingResponseInputPolicy.NONE) {
                     enableReadInterestForDisconnectMonitoring();
@@ -1137,6 +1169,10 @@ class ConnectionEventLoop {
                 failSafeClose(e.getCancelationReason(),
                         e.getCancelationCause().orElse(null));
             } catch (IOException | RuntimeException e) {
+                if (isRemoteClose(e)) {
+                    failSafeClose(StreamTerminationReason.CLIENT_DISCONNECTED, e);
+                    return;
+                }
                 try (TransportFailureObserver.Observation ignored =
                              beginTransportFailure(TransportFailureReason.WRITE_ERROR)) {
                     if (logger.failureEnabled()) {
@@ -1187,6 +1223,7 @@ class ConnectionEventLoop {
                 MicrohttpResponse deliveredResponse = responseInDelivery;
                 responseInDelivery = null;
                 streamingResponseInputPolicy = Handler.StreamingResponseInputPolicy.NONE;
+                streamingResponseClosesOnInputEnd = false;
                 streamingResponseBytesDiscarded = 0;
                 cancelResponseWriteIdleTimeout();
                 if (deliveredResponse != null)
@@ -1503,6 +1540,7 @@ class ConnectionEventLoop {
                 }
                 continueResponseBuffer = null;
                 streamingResponseInputPolicy = Handler.StreamingResponseInputPolicy.NONE;
+                streamingResponseClosesOnInputEnd = false;
                 streamingResponseBytesDiscarded = 0;
                 try {
                     selectionKey.cancel();
@@ -1717,7 +1755,9 @@ class ConnectionEventLoop {
     private static boolean isRemoteClose(@Nullable Throwable throwable) {
         Throwable current = throwable;
 
-        while (current != null) {
+        // Sources can supply arbitrary exception chains, including cycles. Classification
+        // must not strand the event loop before it can close the failed response.
+        for (int depth = 0; current != null && depth < MAX_REMOTE_CLOSE_CAUSE_DEPTH; ++depth) {
             if (current instanceof ClosedChannelException)
                 return true;
             if (current instanceof EOFException)
@@ -1900,6 +1940,9 @@ class ConnectionEventLoop {
 
     private void doStart() throws IOException {
         while (!stop.get()) {
+            // Interrupts are not this loop's shutdown signal; stop + wakeup is.
+            // A stray callback interrupt must not make select spin forever.
+            Thread.interrupted();
             selector.select(options.resolution().toMillis());
             Set<SelectionKey> selectedKeys = selector.selectedKeys();
             Iterator<SelectionKey> it = selectedKeys.iterator();

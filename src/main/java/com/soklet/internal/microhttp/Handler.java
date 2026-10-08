@@ -62,7 +62,7 @@ public interface Handler {
      * Whether the transport should continue bounded reads while this request is waiting for its response so
      * it can detect an abortive client disconnect before response commitment. Any pipelined bytes read in
      * this state are retained up to the configured request-size limit and parsed after the response
-     * completes. A normal input half-close is not cancellation: the current response and responses for any
+     * completes. By default an input half-close is not cancellation: the current response and responses for any
      * already-buffered pipelined requests are still written, after which the connection closes.
      *
      * <p>The default is {@code false}, preserving the normal microhttp behavior of suspending socket reads
@@ -81,7 +81,8 @@ public interface Handler {
      * detect an abortive client disconnect while the stream is otherwise idle. Positive client bytes are
      * discarded, never parsed or dispatched as pipelined requests, and limited to the configured request-size
      * bound; exceeding that bound terminates the connection. A normal input half-close is not cancellation and
-     * does not prevent the committed stream from continuing to write.
+     * does not prevent the committed stream from continuing to write, unless
+     * {@link #closeConnectionOnInputEnd(MicrohttpRequest)} selects response closure.
      *
      * <p>This hook is consulted only when the response committed for {@code request} is streaming. The default
      * is {@code false}, preserving ordinary microhttp response behavior.</p>
@@ -98,7 +99,8 @@ public interface Handler {
      * {@link StreamingResponseInputPolicy#DISCARD} retains the existing long-lived protocol behavior:
      * client bytes are bounded and discarded. {@link StreamingResponseInputPolicy#RETAIN}
      * instead retains bounded bytes for ordinary HTTP pipelining after the response completes. In both
-     * modes, an input half-close leaves the response writable. A silent network loss with no socket
+     * modes, an input half-close leaves the response writable unless
+     * {@link #closeConnectionOnInputEnd(MicrohttpRequest)} selects response closure. A silent network loss with no socket
      * signal still requires an application timeout or heartbeat for detection.
      *
      * <p>The default preserves the behavior of handlers that already override
@@ -108,6 +110,24 @@ public interface Handler {
         return monitorClientDisconnectsDuringStreamingResponse(request)
                 ? StreamingResponseInputPolicy.DISCARD
                 : StreamingResponseInputPolicy.NONE;
+    }
+
+    /**
+     * Whether input EOF closes the connection while this response is monitored.
+     * The transport samples this nonblocking hook at dispatch and uses it both before response commitment
+     * and during a monitored streaming response. Closure invokes {@link #cancel} before commitment,
+     * or closes the committed body source with {@link StreamTerminationReason#CLIENT_DISCONNECTED}.
+     * The protocol owner decides whether body-source closure cancels application work or only detaches delivery.
+     *
+     * <p>The default preserves ordinary HTTP half-close and pipelining. TCP FIN cannot distinguish a peer's
+     * full close from {@code shutdownOutput()}; a protocol choosing {@code true} therefore also ends a response
+     * when the peer deliberately half-closes its sending side. This hook does not enable read monitoring.</p>
+     *
+     * @param request the request about to be dispatched
+     * @return whether observed input EOF ends this monitored response
+     */
+    default boolean closeConnectionOnInputEnd(MicrohttpRequest request) {
+        return false;
     }
 
 }

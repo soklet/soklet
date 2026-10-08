@@ -37,6 +37,15 @@ import static java.util.Objects.requireNonNull;
  *   <li>{@link #fromMethods(Set)} (examines the hardcoded set of methods)</li>
  * </ul>
  * <p>
+ * The built-in resolvers prefer declarations without a varargs placeholder.
+ * Competing varargs declarations are compared from left to right: a literal
+ * component outranks a single-component placeholder, which outranks the
+ * varargs suffix. Thus {@code /widgets/{id}/{rest*}} outranks {@code /{path*}}.
+ * Fixed declarations prefer fewer placeholders, then more literals. Equally
+ * specific overlapping declarations are rejected instead of choosing a handler
+ * by registration order. HTTP methods and HTTP/SSE routes are ranked separately.
+ * The annotation processor applies the same ambiguity rule.
+ * <p>
  * It is likely that one or more of the above implementations is sufficient for your application and test suite.
  * <p>
  * However, should a custom implementation be necessary, documentation is available at <a href="https://www.soklet.com/docs/request-handling#resource-method-resolution">https://www.soklet.com/docs/request-handling#resource-method-resolution</a>.
@@ -49,6 +58,10 @@ public interface ResourceMethodResolver {
 	 * Given an HTTP request, provide a matching <em>Resource Method</em> to invoke.
 	 * <p>
 	 * An unmatched <em>Resource Method</em> generally indicates an {@code HTTP 404}.
+	 * When handling {@code HEAD}, Soklet first resolves that method. If unmatched,
+	 * it resolves a {@code GET} copy before request-routing observation and interception.
+	 * The selected GET method is reported as the resource method; the application
+	 * still receives the original {@code HEAD} method and no response body is delivered.
 	 *
 	 * @param request    the HTTP request
 	 * @param serverType the type of server that's handling the request

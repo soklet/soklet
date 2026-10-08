@@ -156,6 +156,36 @@ class SkillPathsTests {
 	}
 
 	@Test
+	void rejectsFilesUsedAsDirectoriesRegardlessOfInputOrderOrInterveningNames() {
+		for (List<String> conflict : List.of(List.of("ref", "ref/b.md"),
+				List.of("ref", "ref-other", "ref/b.md"),
+				List.of("a/b", "a/b/c/d.md"), List.of("SKILL.md/x.md"),
+				List.of("café", "café/notes.md"), List.of("🙂", "🙂/notes.md"))) {
+			List<String> paths = new ArrayList<>(conflict);
+			paths.add("SKILL.md");
+			assertInvalid(() -> SkillPaths.from(paths));
+			java.util.Collections.reverse(paths);
+			assertInvalid(() -> SkillPaths.from(paths));
+		}
+	}
+
+	@Test
+	void acceptsSharedDirectoriesDeepPathsAndDistinctCaseSensitiveFiles() {
+		String deep = "a/".repeat(4_095) + "b";
+		List<String> paths = List.of("SKILL.md", "ref/a.md", "ref/b.md", "reference",
+				"ref-other", "REF", "Readme.md", "readme.md", "nested/SKILL.md", deep);
+		assertEquals(new HashSet<>(paths), new HashSet<>(SkillPaths.from(paths).paths()));
+	}
+
+	@Test
+	void directoryConflictDiagnosticsNeverIncludeLogicalPaths() {
+		IllegalArgumentException failure = assertInvalid(() -> SkillPaths.from(
+				List.of("SKILL.md", "private-path-canary", "private-path-canary/file.md")));
+		assertEquals("Skills logical paths must not use a file as a directory.", failure.getMessage());
+		assertFalse(failure.getMessage().contains("private-path-canary"));
+	}
+
+	@Test
 	void nullCollectionAndElementsHaveFixedNullFailures() {
 		assertNullFailure(() -> SkillPaths.from(null));
 		assertNullFailure(() -> SkillPaths.from(Arrays.asList("SKILL.md", null)));

@@ -85,6 +85,9 @@ public final class McpMetricsSnapshot {
 	private final Map<@NonNull SubscriptionTerminationKey,
 			MetricsCollector.@NonNull HistogramSnapshot> subscriptionDurations;
 	@NonNull
+	private final Map<@NonNull SubscriptionMaintenanceKey, @NonNull Long>
+			subscriptionMaintenance;
+	@NonNull
 	private final Map<@NonNull EndpointMethodKey, @NonNull Long>
 			cancelationsSignaled;
 	@NonNull
@@ -118,6 +121,8 @@ public final class McpMetricsSnapshot {
 		this.activeSubscriptions = builder.activeSubscriptions;
 		this.subscriptionDurations =
 				copySubscriptionDurations(builder.subscriptionDurations);
+		this.subscriptionMaintenance =
+				copySubscriptionMaintenanceCounts(builder.subscriptionMaintenance);
 		this.cancelationsSignaled = copyEndpointMethodCounts(
 				builder.cancelationsSignaled,
 				"MCP cancelation-signaled counts must not be negative.");
@@ -226,6 +231,22 @@ public final class McpMetricsSnapshot {
 				copied = new LinkedHashMap<>();
 		requireNonNull(subscriptionDurations).forEach((key, histogram) ->
 				copied.put(requireNonNull(key), requireNonNull(histogram)));
+		return Collections.unmodifiableMap(copied);
+	}
+
+	@NonNull
+	private static Map<@NonNull SubscriptionMaintenanceKey, @NonNull Long>
+	copySubscriptionMaintenanceCounts(
+			@NonNull Map<@NonNull SubscriptionMaintenanceKey, @NonNull Long> counts) {
+		Map<SubscriptionMaintenanceKey, Long> copied = new LinkedHashMap<>();
+		requireNonNull(counts).forEach((key, count) -> {
+			requireNonNull(key);
+			requireNonNull(count);
+			if (count < 0L)
+				throw new IllegalArgumentException(
+						"MCP subscription-maintenance counts must not be negative.");
+			copied.put(key, count);
+		});
 		return Collections.unmodifiableMap(copied);
 	}
 
@@ -467,6 +488,20 @@ public final class McpMetricsSnapshot {
 	public Map<@NonNull SubscriptionTerminationKey,
 			MetricsCollector.@NonNull HistogramSnapshot> getSubscriptionDurations() {
 		return this.subscriptionDurations;
+	}
+
+	/**
+	 * Returns delivered subscription-maintenance event counts grouped by bounded
+	 * endpoint, fixed work and fixed outcome dimensions across supported MCP
+	 * revisions. Counts include coalescing and stale-result discards; they do not
+	 * measure unique subscriptions, started attempts, durations or active work.
+	 *
+	 * @return immutable subscription-maintenance event counts
+	 */
+	@NonNull
+	public Map<@NonNull SubscriptionMaintenanceKey, @NonNull Long>
+	getSubscriptionMaintenance() {
+		return this.subscriptionMaintenance;
 	}
 
 	/**
@@ -854,6 +889,90 @@ public final class McpMetricsSnapshot {
 	}
 
 	/**
+	 * Immutable subscription-maintenance aggregate dimensions, shared across
+	 * supported MCP revisions. The endpoint is an application-configured path
+	 * declaration, never a subscription ID or arbitrary request target.
+	 *
+	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
+	 */
+	@ThreadSafe
+	public static final class SubscriptionMaintenanceKey {
+		@NonNull
+		private final String endpointPath;
+		private final McpMetricsEvent.SubscriptionMaintenance.@NonNull Work work;
+		private final McpMetricsEvent.SubscriptionMaintenance.@NonNull Outcome outcome;
+
+		/**
+		 * Creates a subscription-maintenance aggregate key.
+		 *
+		 * @param endpointPath registered endpoint-path declaration
+		 * @param maintenanceWork fixed maintenance work classification
+		 * @param maintenanceOutcome fixed observed maintenance outcome
+		 * @return subscription-maintenance aggregate key
+		 * @throws IllegalArgumentException if the endpoint path is empty
+		 */
+		@NonNull
+		public static SubscriptionMaintenanceKey fromDimensions(
+				@NonNull String endpointPath,
+				McpMetricsEvent.SubscriptionMaintenance.@NonNull Work maintenanceWork,
+				McpMetricsEvent.SubscriptionMaintenance.@NonNull Outcome maintenanceOutcome) {
+			return new SubscriptionMaintenanceKey(endpointPath, maintenanceWork,
+					maintenanceOutcome);
+		}
+
+		private SubscriptionMaintenanceKey(@NonNull String endpointPath,
+				McpMetricsEvent.SubscriptionMaintenance.@NonNull Work maintenanceWork,
+				McpMetricsEvent.SubscriptionMaintenance.@NonNull Outcome maintenanceOutcome) {
+			if (requireNonNull(endpointPath).isEmpty())
+				throw new IllegalArgumentException("Endpoint path must not be empty.");
+			this.endpointPath = endpointPath;
+			this.work = requireNonNull(maintenanceWork);
+			this.outcome = requireNonNull(maintenanceOutcome);
+		}
+
+		/** @return registered endpoint-path declaration */
+		@NonNull
+		public String getEndpointPath() {
+			return this.endpointPath;
+		}
+
+		/** @return fixed maintenance work classification */
+		public McpMetricsEvent.SubscriptionMaintenance.@NonNull Work getWork() {
+			return this.work;
+		}
+
+		/** @return fixed observed maintenance outcome */
+		public McpMetricsEvent.SubscriptionMaintenance.@NonNull Outcome getOutcome() {
+			return this.outcome;
+		}
+
+		/** @return whether all three aggregate dimensions are equal */
+		@Override
+		public boolean equals(@Nullable Object other) {
+			if (this == other)
+				return true;
+			if (!(other instanceof SubscriptionMaintenanceKey key))
+				return false;
+			return this.endpointPath.equals(key.endpointPath)
+					&& this.work == key.work && this.outcome == key.outcome;
+		}
+
+		/** @return value-based hash code */
+		@Override
+		public int hashCode() {
+			return Objects.hash(this.endpointPath, this.work, this.outcome);
+		}
+
+		/** @return diagnostic rendering with the application dimension redacted */
+		@Override
+		@NonNull
+		public String toString() {
+			return "SubscriptionMaintenanceKey{endpointPath=<redacted>, work="
+					+ this.work + ", outcome=" + this.outcome + "}";
+		}
+	}
+
+	/**
 	 * Builder for immutable {@link McpMetricsSnapshot} instances.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -900,6 +1019,9 @@ public final class McpMetricsSnapshot {
 		private Map<@NonNull SubscriptionTerminationKey,
 				MetricsCollector.@NonNull HistogramSnapshot> subscriptionDurations;
 		@NonNull
+		private Map<@NonNull SubscriptionMaintenanceKey, @NonNull Long>
+				subscriptionMaintenance;
+		@NonNull
 		private Map<@NonNull EndpointMethodKey, @NonNull Long>
 				cancelationsSignaled;
 		@NonNull
@@ -930,6 +1052,7 @@ public final class McpMetricsSnapshot {
 			this.requestStreamDurations = Map.of();
 			this.activeSubscriptions = 0L;
 			this.subscriptionDurations = Map.of();
+			this.subscriptionMaintenance = Map.of();
 			this.cancelationsSignaled = Map.of();
 			this.progressEmitted = Map.of();
 			this.keepAlivesEmitted = 0L;
@@ -1207,6 +1330,26 @@ public final class McpMetricsSnapshot {
 			this.subscriptionDurations = subscriptionDurations == null
 					? Map.of()
 					: copySubscriptionDurations(subscriptionDurations);
+			return this;
+		}
+
+		/**
+		 * Replaces delivered subscription-maintenance event counts grouped by
+		 * bounded endpoint and fixed work/outcome dimensions. Passing {@code null}
+		 * or an empty map clears these counts. The map is defensively copied;
+		 * explicit zero counts are retained.
+		 *
+		 * @param subscriptionMaintenance subscription-maintenance event counts,
+		 *                                or {@code null} to clear them
+		 * @return this builder
+		 * @throws IllegalArgumentException if any count is negative
+		 */
+		@NonNull
+		public Builder subscriptionMaintenance(
+				@Nullable Map<@NonNull SubscriptionMaintenanceKey, @NonNull Long>
+						subscriptionMaintenance) {
+			this.subscriptionMaintenance = subscriptionMaintenance == null
+					? Map.of() : copySubscriptionMaintenanceCounts(subscriptionMaintenance);
 			return this;
 		}
 

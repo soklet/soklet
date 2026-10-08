@@ -446,7 +446,8 @@ public class McpPromptPublicRuntimeTests {
 						request("invalid-" + name, "prompts/get",
 								invalidParameters), "prompts/get", name);
 				assertError(invalid, 400, -32602, "invalid-" + name);
-				Assertions.assertTrue(stages.isEmpty(), stages.toString());
+				Assertions.assertEquals(invalidParameters.contains("42") ? List.of()
+						: List.of("admission:" + name), stages);
 			}
 			Assertions.assertEquals(1, handlerInvocations.get());
 		} finally {

@@ -221,6 +221,16 @@ are not a single-use replay database: applications that require at-most-once
 approval, consumption, or side effects must persist and enforce that policy
 themselves.
 
+The maximum counts emitted continuations. A valid final-round retry may
+complete, but re-emission cannot advance past the configured maximum. Expiry
+is checked again before re-emission, so state opened immediately before its
+deadline can expire during handler execution. These sealing failures occur
+after the handler returns and produce a sanitized internal error; they do
+not undo application side effects. Public request context exposes application
+JSON only, not the framework's continuation timestamps or round. Applications
+that need workflow counters/deadlines must carry their own values in protected
+state and enforce durable consumption/idempotency separately.
+
 ## Limits and failure behavior
 
 The default limits are:
@@ -234,6 +244,14 @@ The default limits are:
 
 `McpProtectionConfig.Builder` can configure different positive values within
 its validated contract. State is never compressed.
+
+Stable-parameter digest construction is independent of these state-envelope
+limits and the 4 MiB response-output limit. It accepts validated parameters
+under the unchanged production structural/scalar limits with 32 MiB canonical
+output headroom, sufficient for requests admitted under the 16 MiB transport
+ceiling even when canonical number spelling grows. No parameter framing,
+filtering, domain, binding bytes, digest, plaintext or encryption format
+changes; existing vectors retain their exact values.
 
 Incoming empty, oversized, malformed, noncanonical, wrong-prefix, wrong-
 version, invalid-key-ID, or alternate-profile envelopes fail structural

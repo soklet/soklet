@@ -432,7 +432,7 @@ public class McpRequestStatePublicRuntimeTests {
 			HttpResponse<String> malformed = callTool(port, "malformed",
 					FRAMEWORK_TOOL, ",\"requestState\":7", "");
 			assertError(malformed, 400, -32602, "malformed");
-			assertStageCounts(0, 0, 0, 0, admissionInvocations,
+			assertStageCounts(1, 0, 0, 0, admissionInvocations,
 					protector, interceptorInvocations, handlerInvocations);
 
 			HttpResponse<String> missingCapability = callTool(port,
@@ -440,14 +440,14 @@ public class McpRequestStatePublicRuntimeTests {
 					",\"requestState\":\"tampered\"", "");
 			assertMissingRootsCapability(missingCapability,
 					"missing-capability");
-			assertStageCounts(0, 0, 0, 0, admissionInvocations,
+			assertStageCounts(2, 0, 0, 0, admissionInvocations,
 					protector, interceptorInvocations, handlerInvocations);
 
 			HttpResponse<String> tampered = callTool(port, "tampered",
 					FRAMEWORK_TOOL, ",\"requestState\":\"tampered\"",
 					ELICITATION_URL_CAPABILITY);
 			assertError(tampered, 400, -32602, "tampered");
-			assertStageCounts(1, 1, 0, 0, admissionInvocations,
+			assertStageCounts(3, 1, 0, 0, admissionInvocations,
 					protector, interceptorInvocations, handlerInvocations);
 
 			HttpResponse<String> unavailable = callTool(port, "unavailable",
@@ -459,7 +459,7 @@ public class McpRequestStatePublicRuntimeTests {
 							+ "\"error\":{\"code\":-32603,"
 							+ "\"message\":\"Internal error\"}}",
 					unavailable.body());
-			assertStageCounts(2, 2, 0, 0, admissionInvocations,
+			assertStageCounts(4, 2, 0, 0, admissionInvocations,
 					protector, interceptorInvocations, handlerInvocations);
 			Assertions.assertEquals(0, protector.seals.get());
 		} finally {

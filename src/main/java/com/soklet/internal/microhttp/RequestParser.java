@@ -149,7 +149,8 @@ class RequestParser {
         // This can be called after a parse failure to decide whether enough of the
         // request line was read to send an error response. In that case, some fields
         // are intentionally still null.
-        return new MicrohttpRequest(method, uri, version, headers, body, false, remoteAddress);
+        return new MicrohttpRequest(method, uri, version, headers, body, false, remoteAddress,
+                tokenizer.position());
     }
 
     boolean readingBody() {

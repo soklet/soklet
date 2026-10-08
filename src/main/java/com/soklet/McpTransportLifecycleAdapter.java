@@ -78,6 +78,11 @@ final class McpTransportLifecycleAdapter
 		}
 
 		@Override
+		public void signalStartupFailure(@NonNull Throwable cause) {
+			this.owner.delegate.failedStart(this.delegate, requireNonNull(cause), false);
+		}
+
+		@Override
 		@NonNull
 		public InternalLifecycleComponentType kind() {
 			return this.delegate.kind();
@@ -109,6 +114,11 @@ final class McpTransportLifecycleAdapter
 
 		boolean startAttempted() {
 			return this.delegate.startAttempted();
+		}
+
+		@Nullable
+		Throwable startupFailureCause() {
+			return this.delegate.startupFailureCause();
 		}
 	}
 

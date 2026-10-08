@@ -33,8 +33,13 @@ import static java.util.Objects.requireNonNull;
  * Immutable snapshot of incoming bytes rejected by a server before a valid
  * {@link Request} could be constructed.
  * <p>
- * The built-in standard HTTP transport retains at most 64 KiB of wire input
- * attributed to the rejected request through a parser-proven failure boundary.
+ * The built-in HTTP and SSE transports retain at most 64 KiB of wire input
+ * attributed to the rejected request through its rejection boundary. For parsing
+ * failures this is the parser-proven boundary; for a partial read timeout it is
+ * the end of the received input. HTTP validation failures after parsing (such as
+ * invalid URI encoding or body decompression failures) report the observed wire
+ * count with an empty capture and a truncated flag, without retaining another
+ * raw copy of every successfully parsed request.
  * {@link #getObservedByteCount()} reports the number of attributed bytes through
  * that boundary, while {@link #isCaptureTruncated()} indicates whether the
  * retained prefix omits any of those bytes. Bytes already read from the socket
@@ -123,7 +128,7 @@ public final class UnparsedRequest {
 
 	/**
 	 * Returns the retained prefix of exact wire bytes attributed to the rejected
-	 * request through the parser-proven failure boundary.
+	 * request through the rejection boundary.
 	 * <p>
 	 * Each invocation returns a fresh read-only view with position {@code 0} and
 	 * no accessible backing array.
@@ -137,14 +142,14 @@ public final class UnparsedRequest {
 
 	/**
 	 * Returns the number of wire bytes attributed to this rejected request through
-	 * the parser-proven failure boundary. This can be larger than the number
+	 * the rejection boundary. This can be larger than the number
 	 * returned by
 	 * {@link ByteBuffer#remaining()} on {@link #getCapturedBytes()}.
 	 * <p>
 	 * The value does not include bytes already read from the socket beyond that
 	 * boundary because they might belong to a pipelined request.
 	 *
-	 * @return the parser-attributed byte count through the failure boundary
+	 * @return the attributed wire-byte count through the failure boundary
 	 */
 	@NonNull
 	public Long getObservedByteCount() {
@@ -153,8 +158,8 @@ public final class UnparsedRequest {
 
 	/**
 	 * Indicates whether {@link #getCapturedBytes()} is an incomplete prefix of
-	 * the wire input attributed to the rejected request through the parser-proven
-	 * failure boundary.
+	 * the wire input attributed to the rejected request through its
+	 * rejection boundary.
 	 *
 	 * @return {@code true} if captured bytes were truncated
 	 */
@@ -259,7 +264,7 @@ public final class UnparsedRequest {
 		 * Sets the number of wire bytes attributed to this rejected request through
 		 * its failure boundary.
 		 *
-		 * @param observedByteCount parser-attributed byte count through the failure
+		 * @param observedByteCount attributed wire-byte count through the failure
 		 * boundary
 		 * @return this builder
 		 * @throws NullPointerException if {@code observedByteCount} is {@code null}

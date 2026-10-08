@@ -83,6 +83,8 @@ final class SokletFrameworkSetup {
 					startupContext, waiter));
 			validateConfiguredTransports(snapshot);
 			validateNoRemovedHttpServerInjection(snapshot);
+			for (ResourceMethod resourceMethod : snapshot)
+				validateConfiguredResourceMethod(this.config, resourceMethod);
 			initializeMetrics();
 			this.resourceMethods.set(snapshot);
 			this.state.set(State.SUCCEEDED);
@@ -177,6 +179,14 @@ final class SokletFrameworkSetup {
 				throw unsupportedHttpServerParameter(resourceMethod, parameter,
 						normalizedType);
 		}
+	}
+
+	static void validateConfiguredResourceMethod(@NonNull SokletConfig config, @NonNull ResourceMethod resourceMethod) {
+		validateNoRemovedHttpServerInjection(resourceMethod);
+		if (config.getResourceMethodParameterProvider() instanceof DefaultResourceMethodParameterProvider)
+			ResourceMethodBindingValidation.validate(resourceMethod);
+		if (config.getInstanceProvider() instanceof DefaultInstanceProvider)
+			DefaultInstanceProvider.validateInstanceClass(resourceMethod.getMethod().getDeclaringClass());
 	}
 
 	@NonNull

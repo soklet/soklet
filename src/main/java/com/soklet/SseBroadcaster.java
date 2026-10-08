@@ -93,7 +93,12 @@ public interface SseBroadcaster {
 	 * <p>
 	 * This method is designed for high-scale scenarios where generating the payload is expensive (e.g. JSON serialization with localization) and the number of distinct variations (keys) is significantly smaller than the number of clients.
 	 * <p>
-	 * The implementation guarantees that {@code eventProvider} is called exactly once per unique key derived by {@code keySelector} among the currently active clients.
+	 * For each broadcast invocation, the implementation guarantees that {@code eventProvider} is called exactly once
+	 * per unique key derived by {@code keySelector} among the currently active clients. The key may be {@code null}.
+	 * Provider and payload-serialization failures are retained for that invocation: affected clients receive no payload,
+	 * other keys continue, and a later broadcast may try the failed key again. The built-in server logs a generation
+	 * failure once per key with its affected client count and cause, without rendering the key or client contexts.
+	 * A key-selector failure remains per client because no key was obtained.
 	 * <p>
 	 * In practice, implementations will generally return "immediately" and broadcast operation[s] will occur on separate threads of execution.
 	 * <p>
@@ -126,7 +131,12 @@ public interface SseBroadcaster {
 	 * <p>
 	 * This follows the same memoization pattern as {@link #broadcastEvent(Function, Function)}.
 	 * <p>
-	 * The implementation guarantees that {@code commentProvider} is called exactly once per unique key derived by {@code keySelector} among the currently active clients.
+	 * For each broadcast invocation, the implementation guarantees that {@code commentProvider} is called exactly once
+	 * per unique key derived by {@code keySelector} among the currently active clients. The key may be {@code null}.
+	 * Provider and payload-serialization failures are retained for that invocation: affected clients receive no payload,
+	 * other keys continue, and a later broadcast may try the failed key again. The built-in server logs a generation
+	 * failure once per key with its affected client count and cause, without rendering the key or client contexts.
+	 * A key-selector failure remains per client because no key was obtained.
 	 * <p>
 	 * In practice, implementations will generally return "immediately" and broadcast operation[s] will occur on separate threads of execution.
 	 * <p>

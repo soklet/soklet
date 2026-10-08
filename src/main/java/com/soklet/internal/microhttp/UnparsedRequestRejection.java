@@ -33,7 +33,9 @@ public final class UnparsedRequestRejection {
         MALFORMED_REQUEST,
         REQUEST_TARGET_TOO_LONG,
         EXPECTATION_FAILED,
-        REQUEST_HEADERS_TOO_LARGE
+        REQUEST_HEADERS_TOO_LARGE,
+        REQUEST_READ_TIMEOUT,
+        REQUEST_TOO_LARGE
     }
 
     private final Reason reason;

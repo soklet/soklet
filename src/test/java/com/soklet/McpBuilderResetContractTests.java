@@ -359,8 +359,8 @@ public class McpBuilderResetContractTests {
 						"/mcp", McpStreamTerminationReason.COMPLETED);
 		MetricsCollector.HistogramSnapshot histogram =
 				new MetricsCollector.HistogramSnapshot(
-						new long[]{Long.MAX_VALUE}, new long[]{1L},
-						1L, 1L, 1L, 1L);
+						List.of(Long.MAX_VALUE), List.of(1L),
+						1L, 1D, 1L, 1L);
 
 		McpMetricsSnapshot reset = McpMetricsSnapshot.builder()
 				.serverStops(Map.of(

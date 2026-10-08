@@ -352,6 +352,7 @@ public class McpObservabilityPublicApiTests {
 				Map.entry("getRequestStreamDurations", Map.class),
 				Map.entry("getActiveSubscriptions", Long.class),
 				Map.entry("getSubscriptionDurations", Map.class),
+				Map.entry("getSubscriptionMaintenance", Map.class),
 				Map.entry("getCancelationsSignaled", Map.class),
 				Map.entry("getProgressEmitted", Map.class),
 				Map.entry("getKeepAlivesEmitted", Long.class),
@@ -363,7 +364,7 @@ public class McpObservabilityPublicApiTests {
 					.filter(method -> !Modifier.isStatic(method.getModifiers()))
 					.collect(Collectors.toUnmodifiableMap(Method::getName,
 							Method::getReturnType));
-		Assertions.assertEquals(22, actualGetters.size());
+		Assertions.assertEquals(23, actualGetters.size());
 		Assertions.assertEquals(expectedGetters, actualGetters);
 		for (String getterName : expectedGetters.keySet()) {
 			Method getter = McpMetricsSnapshot.class.getMethod(getterName);
@@ -417,6 +418,8 @@ public class McpObservabilityPublicApiTests {
 								McpMetricsSnapshot.Builder.class, Map.class)),
 						Map.entry("activeSubscriptions", methodSignature(
 								McpMetricsSnapshot.Builder.class, Long.class)),
+						Map.entry("subscriptionMaintenance", methodSignature(
+								McpMetricsSnapshot.Builder.class, Map.class)),
 						Map.entry("subscriptionDurations", methodSignature(
 								McpMetricsSnapshot.Builder.class, Map.class)),
 						Map.entry("cancelationsSignaled", methodSignature(
@@ -436,12 +439,12 @@ public class McpObservabilityPublicApiTests {
 						.collect(Collectors.toUnmodifiableMap(Method::getName,
 								method -> methodSignature(method.getReturnType(),
 										method.getParameterTypes())));
-		Assertions.assertEquals(23, actualBuilderMethods.size());
+		Assertions.assertEquals(24, actualBuilderMethods.size());
 		Assertions.assertEquals(expectedBuilderMethods, actualBuilderMethods);
 		Set<String> nullableMapBuilderMethods = Set.of(
 				"serverStops", "transportFailures", "requests",
 				"requestDurations", "requestStreamDurations",
-				"subscriptionDurations", "cancelationsSignaled",
+				"subscriptionDurations", "subscriptionMaintenance", "cancelationsSignaled",
 				"progressEmitted", "protocolErrors",
 				"unknownMirroredHeaders");
 		for (Method method : McpMetricsSnapshot.Builder.class.getDeclaredMethods()) {
@@ -482,16 +485,26 @@ public class McpObservabilityPublicApiTests {
 				"unknownMirroredHeaders", Map.class).getGenericParameterTypes()[0],
 				McpMetricsSnapshot.EndpointMethodKey.class);
 
+		assertCounterMapSignature(McpMetricsSnapshot.class.getMethod(
+				"getSubscriptionMaintenance").getGenericReturnType(),
+				McpMetricsSnapshot.SubscriptionMaintenanceKey.class);
+		assertCounterMapSignature(McpMetricsSnapshot.Builder.class.getMethod(
+				"subscriptionMaintenance", Map.class).getGenericParameterTypes()[0],
+				McpMetricsSnapshot.SubscriptionMaintenanceKey.class);
+
 		DefaultMetricsCollector defaultCollector =
 				DefaultMetricsCollector.defaultInstance();
-		List<McpMetricsEvent> nonAggregatedEvents = List.of(
+		List<McpMetricsEvent> maintenanceEvents = List.of(
 				McpMetricsEvent.subscriptionMaintenance("/mcp",
 						McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
 						McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED));
-		Assertions.assertEquals(1, nonAggregatedEvents.size());
-		nonAggregatedEvents.forEach(defaultCollector::didRecordMcpMetricsEvent);
-		Assertions.assertSame(McpMetricsSnapshot.emptyInstance(),
-				defaultCollector.snapshot().orElseThrow().getMcpMetrics());
+		Assertions.assertEquals(1, maintenanceEvents.size());
+		maintenanceEvents.forEach(defaultCollector::didRecordMcpMetricsEvent);
+		Assertions.assertEquals(Map.of(
+				McpMetricsSnapshot.SubscriptionMaintenanceKey.fromDimensions("/mcp",
+						McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
+						McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED), 1L),
+				defaultCollector.snapshot().orElseThrow().getMcpMetrics().getSubscriptionMaintenance());
 
 		// Public event factories remain application-owned value carriers. This
 		// gate freezes Soklet's built-in schema, not arbitrary nonempty values an

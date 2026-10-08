@@ -38,6 +38,42 @@ class McpLegacySessionTransportSimulatorTests {
 	private static final Set<McpProtocolVersion> ALL = Set.of(McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28);
 
 	@Test
+	void getAndDeleteSnapshotsUseTheConfiguredEndpointInSimulation() throws Exception {
+		for (McpProtocolVersion version : LEGACY) {
+			MetricsCollector collector = MetricsCollector.defaultInstance();
+			SokletSimulator.run(configuration(new CopyOnWriteArrayList<>(), Set.of(version), collector), simulator -> {
+				String id = initialize(simulator, version);
+				try (McpSimulation get = simulator.startMcpRequest(request(HttpMethod.GET, version, id, ""))) {
+					assertEquals(200, get.awaitResponse(WAIT).orElseThrow().getStatusCode());
+					assertEquals(1L, collector.snapshot().orElseThrow().getActiveRequests());
+					try (McpSimulation delete = simulator.startMcpRequest(request(HttpMethod.DELETE, version, id, ""))) {
+						assertEquals(204, delete.awaitResponse(WAIT).orElseThrow().getStatusCode());
+						delete.awaitCompletion(WAIT).orElseThrow();
+					}
+					assertEquals(McpStreamTerminationReason.SESSION_CLOSED, get.awaitCompletion(WAIT).orElseThrow().getReason());
+				}
+				long until = System.nanoTime() + WAIT.toNanos();
+				while (collector.snapshot().orElseThrow().getActiveRequests() != 0L && System.nanoTime() < until)
+					Thread.sleep(5);
+				MetricsCollector.Snapshot snapshot = collector.snapshot().orElseThrow();
+				assertEquals(0L, snapshot.getActiveRequests());
+				assertEquals(2, snapshot.getHttpRequestDurations().size());
+				for (HttpMethod method : List.of(HttpMethod.GET, HttpMethod.DELETE)) {
+					var key = new MetricsCollector.HttpServerRouteStatusKey(method, MetricsCollector.RouteType.MATCHED,
+							ResourcePathDeclaration.fromPath("/mcp"), "2xx");
+					assertNotNull(snapshot.getHttpRequestDurations().get(key));
+					assertEquals(1L, snapshot.getHttpRequestDurations().get(key).getCount());
+				}
+				for (MetricsCollector.MetricsFormat format : MetricsCollector.MetricsFormat.values()) {
+					String text = collector.snapshotText(MetricsCollector.SnapshotTextOptions.withMetricsFormat(format).build()).orElseThrow();
+					assertTrue(text.contains("route=\"/mcp\""));
+					assertFalse(text.contains("route=\"unmatched\""));
+				}
+			});
+		}
+	}
+
+	@Test
 	void singleLegacyViewSupportsHeaderlessGetAndDeleteWithVerifiedSession() throws Exception {
 		for (McpProtocolVersion version : LEGACY)
 			SokletSimulator.run(configuration(new CopyOnWriteArrayList<>(), Set.of(version)), simulator -> {
@@ -187,6 +223,11 @@ class McpLegacySessionTransportSimulatorTests {
 	}
 
 	private static SimulatorConfig configuration(List<McpSessionTransportAdmissionContext> contexts, Set<McpProtocolVersion> versions) {
+		return configuration(contexts, versions, null);
+	}
+
+	private static SimulatorConfig configuration(List<McpSessionTransportAdmissionContext> contexts, Set<McpProtocolVersion> versions,
+			MetricsCollector metricsCollector) {
 		McpAdmissionIdentity identity = McpAdmissionIdentity.withRateLimitPartitionKey("owner")
 				.authorizationPartitionKey("owner").principal("owner").build();
 		Set<McpProtocolVersion> legacyVersions = versions.stream().filter(LEGACY::contains)
@@ -195,7 +236,7 @@ class McpLegacySessionTransportSimulatorTests {
 				.sessionProtocolVersions(legacyVersions).subscriptionProtocolVersions(legacyVersions)
 				.subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(McpSubscriptionEventPublisher.fromInMemoryDefaults(),
 						Set.of(McpSubscriptionNotificationType.TOOLS_LIST_CHANGED)).build()).build();
-		return SimulatorConfig.builder().configureMcpServer(builder -> builder.port(0).host("127.0.0.1")
+		return SimulatorConfig.builder().metricsCollector(metricsCollector).configureMcpServer(builder -> builder.port(0).host("127.0.0.1")
 				.allowedHosts(Set.of("127.0.0.1")).corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.admissionController(context -> McpAdmissionDecision.accepted(identity))

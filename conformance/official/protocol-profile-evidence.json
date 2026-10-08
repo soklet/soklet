@@ -29,7 +29,7 @@
         },
         {
           "path": "conformance/golden-http-contract/precedence-no-store/manifest.sha256",
-          "sha256": "29eb9f597e2d7a8c2268e35918217342b994802868c4bf14309c04c06ac6891a"
+          "sha256": "ccec7ec13ac245bbc4a1820b1c387b188347a3ef868d4128e3af5c3a6e331e92"
         },
         {
           "path": "conformance/golden-http-head/authorization-cors/manifest.sha256",

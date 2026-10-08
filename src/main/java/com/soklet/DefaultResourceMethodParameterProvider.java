@@ -64,6 +64,11 @@ import static java.util.Objects.requireNonNullElse;
  */
 @ThreadSafe
 final class DefaultResourceMethodParameterProvider implements ResourceMethodParameterProvider {
+	// Default registries share this converter. Identify it by identity so explicit
+	// String converters keep control over empty suffix conversion and rejection.
+	@NonNull
+	private static final ValueConverter<Object, Object> DEFAULT_STRING_VALUE_CONVERTER =
+			ValueConverterRegistry.fromDefaults().get(String.class, String.class).orElseThrow();
 	@NonNull
 	private static final Map<@NonNull Type, @NonNull Object> DEFAULT_VALUES_BY_PRIMITIVE_TYPE;
 
@@ -96,6 +101,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 		requireNonNull(request);
 		requireNonNull(resourceMethod);
 		requireNonNull(sokletConfig);
+		ResourceMethodBindingValidation.validate(resourceMethod);
 
 		Parameter[] parameters = resourceMethod.getMethod().getParameters();
 		List<@Nullable Object> parametersToPass = new ArrayList<>(parameters.length);
@@ -161,14 +167,21 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 
 			// Special check for varargs: it must be of type String
 			ResourcePathDeclaration.Component varargsComponent = resourceMethod.getResourcePathDeclaration().getVarargsComponent().orElse(null);
+			boolean varargsParameter = varargsComponent != null && Objects.equals(varargsComponent.getValue(), pathParameterName);
 
-			if (varargsComponent != null
-					&& Objects.equals(varargsComponent.getValue(), pathParameterName)
-					&& !parameter.getType().equals(String.class))
+			if (varargsParameter && !parameter.getType().equals(String.class))
 				throw new IllegalStateException(format("Path parameter '%s' for resource method %s is defined as supporting varargs. Its type was declared as %s, but varargs path parameters must be of type %s.",
 						pathParameterName, resourceMethod, parameter.getType(), String.class));
 
 			ValueConverter<Object, Object> valueConverter = valueConverterFor(parameter, String.class, parameter.getType(), resourceMethod);
+
+			// Zero matched suffix components is a present empty value, not a
+			// missing path parameter. Preserve it only for built-in conversion.
+			@SuppressWarnings("ReferenceEquality")
+			boolean defaultEmptyVarargs = varargsParameter && pathParameterValue.isEmpty()
+					&& valueConverter == DEFAULT_STRING_VALUE_CONVERTER;
+			if (defaultEmptyVarargs)
+				return pathParameterValue;
 
 			Object result;
 

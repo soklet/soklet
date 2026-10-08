@@ -63,5 +63,21 @@ public class McpExecutionDefaultsTests {
 					configuration.handlerQueueCapacity());
 		}
 	}
+	@Test
+	public void application_workers_are_daemon_for_every_supported_strategy() throws Exception {
+		for (McpThreadStrategy strategy : McpThreadStrategy.values()) {
+			if (!strategy.supported()) continue;
+			java.util.concurrent.ExecutorService executor = strategy.createExecutor(1, "daemon-strategy-", (thread, failure) -> { });
+			try {
+				Thread worker = executor.submit(Thread::currentThread).get(2, java.util.concurrent.TimeUnit.SECONDS);
+				Assertions.assertTrue(worker.isDaemon());
+				Assertions.assertTrue(worker.getName().startsWith("daemon-strategy-"));
+			} finally {
+				executor.shutdownNow();
+				Assertions.assertTrue(executor.awaitTermination(2, java.util.concurrent.TimeUnit.SECONDS));
+			}
+		}
+	}
+
 }
 

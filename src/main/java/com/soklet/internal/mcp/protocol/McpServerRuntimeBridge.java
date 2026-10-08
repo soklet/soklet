@@ -98,6 +98,12 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class McpServerRuntimeBridge {
+	/** Construction and transport share the same bounded policy-header validator. */
+	public static void validateAdmissionRejectionHeaders(
+			@NonNull Map<@NonNull String, ? extends @NonNull List<@NonNull String>> headers) {
+		McpHttpServerRuntime.validateAdmissionRejectionHeaders(headers);
+	}
+
 	@NonNull
 	private static final String TASKS_EXTENSION_IDENTIFIER =
 			"io.modelcontextprotocol/tasks";
@@ -3905,6 +3911,11 @@ public final class McpServerRuntimeBridge {
 			boolean coordinatorOwnsUnexpectedTermination();
 
 			void signalTerminationFailure(@NonNull Throwable cause);
+
+			/** Records a synchronous start throw, distinct from an independent listener failure. */
+			default void signalStartupFailure(@NonNull Throwable cause) {
+				signalTerminationFailure(cause);
+			}
 		}
 
 		@NonNull
@@ -4517,6 +4528,8 @@ public final class McpServerRuntimeBridge {
 		if (taskSnapshot.isEmpty())
 			throw new McpInvalidApplicationInputException();
 		TaskSnapshot snapshot = taskSnapshot.orElseThrow();
+		requireTaskInputCapabilities(snapshot,
+				invocation.request().params().metadata().clientCapabilities());
 		return taskResult(snapshot, false);
 	}
 
@@ -5363,9 +5376,10 @@ public final class McpServerRuntimeBridge {
 					McpStreamTerminationReason.CLIENT_DISCONNECTED;
 			case APPLICATION_CANCELED, CLIENT_CANCELED ->
 					McpStreamTerminationReason.REQUEST_CANCELED;
-			case RESPONSE_TIMEOUT, RESPONSE_IDLE_TIMEOUT ->
+			case RESPONSE_TIMEOUT ->
 					McpStreamTerminationReason.DEADLINE_EXCEEDED;
-			case WRITE_FAILED -> McpStreamTerminationReason.WRITE_FAILED;
+			case RESPONSE_IDLE_TIMEOUT, WRITE_FAILED ->
+					McpStreamTerminationReason.WRITE_FAILED;
 			case BACKPRESSURE -> McpStreamTerminationReason.BACKPRESSURE;
 			case SERVER_STOPPING -> McpStreamTerminationReason.SERVER_STOPPING;
 			case CLEANUP_TIMEOUT, PROTOCOL_UNSUPPORTED, PRODUCER_FAILED, INTERNAL_ERROR,

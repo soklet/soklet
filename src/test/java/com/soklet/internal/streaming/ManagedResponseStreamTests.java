@@ -584,7 +584,7 @@ public class ManagedResponseStreamTests {
 		private final List<Throwable> failures = new CopyOnWriteArrayList<>();
 		private final List<Throwable> cleanupFailures = new CopyOnWriteArrayList<>();
 		private final ManagedResponseStream stream = new ManagedResponseStream(this.request, this.token,
-				this.deadline, this.idleTimeout, this.output, () -> {
+				() -> false, this.deadline, this.idleTimeout, this.output, () -> {
 			this.finalizations.incrementAndGet();
 			this.finalizationEntered.countDown();
 		}, throwable -> {

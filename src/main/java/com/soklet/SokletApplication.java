@@ -21,12 +21,8 @@ import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.ThreadSafe;
-import java.io.BufferedReader;
-import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
@@ -51,9 +47,46 @@ import static java.util.Objects.requireNonNull;
  * nor closes standard input. Each registration is released before a run
  * returns or throws, except that a JVM shutdown hook already executing is
  * allowed to complete with the process.
+ * The optional stdin listener does not add read-ahead buffers. If its last
+ * registration is removed during a blocking read, that daemon listener may
+ * consume the one pending byte before retiring; it cannot portably cancel the
+ * read without closing process-owned stdin. Reserve stdin for the trigger
+ * until that pending read completes.
  * Application cleanup begins only after a complete core shutdown. A cleanup
  * timeout bounds the runner's wait and reporting; it does not imply that
  * arbitrary application cleanup code was forcibly stopped.
+ * <p>
+ * Finalization attempts a {@code soklet-terminal-report} directly on
+ * standard error, captured when the run's runtime is created, when the
+ * runner's primary outcome indicates failure, startup failed or timed out, shutdown is
+ * forced or incomplete, a component terminated unexpectedly, or application
+ * cleanup failed or timed out. A complete forced shutdown therefore still
+ * triggers a report; ordinary expected graceful shutdown does not.
+ * This diagnostic bypasses {@link LifecycleObserver} and {@link LogEvent}.
+ * It is capped at 16 KiB of valid UTF-8 and reports failure class names
+ * without exception messages, stack traces or cause/suppressed traversal.
+ * Reporting is best effort with one shared 250-millisecond finalization
+ * allowance; reporter failure or timeout does not replace the lifecycle
+ * result. A blocked output worker may remain after that allowance. No public
+ * reporter switch is provided; configure process stderr capture as needed.
+ * <p>
+ * Shutdown requested during startup may return a terminal result without
+ * reaching readiness; it does not by itself cause a startup exception.
+ * Inspect the returned result to determine the lifecycle outcome.
+ * <p>
+ * JVM shutdown hooks run concurrently with no guaranteed ordering. On a
+ * signal-driven JVM shutdown, the JVM may terminate before {@code run(...)},
+ * a caller's {@code finally} block, or post-run code can finish. Put required
+ * application cleanup in bounded {@link ShutdownCleanup} and coordinate any
+ * independently registered logging/resource shutdown hooks. The runner does
+ * not choose a process exit status.
+ * <p>
+ * Soklet-created auxiliary workers are daemon threads. A residual handler or
+ * callback therefore does not by itself keep the JVM alive after this run
+ * ends, but daemon status does not establish termination proof or make an
+ * incomplete result complete. Running built-in listeners retain process
+ * liveness. Custom transports and supplied executors own their thread and
+ * process-liveness policies.
  */
 @ThreadSafe
 public final class SokletApplication {
@@ -86,7 +119,9 @@ public final class SokletApplication {
 	 *
 	 * @param sokletConfig the one-shot Soklet configuration
 	 * @return the exact immutable lifecycle result
-	 * @throws SokletStartupException if startup does not reach readiness
+	 * @throws TransportOwnershipException if a configured transport identity
+	 * has already been claimed by another lifecycle
+	 * @throws SokletStartupException if startup or process-hook registration fails
 	 * @throws SokletUnexpectedTerminationException if a transport terminates
 	 * unexpectedly after readiness
 	 * @throws SokletShutdownIncompleteException if shutdown cannot be proven complete
@@ -107,7 +142,9 @@ public final class SokletApplication {
 	 * @param additionalShutdownTriggers non-null additional shutdown triggers
 	 * installed and later released by this runner; each element must be non-null
 	 * @return the exact immutable lifecycle result
-	 * @throws SokletStartupException if startup does not reach readiness
+	 * @throws TransportOwnershipException if a configured transport identity
+	 * has already been claimed by another lifecycle
+	 * @throws SokletStartupException if startup or process-hook registration fails
 	 * @throws SokletUnexpectedTerminationException if a transport terminates
 	 * unexpectedly after readiness
 	 * @throws SokletShutdownIncompleteException if shutdown cannot be proven complete
@@ -119,7 +156,8 @@ public final class SokletApplication {
 	}
 
 	/**
-	 * Creates a configured, one-shot standalone application.
+	 * Creates a configured, one-shot standalone application. Transport
+	 * identities are claimed when {@code run(...)} begins, not by this factory.
 	 *
 	 * @param sokletConfig the one-shot Soklet configuration
 	 * @return a configured standalone application
@@ -139,7 +177,9 @@ public final class SokletApplication {
 	 * status before returning or throwing.
 	 *
 	 * @return the exact immutable lifecycle result
-	 * @throws SokletStartupException if startup does not reach readiness
+	 * @throws TransportOwnershipException if a configured transport identity
+	 * has already been claimed by another lifecycle
+	 * @throws SokletStartupException if startup or process-hook registration fails
 	 * @throws SokletUnexpectedTerminationException if a transport terminates
 	 * unexpectedly after readiness
 	 * @throws SokletShutdownIncompleteException if shutdown cannot be proven complete
@@ -162,7 +202,9 @@ public final class SokletApplication {
 	 * @param additionalShutdownTriggers non-null additional shutdown triggers
 	 * installed and later released by this runner; each element must be non-null
 	 * @return the exact immutable lifecycle result
-	 * @throws SokletStartupException if startup does not reach readiness
+	 * @throws TransportOwnershipException if a configured transport identity
+	 * has already been claimed by another lifecycle
+	 * @throws SokletStartupException if startup or process-hook registration fails
 	 * @throws SokletUnexpectedTerminationException if a transport terminates
 	 * unexpectedly after readiness
 	 * @throws SokletShutdownIncompleteException if shutdown cannot be proven complete
@@ -191,7 +233,9 @@ public final class SokletApplication {
 	 * @param additionalShutdownTriggers non-null additional shutdown triggers
 	 * installed and later released by this runner; each element must be non-null
 	 * @return the exact immutable lifecycle result
-	 * @throws SokletStartupException if startup does not reach readiness
+	 * @throws TransportOwnershipException if a configured transport identity
+	 * has already been claimed by another lifecycle
+	 * @throws SokletStartupException if startup or process-hook registration fails
 	 * @throws SokletUnexpectedTerminationException if a transport terminates
 	 * unexpectedly after readiness
 	 * @throws SokletShutdownIncompleteException if shutdown cannot be proven complete
@@ -750,8 +794,11 @@ final class SokletApplicationInputManager
 		}
 		AtomicBoolean registered = new AtomicBoolean(true);
 		return () -> {
-			if (registered.compareAndSet(true, false))
-				this.registrations.remove(registration);
+			if (registered.compareAndSet(true, false)) {
+				synchronized (this.listenerMonitor) {
+					this.registrations.remove(registration);
+				}
+			}
 		};
 	}
 
@@ -784,53 +831,48 @@ final class SokletApplicationInputManager
 	private void runListener(@NonNull InputStream input, long generation) {
 		String warning = null;
 		List<Registration> warningRegistrations = List.of();
-		long observedRegistrationEpoch = registrationEpoch();
-		try (BufferedReader reader = new BufferedReader(new InputStreamReader(
-				new NonClosingInputStream(requireNonNull(input)),
-				StandardCharsets.UTF_8))) {
+		long observedRegistrationEpoch = 0L;
+		try {
 			for (;;) {
-				observedRegistrationEpoch = registrationEpoch();
-				String line = reader.readLine();
-				if (line == null) {
-					warning = "Ignoring ENTER_KEY shutdown because stdin reached EOF";
-					warningRegistrations = List.copyOf(this.registrations);
-					break;
+				synchronized (this.listenerMonitor) {
+					observedRegistrationEpoch = this.registrationEpoch;
+					if (this.registrations.isEmpty())
+						return;
 				}
-				broadcastShutdownIntent();
-				// ENTER_KEY registrations are one-shot for a completed run.  Retire
-				// this reader after the triggering line so it cannot consume input
-				// belonging to code that runs after Soklet shuts down.  If a new
-				// registration arrived during a callback, retireListener's epoch
-				// handoff starts a fresh listener generation for it.
+				// Never add decoder/read-ahead buffers to borrowed process stdin.
+				// Unregistration cannot portably cancel this one blocking byte read
+				// without closing stdin; recheck before starting any further read.
+				int value = requireNonNull(input).read();
+				List<Registration> snapshot;
+				synchronized (this.listenerMonitor) {
+					observedRegistrationEpoch = this.registrationEpoch;
+					if (this.registrations.isEmpty())
+						return;
+					if (value < 0) {
+						warning = "Ignoring ENTER_KEY shutdown because stdin reached EOF";
+						warningRegistrations = List.copyOf(this.registrations);
+						break;
+					}
+					if (value != '\n' && value != '\r')
+						continue;
+					snapshot = List.copyOf(this.registrations);
+				}
+				broadcastShutdownIntent(snapshot);
+				// Only registrations created during delivery need a fresh listener.
 				break;
 			}
 		} catch (IOException | RuntimeException failure) {
 			warning = "Ignoring ENTER_KEY shutdown because stdin became unusable";
-			warningRegistrations = List.copyOf(this.registrations);
+			synchronized (this.listenerMonitor) {
+				observedRegistrationEpoch = this.registrationEpoch;
+				warningRegistrations = List.copyOf(this.registrations);
+			}
 		} finally {
 			retireListener(generation, observedRegistrationEpoch);
 		}
 		if (warning != null) {
 			for (Registration registration : warningRegistrations)
 				registration.warnOnce(warning);
-		}
-	}
-
-	/** Closes decoder buffers without taking ownership of process stdin. */
-	private static final class NonClosingInputStream extends FilterInputStream {
-		private NonClosingInputStream(@NonNull InputStream input) {
-			super(requireNonNull(input));
-		}
-
-		@Override
-		public void close() {
-			// The process owns stdin; a retired listener must leave it available.
-		}
-	}
-
-	private long registrationEpoch() {
-		synchronized (this.listenerMonitor) {
-			return this.registrationEpoch;
 		}
 	}
 
@@ -854,8 +896,7 @@ final class SokletApplicationInputManager
 		}
 	}
 
-	private void broadcastShutdownIntent() {
-		List<Registration> snapshot = List.copyOf(this.registrations);
+	private void broadcastShutdownIntent(@NonNull List<Registration> snapshot) {
 		for (Registration registration : snapshot) {
 			try {
 				registration.shutdownIntent().run();

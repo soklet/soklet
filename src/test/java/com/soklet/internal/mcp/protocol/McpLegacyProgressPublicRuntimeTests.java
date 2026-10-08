@@ -332,6 +332,17 @@ public class McpLegacyProgressPublicRuntimeTests {
 
 	@Test
 	public void committedDisconnectDetachesTheWriterAndRetainsUncanceledPhysicalWork() throws Exception {
+		assertCommittedDisconnect(McpChunkedHttpClient.DisconnectMode.RESET);
+	}
+
+	@Test
+	public void inputEndDetachesLegacyWriterAndRetainsUncanceledPhysicalWork() throws Exception {
+		for (McpChunkedHttpClient.DisconnectMode mode : List.of(McpChunkedHttpClient.DisconnectMode.CLOSE,
+				McpChunkedHttpClient.DisconnectMode.INPUT_END))
+			assertCommittedDisconnect(mode);
+	}
+
+	private void assertCommittedDisconnect(McpChunkedHttpClient.DisconnectMode mode) throws Exception {
 		for (McpProtocolVersion version : LEGACY) {
 			Gate gate = new Gate();
 			CountDownLatch streamClosed = new CountDownLatch(1);
@@ -351,8 +362,8 @@ public class McpLegacyProgressPublicRuntimeTests {
 						toolParams("held"), "\"held\"", "\"token\"")) {
 					assertSseHead(client.readHead());
 					assertEquals(progress("\"token\"", "1"), client.readChunkText());
-					client.closeWithReset();
-					assertTrue(streamClosed.await(5, TimeUnit.SECONDS));
+					client.disconnect(mode);
+					assertTrue(streamClosed.await(2, TimeUnit.SECONDS), "Input end must detach before the handler wait bound.");
 					assertFalse(gate.token.get().isCanceled());
 					assertEquals(1, gate.canceled.getCount());
 					assertEquals(1, server.getDiagnostics().getActiveHandlerExecutions(),

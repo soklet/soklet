@@ -109,6 +109,49 @@ class McpSkillBundleTests {
 	}
 
 	@Test
+	void fileDirectoryConflictsFailBeforeRootParsingInEitherMapOrder() {
+		for (List<String> paths : List.of(List.of("private-path-canary", "private-path-canary/file.md", "SKILL.md"),
+				List.of("SKILL.md", "private-path-canary/file.md", "private-path-canary"),
+				List.of("SKILL.md", "SKILL.md/file.md"))) {
+			Map<String, byte[]> files = new LinkedHashMap<>();
+			for (String path : paths) files.put(path, new byte[]{(byte) 0xff});
+			IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
+					() -> McpSkillBundle.fromFiles(files));
+			assertEquals("Skills logical paths must not use a file as a directory.", failure.getMessage());
+			assertNull(failure.getCause());
+		}
+	}
+
+	@Test
+	void distinctCaseSensitivePathsRetainExactNamesAndBytes() {
+		McpSkillBundle bundle = McpSkillBundle.fromFiles(Map.of("SKILL.md", ROOT,
+				"README.md", new byte[]{1}, "readme.md", new byte[]{2}, "REF", new byte[]{3},
+				"ref/a.md", new byte[]{4}));
+		assertArrayEquals(new byte[]{1}, bundle.findFileBytes("README.md").orElseThrow());
+		assertArrayEquals(new byte[]{2}, bundle.findFileBytes("readme.md").orElseThrow());
+		assertArrayEquals(new byte[]{3}, bundle.findFileBytes("REF").orElseThrow());
+		assertArrayEquals(new byte[]{4}, bundle.findFileBytes("ref/a.md").orElseThrow());
+		assertTrue(bundle.findFileBytes("Readme.md").isEmpty());
+	}
+
+	@Test
+	void metadataErrorsIdentifyFieldsAndRulesThroughThePublicFactory() {
+		for (Map.Entry<String, String> invalid : Map.of(
+				"name: private-name-canary\ndescription: '" + "a".repeat(1_025) + "'\n",
+				"Skills field 'description' exceeds 1024 code points.",
+				"name: test-skill\ndescription: Private-description-canary\nallowed-tools: [private-tool-canary]\n",
+				"Skills field 'allowed-tools' must be a string.",
+				"name: test-skill\ndescription: Description\nmetadata: {private-key-canary: false}\n",
+				"Skills field 'metadata' must contain only string values.").entrySet()) {
+			byte[] document = ("---\n" + invalid.getKey() + "---\nOpaque body.\n").getBytes(StandardCharsets.UTF_8);
+			IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
+					() -> McpSkillBundle.fromFiles(Map.of("SKILL.md", document)));
+			assertEquals(invalid.getValue(), failure.getMessage());
+			assertNull(failure.getCause());
+		}
+	}
+
+	@Test
 	void diagnosticsAreFixedAndDoNotExposeOwnedContent() {
 		McpSkillBundle bundle = McpSkillBundle.fromFiles(Map.of("SKILL.md", ROOT, "private-path-canary", new byte[0]));
 		assertEquals("McpSkillBundle[redacted]", bundle.toString());

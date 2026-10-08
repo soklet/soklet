@@ -52,6 +52,10 @@ import static java.util.Objects.requireNonNull;
  *   <li>{@link #builder()} ("empty" builder suitable for constructing special cases like {@code retry}-only or {@code id}-only events.)</li>
  * </ul>
  * <p>
+ * Browser {@code EventSource} dispatches a message only when the payload includes a {@code data} field.
+ * An event name alone does not dispatch a message. Use {@code .data("")} to dispatch an event with empty data.
+ * {@code id}-only and {@code retry}-only payloads update the client's reconnect state without dispatching a message.
+ * <p>
  * See <a href="https://www.soklet.com/docs/server-sent-events">https://www.soklet.com/docs/server-sent-events</a> for detailed documentation.
  * <p>
  * Formal specification is available at <a href="https://html.spec.whatwg.org/multipage/server-sent-events.html#server-sent-events">https://html.spec.whatwg.org/multipage/server-sent-events.html#server-sent-events</a>.
@@ -71,6 +75,9 @@ public final class SseEvent {
 
 	/**
 	 * Acquires a builder for {@link SseEvent} instances, seeded with an {@code event} value.
+	 * <p>
+	 * Include {@code .data(...)} for browser {@code EventSource} message delivery;
+	 * {@code .data("")} delivers an event with empty data. An event name without data does not dispatch a message.
 	 *
 	 * @param event the {@code event} value for the instance
 	 * @return the builder
@@ -93,6 +100,9 @@ public final class SseEvent {
 
 	/**
 	 * Acquires an "empty" builder for {@link SseEvent} instances, useful for creating special cases like {@code retry}-only or {@code id}-only events.
+	 * <p>
+	 * Payloads without data do not dispatch a browser {@code EventSource} message.
+	 * {@code id}-only and {@code retry}-only payloads can still update the client's reconnect state.
 	 *
 	 * @return the builder
 	 */
@@ -116,9 +126,16 @@ public final class SseEvent {
 					"%s must specify at least one of 'id', 'event', 'data', or 'retry'.",
 					SseEvent.class.getSimpleName()));
 
-		if (this.retry != null && this.retry.isNegative())
-			throw new IllegalArgumentException(format("%s 'retry' values must be non-negative. You supplied '%s'",
-					SseEvent.class.getSimpleName(), this.retry));
+		if (this.retry != null) {
+			try {
+				// Validate the whole-millisecond wire value and negative fractions that would truncate to zero.
+				if (this.retry.toMillis() < 0 || this.retry.isNegative())
+					throw new IllegalArgumentException(format("%s 'retry' values must be non-negative. You supplied '%s'",
+							SseEvent.class.getSimpleName(), this.retry));
+			} catch (ArithmeticException overflow) {
+				throw new IllegalArgumentException("Server-Sent Event retry must be representable in milliseconds", overflow);
+			}
+		}
 
 		if (this.event != null && containsLineBreaks(this.event))
 			throw new IllegalArgumentException(format("%s 'event' values must not contain CR or LF characters. You supplied '%s'",
@@ -201,6 +218,10 @@ public final class SseEvent {
 		/**
 		 * Sets this event's non-negative {@code retry} duration. Passing {@code null}
 		 * clears any previously configured duration.
+		 * <p>
+		 * At {@link #build()}, the whole-millisecond value must fit in a {@code long}.
+		 * The wire value discards fractional milliseconds; a non-negative duration below one millisecond
+		 * writes {@code retry: 0}. The supplied duration is retained by {@link SseEvent#getRetry()}.
 		 *
 		 * @param retry the retry duration, or {@code null} to clear it
 		 * @return this builder
@@ -272,6 +293,9 @@ public final class SseEvent {
 
 	/**
 	 * The {@code retry} duration for this Server-Sent Event.
+	 * <p>
+	 * Returns the supplied duration. Its non-negative whole-millisecond value fits in a {@code long};
+	 * wire serialization discards fractional milliseconds.
 	 * <p>
 	 * Formal specification is available at <a href="https://html.spec.whatwg.org/multipage/server-sent-events.html#server-sent-events">https://html.spec.whatwg.org/multipage/server-sent-events.html#server-sent-events</a>.
 	 *

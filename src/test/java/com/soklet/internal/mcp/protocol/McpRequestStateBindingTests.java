@@ -19,6 +19,8 @@ package com.soklet.internal.mcp.protocol;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -51,6 +53,71 @@ public class McpRequestStateBindingTests {
 						+ "54fe03096860d95a3d51c33f2be4c55bb3bb8ba6fff52134359378b1b3",
 				HexFormat.of().formatHex(McpRequestStateBinding.builtInAssociatedData(
 						HexFormat.of().parseHex("01020304"), binding.bytes())));
+	}
+
+	@Test
+	public void bindsAcceptedParametersBeyondTheResponseByteLimit() {
+		String chunk = "x".repeat(1_000_000);
+		String parametersJson = "{\"arguments\":{\"a\":\"" + chunk
+				+ "\",\"b\":\"" + chunk + "\",\"c\":\"" + chunk
+				+ "\",\"d\":\"" + chunk + "\",\"e\":\"" + chunk + "\"}}";
+		Assertions.assertTrue(parametersJson.length() > 4 * 1_024 * 1_024);
+		Assertions.assertTrue(parametersJson.length() < 10 * 1_024 * 1_024);
+		McpJsonObject parameters = (McpJsonObject) transportCodec()
+				.parse(parametersJson);
+		McpRequestStateBinding original = Assertions.assertDoesNotThrow(
+				() -> binding(parameters));
+		Map<String, McpJsonValue> retry = new LinkedHashMap<>(parameters.members());
+		retry.put("requestState", new McpJsonString("transient"));
+		Assertions.assertArrayEquals(original.digest(),
+				binding(new McpJsonObject(retry)).digest());
+		McpJsonObject changed = (McpJsonObject) transportCodec().parse(
+				parametersJson.substring(0, parametersJson.length() - 4) + "y\"}}");
+		Assertions.assertFalse(MessageDigest.isEqual(original.parametersDigest(),
+				binding(changed).parametersDigest()),
+				"Stable bytes beyond the response ceiling must still affect binding.");
+	}
+
+	@Test
+	public void acceptedParameterCanonicalizationHasHeadroomBeyondTheTransportCeiling()
+			throws Exception {
+		// A legal short exponent becomes a longer canonical plain decimal.
+		// 90,000 numeric leaves and 16 bounded strings fit the production node,
+		// token and scalar limits while canonical bytes exceed the wire ceiling.
+		String chunk = "x".repeat(1_000_000);
+		String strings = "[" + ("\"" + chunk + "\",").repeat(15)
+				+ "\"" + chunk + "\"]";
+		String numbers = "[" + "1e-6,".repeat(89_999) + "1e-6]";
+		String wire = "{\"arguments\":{\"strings\":" + strings
+				+ ",\"numbers\":" + numbers + "}}";
+		Assertions.assertTrue(wire.length() < 16 * 1_024 * 1_024);
+		McpJsonObject parameters = (McpJsonObject) transportCodec().parse(wire);
+		McpRequestStateBinding actual = Assertions.assertDoesNotThrow(
+				() -> binding(parameters));
+
+		// Independent canonical construction pins the existing length-framed
+		// digest, including every byte after 16 MiB; no production writer used.
+		String canonical = "{\"arguments\":{\"numbers\":["
+				+ "0.000001,".repeat(89_999) + "0.000001],\"strings\":"
+				+ strings + "}}";
+		byte[] canonicalUtf8 = canonical.getBytes(StandardCharsets.US_ASCII);
+		Assertions.assertTrue(canonicalUtf8.length > 16 * 1_024 * 1_024);
+		MessageDigest expected = MessageDigest.getInstance("SHA-256");
+		expected.update("soklet-mcp-request-state-params-v1\0"
+				.getBytes(StandardCharsets.US_ASCII));
+		expected.update(java.nio.ByteBuffer.allocate(4)
+				.putInt(canonicalUtf8.length).array());
+		Assertions.assertArrayEquals(expected.digest(canonicalUtf8),
+				actual.parametersDigest());
+	}
+
+	private static McpJsonCodec transportCodec() {
+		McpJsonLimits defaults = McpJsonLimits.productionDefaults();
+		return new McpJsonCodec(new McpJsonLimits(16 * 1_024 * 1_024,
+				defaults.maximumNestingDepth(), defaults.maximumTokenLengthInCharacters(),
+				defaults.maximumStringLengthInCharacters(), defaults.maximumNumberLengthInCharacters(),
+				defaults.maximumExponentMagnitude(), defaults.maximumNodeCount(),
+				defaults.maximumOutputBytes()));
 	}
 
 	@Test

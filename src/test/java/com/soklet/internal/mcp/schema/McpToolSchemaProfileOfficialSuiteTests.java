@@ -97,7 +97,8 @@ public class McpToolSchemaProfileOfficialSuiteTests {
 		Assertions.assertEquals(500, caseCount);
 		Assertions.assertEquals(suite.expectedSelectedGroupCount(), groupCount);
 		Assertions.assertEquals(suite.expectedSelectedCaseCount(), caseCount);
-		Assertions.assertEquals(86, maximumEvaluationOperations);
+		// Bounded path-stack traversal avoids the former per-child ancestor copies.
+		Assertions.assertEquals(62, maximumEvaluationOperations);
 	}
 
 	@Test

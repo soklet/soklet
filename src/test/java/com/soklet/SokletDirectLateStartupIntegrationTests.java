@@ -314,9 +314,48 @@ final class SokletDirectLateStartupIntegrationTests {
 
 	@Test
 	@Timeout(value = 120, unit = TimeUnit.SECONDS)
-	void startReturnAfterTerminalFreezeIsInertAndCannotRewriteUnknown()
+	void startReturnAfterTerminalFreezeIsForcedWithoutRewritingUnknown()
 			throws Exception {
 		assertLateStartReturn(StartRelease.AFTER_FREEZE);
+	}
+
+	@Test
+	void lateStartCompensationDoesNotWaitForOrReplayQueuedForceWorker()
+			throws Exception {
+		ObservedLauncher launcher = ObservedLauncher.holding("lifecycle-force-sse");
+		ImmediateHttpEndpoint http = new ImmediateHttpEndpoint();
+		LateStartSseEndpoint sse = new LateStartSseEndpoint(ProofMode.FORCED);
+		OwnerHarness harness = OwnerHarness.create(config(http, phasePolicy())
+				.sseServer(sse).build(), new LifecycleWorkers(launcher), () -> { });
+		ExecutorService executor = newExecutor();
+		Future<Throwable> start = executor.submit(() -> captureFailure(harness.owner()::start));
+		try (harness) {
+			Assertions.assertTrue(sse.awaitStartEntered());
+			CompletionStage<ShutdownResult> stage = harness.owner().shutdown();
+			Assertions.assertTrue(launcher.awaitHeld());
+			InternalShutdownResult result = stage.toCompletableFuture()
+					.get(5, TimeUnit.SECONDS).internalResult();
+			Assertions.assertEquals(InternalShutdownDisposition.INCOMPLETE, result.disposition());
+			Assertions.assertEquals(0, sse.runtime().forceCalls());
+			sse.releaseStart();
+			Assertions.assertTrue(launcher.awaitCompleted("soklet-start-sse"));
+			Assertions.assertEquals(1, sse.runtime().forceCalls(),
+					"Frozen start must be stopped even before the force worker enters");
+			Assertions.assertEquals(0, sse.runtime().quiesceCalls());
+			Assertions.assertTrue(launcher.releaseHeld());
+			Assertions.assertTrue(launcher.awaitCompleted("lifecycle-force-sse"));
+			Assertions.assertEquals(1, sse.runtime().forceCalls(),
+					"The delayed phase worker must not replay compensation");
+			Assertions.assertInstanceOf(SokletStartupException.class, start.get(5, TimeUnit.SECONDS));
+			assertParticipant(result, InternalLifecycleComponentType.SSE,
+					InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN);
+			assertStableTerminalIdentity(harness.owner(), stage, result);
+		} finally {
+			sse.releaseStart();
+			launcher.releaseHeld();
+			drainFuture(start);
+			launcher.awaitTermination();
+		}
 	}
 
 	@Test
@@ -663,7 +702,7 @@ final class SokletDirectLateStartupIntegrationTests {
 		LateStartSseEndpoint sse = new LateStartSseEndpoint(switch (release) {
 			case GRACEFUL -> ProofMode.GRACEFUL;
 			case FORCED -> ProofMode.FORCED;
-			case AFTER_FREEZE -> ProofMode.NEVER;
+			case AFTER_FREEZE -> ProofMode.FORCED;
 		});
 		InternalLifecyclePolicy policy = release == StartRelease.GRACEFUL
 				? gracefulCatchUpPolicy() : phasePolicy();
@@ -746,8 +785,8 @@ final class SokletDirectLateStartupIntegrationTests {
 				Assertions.assertTrue(launcher.awaitCompleted("soklet-start-sse"),
 						"The late start worker did not finish frozen catch-up handling");
 				Assertions.assertEquals(0, sse.runtime().quiesceCalls());
-				Assertions.assertEquals(0, sse.runtime().forceCalls(),
-						"A return after terminal freeze cannot invoke a late phase");
+				Assertions.assertEquals(1, sse.runtime().forceCalls(),
+						"A return after terminal freeze must receive one forced stop");
 				Assertions.assertSame(result, harness.owner().result().orElseThrow());
 				Assertions.assertEquals(
 						InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN,
@@ -763,9 +802,9 @@ final class SokletDirectLateStartupIntegrationTests {
 			}
 			Assertions.assertEquals(release == StartRelease.GRACEFUL ? 1 : 0,
 					sse.runtime().quiesceCalls());
-			Assertions.assertEquals(release == StartRelease.FORCED ? 1 : 0,
+			Assertions.assertEquals(release == StartRelease.GRACEFUL ? 0 : 1,
 					sse.runtime().forceCalls());
-			if (release == StartRelease.FORCED) {
+			if (release != StartRelease.GRACEFUL) {
 				Assertions.assertEquals(ShutdownPhase.FORCED,
 						sse.runtime().firstUnderlyingPhase());
 				Assertions.assertTrue(sse.runtime().forceSubsumedQuiesce());

@@ -409,7 +409,7 @@ public class ManagedResponseStreamOutputTests {
 		private Fixture(int capacity) {
 			this.output = new TestOutput(capacity);
 			this.stream = new ManagedResponseStream(Request.withPath(HttpMethod.GET, "/output").build(), this.token,
-					null, null, this.output, () -> {}, throwable -> {
+					() -> false, null, null, this.output, () -> {}, throwable -> {
 				this.failure.compareAndSet(null, throwable);
 				if (throwable instanceof StreamingResponseCanceledException canceled) {
 					this.token.cancel(canceled.getCancelationReason(), canceled.getCancelationCause().orElse(null));

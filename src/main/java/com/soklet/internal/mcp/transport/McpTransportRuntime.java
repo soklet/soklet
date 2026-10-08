@@ -201,6 +201,7 @@ final class McpTransportRuntime implements AutoCloseable {
 		this.running = new AtomicBoolean();
 		this.stopped = new AtomicBoolean();
 		this.timerThread = new Thread(this::runTimerLoop, "soklet-mcp-timer");
+		this.timerThread.setDaemon(true);
 
 		Options options = OptionsBuilder.newBuilder()
 				.withHost(configuration.host())

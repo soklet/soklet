@@ -32,6 +32,16 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * These events are exposed via {@link LifecycleObserver#didReceiveLogEvent(LogEvent)}.
  * <p>
+ * The built-in MCP server's request-observer, metrics-collector and transport
+ * failure events deliberately omit the {@link Throwable}, {@link Request},
+ * {@link ResourceMethod} and {@link MarshaledResponse} attachments. Their
+ * diagnostic messages do not include exception text or stack traces. This
+ * privacy boundary differs from HTTP/SSE logging, which may attach the
+ * original Throwable. It does not redact objects passed to application-owned
+ * typed callbacks, generic HTTP callbacks for 2025 session GET/DELETE, or
+ * events constructed by application code. Apply application-specific
+ * redaction and retention policies before exporting those objects.
+ * <p>
  * Instances can be acquired via the {@link #with(LogEventType, String)} builder factory method.
  * <p>
  * Documentation is available at <a href="https://www.soklet.com/docs/request-lifecycle#event-logging">https://www.soklet.com/docs/request-lifecycle#event-logging</a>.
@@ -140,6 +150,8 @@ public final class LogEvent {
 
 	/**
 	 * The throwable for this log event, if available.
+	 * Built-in MCP request-observer, metrics-collector and transport failure
+	 * events deliberately leave this empty; see the class privacy contract.
 	 *
 	 * @return the throwable, or {@link Optional#empty()} if not available
 	 */

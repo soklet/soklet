@@ -20,7 +20,7 @@ package com.soklet;
  * Reasons an HTTP transport can reject incoming bytes before it has enough
  * valid information to construct a {@link Request}.
  * <p>
- * These values describe why request parsing stopped; they do not prescribe an
+ * These values describe why request construction stopped; they do not prescribe an
  * HTTP response status. A {@link ResponseMarshaler} may choose any final status
  * from {@code 200} through {@code 599} for an unparsed-request response.
  *
@@ -46,5 +46,25 @@ public enum UnparsedRequestReason {
 	 * The request header section exceeds a configured transport limit.
 	 * The default response marshaler conventionally uses HTTP 431.
 	 */
-	REQUEST_HEADERS_TOO_LARGE
+	REQUEST_HEADERS_TOO_LARGE,
+	/**
+	 * Reading an in-progress request exceeded the transport's deadline.
+	 * The default response marshaler conventionally uses HTTP 408.
+	 */
+	REQUEST_READ_TIMEOUT,
+	/**
+	 * The aggregate request size exceeds a configured limit before
+	 * a valid {@link Request} can be constructed. The default marshaler uses HTTP 413.
+	 */
+	REQUEST_TOO_LARGE,
+	/**
+	 * Opt-in request decompression does not support the declared content coding.
+	 * The default response marshaler conventionally uses HTTP 415.
+	 */
+	UNSUPPORTED_CONTENT_ENCODING,
+	/**
+	 * The request body cannot be decoded using its declared content coding.
+	 * The default response marshaler conventionally uses HTTP 400.
+	 */
+	REQUEST_BODY_DECOMPRESSION_FAILED
 }

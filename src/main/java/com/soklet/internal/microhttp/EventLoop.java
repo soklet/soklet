@@ -142,6 +142,8 @@ public class EventLoop {
         Thread acceptLoopThread;
         try {
             acceptLoopThread = new Thread(this::run, "event-loop");
+            // Listener liveness must not inherit the daemon lifecycle caller.
+            acceptLoopThread.setDaemon(false);
         } catch (RuntimeException | Error throwable) {
             connectionEventLoops.forEach(ConnectionEventLoop::closeBeforeStart);
             CloseUtils.closeQuietly(selector);

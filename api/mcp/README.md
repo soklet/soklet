@@ -128,6 +128,35 @@ application Exchange with that Exchange's cancelation token and absolute
 deadline. A post-evaluator active-state fence prevents sanitizer entry after
 deadline or stop even if a callback absorbs interruption and returns allow.
 
+## Mirrored integers and resource-template paths
+
+Mirrored tool properties accept direct `string`, `boolean` and `integer`
+schemas, including derived `long`, `Long` and `BigInteger`. Integer request
+values must fit the inclusive JavaScript-safe range ±9,007,199,254,740,991;
+derived schema ranges remain unchanged. Header spelling is canonical decimal,
+and invalid mirrors produce the fixed HTTP 400 / `-32020` `"Header mismatch"`
+after admission and before handler entry. Mirrors are modern-only: endpoint
+construction rejects mirrored tools selecting either 2025 revision.
+
+All three resource views use RFC 6570 Level 1 simple variables. For
+`file:///{path}`, `file:///src%2Fmain.rs` captures `src/main.rs`; the raw URI
+`file:///src/main.rs` does not match. Captures decode UTF-8 percent escapes
+exactly once (`%252F` becomes `%2F`), while `getUri()` preserves client spelling.
+Reserved expansion, explode and prefix modifiers remain unsupported.
+These are documentation corrections and contract regressions, with no public
+signature, schema-range, routing or protocol-claim changes.
+
+## Response-channel EOF
+
+The built-in MCP transport closes its response channel on input EOF, including
+normal TCP FIN and deliberate `shutdownOutput()`. Before commitment this
+cancels the request; a committed modern response cancels work, while a
+committed 2025 POST SSE response detaches delivery and retains bounded physical
+work under the existing session/deadline cancellation rules. Clients keep
+their sending side open until the response finishes. This changes no public
+API signature or protocol selector. Ordinary HTTP retains its half-close and
+pipelining behavior; idle FIN alone cannot identify a fully closed reader.
+
 ## Reviewed ownership
 
 Every current exported MCP type and every shared public/protected host in
@@ -1052,8 +1081,16 @@ control-plane shapes. Construction-time extraction operates on the final
 schema-aware response-local slot plans, enforces bounded callback counts, and
 preserves the application-owned custom resource-list boundary. The built-in
 handler interceptor receives the exact downstream invocation-feature carrier;
-its continuation retains the thread, one-shot, and call-lifetime rules. L1 does
-not invoke a localization provider or alter MCP wire output; request-time
+its continuation retains the thread, one-shot, and call-lifetime rules.
+
+The continuation exposes a handler's `McpJsonRpcException` unchanged, allowing
+interceptors to inspect and rethrow the same object or return a validated,
+method-compatible recovery result. Only that exact exception from the current
+downstream invocation preserves a client-visible handler error. Interceptor
+errors, copies, wrappers and exceptions retained from previous calls fail closed.
+No public signatures change for this behavior.
+
+L1 does not invoke a localization provider or alter MCP wire output; request-time
 rendering begins in L2. The original 18-owner surface first grew
 `phase-6.includes` to 33; the later telemetry amendment grew it to 65, and the
 2026-08-17 result simplification removed one redundant nested owner, and the
@@ -2231,11 +2268,11 @@ conformance. These are local snapshot checks, not immutable-candidate evidence.
 The preceding four-row HTTP-contract reconciliation closed readable
 `initialize` and validated-unsupported-selector rejection diagnostics,
 unsupported classified-notification handling, universal MCP HTTP `no-store`,
-and exact request/notification validation precedence. Its separate 22-response
+and exact request/notification validation precedence. Its separate 23-response
 complete-HTTP corpus is bound
 by `conformance/golden-http-contract/precedence-no-store/manifest.sha256` at
 SHA-256
-`29eb9f597e2d7a8c2268e35918217342b994802868c4bf14309c04c06ac6891a`.
+`ccec7ec13ac245bbc4a1820b1c387b188347a3ef868d4128e3af5c3a6e331e92`.
 Five contract tests comprise three real-listener goldens, one exhaustive response-authority inventory, and one six-document manifest-digest parity gate;
 four diagnostic tests cover the positive post-JSON and negative pre-JSON/
 unreadable-method boundary. Those two classes pass 9/9 in the current focused

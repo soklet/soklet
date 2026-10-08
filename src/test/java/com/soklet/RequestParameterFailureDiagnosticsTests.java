@@ -101,7 +101,7 @@ final class RequestParameterFailureDiagnosticsTests {
 			@NonNull String secret) {
 		String body = new String(result.getMarshaledResponse().bodyBytesOrEmpty(),
 				StandardCharsets.UTF_8);
-		Assertions.assertEquals("HTTP 500: Internal HttpServer Error", body);
+		Assertions.assertEquals("HTTP 500: Internal Server Error", body);
 		Assertions.assertFalse(body.contains(secret));
 	}
 

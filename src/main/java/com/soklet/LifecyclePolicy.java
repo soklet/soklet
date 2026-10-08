@@ -28,6 +28,12 @@ import static java.util.Objects.requireNonNull;
 /**
  * Immutable startup and shutdown deadline policy shared by every configured
  * lifecycle component.
+ * <p>
+ * Every timeout accepts {@link Duration#ZERO} as an immediate deadline, not
+ * an unlimited wait or a disabled phase. Zero leaves no waiting allowance for
+ * startup, startup cancelation, graceful drain or forced termination proof.
+ * Use positive budgets for normal operation; shutdown completion depends on
+ * physical termination evidence, not merely requesting interruption.
  */
 @ThreadSafe
 public final class LifecyclePolicy {
@@ -190,6 +196,9 @@ public final class LifecyclePolicy {
 
 		/**
 		 * Sets the startup timeout. Zero means an immediate boundary.
+		 * A zero budget leaves no waiting allowance for framework setup or
+		 * transport startup and can immediately produce
+		 * {@link StartupDisposition#TIMED_OUT}; it does not disable the timeout.
 		 *
 		 * Passing {@code null} restores the built-in default of 30 seconds.
 		 *
@@ -208,6 +217,9 @@ public final class LifecyclePolicy {
 
 		/**
 		 * Sets the startup-cancelation budget. Zero means an immediate boundary.
+		 * A zero budget leaves no waiting allowance for an active startup call
+		 * to return after shutdown intent. Remaining startup work stays tracked
+		 * through the graceful and forced shutdown phases.
 		 *
 		 * Passing {@code null} restores the built-in default of 2 seconds.
 		 *
@@ -230,6 +242,8 @@ public final class LifecyclePolicy {
 		/**
 		 * Sets the graceful shutdown timeout. Zero means an immediate boundary.
 		 * Passing {@code null} restores the built-in default of 15 seconds.
+		 * A zero budget leaves no waiting allowance for graceful drain;
+		 * participants without termination proof proceed to forced shutdown.
 		 * <p>
 		 * This budget is independent of the server request-handler timeout (60 seconds by default).
 		 * To let all permitted in-flight requests finish, allow their maximum remaining work and
@@ -258,6 +272,11 @@ public final class LifecyclePolicy {
 		/**
 		 * Sets the forced shutdown timeout. Zero means an immediate boundary.
 		 * Passing {@code null} restores the built-in default of 3 seconds.
+		 * A zero budget leaves no waiting allowance for forced termination
+		 * proof. Any still-unproven or residual work produces an incomplete
+		 * result. In particular, zero graceful and forced budgets can make
+		 * even an idle running listener's shutdown incomplete because its stop
+		 * calls and termination proof are asynchronous.
 		 *
 		 * @param forcedShutdownTimeout forced shutdown timeout, or {@code null}
 		 * to use the default

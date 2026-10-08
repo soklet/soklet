@@ -188,10 +188,43 @@ class SkillDocumentMetadataTests {
 	void diagnosticsAndRenderingNeverExposeAuthoredMetadata() {
 		IllegalArgumentException first = assertInvalid(document("private-name-canary%", "private-description-canary"));
 		IllegalArgumentException second = assertInvalid(with("license", new McpJsonNumber(9_876_543)));
-		assertEquals(first.getMessage(), second.getMessage());
-		assertEquals("The Skills document metadata is invalid.", first.getMessage());
+		assertEquals("Skills field 'name' must contain only lowercase letters, numbers, and hyphens.", first.getMessage());
+		assertEquals("Skills field 'license' must be a string.", second.getMessage());
+		IllegalArgumentException nested = assertInvalid(with("metadata",
+				new McpJsonObject(Map.of("private-key-canary", new McpJsonNumber(9_876_543)))));
+		assertEquals("Skills field 'metadata' must contain only string values.", nested.getMessage());
+		for (IllegalArgumentException failure : List.of(first, second, nested))
+			for (String canary : List.of("private-name-canary", "private-description-canary", "private-key-canary", "9876543"))
+				assertFalse(failure.getMessage().contains(canary));
 		assertEquals("SkillDocumentMetadata[redacted]",
 				SkillDocumentMetadata.from(document("private-name-canary", "private-description-canary")).toString());
+	}
+
+	@Test
+	void diagnosticsIdentifyMissingFieldsAndTypesWithoutCoercion() {
+		assertDiagnostic(McpJsonObject.empty(), "Skills field 'name' is required.");
+		assertDiagnostic(new McpJsonObject(Map.of("name", new McpJsonString("skill"))),
+				"Skills field 'description' is required.");
+		for (String field : List.of("name", "description", "compatibility", "license", "allowed-tools"))
+			for (McpJsonValue value : nonStrings())
+				assertDiagnostic(with(field, value), "Skills field '" + field + "' must be a string.");
+		assertDiagnostic(with("metadata", McpJsonNull.INSTANCE), "Skills field 'metadata' must be an object.");
+	}
+
+	@Test
+	void boundedFieldDiagnosticsIdentifyEmptyLengthUnicodeAndNameGrammarRules() {
+		for (Map.Entry<String, Integer> field : Map.of("name", 64, "description", 1_024, "compatibility", 500).entrySet()) {
+			assertDiagnostic(with(field.getKey(), new McpJsonString("")),
+					"Skills field '" + field.getKey() + "' must not be empty.");
+			for (String character : List.of("a", "🙂"))
+				assertDiagnostic(with(field.getKey(), new McpJsonString(character.repeat(field.getValue() + 1))),
+						"Skills field '" + field.getKey() + "' exceeds " + field.getValue() + " code points.");
+			assertDiagnostic(with(field.getKey(), new McpJsonString("a\uD800b")),
+					"Skills field '" + field.getKey() + "' must contain valid Unicode scalar text.");
+		}
+		for (String name : List.of("-skill", "skill-", "two--words"))
+			assertDiagnostic(document(name, "description"),
+					"Skills field 'name' must not start or end with a hyphen or contain consecutive hyphens.");
 	}
 
 	@Test
@@ -221,8 +254,12 @@ class SkillDocumentMetadataTests {
 		IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
 				() -> SkillDocumentMetadata.from(source));
 		assertEquals(IllegalArgumentException.class, failure.getClass());
-		assertEquals("The Skills document metadata is invalid.", failure.getMessage());
+		assertTrue(failure.getMessage().startsWith("Skills field '"));
 		assertNull(failure.getCause());
 		return failure;
+	}
+
+	private static void assertDiagnostic(McpJsonObject source, String message) {
+		assertEquals(message, assertInvalid(source).getMessage());
 	}
 }

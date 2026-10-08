@@ -31,6 +31,13 @@ import static java.util.Objects.requireNonNull;
 /**
  * Immutable binary contents for one MCP resource.
  *
+ * <p>The built-in server can send at most 786,432 raw bytes per binary content
+ * item: Base64 encoding must fit the 1,048,576-character JSON string limit.
+ * The complete response must also fit the 4 MiB UTF-8 JSON limit. Construction
+ * defensively copies data but does not prevalidate the eventual response size.
+ * Prefer {@link McpResourceLink} for larger payloads; an MCP resource read
+ * returning these contents remains subject to the same limits.</p>
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe

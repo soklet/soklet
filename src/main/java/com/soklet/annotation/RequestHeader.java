@@ -47,6 +47,8 @@ public @interface RequestHeader {
 	/**
 	 * Is this HTTP request header optional or required?
 	 *
+	 * Optional parameters must use a reference type, such as a boxed scalar or {@code Optional<T>}, not a primitive.
+	 *
 	 * @return {@code true} if optional, {@code false} if required
 	 */
 	boolean optional() default false;

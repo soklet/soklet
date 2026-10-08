@@ -146,8 +146,8 @@ public interface ResponseMarshaler {
 	 * applications should apply their own redaction and retention policies before
 	 * logging or storing them.
 	 * <p>
-	 * The built-in standard HTTP transport dispatches this method to the
-	 * configured request-handler executor and never invokes it inline on the
+	 * The built-in HTTP and SSE transports dispatch this method to the
+	 * configured request-handler executor and never invoke it inline on the
 	 * selector thread. The framework-managed default executor has bounded
 	 * concurrency and queue capacity; a custom executor controls its own capacity.
 	 * The method should perform bounded work and must not block. The request-handler
@@ -155,14 +155,18 @@ public interface ResponseMarshaler {
 	 * marshaling pipeline; cancellation interrupts the worker but remains
 	 * cooperative if application code ignores interruption. If application capacity
 	 * is unavailable, both callbacks may be skipped and the transport writes its
-	 * built-in bodyless response instead.
+	 * built-in bodyless response instead. Later HTTP validation failures and SSE
+	 * rejections use the remaining handler budget, including any earlier queue wait.
+	 * Idle read timeouts and EOF before complete headers close quietly. Admission,
+	 * shutdown and broken-socket failsafes do not call this method.
 	 * <p>
 	 * Transport-owned HTTP framing, including connection closure and message-body
 	 * length, is applied after marshaling. A transport may reject a response-body
 	 * representation that cannot be safely written on this pre-dispatch path.
 	 * <p>
 	 * The default implementation returns the conventional bodyless response for
-	 * the rejection reason ({@code 400}, {@code 414}, {@code 417}, or {@code 431}).
+	 * the rejection reason ({@code 400}, {@code 408}, {@code 413}, {@code 414}, {@code 415},
+	 * {@code 417}, or {@code 431}).
 	 * Custom implementations may return any final response status from {@code 200}
 	 * through {@code 599}, consistent with this interface's other methods. This
 	 * default method preserves
@@ -422,8 +426,8 @@ public interface ResponseMarshaler {
 			 * This method is invoked at most once for each rejected request, only if
 			 * the rejection-detail task is accepted and timeout budget remains after
 			 * lifecycle observation. Captured bytes are untrusted and may contain
-			 * sensitive values. The built-in standard HTTP transport dispatches it to
-			 * the configured request-handler executor and never invokes it inline on
+			 * sensitive values. The built-in HTTP and SSE transports dispatch it to
+			 * the configured request-handler executor and never invoke it inline on
 			 * the selector thread. The framework-managed default executor has bounded
 			 * concurrency and queue capacity; a custom executor controls its own
 			 * capacity. The handler should perform bounded work and must not block. The

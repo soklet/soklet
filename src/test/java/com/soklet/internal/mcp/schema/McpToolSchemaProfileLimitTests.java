@@ -16,10 +16,12 @@
 
 package com.soklet.internal.mcp.schema;
 
+import com.soklet.internal.mcp.protocol.McpJsonArray;
 import com.soklet.internal.mcp.protocol.McpJsonCodec;
 import com.soklet.internal.mcp.protocol.McpJsonLimits;
 import com.soklet.internal.mcp.protocol.McpJsonObject;
 import com.soklet.internal.mcp.protocol.McpJsonValue;
+import com.soklet.internal.mcp.protocol.McpJsonNumber;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -289,6 +291,92 @@ public class McpToolSchemaProfileLimitTests {
 		assertEvaluationLimit(additionalProperties, manyMembers,
 				new McpSchemaEvaluationLimits(1, 10, 10, 10, 1_000),
 				McpSchemaEvaluationLimit.EVALUATION_OPERATIONS);
+	}
+
+	@Test
+	public void retainedDiagnosticPathCopyIsChargedBeforeAllocation() {
+		McpToolSchemaProfileProgram program = compile("{\"items\":false}",
+				GENEROUS_COMPILATION_LIMITS);
+		McpJsonValue instance = JSON_CODEC.parse("[null]");
+		McpSchemaValidationOutcome.Invalid invalid = Assertions.assertInstanceOf(
+				McpSchemaValidationOutcome.Invalid.class, evaluate(program, instance,
+						new McpSchemaEvaluationLimits(4, 10, 10, 10, 1_000)));
+		Assertions.assertEquals(4, invalid.evaluationOperations());
+		Assertions.assertEquals(List.of("0"),
+				invalid.diagnostics().get(0).instancePointerSegments());
+		assertEvaluationLimit(program, instance,
+				new McpSchemaEvaluationLimits(3, 10, 10, 10, 1_000),
+				McpSchemaEvaluationLimit.EVALUATION_OPERATIONS);
+	}
+
+	@Test
+	public void deeplyNestedWideArrayUsesLinearPointerWorkWithinProductionBudget() {
+		McpJsonValue schema = object("{\"type\":\"integer\"}");
+		McpJsonValue instance = new McpJsonArray(java.util.Collections.nCopies(
+				70_000, new McpJsonNumber(1L)));
+		for (int depth = 0; depth < 15; ++depth) {
+			schema = new McpJsonObject(java.util.Map.of("items", schema));
+			if (depth > 0)
+				instance = new McpJsonArray(List.of(instance));
+		}
+		// Establish that this is accepted production JSON, not just an in-memory tree.
+		McpJsonCodec productionCodec = new McpJsonCodec(
+				com.soklet.internal.mcp.protocol.McpJsonLimits.productionDefaults());
+		instance = productionCodec.parse(productionCodec.toUtf8Bytes(instance));
+		McpToolSchemaProfileProgram program = compile((McpJsonObject) schema,
+				McpSchemaCompilationLimits.productionDefaults());
+		McpSchemaValidationOutcome.Valid outcome = Assertions.assertInstanceOf(
+				McpSchemaValidationOutcome.Valid.class, evaluate(program, instance,
+						McpSchemaEvaluationLimits.productionDefaults()));
+		Assertions.assertTrue(outcome.evaluationOperations() < 300_000);
+	}
+
+	@Test
+	public void suppressedBranchDiagnosticsDoNotChargeUnusedPointerWork() {
+		McpJsonValue instance = JSON_CODEC.parse("[[null]]");
+		assertValid(compile("{\"anyOf\":[{\"items\":{\"items\":true}}]}",
+				GENEROUS_COMPILATION_LIMITS), instance,
+				new McpSchemaEvaluationLimits(4, 10, 10, 10, 1_000));
+		assertValid(compile("{\"if\":{\"items\":{\"items\":true}},\"then\":true}",
+				GENEROUS_COMPILATION_LIMITS), instance,
+				new McpSchemaEvaluationLimits(5, 10, 10, 10, 1_000));
+	}
+
+	@Test
+	public void legitimateRepeatedSchemaWorkStillExhaustsTheProductionBudget() {
+		McpJsonObject schema = object("{\"items\":{\"allOf\":["
+				+ String.join(",", java.util.Collections.nCopies(50, "true")) + "]}}");
+		McpJsonValue instance = new McpJsonArray(java.util.Collections.nCopies(
+				30_000, com.soklet.internal.mcp.protocol.McpJsonNull.INSTANCE));
+		McpJsonCodec productionCodec = new McpJsonCodec(
+				com.soklet.internal.mcp.protocol.McpJsonLimits.productionDefaults());
+		instance = productionCodec.parse(productionCodec.toUtf8Bytes(instance));
+		McpToolSchemaProfileProgram program = compile(schema,
+				McpSchemaCompilationLimits.productionDefaults());
+		assertEvaluationLimit(program, instance,
+				McpSchemaEvaluationLimits.productionDefaults(),
+				McpSchemaEvaluationLimit.EVALUATION_OPERATIONS);
+	}
+
+	@Test
+	public void diagnosticsRetainIndependentPathsAcrossSiblingsAndSuppressedBranches() {
+		McpToolSchemaProfileProgram program = compile(
+				"{\"items\":{\"properties\":{\"x\":false},"
+						+ "\"anyOf\":[{\"properties\":{\"x\":false}}]}}",
+				GENEROUS_COMPILATION_LIMITS);
+		McpSchemaValidationOutcome.Invalid invalid = Assertions.assertInstanceOf(
+				McpSchemaValidationOutcome.Invalid.class,
+				evaluate(program, JSON_CODEC.parse("[{\"x\":1},{\"x\":2}]"),
+						GENEROUS_EVALUATION_LIMITS));
+		Assertions.assertEquals(List.of(List.of("0"), List.of("0", "x"),
+				List.of("1"), List.of("1", "x")), invalid.diagnostics().stream()
+				.map(McpSchemaDiagnostic::instancePointerSegments).toList());
+		Assertions.assertEquals(List.of(McpSchemaDiagnostic.Code.ANY_OF_MISMATCH,
+				McpSchemaDiagnostic.Code.FALSE_SCHEMA, McpSchemaDiagnostic.Code.ANY_OF_MISMATCH,
+				McpSchemaDiagnostic.Code.FALSE_SCHEMA), invalid.diagnostics().stream()
+				.map(McpSchemaDiagnostic::code).toList());
+		Assertions.assertThrows(UnsupportedOperationException.class,
+				() -> invalid.diagnostics().get(0).instancePointerSegments().add("changed"));
 	}
 
 	@Test

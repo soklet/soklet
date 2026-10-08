@@ -323,7 +323,7 @@ final class SokletFrameworkSetupValidationTests {
 
 		assertDynamicRequestGuard(resolver,
 				Request.withPath(HttpMethod.HEAD, "/dynamic-invalid").build(),
-				LogEventType.REQUEST_PROCESSING_FAILED);
+				LogEventType.RESOURCE_METHOD_RESOLUTION_FAILED);
 	}
 
 	@Test

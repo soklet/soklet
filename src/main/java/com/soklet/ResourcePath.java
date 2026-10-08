@@ -66,8 +66,11 @@ public final class ResourcePath {
 	 * <p>
 	 * This is in contrast to {@link ResourcePathDeclaration}, which represents compile-time path declarations
 	 * that may include placeholders, e.g. {@code /users/{userId}}.
+	 * <p>
+	 * Supply an already-decoded path, such as {@link Request#getPath()}. This factory does not
+	 * percent-decode its input; {@code /users/ab%20c} retains the literal {@code %20} text.
 	 *
-	 * @param path a runtime path (no placeholders) e.g. {@code /users/123}
+	 * @param path an already-decoded runtime path (no placeholders) e.g. {@code /users/123}
 	 */
 	@NonNull
 public static ResourcePath fromPath(@NonNull String path) {
@@ -142,10 +145,14 @@ public static ResourcePath fromPath(@NonNull String path) {
 	 * For example, placeholder extraction for resource path {@code /users/123} and resource path declaration {@code /users/{userId}}
 	 * would result in a value equivalent to {@code Map.of("userId", "123")}.
 	 * <p>
-	 * Resource path placeholder values are automatically URL-decoded.  For example, placeholder extraction for resource path declaration {@code /users/{userId}}
-	 * and resource path {@code /users/ab%20c} would result in a value equivalent to {@code Map.of("userId", "ab c")}.
+	 * Placeholder extraction does not percent-decode values. A path supplied as {@code /users/ab%20c}
+	 * produces {@code Map.of("userId", "ab%20c")} for the declaration {@code /users/{userId}}.
+	 * A path supplied as {@code /users/ab c} produces {@code Map.of("userId", "ab c")}.
+	 * Resource paths obtained from {@link Request#getResourcePath()} already use the request's
+	 * decoded {@link Request#getPath() path}.
 	 * <p>
-	 * For varargs placeholders, the extra path components are joined with '/'.
+	 * For varargs placeholders, zero or more remaining path components are joined with {@code /}.
+	 * A match with no remaining components includes the varargs name mapped to {@code ""}.
 	 *
 	 * @param resourcePathDeclaration compile-time resource path, used to provide placeholder names
 	 * @return a mapping of placeholder names to values, or the empty map if there were no placeholders

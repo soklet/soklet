@@ -27,6 +27,10 @@ import java.lang.annotation.Target;
 /**
  * Apply to <em>Resource Methods</em> to make them function as <a href="https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events">Server-Sent Event Sources</a>.
  * <p>
+ * On the built-in SSE server, this declaration handles {@code GET} only. {@code HEAD} receives a bodyless
+ * {@code 405} without invoking the method or a client initializer; {@code OPTIONS} advertises {@code GET}
+ * and {@code OPTIONS}. The automatic {@code HEAD}-to-{@code GET} fallback applies only to ordinary HTTP routes.
+ * <p>
  * See <a href="https://www.soklet.com/docs/server-sent-events">https://www.soklet.com/docs/server-sent-events</a> for detailed documentation.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>

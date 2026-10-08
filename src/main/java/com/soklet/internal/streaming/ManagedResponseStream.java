@@ -41,6 +41,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
 import static com.soklet.internal.ObjectIdentity.sameInstance;
@@ -71,6 +72,7 @@ public final class ManagedResponseStream implements ResponseStream {
 
 	private final Request request;
 	private final CancelationToken cancelationToken;
+	private final BooleanSupplier gracefulShutdownRequested;
 	private final Instant deadline;
 	private final Duration idleTimeout;
 	private final Output output;
@@ -91,6 +93,7 @@ public final class ManagedResponseStream implements ResponseStream {
 
 	public ManagedResponseStream(@NonNull Request request,
 			@NonNull CancelationToken cancelationToken,
+			@NonNull BooleanSupplier gracefulShutdownRequested,
 			@Nullable Instant deadline,
 			@Nullable Duration idleTimeout,
 			@NonNull Output output,
@@ -99,6 +102,7 @@ public final class ManagedResponseStream implements ResponseStream {
 			@NonNull Consumer<Throwable> cleanupFailureConsumer) {
 		this.request = requireNonNull(request);
 		this.cancelationToken = requireNonNull(cancelationToken);
+		this.gracefulShutdownRequested = requireNonNull(gracefulShutdownRequested);
 		this.deadline = deadline;
 		this.idleTimeout = idleTimeout;
 		this.output = requireNonNull(output);
@@ -156,6 +160,10 @@ public final class ManagedResponseStream implements ResponseStream {
 	@Override
 	@NonNull
 	public CancelationToken getCancelationToken() { return this.cancelationToken; }
+
+	@Override
+	@NonNull
+	public Boolean isGracefulShutdownRequested() { return this.gracefulShutdownRequested.getAsBoolean(); }
 
 	@Override
 	@NonNull

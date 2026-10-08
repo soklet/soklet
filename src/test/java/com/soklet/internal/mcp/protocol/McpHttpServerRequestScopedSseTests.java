@@ -173,6 +173,15 @@ public class McpHttpServerRequestScopedSseTests {
 	@Timeout(240)
 	public void reset_before_http_offer_cancels_an_allocated_stream_in_every_revision()
 			throws Exception {
+		assertPreOfferDisconnect(McpChunkedHttpClient.DisconnectMode.RESET);
+	}
+
+	@Test
+	public void finBeforeHttpOfferCancelsAllocatedStreamInEveryRevision() throws Exception {
+		assertPreOfferDisconnect(McpChunkedHttpClient.DisconnectMode.CLOSE);
+	}
+
+	private void assertPreOfferDisconnect(McpChunkedHttpClient.DisconnectMode mode) throws Exception {
 		for (String revision : List.of("2025-06-18", "2025-11-25", "2026-07-28")) {
 			PreOfferDisconnectObservation observation =
 					new PreOfferDisconnectObservation();
@@ -227,7 +236,7 @@ public class McpHttpServerRequestScopedSseTests {
 					Assertions.assertTrue(observation.openEntered.await(5, TimeUnit.SECONDS),
 							"The " + revision + " stream was not allocated before its HTTP offer.");
 					Assertions.assertNull(notificationAccepted.get());
-					client.closeWithReset();
+					client.disconnect(mode);
 					Assertions.assertTrue(observation.workerInterrupted.await(5, TimeUnit.SECONDS),
 							"Disconnecting the unoffered " + revision + " stream did not cancel its worker.");
 					Assertions.assertEquals(Optional.of(StreamTerminationReason.CLIENT_DISCONNECTED),

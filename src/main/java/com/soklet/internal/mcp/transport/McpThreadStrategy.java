@@ -121,6 +121,7 @@ enum McpThreadStrategy {
 
 		return runnable -> {
 			Thread thread = new Thread(runnable, prefix + sequence.incrementAndGet());
+			thread.setDaemon(true);
 			thread.setUncaughtExceptionHandler(uncaughtExceptionHandler);
 			return thread;
 		};

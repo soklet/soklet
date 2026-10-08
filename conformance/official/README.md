@@ -348,7 +348,7 @@ The preceding four-row HTTP-contract reconciliation added a third, independent
 evidence surface without changing the official corpus: 22 canonical complete
 HTTP response fixtures bound by
 `../golden-http-contract/precedence-no-store/manifest.sha256` at SHA-256
-`29eb9f597e2d7a8c2268e35918217342b994802868c4bf14309c04c06ac6891a`.
+`ccec7ec13ac245bbc4a1820b1c387b188347a3ef868d4128e3af5c3a6e331e92`.
 Five contract tests—three real-listener goldens, one exhaustive response-
 authority inventory, and one six-document manifest-digest parity gate—and four
 initialize-diagnostic tests pass 9/9 in the current focused execution. Full

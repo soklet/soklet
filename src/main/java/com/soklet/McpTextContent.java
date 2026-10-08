@@ -31,6 +31,15 @@ import static java.util.Objects.requireNonNull;
 /**
  * Immutable textual MCP content block.
  *
+ * <p>Construction rejects unpaired UTF-16 surrogates with
+ * {@link IllegalArgumentException}. Well-formed text is retained exactly,
+ * without normalization or replacement.</p>
+ *
+ * <p>Text must fit the independent decoded-string and escaped-token JSON
+ * limits described by {@link McpJsonString}, as well as the complete response
+ * byte limit. Creating this content block does not prevalidate its eventual
+ * serialized response.</p>
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
@@ -47,6 +56,7 @@ public final class McpTextContent implements McpContentBlock {
 	 *
 	 * @param text text value
 	 * @return immutable text content
+	 * @throws IllegalArgumentException if the text contains an unpaired surrogate
 	 */
 	@NonNull
 	public static McpTextContent fromText(@NonNull String text) {
@@ -58,6 +68,7 @@ public final class McpTextContent implements McpContentBlock {
 	 *
 	 * @param text text value
 	 * @return text-content builder
+	 * @throws IllegalArgumentException if the text contains an unpaired surrogate
 	 */
 	@NonNull
 	public static Builder withText(@NonNull String text) {
@@ -126,7 +137,7 @@ public final class McpTextContent implements McpContentBlock {
 		private McpJsonObject metadata = McpJsonObject.emptyInstance();
 
 		private Builder(@NonNull String text) {
-			this.text = requireNonNull(text);
+			this.text = McpContentValueSupport.requireWellFormedString(text);
 		}
 
 		/** @param annotations content annotations

@@ -100,9 +100,11 @@ import java.util.function.Consumer;
  *
  *     // Finally, wait a bit for the latch to open
  *     try {
- *       eventReceivedLatch.await(5, SECONDS);
+ *       Assertions.assertTrue(eventReceivedLatch.await(5, SECONDS),
+ *         "Didn't receive a Server-Sent Event in time");
  *     } catch (InterruptedException e) {
- *       Assertions.fail("Didn't receive a Server-Sent Event in time");
+ *       Thread.currentThread().interrupt();
+ *       Assertions.fail("Interrupted while waiting for a Server-Sent Event", e);
  *     }
  *     });
  * }}</pre>
@@ -177,6 +179,28 @@ public interface Simulator {
 	 * Each invocation processes a fresh copy of {@code request}, preserving its ID and other values.
 	 * Paired lifecycle and metrics callbacks, including HTTP stream handles, share that dispatch copy,
 	 * so the same caller-supplied request may be reused concurrently without sharing observation identity.
+	 * <p>
+	 * Streaming producers run synchronously on the calling thread and successful
+	 * output is materialized into bytes. HTTP streaming total/idle timeout settings
+	 * are not applied: the stream's deadline and idle timeout are empty. Cleanup
+	 * supervision, scope shutdown and output-capture limits still apply. Use the
+	 * real HTTP server to test response deadlines and committed partial delivery.
+	 * <p>
+	 * An admitted call waits for its termination observer to finish. A producer
+	 * failure that wins termination surfaces as an {@link IllegalStateException}
+	 * with the original cause instead of returning a partial result; an application
+	 * {@link Error} is rethrown when it wins that outcome. An earlier elected
+	 * cancelation still wins.
+	 * A blocked producer or observer can therefore block this synchronous call.
+	 * <p>
+	 * Exhausted HTTP streaming admission returns the built-in finite {@code 503}
+	 * response with its plain-text body and {@code Connection: close} header. Its
+	 * logical response is absent and its resource method remains available.
+	 * {@code didWriteResponse} and {@code didFinishRequestHandling} observers and
+	 * metrics receive that finite response. {@code willWriteResponse} sees the
+	 * original stream before admission, as it does in HTTP. The rejected producer
+	 * is not acquired. Stream rejection observation retains the original
+	 * stream descriptor and uses bounded asynchronous delivery without delaying this call.
 	 *
 	 * @param request the standard HTTP request to process
 	 * @return the result (logical response, marshaled response, etc.) that corresponds to the request
@@ -192,6 +216,16 @@ public interface Simulator {
 	 * Each invocation processes a fresh copy of {@code request}, preserving its ID and other values.
 	 * Paired lifecycle and metrics callbacks share that dispatch copy, even when the caller reuses the
 	 * same request concurrently.
+	 * <p>
+	 * On an accepted connection, the first event or comment consumer starts simulated reading. Later payloads
+	 * of unregistered types are discarded; the bounded capture from before reading remains available to later
+	 * consumers. Pending deliveries to registered consumers have a separate combined queue-capacity bound.
+	 * See {@link SseRequestResult.HandshakeAccepted} for capture limits and registration semantics.
+	 * <p>
+	 * SSE establishment and termination notifications use the configured {@link LifecycleObserver} and
+	 * {@link MetricsCollector}. Terminal notifications run asynchronously; simulator teardown waits within
+	 * its lifecycle budgets. Failed handshakes use a separate bounded observation allowance; notifications
+	 * beyond that allowance are omitted with a log event. No socket-write callbacks or wire metrics are simulated.
 	 *
 	 * @param request the Server-Sent Event HTTP request to process
 	 * @return the result (handshake outcode, etc.) that corresponds to the request
@@ -200,9 +234,12 @@ public interface Simulator {
 	SseRequestResult performSseRequest(@NonNull Request request);
 
 	/**
-	 * Registers a handler for exceptions thrown by simulated Server-Sent Event consumers.
+	 * Registers a handler for exceptions from simulated Server-Sent Event broadcasts.
 	 * <p>
-	 * This only applies to simulator-mode SSE broadcasts.
+	 * This only applies to simulator-mode SSE broadcasts. A memoized provider failure, including a forbidden null
+	 * payload, is reported once per key per broadcast. Key-selector and consumer failures remain per client.
+	 * A consumer failure does not invalidate a payload shared with other clients. A later broadcast can retry a
+	 * failed provider key. Without a handler, or if it throws, Soklet logs the original failure.
 	 *
 	 * @param onBroadcastError handler for broadcast errors, or {@code null} to clear
 	 * @return this simulator

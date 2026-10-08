@@ -795,11 +795,12 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		requireNonNull(request);
 		requireNonNull(resourceMethods);
 
-		// Choose the most specific routes: prefer non-varargs, then fewer placeholders, then more literals.
+		// The same key governs compile-time/runtime ambiguity and route selection.
+		Map<ResourceMethod, ResourcePathSpecificity> specificities = new HashMap<>();
+		for (ResourceMethod resourceMethod : resourceMethods)
+			specificities.put(resourceMethod, ResourcePathSpecificity.from(resourceMethod.getResourcePathDeclaration()));
 		Comparator<ResourceMethod> specificityComparator = Comparator
-				.comparing((ResourceMethod resourceMethod) -> resourceMethod.getResourcePathDeclaration().getVarargsComponent().isPresent())
-				.thenComparingLong(DefaultResourceMethodResolver::placeholderCount)
-				.thenComparingLong(resourceMethod -> -literalCount(resourceMethod));
+				.comparing(resourceMethod -> requireNonNull(specificities.get(resourceMethod)));
 
 		ResourceMethod mostSpecific = resourceMethods.stream()
 				.min(specificityComparator)
@@ -813,22 +814,6 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 				.collect(Collectors.toSet());
 	}
 
-	private static long placeholderCount(@NonNull ResourceMethod resourceMethod) {
-		requireNonNull(resourceMethod);
-
-		return resourceMethod.getResourcePathDeclaration().getComponents().stream()
-				.filter(component -> component.getType() == ResourcePathDeclaration.ComponentType.PLACEHOLDER)
-				.count();
-	}
-
-	private static long literalCount(@NonNull ResourceMethod resourceMethod) {
-		requireNonNull(resourceMethod);
-
-		return resourceMethod.getResourcePathDeclaration().getComponents().stream()
-				.filter(component -> component.getType() == ResourcePathDeclaration.ComponentType.LITERAL)
-				.count();
-	}
-
 	private static void validateNoAmbiguousResourceMethods(@NonNull Set<@NonNull ResourceMethod> resourceMethods) {
 		requireNonNull(resourceMethods);
 
@@ -839,14 +824,10 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 
 		for (ResourceMethod resourceMethod : resourceMethods) {
 			ResourcePathDeclaration declaration = resourceMethod.getResourcePathDeclaration();
-			boolean hasVarargs = declaration.getVarargsComponent().isPresent();
-
 			SpecificityKey key = new SpecificityKey(
 					resourceMethod.getHttpMethod(),
 					resourceMethod.isSseEventSource(),
-					hasVarargs,
-					placeholderCount(resourceMethod),
-					literalCount(resourceMethod));
+					ResourcePathSpecificity.from(declaration));
 
 			groups.computeIfAbsent(key, ignored -> new ArrayList<>()).add(resourceMethod);
 		}
@@ -1114,15 +1095,11 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 
 	private record SpecificityKey(@NonNull HttpMethod httpMethod,
 															 @NonNull Boolean sseEventSource,
-															 @NonNull Boolean hasVarargs,
-															 @NonNull Long placeholderCount,
-															 @NonNull Long literalCount) {
+			@NonNull ResourcePathSpecificity specificity) {
 		private SpecificityKey {
 			requireNonNull(httpMethod);
 			requireNonNull(sseEventSource);
-			requireNonNull(hasVarargs);
-			requireNonNull(placeholderCount);
-			requireNonNull(literalCount);
+			requireNonNull(specificity);
 		}
 	}
 

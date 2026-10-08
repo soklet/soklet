@@ -29,6 +29,15 @@ import static java.util.Objects.requireNonNull;
  * Hook methods that can adjust Soklet's request processing flow.
  * <p>
  * A standard threadsafe implementation can be acquired via {@link #defaultInstance()}.
+ * <p>
+ * These hooks cover synchronous request handling and response handoff, not execution of an HTTP
+ * {@link StreamingResponseBody}. The built-in HTTP server invokes streaming writers and source factories
+ * on a separate producer thread without propagating interceptor-bound {@link ThreadLocal} values,
+ * scoped values, transactions, or tracing scopes. Production can overlap remaining wrapping or lifecycle
+ * observation; there is no guarantee that those callbacks have returned before the producer starts.
+ * Capture required immutable context while the resource method runs and explicitly bind it inside the
+ * producer when application helpers need ambient context. Interceptor-owned resources must not be
+ * used by the producer after their request-handling lifetime ends.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -48,6 +57,9 @@ public interface RequestInterceptor {
 	 * <p>
 	 * You must call {@code requestProcessor.accept(...)} exactly once before returning to advance processing.
 	 * If you do not, Soklet logs the error and returns a 500 response.
+	 * <p>
+	 * A scope established around {@code requestProcessor.accept(...)} does not cover streaming body
+	 * production. Capture needed values before returning the response; see {@link StreamingResponseWriter}.
 	 * <p>
 	 * This method <strong>is not</strong> fail-fast. If an exception occurs when Soklet invokes this method,
 	 * Soklet will catch it and surface separately via {@link LifecycleObserver#didReceiveLogEvent(LogEvent)}
@@ -84,6 +96,12 @@ public interface RequestInterceptor {
 	 * Do not offload the {@code responseGenerator} or {@code responseWriter} invocations to another thread:
 	 * Soklet's request lifecycle bookkeeping (for example, metrics correlation and timeout handling)
 	 * is thread-affine to the request-handler thread.
+	 * <p>
+	 * Generating a streaming response creates a body descriptor; it does not execute the producer in
+	 * this method's scope. A transaction opened here covers response generation, not subsequent body
+	 * production or delivery. Materialize the needed data before that transaction ends, or open a separate
+	 * bounded transaction in the producer. Do not capture a transaction-bound cursor or lazy entity whose
+	 * owning transaction ends here.
 	 *
 	 * @param serverType                the server type that received the request
 	 * @param request                   the request that was received

@@ -4,6 +4,7 @@ com.soklet.BearerAuthenticationError
 com.soklet.CallbackRegistration
 com.soklet.CancelationToken
 com.soklet.CorsPreflight
+com.soklet.HttpRequestResult
 com.soklet.HttpServer
 com.soklet.HttpServer$Builder
 com.soklet.HttpTransportAttachmentContext
@@ -12,6 +13,8 @@ com.soklet.LifecyclePolicy$Builder
 com.soklet.MarshaledResponse
 com.soklet.MarshaledResponse$Builder
 com.soklet.MarshaledResponse$Copier
+com.soklet.MetricsCollector$HistogramSnapshot
+com.soklet.MetricsCollector$HttpResponseStreamTerminationKey
 com.soklet.MetricsCollector$HttpServerRouteKey
 com.soklet.MetricsCollector$HttpServerRouteStatusKey
 com.soklet.MetricsCollector$RequestReadFailureKey
@@ -65,6 +68,7 @@ com.soklet.SokletStartupException
 com.soklet.SokletStatus
 com.soklet.SokletUnexpectedTerminationException
 com.soklet.SseClientInitializer
+com.soklet.SseConnection$HandshakeFailureReason
 com.soklet.SseHandshakeResult$Accepted
 com.soklet.SseHandshakeResult$Accepted$Builder
 com.soklet.SseRequestResult$HandshakeAccepted

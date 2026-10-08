@@ -88,6 +88,71 @@ final class DirectParticipantPhaseGateTests {
 	}
 
 	@Test
+	void frozenStartReceivesOneForcedCompensationAndRetainsClassification() {
+		DirectParticipantPhaseGate gate = new DirectParticipantPhaseGate();
+		ShutdownContext graceful = context(ShutdownPhase.GRACEFUL);
+		ShutdownContext forced = context(ShutdownPhase.FORCED);
+		Assertions.assertTrue(gate.claimStart());
+		Assertions.assertNull(gate.requestPhase(graceful));
+		gate.freezeForClassification(forced);
+		DirectParticipantPhaseGate.PhaseDelivery delivery = gate.completeStartCallDelivery();
+		Assertions.assertSame(forced, delivery.context());
+		Assertions.assertTrue(delivery.afterClassificationFreeze());
+		Assertions.assertTrue(gate.startupCallActive());
+		Assertions.assertNull(gate.completeStartCallDelivery());
+		Assertions.assertNull(gate.requestPhase(forced));
+		Assertions.assertNull(gate.requestPhase(graceful));
+		Assertions.assertFalse(gate.claimStart());
+	}
+
+	@Test
+	void freezeSuppliesForceEvenWhenPhaseWorkersHaveNotEntered() {
+		DirectParticipantPhaseGate gate = new DirectParticipantPhaseGate();
+		ShutdownContext forced = context(ShutdownPhase.FORCED);
+		Assertions.assertTrue(gate.claimStart());
+		gate.freezeForClassification(forced);
+		gate.freezeForClassification(context(ShutdownPhase.FORCED));
+		DirectParticipantPhaseGate.PhaseDelivery delivery = gate.completeStartCallDelivery();
+		Assertions.assertSame(forced, delivery.context());
+		Assertions.assertTrue(delivery.afterClassificationFreeze());
+		Assertions.assertNull(gate.requestPhase(forced), "A delayed worker cannot replay force");
+	}
+
+	@Test
+	void freezeDoesNotReplayAForceAlreadyClaimedBeforeClassification() {
+		DirectParticipantPhaseGate gate = new DirectParticipantPhaseGate();
+		ShutdownContext forced = context(ShutdownPhase.FORCED);
+		Assertions.assertTrue(gate.claimStart());
+		Assertions.assertNull(gate.requestPhase(forced));
+		DirectParticipantPhaseGate.PhaseDelivery delivery = gate.completeStartCallDelivery();
+		Assertions.assertSame(forced, delivery.context());
+		Assertions.assertFalse(delivery.afterClassificationFreeze());
+		gate.freezeForClassification(forced);
+		Assertions.assertFalse(gate.startupCallActive());
+		Assertions.assertNull(gate.completeStartCallDelivery());
+		Assertions.assertNull(gate.requestPhase(forced));
+	}
+
+	@Test
+	void compensationMetadataDoesNotRenderClockAndRejectsNonForcedContext() {
+		DirectParticipantPhaseGate gate = new DirectParticipantPhaseGate();
+		IllegalArgumentException failure = Assertions.assertThrows(IllegalArgumentException.class,
+				() -> gate.freezeForClassification(context(ShutdownPhase.GRACEFUL)));
+		Assertions.assertEquals("Late startup cleanup requires forced shutdown", failure.getMessage());
+		Assertions.assertNull(failure.getCause());
+		NanoClock privateClock = new NanoClock() {
+			@Override public long nanoTime() { return 0L; }
+			@Override public String toString() { return "private-clock-canary"; }
+		};
+		Assertions.assertTrue(gate.claimStart());
+		gate.freezeForClassification(new ShutdownContext(ShutdownPhase.FORCED, privateClock, 0L));
+		DirectParticipantPhaseGate.PhaseDelivery delivery = gate.completeStartCallDelivery();
+		Assertions.assertEquals(ShutdownPhase.FORCED, delivery.context().getShutdownPhase());
+		Assertions.assertTrue(delivery.afterClassificationFreeze());
+		Assertions.assertFalse(delivery.toString().contains("private-clock-canary"));
+	}
+
+	@Test
 	void coordinatorFreezesGateBeforeReadingEvidence() throws Exception {
 		LifecycleWorkers workers = new LifecycleWorkers((name, task) -> task.run());
 		DeadlineWaiter waiter = new DeadlineWaiter(CLOCK);

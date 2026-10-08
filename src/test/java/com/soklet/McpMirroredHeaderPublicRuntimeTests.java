@@ -23,6 +23,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 import javax.annotation.concurrent.NotThreadSafe;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -54,7 +56,7 @@ public class McpMirroredHeaderPublicRuntimeTests {
 	private static final String TOOL_NAME = "catalog.route";
 
 	@Test
-	public void publicPlansValidateBeforeAdmissionAndIgnoreUnknownsByDefault()
+	public void publicPlansValidateAfterAdmissionAndIgnoreUnknownsByDefault()
 			throws Exception {
 		AtomicInteger admissions = new AtomicInteger();
 		AtomicInteger handlers = new AtomicInteger();
@@ -81,8 +83,8 @@ public class McpMirroredHeaderPublicRuntimeTests {
 			HttpResponse<String> mismatch = call(port, MCP_PATH, "mismatch",
 					TOOL_NAME, mirroredArgumentsJson(), mismatchHeaders);
 			assertError(mismatch, -32_020, "mismatch");
-			Assertions.assertEquals(1, admissions.get(),
-					"A recognized mismatch must fail before public admission.");
+			Assertions.assertEquals(2, admissions.get(),
+					"Registration-specific header checks follow public admission.");
 			Assertions.assertEquals(1, handlers.get(),
 					"A recognized mismatch must fail before the tool handler.");
 
@@ -91,7 +93,7 @@ public class McpMirroredHeaderPublicRuntimeTests {
 			HttpResponse<String> ignored = call(port, MCP_PATH, "ignored",
 					TOOL_NAME, mirroredArgumentsJson(), unknownHeaders);
 			assertSuccess(ignored, "ignored");
-			Assertions.assertEquals(2, admissions.get());
+			Assertions.assertEquals(3, admissions.get());
 			Assertions.assertEquals(2, handlers.get());
 			assertBodyAuthoritativeArguments(observed, observedRaw);
 			Assertions.assertFalse(ignored.body().contains("administrator-canary"),
@@ -100,6 +102,115 @@ public class McpMirroredHeaderPublicRuntimeTests {
 			soklet.close();
 		}
 	}
+
+	@Test
+	public void wideIntegerMirrorsRegisterAndPublishJavaTypeRanges() {
+		McpToolRegistration<WideIntegerArguments> tool = wideIntegerTool(new AtomicInteger(), new AtomicReference<>());
+		McpJsonObject properties = (McpJsonObject) tool.getInputSchema().getDocument().find("properties").orElseThrow();
+		for (String property : List.of("primitiveValue", "boxedValue")) {
+			McpJsonObject schema = (McpJsonObject) properties.find(property).orElseThrow();
+			Assertions.assertEquals(McpJsonString.fromValue("integer"), schema.find("type").orElseThrow());
+			Assertions.assertEquals(McpJsonNumber.fromValue(BigDecimal.valueOf(Long.MIN_VALUE)), schema.find("minimum").orElseThrow());
+			Assertions.assertEquals(McpJsonNumber.fromValue(BigDecimal.valueOf(Long.MAX_VALUE)), schema.find("maximum").orElseThrow());
+		}
+		McpJsonObject bigIntegerSchema = (McpJsonObject) properties.find("bigIntegerValue").orElseThrow();
+		Assertions.assertEquals(McpJsonString.fromValue("integer"), bigIntegerSchema.find("type").orElseThrow());
+		Assertions.assertEquals(McpJsonString.fromValue("BigInteger"), bigIntegerSchema.find("x-mcp-header").orElseThrow());
+		Assertions.assertTrue(bigIntegerSchema.find("minimum").isEmpty());
+		Assertions.assertTrue(bigIntegerSchema.find("maximum").isEmpty());
+	}
+
+	@Test
+	public void modernIntegerMirrorsConstrainValuesAndLegacyRegistrationsRejectMirrors() throws Exception {
+		AtomicInteger handlers = new AtomicInteger();
+		AtomicInteger admissions = new AtomicInteger();
+		AtomicReference<WideIntegerArguments> observed = new AtomicReference<>();
+		McpToolRegistration<WideIntegerArguments> tool = wideIntegerTool(handlers, observed);
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
+				McpImplementation.withNameAndVersion("wide-integer-mirrors", "1").build(), tool.getProtocolVersions())
+				.toolRegistrations(List.of(tool)).build();
+		McpServer server = serverBuilder(List.of(endpoint), admissions, CorsAuthorizer.rejectAllInstance()).build();
+		try (Soklet owner = lifecycleSoklet(server, new CopyOnWriteArrayList<>())) {
+			owner.start();
+			int port = boundPort(server);
+			for (String value : List.of("-9007199254740991", "0", "9007199254740991")) {
+				HttpResponse<String> response = numericCall(port,
+						numericArguments(value, value, value), numericHeaders(value, value, value));
+				assertSuccess(response, "numeric");
+				Assertions.assertEquals(new WideIntegerArguments(Long.parseLong(value), Long.valueOf(value),
+						new BigInteger(value)), observed.get());
+			}
+			HttpResponse<String> exponent = numericCall(port,
+					numericArguments("9.007199254740991e15", "-9007199254740991.0", "-0"),
+					numericHeaders("9007199254740991", "-9007199254740991", "0"));
+			assertSuccess(exponent, "numeric");
+			Assertions.assertEquals(new WideIntegerArguments(9007199254740991L, -9007199254740991L, BigInteger.ZERO), observed.get());
+			Assertions.assertEquals(4, handlers.get());
+
+			for (int property = 0; property < 3; ++property) {
+				for (String unsafe : List.of("-9007199254740992", "9007199254740992",
+						Long.toString(Long.MIN_VALUE), Long.toString(Long.MAX_VALUE))) {
+					String[] values = { "0", "0", "0" };
+					values[property] = unsafe;
+					assertNumericMismatch(numericCall(port,
+							numericArguments(values[0], values[1], values[2]), numericHeaders(values[0], values[1], values[2])));
+				}
+			}
+			assertNumericMismatch(numericCall(port,
+					numericArguments("0", "0", "1e99"), numericHeaders("0", "0", "1")));
+			for (String noncanonical : List.of("+1", "01", "-0"))
+				assertNumericMismatch(numericCall(port,
+						numericArguments("0", "0", noncanonical.equals("-0") ? "0" : "1"),
+						numericHeaders("0", "0", noncanonical)));
+			Assertions.assertEquals(4, handlers.get(), "Invalid mirrors cannot enter the application handler.");
+
+			Assertions.assertEquals(20, admissions.get(), "Modern value constraints follow admission.");
+		}
+		for (McpProtocolVersion version : List.of(McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25)) {
+			McpToolRegistration<WideIntegerArguments> legacyTool = McpToolRegistration.withName("wide.integer", Set.of(version))
+					.argumentType(WideIntegerArguments.class)
+					.handler((requestContext, toolArguments, invocationFeatures) -> McpCompleteResult.fromToolText("unreachable"))
+					.build();
+			Assertions.assertThrows(IllegalStateException.class, () -> McpEndpoint.withPath(MCP_PATH,
+					McpImplementation.withNameAndVersion("legacy-integer-mirrors", "1").build(), Set.of(version))
+					.toolRegistrations(List.of(legacyTool)).build());
+		}
+	}
+
+	private static McpToolRegistration<WideIntegerArguments> wideIntegerTool(AtomicInteger handlers,
+			AtomicReference<WideIntegerArguments> observed) {
+		return McpToolRegistration.withName("wide.integer", Set.of(McpProtocolVersion.V2026_07_28))
+				.argumentType(WideIntegerArguments.class)
+				.handler((requestContext, toolArguments, invocationFeatures) -> {
+					handlers.incrementAndGet();
+					observed.set(toolArguments.getConvertedArguments());
+					return McpCompleteResult.fromToolText("accepted");
+				}).build();
+	}
+
+	private static String numericArguments(String primitiveValue, String boxedValue, String bigIntegerValue) {
+		return "{\"primitiveValue\":" + primitiveValue + ",\"boxedValue\":" + boxedValue
+				+ ",\"bigIntegerValue\":" + bigIntegerValue + "}";
+	}
+
+	private static Map<String, String> numericHeaders(String primitiveValue, String boxedValue, String bigIntegerValue) {
+		return Map.of("Mcp-Param-Primitive", primitiveValue, "Mcp-Param-Boxed", boxedValue,
+				"Mcp-Param-BigInteger", bigIntegerValue);
+	}
+
+	private static HttpResponse<String> numericCall(int port,
+			String argumentsJson, Map<String, String> headers) throws Exception {
+		return call(port, MCP_PATH, "numeric", "wide.integer", argumentsJson, headers);
+	}
+
+	private static void assertNumericMismatch(HttpResponse<String> response) {
+		Assertions.assertEquals(400, response.statusCode(), response.body());
+		Assertions.assertEquals("{\"jsonrpc\":\"2.0\",\"id\":\"numeric\",\"error\":{\"code\":-32020,\"message\":\"Header mismatch\"}}",
+				response.body());
+	}
+
+	private record WideIntegerArguments(@McpHeader(name = "Primitive") long primitiveValue,
+			@McpHeader(name = "Boxed") Long boxedValue, @McpHeader(name = "BigInteger") BigInteger bigIntegerValue) { }
 
 	@Test
 	public void unknownNameDiagnosticsAreDefaultOffOnThePublicListener()
@@ -280,7 +391,7 @@ public class McpMirroredHeaderPublicRuntimeTests {
 	}
 
 	@Test
-	public void strictUnknownPolicyRejectsBeforeAdmissionWithoutReflection()
+	public void strictUnknownPolicyRejectsAfterAdmissionWithoutReflection()
 			throws Exception {
 		AtomicInteger admissions = new AtomicInteger();
 		AtomicInteger handlers = new AtomicInteger();
@@ -309,7 +420,7 @@ public class McpMirroredHeaderPublicRuntimeTests {
 					response.body());
 			Assertions.assertFalse(response.body().contains("super-secret-value"),
 					response.body());
-			Assertions.assertEquals(0, admissions.get());
+			Assertions.assertEquals(1, admissions.get());
 			Assertions.assertEquals(0, handlers.get());
 			assertNameDiagnostic(events, "Mcp-Param-Super-Secret-Name",
 					"super-secret-value");

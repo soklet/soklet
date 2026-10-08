@@ -183,8 +183,8 @@ public class McpHttpContractGoldenProductionTests {
 					new RequestCase("schema-failure",
 							validToolPost("schema-failure", TOOL_NAME,
 									"schema-failure", false),
-							"invalid-params-400.http.hex", List.of("admission",
-									"request-limiter", "tool-limiter", "interceptor")),
+							"tool-argument-error-200.http.hex", List.of("admission",
+									"request-limiter", "tool-limiter", "interceptor", "sanitizer")),
 					new RequestCase("handler-failure",
 							validToolPost("handler-failure", TOOL_NAME,
 									"handler-failure", false),
@@ -648,7 +648,7 @@ public class McpHttpContractGoldenProductionTests {
 		Path manifest = GOLDEN_ROOT.resolve("manifest.sha256");
 		Assertions.assertTrue(Files.isRegularFile(manifest, LinkOption.NOFOLLOW_LINKS));
 		List<String> rows = Files.readAllLines(manifest, StandardCharsets.US_ASCII);
-		Assertions.assertEquals(22, rows.size());
+		Assertions.assertEquals(23, rows.size());
 		List<String> manifested = new ArrayList<>();
 		for (String row : rows) {
 			String[] fields = row.split("  ", -1);

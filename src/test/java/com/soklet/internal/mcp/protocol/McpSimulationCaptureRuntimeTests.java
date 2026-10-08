@@ -283,6 +283,137 @@ public class McpSimulationCaptureRuntimeTests {
 	}
 
 	@Test
+	public void terminalBeforeResponseHeadRetainsOrderingAndExactCaptureBudget()
+			throws Exception {
+		McpRequestSseStream.Frame progress = frame("progress");
+		McpRequestSseStream.Frame terminal = frame("terminal");
+		SseCapture capture = newSseCapture(options(2,
+				progress.encodedBytes().length + terminal.encodedBytes().length));
+		AtomicInteger cancellationCalls = new AtomicInteger();
+		capture.runtime().bindController(reason -> {
+			cancellationCalls.incrementAndGet();
+			return true;
+		});
+		Assertions.assertTrue(capture.runtime().enqueue(progress));
+		Assertions.assertTrue(capture.runtime().complete(terminal));
+		Assertions.assertFalse(capture.runtime().complete(frame("late")));
+		Assertions.assertEquals(McpOutboundChannel.OfferResult.CLOSED,
+				capture.runtime().offer(frame("late-progress")));
+		capture.runtime().close();
+		Assertions.assertEquals(0, cancellationCalls.get(),
+				"A later client close must not replace the reserved terminal result.");
+		Assertions.assertTrue(capture.runtime().awaitResponse(Duration.ZERO).isEmpty());
+		Assertions.assertTrue(capture.runtime().awaitStreamItem(Duration.ZERO).isEmpty());
+		Assertions.assertTrue(capture.runtime().awaitCompletion(Duration.ZERO).isEmpty());
+		Assertions.assertEquals(0, capture.listener().terminationCount());
+
+		MicrohttpResponse head = capture.runtime().response(List.of(
+				new Header("Content-Type", "text/event-stream")));
+		capture.runtime().acceptResponse(head);
+		Assertions.assertEquals(McpSimulationBodyType.SSE,
+				capture.runtime().awaitResponse(Duration.ZERO).orElseThrow().getBodyType());
+		capture.listener().assertTermination(StreamTerminationReason.COMPLETED,
+				McpStreamTerminationReason.COMPLETED);
+		capture.runtime().didFinishRequest(McpRequestOutcome.COMPLETE, List.of());
+		assertEncodedBytes(progress, capture.runtime().awaitStreamItem(Duration.ZERO).orElseThrow());
+		McpSimulationStreamItem terminalItem = capture.runtime()
+				.awaitStreamItem(Duration.ZERO).orElseThrow();
+		assertEncodedBytes(terminal, terminalItem);
+		Assertions.assertTrue(capture.runtime().awaitStreamItem(Duration.ZERO).isEmpty());
+		Assertions.assertEquals(publicObject(terminalItem.getMessage().orElseThrow()).getMembers(),
+				publicObject(completion(capture).getTerminalMessage().orElseThrow()).getMembers());
+		Assertions.assertTrue(completion(capture).getThrowables().isEmpty());
+		Assertions.assertEquals(1, capture.completionCallbacks().get());
+		capture.runtime().acceptResponse(head);
+		capture.runtime().didFinishRequest(McpRequestOutcome.INTERNAL_ERROR, List.of());
+		Assertions.assertEquals(1, capture.listener().terminationCount());
+		Assertions.assertEquals(1, capture.completionCallbacks().get());
+	}
+
+	@Test
+	public void terminalBeforeResponseHeadPreservesExactCaptureLimitFailures()
+			throws Exception {
+		McpRequestSseStream.Frame progress = frame("progress");
+		McpRequestSseStream.Frame terminal = frame("terminal");
+		for (boolean itemLimit : List.of(true, false)) {
+			McpStreamTerminationReason expected = itemLimit
+					? McpStreamTerminationReason.SIMULATOR_CAPTURE_ITEM_LIMIT_EXCEEDED
+					: McpStreamTerminationReason.SIMULATOR_CAPTURE_BYTE_LIMIT_EXCEEDED;
+			SseCapture capture = newSseCapture(options(itemLimit ? 1 : 2,
+					progress.encodedBytes().length + terminal.encodedBytes().length - 1));
+			Assertions.assertTrue(capture.runtime().enqueue(progress));
+			Assertions.assertFalse(capture.runtime().complete(terminal));
+			Assertions.assertEquals(0, capture.listener().terminationCount());
+			Assertions.assertTrue(capture.runtime().awaitCompletion(Duration.ZERO).isEmpty());
+			Assertions.assertTrue(capture.runtime().awaitResponse(Duration.ZERO).isEmpty());
+			Assertions.assertTrue(capture.runtime().awaitStreamItem(Duration.ZERO).isEmpty());
+			capture.runtime().acceptResponse(capture.runtime().response(List.of()));
+			Assertions.assertEquals(McpSimulationBodyType.SSE,
+					capture.runtime().awaitResponse(Duration.ZERO).orElseThrow().getBodyType());
+			capture.listener().assertTermination(StreamTerminationReason.SIMULATOR_LIMIT_EXCEEDED,
+					expected);
+			capture.runtime().didFinishRequest(McpRequestOutcome.CANCELED, List.of());
+			Assertions.assertEquals(expected, completion(capture).getReason());
+			Assertions.assertTrue(completion(capture).getTerminalMessage().isEmpty());
+			assertEncodedBytes(progress, capture.runtime().awaitStreamItem(Duration.ZERO).orElseThrow());
+			Assertions.assertTrue(capture.runtime().awaitStreamItem(Duration.ZERO).isEmpty());
+			Assertions.assertEquals(1, capture.completionCallbacks().get());
+		}
+	}
+
+	@Test
+	public void unpublishedTerminalCanBeAbortedWhilePublishedTerminalKeepsItsWinner()
+			throws Exception {
+		for (boolean publishHead : List.of(false, true)) {
+			SseCapture capture = newSseCapture(options(2, 1_024));
+			Assertions.assertTrue(capture.runtime().enqueue(frame("progress")));
+			Assertions.assertTrue(capture.runtime().complete(frame("terminal")));
+			MicrohttpResponse head = capture.runtime().response(List.of());
+			if (publishHead)
+				capture.runtime().acceptResponse(head);
+			Assertions.assertEquals(publishHead, capture.runtime().isTerminalWritten(),
+					"A terminal frame is delivered only after its response head.");
+			Assertions.assertEquals(!publishHead,
+					capture.runtime().fail(StreamTerminationReason.SERVER_STOPPING, null));
+			capture.runtime().didFinishRequest(publishHead ? McpRequestOutcome.COMPLETE
+					: McpRequestOutcome.CANCELED, List.of());
+			Assertions.assertEquals(publishHead ? McpStreamTerminationReason.COMPLETED
+					: McpStreamTerminationReason.SERVER_STOPPING, completion(capture).getReason());
+			Assertions.assertEquals(publishHead, completion(capture).getTerminalMessage().isPresent());
+			capture.listener().assertTermination(publishHead ? StreamTerminationReason.COMPLETED
+					: StreamTerminationReason.SERVER_STOPPING, completion(capture).getReason());
+			Assertions.assertEquals(1, capture.completionCallbacks().get());
+			if (!publishHead) {
+				capture.runtime().acceptResponse(head);
+				Assertions.assertTrue(capture.runtime().awaitResponse(Duration.ZERO).isEmpty());
+				Assertions.assertTrue(capture.runtime().awaitStreamItem(Duration.ZERO).isEmpty());
+			}
+		}
+	}
+
+	@Test
+	public void finiteResponseCanReplaceAnUnpublishedCompletedSseChannel()
+			throws Exception {
+		SseCapture capture = newSseCapture(options(2, 1_024));
+		Assertions.assertTrue(capture.runtime().enqueue(frame("progress")));
+		Assertions.assertTrue(capture.runtime().complete(frame("terminal")));
+		byte[] body = "{\"error\":\"denied\"}".getBytes(StandardCharsets.UTF_8);
+		capture.runtime().acceptResponse(new MicrohttpResponse(403, "Forbidden",
+				List.of(new Header("Content-Type", "application/json")), body));
+		McpSimulationResponse response = capture.runtime().awaitResponse(Duration.ZERO).orElseThrow();
+		Assertions.assertEquals(403, response.getStatusCode());
+		Assertions.assertEquals(McpSimulationBodyType.JSON, response.getBodyType());
+		Assertions.assertArrayEquals(body, response.getBody().orElseThrow());
+		Assertions.assertFalse(capture.runtime().isTerminalWritten(),
+				"An abandoned SSE channel must not report delivered terminal output.");
+		Assertions.assertEquals(0, capture.listener().terminationCount());
+		Assertions.assertTrue(capture.runtime().awaitStreamItem(Duration.ZERO).isEmpty());
+		capture.runtime().didFinishRequest(McpRequestOutcome.REJECTED, List.of());
+		Assertions.assertTrue(completion(capture).getTerminalMessage().isEmpty());
+		Assertions.assertEquals(1, capture.completionCallbacks().get());
+	}
+
+	@Test
 	public void terminalFrameIsCountedOnceAndRepeatedInCompletion()
 			throws Exception {
 		McpJsonRpcMessage.Notification progress = notification(

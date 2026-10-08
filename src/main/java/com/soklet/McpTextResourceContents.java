@@ -31,6 +31,12 @@ import static java.util.Objects.requireNonNull;
 /**
  * Immutable UTF-16 Java text contents for one MCP resource.
  *
+ * <p>Construction rejects unpaired UTF-16 surrogates with
+ * {@link IllegalArgumentException}. Well-formed text is retained exactly,
+ * without normalization or replacement. Text must fit the independent JSON
+ * string/token and complete-response limits described by {@link McpJsonString};
+ * construction does not prevalidate its eventual serialized size.</p>
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
@@ -53,7 +59,7 @@ public final class McpTextResourceContents implements McpResourceContents {
 	 * @param text resource text
 	 * @return resource-content builder
 	 * @throws IllegalArgumentException if the URI is relative, not normalized,
-	 * or not in ASCII wire form
+	 * or not in ASCII wire form, or the text contains an unpaired surrogate
 	 */
 	@NonNull
 	public static Builder withUriAndText(@NonNull URI uri,
@@ -161,7 +167,7 @@ public final class McpTextResourceContents implements McpResourceContents {
 		private Builder(@NonNull URI uri, @NonNull String text) {
 			this.uri = McpResourceValueSupport
 					.requireAbsoluteNormalizedUri(uri);
-			this.text = requireNonNull(text);
+			this.text = McpContentValueSupport.requireWellFormedString(text);
 		}
 
 		/**

@@ -1159,7 +1159,7 @@ public class SokletSimulatorIsolationTests {
 
 	@Test
 	@Timeout(value = 120, unit = TimeUnit.SECONDS)
-	public void scopeMcpBuilderPreservesPortPolicyWithoutBinding() throws Exception {
+	public void scopeMcpBuilderPreservesAutomaticHostPortPolicyWithoutBinding() throws Exception {
 		int configuredPort = 43_217;
 		AtomicReference<McpServer> escapedServer = new AtomicReference<>();
 		AtomicInteger handlerCalls = new AtomicInteger();
@@ -1170,8 +1170,16 @@ public class SokletSimulatorIsolationTests {
 					return McpCompleteResult.fromToolText("scope complete");
 				}).build();
 
-		SimulatorConfig simulatorConfig = mcpConfig(SimulatorConfig.builder(),
-				configuredPort, List.of(tool));
+		// Explicit allowedHosts names intentionally accept public proxy ports.
+		// This test exercises automatic loopback authority and its listener port.
+		SimulatorConfig simulatorConfig = SimulatorConfig.builder()
+				.configureMcpServer(builder -> configureMcpBuilder(builder
+						.port(configuredPort)
+						.endpointRegistry(mcpEndpointRegistry(List.of(tool)))
+						.admissionController(McpAdmissionController.acceptAllInstance()))
+						.allowedHosts(Set.of()))
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.build();
 		SokletSimulator.run(simulatorConfig, simulator -> {
 			escapedServer.set(simulator.getMcpServer().orElseThrow());
 			McpSimulation accepted = simulator.startMcpRequest(mcpRequest(

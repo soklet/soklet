@@ -123,6 +123,13 @@ public final class McpResourceRegistration {
 	 * also enforces the limit of 256 URI templates per endpoint at server
 	 * construction.
 	 *
+	 * <p>Level 1 simple variables do not consume a raw slash. For example,
+	 * {@code file:///{path}} matches {@code file:///src%2Fmain.rs} with variable
+	 * value {@code src/main.rs}, but does not match {@code file:///src/main.rs}.
+	 * Captured values are UTF-8 percent-decoded exactly once; {@code %252F}
+	 * becomes the literal string {@code %2F}. Reserved expansion
+	 * ({@code {+path}}), explode and prefix modifiers are unsupported.
+	 *
 	 * <p>Neither validation step authorizes expanded URIs or establishes that
 	 * their scheme is safe for the application's delivery intent.
 	 *

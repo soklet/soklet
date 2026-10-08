@@ -517,7 +517,8 @@ public class McpInputRequiredPublicRuntimeTests {
 					"missing-required", "required-urlInput", "{}");
 			assertMissingCapability(missingRequired, "missing-required",
 					URL_INPUT_CAPABILITY);
-			assertCounts(0, admissionInvocations, requestLimiterInvocations,
+			Assertions.assertEquals(1, admissionInvocations.get());
+			assertCounts(0, requestLimiterInvocations,
 					toolLimiterInvocations, requiredHandlerInvocations,
 					conditionalCompleteHandlerInvocations,
 					conditionalInputHandlerInvocations, sanitizerInvocations);
@@ -525,7 +526,7 @@ public class McpInputRequiredPublicRuntimeTests {
 			HttpResponse<String> supportedRequired = callTool(port,
 					"supported-required", "required-urlInput", URL_INPUT_CAPABILITY);
 			assertInputRequired(supportedRequired, "supported-required");
-			Assertions.assertEquals(1, admissionInvocations.get());
+			Assertions.assertEquals(2, admissionInvocations.get());
 			Assertions.assertEquals(1, requestLimiterInvocations.get());
 			Assertions.assertEquals(1, toolLimiterInvocations.get());
 			Assertions.assertEquals(1, requiredHandlerInvocations.get());
@@ -549,7 +550,7 @@ public class McpInputRequiredPublicRuntimeTests {
 					"conditional-supported", "conditional-input",
 					URL_INPUT_CAPABILITY);
 			assertInputRequired(emittedWithCapability, "conditional-supported");
-			Assertions.assertEquals(4, admissionInvocations.get());
+			Assertions.assertEquals(5, admissionInvocations.get());
 			Assertions.assertEquals(4, requestLimiterInvocations.get());
 			Assertions.assertEquals(4, toolLimiterInvocations.get());
 			Assertions.assertEquals(2, conditionalInputHandlerInvocations.get());
@@ -560,7 +561,7 @@ public class McpInputRequiredPublicRuntimeTests {
 	}
 
 	@Test
-	public void staticCatalogIsCallerNeutralWhileRequiredFormCallChecksBeforeAdmission()
+	public void staticCatalogIsCallerNeutralWhileRequiredFormCallChecksAfterAdmission()
 			throws Exception {
 		String toolName = "catalog-required-form";
 		String promptName = "catalog-neutral-prompt";
@@ -712,9 +713,8 @@ public class McpInputRequiredPublicRuntimeTests {
 					"{}", "Bearer missing");
 			assertMissingCapability(missingCapability, "missing-form",
 					FORM_CAPABILITY);
-			Assertions.assertFalse(admissionObservations.stream()
-					.anyMatch(observation -> observation.startsWith("missing-form|")),
-					"A missing REQUIRED capability must fail before admission.");
+			Assertions.assertTrue(admissionObservations.contains("missing-form|missing|false"),
+					"Required capabilities are checked only after application admission.");
 
 			HttpResponse<String> supported = sendAsCaller(port, "supported-form",
 					"tools/call", toolName,
@@ -728,6 +728,7 @@ public class McpInputRequiredPublicRuntimeTests {
 					"caller-neutral-prompts|alpha|false",
 					"caller-neutral-prompts|beta|true",
 					"denied-list|denied|false",
+					"missing-form|missing|false",
 					"supported-form|gamma|true"), admissionObservations);
 			Assertions.assertEquals(5, requestLimiterInvocations.get());
 			Assertions.assertEquals(1, toolLimiterInvocations.get());

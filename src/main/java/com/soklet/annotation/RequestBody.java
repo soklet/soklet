@@ -34,6 +34,8 @@ public @interface RequestBody {
 	/**
 	 * Is this HTTP request body optional or required?
 	 *
+	 * An absent optional body bound to a primitive uses its Java default value.
+	 *
 	 * @return {@code true} if optional, {@code false} if required
 	 */
 	boolean optional() default false;

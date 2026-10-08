@@ -21,10 +21,17 @@ import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 
-import static java.util.Objects.requireNonNull;
-
 /**
  * An immutable JSON string.
+ *
+ * <p>Construction rejects unpaired UTF-16 surrogates with
+ * {@link IllegalArgumentException} and retains well-formed text exactly,
+ * without normalization or replacement. It does not guarantee that the
+ * value can be sent on the MCP wire. Production JSON independently limits
+ * decoded strings and their escaped tokens to 1,048,576 UTF-16 code units,
+ * excluding the surrounding quotes. For example, each newline consumes one
+ * decoded unit but two token units. Object member names have the same limits.
+ * The complete response is also limited to 4 MiB of UTF-8 JSON.</p>
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -38,6 +45,7 @@ public final class McpJsonString implements McpJsonValue {
 	 *
 	 * @param value the non-null string value
 	 * @return immutable JSON string
+	 * @throws IllegalArgumentException if the value contains an unpaired surrogate
 	 */
 	@NonNull
 	public static McpJsonString fromValue(@NonNull String value) {
@@ -45,7 +53,7 @@ public final class McpJsonString implements McpJsonValue {
 	}
 
 	private McpJsonString(@NonNull String value) {
-		this.value = requireNonNull(value);
+		this.value = McpContentValueSupport.requireWellFormedString(value);
 	}
 
 	/** @return string value */

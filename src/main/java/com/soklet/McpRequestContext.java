@@ -139,6 +139,16 @@ public interface McpRequestContext {
 	 * {@link java.math.BigDecimal#toPlainString()} avoids exponent notation but
 	 * does not restore the original decimal scale.
 	 *
+	 * <p>This accessor exposes application JSON, not the framework's hidden
+	 * round, issuance, or expiry metadata. A valid retry at the configured
+	 * maximum round may complete, but cannot emit further framework state.
+	 * State that expires during the handler also cannot be re-emitted. Sealing
+	 * occurs after the handler returns; either failure becomes a sanitized
+	 * internal error and does not roll back application side effects. Include
+	 * application workflow counters/deadlines in the protected JSON when the
+	 * handler needs them, and enforce durable consumption/idempotency in
+	 * application infrastructure.
+	 *
 	 * @return verified framework-protected state, or empty when absent
 	 */
 	@NonNull

@@ -125,11 +125,13 @@ public sealed interface McpServer permits DefaultMcpServer {
 	/**
 	 * Returns the optional application-owned task manager.
 	 * <p>
-	 * When present, this server advertises support for the MCP Tasks extension.
-	 * Soklet neither starts nor closes the manager and does not own its worker
-	 * runtime.
+	 * A configured manager enables the MCP Tasks extension only on endpoints
+	 * whose {@link McpEndpoint#getTaskProtocolVersions()} includes the selected
+	 * {@link McpProtocolVersion#V2026_07_28} revision. Other endpoints do not
+	 * inherit Tasks. Soklet neither starts nor closes the manager and does not
+	 * own its worker runtime.
 	 *
-	 * @return task manager, or the empty optional when Tasks are disabled
+	 * @return configured task manager, or the empty optional when none is configured
 	 */
 	@NonNull
 	Optional<@NonNull McpTaskManager> getTaskManager();
@@ -1016,7 +1018,10 @@ public sealed interface McpServer permits DefaultMcpServer {
 		/**
 		 * Sets the positive, finite number of pending messages retained for one
 		 * MCP response or subscription stream. The default is {@code 128}.
-		 * This setting has neutral behavior until its streaming owner is active.
+		 * Applies to request-scoped POST SSE, modern listen streams and configured
+		 * 2025 GET notification streams. Regular frames also share an encoded-byte
+		 * ceiling equal to one maximum outbound SSE frame; both limits apply.
+		 * The terminal frame has a separate bounded reservation.
 		 *
 		 * @param streamQueueCapacity maximum pending messages per stream, or null
 		 *                            to restore the default
@@ -1056,8 +1061,12 @@ public sealed interface McpServer permits DefaultMcpServer {
 
 		/**
 		 * Sets the positive finite interval between idle SSE keep-alive comments.
-		 * The default is 15 seconds. This setting has neutral behavior until its
-		 * streaming owner is active.
+		 * The default is 15 seconds. Applies to request-scoped POST SSE, modern
+		 * listen streams and configured 2025 GET notification streams. Successful
+		 * keep-alive writes reset the stream's write-idle clock; this interval must
+		 * be strictly shorter than {@link #writeTimeout(Duration)}, or
+		 * {@link #build()} rejects the configuration. Keep-alives do not renew
+		 * subscription authorization or extend a fixed stream lifetime.
 		 *
 		 * @param keepAliveInterval SSE keep-alive interval, or null to restore the
 		 *                          default
@@ -1241,12 +1250,16 @@ public sealed interface McpServer permits DefaultMcpServer {
 
 		/**
 		 * Configures the application-owned MCP task manager. A configured manager
-		 * enables and advertises the MCP Tasks extension for every endpoint on this
-		 * server.
+		 * enables and advertises the MCP Tasks extension only on endpoints explicitly
+		 * including {@link McpProtocolVersion#V2026_07_28} in
+		 * {@link McpEndpoint.Builder#taskProtocolVersions(Set)}. The annotation
+		 * {@link com.soklet.annotation.McpServerEndpoint#taskProtocolVersions()}
+		 * supplies the equivalent endpoint gate. Other endpoints do not inherit Tasks.
 		 * <p>
 		 * Soklet invokes the manager concurrently but does not start it, close it, or
-		 * own its workers. Passing {@code null} disables Tasks and is valid only when
-		 * no registered tool statically requires Tasks.
+		 * own its workers. Passing {@code null} disables Tasks. An endpoint declaring
+		 * Tasks requires a manager at construction; a statically task-required tool
+		 * also requires Tasks to be enabled for each revision exposing that tool.
 		 *
 		 * @param taskManager application-owned task manager, or null to disable Tasks
 		 * @return this builder

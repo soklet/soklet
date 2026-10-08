@@ -1,10 +1,14 @@
 # Model Context Protocol (MCP)
 
-Soklet's qualified 4.0.0 server target is MCP `2026-07-28`. The development
-source implements explicitly selected `2025-06-18` and `2025-11-25` revisions
-on the same endpoint URL for synchronous tools, ordinary prompts/resources,
-argument completion, and request-scoped POST progress. Those adapters still need
-exact-candidate release qualification. MCP support is part
+Soklet supports MCP `2026-07-28` and explicitly selected `2025-06-18` and
+`2025-11-25` compatibility profiles on the same endpoint URL. Both 2025 profiles
+support synchronous tools, ordinary prompts/resources, argument completion,
+request-scoped POST progress, and static catalog pagination. Explicitly enabled
+sessions retain public client metadata and enable active-request cancelation.
+Configured HTTP transport admission enables verified DELETE and, with selected
+subscriptions and effective change sources, leased GET resource/catalog
+invalidations backed by session-owned URI grants. Skills, Apps UI, durable Tasks,
+and multi-round input remain exclusive to `2026-07-28`. MCP support is part
 of core Soklet and uses a dedicated `McpServer` listener; it is not mounted in
 the ordinary `HttpServer` or `SseServer`. The API and implementation ship in
 the zero-runtime-dependency `com.soklet:soklet` artifact; there is no separate
@@ -45,7 +49,7 @@ exactly which host/tool versions were manually exercised.
 | Multi-round-trip | Declared `input_required` results and retries for tools, prompt gets, and resource reads; application- or framework-protected request state |
 | Tasks | `tools/call` task augmentation, durable application-owned task state, polling, input, cooperative cancelation, typed deferred-result validation, and optional status notifications |
 | Invocation control | Request-scoped progress over the MCP response stream plus cooperative cancelation for every application handler |
-| Subscriptions | Long-lived `subscriptions/listen` streams for resource-list changes, requested-resource updates, and authorized task IDs; application-owned local or distributed broadcast publishing |
+| Subscriptions | Long-lived `subscriptions/listen` streams for resource/tool/prompt list changes, requested-resource updates, and authorized task IDs; bounded authorization leases and application-owned local or distributed broadcast publishing |
 | Localization | Request-scoped library-neutral localization for framework-owned server, tool, prompt, resource, and schema text; no protocol capability or `_meta` extension |
 | Simulation | Asynchronous off-network MCP HTTP requests, including POST, session-enabled 2025 GET/DELETE, and OPTIONS preflight, through the real processor/lifecycle with bounded JSON and exact SSE capture; no listener, bound address, or public diagnostic activity |
 | Bounded observation | Exactly one clean/residual outcome per successfully started listener generation, plus server-wide active-handler, queued-request, queue-full-rejection, and immutable handler-capacity, live-stream, protection, and trace-configuration diagnostics |
@@ -220,6 +224,45 @@ qualification against the exact candidate.
 thread-safe `McpLocalizationLookup` over the captured translation snapshot;
 applications do not implement or subtype the context.
 
+On the modern view, framework-generated `tools/list`, `prompts/list`, static
+`resources/list`, and `resources/templates/list` localize the included
+`_meta["io.modelcontextprotocol/serverInfo"]` title and description. This also
+applies to empty or caller-filtered catalogs and catalogs without translatable
+descriptor text. The server fields reuse canonical translation coordinates,
+count toward the same response-wide lookup and byte limits, and follow the
+whole-response failure policy. Server name/version remain canonical. The 2025
+catalog projections omit this metadata and do not perform its lookups.
+
+Custom `resources/list` results and other application results remain
+application-owned and are not post-processed. Their appended server-information
+metadata retains canonical text; handlers use the selected localization context
+to translate their own result text.
+
+MCP language preferences ignore empty comma-separated `Accept-Language`
+elements and normalize SP/HTAB at element edges and around the quality-value
+semicolon before JDK parsing. Empty elements still count toward the existing
+4,096-code-unit raw-input limit. The 32-range limit after JDK alias expansion,
+physical header order, first-occurrence duplicate handling, and zero-weight
+exclusions are unchanged. Malformed tokens, remaining controls, or over-limit
+input produce the existing empty preference view for application fallback.
+
+On explicitly enabled 2025 views, `initialize` localizes `serverInfo.title`
+and endpoint `instructions`; the `2025-11-25` view also localizes
+`serverInfo.description`. The `2025-06-18` projection omits description and
+never looks it up. These fields reuse the same canonical text coordinates as
+modern discovery, with the existing per-response lookup and output limits.
+The required initialization `serverInfo` is independent of the optional
+server-information result-metadata setting. A successful render emits
+`Content-Language`; whole-response `USE_DEFAULT_TEXT` fallback emits the
+configured fallback locale. Under `FAIL_REQUEST`, initialization returns the
+fixed private internal error and releases any pending session without offering
+its ID, so a later initialization may retry.
+
+Modern subscription terminal metadata uses the same localizer when the endpoint
+explicitly enables `2026-07-28` subscriptions, including framework localization
+or task notifications without an application `McpSubscriptionConfig` publisher.
+Its audience is selected before the SSE response head is committed.
+
 Localization is node-local by design. Modern and session-disabled 2025 requests
 may be routed round-robin because each node creates a fresh context from the
 request's portable inputs and one response retains one immutable catalog snapshot. A live SSE
@@ -283,6 +326,21 @@ general YAML compatibility are separate from Soklet's server-side Skills claim.
 Supply complete file bytes under logical bundle-relative paths, including
 `SKILL.md`. The application loads or generates those bytes; Soklet does not open
 files, fetch URLs, watch directories, or execute skill instructions.
+
+Each file must have a distinct NFC logical path, and a file cannot also be a
+directory prefix of another file: `ref` and `ref/notes.md`, or `SKILL.md` and
+`SKILL.md/notes.md`, fail bundle construction before root parsing or byte copying.
+Logical paths are case-sensitive and retain their exact spelling. Applications
+loading or materializing a bundle on a case-insensitive filesystem must account
+for names such as `README.md` and `readme.md` that collide there.
+
+Metadata validation retains the Agent Skills field rules and limits. An invalid
+field produces an `IllegalArgumentException` identifying the fixed field and
+rule, such as `Skills field 'description' exceeds 1024 code points.` Authored
+values and custom metadata keys are omitted, and the document is not repaired
+or rewritten. These messages are diagnostics rather than a structured validation
+API; a construction failure inside a request callback remains a fixed private
+internal error on the wire.
 
 ```java
 McpSkillBundle bundle = McpSkillBundle.fromFiles(files);
@@ -528,8 +586,10 @@ Configure the built-in listener's transport bounds through
 to 60 seconds; the request-body limit defaults to 10 MiB and may be configured
 only from 1 byte through the reviewed 16 MiB production-JSON ceiling. That
 aggregate body limit does not widen the independent 1,048,576-character limit
-on any single JSON string or token; larger logical documents must be divided
-across fields or transferred out of band. The defaults are 100 headers, 64 KiB
+on decoded UTF-16 units and on the escaped token spelling of any single JSON
+string or member name. See [JSON and schema limits](#json-and-schema-limits)
+for escape accounting; larger logical documents must be divided across fields
+or transferred out of band. The defaults are 100 headers, 64 KiB
 of aggregate headers, an 8,192-byte request target, a 64 KiB request-read
 buffer, and 8,192 concurrent connections. A zero concurrent-connection limit
 disables Soklet's cap and therefore requires an effective external bound.
@@ -868,6 +928,107 @@ keywords, one million evaluation operations, and 128 active evaluation calls.
 These are resource ceilings, not recommended payload sizes. Soklet charges
 bounded work before allocation and returns sanitized validation failures.
 
+### JSON and schema limits
+
+The string and token ceilings are independent, and both count **UTF-16 code
+units**, not Unicode code points or UTF-8 bytes. Each production ceiling is
+1,048,576 units and also applies to object member names. The decoded-string
+ceiling counts the resulting Java string. The token ceiling counts the spelling
+between quotation marks, including escapes but excluding the surrounding quotes:
+
+| Text unit | Decoded units | Token units when Soklet writes JSON |
+| --- | --- | --- |
+| Ordinary ASCII character | 1 | 1 |
+| Quote, backslash, newline, tab, carriage return, backspace or form feed | 1 | 2 |
+| Other C0 control character, such as U+0001 | 1 | 6 (`\u0001`) |
+| Supplementary Unicode character, such as 🚀 | 2 | 2 (4 UTF-8 bytes) |
+
+For example, a string containing only newlines can hold 524,288 of them under
+the token ceiling. A client can spend more token units by escaping ordinary
+characters: `\u0061` uses six incoming token units for one decoded `a`, and
+`\uD83D\uDE80` uses twelve for one two-unit supplementary character. Soklet's
+writer emits those ordinary characters directly. Aggregate UTF-8 body/response
+limits still apply. Constructing `McpJsonString` or `McpTextContent` does not
+prevalidate an eventual serialized response.
+
+Public `McpTextContent`, `McpTextResourceContents`, `McpJsonString`, JSON object
+member names, prompt-output descriptions, and argument-completion values reject
+unpaired UTF-16 surrogates at their factory or setter with
+`IllegalArgumentException`. Valid text remains exact, including empty strings,
+controls, supplementary characters, and distinct Unicode normalization forms.
+Construction validates well-formedness; size ceilings remain serialization
+checks. If an application lets a construction exception escape its handler,
+the client receives the same fixed internal error described below.
+
+Image and audio MIME types use the existing MCP Apps ASCII media-type parser:
+type/subtype and optional token or quoted parameters, with malformed syntax,
+controls, non-ASCII characters, and case-insensitive duplicate parameter names
+rejected at construction. Supplied spelling and parameter values are retained.
+Soklet does not inspect binary bytes, restrict formats to a registry, or promise
+that a client supports a declared format; applications must label their bytes
+accurately.
+
+Each `McpImageContent`, `McpAudioContent`, and `McpBlobResourceContents` item can
+contain at most **786,432 raw bytes** on the built-in server's wire. Its Base64
+string must fit the 1,048,576-character JSON scalar ceiling; 786,433 bytes cannot
+fit. Complete responses also obey the independent 4 MiB UTF-8 JSON ceiling,
+including wrappers and metadata. Binary constructors still defensively copy
+data without prevalidating the eventual response size. A larger binary output
+fails with the fixed internal error below. Use `McpResourceLink` with an
+authorized delivery route for larger files; embedding a blob or returning one
+from `resources/read` does not bypass these limits.
+
+An incoming JSON token/string limit failure produces the fixed JSON-RPC parse
+error `-32700` before handler execution. An outgoing JSON limit failure produces
+the fixed internal error `-32603`; submitted or generated text and exception
+details are not reflected in that error. The early JSON parse-limit rejection
+uses HTTP 400 for all three supported revisions. An output error uses HTTP 500
+for an uncommitted modern response; the 2025 adapters carry that error in HTTP
+200.
+
+The schema-operation budget limits work, rather than only the number of JSON
+nodes. Repeated `allOf`/`anyOf` branches, references, structural equality and
+object-member sorting may exhaust it even for a semantically valid value below
+the JSON limits. Valid traversal uses a bounded per-call diagnostic-path stack;
+full paths are copied only for diagnostics, and suppressed branch diagnostics
+require no path construction. This avoids charging ancestor-copy work at every
+child while preserving the one-million-operation ceiling and bounded diagnostics.
+
+Schema-budget exhaustion remains a generic validation rejection. For tool input,
+`2025-11-25` and `2026-07-28` return HTTP 200 with the safe completed `isError`
+result; `2025-06-18` returns JSON-RPC `-32602` in HTTP 200. The application handler
+is not invoked. Output-schema exhaustion produces the fixed internal error
+`-32603` (HTTP 500 for an uncommitted modern response, HTTP 200 for 2025).
+Detailed internal limit outcomes and diagnostic paths are not a public error API.
+Keep schemas and individual results bounded; use multiple calls or pagination
+where an application needs larger logical collections.
+
+### Icon declarations
+
+`McpIcon.withSource(URI)` requires an absolute source URI with well-formed
+UTF-16 at the factory. It retains the supplied URI without normalization.
+The optional `mimeType(String)` setter uses the same ASCII media-type syntax
+parser as image/audio content. `sizes(List)` accepts ASCII decimal digits on
+each side of a lowercase `x`, or exactly `any`. Size hints retain order,
+duplicates and decimal spelling; no integer parsing, dimension ceiling or
+image-dimension verification is added. Null or empty clears sizes, and an
+invalid replacement leaves the prior value intact. Invalid declarations throw
+input-free `IllegalArgumentException` messages before serialization. Eventual
+JSON scalar and response-size ceilings still apply.
+
+These are public application-declaration checks. Incoming client metadata
+remains untrusted informational data, with its existing wire-shape and absolute
+URI checks; it is not an authenticated identity. Soklet does not fetch icons,
+enforce a URI scheme/domain allowlist, validate inline image bytes or sanitize
+SVG. Prefer trusted HTTPS sources or image data URIs. Applications and consuming
+clients own trusted-source and rendering policy, as described by the
+[MCP Icon definition](https://modelcontextprotocol.io/specification/2026-07-28/schema#icon).
+
+Icon revision projection is unchanged: November 2025 and modern catalogs and
+tool resource links retain declared icons; June 2025 catalogs and tool resource
+links omit them without mutating application values. June prompt resource links
+with icons remain unrepresentable and fail safely.
+
 ## Prompts
 
 A prompt is a named, discoverable template that returns ordered user and
@@ -984,9 +1145,10 @@ Soklet renders `-32002` for `2025-06-18` and `2025-11-25`, and `-32602` for
 `2026-07-28`. Accepted 2025 operation errors use HTTP 200; modern invalid-parameter
 errors use HTTP 400. A plain `fromInvalidParameters(...)` error retains `-32602`
 on every revision, even with the same message and URI data. These two errors
-are unequal because their revision intent differs. Interceptor failures remain
-private internal errors; the factory does not turn an interceptor failure into
-a client-visible resource error.
+are unequal because their revision intent differs. An interceptor can inspect
+and rethrow the exact handler exception to preserve that intent. Interceptor
+failures remain private internal errors; constructing a new exception with this
+factory does not turn an interceptor failure into a client-visible resource error.
 
 
 An exact resource registration has one concrete URI and contributes to the
@@ -994,6 +1156,31 @@ static `resources/list` fallback. A URI-template registration uses bounded RFC
 6570 Level 1 variables, is advertised by `resources/templates/list`, and is
 selected for reads only after exact-resource matching. Exact URI identity uses
 RFC 3986 syntax equivalence; declared descriptor spelling is preserved.
+
+The same Level 1 routing subset applies to all three supported revisions.
+Simple `{variable}` expansion encodes a slash inside a variable as `%2F`;
+a variable cannot consume a raw `/`. For the template `file:///{path}`:
+
+| Client URI | Routing result / decoded `path` |
+| --- | --- |
+| `file:///src/main.rs` | No template match |
+| `file:///src%2Fmain.rs` | `src/main.rs` |
+| `file:///src%252Fmain.rs` | `src%2Fmain.rs` |
+| `file:///src%2Fcaf%C3%A9.rs` | `src/café.rs` |
+
+`McpResourceReadContext.getUri()` retains the original client URI spelling.
+`getUriTemplateVariables()` and `@McpResourceUriParameter` provide immutable
+strings decoded exactly once using UTF-8 percent escapes. Do not decode these
+values again. Encoded separators do not authorize filesystem access; the
+application still owns path validation, containment and symlink policy.
+
+Reserved expansion (`{+path}`), explode (`{path*}`) and prefix (`{path:5}`)
+modifiers are unsupported and fail server construction. For known raw
+multi-segment URIs, register an exact resource; for a fixed path structure,
+use literal separators such as `file:///{directory}/{name}`. There is no
+arbitrary-depth raw-slash wildcard. See [RFC 6570 simple expansion](https://www.rfc-editor.org/rfc/rfc6570.html#section-3.2.2)
+and [reserved expansion](https://www.rfc-editor.org/rfc/rfc6570.html#section-3.2.3).
+
 Programmatic exact-resource registrations and exact-routed read URIs have a
 1,048,576-byte ASCII wire ceiling, aligned with the production JSON string
 ceiling. Java annotation declarations have a separate 65,534-byte exact-URI
@@ -1164,7 +1351,7 @@ fresh POST to retry the original tool, prompt, or resource request; there is
 no bidirectional session carrying an independent server request.
 
 `McpInputRequirement.REQUIRED` makes the declaration's capabilities mandatory
-before admission on every call. `CONDITIONAL` defers that check until the
+after successful application admission and before execution on every call. `CONDITIONAL` defers that check until the
 handler actually emits the request. All missing capabilities from one result
 are reported together before result metadata, request parameters, request
 state, or a custom protector is evaluated. A retry's exact responses are
@@ -1313,12 +1500,42 @@ identical on a retry. Applications should use the excluded progress, trace, or
 baggage fields for per-attempt correlation rather than varying another
 extension member during a multi-round operation.
 
+Stable-parameter binding supports accepted request bodies within the configured
+MCP request limit: 10 MiB by default, configurable up to 16 MiB. The binding
+uses a separate bounded canonical-parameter profile with 32 MiB of output
+headroom because canonical number spelling can be longer than the wire form.
+The 4 MiB response-output limit does not cap this digest input. Existing
+production depth, node, token and scalar limits still apply. Arguments are
+represented by a fixed-size digest in the state binding; they are not copied
+into the protected continuation. Encoded and decoded state limits remain
+independent of request-body size.
+
 The first emission records round 1, issuance/expiry, and the emitting request
 ID. Re-emission preserves the original expiry, increments the round, and
 records the current request ID. The next retry must use an ID different from
 the request that emitted that particular state. This prior-ID check is not a
 server-side single-use store: an application that needs stronger replay or
 workflow-consumption semantics must enforce them itself.
+
+The maximum round counts emitted continuations, not handler invocations. A
+valid retry carrying the final allowed round can complete normally, but cannot
+emit another framework continuation. Likewise, a state valid when opened can
+expire while the handler runs. Re-emission checks the original expiry and the
+next round after the handler returns. Either failure is a sanitized JSON-RPC
+`-32603` internal error (HTTP 500 when the response is still uncommitted), with
+no new state emitted and no rollback of application side effects. Incoming
+state already expired or beyond the configured round limit remains HTTP 400 /
+`-32602` before handler entry.
+
+`McpRequestContext.getFrameworkRequestState()` exposes only application JSON,
+not the framework's hidden round, issuance or expiry metadata. Put application
+step counters or deadlines in that JSON when handlers need to decide whether
+to complete, ask again or return a business error. Keep application deadlines
+within the configured lifetime, and use durable consumption/idempotency for
+side effects that must not repeat. An application-owned workflow policy cannot
+make sealing atomic with a side effect or prevent an expiry race during the
+handler. `APPLICATION_PROTECTED` state delegates these policies to the
+application; it does not inherit framework round or lifetime checks.
 
 Built-in framework state can continue on another Soklet instance when both
 instances use the same production protection material and admission resolves
@@ -1341,9 +1558,9 @@ state response before interception or handler entry. A denied hidden target
 retains the ordinary unavailable-target response, so protected-state validity
 cannot become a caller-visible catalog oracle.
 
-Soklet checks request-state wire shape and size before capability checks or
-admission, but does not cryptographically open structurally valid state until
-after accepted admission and authorization-partition resolution. Consequently
+After successful admission, Soklet checks registration-dependent request-state
+shape and size before required capability checks. It cryptographically opens
+structurally valid state only after authorization-partition resolution. Consequently
 a missing required capability or admission rejection wins over a later
 tamper/binding failure. Invalid, tampered, expired, wrong-bound, over-round, or
 same-prior-ID framework state returns HTTP 400 / JSON-RPC `-32602`; temporary
@@ -1389,8 +1606,17 @@ that endpoint gate and the server-wide manager enable the Tasks capability,
 endpoints on the same server do not inherit Tasks. The client must declare the
 extension capability on each applicable request. A statically task-required
 tool presented by `tools/list` remains discoverable, but Soklet rejects its
-invocation with `-32021` before admission or application work when the client
+invocation with `-32021` after successful admission and before rate limiting,
+interception or handler execution when the client
 did not declare Tasks.
+
+An advanced handler or interceptor must complete inline when
+`McpInvocationFeatures.getTaskCreationContext()` is empty. Returning a task
+handle anyway is an application contract failure, reported as the fixed
+JSON-RPC internal error (`-32603`): HTTP 500 for the modern revision and HTTP
+200 for the 2025 revisions. The application callback has already run, so this
+error does not roll back its effects. It is distinct from the statically
+task-required tool's preflight capability rejection.
 
 The client declares that it understands task handles; it does not command the
 server to run a tool asynchronously. The selected application handler decides
@@ -1523,6 +1749,39 @@ payloads are exclusive: outstanding input requests belong to
 `INPUT_REQUIRED`, a complete tool result to `COMPLETED`, and a JSON-RPC error
 to `FAILED`. A complete tool result whose `isError` value is true is still a
 completed task.
+
+An `INPUT_REQUIRED` poll is checked against the independently admitted
+`tasks/get` request's current client capabilities after the manager's
+authorized lookup. If any outstanding form or URL elicitation mode is
+unsupported, Soklet returns HTTP 400 / `-32021` with only the deduplicated
+missing modes in `data.requiredCapabilities`. It sends no partial task snapshot
+or input payload and leaves durable state unchanged. A later capable poll
+returns all outstanding requests. Capabilities from task creation or a prior
+poll are not remembered, and unused origin declarations do not require a
+capability on a poll. Working and terminal snapshots require no elicitation
+capability. Unknown and unauthorized tasks retain the same neutral error
+before this check.
+
+Task construction validates status-specific payload shape. It does not
+validate a stored result against the origin tool's output schema or verify
+outstanding input requests against its declarations. The development manager's
+`completeTask` and `requestTaskInput` methods also defer those checks to
+delivery. Application workers must validate their output and input requests
+before storing them, including required typed structured content. Soklet
+supplies no worker-side API for running the complete delivery pipeline;
+preserve the origin as opaque data instead of interpreting its persisted
+members.
+
+Invalid stored payloads cause a fixed internal error (`-32603`, HTTP 500) on
+`tasks/get`; invalid notification projections are suppressed. Reads do not
+mutate authoritative task state, publish a state transition, or notify the
+worker. Soklet does not synthesize `FAILED` from a delivery error: current
+access policy, sanitizer behavior, and transport limits can also prevent a
+successful task from being delivered. A later read can recover after those
+conditions change. Corrections to stored state remain application-owned;
+terminal in-memory tasks cannot be overwritten, while invalid outstanding
+input on a nonterminal task can be superseded with `markTaskWorking` before
+starting a valid input round.
 
 `tasks/update` carries any partial subset of outstanding input responses.
 Unknown, already consumed, superseded, and union-mismatched responses are
@@ -1672,6 +1931,18 @@ admission boundary for every structurally valid MCP request and notification.
 It is mandatory and may be invoked concurrently. Failures and null decisions
 fail closed.
 
+For `tools/call`, `prompts/get` and `resources/read`, application admission runs
+before target membership, descriptor-dependent prompt arguments, custom mirrored
+headers, required client capabilities and registration-dependent request-state
+checks. This applies to all supported protocol revisions. A rejected caller
+receives its admission response for both known and unknown targets, without
+invoking an operation handler. `getOperationName()` is the syntactically validated
+requested name or URI; its presence does not establish that a target exists.
+Malformed wire shapes, URI syntax, endpoint/version selection and required
+protocol/name header consistency still fail before admission. Caller-aware
+catalog access policy continues to protect direct tool and prompt access after
+admission.
+
 `McpAdmissionController.acceptAllInstance()` deliberately accepts the
 canonical anonymous identity. It is convenient for a loopback example, not a
 production authentication mechanism. An authenticated acceptance supplies an
@@ -1698,6 +1969,20 @@ response-header safety checks. The application owns token verification,
 protected-resource metadata, authorization-server selection, and scope policy. Unsafe
 or reserved response headers fail closed, and notifications retain the HTTP
 status and safe headers without acquiring a JSON-RPC body.
+
+`McpAdmissionRejection.Builder.headers(...)` and `addHeader(...)` validate eagerly
+and leave previous headers intact if validation fails. Names must be ASCII HTTP
+tokens, unique ignoring case; lists must be nonempty and values may contain only
+visible ASCII or horizontal tabs (an empty string is permitted). The fixed
+profile allows at most 100 fields and 65,536 bytes, counting name length plus
+value length plus four bytes for each field. Reserved names are `Cache-Control`,
+`Connection`, `Content-Encoding`, `Content-Length`, `Content-Type`, `Keep-Alive`,
+`Proxy-Authenticate`, `Proxy-Authorization`, `Proxy-Connection`, `TE`, `Trailer`,
+`Transfer-Encoding`, `Upgrade`, `Retry-After`, `Mcp-Session-Id`, `Last-Event-ID`
+and every `Access-Control-*` name, ignoring case. Safe headers preserve original
+spelling and value order in an immutable snapshot; custom names and values do
+not appear in validation errors.
+
 
 Authorization policy can switch on
 `McpAdmissionContext.getOperationType()` and then refine a named operation
@@ -1829,6 +2114,16 @@ reporters wake, later reports are inert, and the eventual result is discarded. T
 physical execution reservation remain owned until their normal boundaries.
 Finite, uncommitted, or queued legacy requests and modern requests retain
 disconnect cancellation.
+
+The built-in MCP listener treats input EOF as loss of the response channel.
+This includes a normal TCP FIN and a deliberate client `shutdownOutput()`;
+clients must keep their sending side open while awaiting the response.
+Before response commitment, EOF cancels the request. After commitment,
+modern requests cancel and legacy POST SSE writers detach under the existing
+rules above. TCP cannot distinguish full close from input half-close, so this
+is an MCP transport policy. Ordinary HTTP preserves half-close and buffered
+pipelining; an idle HTTP feed still needs a finite timeout or further writes
+to bound an otherwise undetectable abandoned lifetime.
 
 The same non-forcible rule applies to application-supplied request-pipeline
 callbacks such as admission, rate limiting, and custom request-state
@@ -2037,10 +2332,23 @@ preflight before the handler runs.
 
 ## Resource subscriptions
 
-Soklet implements `subscriptions/listen` as a framework-owned, long-lived POST
-SSE stream on the dedicated MCP listener. Applications enable it per endpoint
-by attaching an `McpSubscriptionConfig` with an application-owned
-`McpSubscriptionEventPublisher` and one or both supported notification types:
+Soklet implements modern `subscriptions/listen` as a framework-owned, long-lived
+POST SSE stream on the dedicated MCP listener. Applications select its exact
+protocol revision per endpoint and attach an `McpSubscriptionConfig` with an
+application-owned `McpSubscriptionEventPublisher` and a nonempty subset of four
+notification families: `RESOURCES_LIST_CHANGED`, `RESOURCE_UPDATED`,
+`TOOLS_LIST_CHANGED`, and `PROMPTS_LIST_CHANGED`. Authorized task IDs use the
+separate Tasks publisher described under [Task notifications](#task-notifications).
+
+The following example assumes an application-owned
+`List<McpResourceRegistration> resources` and a thread-safe
+`subscriptionAuthorizer` that checks current permission for the whole requested
+subscription. The server requires an explicitly selected authorizer; an endpoint
+configuration alone is insufficient. An explicitly selected
+`McpSubscriptionAuthorizer.denyAllInstance()` is valid and rejects every grant.
+For these resource notification families, `resources` must include an exact or
+templated resource enabled for `V2026_07_28`. A custom resource-list handler can
+also provide the resource catalog in a different endpoint configuration.
 
 ```java
 McpSubscriptionEventPublisher publisher =
@@ -2057,11 +2365,46 @@ McpImplementation implementation = McpImplementation
     .build();
 McpEndpoint endpoint = McpEndpoint.withPath("/mcp", implementation,
         Set.of(McpProtocolVersion.V2026_07_28))
-    // registrations
+    .resourceRegistrations(resources)
     .subscriptionProtocolVersions(Set.of(McpProtocolVersion.V2026_07_28))
     .subscriptionConfig(subscriptions)
     .build();
+
+McpServer server = McpServer.withPort(8082)
+    .endpointRegistry(McpEndpointRegistry.fromEndpoints(Set.of(endpoint)))
+    .subscriptionAuthorizer(subscriptionAuthorizer)
+    .build();
 ```
+
+`McpSubscriptionAuthorizer.authorize(subscriptionAuthorizationContext,
+invocationFeatures)` runs after initial request admission and before the first
+acknowledgment, then again for renewal or reconciliation. The initial context
+describes the candidate notification families, resource URIs, and task IDs;
+later checks describe the acknowledged subscription and cannot expand it.
+`getInitialRequestContext()` retains historical admission evidence. The
+authorizer must check current application authority rather than treating old
+credentials or an earlier admission decision as a continuing grant.
+
+Return `McpSubscriptionAuthorization.Allowed.fromValidUntil(validUntil)` or an
+`Allowed.withValidUntil(validUntil)` builder with an application context when
+permission is established, and `deniedInstance()` otherwise. A null result or
+exception fails closed. The effective lease is capped by the application's
+expiry, `maximumSubscriptionAuthorizationDuration` (one minute by default),
+and the subscription's fixed total lifetime. Each callback has the
+queue-inclusive `subscriptionAuthorizationTimeout` (five seconds by default)
+and cooperative cancelation. Renewal rechecks current authority before the
+lease expires; keep-alives and catalog events do not extend a grant.
+
+After policy invalidation or recovery, call
+`server.getSubscriptionReconciler().reconcileSubscriptions()` to fence local
+delivery and schedule fresh checks. Return from this method confirms fencing
+and scheduling, not callback completion or recall of bytes already written.
+Distributed applications make the current policy available on each applicable
+node and invoke its reconciler there. These callbacks are application-owned and
+may run concurrently; the reconciler does not supply a distributed registry or
+migrate streams. Established denial, expiry, and failed required checks end the
+listen as described below. Exact 2025 URI-grant renewal has the separate session
+retirement contract under [Legacy URI grants and catalog invalidations](#legacy-uri-grants-and-catalog-invalidations).
 
 The built-in publisher broadcasts synchronously within one process. A custom
 thread-safe implementation may bridge Redis or another distributed system,
@@ -2070,11 +2413,13 @@ the event. Soklet subscribes when its server starts, closes only its listener
 registration when the server stops, and never closes the application-owned
 publisher. Shutdown first fences the old generation's callback, then invokes
 application registration close outside lifecycle locks on bounded daemon
-cleanup workers. A throwing or in-flight close remains residual state and
-blocks restart; calling `stop()` again retries or joins that cleanup without
-overlapping close invocations. Waiting remains bounded by the server's original
-global shutdown timeout. Application code publishes coarse change events with
-`publishResourcesListChanged()` or `publishResourceUpdated(URI)`; Soklet owns
+cleanup workers. A failing or still-running close can leave residual activity
+or missing termination proof in the immutable `ShutdownResult`. The one-shot
+Soklet lifecycle uses the shared graceful/forced budgets in `LifecyclePolicy`;
+it retains physical cleanup evidence until termination is proven. Application
+code publishes coarse change events with `publishResourcesListChanged()`,
+`publishResourceUpdated(URI)`, `publishToolsListChanged()`, or
+`publishPromptsListChanged()`; Soklet owns
 requested-filter matching, per-stream coalescing, bounded queues, backpressure,
 and wire serialization. Publisher events contain no endpoint, principal,
 authorization partition, or connected-client target. Two subscriptions to the same URI in different admitted partitions therefore receive the same coarse event.
@@ -2125,9 +2470,10 @@ Applications must authorize confidential or capability-bearing subscription URIs
 A rejected or failed admission never activates a subscription, even though the server generation's single shared publisher listener may already be registered.
 With `McpAdmissionController.acceptAllInstance()`, all anonymous callers on one endpoint share its empty authorization/quota partition; one caller can exhaust the configured per-partition subscription bucket for the rest.
 
-The listener parses all protocol filter fields. It acknowledges the configured
-resource-list and requested-resource update families plus authorized task IDs
-when Tasks and its event publisher are enabled. Task filtering and notification
+The listener parses all protocol filter fields. It acknowledges requested
+resource-list/update and tool/prompt list-change families supported by the
+selected endpoint view, plus authorized task IDs when Tasks and its event
+publisher are enabled. Task filtering and notification
 semantics are described under [Task notifications](#task-notifications). Tool and
 prompt list-change filters require an effective configured source and caller-visible
 catalog projection support; registration structure remains immutable, while access
@@ -2662,12 +3008,14 @@ wins:
 4. POST-only HTTP method and `Content-Type`/`Accept` negotiation;
 5. strict JSON parsing;
 6. JSON-RPC envelope validation;
-7. required and custom mirrored-header cardinality/form, strict-unknown policy, and method/name agreement, but no body-revision agreement;
+7. required mirrored-header cardinality/form and method/name agreement, plus
+   registration-independent custom-header policy for non-tool methods;
 8. the non-failing readable nested body-revision probe, followed by exact selector membership/profile selection and unsupported dispatch;
 9. selected-profile required `_meta`, metadata-key, extension/settings, and universal-spine validation, followed by post-map header/body revision agreement;
-10. cheap method/structural parameter validation, followed by required client-
-    capability preflight;
-11. admission, the optional request limiter, and the resolved tool limiter;
+10. cheap method/structural parameter validation;
+11. application admission, then caller-neutral target/descriptor lookup, custom
+    tool mirrored headers, request-state shape and required client capabilities,
+    followed by the optional request limiter and resolved tool limiter;
 12. bounded handler-queue admission and handler-slot acquisition;
 13. the application handler interceptor;
 14. complete application input conversion and validation, including Profile 1
@@ -2676,6 +3024,11 @@ wins:
 16. preliminary result-shape recognition, applicable tool-output sanitization,
     and remaining result/output-schema validation; and
 17. envelope generation and response write.
+
+Caller-aware tool/prompt catalogs defer descriptor checks through their existing
+access-policy and quota ordering after admission. Unsupported selectors on tool
+calls fail at profile selection without consulting registered custom headers;
+required protocol/method/name header errors still take precedence.
 
 Notifications have a separate, shorter path. The shared transport prefix is
 limits, routing, Host, Origin/CORS, POST/media/Accept, strict JSON, and envelope classification.
@@ -2766,9 +3119,24 @@ application-owned authentication challenges.
 `@McpHeader(name = "Tenant")` on a typed tool argument publishes the `x-mcp-header`
 schema extension and requires `Mcp-Param-Tenant` to agree with that property
 already parsed from the JSON arguments. It never supplies an absent or null
-argument from the header. Mirroring is limited to statically reachable string,
-boolean, or JavaScript-safe integer properties. Both values remain untrusted
-input.
+argument from the header. Mirroring is limited to statically reachable
+properties whose direct schema type is `string`, `boolean`, or `integer`.
+Both values remain untrusted input. Tools declaring mirrors must select only
+`2026-07-28`; endpoint construction rejects either 2025 revision on such a tool.
+
+Integer mirroring constrains each request value independently of the published
+schema range. `long`, `Long`, and `BigInteger` declarations are accepted;
+derived `long`/`Long` schemas retain Java's full range and `BigInteger` has no
+derived minimum/maximum. A mirrored integer must be in the inclusive range
+`-9007199254740991` through `9007199254740991`, even when its input schema accepts
+a wider range. Authored schemas may declare narrower bounds if desired.
+
+The integer header uses canonical decimal spelling: `0`, or digits without
+leading zeros, optionally preceded by `-`. `+1`, `01`, and `-0` are invalid.
+An integral JSON number spelled `1.0` or `1e0` can match the header `1`.
+An unsafe integer or other mismatch produces the fixed HTTP 400 / JSON-RPC
+`-32020` response with message `"Header mismatch"`, after admission and before
+handler entry. Submitted names and values are not included in that response.
 
 In an authored input schema, `x-mcp-header` must be a string containing the
 nonempty RFC 9110 field-name-token suffix, such as `"Tenant"`, not the complete
@@ -3720,6 +4088,18 @@ record that was omitted or evicted does not change its request's
 wire outcome. Metrics are observation, and counters or gauges can be incomplete
 after this overflow; custom collectors must remain nonblocking.
 
+The default collector retains delivered subscription-maintenance counts in
+`McpMetricsSnapshot.getSubscriptionMaintenance()`, keyed by configured endpoint
+and the existing fixed work/outcome enums. Its immutable
+`SubscriptionMaintenanceKey` exposes `fromDimensions(endpointPath,
+maintenanceWork, maintenanceOutcome)`, `getEndpointPath()`, `getWork()` and
+`getOutcome()`; diagnostics redact the endpoint. Counts include coalescing and
+stale-result discards, rather than unique subscriptions or started attempts.
+Prometheus and OpenMetrics expose `soklet_mcp_subscription_maintenance_total`
+with `endpoint`, `work` and `outcome` labels, even for maintenance-only records.
+The existing 8,192-key retention bound and semantic-delivery overflow policy
+apply. Counter reset clears these counts while preserving live gauges.
+
 Progress backpressure holds only the invocation's progress-reporter lock. It
 does not open a server-wide metric deferral, and its accepted-progress record
 is enqueued after that lock is released. Subscription-maintenance records
@@ -4123,11 +4503,25 @@ second terminal result.
 
 ## Compatibility and unsupported features
 
-The qualified 4.0.0 server profile remains MCP `2026-07-28`. The source
-includes an explicit `2025-06-18`/`2025-11-25` synchronous-tools adapter
-behind endpoint and operation version declarations. There is no automatic
-version fallback, and a production or host claim awaits the exact-candidate
-qualification described [above](#exact-protocol-revisions).
+Soklet exposes exact `2026-07-28`, `2025-06-18`, and `2025-11-25` views behind
+endpoint and operation version declarations. Both 2025 profiles support
+synchronous tools, ordinary prompts/resources, argument completion,
+request-scoped POST progress, and static catalog pagination. Their
+[optional sessions](#explicitly-enabled-2025-sessions) retain public client
+metadata and enable active-request cancelation. Configured HTTP transport
+admission enables verified DELETE and, with selected subscriptions and effective
+change sources, leased GET resource/catalog notifications and session-owned URI
+grants. GET admission alone grants no URI permission. Sessions are node-local:
+initialization and later POST, GET, and DELETE traffic require affinity to the
+initializing node; node loss requires reinitialization and resubscription.
+
+Skills, Apps UI, Tasks, `subscriptions/listen`, multi-round input, and
+server-initiated requests are not exposed through either 2025 profile.
+Notification delivery is best effort without event history, replay, or
+lost-POST-result recovery. `2025-03-26` is unsupported. There is no implicit
+latest revision; see [exact protocol revisions](#exact-protocol-revisions) for
+initialization negotiation and header selection. Named-client and release
+claims require qualification of that particular supported profile and artifact.
 
 Client extension settings are open but do not implicitly enable server
 behavior. Keys in `clientCapabilities.extensions` must use a valid namespaced
@@ -4511,9 +4905,9 @@ The preceding four-row HTTP-contract reconciliation closed readable
 `initialize` and validated-unsupported-selector rejection diagnostics,
 unsupported classified-notification handling, universal MCP HTTP `no-store`,
 and the exact request/notification validation order. The separate
-`conformance/golden-http-contract/precedence-no-store/manifest.sha256` binds 22
+`conformance/golden-http-contract/precedence-no-store/manifest.sha256` binds 23
 canonical complete-response fixtures and has SHA-256
-`29eb9f597e2d7a8c2268e35918217342b994802868c4bf14309c04c06ac6891a`.
+`ccec7ec13ac245bbc4a1820b1c387b188347a3ef868d4128e3af5c3a6e331e92`.
 Five contract tests comprise three production-listener golden tests, one exhaustive response-authority inventory, and one six-document manifest-digest
 parity gate; four diagnostic tests include 23
 readable-`initialize` rejection cases and the negative pre-JSON/method
@@ -4763,5 +5157,20 @@ The handler interceptor receives the exact `McpInvocationFeatures` instance
 supplied to the downstream handler as a separate argument. Interceptor chains
 must forward that instance unchanged with the request context and one-shot
 continuation.
+
+`McpHandlerContinuation.proceed()` exposes an intentional handler
+`McpJsonRpcException` as the original exception instance. An interceptor can
+catch it to inspect its `getError()`, rethrow that same object to preserve the
+client-visible error, or return a method-compatible recovery result. Recovery
+still traverses result validation and, for completed tool results, sanitization
+and output-schema validation. This applies on every supported protocol revision
+and to custom resource/Skills lists and prompt/resource completion as well as
+tool, prompt and resource-read handlers.
+
+An interceptor-created exception, a new exception carrying the same error,
+a wrapper, or an exception retained from an earlier invocation receives the
+fixed internal-error response without its code, message or data. Keeping the
+same handler exception preserves revision-specific resource-not-found intent.
+The continuation's thread, one-shot and call-lifetime restrictions still apply.
 
 Do not treat this snapshot guide as a release-conformance statement.

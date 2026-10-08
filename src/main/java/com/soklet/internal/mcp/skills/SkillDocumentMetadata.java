@@ -49,19 +49,22 @@ final class SkillDocumentMetadata {
 
 	static SkillDocumentMetadata from(McpJsonObject metadata) {
 		requireNonNull(metadata, "Skills document metadata is required.");
-		String name = requireString(metadata.members().get("name"));
+		String name = requireString(metadata.members().get("name"), "name");
 		validateName(name);
-		String description = requireString(metadata.members().get("description"));
-		validateLength(description, 1_024);
+		String description = requireString(metadata.members().get("description"), "description");
+		validateLength(description, 1_024, "description");
 		validateOptionalString(metadata, "license");
 		validateOptionalString(metadata, "allowed-tools");
 		if (metadata.members().containsKey("compatibility"))
-			validateLength(requireString(metadata.members().get("compatibility")), 500);
+			validateLength(requireString(metadata.members().get("compatibility"), "compatibility"), 500, "compatibility");
 		if (metadata.members().containsKey("metadata")) {
-			if (!(metadata.members().get("metadata") instanceof McpJsonObject additional)) throw invalid();
+			if (!(metadata.members().get("metadata") instanceof McpJsonObject additional))
+				throw invalid("metadata", "must be an object");
 			// The immutable JSON object has already validated string keys. Do not
 			// coerce numeric/boolean/null values into strings or reject reserved keys.
-			for (McpJsonValue value : additional.members().values()) requireString(value);
+			for (McpJsonValue value : additional.members().values())
+				if (!(value instanceof McpJsonString))
+					throw invalid("metadata", "must contain only string values");
 		}
 		return new SkillDocumentMetadata(name, description, metadata);
 	}
@@ -71,13 +74,14 @@ final class SkillDocumentMetadata {
 	McpJsonObject metadata() { return this.metadata; }
 
 	private static void validateName(String name) {
-		validateLength(name, 64);
+		validateLength(name, 64, "name");
 		boolean previousHyphen = true;
 		for (int offset = 0; offset < name.length();) {
 			int codePoint = name.codePointAt(offset);
 			offset += Character.charCount(codePoint);
 			if (codePoint == '-') {
-				if (previousHyphen || offset == name.length()) throw invalid();
+				if (previousHyphen || offset == name.length())
+					throw invalid("name", "must not start or end with a hyphen or contain consecutive hyphens");
 				previousHyphen = true;
 			} else {
 				int type = Character.getType(codePoint);
@@ -86,37 +90,44 @@ final class SkillDocumentMetadata {
 						|| type == Character.LETTER_NUMBER
 						|| type == Character.OTHER_NUMBER;
 				if (!alphanumeric || Character.isUpperCase(codePoint)
-						|| Character.isTitleCase(codePoint)) throw invalid();
+						|| Character.isTitleCase(codePoint))
+					throw invalid("name", "must contain only lowercase letters, numbers, and hyphens");
 				previousHyphen = false;
 			}
 		}
 	}
 
-	private static void validateLength(String value, int maximumCodePoints) {
-		if (value.isEmpty() || value.length() > maximumCodePoints * 2) throw invalid();
+	private static void validateLength(String value, int maximumCodePoints, String field) {
+		if (value.isEmpty()) throw invalid(field, "must not be empty");
+		if (value.length() > maximumCodePoints * 2)
+			throw invalid(field, "exceeds " + maximumCodePoints + " code points");
 		int count = 0;
 		for (int offset = 0; offset < value.length(); ++offset) {
 			char character = value.charAt(offset);
 			if (Character.isHighSurrogate(character)) {
-				if (++offset == value.length() || !Character.isLowSurrogate(value.charAt(offset))) throw invalid();
+				if (++offset == value.length() || !Character.isLowSurrogate(value.charAt(offset)))
+					throw invalid(field, "must contain valid Unicode scalar text");
 			} else if (Character.isLowSurrogate(character)) {
-				throw invalid();
+				throw invalid(field, "must contain valid Unicode scalar text");
 			}
-			if (++count > maximumCodePoints) throw invalid();
+			if (++count > maximumCodePoints)
+				throw invalid(field, "exceeds " + maximumCodePoints + " code points");
 		}
 	}
 
 	private static void validateOptionalString(McpJsonObject metadata, String key) {
-		if (metadata.members().containsKey(key)) requireString(metadata.members().get(key));
+		if (metadata.members().containsKey(key)) requireString(metadata.members().get(key), key);
 	}
 
-	private static String requireString(McpJsonValue value) {
-		if (!(value instanceof McpJsonString string)) throw invalid();
+	private static String requireString(McpJsonValue value, String field) {
+		if (value == null) throw invalid(field, "is required");
+		if (!(value instanceof McpJsonString string)) throw invalid(field, "must be a string");
 		return string.value();
 	}
 
-	private static IllegalArgumentException invalid() {
-		return new IllegalArgumentException("The Skills document metadata is invalid.");
+	/** Callers supply fixed field labels/rules and fixed limits, never authored keys or values. */
+	private static IllegalArgumentException invalid(String field, String rule) {
+		return new IllegalArgumentException("Skills field '" + field + "' " + rule + ".");
 	}
 
 	@Override

@@ -140,6 +140,24 @@ public final class StreamingMicrohttpResponses {
 			cancelationToken.reservation.beginCleanup();
 	}
 
+	/**
+	 * Applies the transport's HTTP/1.0 streaming rejection before handoff, allowing its owner
+	 * to observe the finite replacement. Closing the original source reports its termination
+	 * without starting application production. The event loop also uses this check for direct handlers.
+	 */
+	@NonNull
+	public static MicrohttpResponse forRequestVersion(@NonNull MicrohttpResponse response,
+			@NonNull String requestVersion) throws IOException {
+		requireNonNull(response);
+		requireNonNull(requestVersion);
+		if (!response.streaming() || !requestVersion.equals("HTTP/1.0"))
+			return response;
+
+		response.closeStreamingBody(StreamTerminationReason.PROTOCOL_UNSUPPORTED, null);
+		return new MicrohttpResponse(505, "HTTP Version Not Supported",
+				List.of(new Header("Connection", "close")), new byte[0]);
+	}
+
 	/** Disposes an uncommitted/duplicate streaming response without invoking its producer. */
 	public static void discard(@NonNull MicrohttpResponse microhttpResponse) {
 		requireNonNull(microhttpResponse);
@@ -262,6 +280,13 @@ public final class StreamingMicrohttpResponses {
 											@NonNull Duration streamDuration,
 											@Nullable StreamTerminationReason cancelationReason,
 											@Nullable Throwable throwable);
+		/** Internal transport measurements captured before observer dispatch. */
+		default void didTerminate(@NonNull Instant establishedAt, @NonNull Duration streamDuration,
+				@Nullable StreamTerminationReason cancelationReason, @Nullable Throwable throwable,
+				long terminatedNanos, long responseBodySizeInBytes) {
+			didTerminate(establishedAt, streamDuration, cancelationReason, throwable);
+		}
+
 	}
 
 	@NotThreadSafe
@@ -287,6 +312,8 @@ public final class StreamingMicrohttpResponses {
 		private final BooleanSupplier forcedShutdownStarted;
 		@NonNull
 		private final TerminationListener terminationListener;
+		private long responseBodySizeInBytes;
+		private long terminatedNanos;
 		@NonNull
 		private final DefaultCancelationToken cancelationToken;
 		@NonNull
@@ -459,7 +486,11 @@ public final class StreamingMicrohttpResponses {
 				synchronized (this.lock) {
 					// Transport sockets are nonblocking. Keep progress publication atomic
 					// with the idle check so a recent write cannot lose to a stale timer.
-					written = chunk.writeTo(socketChannel, maxBytes - totalWritten);
+					if (this.failure != null) throw toIOException(this.failure);
+					if (this.completed || this.closed) break;
+					int payloadBefore = chunk.payloadWritten();
+					try { written = chunk.writeTo(socketChannel, maxBytes - totalWritten); }
+					finally { this.responseBodySizeInBytes += chunk.payloadWritten() - payloadBefore; }
 					if (written > 0L && this.idleTimeout != null && !this.timeoutsStopped)
 						this.lastIdleActivityNanos = testHooks.nanoTime();
 				}
@@ -484,6 +515,7 @@ public final class StreamingMicrohttpResponses {
 								throw new StreamingResponseCanceledException(
 										this.reservation.reason().orElseThrow(), this.reservation.cause().orElse(null));
 							this.completed = true;
+							this.terminatedNanos = System.nanoTime();
 							notifyCompleted = true;
 						}
 
@@ -642,7 +674,8 @@ public final class StreamingMicrohttpResponses {
 		}
 
 		private ManagedResponseStream newManagedResponseStream() {
-			return new ManagedResponseStream(this.request, this.cancelationToken, this.deadline,
+			return new ManagedResponseStream(this.request, this.cancelationToken,
+					() -> this.reservation != null && this.reservation.isGracefulShutdownRequested(), this.deadline,
 					this.idleTimeout, new ResponseStreamAdapter(), this::beginFinalization,
 					this::failProducer, this::reportCleanupFailure);
 		}
@@ -772,6 +805,7 @@ public final class StreamingMicrohttpResponses {
 				// Preserve the reserved stream reason even when an underlying cause is
 				// available.  The connection event loop distinguishes reasoned stream
 				// termination from a socket write failure by this exception type.
+				this.terminatedNanos = System.nanoTime();
 				this.failure = new StreamingResponseCanceledException(effectiveReason,
 						effectiveCause);
 				cancelationCallbacks = this.cancelationToken.reserveCancelation(effectiveReason, effectiveCause);
@@ -890,8 +924,14 @@ public final class StreamingMicrohttpResponses {
 
 			cancelTimeouts();
 			Duration streamDuration = Duration.between(this.streamStarted, Instant.now());
+			long terminalNanos;
+			long bodyBytes;
+			synchronized (this.lock) {
+				terminalNanos = this.terminatedNanos;
+				bodyBytes = this.responseBodySizeInBytes;
+			}
 			Runnable notification = () -> this.terminationListener.didTerminate(
-					this.streamStarted, streamDuration, reason, throwable);
+					this.streamStarted, streamDuration, reason, throwable, terminalNanos, bodyBytes);
 			if (this.reservation != null) {
 				this.reservation.dispatchTermination(notification);
 				this.reservation.complete();
@@ -1061,6 +1101,10 @@ public final class StreamingMicrohttpResponses {
 			}
 
 			return totalWritten;
+		}
+
+		private int payloadWritten() {
+			return this.terminal ? 0 : this.buffers.get(1).position();
 		}
 
 		private boolean isComplete() {

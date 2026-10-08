@@ -16,6 +16,7 @@
 
 package com.soklet;
 
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -33,12 +34,24 @@ import static java.util.Objects.requireNonNull;
 /**
  * Typed MCP admission rejection. Soklet owns envelope serialization and
  * suppresses the body for notifications. Application response headers are
- * transported only after Soklet's response-header safety validation. A
+ * validated by the builder and revalidated before transport. A
  * {@link BearerAuthenticationChallenge} supplies a validated
  * {@code WWW-Authenticate} value; the application owns token verification,
  * protected-resource metadata, and scope policy. Unsafe,
  * framework-owned, hop-by-hop, CORS, and obsolete transport-state headers
- * fail closed.
+ * fail during header construction without exposing custom names or values.
+ * <p>
+ * Header names must be ASCII HTTP tokens and unique ignoring case. Value lists
+ * must be nonempty; each value may be empty but must contain only visible ASCII
+ * or horizontal tabs. The fixed limits are 100 header fields and 65,536 bytes,
+ * counting each field as its name length plus value length plus four bytes.
+ * <p>
+ * Reserved names, ignoring case, are {@code Cache-Control}, {@code Connection},
+ * {@code Content-Encoding}, {@code Content-Length}, {@code Content-Type},
+ * {@code Keep-Alive}, {@code Proxy-Authenticate}, {@code Proxy-Authorization},
+ * {@code Proxy-Connection}, {@code TE}, {@code Trailer}, {@code Transfer-Encoding},
+ * {@code Upgrade}, {@code Retry-After}, {@code Mcp-Session-Id}, {@code Last-Event-ID},
+ * and every name beginning with {@code Access-Control-}.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -56,7 +69,7 @@ public final class McpAdmissionRejection {
 	 * @param statusCode HTTP status from 400 through 599
 	 * @param jsonRpcError client-visible JSON-RPC error
 	 * @return rejection builder
-	 * @throws NullPointerException if {@code statusCode} is null
+	 * @throws NullPointerException if {@code statusCode} or {@code jsonRpcError} is null
 	 */
 	@NonNull
 	public static Builder withStatusCodeAndError(@NonNull Integer statusCode,
@@ -92,6 +105,7 @@ public final class McpAdmissionRejection {
 		Map<String, List<String>> copied = new LinkedHashMap<>();
 		builder.headers.forEach((name, values) -> copied.put(
 				requireNonNull(name), List.copyOf(requireNonNull(values))));
+		McpServerRuntimeBridge.validateAdmissionRejectionHeaders(copied);
 		this.headers = Collections.unmodifiableMap(copied);
 	}
 
@@ -108,8 +122,8 @@ public final class McpAdmissionRejection {
 	}
 
 	/**
-	 * Returns immutable application response headers. Values remain subject to
-	 * Soklet's fail-closed response-header safety validation when transported.
+	 * Returns the immutable snapshot of validated application response headers.
+	 * Original name spelling, insertion order and value order are preserved.
 	 *
 	 * @return immutable application response headers
 	 */
@@ -172,18 +186,22 @@ public final class McpAdmissionRejection {
 		}
 
 		/**
-		 * Replaces the application response headers. Headers remain subject to
-		 * Soklet's fail-closed response-header safety validation when transported.
-		 * Passing an empty map clears all application response headers.
+		 * Replaces the application response headers with a validated snapshot.
+		 * Passing an empty map clears all application response headers. Invalid
+		 * replacement headers leave this builder's previous headers intact.
+		 *
+		 * @see McpAdmissionRejection for header safety rules and fixed bounds
 		 *
 		 * @param headers application response headers
 		 * @return this builder
 		 * @throws NullPointerException if the map, a name, a value list, or a value is null
+		 * @throws IllegalArgumentException if the headers violate the safety rules or fixed bounds
 		 */
 		@NonNull
 		public Builder headers(
 				@NonNull Map<@NonNull String, ? extends @NonNull List<@NonNull String>> headers) {
 			requireNonNull(headers);
+			McpServerRuntimeBridge.validateAdmissionRejectionHeaders(headers);
 			Map<String, List<String>> copied = new LinkedHashMap<>();
 			headers.forEach((name, values) -> {
 				String checkedName = requireNonNull(name);
@@ -192,25 +210,34 @@ public final class McpAdmissionRejection {
 						value -> copiedValues.add(requireNonNull(value)));
 				copied.put(checkedName, copiedValues);
 			});
+			McpServerRuntimeBridge.validateAdmissionRejectionHeaders(copied);
 			this.headers = copied;
 			return this;
 		}
 
 		/**
-		 * Adds an application response header. The header remains subject to
-		 * Soklet's fail-closed response-header safety validation when transported.
+		 * Adds a validated application response header. Reusing the exact name
+		 * appends a value; a different case spelling of an existing name is rejected.
+		 * Invalid additions leave this builder's previous headers intact.
+		 *
+		 * @see McpAdmissionRejection for header safety rules and fixed bounds
 		 *
 		 * @param name header name
 		 * @param value header value
 		 * @return this builder
 		 * @throws NullPointerException if the name or value is null
+		 * @throws IllegalArgumentException if the addition violates the safety rules or fixed bounds
 		 */
 		@NonNull
 		public Builder addHeader(@NonNull String name, @NonNull String value) {
 			requireNonNull(name);
 			requireNonNull(value);
-			this.headers.computeIfAbsent(name, ignored -> new ArrayList<>())
-					.add(value);
+			Map<String, List<String>> updated = new LinkedHashMap<>(this.headers);
+			List<String> values = new ArrayList<>(updated.getOrDefault(name, List.of()));
+			values.add(value);
+			updated.put(name, values);
+			McpServerRuntimeBridge.validateAdmissionRejectionHeaders(updated);
+			this.headers = updated;
 			return this;
 		}
 

@@ -33,6 +33,9 @@ import static java.util.Objects.requireNonNull;
  *
  * <p>Values remain exact application-provided strings. Soklet does not sort,
  * normalize, deduplicate, translate, or perform prefix matching on them.
+ * Unpaired UTF-16 surrogates are rejected at construction. The independent
+ * JSON string/token and response-size limits described by {@link McpJsonString}
+ * remain serialization checks.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -55,6 +58,7 @@ public final class McpArgumentCompletionResult implements McpOperationResult {
 	 *
 	 * @param values zero to 100 exact, non-null suggestion strings
 	 * @return immutable result
+	 * @throws IllegalArgumentException if there are more than 100 values or a value contains an unpaired surrogate
 	 */
 	@NonNull
 	public static McpArgumentCompletionResult fromValues(
@@ -67,6 +71,7 @@ public final class McpArgumentCompletionResult implements McpOperationResult {
 	 *
 	 * @param values zero to 100 exact, non-null suggestion strings
 	 * @return mutable builder
+	 * @throws IllegalArgumentException if there are more than 100 values or a value contains an unpaired surrogate
 	 */
 	@NonNull
 	public static Builder withValues(@NonNull List<@NonNull String> values) {
@@ -153,6 +158,7 @@ public final class McpArgumentCompletionResult implements McpOperationResult {
 			if (this.values.size() > MAX_VALUES)
 				throw new IllegalArgumentException(
 						"MCP completion results must not exceed 100 values.");
+			this.values.forEach(McpContentValueSupport::requireWellFormedString);
 		}
 
 		/**

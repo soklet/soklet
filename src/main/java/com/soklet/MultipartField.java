@@ -23,6 +23,7 @@ import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.locks.ReentrantLock;
@@ -39,6 +40,10 @@ import static java.util.Objects.requireNonNull;
  *   <li>{@link #withName(String)} (with form element name)</li>
  *   <li>{@link #with(String, byte[])} (with form element name and value)</li>
  * </ul>
+ * <p>
+ * Equality and hashing include the name, filename, content type, explicitly configured charset, and binary contents.
+ * The lazily decoded string value does not participate. A null or empty data array represents an absent value.
+ * Backing bytes are retained without defensive copying; callers must not modify them after the field is built.
  * <p>
  * Full documentation is available at <a href="https://www.soklet.com/docs/request-handling#multipart-form-data">https://www.soklet.com/docs/request-handling#multipart-form-data</a>.
  *
@@ -144,12 +149,12 @@ public final class MultipartField {
 				&& Objects.equals(getFilename(), multipartField.getFilename())
 				&& Objects.equals(getContentType(), multipartField.getContentType())
 				&& Objects.equals(getCharset(), multipartField.getCharset())
-				&& Objects.equals(getData(), multipartField.getData());
+				&& Arrays.equals(this.data, multipartField.data);
 	}
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(getName(), getFilename(), getContentType(), getCharset(), getData());
+		return Objects.hash(getName(), getFilename(), getContentType(), getCharset(), Arrays.hashCode(this.data));
 	}
 
 	/**
@@ -383,6 +388,9 @@ public final class MultipartField {
 
 	/**
 	 * The binary value of this field, if available.
+	 * <p>
+	 * Returns the backing array without defensive copying. Callers must not modify it,
+	 * because string decoding, equality and hashing depend on these bytes.
 	 *
 	 * @return the binary value, or {@link Optional#empty()} if not available
 	 */

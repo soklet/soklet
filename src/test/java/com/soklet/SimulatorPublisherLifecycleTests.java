@@ -127,6 +127,12 @@ public class SimulatorPublisherLifecycleTests {
 					await(fixture.diagnosed);
 					awaitRetirement(fixture.coordinator);
 					Assertions.assertSame(cancelFailure, fixture.diagnostic.get());
+					LogEvent cleanupEvent = fixture.cleanupEvent.get();
+					Assertions.assertNotNull(cleanupEvent);
+					StreamingResponseHandle handle = fixture.streamHandle.get();
+					Assertions.assertSame(handle.getRequest(), cleanupEvent.getRequest().orElseThrow());
+					Assertions.assertSame(handle.getResourceMethod().orElseThrow(), cleanupEvent.getResourceMethod().orElseThrow());
+					Assertions.assertSame(handle.getMarshaledResponse(), cleanupEvent.getMarshaledResponse().orElseThrow());
 					Assertions.assertNull(fixture.publisherFailure.get());
 					Assertions.assertEquals(1, fixture.diagnosticCount.get());
 					Assertions.assertEquals(StreamTerminationReason.APPLICATION_CANCELED, fixture.termination.get().getReason());
@@ -182,9 +188,15 @@ public class SimulatorPublisherLifecycleTests {
 					}
 				}).lifecycleObserver(new LifecycleObserver() {
 					@Override public void didTerminateResponseStream(StreamingResponseHandle handle, StreamTermination termination) {
+						fixture.streamHandle.compareAndSet(null, handle);
 						fixture.termination.compareAndSet(null, termination);
 					}
-					@Override public void didReceiveLogEvent(LogEvent event) {}
+					@Override public void didReceiveLogEvent(LogEvent event) {
+						if (event.getLogEventType() == LogEventType.RESPONSE_STREAM_CLOSE_FAILED) {
+							fixture.cleanupEvent.compareAndSet(null, event);
+							fixture.recordDiagnostic(event.getThrowable().orElseThrow());
+						}
+					}
 				}).build();
 	}
 
@@ -203,6 +215,8 @@ public class SimulatorPublisherLifecycleTests {
 		private final AtomicReference<Throwable> requestFailure = new AtomicReference<>();
 		private final AtomicReference<Throwable> publisherFailure = new AtomicReference<>();
 		private final AtomicReference<Throwable> diagnostic = new AtomicReference<>();
+		private final AtomicReference<LogEvent> cleanupEvent = new AtomicReference<>();
+		private final AtomicReference<StreamingResponseHandle> streamHandle = new AtomicReference<>();
 		private final AtomicReference<StreamTermination> termination = new AtomicReference<>();
 		private Soklet.DefaultSimulator simulator;
 		private StreamLifecycleCoordinator coordinator;
@@ -231,12 +245,14 @@ public class SimulatorPublisherLifecycleTests {
 
 		private void install(Simulator simulator, Duration cleanupTimeout) {
 			this.simulator = (Soklet.DefaultSimulator) simulator;
-			this.coordinator = new StreamLifecycleCoordinator(1, 1, cleanupTimeout, failure -> {
-				this.diagnostic.compareAndSet(null, failure);
-				this.diagnosticCount.incrementAndGet();
-				this.diagnosed.countDown();
-			});
+			this.coordinator = new StreamLifecycleCoordinator(1, 1, cleanupTimeout, this::recordDiagnostic);
 			this.simulator.setStreamLifecycleCoordinatorFactoryForTests(() -> this.coordinator);
+		}
+
+		private void recordDiagnostic(Throwable failure) {
+			this.diagnostic.compareAndSet(null, failure);
+			this.diagnosticCount.incrementAndGet();
+			this.diagnosed.countDown();
 		}
 
 		private void start(Simulator simulator) {

@@ -16,7 +16,14 @@ public record MicrohttpRequest(
         List<Header> headers,
         byte[] body,
         boolean contentTooLarge,
-        @Nullable InetSocketAddress remoteAddress) {
+        @Nullable InetSocketAddress remoteAddress,
+        long observedWireByteCount) {
+
+    public MicrohttpRequest(String method, String uri, String version, List<Header> headers,
+                            byte[] body, boolean contentTooLarge,
+                            @Nullable InetSocketAddress remoteAddress) {
+        this(method, uri, version, headers, body, contentTooLarge, remoteAddress, 0L);
+    }
 
     @Nullable
     public String header(String name) {

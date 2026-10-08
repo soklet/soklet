@@ -64,4 +64,17 @@ public final class ResidualActivityEvidence {
 	public String getSummary() {
 		return this.summary;
 	}
+
+	/**
+	 * Returns a bounded, single-line diagnostic containing the enum-ordered
+	 * residual-activity categories. The free-text summary is available only
+	 * through {@link #getSummary()} and is not rendered here.
+	 *
+	 * @return compact residual-activity diagnostic; not a serialization format
+	 */
+	@Override
+	@NonNull
+	public String toString() {
+		return "ResidualActivityEvidence{residualActivityTypes=" + this.residualActivityTypes + '}';
+	}
 }

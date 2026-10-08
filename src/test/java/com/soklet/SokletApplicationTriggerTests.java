@@ -131,6 +131,89 @@ final class SokletApplicationTriggerTests {
 	}
 
 	@Test
+	void triggeringLineLeavesFollowingInputAvailable() {
+		ByteArrayInputStream input = new ByteArrayInputStream("\nfollow-up\n".getBytes(StandardCharsets.UTF_8));
+		QueuedLauncher launcher = new QueuedLauncher();
+		SokletApplicationInputManager manager = new SokletApplicationInputManager(
+				RecordingProcessAccess.withInput(input), launcher);
+		AtomicInteger calls = new AtomicInteger();
+		SokletApplicationTriggerRegistration registration = manager.register(calls::incrementAndGet);
+		try {
+			launcher.runNext();
+			Assertions.assertEquals(1, calls.get());
+			Assertions.assertEquals("follow-up\n", new String(input.readAllBytes(), StandardCharsets.UTF_8));
+			Assertions.assertFalse(manager.isListenerStarted());
+		} finally { registration.unregister(); }
+	}
+
+	@Test
+	void eofWithoutALineTerminatorDoesNotInventAnEnterKey() {
+		RecordingProcessAccess processAccess = RecordingProcessAccess.withInput(
+				new ByteArrayInputStream("partial input".getBytes(StandardCharsets.UTF_8)));
+		QueuedLauncher launcher = new QueuedLauncher();
+		SokletApplicationInputManager manager = new SokletApplicationInputManager(processAccess, launcher);
+		AtomicInteger calls = new AtomicInteger();
+		SokletApplicationTriggerRegistration registration = manager.register(calls::incrementAndGet);
+		try {
+			launcher.runNext();
+			Assertions.assertEquals(0, calls.get());
+			Assertions.assertEquals(List.of("Ignoring ENTER_KEY shutdown because stdin reached EOF"), processAccess.warnings());
+			Assertions.assertFalse(manager.isListenerStarted());
+		} finally { registration.unregister(); }
+	}
+
+	@Test
+	void queuedListenerWithoutRegistrationsDoesNotReadInput() {
+		ByteArrayInputStream input = new ByteArrayInputStream("untouched\n".getBytes(StandardCharsets.UTF_8));
+		QueuedLauncher launcher = new QueuedLauncher();
+		SokletApplicationInputManager manager = new SokletApplicationInputManager(
+				RecordingProcessAccess.withInput(input), launcher);
+		manager.register(() -> Assertions.fail("Removed registration cannot fire")).unregister();
+		launcher.runNext();
+		Assertions.assertEquals("untouched\n", new String(input.readAllBytes(), StandardCharsets.UTF_8));
+		Assertions.assertFalse(manager.isListenerStarted());
+	}
+
+	@Test
+	void lastUnregisterAllowsOnlyTheAlreadyPendingByteToComplete() throws Exception {
+		byte[] bytes = "later-line\n".getBytes(StandardCharsets.UTF_8);
+		CountDownLatch readEntered = new CountDownLatch(1), releaseRead = new CountDownLatch(1);
+		AtomicInteger offset = new AtomicInteger();
+		InputStream input = new InputStream() {
+			@Override public int read() {
+				if (offset.get() == 0) {
+					readEntered.countDown();
+					awaitUninterruptibly(releaseRead);
+				}
+				int index = offset.getAndIncrement();
+				return index < bytes.length ? Byte.toUnsignedInt(bytes[index]) : -1;
+			}
+		};
+		QueuedLauncher launcher = new QueuedLauncher();
+		SokletApplicationInputManager manager = new SokletApplicationInputManager(
+				RecordingProcessAccess.withInput(input), launcher);
+		AtomicInteger calls = new AtomicInteger();
+		SokletApplicationTriggerRegistration registration = manager.register(calls::incrementAndGet);
+		Thread listener = new Thread(launcher::runNext, "pending-input-test");
+		listener.setDaemon(true);
+		try {
+			listener.start();
+			Assertions.assertTrue(readEntered.await(5, TimeUnit.SECONDS));
+			registration.unregister();
+			registration.unregister();
+			releaseRead.countDown();
+			listener.join(5000);
+			Assertions.assertFalse(listener.isAlive());
+			Assertions.assertEquals(1, offset.get(), "An unregistered listener must not start another read");
+			Assertions.assertEquals(0, calls.get());
+			Assertions.assertFalse(manager.isListenerStarted());
+			Assertions.assertEquals("ater-line\n", new String(input.readAllBytes(), StandardCharsets.UTF_8));
+		} finally {
+			registration.unregister(); releaseRead.countDown(); listener.join(5000);
+		}
+	}
+
+	@Test
 	void retiredListenerDoesNotCloseProcessOwnedStdin() {
 		CloseTrackingInputStream input = new CloseTrackingInputStream("\n");
 		RecordingProcessAccess processAccess =

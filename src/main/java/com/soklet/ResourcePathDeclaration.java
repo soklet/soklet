@@ -29,7 +29,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static com.soklet.Utilities.trimAggressivelyToEmpty;
@@ -76,27 +75,16 @@ import static java.util.stream.Collectors.toList;
  * <p>
  * In addition to simple placeholders, this version supports a special "varargs" placeholder indicated by a trailing {@code *}
  * in the placeholder name. For example, {@code /static/{filePath*}}. When present, the varargs placeholder must appear only once
- * and as the last component in the path.
+ * and as the last component in the path. Its name must be non-empty and must not duplicate a simple placeholder name.
+ * It matches zero or more path components: {@code /static/{filePath*}} matches {@code /static}, with {@code filePath}
+ * mapped to {@code ""}. The default parameter provider preserves this empty String when using default String conversion.
+ * Braces are reserved for placeholders: empty, nested, unbalanced and partial-component placeholders are invalid.
+ * The annotation processor uses this same validation and reports invalid declarations on the annotated method.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
 public final class ResourcePathDeclaration {
-	/**
-	 * Pattern which matches a placeholder in a path component.
-	 * <p>
-	 * Placeholders are bracked-enclosed segments of text, for example {@code &#123;languageId&#125;}
-	 * <p>
-	 * A path component is either literal text or a placeholder. There is no concept of multiple placeholders in a
-	 * component.
-	 */
-	@NonNull
-	private static final Pattern COMPONENT_PLACEHOLDER_PATTERN;
-
-	static {
-		COMPONENT_PLACEHOLDER_PATTERN = Pattern.compile("^\\{.+\\}$");
-	}
-
 	@NonNull
 	private final String path;
 	@NonNull
@@ -106,6 +94,7 @@ public final class ResourcePathDeclaration {
 	 * Vends an instance that represents a compile-time path declaration, for example {@code /users/{userId}}.
 	 *
 	 * @param path a compile-time path declaration that may include placeholders
+	 * @throws IllegalArgumentException if the declaration contains malformed placeholders, duplicate names or a non-final varargs placeholder
 	 */
 	@NonNull
 public static ResourcePathDeclaration fromPath(@NonNull String path) {
@@ -127,19 +116,19 @@ public static ResourcePathDeclaration fromPath(@NonNull String path) {
 				varargsCount++;
 
 				if (i != components.size() - 1)
-					throw new IllegalArgumentException(format("Varargs placeholder must be the last component in the path declaration: %s", path));
+					throw new IllegalArgumentException("Varargs placeholder must be the last component in the path declaration");
 			}
 		}
 
 		Set<String> pathParameterNames = new LinkedHashSet<String>();
 
 		for (var component : components)
-			if (component.getType() == ComponentType.PLACEHOLDER && !pathParameterNames.add(component.getValue()))
+			if (component.getType() != ComponentType.LITERAL && !pathParameterNames.add(component.getValue()))
 				throw new IllegalArgumentException(
-						String.format("Duplicate placeholder name '%s' in resource path declaration: %s", component.getValue(), path));
+						"Duplicate placeholder names are not allowed in a resource path declaration");
 
 		if (varargsCount > 1)
-			throw new IllegalArgumentException(format("Only one varargs placeholder is allowed in the path declaration: %s", path));
+			throw new IllegalArgumentException("Only one varargs placeholder is allowed in the path declaration");
 
 		this.components = unmodifiableList(components);
 	}
@@ -221,7 +210,8 @@ public static ResourcePathDeclaration fromPath(@NonNull String path) {
 	 * Resource path declaration placeholder values are automatically URL-decoded.  For example, placeholder extraction for resource path declaration {@code /users/{userId}}
 	 * and resource path {@code /users/ab%20c} would result in a value equivalent to {@code Map.of("userId", "ab c")}.
 	 * <p>
-	 * Varargs placeholders will combine all remaining path components (joined with @{code /}).
+	 * Varargs placeholders combine zero or more remaining path components (joined with {@code /}).
+	 * A match with no remaining components includes the varargs name mapped to {@code ""}.
 	 *
 	 * @param resourcePath runtime version of this resource path declaration, used to provide placeholder values
 	 * @return a mapping of placeholder names to values, or the empty map if there were no placeholders
@@ -344,9 +334,17 @@ public static ResourcePathDeclaration fromPath(@NonNull String path) {
 		List<String> parts = asList(path.split("/"));
 
 		return parts.stream().map(part -> {
-			if (COMPONENT_PLACEHOLDER_PATTERN.matcher(part).matches()) {
+			boolean openingBrace = part.indexOf('{') >= 0;
+			boolean closingBrace = part.indexOf('}') >= 0;
+			if (openingBrace != closingBrace)
+				throw new IllegalArgumentException("Malformed resource path declaration (unbalanced braces)");
+			if (openingBrace) {
+				if (!part.startsWith("{") || !part.endsWith("}"))
+					throw new IllegalArgumentException("Placeholders must span an entire path component in a resource path declaration");
 				// Remove the enclosing '{' and '}'
 				String inner = part.substring(1, part.length() - 1);
+				if (inner.indexOf('{') >= 0 || inner.indexOf('}') >= 0)
+					throw new IllegalArgumentException("Malformed resource path declaration (unbalanced braces)");
 				ComponentType type;
 
 				if (inner.endsWith("*")) {
@@ -355,6 +353,8 @@ public static ResourcePathDeclaration fromPath(@NonNull String path) {
 				} else {
 					type = ComponentType.PLACEHOLDER;
 				}
+				if (inner.isEmpty())
+					throw new IllegalArgumentException("Placeholder names must not be empty in a resource path declaration");
 
 				return Component.fromValueAndType(inner, type);
 			} else {

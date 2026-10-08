@@ -196,6 +196,40 @@ class McpCatalogAccessLocalizationPublicRuntimeTests {
 				"An over-budget projection must not begin localization lookups.");
 	}
 
+	@Test
+	void callerProjectionBudgetIncludesServerMetadataAndKeepsOneContext() {
+		Set<McpProtocolVersion> versions = Set.of(McpProtocolVersion.V2026_07_28);
+		McpEndpoint endpoint = McpEndpoint.withPath(WIRE_PATH, McpImplementation.withNameAndVersion("server", "1")
+				.title("Server title").description("Server description").build(), versions)
+				.toolRegistrations(List.of(tool("visible", "Visible title"))).build();
+		AtomicInteger contexts = new AtomicInteger();
+		AtomicInteger lookups = new AtomicInteger();
+		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> {
+			contexts.incrementAndGet();
+			return McpLocalizationContext.withLocale(Locale.FRENCH, text -> {
+				lookups.incrementAndGet();
+				return McpLocalizationResult.localized("L[" + text.getDefaultText() + "]");
+			}).build();
+		}).maximumLocalizableTextCountPerResponse(2).failurePolicy(McpLocalizationFailurePolicy.FAIL_REQUEST).build();
+		Capture empty = executeToolList(endpoint, McpCatalogAccessPolicy.fromEvaluators(
+				(requestContext, registration, invocationFeatures) -> false,
+				(requestContext, registration, invocationFeatures) -> true), localizer, "empty-metadata");
+		assertEquals(200, empty.statusCode(), empty.body());
+		assertTrue(empty.body().contains("\"tools\":[]"), empty.body());
+		assertTrue(empty.body().contains("\"title\":\"L[Server title]\""), empty.body());
+		assertEquals(1, contexts.get());
+		assertEquals(2, lookups.get());
+		contexts.set(0);
+		lookups.set(0);
+		Capture overBudget = executeToolList(endpoint, McpCatalogAccessPolicy.allowAllInstance(), localizer, "metadata-budget");
+		assertEquals(500, overBudget.statusCode(), overBudget.body());
+		assertTrue(overBudget.body().contains("\"code\":-32603"), overBudget.body());
+		assertFalse(overBudget.body().contains("Server title"), overBudget.body());
+		assertFalse(overBudget.body().contains("Visible title"), overBudget.body());
+		assertEquals(1, contexts.get(), "Policy and localization share the same captured context.");
+		assertEquals(0, lookups.get(), "Reject the entire over-budget projection before lookups.");
+	}
+
 	private static void assertToolProjections(Map<String, Capture> captures) {
 		String alpha = successBody(captures, "alpha", "tools/list");
 		assertRelativeOrder(alpha, "tool.alpha", "tool.shared");

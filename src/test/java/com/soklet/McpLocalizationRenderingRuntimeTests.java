@@ -208,6 +208,70 @@ class McpLocalizationRenderingRuntimeTests {
 		assertTrue(templates.contains("\"title\":\"FR:Template title\""),
 				templates);
 		assertFalse(templates.contains("FR:Resource title"), templates);
+		for (String body : List.of(tools, prompts, resources, templates)) {
+			assertTrue(body.contains("\"title\":\"FR:Canonical title\""), body);
+			assertTrue(body.contains("\"description\":\"FR:Canonical description\""), body);
+		}
+	}
+
+	@Test
+	void everyFrameworkListLocalizesServerMetadataIncludingEmptyCatalogs() {
+		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH,
+				request -> context(Locale.FRENCH, text -> McpLocalizationResult.localized("FR:" + text.getDefaultText())))
+				.build();
+		for (String method : List.of("tools/list", "prompts/list", "resources/list", "resources/templates/list")) {
+			Capture response = capture(metadataOnlyEndpoint(true), localizer, method, Set.of("fr"));
+			assertEquals(200, response.statusCode(), response.body());
+			assertTrue(response.body().contains("\"title\":\"FR:Canonical title\""), response.body());
+			assertTrue(response.body().contains("\"description\":\"FR:Canonical description\""), response.body());
+			assertTrue(response.body().contains("\"name\":\"metadata-only\",\"version\":\"1\""), response.body());
+			assertEquals(List.of("fr"), response.headers().get("Content-Language"));
+			if (method.equals("resources/templates/list"))
+				assertTrue(response.body().contains("\"resourceTemplates\":[]"), response.body());
+			Capture omitted = capture(metadataOnlyEndpoint(false), localizer, method, Set.of("fr"));
+			assertEquals(200, omitted.statusCode(), omitted.body());
+			assertFalse(omitted.body().contains("io.modelcontextprotocol/serverInfo"), omitted.body());
+			assertFalse(omitted.headers().containsKey("Content-Language"));
+		}
+	}
+
+	@Test
+	void serverMetadataFailureUsesTheWholeCatalogFailurePolicy() {
+		for (McpLocalizationFailurePolicy policy : McpLocalizationFailurePolicy.values()) {
+			McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH,
+					request -> context(Locale.FRENCH, text -> text.getCoordinate().getOwnerType()
+							== McpTextOwnerType.SERVER_INFORMATION ? McpLocalizationResult.failure()
+							: McpLocalizationResult.localized("FR:" + text.getDefaultText())))
+					.failurePolicy(policy).build();
+			for (String method : List.of("tools/list", "prompts/list", "resources/list", "resources/templates/list")) {
+				Capture response = capture(richEndpoint(), localizer, method, Set.of("fr"));
+				assertFalse(response.body().contains("FR:"), response.body());
+				if (policy == McpLocalizationFailurePolicy.USE_DEFAULT_TEXT) {
+					assertEquals(200, response.statusCode(), response.body());
+					assertTrue(response.body().contains("\"title\":\"Canonical title\""), response.body());
+					assertEquals(List.of("en"), response.headers().get("Content-Language"));
+				} else {
+					assertEquals(500, response.statusCode(), response.body());
+					assertTrue(response.body().contains("\"code\":-32603"), response.body());
+					assertFalse(response.headers().containsKey("Content-Language"));
+				}
+			}
+		}
+	}
+
+	private static McpEndpoint metadataOnlyEndpoint(boolean serverInfoIncluded) {
+		Set<McpProtocolVersion> versions = Set.of(McpProtocolVersion.V2026_07_28);
+		return McpEndpoint.withPath(WIRE_PATH, McpImplementation.withNameAndVersion("metadata-only", "1")
+				.title("Canonical title").description("Canonical description").build(), versions)
+				.serverInfoIncluded(serverInfoIncluded)
+				.toolRegistrations(List.of(McpToolRegistration.withName("plain", versions).jsonObjectArguments()
+						.handler((requestContext, toolArguments, invocationFeatures) -> McpCompleteResult.fromToolText("unused")).build()))
+				.promptRegistrations(List.of(McpPromptRegistration.withName("plain", versions)
+						.handler((requestContext, promptArguments, invocationFeatures) -> McpCompleteResult.fromPromptOutput(McpPromptOutput.fromMessages())).build()))
+				.resourceRegistrations(List.of(McpResourceRegistration.withUriAndName(URI.create("test://plain"), "plain", versions)
+						.handler((requestContext, resourceReadContext, invocationFeatures) -> McpCompleteResult.fromResourceOutput(
+								McpResourceOutput.fromContent(McpTextResourceContents.withUriAndText(resourceReadContext.getUri(), "unused").build()))).build()))
+				.build();
 	}
 
 	@Test

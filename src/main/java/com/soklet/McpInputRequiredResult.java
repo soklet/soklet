@@ -232,6 +232,13 @@ public final class McpInputRequiredResult implements McpOperationResult {
 		 * <p>This replaces any request state supplied by an earlier builder
 		 * call.
 		 *
+		 * <p>Protection and its configured size, round, and expiry checks run
+		 * after the handler returns. Re-emission at the maximum round or after
+		 * the original expiry fails as a sanitized internal error; building this
+		 * value does not guarantee that it can be sealed. Application side
+		 * effects are not rolled back. Returning a complete result on a valid
+		 * final-round retry does not require another state emission.
+		 *
 		 * @param frameworkRequestState application-defined JSON state
 		 * @return this builder
 		 * @throws NullPointerException if {@code frameworkRequestState} is null

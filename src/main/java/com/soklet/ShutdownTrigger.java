@@ -35,6 +35,14 @@ public enum ShutdownTrigger {
 	 * Requests shutdown when the runner observes an Enter key from standard
 	 * input. The runner owns the input registration; selecting this trigger does
 	 * not transfer ownership of or close standard input.
+	 * <p>
+	 * Active registrations share one daemon listener. It reads one byte at a
+	 * time and stops at the first LF or CR without adding read-ahead buffers.
+	 * EOF without a line terminator does not request shutdown. Removing the last
+	 * registration prevents further reads, except that an already-pending byte
+	 * read may finish before the listener retires. Java cannot portably cancel
+	 * that read without closing stdin. Reserve stdin while using this trigger;
+	 * a trailing LF after a CR is left available to later input consumers.
 	 */
 	ENTER_KEY
 }

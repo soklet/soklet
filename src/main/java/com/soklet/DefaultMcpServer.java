@@ -426,8 +426,9 @@ final class DefaultMcpServer implements McpServer {
 		return new McpApplicationExecutionObserver() {
 			@Override
 			@NonNull
-			public HttpRequestObservation didStartHttpRequest(@NonNull Request request) {
+			public HttpRequestObservation didStartHttpRequest(@NonNull Request request, @NonNull String endpointPath) {
 				requireNonNull(request);
+				requireNonNull(endpointPath);
 				LifecycleObserver observer = lifecycleObserver;
 				MetricsCollector collector = metricsCollector;
 				List<Throwable> startThrowables = new ArrayList<>();
@@ -440,7 +441,10 @@ final class DefaultMcpServer implements McpServer {
 							"An exception occurred while invoking LifecycleObserver::didStartRequestHandling").build(), null);
 				}
 				try {
-					collector.didStartRequestHandling(ServerType.HTTP, request, null);
+					if (collector instanceof DefaultMetricsCollector defaultMetricsCollector)
+						defaultMetricsCollector.didStartMcpHttpRequestHandling(request, endpointPath);
+					else
+						collector.didStartRequestHandling(ServerType.HTTP, request, null);
 				} catch (Throwable throwable) {
 					startThrowables.add(throwable);
 					safelyLogRequestObservation(observer, LogEvent.with(LogEventType.METRICS_COLLECTOR_FAILED,
@@ -813,15 +817,10 @@ final class DefaultMcpServer implements McpServer {
 			if (endpoint.getSkillListHandler().isPresent()) {
 				McpOperationResult result;
 				try {
-					result = interceptHandler(request, base.handlerEntryGuard(), features, () -> {
-						try {
-							return requireNonNull(endpoint.getSkillListHandler().orElseThrow().handle(request,
+					result = interceptHandler(request, base.handlerEntryGuard(), features,
+							() -> requireNonNull(endpoint.getSkillListHandler().orElseThrow().handle(request,
 									McpSkillListContext.from(invocation.cursor(), initial), features),
-									"The MCP Skills-list handler returned null.");
-						} catch (McpJsonRpcException exception) {
-							throw new ApplicationHandlerJsonRpcException(exception.getError());
-						}
-					});
+									"The MCP Skills-list handler returned null."));
 				} catch (ApplicationHandlerJsonRpcException exception) {
 					McpJsonRpcError error = exception.getError();
 					return ResourceListInvocationResult.jsonRpcError(error.getCode(), error.getMessage(), error.getData());
@@ -1216,6 +1215,10 @@ final class DefaultMcpServer implements McpServer {
 					McpCanonicalLocalizationPlan.@NonNull ResponseKind kind) {
 		return switch (kind) {
 			case DISCOVERY -> McpRuntimeCatalogLocalizer.ResponseKind.DISCOVERY;
+			case INITIALIZE_2025_06_18 ->
+					McpRuntimeCatalogLocalizer.ResponseKind.INITIALIZE_2025_06_18;
+			case INITIALIZE_2025_11_25 ->
+					McpRuntimeCatalogLocalizer.ResponseKind.INITIALIZE_2025_11_25;
 			case TOOLS_LIST -> McpRuntimeCatalogLocalizer.ResponseKind.TOOLS_LIST;
 			case PROMPTS_LIST ->
 					McpRuntimeCatalogLocalizer.ResponseKind.PROMPTS_LIST;
@@ -1517,6 +1520,10 @@ final class DefaultMcpServer implements McpServer {
 			McpRuntimeCatalogLocalizer.@NonNull ResponseKind responseKind) {
 		return switch (responseKind) {
 			case DISCOVERY -> McpCanonicalLocalizationPlan.ResponseKind.DISCOVERY;
+			case INITIALIZE_2025_06_18 ->
+					McpCanonicalLocalizationPlan.ResponseKind.INITIALIZE_2025_06_18;
+			case INITIALIZE_2025_11_25 ->
+					McpCanonicalLocalizationPlan.ResponseKind.INITIALIZE_2025_11_25;
 			case TOOLS_LIST -> McpCanonicalLocalizationPlan.ResponseKind.TOOLS_LIST;
 			case PROMPTS_LIST -> McpCanonicalLocalizationPlan.ResponseKind.PROMPTS_LIST;
 			case RESOURCES_LIST ->
@@ -2112,19 +2119,12 @@ final class DefaultMcpServer implements McpServer {
 		try {
 			result = interceptHandler(requestContext,
 					invocation.handlerEntryGuard(), invocationFeatures,
-					() -> {
-						try {
-							return taskCreationContext.isPresent()
-									? tool.invokeDecoded(requestContext,
-											taskCreationContext.orElseThrow().decodedArguments(),
-											invocationFeatures)
-									: tool.invoke(requestContext,
-											invocation.rawArguments(), invocationFeatures);
-						} catch (McpJsonRpcException exception) {
-							throw new ApplicationHandlerJsonRpcException(
-									exception.getError());
-						}
-					});
+					() -> taskCreationContext.isPresent()
+							? tool.invokeDecoded(requestContext,
+									taskCreationContext.orElseThrow().decodedArguments(),
+									invocationFeatures)
+							: tool.invoke(requestContext,
+									invocation.rawArguments(), invocationFeatures));
 		} catch (ApplicationHandlerJsonRpcException exception) {
 			McpJsonRpcError error = exception.getError();
 			return ToolInvocationResult.jsonRpcError(error.getCode(),
@@ -2141,7 +2141,8 @@ final class DefaultMcpServer implements McpServer {
 				throw new IllegalArgumentException(
 						"An MCP task result requires a configured task manager.");
 			if (taskCreationContext.isEmpty())
-				return ToolInvocationResult.taskCapabilityRequired();
+				throw new IllegalStateException(
+						"An MCP task result requires an available task creation context.");
 			DefaultMcpTaskCreationContext<A> defaultTaskCreationContext = taskCreationContext.orElseThrow();
 			McpTaskOrigin taskOrigin;
 			try {
@@ -2494,15 +2495,8 @@ final class DefaultMcpServer implements McpServer {
 		try {
 			result = interceptHandler(requestContext, invocation.handlerEntryGuard(),
 					invocationFeatures,
-					() -> {
-						try {
-							return prompt.invoke(requestContext,
-									invocation.rawArguments(), invocationFeatures);
-						} catch (McpJsonRpcException exception) {
-							throw new ApplicationHandlerJsonRpcException(
-									exception.getError());
-						}
-					});
+					() -> prompt.invoke(requestContext,
+							invocation.rawArguments(), invocationFeatures));
 		} catch (ApplicationHandlerJsonRpcException exception) {
 			McpJsonRpcError error = exception.getError();
 			return PromptInvocationResult.jsonRpcError(error.getCode(),
@@ -2558,13 +2552,8 @@ final class DefaultMcpServer implements McpServer {
 		McpOperationResult result;
 		try {
 			result = interceptHandler(requestContext,
-					invocation.handlerEntryGuard(), features, () -> {
-						try {
-							return handler.handle(requestContext, completionContext, features);
-						} catch (McpJsonRpcException exception) {
-							throw new ApplicationHandlerJsonRpcException(exception.getError());
-						}
-					});
+					invocation.handlerEntryGuard(), features,
+					() -> handler.handle(requestContext, completionContext, features));
 		} catch (ApplicationHandlerJsonRpcException exception) {
 			throw McpServerRuntimeBridge.applicationHandlerJsonRpcFailure(exception.getError());
 		}
@@ -2630,18 +2619,9 @@ final class DefaultMcpServer implements McpServer {
 		try {
 			result = interceptHandler(requestContext, invocation.handlerEntryGuard(),
 					invocationFeatures,
-					() -> {
-						try {
-							return requireNonNull(
-									resource.getHandler().handle(requestContext,
-											new DefaultMcpResourceReadContext(invocation),
-											invocationFeatures),
-									"The MCP resource handler returned null.");
-						} catch (McpJsonRpcException exception) {
-							throw new ApplicationHandlerJsonRpcException(
-									exception.getError());
-						}
-					});
+					() -> requireNonNull(resource.getHandler().handle(requestContext,
+							new DefaultMcpResourceReadContext(invocation), invocationFeatures),
+							"The MCP resource handler returned null."));
 		} catch (ApplicationHandlerJsonRpcException exception) {
 			McpJsonRpcError error = exception.getError();
 			if (error.resourceNotFoundUri().isPresent())
@@ -2726,6 +2706,7 @@ final class DefaultMcpServer implements McpServer {
 		requireNonNull(continuation);
 		AtomicBoolean active = new AtomicBoolean(true);
 		AtomicBoolean invoked = new AtomicBoolean();
+		AtomicReference<@Nullable McpJsonRpcException> handlerFailure = new AtomicReference<>();
 		Thread interceptorThread = Thread.currentThread();
 		McpOperationResult result;
 		try {
@@ -2749,12 +2730,24 @@ final class DefaultMcpServer implements McpServer {
 								throw new IllegalStateException(
 										"An MCP interceptor continuation may be invoked only once.");
 							handlerEntryGuard.requireEntry();
-							return requireNonNull(continuation.proceed(),
-									"The MCP downstream handler returned null.");
+							try {
+								return requireNonNull(continuation.proceed(),
+										"The MCP downstream handler returned null.");
+							} catch (McpJsonRpcException exception) {
+								handlerFailure.set(exception);
+								throw exception;
+							}
 						}
 					});
+		} catch (McpJsonRpcException exception) {
+			// Interceptors see the original public exception. Only that exact
+			// downstream object from this call can cross the client-visible boundary.
+			if (sameInstance(exception, handlerFailure.get()))
+				throw new ApplicationHandlerJsonRpcException(exception.getError());
+			throw exception;
 		} finally {
 			active.set(false);
+			handlerFailure.set(null);
 		}
 		return requireNonNull(result,
 				"The MCP handler interceptor returned null.");
@@ -2775,20 +2768,9 @@ final class DefaultMcpServer implements McpServer {
 		try {
 			result = interceptHandler(requestContext, invocation.handlerEntryGuard(),
 					invocationFeatures,
-					() -> {
-						try {
-							return requireNonNull(
-									handler.handle(requestContext,
-											new DefaultMcpResourceListContext(
-													invocation.cursor(),
-													registeredDescriptors),
-											invocationFeatures),
-									"The MCP resource-list handler returned null.");
-						} catch (McpJsonRpcException exception) {
-							throw new ApplicationHandlerJsonRpcException(
-									exception.getError());
-						}
-					});
+					() -> requireNonNull(handler.handle(requestContext,
+							new DefaultMcpResourceListContext(invocation.cursor(), registeredDescriptors),
+							invocationFeatures), "The MCP resource-list handler returned null."));
 		} catch (ApplicationHandlerJsonRpcException exception) {
 			McpJsonRpcError error = exception.getError();
 			return ResourceListInvocationResult.jsonRpcError(error.getCode(),
@@ -3293,7 +3275,9 @@ final class DefaultMcpServer implements McpServer {
 
 	/**
 	 * Internal control signal that distinguishes an intentional JSON-RPC error
-	 * thrown by an application handler from one thrown by its interceptor.
+	 * thrown by an application handler and rethrown unchanged through interception
+	 * from one authored by its interceptor. This signal is created only after
+	 * the public exception has left the interceptor chain.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */

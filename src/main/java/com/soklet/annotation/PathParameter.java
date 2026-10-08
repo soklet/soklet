@@ -26,6 +26,12 @@ import java.lang.annotation.Target;
 /**
  * Apply to <em>Resource Method</em> parameters to enable URL path parameter (for example, {@code /widgets/{widgetId}}) injection.
  * <p>
+ * Path parameters cannot use {@code Optional<T>}; varargs path parameters must use {@code String}.
+ * Apply only one Soklet binding annotation to each parameter.
+ * <p>
+ * Varargs placeholders match zero or more path components. With the default parameter provider and String converter,
+ * a suffix with no components is injected as {@code ""}. Explicit String converters still run and may reject it.
+ * <p>
  * Refer to documentation at <a href="https://www.soklet.com/docs/request-handling#path-parameters">https://www.soklet.com/docs/request-handling#path-parameters</a> for details.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>

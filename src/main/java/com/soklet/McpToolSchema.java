@@ -33,7 +33,16 @@ import static java.util.Objects.requireNonNull;
  * {@link McpToolRegistration.ArgumentTypeStage#inputSchema(McpJsonObject)};
  * output schemas remain derived. Profile 1 is a closed generation and
  * validation profile based on JSON Schema Draft 2020-12, not a complete Draft
- * 2020-12 implementation.
+ * 2020-12 implementation.</p>
+ *
+ * <p>Evaluation has independent resource bounds, including one million
+ * operations and 128 active evaluation calls. A value within the JSON byte,
+ * depth and node limits can still exhaust schema evaluation. Repeated
+ * applicators, reference traversals, equality checks and object-member sorting
+ * contribute work; satisfying the schema semantically does not guarantee
+ * completion within these bounds. Limit exhaustion rejects input through the
+ * revision's ordinary tool-validation result, and output through the fixed
+ * internal-error result. Internal diagnostics are not exposed on the wire.</p>
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

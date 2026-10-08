@@ -1790,6 +1790,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				new AtomicReference<>(ListenerState.STARTING);
 		AtomicReference<InetSocketAddress> candidateAddress = new AtomicReference<>();
 		AtomicReference<Throwable> startupFailure = new AtomicReference<>();
+		// Elected with startupFailure under lifecycleLock, so a competing callback
+		// cannot reclassify an earlier synchronous throw (or the reverse).
+		AtomicBoolean startupFailureWasSynchronous = new AtomicBoolean();
 		AtomicBoolean startupFailureSignaled = new AtomicBoolean();
 		AtomicBoolean startupFailureDiagnosticRetained = new AtomicBoolean();
 		Object startupFailureSignalLock = new Object();
@@ -1903,6 +1906,13 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				}
 
 				@Override
+				public boolean closeConnectionOnInputEnd(@NonNull MicrohttpRequest request) {
+					// RequestControl cancels pre-commit/modern work, but an already
+					// committed 2025 POST SSE writer detaches without canceling its handler.
+					return true;
+				}
+
+				@Override
 				public void cancel(@NonNull MicrohttpRequest request,
 						@NonNull StreamTerminationReason reason,
 						@Nullable Throwable cause) {
@@ -1913,7 +1923,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			Options options = microhttpOptions();
 			candidateEventLoop = new EventLoop(options, NoopLogger.instance(), handler,
 					connectionListener(candidateReadiness, lifecycleGeneration,
-							startupFailure, startupFailureSignaled,
+							startupFailure, startupFailureWasSynchronous, startupFailureSignaled,
 							startupFailureDiagnosticRetained,
 							startupFailureSignalLock),
 					this.transportFailureObserver);
@@ -1977,7 +1987,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				// serialized with the final STARTING -> READY transition.  Publishing
 				// TERMINATED before the cause would allow startup to synthesize a
 				// different failure and win the common coordinator signal.
-				startupFailure.compareAndSet(null, throwable);
+				if (startupFailure.compareAndSet(null, throwable))
+					startupFailureWasSynchronous.set(true);
 				primary = requireNonNull(startupFailure.get());
 				candidateReadiness.set(ListenerState.TERMINATED);
 			}
@@ -2013,7 +2024,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 			signalStartupFailure(
 					lifecycleGeneration, primary, startupFailureSignaled,
-					startupFailureSignalLock);
+					startupFailureSignalLock, startupFailureWasSynchronous.get());
 			// A signal-path failure is contained locally and cannot replace or
 			// decorate the elected startup cause.
 
@@ -2357,14 +2368,16 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			McpServerRuntimeBridge.LifecycleAdapter.@NonNull Generation generation,
 			@NonNull Throwable failure,
 			@NonNull AtomicBoolean failureSignaled,
-			@NonNull Object failureSignalLock) {
+			@NonNull Object failureSignalLock, boolean synchronousStartFailure) {
 		AtomicBoolean exactFailureSignaled = requireNonNull(failureSignaled);
 		synchronized (requireNonNull(failureSignalLock)) {
 			if (!exactFailureSignaled.compareAndSet(false, true))
 				return;
 			try {
-				requireNonNull(generation).signalTerminationFailure(
-						requireNonNull(failure));
+				if (synchronousStartFailure)
+					requireNonNull(generation).signalStartupFailure(requireNonNull(failure));
+				else
+					requireNonNull(generation).signalTerminationFailure(requireNonNull(failure));
 			} catch (Throwable ignored) {
 				// Signal-path failure cannot replace or decorate the elected cause.
 			}
@@ -3535,7 +3548,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		ThreadFactory threadFactory = runnable -> {
 			Thread thread = new Thread(runnable, "soklet-mcp-request-"
 					+ processorThreadSequence.incrementAndGet());
-			thread.setDaemon(false);
+			thread.setDaemon(true);
 			return thread;
 		};
 		return new LifecycleRequestProcessor(
@@ -3871,6 +3884,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			McpServerRuntimeBridge.LifecycleAdapter.@NonNull Generation
 					lifecycleGeneration,
 			@NonNull AtomicReference<Throwable> startupFailure,
+			@NonNull AtomicBoolean startupFailureWasSynchronous,
 			@NonNull AtomicBoolean startupFailureSignaled,
 			@NonNull AtomicBoolean startupFailureDiagnosticRetained,
 			@NonNull Object startupFailureSignalLock) {
@@ -3932,7 +3946,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 								startupFailureSignalLock);
 						signalStartupFailure(lifecycleGeneration, primary,
 								startupFailureSignaled,
-								startupFailureSignalLock);
+								startupFailureSignalLock, startupFailureWasSynchronous.get());
 						try {
 							unexpectedTerminationConsumer.accept(primary);
 						} catch (Throwable ignored) {
@@ -4708,20 +4722,20 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					|| headerProtocolVersion != null
 					&& McpLegacyHttpWire.isLegacyRevision(headerProtocolVersion));
 		boolean deferredToolMirroredHeaderValidation =
-				!legacy && endpointBinding.endpoint().catalogAccessAdapter().isPresent()
-						&& "tools/call".equals(wireRequest.method());
+				!legacy && "tools/call".equals(wireRequest.method());
 		if (!legacy) {
 			MicrohttpResponse initialMirroredHeaderFailure =
 					validateRequiredMirroredHeaders(request, wireRequest,
 							validatedUnsupportedSelector, corsHeaders,
-							!deferredToolMirroredHeaderValidation);
+							!("tools/call".equals(wireRequest.method())
+									&& endpointBinding.endpoint().catalogAccessAdapter().isPresent()));
 			if (initialMirroredHeaderFailure != null)
 				return initialMirroredHeaderFailure;
 		}
 		if (!legacy && !deferredToolMirroredHeaderValidation) {
-			// The modern header checks and custom-header policy precede version
-			// selection. Use the exact modern view when supported, otherwise the
-			// modern endpoint view for deterministic unsupported-selector errors.
+			// Non-tool custom-header policy is independent of tool registration.
+			// Tool-specific checks require successful version selection and admission.
+			// Other methods retain the modern view for unsupported-selector errors.
 			String validationRevision = headerProtocolVersion != null
 					&& !McpLegacyHttpWire.isLegacyRevision(headerProtocolVersion)
 					&& endpointBinding.revisionEndpoint(headerProtocolVersion).isPresent()
@@ -4812,8 +4826,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				selectedRevision).orElseThrow();
 		McpServerCapabilityRegistry capabilityRegistry =
 				endpointRuntime.capabilityRegistry(selectedRevision);
-		McpApplicationRequestRouter applicationRouter =
-				endpointRuntime.resourceRoutersByRevision().get(selectedRevision);
+		McpApplicationRequestRouter applicationRouter = requireNonNull(
+				endpointRuntime.resourceRoutersByRevision().get(selectedRevision));
 
 		requestControl.bindProtocolProfile(protocolProfile);
 		boolean sessionEnabled = legacy && sessionsEnabled(endpointRuntime.path(), selectedRevision);
@@ -5075,35 +5089,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				if (argumentsValue != null
 						&& !(argumentsValue instanceof McpJsonObject))
 					return invalidParams(protocolProfile, mappedRequest, corsHeaders);
-				if ((applicationRouter.hasToolRoutes()
-						|| !capabilityRegistry.tools().isEmpty())
-						&& !capabilityRegistry.tools().contains(name.value()))
-					return invalidParams(protocolProfile, mappedRequest, corsHeaders);
-
-				toolRoute = applicationRouter.resolveTool(name.value());
-				if (applicationRouter.hasToolRoutes()) {
-					if (toolRoute.isEmpty())
-						return invalidParams(protocolProfile, mappedRequest, corsHeaders);
-					McpApplicationToolRoute resolvedRoute = toolRoute.orElseThrow();
-					applicationHandler = Optional.of(resolvedRoute.handler());
-					inputRequestPlan = resolvedRoute.inputRequestPlan();
-					requestStateMode = resolvedRoute.requestStateMode();
-					taskRequired = resolvedRoute.taskRequired();
-				} else {
-					// Retain the package-private generic method route for existing runtime
-					// tests while production registrations use exact immutable tool routes.
-					applicationHandler = applicationRouter.resolve(mappedRequest.method());
-				}
-				if (applicationHandler.isEmpty())
-					return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
 			}
 		} else if ("prompts/get".equals(mappedRequest.method())) {
-			Optional<McpApplicationRequestHandler> genericPromptHandler =
-					applicationRouter.resolve(mappedRequest.method());
-			if (capabilityRegistry.prompts().isEmpty()
-					&& genericPromptHandler.isEmpty())
-				return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
-
 			Map<String, McpJsonValue> fields =
 					mappedRequest.params().fields().members();
 			try {
@@ -5119,8 +5106,135 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
 			operationName = Optional.of(name.value());
 
-			if (!callerAwareCatalog) {
-				McpJsonValue argumentsValue = fields.get("arguments");
+			if (!callerAwareCatalog && !validPromptArgumentValues(fields.get("arguments")))
+				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
+		} else if ("resources/read".equals(mappedRequest.method())) {
+			Map<String, McpJsonValue> fields = mappedRequest.params().fields().members();
+			try {
+				Optional<McpJsonObject> parsedInputResponses =
+						parseInputResponses(fields);
+				inputResponses = parsedInputResponses.orElseGet(McpJsonObject::empty);
+				inputResponsesSupplied = parsedInputResponses.isPresent();
+			} catch (IllegalArgumentException exception) {
+				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
+			}
+			McpJsonValue uriValue = fields.get("uri");
+			if (!(uriValue instanceof McpJsonString uriString))
+				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
+			String uri;
+			try {
+				uri = McpLevelOneUriTemplate.requireValidAbsoluteUri(
+						uriString.value(), "Resource URI");
+			} catch (IllegalArgumentException exception) {
+				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
+			}
+			operationName = Optional.of(uri);
+		} else if (mappedRequest.method().startsWith("tasks/")
+				|| mappedRequest.method().startsWith("skills/")) {
+			// These framework extensions own their complete method namespaces.
+			// Unknown methods never fall through to an application route.
+			return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
+		} else {
+			applicationHandler = applicationRouter.resolve(mappedRequest.method());
+			if (applicationHandler.isEmpty())
+				return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
+		}
+
+		boolean completionPromptRequest = completionRequest
+				.map(value -> value.promptReference()).orElse(false);
+		boolean appToolCall = "tools/call".equals(mappedRequest.method())
+				&& operationName.map(capabilityRegistry::hasAppTool).orElse(false);
+		boolean deferredCatalogDirectRequest = callerAwareCatalog
+				&& ("tools/call".equals(mappedRequest.method())
+						|| "prompts/get".equals(mappedRequest.method()));
+
+		if (!requestControl.protocolProcessingAllowed())
+			return null;
+		McpAdmissionContext admissionContext = new McpAdmissionContext(
+				sokletRequest, endpoint, Map.of(), mappedRequest.method(), false,
+				Optional.of(mappedRequest.id()), requestedProtocolVersion,
+				operationName, mappedRequest.params().metadata().clientInformation(),
+				legacy && !initializeRequest ? Optional.empty()
+						: Optional.of(mappedRequest.params().metadata().clientCapabilities()),
+				acceptedSubscriptionFilter.map(AcceptedSubscriptionFilter
+						::toolsListChanged).orElse(false),
+				acceptedSubscriptionFilter.map(AcceptedSubscriptionFilter
+						::promptsListChanged).orElse(false),
+				acceptedSubscriptionFilter.map(AcceptedSubscriptionFilter
+						::resourcesListChanged).orElse(false),
+				acceptedSubscriptionFilter.map(AcceptedSubscriptionFilter
+						::resourceSubscriptionsIncluded).orElse(false),
+				acceptedSubscriptionFilter
+						.map(AcceptedSubscriptionFilter
+								::requestedResourceSubscriptionUris)
+						.orElseGet(List::of),
+				acceptedSubscriptionFilter.map(AcceptedSubscriptionFilter
+						::taskIdsRequested).orElse(false),
+				acceptedSubscriptionFilter.map(AcceptedSubscriptionFilter
+						::requestedTaskIds).orElseGet(List::of),
+				Optional.of(requestMessageMetadata));
+		// A failed/rejected admission hook is an HTTP policy failure, even when
+		// its safe response carries a JSON-RPC error body.
+		requestControl.legacyTransportRejected = legacy;
+		Optional<McpAdmissionDecision> admissionResult;
+		try {
+			admissionResult = Optional.ofNullable(
+					endpointPolicy.protocolAdmissionController().admit(admissionContext));
+		} catch (Throwable throwable) {
+			return policyHookInternalError(protocolProfile, mappedRequest.id(), corsHeaders);
+		}
+		if (!requestControl.protocolProcessingAllowed())
+			return null;
+		if (admissionResult.isEmpty())
+			return policyHookInternalError(protocolProfile, mappedRequest.id(), corsHeaders);
+		McpAdmissionDecision admissionDecision = admissionResult.orElseThrow();
+
+		if (admissionDecision instanceof McpAdmissionDecision.Rejected rejected) {
+			try {
+				return remapSessionAdmissionRejection(admissionRejection(mappedRequest.id(),
+						rejected.rejection(), corsHeaders), sessionEnabled);
+			} catch (IllegalArgumentException exception) {
+				return policyHookInternalError(protocolProfile, mappedRequest.id(), corsHeaders);
+			}
+		}
+		McpAdmissionIdentity admittedIdentity =
+				((McpAdmissionDecision.Accepted) admissionDecision).identity();
+		requestControl.legacyTransportRejected = false;
+		if ("prompts/get".equals(mappedRequest.method())
+				&& capabilityRegistry.prompts().isEmpty()
+				&& applicationRouter.resolve(mappedRequest.method()).isEmpty())
+			return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
+		// Admission sees the validated operation spelling before any neutral
+		// registry membership, descriptor requirements, or resource routing result.
+		if (!callerAwareCatalog && "tools/call".equals(mappedRequest.method())) {
+			String name = operationName.orElseThrow();
+			if ((applicationRouter.hasToolRoutes()
+					|| !capabilityRegistry.tools().isEmpty())
+					&& !capabilityRegistry.tools().contains(name))
+				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
+
+			toolRoute = applicationRouter.resolveTool(name);
+			if (applicationRouter.hasToolRoutes()) {
+				if (toolRoute.isEmpty())
+					return invalidParams(protocolProfile, mappedRequest, corsHeaders);
+				McpApplicationToolRoute resolvedRoute = toolRoute.orElseThrow();
+				applicationHandler = Optional.of(resolvedRoute.handler());
+				inputRequestPlan = resolvedRoute.inputRequestPlan();
+				requestStateMode = resolvedRoute.requestStateMode();
+				taskRequired = resolvedRoute.taskRequired();
+			} else {
+				// Retain the package-private generic method route for existing runtime
+				// tests while production registrations use exact immutable tool routes.
+				applicationHandler = applicationRouter.resolve(mappedRequest.method());
+			}
+			if (applicationHandler.isEmpty())
+				return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
+		} else if (!callerAwareCatalog && "prompts/get".equals(mappedRequest.method())) {
+			Optional<McpApplicationRequestHandler> genericPromptHandler =
+					applicationRouter.resolve(mappedRequest.method());
+			Map<String, McpJsonValue> fields = mappedRequest.params().fields().members();
+			String name = operationName.orElseThrow();
+			McpJsonValue argumentsValue = fields.get("arguments");
 			if (capabilityRegistry.prompts().isEmpty()
 					&& !applicationRouter.hasPromptRoutes()) {
 				// Preserve the package-private generic method seam used by transport
@@ -5129,14 +5243,14 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					return invalidParams(protocolProfile, mappedRequest, corsHeaders);
 			} else {
 				Optional<McpNormalizedPromptDescriptor> promptDescriptor =
-						capabilityRegistry.promptDescriptor(name.value());
+						capabilityRegistry.promptDescriptor(name);
 				if (promptDescriptor.isEmpty()
 						|| !validPromptArguments(promptDescriptor.orElseThrow(),
 								argumentsValue))
 					return invalidParams(protocolProfile, mappedRequest, corsHeaders);
 			}
 
-			promptRoute = applicationRouter.resolvePrompt(name.value());
+			promptRoute = applicationRouter.resolvePrompt(name);
 			if (applicationRouter.hasPromptRoutes()) {
 				if (promptRoute.isEmpty())
 					return invalidParams(protocolProfile, mappedRequest, corsHeaders);
@@ -5151,7 +5265,6 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			}
 			if (applicationHandler.isEmpty())
 				return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
-			}
 		} else if ("resources/read".equals(mappedRequest.method())) {
 			Optional<McpApplicationRequestHandler> genericResourceHandler =
 					applicationRouter.resolve(mappedRequest.method());
@@ -5161,30 +5274,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					&& genericResourceHandler.isEmpty()
 					&& !applicationRouter.hasResourceReadRoutes())
 				return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
-
 			Map<String, McpJsonValue> fields = mappedRequest.params().fields().members();
-			try {
-				Optional<McpJsonObject> parsedInputResponses =
-						parseInputResponses(fields);
-				inputResponses = parsedInputResponses.orElseGet(McpJsonObject::empty);
-				inputResponsesSupplied = parsedInputResponses.isPresent();
-			} catch (IllegalArgumentException exception) {
-				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
-			}
-			boolean resourceRetry = inputResponsesSupplied
-					|| fields.containsKey("requestState");
-			McpJsonValue uriValue = fields.get("uri");
-			if (!(uriValue instanceof McpJsonString uriString))
-				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
-			String uri;
-			try {
-				uri = McpLevelOneUriTemplate.requireValidAbsoluteUri(
-						uriString.value(), "Resource URI");
-			} catch (IllegalArgumentException exception) {
-				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
-			}
-			operationName = Optional.of(uri);
-
+			String uri = operationName.orElseThrow();
+			boolean resourceRetry = inputResponsesSupplied || fields.containsKey("requestState");
 			if (applicationRouter.hasResourceReadRoutes()) {
 				Optional<McpApplicationResourceReadRoute> exactRoute =
 						applicationRouter.resolveExactResource(uri);
@@ -5242,24 +5334,29 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					return invalidResourceUriParams(protocolProfile, mappedRequest, uri, corsHeaders);
 				return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
 			}
-		} else if (mappedRequest.method().startsWith("tasks/")
-				|| mappedRequest.method().startsWith("skills/")) {
-			// These framework extensions own their complete method namespaces.
-			// Unknown methods never fall through to an application route.
-			return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
-		} else {
-			applicationHandler = applicationRouter.resolve(mappedRequest.method());
-			if (applicationHandler.isEmpty())
-				return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
 		}
 
-		boolean completionPromptRequest = completionRequest
-				.map(value -> value.promptReference()).orElse(false);
-		boolean appToolCall = "tools/call".equals(mappedRequest.method())
-				&& operationName.map(capabilityRegistry::hasAppTool).orElse(false);
-		boolean deferredCatalogDirectRequest = callerAwareCatalog
-				&& ("tools/call".equals(mappedRequest.method())
-						|| "prompts/get".equals(mappedRequest.method()));
+		if (deferredToolMirroredHeaderValidation && !callerAwareCatalog) {
+			McpCustomMirroredHeaderValidation customHeaderValidation =
+					customMirroredHeaderValidator.validate(request.headers(), wireRequest,
+							capabilityRegistry,
+							endpointPolicy.unknownMirroredHeaderPolicy(),
+							this.unknownMirroredHeaderNameDiagnostics.enabled());
+			recordUnknownMirroredHeaders(endpointRuntime.path(), wireRequest.method(),
+					customHeaderValidation.unknownHeaderCount());
+			for (String unknownHeaderName : customHeaderValidation.unknownHeaderNames())
+				this.unknownMirroredHeaderNameDiagnostics.observe(
+						endpointRuntime.path(), unknownHeaderName);
+			if (customHeaderValidation.outcome()
+					== McpCustomMirroredHeaderOutcome.HEADER_MISMATCH)
+				return headerMismatch(endpointBinding, wireRequest.id(), wireRequest.method(),
+						validatedUnsupportedSelector, corsHeaders);
+			if (customHeaderValidation.outcome()
+					== McpCustomMirroredHeaderOutcome.STRICT_UNKNOWN)
+				return strictUnknownMirroredHeader(endpointBinding, wireRequest.id(), wireRequest.method(),
+						validatedUnsupportedSelector, corsHeaders);
+		}
+
 		if (McpWireResult.supportsInputRequired(mappedRequest.method())
 				&& !deferredCatalogDirectRequest) {
 			try {
@@ -5290,58 +5387,6 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					McpJsonRpcError.missingRequiredClientCapabilities(
 							missingCapabilities), corsHeaders);
 
-		if (!requestControl.protocolProcessingAllowed())
-			return null;
-		McpAdmissionContext admissionContext = new McpAdmissionContext(
-				sokletRequest, endpoint, Map.of(), mappedRequest.method(), false,
-				Optional.of(mappedRequest.id()), requestedProtocolVersion,
-				operationName, mappedRequest.params().metadata().clientInformation(),
-				legacy && !initializeRequest ? Optional.empty()
-						: Optional.of(mappedRequest.params().metadata().clientCapabilities()),
-				acceptedSubscriptionFilter.map(AcceptedSubscriptionFilter
-						::toolsListChanged).orElse(false),
-				acceptedSubscriptionFilter.map(AcceptedSubscriptionFilter
-						::promptsListChanged).orElse(false),
-				acceptedSubscriptionFilter.map(AcceptedSubscriptionFilter
-						::resourcesListChanged).orElse(false),
-				acceptedSubscriptionFilter.map(AcceptedSubscriptionFilter
-						::resourceSubscriptionsIncluded).orElse(false),
-				acceptedSubscriptionFilter
-						.map(AcceptedSubscriptionFilter
-								::requestedResourceSubscriptionUris)
-						.orElseGet(List::of),
-				acceptedSubscriptionFilter.map(AcceptedSubscriptionFilter
-						::taskIdsRequested).orElse(false),
-				acceptedSubscriptionFilter.map(AcceptedSubscriptionFilter
-						::requestedTaskIds).orElseGet(List::of),
-				Optional.of(requestMessageMetadata));
-		// A failed/rejected admission hook is an HTTP policy failure, even when
-		// its safe response carries a JSON-RPC error body.
-		requestControl.legacyTransportRejected = legacy;
-		Optional<McpAdmissionDecision> admissionResult;
-		try {
-			admissionResult = Optional.ofNullable(
-					endpointPolicy.protocolAdmissionController().admit(admissionContext));
-		} catch (Throwable throwable) {
-			return policyHookInternalError(protocolProfile, mappedRequest.id(), corsHeaders);
-		}
-		if (!requestControl.protocolProcessingAllowed())
-			return null;
-		if (admissionResult.isEmpty())
-			return policyHookInternalError(protocolProfile, mappedRequest.id(), corsHeaders);
-		McpAdmissionDecision admissionDecision = admissionResult.orElseThrow();
-
-		if (admissionDecision instanceof McpAdmissionDecision.Rejected rejected) {
-			try {
-				return remapSessionAdmissionRejection(admissionRejection(mappedRequest.id(),
-						rejected.rejection(), corsHeaders), sessionEnabled);
-			} catch (IllegalArgumentException exception) {
-				return policyHookInternalError(protocolProfile, mappedRequest.id(), corsHeaders);
-			}
-		}
-		McpAdmissionIdentity admittedIdentity =
-				((McpAdmissionDecision.Accepted) admissionDecision).identity();
-		requestControl.legacyTransportRejected = false;
 		McpEffectiveAdmissionIdentity effectiveIdentity =
 				McpEffectiveAdmissionIdentity.resolve(endpoint, endpointPolicy.path(),
 						admittedIdentity);
@@ -5885,10 +5930,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			endpoint.instructions().ifPresent(value ->
 					fields.put("instructions", new McpJsonString(value)));
 			McpWireResult result = McpWireResult.complete(new McpJsonObject(fields));
-			MicrohttpResponse response = jsonResponse(200, "OK", McpLegacyResponseWire.encode(jsonCodec,
-					new McpJsonRpcMessage.ResultResponse(mappedRequest.id(), result,
-							McpJsonObject.empty())), corsHeaders);
-			return requestControl.withInitializationResponse(response);
+			return catalogResponse(result, protocolProfile,
+					"2025-06-18".equals(selectedRevision)
+							? McpRuntimeCatalogLocalizer.ResponseKind.INITIALIZE_2025_06_18
+							: McpRuntimeCatalogLocalizer.ResponseKind.INITIALIZE_2025_11_25,
+					mappedRequest.id(), endpointPolicy, requestControl, corsHeaders,
+					Optional.empty(), true);
 		}
 
 		if (pingRequest) {
@@ -6086,9 +6133,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					"Subscription notifications must be an object.");
 
 		Map<String, McpJsonValue> fields = notifications.members();
-		// Canonical registrations are immutable, but localized presentation is
-		// not: tool and prompt list-change filters are accepted exactly when the
-		// corresponding localized catalog exists.
+		// Registrations are immutable. Configured publishers and localization can
+		// supply list-change hints; caller-visible projections determine whether
+		// the selected tool or prompt catalog actually changed.
 		boolean toolsListChangedRequested = optionalSubscriptionBoolean(
 				fields, "toolsListChanged");
 		boolean promptsListChangedRequested = optionalSubscriptionBoolean(
@@ -6803,7 +6850,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	private @Nullable MicrohttpResponse processLegacySessionHttp(MicrohttpRequest request,
 			Request publicRequest, HttpMethod method, EndpointRuntime endpoint,
 			RequestControl control, McpApplicationExecution application, List<Header> headers) {
-		control.startLegacyHttpObservation(publicRequest);
+		control.startLegacyHttpObservation(publicRequest, endpoint.path());
 		Set<HttpMethod> configuredMethods = legacyHttpMethods(endpoint, null);
 		if (!configuredMethods.contains(method))
 			return methodNotAllowed(headers, configuredMethods);
@@ -7897,7 +7944,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				requestControl.publicRequestContext().orElse(null);
 
 		if (catalogLocalizer.isEmpty() || requestContext == null)
-			return jsonResponse(200, "OK", canonicalEncoded, corsHeaders);
+			return successfulCatalogResponse(canonicalEncoded, corsHeaders,
+					responseKind, requestControl);
 
 		McpJsonObject canonicalDocument = McpLegacyHttpWire.isLegacyRevision(
 				protocolProfile.revision())
@@ -7936,15 +7984,29 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				outcome.contentLanguage());
 
 		return switch (outcome.disposition()) {
-			case CANONICAL -> jsonResponse(200, "OK", canonicalEncoded,
-					responseHeaders);
-			case LOCALIZED -> jsonResponse(200, "OK", encodeResultResponse(
+			case CANONICAL -> successfulCatalogResponse(canonicalEncoded,
+					responseHeaders, responseKind, requestControl);
+			case LOCALIZED -> successfulCatalogResponse(encodeResultResponse(
 					protocolProfile, requestId,
 					McpWireResult.withPrecomputedJsonObject(canonicalResult,
 							outcome.document())),
-					responseHeaders);
+					responseHeaders, responseKind, requestControl);
 			case FAIL_REQUEST, RESIZE_PAGE -> observedPolicyHookInternalError(requestControl,
 					requestId, corsHeaders, null);
+		};
+	}
+
+	/** Offers a pending session only after a successful initialization render. */
+	@NonNull
+	private MicrohttpResponse successfulCatalogResponse(byte @NonNull [] encoded,
+			@NonNull List<@NonNull Header> headers,
+			McpRuntimeCatalogLocalizer.@NonNull ResponseKind responseKind,
+			@NonNull RequestControl requestControl) {
+		MicrohttpResponse response = jsonResponse(200, "OK", encoded, headers);
+		return switch (responseKind) {
+			case INITIALIZE_2025_06_18, INITIALIZE_2025_11_25 ->
+					requestControl.withInitializationResponse(response);
+			default -> response;
 		};
 	}
 
@@ -8454,37 +8516,46 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				&& code != SOKLET_STRICT_UNKNOWN_MIRRORED_HEADER;
 	}
 
+	static void validateAdmissionRejectionHeaders(
+			@NonNull Map<@NonNull String, ? extends @NonNull List<@NonNull String>> policyHeaders) {
+		validatedPolicyHeaders(requireNonNull(policyHeaders));
+	}
+
 	@NonNull
-	private List<@NonNull Header> validatedPolicyHeaders(
-			@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> policyHeaders) {
+	private static List<@NonNull Header> validatedPolicyHeaders(
+			@NonNull Map<@NonNull String, ? extends @NonNull List<@NonNull String>> policyHeaders) {
 		List<Header> headers = new ArrayList<>();
 		Set<String> normalizedNames = new LinkedHashSet<>();
 		long encodedBytes = 0L;
-		for (Map.Entry<String, List<String>> entry : policyHeaders.entrySet()) {
+		for (Map.Entry<String, ? extends List<String>> entry : policyHeaders.entrySet()) {
 			String name = requireNonNull(entry.getKey());
+			if (name.length() > MAXIMUM_ADMISSION_REJECTION_HEADER_BYTES)
+				throw new IllegalArgumentException("Admission rejection response headers exceed the fixed bounds.");
 			String lowerName = name.toLowerCase(Locale.ROOT);
-			if (!validHeaderName(name)
-					|| !normalizedNames.add(lowerName)
-					|| FRAMEWORK_OWNED_POLICY_HEADERS.contains(lowerName)
-					|| FORBIDDEN_LEGACY_MCP_POLICY_HEADERS.contains(lowerName)
-					|| lowerName.startsWith("access-control-"))
-				throw new IllegalArgumentException(
-						"Admission rejection contains an unsafe response header.");
+			if (!validHeaderName(name))
+				throw new IllegalArgumentException("Admission rejection header names must be ASCII HTTP tokens.");
+			if (!normalizedNames.add(lowerName))
+				throw new IllegalArgumentException("Admission rejection header names must be unique ignoring case.");
+			if (FRAMEWORK_OWNED_POLICY_HEADERS.contains(lowerName)
+					|| FORBIDDEN_LEGACY_MCP_POLICY_HEADERS.contains(lowerName))
+				throw new IllegalArgumentException("Admission rejection cannot supply framework-owned header '" + lowerName + "'.");
+			if (lowerName.startsWith("access-control-"))
+				throw new IllegalArgumentException("Admission rejection cannot supply Access-Control-* response headers.");
 
 			List<String> values = requireNonNull(entry.getValue());
 			if (values.isEmpty())
 				throw new IllegalArgumentException(
-						"Admission rejection header values must not be empty.");
+						"Admission rejection header value lists must not be empty.");
 			for (String value : values) {
 				requireNonNull(value);
-				if (!validHeaderValue(value))
-					throw new IllegalArgumentException(
-							"Admission rejection contains an unsafe response header value.");
 				encodedBytes += name.length() + value.length() + 4L;
 				if (headers.size() >= MAXIMUM_ADMISSION_REJECTION_HEADER_COUNT
 						|| encodedBytes > MAXIMUM_ADMISSION_REJECTION_HEADER_BYTES)
 					throw new IllegalArgumentException(
 							"Admission rejection response headers exceed the fixed bounds.");
+				if (!validHeaderValue(value))
+					throw new IllegalArgumentException(
+							"Admission rejection header values must contain only visible ASCII or HTAB.");
 				headers.add(new Header(name, value));
 			}
 		}
@@ -8498,7 +8569,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		return new McpLegacySessionTransportAdmission.Rejected(statusCode, validatedPolicyHeaders(headers));
 	}
 
-	private boolean validHeaderName(@NonNull String name) {
+	private static boolean validHeaderName(@NonNull String name) {
 		if (name.isEmpty())
 			return false;
 		for (int index = 0; index < name.length(); index++) {
@@ -8512,7 +8583,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		return true;
 	}
 
-	private boolean validHeaderValue(@NonNull String value) {
+	private static boolean validHeaderValue(@NonNull String value) {
 		for (int index = 0; index < value.length(); index++) {
 			char character = value.charAt(index);
 			if (character != '\t' && (character < 0x20 || character > 0x7E))
@@ -10588,10 +10659,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			this.lifecycleWorkOwners = lifecycleAdmission == null ? 0 : 1;
 		}
 
-		private void startLegacyHttpObservation(Request request) {
+		private void startLegacyHttpObservation(Request request, String endpointPath) {
 			synchronized (lock) { legacyHttpControl = true; legacyHttpStartedNanos = applicationClock.nanoTime(); }
 			McpApplicationExecutionObserver.HttpRequestObservation observation;
-			try { observation = applicationExecutionObserver.didStartHttpRequest(request); }
+			try { observation = applicationExecutionObserver.didStartHttpRequest(request, endpointPath); }
 			catch (Throwable ignored) { observation = (status, headers, duration, throwables) -> {}; }
 			synchronized (lock) { legacyHttpObservation = observation; }
 		}

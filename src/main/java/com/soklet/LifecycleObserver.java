@@ -20,8 +20,6 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
-import java.io.PrintWriter;
-import java.io.StringWriter;
 import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.util.List;
@@ -34,6 +32,12 @@ import java.util.List;
  * observational. Soklet contains their failures; they cannot veto, delay, or
  * change startup, shutdown, or the published lifecycle result. Other callbacks
  * retain the inline behavior documented on their individual methods.
+ * <p>
+ * Transition callbacks are delivered serially by a daemon observer worker;
+ * returning from shutdown or {@link SokletApplication#run(SokletConfig)} does
+ * not join their delivery. They may be lost when the JVM exits. Essential
+ * application cleanup belongs in bounded {@link ShutdownCleanup}, with an
+ * application-owned delivery barrier if it depends on observer state.
  * <p>
  * Soklet may invoke callbacks concurrently from lifecycle, transport, and
  * request-handling threads. Implementations must therefore be thread-safe. A
@@ -275,18 +279,21 @@ public interface LifecycleObserver {
 	}
 
 	/**
-	 * Called when a server exposes a parser rejection that occurred before a
+	 * Called when a server exposes an input rejection that occurred before a
 	 * valid {@link Request} could be constructed.
 	 * <p>
 	 * Captured bytes are untrusted and may contain credentials or other sensitive
 	 * values. Implementations should apply appropriate redaction and retention
 	 * policies before logging or storing them.
 	 * <p>
-	 * The built-in standard HTTP transport uses this callback for malformed
-	 * requests, overlong request targets, unsupported expectations, and oversized
-	 * request headers. Other failures before request construction, such as a
-	 * partial-request read timeout or an aggregate-size violation before the request
-	 * line can be trusted, may close the connection without this callback.
+	 * The built-in HTTP and SSE transports use this callback for malformed
+	 * requests, overlong request targets, unsupported expectations, oversized
+	 * request headers, partial-request read timeouts and early aggregate-size
+	 * violations. HTTP construction failures such as invalid URI encoding,
+	 * unsupported content coding and malformed compressed bodies also use this
+	 * callback; those later failures provide an observed wire count with an empty,
+	 * truncated capture. Idle timeouts and EOF before complete headers close quietly.
+	 * Admission, shutdown and broken-socket failsafes do not use this callback.
 	 * <p>
 	 * The transport invokes this callback at most once for a rejected request whose
 	 * detail task is accepted. It dispatches the callback to the configured
@@ -296,7 +303,8 @@ public interface LifecycleObserver {
 	 * If timeout budget remains afterward, the transport invokes
 	 * {@link ResponseMarshaler#forUnparsedRequest(UnparsedRequest)}. The callback
 	 * should perform bounded work and must not block. The request-handler timeout
-	 * bounds how long the transport waits; cancellation interrupts the worker but
+	 * bounds how long the transport waits, using the remaining budget for later
+	 * HTTP validation failures and SSE rejections; cancellation interrupts the worker but
 	 * is cooperative if application code ignores interruption. If application
 	 * capacity is unavailable, both callbacks may be skipped and the transport
 	 * writes its built-in bodyless response instead. Exceptions are contained and
@@ -335,6 +343,11 @@ public interface LifecycleObserver {
 
 	/**
 	 * Called before response data is written.
+	 * <p>
+	 * This callback sees the logical response before transport preparation. The built-in HTTP
+	 * transport may subsequently replace it (for example, an HTTP/1.0 streaming response with
+	 * a finite 505 rejection). {@link #didWriteResponse} and {@link #didFinishRequestHandling}
+	 * receive the replacement; the stream termination handle retains the original streaming response.
 	 */
 	default void willWriteResponse(@NonNull ServerType serverType,
 																 @NonNull Request request,
@@ -372,7 +385,9 @@ public interface LifecycleObserver {
 	/**
 	 * Called before a streaming response termination is reported as complete.
 	 * <p>
-	 * This is paired with {@link #didTerminateResponseStream(StreamingResponseHandle, StreamTermination)}. For standard
+	 * This is paired with {@link #didTerminateResponseStream(StreamingResponseHandle, StreamTermination)}. Admitted HTTP stream notifications follow metrics handling finish
+	 * and terminal metrics delivery, and may precede lifecycle handling finish. Earlier handling/write callbacks
+	 * must return to allow this ordering to advance. For standard
 	 * HTTP response streams, the two callbacks are normally invoked back-to-back because there is no broadcaster or
 	 * session registry cleanup phase between them.
 	 *
@@ -395,6 +410,14 @@ public interface LifecycleObserver {
 	 * request-handling finish do not wait for it. Unadmitted-stream observation uses a separate bounded
 	 * allowance on the managed callback executor; exhaustion or stopped infrastructure omits that
 	 * observation and logs the omission. Admitted streams retain their reserved callback jobs.
+	 * <p>
+	 * Admitted HTTP streaming notifications have independent worker capacity, bounded by
+	 * {@link HttpServer.Builder#streamingLifecycleCapacity(Integer)}. They can run more concurrently than
+	 * {@link HttpServer.Builder#streamingCallbackConcurrency(Integer)}, which bounds cancelation batches and
+	 * unadmitted rejection observers. A blocked admitted observer retains its own lifetime through physical exit,
+	 * while other admitted streams can report termination and retire. Cleanup diagnostics use another independently
+	 * bounded executor. The built-in simulator waits for its own termination observer, without holding up other
+	 * streams' observers. Implementations must support concurrent delivery and return promptly.
 	 *
 	 * @param streamingResponseHandle the stream that terminated
 	 * @param streamTermination       why and when the stream terminated
@@ -570,13 +593,21 @@ public interface LifecycleObserver {
 
 	/**
 	 * Called after an SSE connection is established.
+	 * <p>
+	 * If client initialization fails after the accepted response has been written, the built-in SSE server
+	 * invokes this callback immediately before the paired termination callbacks. Such a connection never
+	 * becomes available to a broadcaster. The termination retains its elected reason and cause.
 	 */
 	default void didEstablishSseConnection(@NonNull SseConnection sseConnection) {
 		// No-op by default
 	}
 
 	/**
-	 * Called if an SSE connection fails to establish.
+	 * Called if an SSE connection fails to establish before an accepted response has been written.
+	 * <p>
+	 * Capacity rejection is {@link SseConnection.HandshakeFailureReason#CAPACITY_EXCEEDED}; request processing,
+	 * response preparation and response writing failures use {@link SseConnection.HandshakeFailureReason#INTERNAL_ERROR}
+	 * with their cause. Failure during client initialization after acceptance uses the stream-termination callbacks.
 	 *
 	 * @param connectionHandshakeFailureReason    the handshake failure reason
 	 * @param throwable an optional underlying cause, or {@code null} if not applicable
@@ -660,25 +691,21 @@ public interface LifecycleObserver {
 
 	/**
 	 * Called when Soklet emits a log event.
+	 * The interface default is a no-op. Override this method to route events
+	 * through application logging, or explicitly configure
+	 * {@link #defaultInstance()} for stderr logging. Custom observers do not
+	 * inherit an implicit stderr logger.
 	 */
 	default void didReceiveLogEvent(@NonNull LogEvent logEvent) {
-		String message = logEvent.getMessage();
-		Throwable throwable = logEvent.getThrowable().orElse(null);
-
-		if (throwable == null) {
-			System.err.printf("%s::didReceiveLogEvent [%s]: %s%n", LifecycleObserver.class.getSimpleName(), logEvent.getLogEventType().name(), message);
-		} else {
-			StringWriter stringWriter = new StringWriter();
-			PrintWriter printWriter = new PrintWriter(stringWriter);
-			throwable.printStackTrace(printWriter);
-			String throwableWithStackTrace = stringWriter.toString();
-
-			System.err.printf("%s::didReceiveLogEvent [%s]: %s\n%s\n", LifecycleObserver.class.getSimpleName(), logEvent.getLogEventType().name(), message, throwableWithStackTrace);
-		}
+		// No-op by default
 	}
 
 	/**
 	 * Acquires a threadsafe {@link LifecycleObserver} instance with sensible defaults.
+	 * This instance writes log events and attached Throwable stack traces to
+	 * stderr. {@link SokletConfig} selects it when no lifecycle-observer
+	 * configuration is supplied. Configuring custom observers replaces that
+	 * default; include this instance explicitly to retain stderr logging.
 	 *
 	 * @return a {@code LifecycleObserver} with default settings
 	 */

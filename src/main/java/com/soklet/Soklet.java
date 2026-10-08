@@ -60,6 +60,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -87,16 +88,27 @@ import static java.util.Objects.requireNonNull;
  * JVM shutdown hook or {@link ShutdownTrigger} registration should use
  * {@link SokletApplication} instead. Do not mix both ownership models for one
  * lifecycle.
+ * Built-in HTTP/SSE listener threads retain JVM liveness while running, even
+ * when the caller returns from {@link #start()}; a complete shutdown releases
+ * them. Custom transports own their thread-liveness policy.
  * <p>
  * <pre>{@code // Use out-of-the-box defaults
  * SokletConfig config = SokletConfig.withHttpServer(
  *   HttpServer.fromPort(8080)
  * ).build();
  *
- * try (Soklet soklet = Soklet.fromConfig(config)) {
+ * Soklet soklet = Soklet.fromConfig(config);
+ * Thread shutdownHook = new Thread(soklet::close, "application-shutdown");
+ * Runtime.getRuntime().addShutdownHook(shutdownHook);
+ * try (soklet) {
  *   soklet.start();
- *   installApplicationShutdownCallback(soklet::shutdown);
  *   ShutdownResult result = soklet.awaitShutdown();
+ * } finally {
+ *   try {
+ *     Runtime.getRuntime().removeShutdownHook(shutdownHook);
+ *   } catch (IllegalStateException shutdownInProgress) {
+ *     // The JVM is already executing its registered shutdown hooks.
+ *   }
  * }}</pre>
  * <p>
  * Soklet also offers an off-network {@link Simulator} through
@@ -166,10 +178,13 @@ public final class Soklet implements AutoCloseable {
 	}
 
 	/**
-	 * Acquires a Soklet instance with the given configuration.
+	 * Acquires a Soklet instance with the given configuration and claims its
+	 * transport identities immediately, before {@link #start()} is invoked.
 	 *
 	 * @param sokletConfig configuration that drives the Soklet system
 	 * @return a Soklet instance
+	 * @throws TransportOwnershipException if a configured transport identity
+	 * has already been claimed by another lifecycle
 	 */
 	@NonNull
 	public static Soklet fromConfig(@NonNull SokletConfig sokletConfig) {
@@ -251,6 +266,10 @@ public final class Soklet implements AutoCloseable {
 
 	/**
 	 * Blocks until this lifecycle publishes its immutable shutdown result.
+	 * This method only waits: it neither requests shutdown nor installs a JVM
+	 * hook, signal handler or input trigger. Use {@link SokletApplication} for
+	 * standalone process ownership. An application-owned JVM hook must join
+	 * shutdown, for example by invoking {@link #close()}, before the hook returns.
 	 *
 	 * @return exact published result
 	 * @throws InterruptedException if the current thread is interrupted while
@@ -304,6 +323,7 @@ public final class Soklet implements AutoCloseable {
 		// stream handles, so observers never have to correlate caller-controlled request IDs.
 		AtomicReference<ResourceMethod> resourceMethodHolder = new AtomicReference<>();
 		AtomicReference<HttpRequestResult> requestResultHolder = new AtomicReference<>();
+		AtomicReference<Throwable> requestHandlingFailureHolder = new AtomicReference<>();
 
 		// Holders to permit mutable effectively-final state tracking
 		AtomicBoolean willStartResponseWritingCompleted = new AtomicBoolean(false);
@@ -315,7 +335,14 @@ public final class Soklet implements AutoCloseable {
 
 		// A built-in transport can replace the logical response before commitment.
 		// Keep write/finish observation aligned with that finite wire response.
+		HttpResponseStreamObservation streamObservation = new HttpResponseStreamObservation(processingStartedNanos);
 		Consumer<HttpRequestResult> transportResultConsumer = requestResult -> {
+			if (serverType == ServerType.HTTP)
+				requestResult = requestResult.copy().responseStreamObservation(streamObservation).finish();
+			Throwable requestHandlingFailure = requestHandlingFailureHolder.get();
+			if (serverType == ServerType.SSE && requestHandlingFailure != null)
+				requestResult = requestResult.copy().sseHandshakeResult(null)
+						.requestHandlingFailure(requestHandlingFailure).finish();
 			try {
 				requestResultConsumer.accept(requestResult);
 			} catch (HttpTransportResponseReplacement replacement) {
@@ -365,9 +392,7 @@ public final class Soklet implements AutoCloseable {
 				try {
 					// Resolve after wrapping so path/method rewrites affect routing.
 					ResourceMethod resolvedResourceMethod =
-							validateResolvedResourceMethod(resourceMethodResolver
-									.resourceMethodForRequest(requestHolder.get(), serverType)
-									.orElse(null));
+							resolveResourceMethodForRequest(requireNonNull(requestHolder.get()), resourceMethodResolver, serverType);
 					resourceMethodHolder.set(resolvedResourceMethod);
 					resourceMethodResolutionExceptionHolder.set(null);
 				} catch (Throwable t) {
@@ -454,6 +479,7 @@ public final class Soklet implements AutoCloseable {
 
 							return updatedMarshaledResponse;
 							} catch (Throwable t) {
+								requestHandlingFailureHolder.compareAndSet(null, t);
 								requestResultHolder.updateAndGet(result -> result == null ? null
 										: result.copy().headResponseCompressionBody(null).finish());
 								if (!sameInstance(t, resourceMethodResolutionExceptionHolder.get())) {
@@ -503,6 +529,7 @@ public final class Soklet implements AutoCloseable {
 						throw new IllegalStateException(format("%s::interceptRequest must call responseWriter", RequestInterceptor.class.getSimpleName()));
 					}
 				} catch (Throwable t) {
+					requestHandlingFailureHolder.compareAndSet(null, t);
 					throwables.add(t);
 					requestResultHolder.updateAndGet(result -> result == null ? null
 							: result.copy().headResponseCompressionBody(null).finish());
@@ -615,6 +642,9 @@ public final class Soklet implements AutoCloseable {
 								format("An exception occurred while invoking %s::didFinishRequestHandling", MetricsCollector.class.getSimpleName()),
 								(metricsInvocation) -> metricsInvocation.didFinishRequestHandling(serverType, request, resourceMethodHolder.get(), marshaledResponseHolder.get(), processingDuration, Collections.unmodifiableList(throwables)));
 
+					MarshaledResponse finishedResponse = marshaledResponseHolder.get();
+					streamObservation.completeHandling(serverType == ServerType.HTTP && finishedResponse != null && finishedResponse.isStreaming());
+
 						try {
 							lifecycleObserver.didFinishRequestHandling(serverType, request, resourceMethodHolder.get(), marshaledResponseHolder.get(), processingDuration, Collections.unmodifiableList(throwables));
 						} catch (Throwable t) {
@@ -636,6 +666,7 @@ public final class Soklet implements AutoCloseable {
 			if (!didInvokeWrapRequestConsumer.get())
 				throw new IllegalStateException(format("%s::wrapRequest must call requestProcessor", RequestInterceptor.class.getSimpleName()));
 		} catch (Throwable t) {
+			requestHandlingFailureHolder.compareAndSet(null, t);
 			// If an error occurred during request wrapping, it's possible a response was never written/communicated back to LifecycleObserver.
 			// Detect that here and inform LifecycleObserver accordingly.
 			safelyLog.accept(LogEvent.with(LogEventType.REQUEST_INTERCEPTOR_WRAP_REQUEST_FAILED,
@@ -765,6 +796,9 @@ public final class Soklet implements AutoCloseable {
 							format("An exception occurred while invoking %s::didFinishRequestHandling", MetricsCollector.class.getSimpleName()),
 							(metricsInvocation) -> metricsInvocation.didFinishRequestHandling(serverType, request, resourceMethodHolder.get(), marshaledResponseHolder.get(), processingDuration, Collections.unmodifiableList(throwables)));
 
+					MarshaledResponse finishedResponse = marshaledResponseHolder.get();
+					streamObservation.completeHandling(serverType == ServerType.HTTP && finishedResponse != null && finishedResponse.isStreaming());
+
 					try {
 						lifecycleObserver.didFinishRequestHandling(serverType, request, resourceMethodHolder.get(), marshaledResponseHolder.get(), processingDuration, Collections.unmodifiableList(throwables));
 					} catch (Throwable t2) {
@@ -799,8 +833,7 @@ public final class Soklet implements AutoCloseable {
 		// Special short-circuit for big requests
 		if (request.isContentTooLarge()) {
 			ResourceMethod contentTooLargeResourceMethod =
-					validateResolvedResourceMethod(resourceMethodResolver
-							.resourceMethodForRequest(request, serverType).orElse(null));
+					resolveResourceMethodForRequest(request, resourceMethodResolver, serverType);
 			return HttpRequestResult.withMarshaledResponse(responseMarshaler.forContentTooLarge(request, contentTooLargeResourceMethod))
 					.resourceMethod(resourceMethod)
 					.build();
@@ -849,13 +882,13 @@ public final class Soklet implements AutoCloseable {
 					if (optionsResourceMethod != null) {
 						resourceMethod = optionsResourceMethod;
 					} else {
-						Set<HttpMethod> allowedHttpMethods = allowedHttpMethodsForResponse(matchingResourceMethodsByHttpMethod, true);
+						Set<HttpMethod> allowedHttpMethods = allowedHttpMethodsForResponse(matchingResourceMethodsByHttpMethod, true, serverType);
 
 						return HttpRequestResult.withMarshaledResponse(responseMarshaler.forOptions(request, allowedHttpMethods))
 								.build();
 					}
 				}
-			} else if (request.getHttpMethod() == HttpMethod.HEAD) {
+			} else if (request.getHttpMethod() == HttpMethod.HEAD && serverType == ServerType.HTTP) {
 				// If there's a matching GET resource method for this HEAD request, then invoke it
 				Request headGetRequest = request.copy().httpMethod(HttpMethod.GET).finish();
 				ResourceMethod headGetResourceMethod =
@@ -878,7 +911,7 @@ public final class Soklet implements AutoCloseable {
 
 				if (matchingNonOptionsHttpMethods.size() > 0) {
 					// ...if some do, it's a 405
-					Set<HttpMethod> allowedHttpMethods = allowedHttpMethodsForResponse(otherMatchingResourceMethodsByHttpMethod, true);
+					Set<HttpMethod> allowedHttpMethods = allowedHttpMethodsForResponse(otherMatchingResourceMethodsByHttpMethod, true, serverType);
 					return HttpRequestResult.withMarshaledResponse(responseMarshaler.forMethodNotAllowed(request, allowedHttpMethods))
 							.build();
 				} else {
@@ -893,7 +926,7 @@ public final class Soklet implements AutoCloseable {
 		// 1. Get an instance of the resource class
 		// 2. Get values to pass to the resource method on the resource class
 		// 3. Invoke the resource method and use its return value to drive a response
-		validateResolvedResourceMethod(resourceMethod);
+		SokletFrameworkSetup.validateConfiguredResourceMethod(getSokletConfig(), resourceMethod);
 		Class<?> resourceClass = resourceMethod.getMethod().getDeclaringClass();
 		Object resourceClassInstance;
 
@@ -1146,6 +1179,21 @@ public final class Soklet implements AutoCloseable {
 	}
 
 	@Nullable
+	private static ResourceMethod resolveResourceMethodForRequest(@NonNull Request request,
+			@NonNull ResourceMethodResolver resourceMethodResolver, @NonNull ServerType serverType) {
+		ResourceMethod resourceMethod = validateResolvedResourceMethod(resourceMethodResolver
+				.resourceMethodForRequest(request, serverType).orElse(null));
+		if (resourceMethod == null && request.getHttpMethod() == HttpMethod.HEAD && serverType == ServerType.HTTP) {
+			// Resolve the GET fallback before observers/interceptors see routing metadata.
+			// Only the lookup copy becomes GET; the application still receives HEAD.
+			Request getRequest = request.copy().httpMethod(HttpMethod.GET).finish();
+			resourceMethod = validateResolvedResourceMethod(resourceMethodResolver
+					.resourceMethodForRequest(getRequest, serverType).orElse(null));
+		}
+		return resourceMethod;
+	}
+
+	@Nullable
 	private static ResourceMethod validateResolvedResourceMethod(
 			@Nullable ResourceMethod resourceMethod) {
 		if (resourceMethod != null)
@@ -1162,7 +1210,7 @@ public final class Soklet implements AutoCloseable {
 
 	@NonNull
 	private static Set<@NonNull HttpMethod> allowedHttpMethodsForResponse(@NonNull Map<@NonNull HttpMethod, @NonNull ResourceMethod> matchingResourceMethodsByHttpMethod,
-																																				@NonNull Boolean includeOptions) {
+																																				@NonNull Boolean includeOptions, @NonNull ServerType serverType) {
 		requireNonNull(matchingResourceMethodsByHttpMethod);
 		requireNonNull(includeOptions);
 
@@ -1172,7 +1220,8 @@ public final class Soklet implements AutoCloseable {
 		if (includeOptions)
 			allowedHttpMethods.add(HttpMethod.OPTIONS);
 
-		if (matchingResourceMethodsByHttpMethod.containsKey(HttpMethod.GET) || matchingResourceMethodsByHttpMethod.containsKey(HttpMethod.HEAD))
+		if ((serverType == ServerType.HTTP && matchingResourceMethodsByHttpMethod.containsKey(HttpMethod.GET))
+				|| matchingResourceMethodsByHttpMethod.containsKey(HttpMethod.HEAD))
 			allowedHttpMethods.add(HttpMethod.HEAD);
 
 		return allowedHttpMethods;
@@ -1431,7 +1480,7 @@ public final class Soklet implements AutoCloseable {
 		void quiesceHttpScope() {
 			StreamLifecycleCoordinator coordinator = this.streamLifecycleCoordinator;
 			if (coordinator != null)
-				coordinator.stopAdmission();
+				coordinator.requestGracefulShutdown();
 		}
 
 		void forceHttpScope() {
@@ -1495,8 +1544,8 @@ public final class Soklet implements AutoCloseable {
 							? new StreamLifecycleCoordinator(server.streamingLifecycleCapacity,
 									server.streamingCallbackConcurrency, server.streamingCleanupTimeout, throwable -> {
 								try {
-									observer.didReceiveLogEvent(LogEvent.with(LogEventType.RESPONSE_STREAM_CLOSE_FAILED,
-											"A simulated streaming response cleanup operation failed or exceeded its deadline")
+									observer.didReceiveLogEvent(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR,
+											"A simulated streaming lifecycle supervision operation failed or exceeded its deadline")
 											.throwable(throwable).build());
 								} catch (Throwable observerFailure) {
 									LifecycleObserverLogFallback.report(observerFailure);
@@ -1567,24 +1616,28 @@ public final class Soklet implements AutoCloseable {
 			synchronized (this.scopeStateLock) {
 				if (this.closed.get())
 					return null;
-				if (this.sseLifecycleCoordinator == null) {
-					MockSseServer server = requireNonNull(this.sseServer);
-					LifecycleObserver observer = server.getSokletConfig().orElseThrow().getAggregateLifecycleObserver();
-					this.sseLifecycleCoordinator = this.sseLifecycleCoordinatorFactoryForTests == null
-							? new StreamLifecycleCoordinator(server.streamingLifecycleCapacity,
-									DefaultSseServer.STREAMING_COORDINATOR_CALLBACK_CONCURRENCY,
-									DefaultSseServer.STREAMING_COORDINATOR_CLEANUP_GRACE, throwable -> {
-								try {
-									observer.didReceiveLogEvent(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR,
-											"A simulated SSE cleanup operation failed or exceeded its deadline")
-											.throwable(throwable).build());
-								} catch (Throwable observerFailure) {
-									LifecycleObserverLogFallback.report(observerFailure);
-								}
-							}) : requireNonNull(this.sseLifecycleCoordinatorFactoryForTests.get());
-				}
-				return this.sseLifecycleCoordinator.tryReserve();
+				return sseCoordinatorWhileLocked().tryReserve();
 			}
+		}
+
+		private @NonNull StreamLifecycleCoordinator sseCoordinatorWhileLocked() {
+			if (this.sseLifecycleCoordinator == null) {
+				MockSseServer server = requireNonNull(this.sseServer);
+				LifecycleObserver observer = server.getSokletConfig().orElseThrow().getAggregateLifecycleObserver();
+				this.sseLifecycleCoordinator = this.sseLifecycleCoordinatorFactoryForTests == null
+						? new StreamLifecycleCoordinator(server.streamingLifecycleCapacity,
+								DefaultSseServer.STREAMING_COORDINATOR_CALLBACK_CONCURRENCY,
+								DefaultSseServer.STREAMING_COORDINATOR_CLEANUP_GRACE, throwable -> {
+							try {
+								observer.didReceiveLogEvent(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR,
+										"A simulated SSE cleanup operation failed or exceeded its deadline")
+										.throwable(throwable).build());
+							} catch (Throwable observerFailure) {
+								LifecycleObserverLogFallback.report(observerFailure);
+							}
+						}) : requireNonNull(this.sseLifecycleCoordinatorFactoryForTests.get());
+			}
+			return this.sseLifecycleCoordinator;
 		}
 
 		void forceMcpScope() {
@@ -1704,18 +1757,51 @@ public final class Soklet implements AutoCloseable {
 			if (requestHandler == null)
 				throw new IllegalStateException("You must register a request handler prior to simulating requests");
 
-			requestHandler.handleRequest(request, (requestResult -> {
-				// Simulated responses do not run transport compression or retain its private HEAD input.
-				requestResultHolder.set(requestResult.getHeadResponseCompressionBody().isEmpty() ? requestResult
-						: requestResult.copy().headResponseCompressionBody(null).finish());
-			}));
-
-			return materializeStreamingResponse(request, requestResultHolder.get());
+			AtomicReference<StreamLifecycleCoordinator.Reservation> reservationHolder = new AtomicReference<>();
+			try {
+				requestHandler.handleRequest(request, requestResult -> {
+					// Simulated responses do not run transport compression or retain its private HEAD input.
+					HttpRequestResult result = requestResult.getHeadResponseCompressionBody().isEmpty() ? requestResult
+							: requestResult.copy().headResponseCompressionBody(null).finish();
+					if (result.getMarshaledResponse().isStreaming()) {
+						StreamLifecycleCoordinator.Reservation reservation = reserveHttpStream();
+						if (reservation == null) {
+							MarshaledResponse unavailable = DefaultHttpServer.provideDefaultStreamingAdmissionRejection();
+							requestResultHolder.set(result.copy().marshaledResponse(unavailable).response(null).finish());
+							Throwable rejection = new RejectedExecutionException(
+									"Streaming lifecycle capacity is unavailable.");
+							StreamLifecycleCoordinator coordinator = this.streamLifecycleCoordinator;
+							StreamTerminationReason reason = this.closed.get() || coordinator == null || !coordinator.snapshot().accepting()
+									? StreamTerminationReason.SERVER_STOPPING : StreamTerminationReason.BACKPRESSURE;
+							Runnable notification = () -> notifyDidTerminateSimulatorResponseStream(request, result, Instant.now(),
+									Duration.ZERO, reason, rejection);
+							if (coordinator == null || !coordinator.dispatchRejectionObserver(notification)) {
+								try {
+									server.getSokletConfig().orElseThrow().getAggregateLifecycleObserver().didReceiveLogEvent(
+											LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_TERMINATE_RESPONSE_STREAM_FAILED,
+													"Unadmitted stream rejection observer capacity was unavailable.").request(request).build());
+								} catch (Throwable observerFailure) {
+									LifecycleObserverLogFallback.report(observerFailure);
+								}
+							}
+							// Synchronous replacement keeps didWrite/finish callbacks and metrics finite.
+							throw new HttpTransportResponseReplacement(unavailable, rejection, null);
+						}
+						reservationHolder.set(reservation);
+					}
+					requestResultHolder.set(result);
+				});
+				return materializeStreamingResponse(request, requestResultHolder.get(), reservationHolder.get());
+			} finally {
+				// Also retire a reservation if handling fails before inline producer entry.
+				StreamLifecycleCoordinator.Reservation reservation = reservationHolder.get();
+				if (reservation != null) reservation.complete();
+			}
 		}
 
 		@NonNull
 		private HttpRequestResult materializeStreamingResponse(@NonNull Request request,
-																													 @Nullable HttpRequestResult requestResult) {
+				@Nullable HttpRequestResult requestResult, StreamLifecycleCoordinator.@Nullable Reservation reservedLifetime) {
 			requireNonNull(request);
 
 			if (requestResult == null)
@@ -1726,13 +1812,22 @@ public final class Soklet implements AutoCloseable {
 			if (stream == null)
 				return requestResult;
 
-			StreamLifecycleCoordinator.Reservation reservation = reserveHttpStream();
-			if (reservation == null)
-				return requestResult.copy()
-						.marshaledResponse(MarshaledResponse.withStatusCode(503).build())
-						.finish();
+			StreamLifecycleCoordinator.Reservation reservation = requireNonNull(reservedLifetime);
 			AtomicReference<HttpRequestResult> result = new AtomicReference<>();
 			AtomicReference<Throwable> failure = new AtomicReference<>();
+			LifecycleObserver cleanupObserver = requireNonNull(this.server).getSokletConfig().orElseThrow()
+					.getAggregateLifecycleObserver();
+			reservation.bindCleanupFailureObserver(throwable -> {
+				try {
+					cleanupObserver.didReceiveLogEvent(LogEvent.with(LogEventType.RESPONSE_STREAM_CLOSE_FAILED,
+								"A simulated streaming response cleanup operation failed")
+							.throwable(throwable).request(request)
+							.resourceMethod(requestResult.getResourceMethod().orElse(null))
+							.marshaledResponse(requestResult.getMarshaledResponse()).build());
+				} catch (Throwable observerFailure) {
+					LifecycleObserverLogFallback.report(observerFailure);
+				}
+			});
 			boolean entered = reservation.executeInline(() -> {
 				try {
 					result.set(materializeStreamingResponseWhileReserved(request, requestResult, stream, reservation));
@@ -1770,29 +1865,30 @@ public final class Soklet implements AutoCloseable {
 				StreamLifecycleCoordinator.@NonNull Reservation reservation) {
 
 			byte[] bytes;
+			java.util.concurrent.atomic.AtomicLong acceptedBytes = new java.util.concurrent.atomic.AtomicLong();
 			Instant streamStarted = Instant.now();
 
 			try {
-				bytes = materializeStreamingResponseBody(request, requestResult, stream, reservation);
+				bytes = materializeStreamingResponseBody(request, requestResult, stream, reservation, acceptedBytes);
 				if (!reservation.completeTransport())
 					throw new StreamingResponseCanceledException(reservation.reason().orElse(StreamTerminationReason.SERVER_STOPPING),
 							reservation.cause().orElse(null));
 				notifyDidTerminateSimulatorResponseStream(reservation, request, requestResult, streamStarted,
-						Duration.between(streamStarted, Instant.now()), null, null);
+						Duration.between(streamStarted, Instant.now()), null, null, acceptedBytes.get());
 			} catch (StreamingResponseCanceledException e) {
 				StreamTerminationReason cancelationReason = e.getCancelationReason();
 				Throwable cause = e.getCancelationCause().orElse(null);
 				notifyDidTerminateSimulatorResponseStream(reservation, request, requestResult, streamStarted,
-						Duration.between(streamStarted, Instant.now()), cancelationReason, cause);
+						Duration.between(streamStarted, Instant.now()), cancelationReason, cause, acceptedBytes.get());
 				throw new IllegalStateException("Simulated streaming response was canceled: " + cancelationReason.name(), e);
 			} catch (InterruptedException e) {
 				Thread.currentThread().interrupt();
 				notifyDidTerminateSimulatorResponseStream(reservation, request, requestResult, streamStarted,
-						Duration.between(streamStarted, Instant.now()), StreamTerminationReason.APPLICATION_CANCELED, e);
+						Duration.between(streamStarted, Instant.now()), StreamTerminationReason.APPLICATION_CANCELED, e, acceptedBytes.get());
 				throw new IllegalStateException("Simulated streaming response was canceled: APPLICATION_CANCELED", e);
 			} catch (Throwable t) {
 				notifyDidTerminateSimulatorResponseStream(reservation, request, requestResult, streamStarted,
-						Duration.between(streamStarted, Instant.now()), StreamTerminationReason.PRODUCER_FAILED, t);
+						Duration.between(streamStarted, Instant.now()), StreamTerminationReason.PRODUCER_FAILED, t, acceptedBytes.get());
 
 				if (t instanceof Error error)
 					throw error;
@@ -1814,11 +1910,20 @@ public final class Soklet implements AutoCloseable {
 				@NonNull Request request, @NonNull HttpRequestResult requestResult,
 				@NonNull Instant establishedAt, @NonNull Duration streamDuration,
 				@Nullable StreamTerminationReason cancelationReason, @Nullable Throwable throwable) {
+			notifyDidTerminateSimulatorResponseStream(reservation, request, requestResult, establishedAt,
+					streamDuration, cancelationReason, throwable, 0L);
+		}
+
+		private void notifyDidTerminateSimulatorResponseStream(StreamLifecycleCoordinator.@NonNull Reservation reservation,
+				@NonNull Request request, @NonNull HttpRequestResult requestResult,
+				@NonNull Instant establishedAt, @NonNull Duration streamDuration,
+				@Nullable StreamTerminationReason cancelationReason, @Nullable Throwable throwable, long bodyBytes) {
+			long terminalNanos = reservation.transportTerminatedNanos();
 			CountDownLatch delivered = new CountDownLatch(1);
 			reservation.dispatchTermination(() -> {
 				try {
 					notifyDidTerminateSimulatorResponseStream(request, requestResult, establishedAt,
-							streamDuration, cancelationReason, throwable);
+							streamDuration, cancelationReason, throwable, terminalNanos, bodyBytes);
 				} finally {
 					delivered.countDown();
 				}
@@ -1845,6 +1950,16 @@ public final class Soklet implements AutoCloseable {
 																													 @NonNull Duration streamDuration,
 																													 @Nullable StreamTerminationReason cancelationReason,
 																													 @Nullable Throwable throwable) {
+			notifyDidTerminateSimulatorResponseStream(request, requestResult, establishedAt, streamDuration,
+					cancelationReason, throwable, 0L, 0L);
+		}
+
+		private void notifyDidTerminateSimulatorResponseStream(@NonNull Request request,
+																													 @NonNull HttpRequestResult requestResult,
+																													 @NonNull Instant establishedAt,
+																													 @NonNull Duration streamDuration,
+																													 @Nullable StreamTerminationReason cancelationReason,
+																													 @Nullable Throwable throwable, long terminalNanos, long bodyBytes) {
 			requireNonNull(request);
 			requireNonNull(requestResult);
 			requireNonNull(establishedAt);
@@ -1865,6 +1980,14 @@ public final class Soklet implements AutoCloseable {
 					.with(cancelationReason == null ? StreamTerminationReason.COMPLETED : cancelationReason, streamDuration)
 					.cause(throwable)
 					.build();
+
+			HttpResponseStreamObservation observation = requestResult.getResponseStreamObservation();
+			if (observation != null && terminalNanos != 0L)
+				observation.deliver(streamingResponse, termination, terminalNanos, bodyBytes,
+						sokletConfig.getMetricsCollector(), logEvent -> {
+					try { lifecycleObserver.didReceiveLogEvent(logEvent); }
+					catch (Throwable failure) { LifecycleObserverLogFallback.report(failure); }
+				});
 
 			try {
 				lifecycleObserver.willTerminateResponseStream(streamingResponse, termination);
@@ -1933,7 +2056,7 @@ public final class Soklet implements AutoCloseable {
 		private byte[] materializeStreamingResponseBody(@NonNull Request request,
 																										@NonNull HttpRequestResult requestResult,
 				@NonNull StreamingResponseBody stream,
-				StreamLifecycleCoordinator.@NonNull Reservation reservation) throws Exception {
+				StreamLifecycleCoordinator.@NonNull Reservation reservation, java.util.concurrent.atomic.AtomicLong acceptedBytes) throws Exception {
 			requireNonNull(request);
 			requireNonNull(requestResult);
 			requireNonNull(stream);
@@ -1943,7 +2066,7 @@ public final class Soklet implements AutoCloseable {
 			SimulatorCancelationToken cancelationToken = new SimulatorCancelationToken(cleanupFailureConsumer, reservation);
 			reservation.bindTermination(cancelationToken::deliverCancelation);
 			SimulatorResponseOutput output = new SimulatorResponseOutput(cancelationToken,
-					getSimulatorOptions().getStreamingResponseBodyLimitInBytes());
+					getSimulatorOptions().getStreamingResponseBodyLimitInBytes(), acceptedBytes);
 
 			try {
 				cancelationToken.throwIfCanceled();
@@ -1951,7 +2074,7 @@ public final class Soklet implements AutoCloseable {
 					materializePublisher(publisherBody, output, cancelationToken, reservation);
 				} else {
 					ManagedResponseStream managedResponseStream = new ManagedResponseStream(request, cancelationToken,
-							null, null, output, reservation::beginCleanup,
+							reservation::isGracefulShutdownRequested, null, null, output, reservation::beginCleanup,
 							throwable -> cancelSimulatorStream(cancelationToken, throwable), reservation::reportCleanupFailure);
 					managedResponseStream.run(responseStream -> {
 						if (stream instanceof StreamingResponseBody.WriterBody writerBody) {
@@ -2124,13 +2247,19 @@ public final class Soklet implements AutoCloseable {
 
 			SseHandshakeResult sseHandshakeResult = requestResult.getSseHandshakeResult().orElse(null);
 
-			if (sseHandshakeResult == null)
+			if (sseHandshakeResult == null) {
+				Throwable cause = requestResult.getRequestHandlingFailure().orElse(null);
+				notifySseHandshakeFailure(request, requestResult, cause == null
+						? SseConnection.HandshakeFailureReason.HANDSHAKE_REJECTED
+						: SseConnection.HandshakeFailureReason.INTERNAL_ERROR, cause);
 				return new SseRequestResult.RequestFailed(requestResult);
+			}
 
 			if (sseHandshakeResult instanceof SseHandshakeResult.Accepted acceptedHandshake) {
 				SseClientInitializer clientInitializer = acceptedHandshake.getClientInitializer().orElse(null);
 				StreamLifecycleCoordinator.Reservation reservation = reserveSseStream();
 				if (reservation == null) {
+					notifySseHandshakeFailure(request, requestResult, SseConnection.HandshakeFailureReason.CAPACITY_EXCEEDED, null);
 					MarshaledResponse unavailable = sseServer.getSokletConfig().orElseThrow()
 							.getResponseMarshaler().forServiceUnavailable(request, requestResult.getResourceMethod().orElse(null));
 					return new SseRequestResult.RequestFailed(requestResult.copy()
@@ -2164,10 +2293,31 @@ public final class Soklet implements AutoCloseable {
 				}
 			}
 
-			if (sseHandshakeResult instanceof SseHandshakeResult.Rejected rejectedHandshake)
+			if (sseHandshakeResult instanceof SseHandshakeResult.Rejected rejectedHandshake) {
+				notifySseHandshakeFailure(request, requestResult, SseConnection.HandshakeFailureReason.HANDSHAKE_REJECTED, null);
 				return new HandshakeRejected(rejectedHandshake, requestResult);
+			}
 
 			throw new IllegalStateException(format("Encountered unexpected %s: %s", SseHandshakeResult.class.getSimpleName(), sseHandshakeResult));
+		}
+
+		private void notifySseHandshakeFailure(@NonNull Request request, @NonNull HttpRequestResult requestResult,
+				SseConnection.@NonNull HandshakeFailureReason reason, @Nullable Throwable cause) {
+			MockSseServer server = requireNonNull(this.sseServer);
+			StreamLifecycleCoordinator coordinator;
+			synchronized (this.scopeStateLock) {
+				if (this.closed.get())
+					return;
+				coordinator = sseCoordinatorWhileLocked();
+			}
+			ResourceMethod resourceMethod = requestResult.getResourceMethod().orElse(null);
+			if (!coordinator.dispatchRejectionObserver(() -> server.notifyConnectionLifecycle(request, resourceMethod,
+					LogEventType.LIFECYCLE_OBSERVER_DID_ESTABLISH_SSE_CONNECTION_FAILED, "didFailToEstablishSseConnection",
+					observer -> observer.didFailToEstablishSseConnection(request, resourceMethod, reason, cause),
+					metrics -> metrics.didFailToEstablishSseConnection(request, resourceMethod, reason, cause)))) {
+				server.safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_ESTABLISH_SSE_CONNECTION_FAILED,
+						"Simulated SSE handshake-failure observer capacity was unavailable.").request(request).build());
+			}
 		}
 
 		@NonNull
@@ -2259,9 +2409,11 @@ public final class Soklet implements AutoCloseable {
 		@NonNull
 		private final SimulatorCancelationToken cancelationToken;
 		private boolean closed;
+		private final java.util.concurrent.atomic.AtomicLong acceptedBytes;
 
 		private SimulatorResponseOutput(@NonNull SimulatorCancelationToken cancelationToken,
-				@NonNull Integer limitInBytes) {
+				@NonNull Integer limitInBytes, java.util.concurrent.atomic.AtomicLong acceptedBytes) {
+			this.acceptedBytes = acceptedBytes;
 			this.byteArrayOutputStream = new ByteArrayOutputStream();
 			this.limitInBytes = requireNonNull(limitInBytes);
 			this.cancelationToken = requireNonNull(cancelationToken);
@@ -2285,8 +2437,14 @@ public final class Soklet implements AutoCloseable {
 
 			byte[] bytes = new byte[bytesToWrite];
 			source.get(bytes);
-			this.byteArrayOutputStream.write(bytes);
-			byteBuffer.position(byteBuffer.position() + bytesToWrite);
+			Runnable append = () -> {
+				this.byteArrayOutputStream.writeBytes(bytes);
+				this.acceptedBytes.addAndGet(bytesToWrite);
+				byteBuffer.position(byteBuffer.position() + bytesToWrite);
+			};
+			StreamLifecycleCoordinator.Reservation reservation = this.cancelationToken.reservation;
+			if (reservation == null) append.run();
+			else if (!reservation.acceptTransportOutput(append)) this.cancelationToken.throwIfCanceled();
 		}
 
 		@Override
@@ -2728,62 +2886,64 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		@Override
-		public <T> void broadcastEvent(
-				@NonNull Function<Object, T> keySelector,
-				@NonNull Function<T, SseEvent> eventProvider
-		) {
+		public <T> void broadcastEvent(@NonNull Function<Object, T> keySelector,
+				@NonNull Function<T, SseEvent> eventProvider) {
 			requireNonNull(keySelector);
 			requireNonNull(eventProvider);
+			Map<T, SseBroadcastPayload<SseEvent>> payloadCache = new HashMap<>();
 
-			// 1. Create a temporary cache for this specific broadcast operation.
-			// This ensures we only run the expensive 'eventProvider' once per unique key.
-			Map<T, SseEvent> payloadCache = new HashMap<>();
-
-			this.getEventConsumers().forEach((consumer, context) -> {
+			getEventConsumers().forEach((consumer, context) -> {
 				try {
-					// 2. Derive the key from the subscriber's context
-					Object clientContext = sameInstance(context, NULL_CONTEXT_SENTINEL)
-							? null : context;
+					Object clientContext = sameInstance(context, NULL_CONTEXT_SENTINEL) ? null : context;
 					T key = keySelector.apply(clientContext);
-
-					// 3. Memoize: Generate the payload if we haven't seen this key yet, otherwise reuse it
-					SseEvent event = payloadCache.computeIfAbsent(key, eventProvider);
-
-					// 4. Dispatch
+					SseBroadcastPayload<SseEvent> generation = payloadCache.computeIfAbsent(key,
+							cacheKey -> SseBroadcastPayload.fromSupplier(() -> eventProvider.apply(cacheKey)));
+					SseEvent event = generation.getPayload();
+					if (event == null) {
+						generation.recordFailedClient();
+						return;
+					}
+					// A failing consumer cannot invalidate the payload shared by other clients.
 					consumer.accept(event);
 				} catch (Throwable throwable) {
 					handleBroadcastError(throwable);
 				}
 			});
+			payloadCache.values().forEach(generation -> handleBroadcastGenerationFailure(generation, false));
 		}
 
 		@Override
-		public <T> void broadcastComment(
-				@NonNull Function<Object, T> keySelector,
-				@NonNull Function<T, SseComment> commentProvider
-		) {
+		public <T> void broadcastComment(@NonNull Function<Object, T> keySelector,
+				@NonNull Function<T, SseComment> commentProvider) {
 			requireNonNull(keySelector);
 			requireNonNull(commentProvider);
+			Map<T, SseBroadcastPayload<SseComment>> payloadCache = new HashMap<>();
 
-			// 1. Create temporary cache
-			Map<T, SseComment> commentCache = new HashMap<>();
-
-			this.getCommentConsumers().forEach((consumer, context) -> {
+			getCommentConsumers().forEach((consumer, context) -> {
 				try {
-					// 2. Derive key
-					Object clientContext = sameInstance(context, NULL_CONTEXT_SENTINEL)
-							? null : context;
+					Object clientContext = sameInstance(context, NULL_CONTEXT_SENTINEL) ? null : context;
 					T key = keySelector.apply(clientContext);
-
-					// 3. Memoize
-					SseComment comment = commentCache.computeIfAbsent(key, commentProvider);
-
-					// 4. Dispatch
+					SseBroadcastPayload<SseComment> generation = payloadCache.computeIfAbsent(key,
+							cacheKey -> SseBroadcastPayload.fromSupplier(() -> commentProvider.apply(cacheKey)));
+					SseComment comment = generation.getPayload();
+					if (comment == null) {
+						generation.recordFailedClient();
+						return;
+					}
 					consumer.accept(comment);
 				} catch (Throwable throwable) {
 					handleBroadcastError(throwable);
 				}
 			});
+			payloadCache.values().forEach(generation -> handleBroadcastGenerationFailure(generation, true));
+		}
+
+		private void handleBroadcastGenerationFailure(@NonNull SseBroadcastPayload<?> generation, boolean comment) {
+			generation.getFailure().ifPresent(failure -> handleBroadcastError(failure,
+					LogEventType.SSE_SERVER_BROADCAST_GENERATION_FAILED,
+					format("Failed to generate %s for %d connections on %s",
+							comment ? "Server-Sent Event comment" : "Server-Sent Event",
+							generation.getFailedClientCount(), getResourcePath())));
 		}
 
 		@NonNull
@@ -2858,22 +3018,23 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		protected void handleBroadcastError(@NonNull Throwable throwable) {
+			handleBroadcastError(throwable, LogEventType.SSE_SERVER_INTERNAL_ERROR,
+					"SSE simulator broadcast consumer failed");
+		}
+
+		private void handleBroadcastError(@NonNull Throwable throwable,
+				@NonNull LogEventType logEventType, @NonNull String message) {
 			requireNonNull(throwable);
 			Consumer<Throwable> handler = this.broadcastErrorHandler.get();
-
 			if (handler != null) {
 				try {
 					handler.accept(throwable);
 					return;
 				} catch (Throwable ignored) {
-					// Fall through to default behavior
+					// Fall through to default behavior.
 				}
 			}
-
-			safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR,
-							"SSE simulator broadcast consumer failed")
-					.throwable(throwable)
-					.build());
+			safelyLog(LogEvent.with(logEventType, message).throwable(throwable).build());
 		}
 
 		protected void safelyLog(@NonNull LogEvent logEvent) {
@@ -3111,6 +3272,28 @@ public final class Soklet implements AutoCloseable {
 
 		public void onUnicastError(@Nullable Consumer<Throwable> onUnicastError) {
 			this.unicastErrorHandler.set(onUnicastError);
+		}
+
+		void notifyConnectionLifecycle(@NonNull Request request, @Nullable ResourceMethod resourceMethod,
+				@NonNull LogEventType failureType, @NonNull String callbackName,
+				@NonNull Consumer<LifecycleObserver> observerNotification,
+				@NonNull Consumer<MetricsCollector> metricsNotification) {
+			SokletConfig config = this.sokletConfig;
+			if (config == null)
+				return;
+			try {
+				observerNotification.accept(config.getAggregateLifecycleObserver());
+			} catch (Throwable failure) {
+				safelyLog(LogEvent.with(failureType, "An exception occurred while invoking LifecycleObserver::" + callbackName)
+						.request(request).resourceMethod(resourceMethod).throwable(failure).build());
+			}
+			try {
+				metricsNotification.accept(config.getMetricsCollector());
+			} catch (Throwable failure) {
+				safelyLog(LogEvent.with(LogEventType.METRICS_COLLECTOR_FAILED,
+						"An exception occurred while invoking MetricsCollector::" + callbackName)
+						.request(request).resourceMethod(resourceMethod).throwable(failure).build());
+			}
 		}
 
 		void safelyLog(@NonNull LogEvent logEvent) {

@@ -49,10 +49,11 @@ public interface McpApplicationExecutionObserver {
 				@NonNull Duration duration, @NonNull List<@NonNull Throwable> throwables);
 	}
 
+	/** Begins HTTP observation after selection of a configured MCP endpoint path. */
 	@NonNull
-	default HttpRequestObservation didStartHttpRequest(@NonNull Request request) {
-		if (request == null)
-			throw new NullPointerException("request");
+	default HttpRequestObservation didStartHttpRequest(@NonNull Request request, @NonNull String endpointPath) {
+		if (request == null || endpointPath == null)
+			throw new NullPointerException("HTTP observation property");
 		return (statusCode, headers, duration, throwables) -> {};
 	}
 

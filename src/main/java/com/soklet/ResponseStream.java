@@ -33,7 +33,7 @@ import java.util.Optional;
  * Output and resource operations belong to the thread executing {@link StreamingResponseWriter#writeTo(ResponseStream)}.
  * After the callback returns, Soklet performs remaining normal finalization on that thread before sealing successful
  * output. Cancelation callbacks may already have closed resources opened with coordinated close-as-abort.
- * The request, deadline, idle timeout, and thread-safe cancelation token may be read from other threads.
+ * The request, deadline, idle timeout, graceful-shutdown state, and thread-safe cancelation token may be read from other threads.
  * Each response execution receives its own stream. Applications must not manually close owned resources or use
  * them after their owning lifetime. Duplicate active ownership of the same resource instance is rejected.
  * <p>
@@ -62,6 +62,26 @@ public interface ResponseStream {
 	 */
 	@NonNull
 	CancelationToken getCancelationToken();
+
+	/**
+	 * Has the HTTP owner requested that this response finish during graceful shutdown?
+	 * <p>
+	 * This thread-safe, per-execution state becomes {@code true} when graceful shutdown
+	 * requests completion while production is still live, including before a queued producer
+	 * starts. Once requested, it stays {@code true}. A completed or canceled response receives
+	 * no new request, and forced shutdown alone does not set this state.
+	 * <p>
+	 * The request is advisory. It does not cancel the token, interrupt the producer, abort
+	 * resources, close output, or change the configured response deadline or idle timeout.
+	 * Finite responses may continue draining. An indefinite feed should check between items
+	 * and use bounded waits, finish its final output, then return normally. Output and normal
+	 * finalization remain subject to disconnects, deadlines and forced cancelation. A request
+	 * alone is not proof of successful response delivery or physical termination.
+	 *
+	 * @return {@code true} if graceful completion was requested for this execution
+	 */
+	@NonNull
+	Boolean isGracefulShutdownRequested();
 
 	/**
 	 * The absolute deadline for this stream, if one is configured.

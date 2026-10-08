@@ -54,6 +54,26 @@ public class StreamingDisconnectMonitorTests {
             "GET /next HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
 
     @Test
+    void directHandlerHttpOneDotZeroStreamIsRejectedWithoutStartingItsSource() throws Exception {
+        HeldSource source;
+        try (Fixture fixture = new Fixture(Handler.StreamingResponseInputPolicy.RETAIN, 512);
+             Socket socket = fixture.connect()) {
+            source = fixture.source;
+            send(socket, "GET /stream HTTP/1.0\r\n\r\n");
+            String wire = new String(socket.getInputStream().readAllBytes(), StandardCharsets.ISO_8859_1);
+            Assertions.assertTrue(wire.startsWith("HTTP/1.0 505 HTTP Version Not Supported\r\n"), wire);
+            Assertions.assertTrue(wire.contains("Connection: close\r\n"), wire);
+            Assertions.assertTrue(wire.contains("Content-Length: 0\r\n"), wire);
+            Assertions.assertFalse(wire.contains("Transfer-Encoding:"), wire);
+            Assertions.assertTrue(wire.endsWith("\r\n\r\n"), wire);
+            Assertions.assertEquals(StreamTerminationReason.PROTOCOL_UNSUPPORTED, source.closeReason.get());
+            Assertions.assertEquals(0, source.starts.get());
+            Assertions.assertEquals(0, fixture.writeErrors.get());
+        }
+        Assertions.assertEquals(1, source.closes.get());
+    }
+
+    @Test
     void resetWhileCommittedStreamIsIdleClosesItAsClientDisconnected() throws Exception {
         try (Fixture fixture = new Fixture(Handler.StreamingResponseInputPolicy.RETAIN, 512);
              Socket socket = fixture.connect()) {
@@ -458,6 +478,73 @@ public class StreamingDisconnectMonitorTests {
         }
     }
 
+    @Test
+    void idleOrdinaryHttpFinPreservesResponseAndDoesNotBlockAnotherConnection() throws Exception {
+        HeldSource held;
+        try (Fixture fixture = new Fixture(Handler.StreamingResponseInputPolicy.RETAIN, 512)) {
+            held = fixture.source;
+            try (Socket socket = fixture.connect()) {
+                send(socket, STREAM_REQUEST);
+                Assertions.assertTrue(readHeaders(socket.getInputStream()).startsWith("HTTP/1.1 200 OK"));
+            }
+            await(() -> fixture.logger.halfCloses.get() == 1, "Ordinary close did not produce input EOF");
+            Assertions.assertEquals(1, held.closed.getCount(),
+                    "TCP FIN alone cannot distinguish a full close from a peer waiting for its response.");
+            try (Socket next = fixture.connect()) {
+                send(next, NEXT_REQUEST);
+                Assertions.assertTrue(readHeaders(next.getInputStream()).startsWith("HTTP/1.1 200 OK"));
+                Assertions.assertArrayEquals(ascii("next"), next.getInputStream().readNBytes(4));
+                Assertions.assertEquals(1, fixture.nextCalls.get());
+            }
+        }
+        Assertions.assertEquals(0, held.closed.getCount(), "Server stop must release the retained idle response.");
+    }
+
+    @Test
+    void remoteWriteFailureAfterInputHalfCloseIsDisconnectWithoutWriteErrorDiagnostic() throws Exception {
+        try (Fixture fixture = new Fixture(Handler.StreamingResponseInputPolicy.RETAIN, 512);
+             Socket socket = fixture.connect()) {
+            send(socket, STREAM_REQUEST);
+            Assertions.assertTrue(readHeaders(socket.getInputStream()).startsWith("HTTP/1.1 200 OK"));
+            socket.shutdownOutput();
+            await(() -> fixture.logger.halfCloses.get() == 1, "Input FIN was not observed");
+            fixture.source.writeFailure = new IOException("Broken pipe");
+            fixture.source.release();
+            Assertions.assertTrue(fixture.source.closed.await(3, TimeUnit.SECONDS));
+            Assertions.assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED, fixture.source.closeReason.get());
+            Assertions.assertEquals(0, fixture.logger.writeErrors.get());
+            Assertions.assertEquals(0, fixture.writeErrors.get());
+        }
+    }
+
+    @Test
+    void unrelatedWriteFailureRetainsWriteErrorReasonAndDiagnostic() throws Exception {
+        assertUnrelatedWriteFailure(new IOException("Source unavailable"));
+    }
+
+    @Test
+    void cyclicWriteFailureCannotStrandTheConnectionLoop() throws Exception {
+        IOException first = new IOException("First source failure");
+        IOException second = new IOException("Second source failure");
+        first.initCause(second);
+        second.initCause(first);
+        assertUnrelatedWriteFailure(first);
+    }
+
+    private void assertUnrelatedWriteFailure(IOException failure) throws Exception {
+        try (Fixture fixture = new Fixture(Handler.StreamingResponseInputPolicy.RETAIN, 512);
+             Socket socket = fixture.connect()) {
+            send(socket, STREAM_REQUEST);
+            Assertions.assertTrue(readHeaders(socket.getInputStream()).startsWith("HTTP/1.1 200 OK"));
+            fixture.source.writeFailure = failure;
+            fixture.source.release();
+            Assertions.assertTrue(fixture.source.closed.await(3, TimeUnit.SECONDS));
+            Assertions.assertEquals(StreamTerminationReason.WRITE_FAILED, fixture.source.closeReason.get());
+            await(() -> fixture.writeErrors.get() == 1, "Write failure observation did not finish");
+            Assertions.assertEquals(1, fixture.logger.writeErrors.get());
+        }
+    }
+
     private static final class QueuePressureFixture implements AutoCloseable {
         final CountDownLatch allowWrites = new CountDownLatch(1);
         final CountDownLatch writerEntered = new CountDownLatch(1);
@@ -602,6 +689,7 @@ public class StreamingDisconnectMonitorTests {
     private static final class Fixture implements AutoCloseable {
         final HeldSource source = new HeldSource();
         final CountingLogger logger = new CountingLogger();
+        final AtomicInteger writeErrors = new AtomicInteger();
         final AtomicInteger nextCalls = new AtomicInteger();
         final EventLoop eventLoop;
 
@@ -643,7 +731,16 @@ public class StreamingDisconnectMonitorTests {
                     .withMaxRequestBodySize(maxRequestSize)
                     .withReadBufferSize(readBufferSize)
                     .withConcurrency(1).build();
-            eventLoop = new EventLoop(options, logger, handler);
+            eventLoop = new EventLoop(options, logger, handler, NoopConnectionListener.instance(), reason -> {
+                return new TransportFailureObserver.Observation() {
+                    private boolean discarded;
+                    @Override public void discard() { discarded = true; }
+                    @Override public void close() {
+                        if (!discarded && reason == com.soklet.MetricsCollector.TransportFailureReason.WRITE_ERROR)
+                            writeErrors.incrementAndGet();
+                    }
+                };
+            });
             if (autoStart) start();
         }
 
@@ -671,9 +768,15 @@ public class StreamingDisconnectMonitorTests {
         final CountDownLatch closed = new CountDownLatch(1);
         final AtomicReference<StreamTerminationReason> closeReason = new AtomicReference<>();
         final AtomicInteger readinessTurns = new AtomicInteger();
+        final AtomicInteger starts = new AtomicInteger();
+        final AtomicInteger closes = new AtomicInteger();
         private volatile Runnable readyCallback;
         private volatile boolean released;
         private volatile boolean readinessFlood;
+        volatile IOException writeFailure;
+
+        @Override
+        public void start() { starts.incrementAndGet(); }
 
         @Override
         public void writeReadyCallback(Runnable callback) {
@@ -688,6 +791,7 @@ public class StreamingDisconnectMonitorTests {
                 return 0;
             }
             if (!released) return 0;
+            if (writeFailure != null) throw writeFailure;
             return socketChannel.write(body);
         }
 
@@ -715,12 +819,14 @@ public class StreamingDisconnectMonitorTests {
 
         @Override
         public void close() {
+            closes.incrementAndGet();
             readinessFlood = false;
             closed.countDown();
         }
 
         @Override
         public void close(StreamTerminationReason reason, Throwable cause) {
+            closes.incrementAndGet();
             readinessFlood = false;
             closeReason.set(reason);
             closed.countDown();
@@ -732,6 +838,7 @@ public class StreamingDisconnectMonitorTests {
         final AtomicInteger retainedReads = new AtomicInteger();
         final AtomicInteger discardedReads = new AtomicInteger();
         final AtomicInteger readLimitFailures = new AtomicInteger();
+        final AtomicInteger writeErrors = new AtomicInteger();
 
         @Override public boolean enabled() { return true; }
         @Override public void log(LogEntry... entries) {
@@ -742,6 +849,7 @@ public class StreamingDisconnectMonitorTests {
                     case "read_pipelined_bytes_during_streaming_response" -> retainedReads.incrementAndGet();
                     case "read_bytes_during_streaming_response" -> discardedReads.incrementAndGet();
                     case "streaming_response_read_limit_close" -> readLimitFailures.incrementAndGet();
+                    case "write_error" -> writeErrors.incrementAndGet();
                     default -> { }
                 }
             }

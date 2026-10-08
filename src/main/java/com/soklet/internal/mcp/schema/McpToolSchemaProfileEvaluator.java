@@ -77,7 +77,7 @@ final class McpToolSchemaProfileEvaluator {
 		Evaluation evaluation = new Evaluation(program, requireNonNull(limits));
 		try {
 			boolean valid = evaluation.evaluateNode(program.rootNodeId(), instance,
-					List.of(), true);
+					new ArrayList<>(), true);
 			if (valid)
 				return new McpSchemaValidationOutcome.Valid(
 						evaluation.context.evaluationOperations());
@@ -268,9 +268,10 @@ final class McpToolSchemaProfileEvaluator {
 			if (instance instanceof McpJsonArray array
 					&& node.itemSchema().isPresent()) {
 				for (int index = 0; index < array.values().size(); ++index) {
-					valid &= evaluateNode(node.itemSchema().get(),
-							array.values().get(index), append(instancePointer,
-									Integer.toString(index)), reportDiagnostics);
+					valid &= evaluateChild(node.itemSchema().get(),
+							array.values().get(index), instancePointer,
+							reportDiagnostics ? Integer.toString(index) : "",
+							reportDiagnostics);
 				}
 			}
 
@@ -307,9 +308,8 @@ final class McpToolSchemaProfileEvaluator {
 					: node.propertySchemas().entrySet()) {
 				McpJsonValue value = object.members().get(property.getKey());
 				if (value != null)
-					valid &= evaluateNode(property.getValue(), value,
-							append(instancePointer, property.getKey()),
-							reportDiagnostics);
+					valid &= evaluateChild(property.getValue(), value,
+							instancePointer, property.getKey(), reportDiagnostics);
 			}
 			if (node.additionalPropertiesSchema().isEmpty())
 				return valid;
@@ -325,9 +325,8 @@ final class McpToolSchemaProfileEvaluator {
 			}
 			entries.sort(Map.Entry.comparingByKey());
 			for (Map.Entry<String, McpJsonValue> entry : entries)
-				valid &= evaluateNode(node.additionalPropertiesSchema().get(),
-						entry.getValue(), append(instancePointer, entry.getKey()),
-						reportDiagnostics);
+				valid &= evaluateChild(node.additionalPropertiesSchema().get(),
+						entry.getValue(), instancePointer, entry.getKey(), reportDiagnostics);
 			return valid;
 		}
 
@@ -366,19 +365,29 @@ final class McpToolSchemaProfileEvaluator {
 				@NonNull Optional<@NonNull String> missingPropertyName,
 				@NonNull List<@NonNull String> instancePointer,
 				@NonNull String message) {
+			if (context.diagnosticsTruncated())
+				return;
+			// The diagnostic snapshots the mutable path; charge before that copy.
+			chargeOperations(instancePointer.size());
 			context.addDiagnostic(code, node.location(), keyword,
 					missingPropertyName, instancePointer, message);
 		}
 
-		@NonNull
-		private List<@NonNull String> append(
-				@NonNull List<@NonNull String> source,
-				@NonNull String segment) {
-			chargeOperations((long) source.size() + 1);
-			List<String> result = new ArrayList<>(source.size() + 1);
-			result.addAll(source);
-			result.add(segment);
-			return List.copyOf(result);
+		private boolean evaluateChild(@NonNull McpSchemaNodeId nodeId,
+				@NonNull McpJsonValue instance,
+				@NonNull List<@NonNull String> instancePointer,
+				@NonNull String segment, boolean reportDiagnostics) {
+			if (!reportDiagnostics)
+				return evaluateNode(nodeId, instance, instancePointer, false);
+			// One invocation owns this bounded stack. Only retained diagnostics
+			// copy the full path; valid traversal never copies each ancestor.
+			chargeOperation();
+			instancePointer.add(segment);
+			try {
+				return evaluateNode(nodeId, instance, instancePointer, true);
+			} finally {
+				instancePointer.remove(instancePointer.size() - 1);
+			}
 		}
 	}
 

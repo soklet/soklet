@@ -32,6 +32,12 @@ import static java.util.Objects.requireNonNull;
 /**
  * An immutable JSON object.
  *
+ * <p>Member names are retained exactly, without normalization or replacement.
+ * Factories and builder setters reject names containing unpaired UTF-16
+ * surrogates with {@link IllegalArgumentException}. The independent string/token
+ * and response-size limits described by {@link McpJsonString} are checked when
+ * the object is serialized.</p>
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
@@ -66,6 +72,7 @@ public final class McpJsonObject implements McpJsonValue {
 	 *
 	 * @param members object members
 	 * @return immutable JSON object
+	 * @throws IllegalArgumentException if a member name contains an unpaired surrogate
 	 */
 	@NonNull
 	public static McpJsonObject fromMembers(
@@ -80,7 +87,8 @@ public final class McpJsonObject implements McpJsonValue {
 			@NonNull Map<@NonNull String, ? extends @NonNull McpJsonValue> members) {
 		LinkedHashMap<@NonNull String, @NonNull McpJsonValue> copied =
 				new LinkedHashMap<>();
-		members.forEach((name, value) -> copied.put(requireNonNull(name), requireNonNull(value)));
+		members.forEach((name, value) -> copied.put(
+				McpContentValueSupport.requireWellFormedString(name), requireNonNull(value)));
 		this.members = Collections.unmodifiableMap(copied);
 	}
 
@@ -141,10 +149,11 @@ public final class McpJsonObject implements McpJsonValue {
 		 * @param name  the member name
 		 * @param value the member value
 		 * @return this builder
+		 * @throws IllegalArgumentException if the member name contains an unpaired surrogate
 		 */
 		@NonNull
 		public Builder put(@NonNull String name, @NonNull McpJsonValue value) {
-			this.members.put(requireNonNull(name), requireNonNull(value));
+			this.members.put(McpContentValueSupport.requireWellFormedString(name), requireNonNull(value));
 			return this;
 		}
 
@@ -154,6 +163,7 @@ public final class McpJsonObject implements McpJsonValue {
 		 * @param name  the member name
 		 * @param value the string value
 		 * @return this builder
+		 * @throws IllegalArgumentException if the name or value contains an unpaired surrogate
 		 */
 		@NonNull
 		public Builder put(@NonNull String name, @NonNull String value) {

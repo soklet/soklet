@@ -51,7 +51,7 @@ public class StreamLifecycleCoordinatorTests {
 		CountDownLatch releaseRejection = new CountDownLatch(1);
 		Runnable rejection = () -> { rejectionEntered.countDown(); awaitUninterruptibly(releaseRejection); };
 		try {
-			reservation.dispatchTermination(() -> {
+			reservation.dispatchCallbacks(() -> {
 				observerEntered.countDown(); awaitUninterruptibly(releaseObserver);
 			});
 			reservation.complete(); await(observerEntered);

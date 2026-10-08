@@ -47,7 +47,11 @@ public final class McpSkillBundle {
 	 * Validates and snapshots a bundle, including its required root {@code SKILL.md}.
 	 *
 	 * <p>Keys must be unique NFC logical paths with no empty, dot, or dot-dot
-	 * segments, backslashes, percent signs, or control characters. Each path is
+	 * segments, backslashes, percent signs, or control characters. A file cannot
+	 * also be a directory prefix of another file (for example, {@code ref} and
+	 * {@code ref/notes.md}). Names are case-sensitive and are not case-folded;
+	 * applications loading or materializing files on a case-insensitive filesystem
+	 * must account for names that differ only by case. Each path is
 	 * limited to 8,192 UTF-8 bytes. Bundles contain at most 512 files and 16 MiB of
 	 * raw content; individual resource representations remain subject to the
 	 * stricter MCP output limits. Supplied arrays are defensively copied. Do not
@@ -60,6 +64,11 @@ public final class McpSkillBundle {
 	 * 50,000,000 metered work units. The production JSON profile independently
 	 * constrains resolved metadata and resource delivery. These construction
 	 * bounds are not configurable through this factory.
+	 *
+	 * <p>Metadata validation errors identify the fixed field and violated rule
+	 * without including authored values or custom metadata keys. The exception
+	 * remains an {@link IllegalArgumentException}; diagnostics are not a structured
+	 * validation API. Metadata validation does not repair or rewrite the document.
 	 *
 	 * @param fileContentsByLogicalPath logical file paths and complete file contents
 	 * @return immutable validated bundle

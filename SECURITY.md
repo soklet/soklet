@@ -53,7 +53,27 @@ claim to secure an application or deployment end to end. In particular:
   explicitly authored tool-input schemas. It is not
   universal JSON Schema safety, semantic sensitive-data classification,
   protection against prompt injection, or validation of application business
-  rules.
+  rules. JSON decoded-string and escaped-token limits are independent UTF-16
+  bounds; aggregate transport bytes do not widen either. Schema work can exhaust
+  its budget even for a semantically valid value within the JSON ceilings. See
+  [JSON and schema limits](MCP.md#json-and-schema-limits) for accounting and the
+  fixed, revision-specific rejection results. No submitted values or exception
+  details are included in those errors.
+- Public MCP text content, text resource contents, JSON strings/member names,
+  prompt-output descriptions, and argument-completion values reject unpaired
+  UTF-16 surrogates at construction without reflecting supplied text in the
+  exception. Image/audio MIME syntax is validated without decoding or sniffing
+  application bytes. Binary items retain the fixed 786,432-byte raw wire ceiling
+  and the aggregate JSON response ceiling. See
+  [JSON and content boundaries](MCP.md#json-and-schema-limits). Construction
+  does not guarantee that a complete response fits; escaping application
+  construction failures and output-limit failures remain private internal errors.
+- Public MCP icon declarations require absolute sources with well-formed UTF-16,
+  valid ASCII MIME syntax, and decimal `WxH` or `any` size hints. They are
+  declaration checks, not trusted-source or rendering protections: Soklet does
+  not fetch icons, restrict schemes/domains, validate image bytes or sanitize
+  SVG. Incoming client metadata remains informational and untrusted under its
+  existing wire checks. See [Icon declarations](MCP.md#icon-declarations).
 - The built-in request-state and trace-correlation cryptography has frozen
   profiles, vectors, and implementation tests. It has not received an
   independent cryptographic audit, formal verification, or certification.
@@ -101,7 +121,7 @@ isolation.
 Validation precedence is a security boundary. Transport limits and endpoint routing run first, followed by Host, Origin/CORS, POST/media negotiation,
 strict JSON, and JSON-RPC envelope classification.
 Requests then traverse mirrored-header form and method/name agreement; a read-only nested body-version probe and exact registry profile selection; then selected-profile required
-metadata/extensions, universal-spine validation, and post-map header/body version agreement. Cheap structure and required capabilities precede admission, request/tool limiting,
+metadata/extensions, universal-spine validation, and post-map header/body version agreement. Cheap wire structure precedes admission. Caller-neutral target/descriptor lookup, tool custom mirrored-header policy, request-state shape and required capabilities follow successful admission, before request/tool limiting,
 bounded dispatch, interception, full input validation, handler execution, output processing in the exact order of preliminary result-shape recognition, applicable sanitization,
 and remaining result/output-schema validation, and then writing. Notifications instead validate selector cardinality/form and registry membership before any selected-profile
 present metadata, admission, and the optional request limiter after the common transport prefix, then terminate with an empty response; identifiable
@@ -244,7 +264,7 @@ authorization and all protection of custom-list cursors.
 
 Tools, prompt gets, and resource reads may now perform multi-round-trip
 `input_required` exchanges. The operation must declare every client request it
-may emit. Required capabilities are checked before admission; conditional
+may emit. Required capabilities are checked after successful admission and before execution; conditional
 capabilities are checked only when emitted, but still before output parameters,
 metadata, request state, or a custom protector is processed. Client
 `inputResponses` remain untrusted input and must be authorized and validated in
@@ -312,6 +332,24 @@ with fencing where multiple nodes can claim work. `tasks/cancel` records
 cooperative durable intent; it is not an interrupt and may lose a race with
 completion or failure. Soklet shutdown likewise does not cancel durable tasks
 or prove that application workers have stopped.
+
+Workers must validate application output and input requests before storing
+task state. Public task construction and in-memory worker mutations validate
+status-specific shape, not the origin output schema or input declarations.
+Soklet validates those contracts at delivery time. Invalid stored payloads
+fail polling with a fixed internal error and suppress notification projection;
+they do not change authoritative state, publish a transition, or notify the
+worker. Current authorization, sanitization, or transport limits can also
+prevent delivery. A failed read therefore does not prove that the work failed
+and must not be used to infer a durable `FAILED` transition.
+
+Task input delivery also checks the current caller's capabilities after the
+authorized manager lookup. A polling client lacking an outstanding elicitation
+mode receives HTTP 400 / `-32021` with the missing capability names only;
+Soklet sends no task input payload or partial snapshot and does not change
+durable state. Unknown and unauthorized task IDs remain indistinguishable
+before capability checks. Capabilities from creation or earlier polls do not
+authorize input delivery on a later request.
 
 Task notifications are advisory. An application-provided
 [`McpTaskEventPublisher`](https://javadoc.soklet.com/com/soklet/McpTaskEventPublisher.html)
@@ -381,8 +419,9 @@ Framework state is bound to endpoint path, protocol version, JSON-RPC method,
 the admitted authorization partition, and stable validated parameters. Retry-
 only fields and transient progress/trace/baggage metadata are excluded from the
 parameter digest; application operation arguments and identity partition are
-not. Wire shape and size are checked before capability/admission side effects,
-but structurally valid state is opened only after admission, preventing an
+not. Registration-dependent state shape and size are checked after successful
+admission and before required capability checks; structurally valid state is
+opened only after authorization-partition resolution, preventing an
 unauthenticated cryptographic validity oracle. Invalid, tampered, expired, or
 wrong-bound state is a sanitized HTTP 400 / JSON-RPC `-32602`; temporary
 protection unavailability is HTTP 503 / `-32603`. Invalid-state reports and
@@ -390,11 +429,24 @@ malformed, noncanonical, empty, or oversized custom-open plaintext collapse to
 the same 400 / `-32602` response. Null or unexpected provider behavior and
 invalid sealing/server output fail as HTTP 500 / `-32603`.
 
+Canonical parameter binding uses the internal accepted-parameter profile,
+with 32 MiB output headroom and unchanged production structural/scalar limits.
+It does not impose the 4 MiB response limit on accepted request parameters.
+MCP request-body acceptance remains 10 MiB by default, configurable up to
+16 MiB; encoded/decoded state limits remain separate. The protected binding
+contains the parameter digest rather than a copy of the operation arguments.
+
 The first framework state starts the configured lifetime and round count.
 Re-emission preserves that original expiry, increments the round, and records
 the emitting request ID; the next retry must use a different ID. This is not a
 single-use replay database. Workflows that require one-time approval or
 consumption must store and enforce that fact in application infrastructure.
+The last allowed round is valid for completion. Attempting another framework
+emission at that round, or after expiry during a valid retry's handler, fails
+at sealing after handler execution with a sanitized internal error. No new
+state is returned and application side effects are not rolled back. The
+public state accessor does not expose the framework's round or expiry; keep
+application workflow counters/deadlines in the protected JSON when needed.
 Input-required results have no protocol cache hints, and completed resource
 retries are forced to private, zero-TTL cache policy; the HTTP transport remains
 `Cache-Control: no-store`.
@@ -1766,9 +1818,9 @@ conformance. These are local snapshot checks, not immutable-candidate evidence.
 The preceding four-row HTTP-contract reconciliation closed the exact validation-
 precedence, diagnostic-boundary, unsupported-notification, and universal
 `no-store` security contracts. The separate
-`conformance/golden-http-contract/precedence-no-store/manifest.sha256` binds 22
+`conformance/golden-http-contract/precedence-no-store/manifest.sha256` binds 23
 canonical complete responses at SHA-256
-`29eb9f597e2d7a8c2268e35918217342b994802868c4bf14309c04c06ac6891a`.
+`ccec7ec13ac245bbc4a1820b1c387b188347a3ef868d4128e3af5c3a6e331e92`.
 Five contract tests comprise three real-listener golden tests, one exhaustive response-authority inventory, and one six-document manifest-digest parity gate;
 four initialize-diagnostic tests include 23 readable-`initialize` rejection
 cases and the negative boundary. Those two classes pass 9/9 in the current

@@ -29,6 +29,19 @@ import javax.annotation.concurrent.ThreadSafe;
  * already have closed resources opened with coordinated close-as-abort. A writer reused across
  * responses may be invoked concurrently; the application is responsible for synchronizing any mutable
  * state shared by those invocations.
+ * <p>
+ * The built-in HTTP server invokes the writer on a producer thread separate from synchronous request
+ * handling. {@link RequestInterceptor} scopes do not wrap this callback, and Soklet does not propagate
+ * ambient thread-local or scoped values, transactions, or tracing scopes. Producer execution can overlap
+ * remaining request wrapping or lifecycle observation. Capture required immutable values while the
+ * resource method runs, then bind any application context explicitly around the producer's work and
+ * restore or remove thread-local bindings in {@code finally}.
+ * <p>
+ * Simulation materializes the body on the {@link Simulator#performHttpRequest(Request)} caller's thread
+ * after request handling returns; it does not reproduce the HTTP producer executor. Interceptor scopes
+ * have ended by then, but a binding outside the simulator call may remain visible. Do not rely on that
+ * visibility in production. Likewise, context bound only during this callback does not automatically
+ * cover resource finalization after it returns or cancelation callbacks dispatched on other threads.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

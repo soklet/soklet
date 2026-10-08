@@ -566,9 +566,12 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 							+ capableMetadata + ",\"name\":\"" + toolName
 							+ "\",\"arguments\":{\"query\":"
 							+ "\"missing pageSizes\"}}}");
-			Assertions.assertEquals(400, invalid.statusCode(), invalid.body());
-			Assertions.assertTrue(invalid.body().contains("\"code\":-32602"),
+			Assertions.assertEquals(200, invalid.statusCode(), invalid.body());
+			Assertions.assertTrue(invalid.body().contains("\"isError\":true"),
 					invalid.body());
+			Assertions.assertTrue(invalid.body().contains("Arguments do not match the tool's inputSchema."),
+					invalid.body());
+			Assertions.assertFalse(invalid.body().contains("missing pageSizes"), invalid.body());
 			Assertions.assertEquals(3, interceptorInvocations.get(),
 					"Interception must retain its pre-validation ordering.");
 			Assertions.assertEquals(1, handlerInvocations.get(),
@@ -587,10 +590,12 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 							+ capableMetadata + ",\"name\":\"" + toolName
 							+ "\",\"arguments\":{\"query\":\"reject\","
 							+ "\"pageSizes\":[10]}}}");
-			Assertions.assertEquals(400, rejectedDuringConstruction.statusCode(),
+			Assertions.assertEquals(200, rejectedDuringConstruction.statusCode(),
 					rejectedDuringConstruction.body());
 			Assertions.assertTrue(rejectedDuringConstruction.body().contains(
-					"\"code\":-32602"), rejectedDuringConstruction.body());
+					"\"isError\":true"), rejectedDuringConstruction.body());
+			Assertions.assertTrue(rejectedDuringConstruction.body().contains(
+					"Arguments do not match the tool's inputSchema."), rejectedDuringConstruction.body());
 			Assertions.assertEquals(4, interceptorInvocations.get());
 			Assertions.assertEquals(1, handlerInvocations.get());
 			Assertions.assertEquals(2,
@@ -608,7 +613,11 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 							+ "\"io.modelcontextprotocol/clientCapabilities\":{}},"
 							+ "\"name\":\"" + toolName + "\",\"arguments\":{"
 							+ "\"query\":\"missing pageSizes\"}}}");
-			Assertions.assertEquals(400, incapableInvalid.statusCode(),
+			Assertions.assertEquals(200, incapableInvalid.statusCode(),
+					incapableInvalid.body());
+			Assertions.assertTrue(incapableInvalid.body().contains("\"isError\":true"),
+					incapableInvalid.body());
+			Assertions.assertTrue(incapableInvalid.body().contains("Arguments do not match the tool's inputSchema."),
 					incapableInvalid.body());
 			Assertions.assertEquals(5, interceptorInvocations.get(),
 					"Non-Tasks calls retain interceptor-before-validation ordering.");

@@ -131,12 +131,12 @@ public class McpRequestStreamLifecycleMetricsAggregationTests {
 				+ "reason=INTERNAL_ERROR}", applicationKey.toString());
 		MetricsCollector.HistogramSnapshot completedHistogram =
 				new MetricsCollector.HistogramSnapshot(
-						new long[]{1L, Long.MAX_VALUE}, new long[]{0L, 1L},
-						1L, 2L, 2L, 2L);
+						List.of(1L, Long.MAX_VALUE), List.of(0L, 1L),
+						1L, 2D, 2L, 2L);
 		MetricsCollector.HistogramSnapshot applicationHistogram =
 				new MetricsCollector.HistogramSnapshot(
-						new long[]{Long.MAX_VALUE}, new long[]{0L},
-						0L, 0L, 0L, 0L);
+						List.of(Long.MAX_VALUE), List.of(0L),
+						0L, 0D, 0L, 0L);
 		Map<McpMetricsSnapshot.RequestStreamTerminationKey,
 				MetricsCollector.HistogramSnapshot> source =
 				new LinkedHashMap<>();
@@ -558,9 +558,14 @@ public class McpRequestStreamLifecycleMetricsAggregationTests {
 	private static void assertSample(@NonNull String text,
 			@NonNull String metricName, @NonNull String encodedLabels,
 			long value) {
-		Assertions.assertTrue(requireNonNull(text).contains(
-				requireNonNull(metricName) + requireNonNull(encodedLabels)
-						+ " " + value + "\n"), text);
+		String prefix = requireNonNull(metricName) + requireNonNull(encodedLabels) + " ";
+		if (metricName.endsWith("_sum")) {
+			String actual = requireNonNull(text).lines().filter(line -> line.startsWith(prefix))
+					.findFirst().orElseThrow().substring(prefix.length());
+			Assertions.assertEquals((double) value, Double.parseDouble(actual), 0D);
+		} else {
+			Assertions.assertTrue(requireNonNull(text).contains(prefix + value + "\n"), text);
+		}
 	}
 
 	private static boolean isStreamLifecycleSample(@NonNull String name) {

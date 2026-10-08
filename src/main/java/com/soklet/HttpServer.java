@@ -262,6 +262,9 @@ public interface HttpServer {
 
 		/**
 		 * Sets the maximum duration for reading the HTTP request line and headers.
+		 * An in-progress read timeout routes through
+		 * {@link ResponseMarshaler#forUnparsedRequest(UnparsedRequest)}, whose default
+		 * response is {@code 408}. A timeout without request bytes closes quietly.
 		 * <p>
 		 * Passing {@code null} restores the built-in default of 60 seconds.
 		 *
@@ -276,7 +279,9 @@ public interface HttpServer {
 
 		/**
 		 * Sets the maximum duration for reading the HTTP request body after the request
-		 * line and headers have been received.
+		 * line and headers have been received. A read timeout routes through
+		 * {@link ResponseMarshaler#forUnparsedRequest(UnparsedRequest)}, whose default
+		 * response is {@code 408}.
 		 * <p>
 		 * Passing {@code null} restores the built-in default of 60 seconds.
 		 *
@@ -348,7 +353,11 @@ public interface HttpServer {
 		}
 
 		/**
-		 * Sets the maximum duration of application request handling. Passing
+		 * Sets the maximum duration of application request handling, including time
+		 * queued on the request-handler executor. Admitted requests keep their
+		 * original deadlines during graceful shutdown. Expiry claims a 503 response
+		 * and requests interruption of a running handler; it does not prove that
+		 * noncooperative application work has terminated. Passing
 		 * {@code null} restores the built-in timeout of 60 seconds.
 		 *
 		 * @param requestHandlerTimeout request-handler timeout, or {@code null} for
@@ -558,6 +567,12 @@ public interface HttpServer {
 		 * shutdown, which may interrupt its tasks. Passing {@code null} restores the
 		 * framework-managed fixed-size executor with the effective
 		 * request-handler concurrency and queue capacity.
+		 * <p>
+		 * The executor must dispatch asynchronously. Direct or caller-runs execution
+		 * is rejected before application entry with a 503 response and connection
+		 * closure. Use a throwing rejection policy when executor capacity is
+		 * exhausted. Custom executor concurrency and queue
+		 * limits remain the application's responsibility.
 		 *
 		 * @param requestHandlerExecutorServiceSupplier executor supplier, or
 		 * {@code null} for the default
@@ -626,13 +641,20 @@ public interface HttpServer {
 		}
 
 		/**
-		 * Sets the worker concurrency for streaming cancelation and termination callbacks.
+		 * Sets the worker concurrency for streaming cancelation batches and unadmitted rejection observers.
 		 * <p>
 		 * These workers are separate from response producers and transport event loops. Normal resource finalization
 		 * still runs on the producer thread. Precommit rejection observers are offered to these same workers after the finite response is offered,
 		 * using a separately bounded allowance that does not consume admitted streams' reserved jobs.
 		 * That observation is omitted and logged if its allowance is exhausted or infrastructure has stopped.
 		 * Accepted observer work remains retained through shutdown; request handling never waits for it.
+		 * Admitted termination observers and diagnostics use separate executors, each with at most
+		 * {@link #streamingLifecycleCapacity(Integer) lifecycle capacity} workers and one prepaid observation per
+		 * lifetime. These workers grow with outstanding observation work and are reused; idle workers expire.
+		 * Observations can therefore run more concurrently than this setting. A blocked observer retains its own
+		 * lifetime without queuing another admitted stream's observation behind it. Blocking all cancelation workers
+		 * can still queue later cancelation batches and unadmitted rejection observers. Keep application hooks short;
+		 * no deadline forcibly stops them or releases their slots before physical exit.
 		 * Passing {@code null} restores the built-in default of four workers.
 		 * <p>
 		 * At {@link #build()}, the effective concurrency must be positive and no greater than the effective
@@ -661,6 +683,12 @@ public interface HttpServer {
 		 * Healthy queue backpressure during encoder finalization pauses the remaining cleanup budget; cancelation
 		 * starts a finite cleanup budget even if an output wait remains active. Successful socket writes refresh
 		 * response idle activity after production finishes, so a progressing drain can complete.
+		 * <p>
+		 * Owned-resource close/abort and publisher cancel failures use {@link LogEventType#RESPONSE_STREAM_CLOSE_FAILED} with the original
+		 * exception, request, optional resource method and streaming response. Framework supervision failures and
+		 * deadline expiry use {@link LogEventType#SERVER_INTERNAL_ERROR}. Built-in HTTP simulation uses the same
+		 * classification. Diagnostic delivery is asynchronous and limited to the first diagnostic claimed for an
+		 * admitted lifetime; a blocked log observer remains physical work through shutdown.
 		 *
 		 * @param streamingCleanupTimeout the cleanup timeout, or {@code null} for the default
 		 * @return this builder
@@ -702,6 +730,8 @@ public interface HttpServer {
 		 * <p>
 		 * Use {@link Duration#ZERO} to disable the timeout. Passing {@code null}
 		 * restores that built-in disabled default.
+		 * The effective duration must be nonnegative and representable in nanoseconds;
+		 * {@link #build()} rejects larger durations instead of failing during response preparation.
 		 *
 		 * @param streamingResponseTimeout the streaming response timeout, or {@code null} for the default
 		 * @return this builder
@@ -718,6 +748,14 @@ public interface HttpServer {
 		 * Use {@link Duration#ZERO} to disable the timeout. Passing {@code null}
 		 * derives the default from the effective request-body timeout, which is 60
 		 * seconds when that setting is also left at its default.
+		 * The effective duration, including an inherited default, must be nonnegative
+		 * and representable in nanoseconds; {@link #build()} rejects larger durations.
+		 * <p>
+		 * Ordinary HTTP preserves input half-close so clients can continue reading
+		 * their responses. TCP FIN alone cannot distinguish that from a full peer
+		 * close. An idle response with no further write can therefore retain its
+		 * lifetime until an idle or total timeout; disabling both timeouts removes
+		 * that bound. A reset or recognized remote write failure cancels delivery.
 		 *
 		 * @param streamingResponseIdleTimeout the streaming response idle timeout, or {@code null} for the default
 		 * @return this builder

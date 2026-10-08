@@ -115,6 +115,10 @@ import static java.util.Objects.requireNonNull;
  * static analysis.
  * <p>
  * This Annotation Processor ensures <em>Resource Methods</em> annotated with {@link SseEventSource} are declared as returning an instance of {@link SseHandshakeResult}.
+ * It validates HTTP/SSE path syntax using {@link ResourcePathDeclaration}, reporting malformed, partial-component,
+ * duplicate-name and non-final varargs placeholders on the annotated method before generating its route entry.
+ * HTTP/SSE parameters may declare only one Soklet binding annotation. Optional value bindings require reference types;
+ * path bindings cannot use Optional, and varargs path bindings require String. Application qualifiers and custom converter types remain eligible.
  * <p>
  * Your build system should ensure this Annotation Processor is available at compile time. Follow the instructions below to make your application conformant:
  * <p>
@@ -151,8 +155,9 @@ import static java.util.Objects.requireNonNull;
  *
  * <p><strong>Incremental/IDE ("IntelliJ-safe") behavior</strong>
  * <ul>
- *   <li>Never rebuilds the global index from only the currently-compiled sources. It always merges with the prior index.</li>
- *   <li>Only removes stale entries for top-level types compiled in the current compiler invocation (touched types).</li>
+ *   <li>Merges the current compilation into one prior HTTP/SSE snapshot: CLASS_OUTPUT first, then the enabled sidecar and persistent caches as fallbacks. An empty current snapshot is authoritative.</li>
+ *   <li>Replaces entries for touched top-level types and removes retained HTTP/SSE owners absent from the compiler's sources/classpath. Untouched visible types, nested types and dependency JAR owners remain eligible.</li>
+ *   <li>A selected HTTP/SSE snapshot that cannot be read completely or contains malformed rows causes a compiler diagnostic and is not overwritten with partial metadata.</li>
  *   <li>Declares wildcard annotation support, while claiming no annotations, so a compiler still invokes it when a touched type removes its final Soklet annotation.</li>
  *   <li>Skips writing the index entirely if compilation errors are present, preventing clobbering a good index.</li>
  *   <li>Writes with originating elements (best-effort) so incremental build tools can track dependencies.</li>
@@ -165,6 +170,10 @@ import static java.util.Objects.requireNonNull;
  *   <li><code>-Asoklet.pruneDeleted=true|false</code> (default: false; generally not IDE-safe)</li>
  *   <li><code>-Asoklet.debug=true|false</code> (default: false)</li>
  * </ul>
+ *
+ * <p>For incremental HTTP/SSE compilation, untouched owners must remain visible on the compiler's source path or classpath.
+ * A deleted source whose old classfile is still visible remains a resolvable type; remove that old output or perform a clean build.
+ * The optional <code>soklet.pruneDeleted</code> setting additionally checks classfile presence in CLASS_OUTPUT and is stricter than normal compiler-visibility cleanup.
  *
  * <p><strong>Important</strong>: This processor will never create a project-root <code>.soklet</code> directory by default.
  * Persistent caching is only enabled when <code>cacheMode=persistent</code> <em>and</em> <code>soklet.cacheDir</code> is set.
@@ -266,6 +275,7 @@ public final class SokletProcessor extends AbstractProcessor {
 			new LinkedHashMap<>();
 	private boolean mcpProcessingErrorDetected;
 	private int mcpProcessingErrorCount;
+	private boolean resourceMethodIndexErrorDetected;
 
 	// ---- Supported annotations ----------------------------------------------
 
@@ -463,6 +473,8 @@ public final class SokletProcessor extends AbstractProcessor {
 				return false;
 			}
 			mergeAndWriteIndex(collected, touchedTopLevelBinaries);
+			if (resourceMethodIndexErrorDetected)
+				return false;
 			mergeAndWriteMcpEndpointIndex(collectedMcpEndpoints,
 					touchedMcpTopLevelBinaries);
 		}
@@ -500,6 +512,7 @@ public final class SokletProcessor extends AbstractProcessor {
 
 			if (isStatic) error(method, "Soklet: Resource Method must not be static");
 			if (!isPublic) error(method, "Soklet: Resource Method must be public");
+			ParamBindings pb = readPathParameterBindings(method);
 
 			// Extract each occurrence as an AnnotationMirror (handles repeatable containers)
 			List<AnnotationMirror> occurrences = extractOccurrences(method, base, container);
@@ -516,7 +529,7 @@ public final class SokletProcessor extends AbstractProcessor {
 				ValidationResult vr = validatePathTemplate(method, path);
 				if (!vr.ok) continue;
 
-				ParamBindings pb = readPathParameterBindings(method);
+				boolean bindingTypesValid = validatePathParameterTypes(method, vr);
 
 				// a) placeholders must be bound
 				for (String placeholder : vr.placeholders) {
@@ -534,7 +547,7 @@ public final class SokletProcessor extends AbstractProcessor {
 				}
 
 				// Only collect if this method is otherwise valid
-				if (!pb.hadError && vr.ok && isPublic && !isStatic) {
+				if (!pb.hadError && bindingTypesValid && vr.ok && isPublic && !isStatic) {
 					String className = elements.getBinaryName(owner).toString();
 					String methodName = method.getSimpleName().toString();
 					String[] paramTypes = method.getParameters().stream()
@@ -3820,8 +3833,21 @@ public final class SokletProcessor extends AbstractProcessor {
 		if (pathParameterElement == null) return new ParamBindings(names, false);
 
 		for (VariableElement p : method.getParameters()) {
+			int bindingCount = 0;
+			boolean optionalPrimitive = false;
+			boolean optionalPath = false;
 			for (AnnotationMirror am : p.getAnnotationMirrors()) {
+				String annotationName = ((TypeElement) am.getAnnotationType().asElement()).getQualifiedName().toString();
+				boolean binding = ResourceMethodBindingValidation.BINDING_ANNOTATIONS.stream()
+						.anyMatch(type -> type.getCanonicalName().equals(annotationName));
+				if (binding) {
+					++bindingCount;
+					optionalPrimitive |= p.asType().getKind().isPrimitive()
+							&& !annotationName.equals("com.soklet.annotation.RequestBody")
+							&& Boolean.TRUE.equals(annotationMemberWithDefaults(am, "optional"));
+				}
 				if (isAnnotationType(am, pathParameterElement)) {
+					optionalPath = optionalType != null && types.isSameType(types.erasure(p.asType()), types.erasure(optionalType));
 					// 1) try explicit annotation member
 					String name = readAnnotationStringMember(am, "name");
 					// 2) default to the parameter's source name if missing/blank
@@ -3833,9 +3859,36 @@ public final class SokletProcessor extends AbstractProcessor {
 					}
 				}
 			}
+			String failure = ResourceMethodBindingValidation.failure(bindingCount, optionalPrimitive, optionalPath, false);
+			if (failure != null) {
+				error(p, "Soklet: %s", failure);
+				hadError = true;
+			}
 		}
 
 		return new ParamBindings(names, hadError);
+	}
+
+	private boolean validatePathParameterTypes(@NonNull ExecutableElement method, @NonNull ValidationResult validation) {
+		if (pathParameterElement == null)
+			return true;
+		boolean valid = true;
+		for (VariableElement parameter : method.getParameters())
+			for (AnnotationMirror annotation : parameter.getAnnotationMirrors()) {
+				if (!isAnnotationType(annotation, pathParameterElement))
+					continue;
+				String name = readAnnotationStringMember(annotation, "name");
+				if (name == null || name.isBlank()) name = parameter.getSimpleName().toString();
+				String token = validation.original.get(name);
+				boolean varargs = token != null && token.endsWith("*");
+				String failure = ResourceMethodBindingValidation.failure(1, false, false,
+						varargs && (stringType == null || !types.isSameType(types.erasure(parameter.asType()), stringType)));
+				if (failure != null) {
+					error(parameter, "Soklet: %s", failure);
+					valid = false;
+				}
+			}
+		return valid;
 	}
 
 	private static boolean isAnnotationType(AnnotationMirror am, TypeElement type) {
@@ -3871,59 +3924,32 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	/**
-	 * Validates braces and duplicate placeholders (treating {name*} as a greedy/varargs placeholder whose
-	 * logical name is "name"). Duplicate detection is done on the normalized name (without trailing '*').
+	 * Uses the runtime declaration parser so malformed templates never reach pairwise ambiguity checks.
+	 * Logical names omit the varargs suffix; original tokens retain it for binding diagnostics.
 	 */
 	private ValidationResult validatePathTemplate(Element reportOn, String path) {
 		if (path == null || path.isEmpty()) {
 			return new ValidationResult(false, Collections.emptySet(), Collections.emptyMap());
 		}
 
+		ResourcePathDeclaration declaration;
+		try {
+			declaration = ResourcePathDeclaration.fromPath(path);
+		} catch (IllegalArgumentException invalidPath) {
+			String message = invalidPath.getMessage();
+			error(reportOn, "Soklet: %s", message == null ? "Invalid resource path declaration" : message);
+			return new ValidationResult(false, Collections.emptySet(), Collections.emptyMap());
+		}
 		Set<String> names = new LinkedHashSet<>();
 		Map<String, String> originalTokens = new LinkedHashMap<>();
-
-		int i = 0;
-		while (i < path.length()) {
-			char c = path.charAt(i);
-			if (c == '{') {
-				int close = path.indexOf('}', i + 1);
-				if (close < 0) {
-					error(reportOn, "Soklet: Malformed resource path declaration (unbalanced braces)");
-					return new ValidationResult(false, Collections.emptySet(), Collections.emptyMap());
-				}
-
-				String token = path.substring(i + 1, close);   // e.g., "id", "cssPath*"
-				if (token.isEmpty()) {
-					error(reportOn, "Soklet: Malformed resource path declaration (unbalanced braces)");
-					return new ValidationResult(false, Collections.emptySet(), Collections.emptyMap());
-				}
-
-				String normalized = normalizePlaceholder(token);
-				if (normalized.isEmpty()) {
-					error(reportOn, "Soklet: Malformed resource path declaration (unbalanced braces)");
-					return new ValidationResult(false, Collections.emptySet(), Collections.emptyMap());
-				}
-
-				if (!names.add(normalized)) {
-					error(reportOn, "Soklet: Duplicate @PathParameter name: %s", normalized);
-				}
-				originalTokens.putIfAbsent(normalized, token);
-
-				i = close + 1;
-			} else if (c == '}') {
-				error(reportOn, "Soklet: Malformed resource path declaration (unbalanced braces)");
-				return new ValidationResult(false, Collections.emptySet(), Collections.emptyMap());
-			} else {
-				i++;
-			}
+		for (ResourcePathDeclaration.Component component : declaration.getComponents()) {
+			if (component.getType() == ResourcePathDeclaration.ComponentType.LITERAL)
+				continue;
+			String name = component.getValue();
+			names.add(name);
+			originalTokens.put(name, component.getType() == ResourcePathDeclaration.ComponentType.VARARGS ? name + "*" : name);
 		}
-
 		return new ValidationResult(true, names, originalTokens);
-	}
-
-	private static String normalizePlaceholder(String token) {
-		if (token.endsWith("*")) return token.substring(0, token.length() - 1);
-		return token;
 	}
 
 
@@ -4076,9 +4102,7 @@ public final class SokletProcessor extends AbstractProcessor {
 		return new ResourceMethodSpecificityKey(
 				declaration.httpMethod(),
 				declaration.sseEventSource(),
-				resourcePathDeclaration.getVarargsComponent().isPresent(),
-				placeholderCount(resourcePathDeclaration),
-				literalCount(resourcePathDeclaration));
+				ResourcePathSpecificity.from(resourcePathDeclaration));
 	}
 
 	@NonNull
@@ -4090,18 +4114,6 @@ public final class SokletProcessor extends AbstractProcessor {
 				declaration.className(),
 				declaration.methodName(),
 				String.join(", ", declaration.parameterTypes()));
-	}
-
-	private static long placeholderCount(@NonNull ResourcePathDeclaration declaration) {
-		return declaration.getComponents().stream()
-				.filter(component -> component.getType() == ResourcePathDeclaration.ComponentType.PLACEHOLDER)
-				.count();
-	}
-
-	private static long literalCount(@NonNull ResourcePathDeclaration declaration) {
-		return declaration.getComponents().stream()
-				.filter(component -> component.getType() == ResourcePathDeclaration.ComponentType.LITERAL)
-				.count();
 	}
 
 	private static boolean resourcePathDeclarationsOverlap(@NonNull ResourcePathDeclaration first,
@@ -4182,23 +4194,27 @@ public final class SokletProcessor extends AbstractProcessor {
 		debug("SokletProcessor: persistentIndexPath=%s", persistentIndexPath);
 		debug("SokletProcessor: touchedTopLevels=%s", touchedTopLevelBinaries);
 
-		// Always merge from ALL enabled sources. Never "fallback only if empty".
+		// Each index is a complete snapshot. Never union it with older caches,
+		// including when the authoritative current snapshot contains no routes.
 		Map<String, ResourceMethodDeclaration> merged = new LinkedHashMap<>();
-
-		// Oldest/most durable first
-		if (persistentIndexPath != null) readIndexFromPath(persistentIndexPath, merged);
-		if (sideCarIndexPath != null) readIndexFromPath(sideCarIndexPath, merged);
-
-		// Then current output dir (direct file access, if possible)
-		if (classOutputIndexPath != null) readIndexFromPath(classOutputIndexPath, merged);
-
-		// Then via filer (often works even if direct file paths don't)
-		readIndexFromLocation(StandardLocation.CLASS_OUTPUT, merged);
+		boolean existingSnapshotRead = classOutputIndexPath != null
+				&& readIndexFromPath(classOutputIndexPath, merged);
+		if (!existingSnapshotRead)
+			existingSnapshotRead = readIndexFromLocation(StandardLocation.CLASS_OUTPUT, merged);
+		if (!existingSnapshotRead && sideCarIndexPath != null)
+			existingSnapshotRead = readIndexFromPath(sideCarIndexPath, merged);
+		if (!existingSnapshotRead && persistentIndexPath != null)
+			readIndexFromPath(persistentIndexPath, merged);
+		if (resourceMethodIndexErrorDetected)
+			return;
 
 		debug("SokletProcessor: mergedExistingIndexSize=%d", merged.size());
 
 		// Remove stale entries for classes being recompiled now (top-level + nested)
 		removeTouchedEntries(merged, touchedTopLevelBinaries);
+		Map<String, Boolean> availableOwners = new LinkedHashMap<>();
+		merged.values().removeIf(declaration -> !availableOwners.computeIfAbsent(
+				declaration.className(), this::resourceOwnerTypeAvailable));
 		debug("SokletProcessor: afterRemovingTouched=%d", merged.size());
 
 		// Add new entries
@@ -4227,6 +4243,33 @@ public final class SokletProcessor extends AbstractProcessor {
 		if (persistentIndexPath != null) writeIndexFileAtomically(persistentIndexPath, toWrite);
 
 		debug("SokletProcessor: wroteIndexSize=%d", toWrite.size());
+	}
+
+	private boolean resourceOwnerTypeAvailable(@NonNull String binaryName) {
+		TypeElement direct = elements.getTypeElement(binaryName);
+		if (direct != null && elements.getBinaryName(direct).contentEquals(binaryName))
+			return true;
+		// Elements expects canonical names for nested types. Walk actual enclosed
+		// declarations rather than replacing every '$', which is also legal in identifiers.
+		for (int separator = binaryName.lastIndexOf('$'); separator >= 0;
+				separator = binaryName.lastIndexOf('$', separator - 1)) {
+			TypeElement enclosing = elements.getTypeElement(binaryName.substring(0, separator));
+			if (enclosing != null && containsResourceOwner(enclosing, binaryName))
+				return true;
+		}
+		return false;
+	}
+
+	private boolean containsResourceOwner(@NonNull TypeElement typeElement, @NonNull String binaryName) {
+		String name = elements.getBinaryName(typeElement).toString();
+		if (name.equals(binaryName))
+			return true;
+		if (!binaryName.startsWith(name + "$"))
+			return false;
+		for (Element enclosed : typeElement.getEnclosedElements())
+			if (enclosed instanceof TypeElement nested && containsResourceOwner(nested, binaryName))
+				return true;
+		return false;
 	}
 
 	private void mergeAndWriteMcpEndpointIndex(
@@ -4596,14 +4639,22 @@ public final class SokletProcessor extends AbstractProcessor {
 
 
 	private boolean readIndexFromLocation(StandardLocation location, Map<String, ResourceMethodDeclaration> out) {
+		boolean opened = false;
+		String indexLocation = RESOURCE_METHOD_LOOKUP_TABLE_PATH;
 		try {
 			FileObject fo = filer.getResource(location, "", RESOURCE_METHOD_LOOKUP_TABLE_PATH);
+			indexLocation = fo.toUri().toString();
 			try (BufferedReader reader = new BufferedReader(new InputStreamReader(fo.openInputStream(), StandardCharsets.UTF_8))) {
-				readIndexFromReader(reader, out);
+				opened = true;
+				Map<String, ResourceMethodDeclaration> snapshot = new LinkedHashMap<>();
+				readIndexFromReader(reader, snapshot);
+				out.putAll(snapshot);
 			}
 			return true;
 		} catch (IOException ignored) {
-			return false;
+			if (opened)
+				resourceMethodIndexError("Soklet: Unable to read the existing HTTP/SSE route index at %s; delete it and rebuild.", indexLocation);
+			return opened;
 		}
 	}
 
@@ -4611,10 +4662,13 @@ public final class SokletProcessor extends AbstractProcessor {
 	private boolean readIndexFromPath(Path path, Map<String, ResourceMethodDeclaration> out) {
 		if (path == null || !Files.isRegularFile(path)) return false;
 		try (BufferedReader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
-			readIndexFromReader(reader, out);
+			Map<String, ResourceMethodDeclaration> snapshot = new LinkedHashMap<>();
+			readIndexFromReader(reader, snapshot);
+			out.putAll(snapshot);
 			return true;
 		} catch (IOException ignored) {
-			return false;
+			resourceMethodIndexError("Soklet: Unable to read the existing HTTP/SSE route index at %s; delete it and rebuild.", path);
+			return true;
 		}
 	}
 
@@ -4623,9 +4677,11 @@ public final class SokletProcessor extends AbstractProcessor {
 		String line;
 		while ((line = reader.readLine()) != null) {
 			line = line.trim();
-			if (line.isEmpty()) continue;
+			if (line.isEmpty() || line.startsWith("#")) continue;
 			ResourceMethodDeclaration r = parseIndexLine(line);
-			if (r != null) out.put(generateKey(r), r);
+			if (r == null)
+				throw new IOException("Malformed HTTP/SSE route index row");
+			out.put(generateKey(r), r);
 		}
 	}
 
@@ -4726,10 +4782,11 @@ public final class SokletProcessor extends AbstractProcessor {
 		return root;
 	}
 
+	@Nullable
 	private ResourceMethodDeclaration parseIndexLine(String line) {
 		try {
 			String[] parts = line.split("\\|", -1);
-			if (parts.length < 6) return null;
+			if (parts.length != 6 || !(parts[5].equals("true") || parts[5].equals("false"))) return null;
 
 			HttpMethod httpMethod = HttpMethod.valueOf(parts[0]);
 			Base64.Decoder dec = Base64.getDecoder();
@@ -4737,6 +4794,7 @@ public final class SokletProcessor extends AbstractProcessor {
 			String path = new String(dec.decode(parts[1]), StandardCharsets.UTF_8);
 			String className = new String(dec.decode(parts[2]), StandardCharsets.UTF_8);
 			String methodName = new String(dec.decode(parts[3]), StandardCharsets.UTF_8);
+			if (path.isEmpty() || className.isEmpty() || methodName.isEmpty()) return null;
 			String paramsJoined = new String(dec.decode(parts[4]), StandardCharsets.UTF_8);
 			boolean sse = Boolean.parseBoolean(parts[5]);
 
@@ -4856,14 +4914,19 @@ public final class SokletProcessor extends AbstractProcessor {
 
 
 	/**
-	 * Best-effort atomic write. Failures are logged (if debug enabled) and ignored.
+	 * Best-effort atomic cache write. A failed update invalidates the stale snapshot.
 	 */
 	private void writeIndexFileAtomically(Path target, List<ResourceMethodDeclaration> routes) {
 		if (target == null) return;
 		try {
 			writeIndexFileAtomicallyOrThrow(target, routes);
 		} catch (IOException e) {
-			debug("SokletProcessor: failed to write cache index %s (%s)", target, e);
+			try {
+				Files.deleteIfExists(target);
+				debug("SokletProcessor: failed to write cache index %s; invalidated the stale snapshot (%s)", target, e);
+			} catch (IOException deletionException) {
+				resourceMethodIndexError("Soklet: Unable to update or invalidate an HTTP/SSE route cache index at %s.", target);
+			}
 		}
 	}
 
@@ -4878,14 +4941,17 @@ public final class SokletProcessor extends AbstractProcessor {
 			throw new IOException("Unable to determine filename for " + target);
 
 		Path tmp = Files.createTempFile(parent == null ? Path.of(".") : parent, targetFileName.toString(), ".tmp");
-		try (Writer w = Files.newBufferedWriter(tmp, StandardCharsets.UTF_8)) {
-			writeIndexToWriter(w, routes);
-		}
-
 		try {
-			Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-		} catch (AtomicMoveNotSupportedException e) {
-			Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
+			try (Writer w = Files.newBufferedWriter(tmp, StandardCharsets.UTF_8)) {
+				writeIndexToWriter(w, routes);
+			}
+			try {
+				Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+			} catch (AtomicMoveNotSupportedException e) {
+				Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
+			}
+		} finally {
+			Files.deleteIfExists(tmp);
 		}
 	}
 
@@ -4900,6 +4966,12 @@ public final class SokletProcessor extends AbstractProcessor {
 	@FormatMethod
 	private void error(Element e, String fmt, Object... args) {
 		messager.printMessage(Diagnostic.Kind.ERROR, String.format(fmt, args), e);
+	}
+
+	@FormatMethod
+	private void resourceMethodIndexError(@NonNull String format, Object... arguments) {
+		resourceMethodIndexErrorDetected = true;
+		messager.printMessage(Diagnostic.Kind.ERROR, String.format(format, arguments));
 	}
 
 	@FormatMethod
@@ -5167,8 +5239,6 @@ public final class SokletProcessor extends AbstractProcessor {
 
 	private record ResourceMethodSpecificityKey(HttpMethod httpMethod,
 																							Boolean sseEventSource,
-																							Boolean hasVarargs,
-																							Long placeholderCount,
-																							Long literalCount) {}
+			ResourcePathSpecificity specificity) {}
 
 }

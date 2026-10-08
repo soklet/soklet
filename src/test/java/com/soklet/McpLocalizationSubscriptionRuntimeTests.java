@@ -102,6 +102,31 @@ class McpLocalizationSubscriptionRuntimeTests {
 	}
 
 	@Test
+	void frameworkOnlySubscriptionLocalizesTerminalWithoutApplicationPublisher() {
+		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH,
+				request -> context(text -> McpLocalizationResult.localized("FR:" + text.getDefaultText())))
+				.build();
+		List<String> frames = subscribeAndDrain(localizer, 2, new AtomicInteger(), response -> {
+			assertEquals(List.of("fr"), response.getHeaders().get("Content-Language"));
+			assertEquals(List.of("Accept-Language"), response.getHeaders().get("Vary"));
+		}, false);
+		String terminal = frames.get(frames.size() - 1);
+		assertTrue(terminal.contains("\"title\":\"FR:Canonical title\""), terminal);
+		assertTrue(terminal.contains("\"description\":\"FR:Canonical description\""), terminal);
+	}
+
+	@Test
+	void frameworkOnlySubscriptionFallbackUsesCanonicalTerminalAndFallbackLanguage() {
+		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH,
+				request -> context(text -> McpLocalizationResult.failure())).build();
+		List<String> frames = subscribeAndDrain(localizer, 2, new AtomicInteger(), response ->
+				assertEquals(List.of("en"), response.getHeaders().get("Content-Language")), false);
+		String terminal = frames.get(frames.size() - 1);
+		assertTrue(terminal.contains("\"title\":\"Canonical title\""), terminal);
+		assertFalse(terminal.contains("FR:"), terminal);
+	}
+
+	@Test
 	void useDefaultTextPreRenderFailurePublishesTheCanonicalTerminal() {
 		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH,
 				request -> context(text -> McpLocalizationResult.failure()))
@@ -119,6 +144,11 @@ class McpLocalizationSubscriptionRuntimeTests {
 	@Test
 	@Timeout(120)
 	void failRequestPreRenderRollsTheReservationBackExactlyOnce() {
+		verifyFailedTerminalPreRender(true);
+		verifyFailedTerminalPreRender(false);
+	}
+
+	private void verifyFailedTerminalPreRender(boolean applicationPublisher) {
 		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> {
 					throw new IllegalStateException("secret-subscription-detail");
 				})
@@ -127,7 +157,7 @@ class McpLocalizationSubscriptionRuntimeTests {
 		List<Integer> statusCodes = new ArrayList<>();
 		List<String> bodies = new ArrayList<>();
 
-		SokletSimulator.run(simulatorConfig(localizer, 2),
+		SokletSimulator.run(simulatorConfig(localizer, 2, new AtomicInteger(), applicationPublisher),
 				simulator -> {
 			// With a per-authorization-partition cap of 2, any reservation leak
 			// would turn the third and later attempts into capacity rejections
@@ -174,10 +204,16 @@ class McpLocalizationSubscriptionRuntimeTests {
 	private static List<String> subscribeAndDrain(McpLocalizer localizer,
 			int maximumSubscriptionsPerPartition,
 			AtomicInteger authorizationInvocations, ResponseProbe probe) {
+		return subscribeAndDrain(localizer, maximumSubscriptionsPerPartition, authorizationInvocations, probe, true);
+	}
+
+	private static List<String> subscribeAndDrain(McpLocalizer localizer,
+			int maximumSubscriptionsPerPartition, AtomicInteger authorizationInvocations,
+			ResponseProbe probe, boolean applicationPublisher) {
 		AtomicReference<McpSimulation> escaped = new AtomicReference<>();
 
 		SokletSimulator.run(simulatorConfig(localizer,
-				maximumSubscriptionsPerPartition, authorizationInvocations), simulator -> {
+				maximumSubscriptionsPerPartition, authorizationInvocations, applicationPublisher), simulator -> {
 			McpSimulation simulation = simulator.startMcpRequest(
 					subscriptionRequest("terminal-render"));
 			escaped.set(simulation);
@@ -234,6 +270,12 @@ class McpLocalizationSubscriptionRuntimeTests {
 	private static SimulatorConfig simulatorConfig(McpLocalizer localizer,
 			int maximumSubscriptionsPerPartition,
 			AtomicInteger authorizationInvocations) {
+		return simulatorConfig(localizer, maximumSubscriptionsPerPartition, authorizationInvocations, true);
+	}
+
+	private static SimulatorConfig simulatorConfig(McpLocalizer localizer,
+			int maximumSubscriptionsPerPartition, AtomicInteger authorizationInvocations,
+			boolean applicationPublisher) {
 		Object authorizationApplicationContext = new Object();
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation
 						.withNameAndVersion("localization-subscription", "1.0")
@@ -251,13 +293,13 @@ class McpLocalizationSubscriptionRuntimeTests {
 														.build())
 												.build()))
 						.build()))
-				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(McpSubscriptionConfig
+				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(applicationPublisher ? McpSubscriptionConfig
 						.withEventPublisherAndNotificationTypes(
 								McpSubscriptionEventPublisher.fromInMemoryDefaults(),
 								EnumSet.of(
 										McpSubscriptionNotificationType
 												.RESOURCES_LIST_CHANGED))
-						.build())
+						.build() : null)
 				.build();
 		return SimulatorConfig.builder().configureMcpServer(builder -> builder
 					.port(0)

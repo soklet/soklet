@@ -196,6 +196,34 @@ class McpLocalizationCatalogExtractionTests {
 	}
 
 	@Test
+	void catalogServerMetadataCountsOnlyInTheModernPublishedProjection() {
+		Set<McpProtocolVersion> versions = Set.of(McpProtocolVersion.V2026_07_28, McpProtocolVersion.V2025_06_18);
+		McpEndpoint endpoint = McpEndpoint.withPath("/projection", McpImplementation.withNameAndVersion("same", "1")
+				.title("Server title").description("Server description").build(), versions)
+				.toolRegistrations(List.of(McpToolRegistration.withName("same", versions).jsonObjectArguments()
+						.handler((requestContext, toolArguments, invocationFeatures) -> McpCompleteResult.fromToolText("unused"))
+						.title("Tool title").build())).build();
+		McpEndpointRegistry registry = McpEndpointRegistry.fromEndpoints(List.of(endpoint));
+		assertThrows(IllegalStateException.class, () -> DefaultMcpLocalizationCatalogExtractor.plan(registry, 2));
+		McpCanonicalLocalizationPlan plan = DefaultMcpLocalizationCatalogExtractor.plan(registry, 3);
+		McpCanonicalLocalizationPlan.ResponsePlan tools = plan.endpoints().get(0)
+				.response(McpCanonicalLocalizationPlan.ResponseKind.TOOLS_LIST).orElseThrow();
+		assertEquals(3, tools.slots().size());
+		assertEquals(1, tools.ownerSlotCount("same"), "Server and descriptor names must not merge their lookup counts.");
+		var descriptors = wireArray(List.of(wireObject(Map.of("name", wireString("same"), "title", wireString("Tool title")))));
+		assertEquals(1, tools.resolveSlots(wireObject(Map.of("tools", descriptors))).size(),
+				"Legacy pages do not include or look up framework result metadata.");
+		var metadata = wireObject(Map.of("io.modelcontextprotocol/serverInfo", wireObject(Map.of(
+				"name", wireString("same"), "version", wireString("1"), "title", wireString("Server title"),
+				"description", wireString("Server description")))));
+		assertEquals(3, tools.resolveSlots(wireObject(Map.of("tools", descriptors,
+				"resultType", wireString("complete"), "_meta", metadata))).size());
+		assertEquals(2, tools.resolveSlots(wireObject(Map.of("tools", wireArray(List.of()),
+				"resultType", wireString("complete"), "_meta", metadata))).size(),
+				"An empty modern projection still owns its server metadata.");
+	}
+
+	@Test
 	void customListOwnsExactDescriptorsButNotStaticTemplates() {
 		McpCanonicalLocalizationPlan plan =
 				DefaultMcpLocalizationCatalogExtractor.plan(

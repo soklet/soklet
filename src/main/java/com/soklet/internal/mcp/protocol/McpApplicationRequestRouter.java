@@ -1696,7 +1696,7 @@ final class McpApplicationExecution {
 			Thread thread = new Thread(requireNonNull(runnable),
 					"soklet-mcp-cancellation-"
 							+ CANCELLATION_CALLBACK_THREAD_SEQUENCE.incrementAndGet());
-			thread.setDaemon(false);
+			thread.setDaemon(true);
 			return thread;
 		};
 		this.cancellationCallbackExecutor = new ThreadPoolExecutor(
@@ -1748,7 +1748,7 @@ final class McpApplicationExecution {
 		this.quiescing = new AtomicBoolean();
 		this.stoppingReason = new AtomicReference<>();
 		this.timerThread = new Thread(this::runTimerLoop, "soklet-mcp-deadline");
-		this.timerThread.setDaemon(false);
+		this.timerThread.setDaemon(true);
 	}
 
 	// Throwable identity is required to avoid illegal self-suppression.

@@ -75,7 +75,7 @@ public class McpTasksPublicRuntimeTests {
 			McpInputRequestDeclaration.fromElicitationUrl(McpInputRequirement.REQUIRED);
 
 	@Test
-	public void typedTaskRequiredToolPreflightsEveryMissingCapabilityBeforeApplicationEffects()
+	public void typedTaskRequiredToolPreflightsCapabilitiesAfterAdmissionBeforeExecution()
 			throws Exception {
 		ScriptedTaskManager taskManager = new ScriptedTaskManager();
 		AtomicInteger admissions = new AtomicInteger();
@@ -178,7 +178,7 @@ public class McpTasksPublicRuntimeTests {
 							+ "\"extensions\":{\"" + TASKS_EXTENSION_ID
 							+ "\":{}}}}}}",
 					missing.body());
-			Assertions.assertEquals(0, admissions.get());
+			Assertions.assertEquals(1, admissions.get());
 			Assertions.assertEquals(0, requestLimiterInvocations.get());
 			Assertions.assertEquals(0, toolLimiterInvocations.get());
 			Assertions.assertEquals(0, interceptorInvocations.get());
@@ -197,7 +197,7 @@ public class McpTasksPublicRuntimeTests {
 			assertNoStore(capable, 200);
 			Assertions.assertTrue(capable.body().contains(
 					"\"resultType\":\"task\""), capable.body());
-			Assertions.assertEquals(1, admissions.get());
+			Assertions.assertEquals(2, admissions.get());
 			Assertions.assertEquals(1, requestLimiterInvocations.get());
 			Assertions.assertEquals(1, toolLimiterInvocations.get());
 			Assertions.assertEquals(1, interceptorInvocations.get());
@@ -350,13 +350,11 @@ public class McpTasksPublicRuntimeTests {
 			HttpResponse<String> missingRoots = callTask(port, "tasks/get",
 					"get-input-missing-roots", inputRequired.getTaskId(), true,
 					false);
-			assertNoStore(missingRoots, 200);
-			Assertions.assertEquals(taskResponse("get-input-missing-roots",
-					inputRequired, false,
-					",\"inputRequests\":{\"approval\":{"
-							+ "\"method\":\"elicitation/create\",\"params\":{\"mode\":\"url\",\"message\":\"Authorize access\",\"url\":\"https://example.com/authorize\"}},"
-							+ "\"secondary\":{\"method\":\"elicitation/create\","
-							+ "\"params\":{\"mode\":\"url\",\"message\":\"Authorize access\",\"url\":\"https://example.com/authorize\"}}}"), missingRoots.body());
+			assertNoStore(missingRoots, 400);
+			Assertions.assertEquals("{\"jsonrpc\":\"2.0\",\"id\":\"get-input-missing-roots\","
+					+ "\"error\":{\"code\":-32021,\"message\":\"Missing required client capability\","
+					+ "\"data\":{\"requiredCapabilities\":{\"elicitation\":{\"url\":{}}}}}}",
+					missingRoots.body());
 			assertTaskGet(port, "get-input", inputRequired,
 					",\"inputRequests\":{\"approval\":{"
 							+ "\"method\":\"elicitation/create\",\"params\":{\"mode\":\"url\",\"message\":\"Authorize access\",\"url\":\"https://example.com/authorize\"}},"

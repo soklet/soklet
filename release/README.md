@@ -429,8 +429,8 @@ The preceding four-row HTTP-contract reconciliation closed readable
 unsupported classified-notification handling, universal MCP HTTP `no-store`,
 and exact validation precedence. The
 separate `conformance/golden-http-contract/precedence-no-store/manifest.sha256`
-binds 22 canonical complete responses at SHA-256
-`29eb9f597e2d7a8c2268e35918217342b994802868c4bf14309c04c06ac6891a`.
+binds 23 canonical complete responses at SHA-256
+`ccec7ec13ac245bbc4a1820b1c387b188347a3ef868d4128e3af5c3a6e331e92`.
 Five contract tests comprise three real-listener goldens, one exhaustive
 response-authority inventory, and one six-document manifest-digest parity gate;
 four diagnostic tests cover the positive post-JSON and negative pre-JSON/
@@ -689,7 +689,7 @@ The 4.0 candidate keeps static `tools/list` and `prompts/list` catalogs
 immutable and caller-neutral after admission; their descriptors are not
 authorization-filtered. A registered tool remains listed when it declares a
 required client capability, while the matching call can receive `-32021`
-before admission if that capability is absent. The list responses retain
+after successful admission and before execution if that capability is absent. The list responses retain
 private, zero-TTL protocol cache hints and HTTP `Cache-Control: no-store`;
 this distinction is not an authorization boundary or an ETag/dynamic-catalog
 promise.

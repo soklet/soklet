@@ -335,6 +335,8 @@ public class McpFiniteBoundInventoryTests {
 				taskArgumentsJson.maximumNumberLengthInCharacters());
 		put(values, "task.origin.restored-arguments.output-bytes",
 				taskArgumentsJson.maximumOutputBytes());
+		put(values, "request-state.parameters.canonical-bytes",
+				McpJsonLimits.requestStateBindingParameters().maximumOutputBytes());
 		put(values, "task.origin.restored-arguments.string-characters",
 				taskArgumentsJson.maximumStringLengthInCharacters());
 		put(values, "task.origin.restored-arguments.token-characters",

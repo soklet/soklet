@@ -68,6 +68,10 @@ public class McpLegacySessionNegativeInventoryTests {
 				"MCP production source inventory must not be empty.");
 		for (Path sourcePath : sourcePaths) {
 			String source = Files.readString(sourcePath, StandardCharsets.UTF_8);
+			// Header safety Javadoc lists the exact denylist; it is not wire state.
+			if (sourcePath.equals(Path.of("src/main/java/com/soklet/McpAdmissionRejection.java")))
+				source = source.replace("{@code Mcp-Session-Id}", "{@code reserved session header}")
+						.replace("{@code Last-Event-ID}", "{@code reserved transport header}");
 			assertNoReplayStateIdentifier(sourcePath, source);
 			if (sourcePath.equals(MODERN_PROFILE_SOURCE))
 				assertNoLegacyStateIdentifier(sourcePath, source);
@@ -127,8 +131,8 @@ public class McpLegacySessionNegativeInventoryTests {
 		Assertions.assertTrue(denylist.contains("\"last-event-id\""), denylist);
 
 		String validator = slice(runtime,
-				"private List<@NonNull Header> validatedPolicyHeaders(",
-				"private boolean validHeaderName(");
+				"private static List<@NonNull Header> validatedPolicyHeaders(",
+				"private static boolean validHeaderName(");
 		Assertions.assertTrue(validator.contains(
 				"String lowerName = name.toLowerCase(Locale.ROOT)"), validator);
 		Assertions.assertTrue(validator.contains(

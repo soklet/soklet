@@ -85,15 +85,15 @@ public class McpPublicApiReflectionContractTests {
 			Path.of("api/mcp/provisional.includes"));
 	private static final int PHASE_FOUR_TYPE_COUNT = 169;
 	private static final int PHASE_FIVE_TYPE_COUNT = 45;
-	private static final int PHASE_SIX_TYPE_COUNT = 67;
+	private static final int PHASE_SIX_TYPE_COUNT = 68;
 	private static final int PROVISIONAL_TYPE_COUNT = 22;
-	private static final int CURRENT_MCP_TYPE_COUNT = 303;
+	private static final int CURRENT_MCP_TYPE_COUNT = 304;
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
-			"658ef885a9c69dceeb4ca12539af60d45fda28614b26f5323cda95dfbda03053";
+			"4b8439b0449c8f298d85b6ae55ce3fcf4d4c9c84b0382a35b26bee016ae14c23";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
 			"d677a7f58b36d0293b7ff47dd1501fee626369b6cacee26317a350a5fd14b1e1";
 	private static final String PHASE_SIX_NULLABILITY_SHA_256 =
-			"50925b7abaf348e197d4ea42ec10ba798b1ef4ad5923c2d2ccd8324bc11a54c6";
+			"76b6316df434fffe47a0e8276ba8e6f289ba020795fab2251073f3a054e2cb3f";
 	private static final Map<String, Object> PHASE_FOUR_PRIMITIVE_CONSTANTS =
 			Map.of(
 					"com.soklet.McpAdmissionIdentity#MAXIMUM_PARTITION_KEY_SIZE_IN_UTF_8_BYTES",
@@ -208,7 +208,7 @@ public class McpPublicApiReflectionContractTests {
 					"com.soklet.McpProtectionKeyringFingerprint#PROFILE",
 					"soklet-mcp-protection-v1",
 					"com.soklet.McpProtectionKeyringFingerprint#VERSION",
-					"v1");
+					"v2");
 	private static final Map<String, Set<String>> PHASE_SIX_PERMITTED_TYPES =
 			Map.of(
 					"com.soklet.McpLocalizationResult", Set.of(
@@ -716,6 +716,7 @@ public class McpPublicApiReflectionContractTests {
 				"com.soklet.McpMetricsSnapshot$EndpointMethodKey",
 				"com.soklet.McpMetricsSnapshot$RequestOutcomeKey",
 				"com.soklet.McpMetricsSnapshot$RequestStreamTerminationKey",
+				"com.soklet.McpMetricsSnapshot$SubscriptionMaintenanceKey",
 				"com.soklet.McpMetricsSnapshot$SubscriptionTerminationKey",
 				"com.soklet.McpRequestOutcome",
 				"com.soklet.McpServerDiagnostics",
@@ -837,7 +838,7 @@ public class McpPublicApiReflectionContractTests {
 				McpMetricsSnapshot.Builder.class, Set.of(
 						"cancelationsSignaled", "progressEmitted", "protocolErrors",
 						"requestDurations", "requests", "requestStreamDurations",
-						"serverStops", "subscriptionDurations", "transportFailures",
+						"serverStops", "subscriptionDurations", "subscriptionMaintenance", "transportFailures",
 						"unknownMirroredHeaders"),
 				McpLocalizationContext.Builder.class, Set.of("revision"),
 				McpLocalizer.Builder.class, Set.of("failurePolicy",
@@ -2100,6 +2101,17 @@ public class McpPublicApiReflectionContractTests {
 				McpMetricsSnapshot.RequestStreamTerminationKey.class,
 				List.of("endpointPath", "jsonRpcMethod", "streamTerminationReason"), String.class,
 				String.class, McpStreamTerminationReason.class);
+		assertFactory(McpMetricsSnapshot.SubscriptionMaintenanceKey.class,
+				"fromDimensions", McpMetricsSnapshot.SubscriptionMaintenanceKey.class,
+				List.of("endpointPath", "maintenanceWork", "maintenanceOutcome"),
+				String.class, McpMetricsEvent.SubscriptionMaintenance.Work.class,
+				McpMetricsEvent.SubscriptionMaintenance.Outcome.class);
+		assertGetter(McpMetricsSnapshot.SubscriptionMaintenanceKey.class,
+				"getEndpointPath", String.class);
+		assertGetter(McpMetricsSnapshot.SubscriptionMaintenanceKey.class,
+				"getWork", McpMetricsEvent.SubscriptionMaintenance.Work.class);
+		assertGetter(McpMetricsSnapshot.SubscriptionMaintenanceKey.class,
+				"getOutcome", McpMetricsEvent.SubscriptionMaintenance.Outcome.class);
 		assertFactory(McpMetricsSnapshot.SubscriptionTerminationKey.class,
 				"fromDimensions",
 				McpMetricsSnapshot.SubscriptionTerminationKey.class,

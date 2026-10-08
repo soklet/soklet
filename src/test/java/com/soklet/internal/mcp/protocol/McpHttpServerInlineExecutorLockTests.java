@@ -35,24 +35,23 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 
+/** Checks request-control locking while a worker finishes before submission returns. */
 @NotThreadSafe
 @Timeout(60)
 class McpHttpServerInlineExecutorLockTests {
 	private static final String APPLICATION_METHOD = "test/execute";
 
 	@Test
-	void inline_executor_never_runs_application_callbacks_under_request_control_lock()
+	void early_completion_never_runs_application_callbacks_under_request_control_lock()
 			throws Exception {
-		InlineExecutorService executor = new InlineExecutorService();
+		McpEarlyCompletionExecutor executor = new McpEarlyCompletionExecutor();
 		TerminalObservation observation = new TerminalObservation();
 		CrossThreadNotificationProbe interceptorProbe =
 				new CrossThreadNotificationProbe("interceptor");
@@ -74,7 +73,7 @@ class McpHttpServerInlineExecutorLockTests {
 						}));
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(
-						"inline-executor-lock-test", "4.0.0"))
+						"early-executor-lock-test", "4.0.0"))
 				.build();
 		McpHttpServerRuntime runtime = new McpHttpServerRuntime(
 				McpHttpTransportConfiguration.productionDefaults(0),
@@ -89,7 +88,7 @@ class McpHttpServerInlineExecutorLockTests {
 			int port = runtime.start().getPort();
 			boolean terminalResultObserved = false;
 			try (McpChunkedHttpClient client = McpChunkedHttpClient.postMcp(
-					port, "\"inline-executor\"", APPLICATION_METHOD)) {
+					port, "\"early-executor\"", APPLICATION_METHOD)) {
 				McpChunkedHttpClient.HttpResponseHead head = client.readHead();
 				Assertions.assertEquals(200, head.status(), head.raw());
 				if (head.hasHeader("Transfer-Encoding")) {
@@ -105,7 +104,7 @@ class McpHttpServerInlineExecutorLockTests {
 			}
 
 			Assertions.assertTrue(terminalResultObserved,
-					"The inline handler did not write its terminal result.");
+					"The early handler did not write its terminal result.");
 			observation.awaitFinished();
 			awaitCondition(() -> {
 				McpRequestExecutionSnapshot requests =
@@ -113,7 +112,7 @@ class McpHttpServerInlineExecutorLockTests {
 				return runtime.diagnosticsSnapshot().activeRequestStreams() == 0
 						&& requests.retainedRequestControls() == 0
 						&& requests.activeIdentifiedRequestExchanges() == 0;
-			}, "The inline terminal response stranded its request stream.");
+			}, "The early terminal response stranded its request stream.");
 			observation.assertCompleteStreamLifecycle();
 			interceptorProbe.assertCompletedWithoutRequestControlLock();
 			handlerProbe.assertCompletedWithoutRequestControlLock();
@@ -242,7 +241,7 @@ class McpHttpServerInlineExecutorLockTests {
 
 		private void awaitFinished() throws InterruptedException {
 			Assertions.assertTrue(this.finished.await(5, TimeUnit.SECONDS),
-					"The inline terminal request observation was stranded.");
+					"The early terminal request observation was stranded.");
 		}
 
 		private void assertCompleteStreamLifecycle() {
@@ -259,44 +258,4 @@ class McpHttpServerInlineExecutorLockTests {
 		}
 	}
 
-	private static final class InlineExecutorService extends AbstractExecutorService {
-		private final AtomicBoolean shutdown;
-
-		private InlineExecutorService() {
-			this.shutdown = new AtomicBoolean();
-		}
-
-		@Override
-		public void shutdown() {
-			shutdown.set(true);
-		}
-
-		@Override
-		public List<Runnable> shutdownNow() {
-			shutdown.set(true);
-			return List.of();
-		}
-
-		@Override
-		public boolean isShutdown() {
-			return shutdown.get();
-		}
-
-		@Override
-		public boolean isTerminated() {
-			return shutdown.get();
-		}
-
-		@Override
-		public boolean awaitTermination(long timeout, TimeUnit unit) {
-			return shutdown.get();
-		}
-
-		@Override
-		public void execute(Runnable command) {
-			if (shutdown.get())
-				throw new RejectedExecutionException("Executor is shut down.");
-			command.run();
-		}
-	}
 }

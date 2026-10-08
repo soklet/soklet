@@ -41,10 +41,25 @@ import java.lang.annotation.Target;
  * when that component is reached from a typed tool input solely through record
  * properties; it may also carry {@link McpToolProperty} to customize its
  * published property metadata. Mirrored properties must derive to the JSON Schema type
- * {@code string}, {@code boolean}, or a JavaScript-safe {@code integer}. Soklet
+ * {@code string}, {@code boolean}, or {@code integer}. Soklet
  * rejects unsupported placements, other property types, invalid HTTP
  * field-name suffixes, and case-insensitive name collisions while deriving the
  * tool schema.
+ * <p>
+ * Integer safety is enforced on each request value. Types such as {@code long}, {@link Long}, and
+ * {@link java.math.BigInteger} are accepted without narrowing their derived
+ * schemas. Each mirrored integer value must be between
+ * {@code -9007199254740991} and {@code 9007199254740991}, inclusive. Its header
+ * must use canonical decimal spelling: {@code 0}, or digits without leading
+ * zeros, optionally preceded by {@code -}; {@code +1}, {@code 01}, and
+ * {@code -0} are invalid. A mathematically integral JSON number such as
+ * {@code 1.0} or {@code 1e0} can match the header {@code 1}.
+ * A mismatch produces the fixed HTTP 400 / JSON-RPC {@code -32020}
+ * {@code "Header mismatch"} response after admission and before handler entry.
+ * <p>
+ * Mirrored headers require MCP {@code 2026-07-28}. Endpoint construction rejects
+ * a tool with mirrored-header declarations that selects either supported
+ * {@code 2025} revision.
  * <p>
  * Mirrored headers can expose argument values to HTTP infrastructure. Do not
  * mirror credentials, secrets, or other sensitive values unless that exposure

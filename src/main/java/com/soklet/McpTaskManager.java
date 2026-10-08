@@ -48,6 +48,17 @@ import java.util.Optional;
  * at-least-once work execution and use leases, fencing, idempotency, and an
  * outbox or equivalent recovery mechanism where their workload requires them.
  *
+ * <p>Soklet validates returned snapshots at delivery time. Invalid stored
+ * output or undeclared input requests fail polling with a fixed internal
+ * error and suppress notification projection without mutating task state,
+ * publishing a state change, or notifying an application worker. Current
+ * access policy, sanitization, and transport limits can also prevent delivery
+ * without proving that the underlying work failed.
+ * Applications must validate their output and input requests before storing
+ * them; preserve the framework origin as opaque data rather than interpreting
+ * its persisted members. This interface supplies no worker-side validation
+ * callback.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
@@ -106,6 +117,12 @@ public interface McpTaskManager {
 	 * implementations should apply finite storage deadlines and respond promptly
 	 * to thread interruption; a result may be discarded when the subscription is
 	 * no longer active.
+	 * <p>
+	 * After an authorized lookup, Soklet checks outstanding input requests
+	 * against the polling request's current client capabilities. Missing support
+	 * fails that poll with the missing-capability protocol error, without sending
+	 * a partial snapshot or changing authoritative state. Working and terminal
+	 * snapshots do not require capabilities for unused input declarations.
 	 *
 	 * @param taskRequestContext independently admitted lookup context
 	 * @return current snapshot, or empty when the task is unknown or unauthorized

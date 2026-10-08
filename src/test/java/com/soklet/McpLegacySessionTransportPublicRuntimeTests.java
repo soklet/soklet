@@ -494,6 +494,11 @@ class McpLegacySessionTransportPublicRuntimeTests {
 		}
 
 		Fixture(boolean controller, Consumer<McpServer.Builder> configure, McpToolHandler<McpJsonObject> handler) throws Exception {
+			this(controller, configure, handler, null);
+		}
+
+		Fixture(boolean controller, Consumer<McpServer.Builder> configure, McpToolHandler<McpJsonObject> handler,
+				MetricsCollector metricsCollector) throws Exception {
 			this.toolCatalogIncluded = handler != null;
 			McpImplementation info = McpImplementation.withNameAndVersion("transport-test", "1").build();
 			McpSubscriptionConfig sources = McpSubscriptionConfig.withEventPublisherAndNotificationTypes(
@@ -529,7 +534,7 @@ class McpLegacySessionTransportPublicRuntimeTests {
 			this.server = builder.build();
 			this.soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
 					.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).lifecyclePolicy(LIFECYCLE)
-					.metricsCollector(new MetricsCollector() {
+					.metricsCollector(metricsCollector != null ? metricsCollector : new MetricsCollector() {
 						@Override public void didRecordMcpMetricsEvent(McpMetricsEvent event) { events.add(event); }
 					}).lifecycleObserver(new LifecycleObserver() {
 						@Override public void didStartRequestHandling(ServerType serverType, Request request, ResourceMethod method) {

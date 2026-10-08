@@ -297,12 +297,12 @@ public class DefaultHttpServerTests {
 
 		Map<String, List<String>> headers = server.headersFromMicrohttpRequest(microhttpRequest);
 
-		Assertions.assertEquals(List.of("no-cache", "no-store"), headers.get("Cache-Control"));
+		Assertions.assertEquals(List.of("no-cache, no-store"), headers.get("Cache-Control"));
 		Assertions.assertEquals(
 				List.of("session=xyz; Expires=Wed, 21 Oct 2015 07:28:00 GMT; Path=/"),
 				new ArrayList<>(headers.get("Set-Cookie")));
 		Assertions.assertEquals(List.of("abc123"), headers.get("x-trace-id"));
-		Assertions.assertFalse(headers.containsKey("X-Empty"));
+		Assertions.assertEquals(List.of(""), headers.get("X-Empty"));
 		Assertions.assertThrows(UnsupportedOperationException.class, () -> headers.put("X-Test", List.of("value")));
 		Assertions.assertThrows(UnsupportedOperationException.class, () -> headers.get("X-Trace-Id").add("def456"));
 	}

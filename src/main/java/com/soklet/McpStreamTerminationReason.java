@@ -34,7 +34,7 @@ public enum McpStreamTerminationReason {
 	SESSION_CLOSED,
 	/** The request deadline elapsed. */
 	DEADLINE_EXCEEDED,
-	/** Stream output could not be written. */
+	/** Stream output could not be written, including expiry of the write-idle timeout. */
 	WRITE_FAILED,
 	/** A bounded server transport or protocol-output queue was exhausted. */
 	BACKPRESSURE,

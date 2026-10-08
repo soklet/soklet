@@ -186,7 +186,7 @@ public class McpFrameworkRequestStateRuntimeTests {
 		McpFrameworkRequestStateRuntime runtime = runtime(clock, adapter);
 		String protectedState = seal(runtime, stringId("request-1"),
 				new McpJsonString("state"), Optional.empty());
-		clock.set(INITIAL_TIME.plusSeconds(1L));
+		clock.set(INITIAL_TIME.plus(MAXIMUM_LIFETIME).minusNanos(1L));
 		McpFrameworkRequestStateContinuation continuation = open(runtime,
 				stringId("request-2"), protectedState).continuation();
 

@@ -32,6 +32,18 @@ import static java.util.Objects.requireNonNull;
 /**
  * Immutable binary audio MCP content block.
  *
+ * <p>The MIME type is validated as an ASCII type/subtype with optional
+ * parameters, using the same syntax parser as MCP Apps. Malformed syntax,
+ * controls, non-ASCII characters, and duplicate parameter names are rejected.
+ * Its spelling is retained; Soklet does not inspect the bytes or check whether
+ * a particular client supports the declared format.</p>
+ *
+ * <p>The built-in server can send at most 786,432 raw bytes per binary content
+ * item: Base64 encoding must fit the 1,048,576-character JSON string limit.
+ * The complete response must also fit the 4 MiB UTF-8 JSON limit. Construction
+ * defensively copies data but does not prevalidate the eventual response size.
+ * Prefer {@link McpResourceLink} for larger payloads.</p>
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
@@ -50,6 +62,7 @@ public final class McpAudioContent implements McpContentBlock {
 	 * @param data audio bytes, defensively copied
 	 * @param mimeType audio MIME type
 	 * @return audio-content builder
+	 * @throws IllegalArgumentException if the MIME type has malformed syntax
 	 */
 	@NonNull
 	public static Builder withDataAndMimeType(byte @NonNull [] data,
@@ -133,7 +146,7 @@ public final class McpAudioContent implements McpContentBlock {
 
 		private Builder(byte @NonNull [] data, @NonNull String mimeType) {
 			this.data = Arrays.copyOf(requireNonNull(data), data.length);
-			this.mimeType = requireNonNull(mimeType);
+			this.mimeType = McpContentValueSupport.requireMimeType(mimeType);
 		}
 
 		/** @param annotations content annotations

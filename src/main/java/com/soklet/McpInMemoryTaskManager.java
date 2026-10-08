@@ -54,6 +54,11 @@ import static java.util.Objects.requireNonNull;
  * boundary; this development helper does not attempt to estimate their JVM
  * object sizes.
  * <p>
+ * Worker mutations establish status-specific payload shape, not delivery
+ * validity under the origin tool's output schema and input declarations.
+ * Soklet performs those checks when reading or projecting a task. A failed
+ * delivery does not change authoritative state or notify the worker.
+ * <p>
  * The manager never creates a thread and requires no close operation. Expired
  * tasks are removed opportunistically during later manager operations. It
  * never evicts an unexpired task to make room for another task.
@@ -251,6 +256,14 @@ public final class McpInMemoryTaskManager implements McpTaskManager {
 	 * lifetime. Repeating an identical, still-outstanding key and request is an
 	 * idempotent no-op; every other reuse is rejected. Accepted client responses
 	 * must be taken before another input round begins.
+	 * <p>
+	 * This mutation does not validate requests against the originating tool's
+	 * input declarations or a later caller's capabilities. An undeclared stored
+	 * request fails the subsequent protocol read with a fixed internal error;
+	 * a polling client lacking an outstanding request's capability receives the
+	 * missing-capability protocol error. Both leave state unchanged. Trusted
+	 * worker code may supersede outstanding requests
+	 * through {@link #markTaskWorking(String, String)} before a corrected round.
 	 *
 	 * @param taskId task identifier
 	 * @param inputRequests nonempty input requests to add
@@ -328,6 +341,12 @@ public final class McpInMemoryTaskManager implements McpTaskManager {
 	/**
 	 * Completes a retained nonterminal task. A tool result whose
 	 * {@code isError} value is true is still a completed task result.
+	 * <p>
+	 * Completion does not prevalidate the originating tool's output schema,
+	 * transport limits or a serving node's current sanitizer. Those checks occur
+	 * during delivery. A failed read does not revert completion or synthesize a
+	 * failed task, and terminal state cannot be overwritten through this manager.
+	 * Applications must produce valid output before completing their work.
 	 *
 	 * @param taskId task identifier
 	 * @param completeResult complete MCP result

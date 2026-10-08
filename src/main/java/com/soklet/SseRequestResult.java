@@ -23,7 +23,10 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.time.Instant;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
 import java.util.function.Consumer;
 
 import static java.lang.String.format;
@@ -43,6 +46,25 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 	 * <p>
 	 * The {@link #registerEventConsumer(Consumer)} and {@link #registerCommentConsumer(Consumer)} methods can be used to "listen" for Server-Sent Events and Comments, respectively.
 	 * <p>
+	 * Before the first consumer registers, initializer and broadcast payloads are captured up to one combined
+	 * {@link SseServer.Builder#connectionQueueCapacity(Integer) connection queue capacity}. The first registration
+	 * starts simulated client reading. Thereafter, new payloads of types without a consumer are discarded;
+	 * already-captured payloads remain available when that type's consumer later registers.
+	 * <p>
+	 * Pending deliveries to registered consumers share a separate queue-capacity bound. Captured payloads and
+	 * pending deliveries can each retain at most that many payloads, excluding consumer calls already in progress.
+	 * Neither limit bounds payload bytes. Overflow before reading or in pending delivery terminates the connection.
+	 * Closing releases both buffers; unfinished consumer calls remain tracked through physical return.
+	 * <p>
+	 * The configured {@link LifecycleObserver} and {@link MetricsCollector} receive connection establishment
+	 * and termination callbacks with the same immutable {@link SseConnection} metadata snapshot. Accepted
+	 * connections whose initializer fails still receive the establishment pair followed by termination.
+	 * The termination pair shares the first elected {@link StreamTermination}, including its original cause
+	 * and duration measured at election. Terminal observation runs asynchronously after framework state is
+	 * released and establishment observation finishes; {@link #close()} does not wait for application observers.
+	 * Observer work remains counted until it returns, including after an incomplete simulator teardown.
+	 * Typed payload delivery does not produce socket-write callbacks or byte/write-duration metrics.
+	 * <p>
 	 * The data provided when the handshake was accepted is available via {@link #getSseHandshakeResult()}, and the final data sent to the client is available via {@link #getHttpRequestResult()}.
 	 */
 	@ThreadSafe
@@ -58,7 +80,14 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 		private final Consumer<SseComment> broadcastComments = comment -> broadcast(this.comments, comment);
 		private final ManagedSseLifecycle lifecycle;
 		private final MockSseUnicaster unicaster;
+		private final StreamLifecycleCoordinator.Reservation reservation;
+		private final SseConnection connectionSnapshot;
+		private final CountDownLatch establishmentFinished = new CountDownLatch(1);
+		private boolean establishmentEntered;
 		private boolean active;
+		private boolean reading;
+		private int capturedPayloadCount;
+		private int pendingDeliveryCount;
 
 		HandshakeAccepted(SseHandshakeResult.@NonNull Accepted sseHandshakeResult,
 				@NonNull Request request, @NonNull HttpRequestResult requestResult,
@@ -68,42 +97,106 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 			this.request = requireNonNull(request);
 			this.requestResult = requireNonNull(requestResult);
 			this.server = requireNonNull(server);
-			this.lifecycle = new ManagedSseLifecycle(requireNonNull(reservation), this::releaseConnection);
+			this.reservation = requireNonNull(reservation);
+			this.connectionSnapshot = new SimulatedSseConnection(request,
+					requestResult.getResourceMethod().orElseThrow(), Instant.now(),
+					sseHandshakeResult.getClientContext().orElse(null));
 			this.unicaster = new MockSseUnicaster(request,
 					event -> enqueue(this.events, event, false), comment -> enqueue(this.comments, comment, false));
+			// Binding may immediately publish a shutdown elected before construction.
+			// Terminal observation waits for initialize() before reading this lifecycle.
+			this.lifecycle = new ManagedSseLifecycle(reservation, this::releaseConnection);
 		}
 
 		boolean initialize(@Nullable SseClientInitializer initializer) throws Exception {
-			if (!this.lifecycle.executeInitializer(() -> {
-				this.unicaster.beginInitializer();
-				try {
-					if (initializer != null)
-						initializer.initialize(this.unicaster);
-				} finally {
-					this.unicaster.finishInitializer();
-				}
-			}))
-				return false;
 			try {
-				return this.lifecycle.whileOpen(() -> {
-					synchronized (this.lock) {
-						this.server.registerConnection(this, this.request.getResourcePath(),
-								this.broadcastEvents, this.broadcastComments,
-								this.sseHandshakeResult.getClientContext().orElse(null));
-						this.active = true;
-						return true;
+				return this.lifecycle.executeInitializer(() -> {
+					this.establishmentEntered = true;
+					notifyWillEstablish();
+					try {
+						this.unicaster.beginInitializer();
+						try {
+							if (initializer != null)
+								initializer.initialize(this.unicaster);
+						} catch (Throwable failure) {
+							// Elect the application failure before a potentially blocking
+							// didEstablish observer or a concurrent shutdown can replace it.
+							this.lifecycle.terminate(StreamTerminationReason.PRODUCER_FAILED, failure);
+							throw failure;
+						} finally {
+							this.unicaster.finishInitializer();
+						}
+						try {
+							this.lifecycle.whileOpen(() -> {
+								synchronized (this.lock) {
+									this.server.registerConnection(this, this.request.getResourcePath(),
+											this.broadcastEvents, this.broadcastComments,
+											this.sseHandshakeResult.getClientContext().orElse(null));
+									this.active = true;
+									return true;
+								}
+							});
+						} catch (IllegalStateException closedBeforeActivation) {
+							if (this.lifecycle.isOpen()) {
+								this.lifecycle.terminate(StreamTerminationReason.INTERNAL_ERROR, closedBeforeActivation);
+								throw closedBeforeActivation;
+							}
+						}
+					} finally {
+						// An accepted response still establishes a logical connection when
+						// initialization fails; its elected termination follows this pair.
+						notifyDidEstablish();
 					}
 				});
-			} catch (IllegalStateException closedBeforeActivation) {
-				if (this.lifecycle.isOpen())
-					throw closedBeforeActivation;
-				return false;
+			} finally {
+				this.establishmentFinished.countDown();
+			}
+		}
+
+		private void notifyWillEstablish() {
+			this.server.notifyConnectionLifecycle(this.request, this.connectionSnapshot.getResourceMethod(),
+					LogEventType.LIFECYCLE_OBSERVER_WILL_ESTABLISH_SSE_CONNECTION_FAILED, "willEstablishSseConnection",
+					observer -> observer.willEstablishSseConnection(this.request, this.connectionSnapshot.getResourceMethod()),
+					metrics -> metrics.willEstablishSseConnection(this.request, this.connectionSnapshot.getResourceMethod()));
+		}
+
+		private void notifyDidEstablish() {
+			this.server.notifyConnectionLifecycle(this.request, this.connectionSnapshot.getResourceMethod(),
+					LogEventType.LIFECYCLE_OBSERVER_DID_ESTABLISH_SSE_CONNECTION_FAILED, "didEstablishSseConnection",
+					observer -> observer.didEstablishSseConnection(this.connectionSnapshot),
+					metrics -> metrics.didEstablishSseConnection(this.connectionSnapshot));
+		}
+
+		private void notifyTermination() {
+			boolean interrupted = false;
+			try {
+				for (;;) {
+					try { this.establishmentFinished.await(); break; }
+					catch (InterruptedException ignored) { interrupted = true; }
+				}
+				if (!this.establishmentEntered) {
+					// Shutdown suppressed initializer entry after the accepted response.
+					notifyWillEstablish();
+					notifyDidEstablish();
+				}
+				StreamTermination termination = this.lifecycle.termination().orElseThrow();
+				this.server.notifyConnectionLifecycle(this.request, this.connectionSnapshot.getResourceMethod(),
+						LogEventType.LIFECYCLE_OBSERVER_WILL_TERMINATE_SSE_CONNECTION_FAILED, "willTerminateSseConnection",
+						observer -> observer.willTerminateSseConnection(this.connectionSnapshot, termination),
+						metrics -> metrics.willTerminateSseConnection(this.connectionSnapshot, termination));
+				this.server.notifyConnectionLifecycle(this.request, this.connectionSnapshot.getResourceMethod(),
+						LogEventType.LIFECYCLE_OBSERVER_DID_TERMINATE_SSE_CONNECTION_FAILED, "didTerminateSseConnection",
+						observer -> observer.didTerminateSseConnection(this.connectionSnapshot, termination),
+						metrics -> metrics.didTerminateSseConnection(this.connectionSnapshot, termination));
+			} finally {
+				if (interrupted) Thread.currentThread().interrupt();
 			}
 		}
 
 		/**
 		 * Disconnects this simulated client. Repeated calls are harmless.
-		 * Handshake metadata remains available.
+		 * Handshake metadata remains available. Terminal callbacks are asynchronous;
+		 * this method does not wait for lifecycle observers or metrics collectors.
 		 */
 		@Override
 		public void close() {
@@ -112,6 +205,9 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 
 		/**
 		 * Registers the sole event consumer and delivers buffered events in order.
+		 * <p>
+		 * The first event or comment consumer starts reading. New events received while only a comment consumer
+		 * is registered are discarded; events captured before reading remain available to this consumer.
 		 * @throws IllegalStateException if a consumer is already registered or this connection has terminated
 		 */
 		public void registerEventConsumer(@NonNull Consumer<@NonNull SseEvent> eventConsumer) {
@@ -120,6 +216,9 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 
 		/**
 		 * Registers the sole comment consumer and delivers buffered comments in order.
+		 * <p>
+		 * The first event or comment consumer starts reading. New comments received while only an event consumer
+		 * is registered are discarded; comments captured before reading remain available to this consumer.
 		 * @throws IllegalStateException if a consumer is already registered or this connection has terminated
 		 */
 		public void registerCommentConsumer(@NonNull Consumer<@NonNull SseComment> commentConsumer) {
@@ -132,6 +231,7 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 					if (channel.consumer != null)
 						throw new IllegalStateException("This simulated SSE connection already has a consumer of this type");
 					channel.consumer = consumer;
+					this.reading = true;
 					return claimDrain(channel);
 				}
 			});
@@ -156,9 +256,18 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 			try {
 				drain = this.lifecycle.whileOpen(() -> {
 					synchronized (this.lock) {
-						if (this.events.pending.size() + this.comments.pending.size() >= this.server.connectionQueueCapacity)
+						// A reading client consumes one stream, even when the test only observes one payload type.
+						if (this.reading && channel.consumer == null)
+							return false;
+						boolean capturedBeforeReading = !this.reading;
+						int pendingCount = capturedBeforeReading ? this.capturedPayloadCount : this.pendingDeliveryCount;
+						if (pendingCount >= this.server.connectionQueueCapacity)
 							throw new QueueCapacityExceededException();
-						channel.pending.addLast(new Pending<>(payload, broadcast));
+						channel.pending.addLast(new Pending<>(payload, broadcast, capturedBeforeReading));
+						if (capturedBeforeReading)
+							this.capturedPayloadCount++;
+						else
+							this.pendingDeliveryCount++;
 						return claimDrain(channel);
 					}
 				});
@@ -192,6 +301,10 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 									return null;
 								}
 								Pending<T> pending = channel.pending.removeFirst();
+								if (pending.capturedBeforeReading)
+									this.capturedPayloadCount--;
+								else
+									this.pendingDeliveryCount--;
 								return new Delivery<>(channel.consumer, pending.payload, pending.broadcast);
 							}
 						});
@@ -213,12 +326,17 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 			synchronized (this.lock) {
 				this.events.clear();
 				this.comments.clear();
+				this.capturedPayloadCount = 0;
+				this.pendingDeliveryCount = 0;
 				if (this.active) {
 					this.server.unregisterConnection(this, this.request.getResourcePath(),
 							this.broadcastEvents, this.broadcastComments);
 					this.active = false;
 				}
 			}
+			// Release framework state first. Application observers run independently,
+			// outside both locks, and retain their physical lifetime until return.
+			this.reservation.dispatchTermination(this::notifyTermination);
 		}
 
 		private void handleConsumerError(Throwable throwable, boolean broadcast) {
@@ -253,8 +371,25 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 			private void clear() { this.pending.clear(); this.consumer = null; this.draining = false; }
 		}
 
-		private record Pending<T>(T payload, boolean broadcast) {}
+		private record Pending<T>(T payload, boolean broadcast, boolean capturedBeforeReading) {}
 		private record Delivery<T>(Consumer<T> consumer, T payload, boolean broadcast) {}
+		private static final class SimulatedSseConnection implements SseConnection {
+			private final Request request;
+			private final ResourceMethod resourceMethod;
+			private final Instant establishedAt;
+			private final @Nullable Object clientContext;
+			private SimulatedSseConnection(Request request, ResourceMethod resourceMethod,
+					Instant establishedAt, @Nullable Object clientContext) {
+				this.request = request;
+				this.resourceMethod = resourceMethod;
+				this.establishedAt = establishedAt;
+				this.clientContext = clientContext;
+			}
+			@Override public @NonNull Request getRequest() { return this.request; }
+			@Override public @NonNull ResourceMethod getResourceMethod() { return this.resourceMethod; }
+			@Override public @NonNull Instant getEstablishedAt() { return this.establishedAt; }
+			@Override public @NonNull Optional<Object> getClientContext() { return Optional.ofNullable(this.clientContext); }
+		}
 		private static final class QueueCapacityExceededException extends IllegalStateException {
 			private QueueCapacityExceededException() { super("The simulated SSE connection queue is full"); }
 		}

@@ -292,7 +292,7 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 							mismatchResponse.body());
 					Assertions.assertTrue(mismatchResponse.body().contains(
 							"\"code\":-32020"), mismatchResponse.body());
-					Assertions.assertEquals(admissionsBeforeMismatch,
+					Assertions.assertEquals(admissionsBeforeMismatch + 1,
 							admissionInvocations.get());
 					Assertions.assertEquals(0, providedInstances.get());
 					Assertions.assertNull(System.getProperty(INITIALIZED_PROPERTY));
@@ -323,7 +323,7 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 							fallbackLimiterInvocations.get());
 					Assertions.assertEquals(1,
 							handlerInterceptorInvocations.get());
-					Assertions.assertEquals(admissionsBeforeMismatch + 1,
+					Assertions.assertEquals(admissionsBeforeMismatch + 2,
 							admissionInvocations.get());
 
 					HttpResponse<String> promptResponse = send(port, "prompts/get",
@@ -345,7 +345,7 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 							fallbackLimiterInvocations.get());
 					Assertions.assertEquals(2,
 							handlerInterceptorInvocations.get());
-					Assertions.assertEquals(admissionsBeforeMismatch + 2,
+					Assertions.assertEquals(admissionsBeforeMismatch + 3,
 							admissionInvocations.get());
 					for (String revision : List.of("2025-06-18", "2025-11-25")) {
 						HttpRequest legacyRequest = HttpRequest.newBuilder()

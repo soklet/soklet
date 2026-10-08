@@ -119,11 +119,13 @@ public class StreamingLifecycleTests {
 				assertStatus(socket, 200);
 				Assertions.assertEquals("5\r\nfirst\r\n", new String(
 						socket.getInputStream().readNBytes(10), StandardCharsets.ISO_8859_1));
+				var eventLoop = fixture.server.getEventLoop().orElseThrow();
+				var streamingExecutor = fixture.server.getStreamingExecutorService().orElseThrow();
 				CompletionStage<ShutdownResult> shutdown = fixture.soklet.shutdown();
-				// This scheduler is stopped at the end of HTTP quiesce. Its state is a
-				// barrier proving the second write occurs after that phase's timer policy.
-				assertEventually(() -> fixture.server.getRequestHandlerTimeoutScheduler()
-						.orElseThrow().isShutdown(), "HTTP quiesce did not finish initiating drain");
+				// Observe actual listener/producer admission closure. Handler deadlines
+				// now remain active during drain, so their scheduler is not a barrier.
+				assertEventually(() -> !eventLoop.isAccepting() && streamingExecutor.isShutdown(),
+						"HTTP quiesce did not finish initiating drain");
 				Assertions.assertFalse(shutdown.toCompletableFuture().isDone(),
 						"The admitted writer must still be draining");
 				releaseSecondChunk.countDown();
@@ -442,7 +444,9 @@ public class StreamingLifecycleTests {
 			}
 		}));
 		fixture.body("capacity-rejected", StreamingResponseBody.fromWriter(stream -> Assertions.fail("Rejected writer entered")));
+		AtomicInteger secondCallbackCalls = new AtomicInteger();
 		fixture.body("second-timeout", StreamingResponseBody.fromWriter(responseStream -> {
+			responseStream.getCancelationToken().onCancel(secondCallbackCalls::incrementAndGet);
 			try {
 				new CountDownLatch(1).await();
 			} finally {
@@ -465,6 +469,9 @@ public class StreamingLifecycleTests {
 					await(secondProducerExited, "Another stream's timeout stopped making progress");
 				}
 				Assertions.assertEquals(1L, releaseCallback.getCount());
+				Assertions.assertEquals(0, secondCallbackCalls.get());
+				assertEventually(() -> fixture.terminations.containsKey("/stream/second-timeout"),
+						"A blocked cancel batch queued another stream's termination");
 				Assertions.assertEquals(2, fixture.coordinator().snapshot().reservations(),
 						"Queued or running terminal callbacks must retain their lifetime slots");
 				try (Socket rejected = fixture.request("/stream/capacity-rejected")) {
@@ -480,6 +487,7 @@ public class StreamingLifecycleTests {
 			releaseCallback.countDown();
 			assertEventually(() -> fixture.coordinator().snapshot().reservations() == 0,
 					"Released callbacks did not drain the bounded terminal queue");
+			Assertions.assertEquals(1, secondCallbackCalls.get());
 			Assertions.assertEquals(StreamTerminationReason.RESPONSE_TIMEOUT,
 					fixture.terminations.get("/stream/second-timeout").getReason());
 		} finally {

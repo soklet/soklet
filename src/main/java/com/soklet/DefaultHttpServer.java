@@ -55,12 +55,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.IdentityHashMap;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.FutureTask;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -425,15 +423,25 @@ final class DefaultHttpServer implements HttpServer {
 				? builder.streamingResponseTimeout
 				: DEFAULT_STREAMING_RESPONSE_TIMEOUT;
 
-		if (this.streamingResponseTimeout.isNegative())
-			throw new IllegalArgumentException("Streaming response timeout must be >= 0");
+		try {
+			if (this.streamingResponseTimeout.toNanos() < 0L)
+				throw new IllegalArgumentException("Streaming response timeout must be >= 0");
+		}
+		catch (ArithmeticException overflow) {
+			throw new IllegalArgumentException("Streaming response timeout must be representable in nanoseconds", overflow);
+		}
 
 		this.streamingResponseIdleTimeout = builder.streamingResponseIdleTimeout != null
 				? builder.streamingResponseIdleTimeout
 				: this.requestBodyTimeout;
 
-		if (this.streamingResponseIdleTimeout.isNegative())
-			throw new IllegalArgumentException("Streaming response idle timeout must be >= 0");
+		try {
+			if (this.streamingResponseIdleTimeout.toNanos() < 0L)
+				throw new IllegalArgumentException("Streaming response idle timeout must be >= 0");
+		}
+		catch (ArithmeticException overflow) {
+			throw new IllegalArgumentException("Streaming response idle timeout must be representable in nanoseconds", overflow);
+		}
 
 		this.streamingExecutorServiceSupplier = builder.streamingExecutorServiceSupplier != null ? builder.streamingExecutorServiceSupplier : () -> {
 			String threadNamePrefix = "streaming-";
@@ -594,6 +602,9 @@ final class DefaultHttpServer implements HttpServer {
 				AtomicBoolean responseWritten = new AtomicBoolean(false);
 				AtomicReference<TimeoutScheduler.ScheduledTask> timeoutFutureRef = new AtomicReference<>();
 				AtomicReference<Thread> handlerThreadRef = new AtomicReference<>();
+				AtomicReference<MicrohttpResponse> unparsedFallbackResponseRef = new AtomicReference<>();
+				Thread submittingThread = Thread.currentThread();
+				AtomicBoolean executedInline = new AtomicBoolean(false);
 
 				if (requestHandlerTimeoutSchedulerReference != null && !requestHandlerTimeoutSchedulerReference.isShutdown()) {
 					timeoutFutureRef.set(requestHandlerTimeoutSchedulerReference.schedule(() -> {
@@ -610,7 +621,8 @@ final class DefaultHttpServer implements HttpServer {
 							handlerThread.interrupt();
 
 						try {
-							MicrohttpResponse timeoutResponse = withConnectionClose(
+							MicrohttpResponse rejectionFallback = unparsedFallbackResponseRef.get();
+							MicrohttpResponse timeoutResponse = rejectionFallback != null ? rejectionFallback : withConnectionClose(
 									provideMicrohttpFailsafeResponse(503, microhttpRequest,
 											new TimeoutException("Request handling timed out")));
 							microHttpCallback.accept(timeoutResponse);
@@ -624,6 +636,13 @@ final class DefaultHttpServer implements HttpServer {
 
 				try {
 					requestHandlerExecutorServiceReference.submit(() -> {
+						// Refuse caller-runs/direct dispatch before publishing a handler
+						// thread or entering application code. A handler timeout must never
+						// interrupt the connection selector through handlerThreadRef.
+						if (sameInstance(Thread.currentThread(), submittingThread)) {
+							executedInline.set(true);
+							return;
+						}
 						try {
 							if (responseWritten.get())
 								return;
@@ -704,7 +723,11 @@ final class DefaultHttpServer implements HttpServer {
 												requestResult.getResourceMethod().orElse(null),
 												requestResult.getMarshaledResponse(),
 												requestResult.getHeadResponseCompressionBody().orElse(null),
-												streamingForcedShutdownStarted::get);
+												streamingForcedShutdownStarted::get, requestResult.getResponseStreamObservation());
+										// Resolve transport-owned protocol replacement synchronously, so
+										// write/finish observation receives the response actually offered.
+										microhttpResponse = StreamingMicrohttpResponses.forRequestVersion(
+												microhttpResponse, microhttpRequest.version());
 									} catch (Throwable preparationFailure) {
 										Runnable reportRejection = () -> {
 											if (requestResult.getMarshaledResponse().isStreaming()) {
@@ -754,7 +777,8 @@ final class DefaultHttpServer implements HttpServer {
 										throw propagateResponseWriteFailure(throwable);
 									}
 									if (!microhttpResponse.streaming()
-											&& microhttpResponse.status() != requestResult.getMarshaledResponse().getStatusCode())
+											&& (requestResult.getMarshaledResponse().isStreaming()
+													|| microhttpResponse.status() != requestResult.getMarshaledResponse().getStatusCode()))
 										throw new HttpTransportResponseReplacement(describeFiniteTransportResponse(microhttpResponse), null, null);
 								});
 							} catch (Throwable t) {
@@ -796,10 +820,27 @@ final class DefaultHttpServer implements HttpServer {
 											t);
 								}
 
+								UnparsedRequestReason unparsedReason = request == null ? unparsedReasonForFailure(t) : null;
+								MicrohttpResponse unparsedResponse = null;
+								if (unparsedReason != null && !responseWritten.get()) {
+									MicrohttpResponse fallback = unparsedBodylessResponse(failsafeStatusCode);
+									unparsedFallbackResponseRef.set(fallback);
+									UnparsedRequest unparsedRequest = UnparsedRequest
+											.withServerTypeAndReason(ServerType.HTTP, unparsedReason)
+											.remoteAddress(microhttpRequest.remoteAddress())
+											.observedByteCount(microhttpRequest.observedWireByteCount())
+											.captureTruncated(microhttpRequest.observedWireByteCount() > 0).build();
+									UnparsedRequestResponseSupport.PreparedResponse prepared = UnparsedRequestResponseSupport.marshal(
+											unparsedRequest, this.responseMarshaler, getLifecycleObserver(), this::safelyLog,
+											() -> !responseWritten.get());
+									unparsedResponse = prepared == null ? fallback : prepared.response();
+								}
+
 								if (responseWritten.compareAndSet(false, true)) {
 									cancelTimeout(timeoutFutureRef.getAndSet(null));
 									try {
-										microHttpCallback.accept(provideMicrohttpFailsafeResponse(failsafeStatusCode, microhttpRequest, t));
+										microHttpCallback.accept(unparsedResponse != null ? unparsedResponse
+												: provideMicrohttpFailsafeResponse(failsafeStatusCode, microhttpRequest, t));
 									} catch (Throwable t2) {
 										safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while writing a failsafe response")
 												.throwable(t2)
@@ -811,6 +852,8 @@ final class DefaultHttpServer implements HttpServer {
 							handlerThreadRef.compareAndSet(Thread.currentThread(), null);
 						}
 					});
+					if (executedInline.get())
+						throw new RejectedExecutionException("Request handler executor must dispatch asynchronously");
 
 					notifyDidAcceptRequest(remoteAddress, requestTarget);
 				} catch (RejectedExecutionException e) {
@@ -978,7 +1021,10 @@ final class DefaultHttpServer implements HttpServer {
 		requireNonNull(statusCode);
 		requireNonNull(microhttpRequest);
 		requireNonNull(throwable);
+		return provideDefaultMicrohttpFailsafeResponse(statusCode);
+	}
 
+	private static MicrohttpResponse provideDefaultMicrohttpFailsafeResponse(int statusCode) {
 		Charset charset = StandardCharsets.UTF_8;
 		String reasonPhrase = StatusCode.fromStatusCode(statusCode)
 				.map(StatusCode::getReasonPhrase)
@@ -987,6 +1033,11 @@ final class DefaultHttpServer implements HttpServer {
 		byte[] body = format("HTTP %s: %s", statusCode, reasonPhrase).getBytes(charset);
 
 		return new MicrohttpResponse(statusCode, reasonPhrase, headers, body);
+	}
+
+	/** The simulator uses the same finite response as built-in HTTP admission rejection. */
+	static MarshaledResponse provideDefaultStreamingAdmissionRejection() {
+		return describeFiniteTransportResponse(withConnectionClose(provideDefaultMicrohttpFailsafeResponse(503)));
 	}
 
 	private static MarshaledResponse describeFiniteTransportResponse(MicrohttpResponse response) {
@@ -1022,7 +1073,7 @@ final class DefaultHttpServer implements HttpServer {
 	}
 
 	@NonNull
-	private MicrohttpResponse withConnectionClose(@NonNull MicrohttpResponse response) {
+	private static MicrohttpResponse withConnectionClose(@NonNull MicrohttpResponse response) {
 		requireNonNull(response);
 
 		if (hasConnectionCloseHeader(response))
@@ -1037,7 +1088,7 @@ final class DefaultHttpServer implements HttpServer {
 		return response.withHeaders(headers);
 	}
 
-	private boolean hasConnectionCloseHeader(@NonNull MicrohttpResponse response) {
+	private static boolean hasConnectionCloseHeader(@NonNull MicrohttpResponse response) {
 		requireNonNull(response);
 
 		List<Header> headers = response.headers();
@@ -1089,135 +1140,15 @@ final class DefaultHttpServer implements HttpServer {
 			@NonNull UnparsedRequestRejection rejection,
 			@NonNull Consumer<byte[]> responseConsumer,
 			AdmissionFence.@NonNull Admission admission) {
-		requireNonNull(rejection);
-		requireNonNull(responseConsumer);
-		requireNonNull(admission);
-
-		ExecutorService executor = this.requestHandlerExecutorService;
-		TimeoutScheduler timeoutScheduler = this.requestHandlerTimeoutScheduler;
-		if (executor == null || executor.isShutdown()
-				|| timeoutScheduler == null || timeoutScheduler.isShutdown())
-			return false;
-
-		AtomicBoolean responseClaimed = new AtomicBoolean();
-		AtomicBoolean executedInline = new AtomicBoolean();
-		AtomicReference<FutureTask<Void>> applicationTaskReference =
-				new AtomicReference<>();
-		AtomicReference<TimeoutScheduler.ScheduledTask> timeoutReference =
-				new AtomicReference<>();
-		Thread submittingThread = Thread.currentThread();
-
-		try {
-			timeoutReference.set(timeoutScheduler.schedule(() -> {
-				if (!responseClaimed.compareAndSet(false, true))
-					return;
-				try {
-					responseConsumer.accept(null);
-				} finally {
-					admission.close();
-					FutureTask<Void> applicationTask =
-							applicationTaskReference.get();
-					if (applicationTask != null)
-						applicationTask.cancel(true);
-				}
-			}, getRequestHandlerTimeout()));
-
-			FutureTask<Void> applicationTask = new FutureTask<>(() -> {
-				MarshaledResponse marshaledResponse = null;
-				try {
-					if (responseClaimed.get())
-						return;
-
-					UnparsedRequest request = UnparsedRequest
-							.withServerTypeAndReason(ServerType.HTTP,
-									unparsedRequestReason(rejection.reason()))
-							.remoteAddress(rejection.remoteAddress())
-							.capturedBytes(rejection.capturedBytesForTransfer())
-							.observedByteCount(rejection.observedByteCount())
-							.captureTruncated(rejection.captureTruncated())
-							.build();
-
-					if (responseClaimed.get())
-						return;
-					notifyDidRejectUnparsedRequest(request);
-					if (responseClaimed.get())
-						return;
-
-					ResponseMarshaler responseMarshaler = requireNonNull(
-							this.responseMarshaler,
-							"Response marshaler is unavailable.");
-					marshaledResponse = requireNonNull(
-							responseMarshaler.forUnparsedRequest(request),
-							"Response marshaler returned null for an unparsed request.");
-					byte[] serializedResponse =
-							serializeUnparsedRequestResponse(marshaledResponse);
-
-					if (responseClaimed.compareAndSet(false, true)) {
-						cancelTimeout(timeoutReference.getAndSet(null));
-						try {
-							responseConsumer.accept(serializedResponse);
-						} finally {
-							admission.close();
-						}
-					}
-				} catch (Throwable throwable) {
-					releaseRejectedUnparsedResponseResources(marshaledResponse);
-					if (responseClaimed.compareAndSet(false, true)) {
-						cancelTimeout(timeoutReference.getAndSet(null));
-						try {
-							responseConsumer.accept(null);
-						} finally {
-							admission.close();
-						}
-						safelyLog(LogEvent.with(
-								LogEventType.RESPONSE_MARSHALER_FOR_UNPARSED_REQUEST_FAILED,
-								"Unable to marshal a response for an unparsed request; using the built-in response")
-								.throwable(throwable)
-								.build());
-					}
-				}
-			}, null);
-			applicationTaskReference.set(applicationTask);
-			executor.execute(() -> {
-				// A caller-runs or direct executor must not turn malformed input
-				// into application work on the selector thread. Check before
-				// entering the FutureTask so timeout cancellation can never
-				// interrupt the selector through the task's runner reference.
-				if (sameInstance(Thread.currentThread(), submittingThread)) {
-					executedInline.set(true);
-					return;
-				}
-				applicationTask.run();
-			});
-			if (executedInline.get()) {
-				cancelTimeout(timeoutReference.getAndSet(null));
-				return false;
-			}
-			return true;
-		} catch (RejectedExecutionException exception) {
-			cancelTimeout(timeoutReference.getAndSet(null));
-			return false;
-		} catch (RuntimeException | Error throwable) {
-			try {
-				cancelTimeout(timeoutReference.getAndSet(null));
-			} catch (RuntimeException | Error cancelationFailure) {
-				throwable.addSuppressed(cancelationFailure);
-			}
-			throw throwable;
-		}
-	}
-
-	private void notifyDidRejectUnparsedRequest(
-			@NonNull UnparsedRequest request) {
-		try {
-			getLifecycleObserver().didRejectUnparsedRequest(requireNonNull(request));
-		} catch (Throwable throwable) {
-			safelyLog(LogEvent.with(
-						LogEventType.LIFECYCLE_OBSERVER_DID_REJECT_UNPARSED_REQUEST_FAILED,
-						"An exception occurred while invoking LifecycleObserver::didRejectUnparsedRequest")
-					.throwable(throwable)
-					.build());
-		}
+		return UnparsedRequestResponseSupport.submit(this.requestHandlerExecutorService,
+				this.requestHandlerTimeoutScheduler, getRequestHandlerTimeout(), () -> UnparsedRequest
+						.withServerTypeAndReason(ServerType.HTTP, unparsedRequestReason(rejection.reason()))
+						.remoteAddress(rejection.remoteAddress())
+						.capturedBytes(rejection.capturedBytesForTransfer())
+						.observedByteCount(rejection.observedByteCount())
+						.captureTruncated(rejection.captureTruncated()).build(),
+				this.responseMarshaler, getLifecycleObserver(), this::safelyLog,
+				responseConsumer, admission::close);
 	}
 
 	@NonNull
@@ -1225,169 +1156,30 @@ final class DefaultHttpServer implements HttpServer {
 			UnparsedRequestRejection.@NonNull Reason reason) {
 		return switch (requireNonNull(reason)) {
 			case MALFORMED_REQUEST -> UnparsedRequestReason.MALFORMED_REQUEST;
-			case REQUEST_TARGET_TOO_LONG ->
-					UnparsedRequestReason.REQUEST_TARGET_TOO_LONG;
+			case REQUEST_TARGET_TOO_LONG -> UnparsedRequestReason.REQUEST_TARGET_TOO_LONG;
 			case EXPECTATION_FAILED -> UnparsedRequestReason.EXPECTATION_FAILED;
-			case REQUEST_HEADERS_TOO_LARGE ->
-					UnparsedRequestReason.REQUEST_HEADERS_TOO_LARGE;
+			case REQUEST_HEADERS_TOO_LARGE -> UnparsedRequestReason.REQUEST_HEADERS_TOO_LARGE;
+			case REQUEST_READ_TIMEOUT -> UnparsedRequestReason.REQUEST_READ_TIMEOUT;
+			case REQUEST_TOO_LARGE -> UnparsedRequestReason.REQUEST_TOO_LARGE;
 		};
 	}
 
-	private byte @NonNull [] serializeUnparsedRequestResponse(
-			@NonNull MarshaledResponse marshaledResponse) {
-		requireNonNull(marshaledResponse);
-
-		if (marshaledResponse.getStreamingResponseBody().isPresent())
-			throw new IllegalArgumentException(
-					"Unparsed-request responses may not stream a body.");
-
-		int statusCode = marshaledResponse.getStatusCode();
-		if (statusCode < 200 || statusCode > 599)
-			throw new IllegalArgumentException(
-					"Unparsed-request response status must be a final HTTP "
-							+ "status from 200 through 599.");
-		if (statusMustNotIncludeBody(statusCode)
-				&& marshaledResponse.getBody().isPresent())
-			throw new IllegalArgumentException(format(
-					"HTTP status %d must not include an unparsed-request response body.",
-					statusCode));
-
-		byte[] body = unparsedRequestResponseBody(marshaledResponse);
-		String reasonPhrase = reasonPhraseForStatusCode(statusCode);
-		long serializedSize = body.length
-				+ "HTTP/1.1".length() + 1L
-				+ Integer.toString(statusCode).length() + 1L
-				+ reasonPhrase.length() + 2L
-				+ serializedHeaderSize("Connection", "close") + 2L;
-		if (!statusMustNotIncludeBody(statusCode))
-			serializedSize += serializedHeaderSize("Content-Length",
-					Integer.toString(body.length));
-		ensureUnparsedResponseSize(serializedSize);
-
-		Set<String> connectionNamedHeaders = new TreeSet<>(
-				String.CASE_INSENSITIVE_ORDER);
-		List<String> connectionValues = marshaledResponse.getHeaders()
-				.get("Connection");
-
-		if (connectionValues != null) {
-			for (String value : connectionValues) {
-				for (String token : value.split(",", -1)) {
-					String normalized = trimAggressivelyToEmpty(token);
-					if (!normalized.isEmpty())
-						connectionNamedHeaders.add(normalized);
-				}
-			}
+	@Nullable
+	private static UnparsedRequestReason unparsedReasonForFailure(@NonNull Throwable throwable) {
+		if (throwable instanceof RequestBodyDecompressionException exception) {
+			return switch (exception.getReason()) {
+				case UNSUPPORTED_CONTENT_ENCODING -> UnparsedRequestReason.UNSUPPORTED_CONTENT_ENCODING;
+				case MALFORMED_CONTENT -> UnparsedRequestReason.REQUEST_BODY_DECOMPRESSION_FAILED;
+				case DECOMPRESSED_CONTENT_TOO_LARGE -> UnparsedRequestReason.REQUEST_TOO_LARGE;
+			};
 		}
-
-		List<Header> headers = new ArrayList<>();
-		for (Map.Entry<String, List<String>> entry :
-				marshaledResponse.getHeaders().entrySet()) {
-			String name = entry.getKey();
-			if (unparsedResponseHeaderIsTransportOwned(name)
-					|| connectionNamedHeaders.contains(name))
-				continue;
-
-			for (String value : entry.getValue()) {
-				serializedSize += serializedHeaderSize(name, value);
-				ensureUnparsedResponseSize(serializedSize);
-				headers.add(new Header(name, value));
-			}
-		}
-
-		List<ResponseCookie> cookies = marshaledResponse.getCookies();
-		List<ResponseCookie> sortedCookies = new ArrayList<>(cookies);
-		if (!connectionNamedHeaders.contains("Set-Cookie")) {
-			for (ResponseCookie cookie : sortedCookies) {
-				String value = cookie.toSetCookieHeaderRepresentation();
-				serializedSize += serializedHeaderSize("Set-Cookie", value);
-				ensureUnparsedResponseSize(serializedSize);
-				headers.add(new Header("Set-Cookie", value));
-			}
-		}
-
-		headers.sort(Comparator.comparing(Header::name,
-				String.CASE_INSENSITIVE_ORDER)
-				.thenComparing(Header::name)
-				.thenComparing(Header::value));
-
-		MicrohttpResponse response = new MicrohttpResponse(statusCode,
-				reasonPhrase, headers, body);
-		List<Header> transportHeaders = new ArrayList<>();
-		transportHeaders.add(new Header("Connection", "close"));
-		if (!statusMustNotIncludeBody(statusCode))
-			transportHeaders.add(new Header("Content-Length",
-					Integer.toString(body.length)));
-		if (!response.hasHeader("Date"))
-			transportHeaders.add(new Header("Date", HttpDate.currentSecondHeaderValue()));
-		return response.serialize("HTTP/1.1", transportHeaders,
-				UNPARSED_RESPONSE_SIZE_LIMIT_IN_BYTES);
+		return throwable instanceof IllegalRequestException || throwable instanceof URISyntaxException
+				? UnparsedRequestReason.MALFORMED_REQUEST : null;
 	}
 
-	private static long serializedHeaderSize(@NonNull String name,
-			@NonNull String value) {
-		return (long) requireNonNull(name).length() + 2L
-				+ requireNonNull(value).length() + 2L;
-	}
-
-	private static void ensureUnparsedResponseSize(long serializedSize) {
-		if (serializedSize > UNPARSED_RESPONSE_SIZE_LIMIT_IN_BYTES)
-			throw new IllegalArgumentException(
-					"Serialized unparsed-request response exceeds its size limit.");
-	}
-
-	private static byte @NonNull [] unparsedRequestResponseBody(
-			@NonNull MarshaledResponse marshaledResponse) {
-		MarshaledResponseBody body = requireNonNull(marshaledResponse)
-				.getBody().orElse(null);
-
-		if (body == null)
-			return emptyByteArray();
-		if (body.getLength() > UNPARSED_RESPONSE_SIZE_LIMIT_IN_BYTES)
-			throw new IllegalArgumentException(
-					"Unparsed-request response body exceeds its size limit.");
-		if (body instanceof MarshaledResponseBody.Bytes bytes)
-			return bytes.getBytes().clone();
-		if (body instanceof MarshaledResponseBody.ByteBuffer byteBuffer) {
-			ByteBuffer source = byteBuffer.getBuffer();
-			byte[] bytes = new byte[source.remaining()];
-			source.get(bytes);
-			return bytes;
-		}
-
-		throw new IllegalArgumentException(format(
-				"Unsupported unparsed-request response body type: %s",
-				body.getClass().getName()));
-	}
-
-	private static boolean unparsedResponseHeaderIsTransportOwned(
-			@NonNull String name) {
-		return switch (requireNonNull(name).toLowerCase(ENGLISH)) {
-			case "connection", "content-length", "keep-alive",
-					"proxy-connection", "te", "trailer", "transfer-encoding",
-					"upgrade" -> true;
-			default -> false;
-		};
-	}
-
-	private static boolean statusMustNotIncludeBody(int statusCode) {
-		return statusCode == 204 || statusCode == 205 || statusCode == 304;
-	}
-
-	private static void releaseRejectedUnparsedResponseResources(
-			@Nullable MarshaledResponse marshaledResponse) {
-		if (marshaledResponse == null)
-			return;
-
-		MarshaledResponseBody body = marshaledResponse.getBody().orElse(null);
-		if (!(body instanceof MarshaledResponseBody.FileChannel fileChannel)
-				|| !fileChannel.getCloseOnComplete())
-			return;
-
-		try {
-			fileChannel.getChannel().close();
-		} catch (IOException ignored) {
-			// Best effort: this is already a response-validation fallback path.
-		}
+	@NonNull
+	private static MicrohttpResponse unparsedBodylessResponse(int statusCode) {
+		return UnparsedRequestResponseSupport.prepare(MarshaledResponse.fromStatusCode(statusCode)).response();
 	}
 
 	@NonNull
@@ -1507,7 +1299,7 @@ final class DefaultHttpServer implements HttpServer {
 
 	@NonNull
 	protected MicrohttpResponse toMicrohttpResponse(@NonNull MarshaledResponse marshaledResponse) {
-		return toMicrohttpResponse(null, null, marshaledResponse, null, () -> false);
+		return toMicrohttpResponse(null, null, marshaledResponse, null, () -> false, null);
 	}
 
 	@NonNull
@@ -1515,7 +1307,7 @@ final class DefaultHttpServer implements HttpServer {
 																	@Nullable ResourceMethod resourceMethod,
 																	@NonNull MarshaledResponse marshaledResponse) {
 		return toMicrohttpResponse(request, resourceMethod, marshaledResponse, null,
-				() -> false);
+				() -> false, null);
 	}
 
 	@NonNull
@@ -1523,7 +1315,8 @@ final class DefaultHttpServer implements HttpServer {
 																@Nullable ResourceMethod resourceMethod,
 																@NonNull MarshaledResponse marshaledResponse,
 																@Nullable MarshaledResponseBody headResponseCompressionBody,
-																@NonNull BooleanSupplier streamingForcedShutdownStarted) {
+																@NonNull BooleanSupplier streamingForcedShutdownStarted,
+			@Nullable HttpResponseStreamObservation streamObservation) {
 		requireNonNull(marshaledResponse);
 		requireNonNull(streamingForcedShutdownStarted);
 
@@ -1590,6 +1383,11 @@ final class DefaultHttpServer implements HttpServer {
 			CountDownLatch preparationFinished = new CountDownLatch(1);
 			AtomicBoolean preparationSucceeded = new AtomicBoolean();
 			try {
+				reservation.bindCleanupFailureObserver(throwable -> safelyLog(
+						LogEvent.with(LogEventType.RESPONSE_STREAM_CLOSE_FAILED,
+								"A streaming response cleanup operation failed")
+								.throwable(throwable).request(streamingRequest)
+								.resourceMethod(streamingResourceMethod).marshaledResponse(marshaledResponse).build()));
 				MicrohttpResponse response = StreamingMicrohttpResponses.withStreamingBody(
 						marshaledResponse.getStatusCode(),
 						reasonPhrase,
@@ -1603,7 +1401,14 @@ final class DefaultHttpServer implements HttpServer {
 						deadline,
 						idleTimeout,
 						streamingForcedShutdownStarted,
-						(establishedAt, streamDuration, cancelationReason, throwable) -> {
+						new StreamingMicrohttpResponses.TerminationListener() {
+							@Override public void didTerminate(Instant establishedAt, Duration streamDuration,
+									@Nullable StreamTerminationReason cancelationReason, @Nullable Throwable throwable) {
+								didTerminate(establishedAt, streamDuration, cancelationReason, throwable, System.nanoTime(), 0L);
+							}
+							@Override public void didTerminate(Instant establishedAt, Duration streamDuration,
+									@Nullable StreamTerminationReason cancelationReason, @Nullable Throwable throwable,
+									long terminatedNanos, long bodyBytes) {
 							boolean interrupted = false;
 							while (true) {
 								try { preparationFinished.await(); break; }
@@ -1612,7 +1417,9 @@ final class DefaultHttpServer implements HttpServer {
 							if (interrupted) Thread.currentThread().interrupt();
 							if (preparationSucceeded.get())
 								notifyDidTerminateResponseStream(streamingRequest, streamingResourceMethod, marshaledResponse,
-										establishedAt, streamDuration, cancelationReason, throwable);
+										establishedAt, streamDuration, cancelationReason, throwable, streamObservation, terminatedNanos, bodyBytes);
+
+							}
 						},
 						(throwable) -> safelyLog(LogEvent.with(LogEventType.RESPONSE_STREAM_CANCELATION_CALLBACK_FAILED,
 										"An exception occurred while invoking a streaming response cancelation callback")
@@ -2076,10 +1883,35 @@ final class DefaultHttpServer implements HttpServer {
 																								@NonNull Duration streamDuration,
 																								@Nullable StreamTerminationReason cancelationReason,
 																								@Nullable Throwable throwable) {
+		notifyDidTerminateResponseStream(request, resourceMethod, marshaledResponse, establishedAt,
+				streamDuration, cancelationReason, throwable, null, 0L, 0L);
+	}
+
+	private void notifyDidTerminateResponseStream(@Nullable Request request,
+																								@Nullable ResourceMethod resourceMethod,
+																								@NonNull MarshaledResponse marshaledResponse,
+																								@NonNull Instant establishedAt,
+																								@NonNull Duration streamDuration,
+																								@Nullable StreamTerminationReason cancelationReason,
+																								@Nullable Throwable throwable,
+			@Nullable HttpResponseStreamObservation streamObservation, long terminatedNanos, long bodyBytes) {
 		requireNonNull(marshaledResponse);
 		requireNonNull(establishedAt);
 		requireNonNull(streamDuration);
 
+
+		if (request == null)
+			return;
+
+		StreamingResponseHandle streamingResponse = new DefaultStreamingResponseHandle(ServerType.HTTP,
+				request, resourceMethod, marshaledResponse, establishedAt);
+		StreamTermination termination = StreamTermination
+				.with(cancelationReason == null ? StreamTerminationReason.COMPLETED : cancelationReason, streamDuration)
+				.cause(throwable)
+				.build();
+
+		if (streamObservation != null)
+			streamObservation.deliver(streamingResponse, termination, terminatedNanos, bodyBytes, this.metricsCollector, this::safelyLog);
 		if (cancelationReason != null) {
 			LogEventType logEventType = cancelationReason == StreamTerminationReason.PRODUCER_FAILED
 					? LogEventType.RESPONSE_STREAM_FAILED
@@ -2092,16 +1924,6 @@ final class DefaultHttpServer implements HttpServer {
 					.marshaledResponse(marshaledResponse)
 					.build());
 		}
-
-		if (request == null)
-			return;
-
-		StreamingResponseHandle streamingResponse = new DefaultStreamingResponseHandle(ServerType.HTTP,
-				request, resourceMethod, marshaledResponse, establishedAt);
-		StreamTermination termination = StreamTermination
-				.with(cancelationReason == null ? StreamTerminationReason.COMPLETED : cancelationReason, streamDuration)
-				.cause(throwable)
-				.build();
 
 		try {
 			getLifecycleObserver().willTerminateResponseStream(streamingResponse, termination);
@@ -2697,11 +2519,25 @@ final class DefaultHttpServer implements HttpServer {
 
 		@Override
 		public void quiesce() {
+			quiesce(false);
+		}
+
+		@Override
+		public void shutdownGracefully(@NonNull ShutdownContext shutdownContext) {
+			requireNonNull(shutdownContext);
+			quiesce(true);
+		}
+
+		private void quiesce(boolean requestGracefulShutdown) {
 			HttpRuntimeSnapshot snapshot = runtimeSnapshot();
 			this.retainedSnapshot.compareAndSet(null, snapshot);
 			StreamLifecycleCoordinator streamLifecycleCoordinator = snapshot.streamLifecycleCoordinator();
-			if (streamLifecycleCoordinator != null)
+			if (streamLifecycleCoordinator != null) {
+				if (requestGracefulShutdown)
+					streamLifecycleCoordinator.requestGracefulShutdown();
+				else
 				streamLifecycleCoordinator.stopAdmission();
+			}
 			EventLoop eventLoop = snapshot.eventLoop();
 			if (eventLoop != null) {
 				eventLoop.stopAccepting();
@@ -2713,11 +2549,9 @@ final class DefaultHttpServer implements HttpServer {
 			ExecutorService streamingExecutor = snapshot.streamingExecutor();
 			if (streamingExecutor != null)
 				streamingExecutor.shutdown();
-			// Admitted streams may still produce bytes and renew idle deadlines while
-			// draining. Their timer service closes after transport and producers exit.
-			TimeoutScheduler requestTimeoutScheduler = snapshot.requestTimeoutScheduler();
-			if (requestTimeoutScheduler != null)
-				requestTimeoutScheduler.shutdown();
+			// Admitted handlers retain their original deadlines during drain, including
+			// queued work. Streams may also renew idle deadlines. Timer services close
+			// after their work terminates, or when forced shutdown begins.
 		}
 
 		@Override
@@ -2759,6 +2593,9 @@ final class DefaultHttpServer implements HttpServer {
 					|| eventLoop.joinUntil(absoluteDeadlineNanos);
 			boolean requestHandlersTerminated = awaitExecutor(
 					snapshot.requestHandlerExecutor(), absoluteDeadlineNanos);
+			TimeoutScheduler requestTimeoutScheduler = snapshot.requestTimeoutScheduler();
+			if (requestHandlersTerminated && requestTimeoutScheduler != null)
+				requestTimeoutScheduler.shutdown();
 			boolean streamingTerminated = awaitExecutor(
 					snapshot.streamingExecutor(), absoluteDeadlineNanos);
 			ScheduledExecutorService streamingTimeoutExecutor = snapshot.streamingTimeoutExecutor();
@@ -2767,7 +2604,7 @@ final class DefaultHttpServer implements HttpServer {
 			boolean streamingTimeoutsTerminated = awaitExecutor(
 					streamingTimeoutExecutor, absoluteDeadlineNanos);
 			boolean requestTimeoutsTerminated = awaitScheduler(
-					snapshot.requestTimeoutScheduler(), absoluteDeadlineNanos);
+					requestTimeoutScheduler, absoluteDeadlineNanos);
 			StreamLifecycleCoordinator streamLifecycleCoordinator = snapshot.streamLifecycleCoordinator();
 			boolean streamLifecycleTerminated = streamLifecycleCoordinator == null
 					|| streamLifecycleCoordinator.awaitTermination(absoluteDeadlineNanos);
@@ -2850,7 +2687,11 @@ final class DefaultHttpServer implements HttpServer {
 		@NonNull
 		public Thread newThread(@NonNull Runnable runnable) {
 			String name = format("%s-%s", getNamePrefix(), getIdGenerator().incrementAndGet());
-			return new Thread(runnable, name);
+			Thread thread = new Thread(runnable, name);
+			// Listener threads retain process liveness; application/timeout workers
+			// must remain daemon even when created by a non-daemon listener.
+			thread.setDaemon(true);
+			return thread;
 		}
 
 		@NonNull

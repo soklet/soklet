@@ -82,7 +82,11 @@ public interface SseConnection {
 		/**
 		 * An unexpected internal error occurred while establishing the SSE connection.
 		 */
-		INTERNAL_ERROR
+		INTERNAL_ERROR,
+		/**
+		 * The server could not admit the stream because its connection or lifecycle capacity was reached.
+		 */
+		CAPACITY_EXCEEDED
 	}
 
 }

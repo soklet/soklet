@@ -24,7 +24,14 @@ import javax.annotation.concurrent.NotThreadSafe;
 import static com.soklet.internal.ObjectIdentity.sameInstance;
 import static java.util.Objects.requireNonNull;
 
-/** Indicates that shutdown ended without complete termination proof. */
+/**
+ * Indicates that shutdown ended without complete termination proof.
+ * <p>
+ * The message includes the bounded diagnostic from {@link #getShutdownResult()},
+ * identifying component dispositions and residual-activity categories without
+ * rendering application Throwables or retained objects. Outstanding work alone
+ * does not supply a Throwable cause; inspect the result's component evidence.
+ */
 @NotThreadSafe
 public final class SokletShutdownIncompleteException
 		extends SokletLifecycleException {
@@ -37,7 +44,7 @@ public final class SokletShutdownIncompleteException
 
 	SokletShutdownIncompleteException(@NonNull ShutdownResult shutdownResult,
 			@Nullable Object retainedScopeEvidence, @Nullable Throwable cause) {
-		super("Soklet shutdown could not prove complete termination",
+		super("Soklet shutdown could not prove complete termination: " + requireNonNull(shutdownResult),
 				requireNonNull(shutdownResult), cause);
 		this.retainedScopeEvidence = retainedScopeEvidence;
 		if (shutdownResult.getShutdownDisposition() != ShutdownDisposition.INCOMPLETE)

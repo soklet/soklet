@@ -330,7 +330,7 @@ public class McpTypedToolPublicRuntimeTests {
 							",\"name\":\"catalog.absent\",\"arguments\":{}"),
 					"tools/call", "catalog.absent");
 			assertError(unknownResponse, 400, -32602, "unknown-1");
-			Assertions.assertTrue(stages.isEmpty(), stages.toString());
+			Assertions.assertEquals(List.of("admission:catalog.absent"), stages);
 			Assertions.assertEquals(1, handlerInvocations.get());
 		} finally {
 			soklet.close();

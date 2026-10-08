@@ -506,6 +506,38 @@ public class McpSkillPublicRuntimeTests {
 	}
 
 	@Test
+	public void dynamicBundleConstructionFailuresStayPrivateAndAllowRecovery() throws Exception {
+		McpSkillRegistration registration = registration("skill://recovery/valid-skill/SKILL.md",
+				Map.of("SKILL.md", skillDocument("valid-skill", "Valid description")));
+		AtomicInteger handlerCalls = new AtomicInteger();
+		McpEndpoint endpoint = endpointBuilder().skillRegistrations(List.of(registration))
+				.skillListHandler((requestContext, skillListContext, invocationFeatures) -> {
+					int call = handlerCalls.incrementAndGet();
+					if (call == 1)
+						McpSkillBundle.fromFiles(Map.of("SKILL.md", skillDocument(
+								"private-name-canary", "private-description-canary" + "x".repeat(1_024))));
+					else if (call == 2)
+						McpSkillBundle.fromFiles(Map.of("SKILL.md", skillDocument("valid-skill", "Description"),
+								"private-path-canary", new byte[0], "private-path-canary/file.md", new byte[0]));
+					return McpSkillPage.builder().skillRegistrations(List.of(registration)).build();
+				}, Set.of(McpProtocolVersion.V2026_07_28)).build();
+		McpServer server = serverBuilder(endpoint).build();
+		Soklet owner = managedSoklet(server);
+		try {
+			owner.start();
+			int port = port(server);
+			for (String id : List.of("metadata-failure", "path-failure"))
+				assertFixedInternalError(send(port, id, "skills/list", "", null, null), id);
+			HttpResponse<String> recovered = send(port, "recovered", "skills/list", "", null, null);
+			assertSuccess(recovered, "recovered");
+			assertContains(recovered.body(), registration.getUri().toString());
+			Assertions.assertEquals(3, handlerCalls.get());
+		} finally {
+			owner.close();
+		}
+	}
+
+	@Test
 	public void ordinaryCustomResourceListCannotExposeAnIndexedSkillFile() throws Exception {
 		McpSkillRegistration registration = registration("skill://resource-list/private-resource/SKILL.md",
 				Map.of("SKILL.md", skillDocument("private-resource", "private-resource-canary")));

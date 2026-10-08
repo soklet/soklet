@@ -37,6 +37,17 @@ import static java.util.Objects.requireNonNull;
  * This type describes how response bytes are produced; it is not itself responsible for writing to a transport.
  * Descriptors are immutable and thread-safe, but caller-supplied writers, publishers, readers, input streams, and
  * factories are responsible for their own behavior.
+ * <p>
+ * The built-in HTTP server invokes writers and source factories on a producer thread without propagating
+ * {@link RequestInterceptor} scopes. Capture needed immutable context during request handling and bind it
+ * explicitly where source acquisition or production needs it; see {@link StreamingResponseWriter}.
+ * Publisher signals may run on publisher-owned threads and need their own application context binding.
+ * <p>
+ * The built-in HTTP server requires HTTP/1.1 to deliver a streaming body. If an HTTP/1.0 request
+ * produces one, it sends a finite 505 response and reports {@link StreamTerminationReason#PROTOCOL_UNSUPPORTED}
+ * without invoking the producer or its resource factory. This check follows request handling:
+ * handler/interceptor side effects have already occurred. Configure reverse proxies to use HTTP/1.1
+ * for their connection to Soklet. Normal HEAD body omission happens before this streaming check.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

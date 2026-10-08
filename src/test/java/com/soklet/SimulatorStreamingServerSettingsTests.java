@@ -45,11 +45,13 @@ public class SimulatorStreamingServerSettingsTests {
 				.streamingCleanupTimeout(Duration.ofMillis(100)).build();
 		CountDownLatch diagnosed = new CountDownLatch(1);
 		AtomicReference<Throwable> diagnostic = new AtomicReference<>();
+		AtomicReference<LogEvent> diagnosticEvent = new AtomicReference<>();
 		SokletConfig sourceConfig = sourceConfig(sourceHttpServer, resource, new LifecycleObserver() {
 			@Override public void didReceiveLogEvent(LogEvent event) {
 				event.getThrowable().filter(StreamLifecycleCoordinator.CleanupDeadlineExceededException.class::isInstance)
 						.ifPresent(throwable -> {
 							diagnostic.set(throwable);
+							diagnosticEvent.set(event);
 							diagnosed.countDown();
 						});
 			}
@@ -66,6 +68,10 @@ public class SimulatorStreamingServerSettingsTests {
 					retainedCoordinator.set(coordinator);
 					await(diagnosed);
 					Assertions.assertInstanceOf(StreamLifecycleCoordinator.CleanupDeadlineExceededException.class, diagnostic.get());
+					Assertions.assertEquals(LogEventType.SERVER_INTERNAL_ERROR, diagnosticEvent.get().getLogEventType());
+					Assertions.assertTrue(diagnosticEvent.get().getRequest().isEmpty());
+					Assertions.assertTrue(diagnosticEvent.get().getResourceMethod().isEmpty());
+					Assertions.assertTrue(diagnosticEvent.get().getMarshaledResponse().isEmpty());
 					Assertions.assertEquals(StreamTerminationReason.CLEANUP_TIMEOUT,
 							resource.token.get().getCancelationReason().orElseThrow());
 					Assertions.assertEquals(1, coordinator.snapshot().reservations());
@@ -100,12 +106,13 @@ public class SimulatorStreamingServerSettingsTests {
 
 	@Test
 	@Timeout(value = 90, unit = TimeUnit.SECONDS)
-	public void inherited_callback_concurrency_runs_two_observers_and_queues_the_third() throws Exception {
+	public void inherited_capacity_isolates_all_observers_from_callback_concurrency() throws Exception {
 		CallbackResource resource = new CallbackResource();
 		DefaultHttpServer sourceHttpServer = (DefaultHttpServer) HttpServer.withPort(0)
 				.streamingLifecycleCapacity(3).streamingCallbackConcurrency(2)
 				.streamingCleanupTimeout(Duration.ofSeconds(5)).build();
-		CountDownLatch twoObserversEntered = new CountDownLatch(2);
+		CountDownLatch allObserversEntered = new CountDownLatch(3);
+		CountDownLatch rejectionObserved = new CountDownLatch(1);
 		CountDownLatch releaseObservers = new CountDownLatch(1);
 		AtomicInteger activeObservers = new AtomicInteger();
 		AtomicInteger maximumObservers = new AtomicInteger();
@@ -116,9 +123,13 @@ public class SimulatorStreamingServerSettingsTests {
 		AtomicReference<StreamLifecycleCoordinator> retainedCoordinator = new AtomicReference<>();
 		SokletConfig sourceConfig = sourceConfig(sourceHttpServer, resource, new LifecycleObserver() {
 			@Override public void didTerminateResponseStream(StreamingResponseHandle handle, StreamTermination termination) {
+				if (termination.getReason() == StreamTerminationReason.BACKPRESSURE) {
+					rejectionObserved.countDown();
+					return;
+				}
 				observerEntries.incrementAndGet();
 				maximumObservers.accumulateAndGet(activeObservers.incrementAndGet(), Math::max);
-				twoObserversEntered.countDown();
+				allObserversEntered.countDown();
 				try {
 					awaitUninterruptibly(releaseObservers);
 				} finally {
@@ -143,7 +154,7 @@ public class SimulatorStreamingServerSettingsTests {
 						producers.add(producer);
 						producer.start();
 					}
-					await(twoObserversEntered);
+					await(allObserversEntered);
 					StreamLifecycleCoordinator coordinator = ((Soklet.DefaultSimulator) simulator)
 							.getStreamLifecycleCoordinatorForTests().orElseThrow();
 					retainedCoordinator.set(coordinator);
@@ -151,12 +162,13 @@ public class SimulatorStreamingServerSettingsTests {
 					StreamLifecycleCoordinator.Snapshot snapshot = coordinator.snapshot();
 					Assertions.assertEquals(3, snapshot.reservations());
 					Assertions.assertEquals(3, snapshot.callbacks());
-					Assertions.assertEquals(1, snapshot.queuedCallbacks());
-					Assertions.assertEquals(2, activeObservers.get());
-					Assertions.assertEquals(2, observerEntries.get());
-					Assertions.assertEquals(2, maximumObservers.get());
+					Assertions.assertEquals(0, snapshot.queuedCallbacks());
+					Assertions.assertEquals(3, activeObservers.get());
+					Assertions.assertEquals(3, observerEntries.get());
+					Assertions.assertEquals(3, maximumObservers.get());
 					Assertions.assertEquals(503, simulator.performHttpRequest(request("/inherited-callback"))
 							.getMarshaledResponse().getStatusCode());
+					await(rejectionObserved);
 					Assertions.assertEquals(3, resource.entries.get());
 					releaseObservers.countDown();
 					for (Thread producer : producers)
@@ -164,7 +176,7 @@ public class SimulatorStreamingServerSettingsTests {
 					Assertions.assertTrue(failures.isEmpty(), failures.toString());
 					Assertions.assertEquals(3, successfulRequests.get());
 					Assertions.assertEquals(3, observerEntries.get());
-					Assertions.assertEquals(2, maximumObservers.get());
+					Assertions.assertEquals(3, maximumObservers.get());
 					awaitCondition(() -> coordinator.snapshot().reservations() == 0);
 					Assertions.assertEquals(200, simulator.performHttpRequest(request("/inherited-callback"))
 							.getMarshaledResponse().getStatusCode());

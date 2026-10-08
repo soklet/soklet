@@ -20,6 +20,7 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.io.UncheckedIOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -786,7 +787,18 @@ final class SokletDirectLifecycle {
 					runStartupCall("soklet-start-"
 							+ participant.kind().name().toLowerCase(Locale.ROOT), participant,
 							() -> {
-								participant.control().start(startupContext);
+								try {
+									participant.control().start(startupContext);
+								} catch (UncheckedIOException failure) {
+									// MCP's internal start adapter wraps checked I/O for its
+									// void entry point. Unwrap only if its cause is the exact
+									// recorded failure, preserving application-owned wrappers.
+									if (participant.control() instanceof McpControl mcpControl
+											&& sameInstance(requireNonNull(mcpControl.generation)
+													.startupFailureCause(), failure.getCause()))
+										throw failure.getCause();
+									throw failure;
+								}
 								return null;
 							}, startupDeadline);
 				} catch (Throwable failure) {
@@ -1971,12 +1983,17 @@ final class SokletDirectLifecycle {
 		}
 
 		void completeStartCall(@Nullable Throwable primaryFailure) {
-			ShutdownContext delivery = this.phaseGate.completeStartCall();
+			DirectParticipantPhaseGate.PhaseDelivery delivery =
+					this.phaseGate.completeStartCallDelivery();
 			if (delivery == null)
 				return;
 			try {
-				deliverPhase(delivery);
+				deliverPhase(delivery.context());
 			} catch (Throwable catchUpFailure) {
+				if (delivery.afterClassificationFreeze())
+					// This is one best-effort stop on the existing tracked worker.
+					// Never mutate a published cause or reopen frozen evidence.
+					return;
 				if (primaryFailure != null) {
 					InternalTerminationGroup group =
 							this.control.terminationGroup();
@@ -2027,7 +2044,9 @@ final class SokletDirectLifecycle {
 			return this.phaseGate.startupCallActive();
 		}
 		@Override public void freezeForClassification() {
-			this.phaseGate.freezeForClassification();
+			ShutdownSchedule schedule = requireNonNull(shutdownSchedule.get());
+			this.phaseGate.freezeForClassification(new ShutdownContext(
+					ShutdownPhase.FORCED, clock, schedule.forcedDeadlineNanos()));
 		}
 		@Override @NonNull public InternalTransportRuntime runtime() {
 			return new InternalTransportRuntime() {
@@ -2595,6 +2614,9 @@ final class SokletDirectLifecycle {
 /** Atomic phase-delivery boundary for one installed participant's start call. */
 @ThreadSafe
 final class DirectParticipantPhaseGate {
+	record PhaseDelivery(@NonNull ShutdownContext context,
+			boolean afterClassificationFreeze) { }
+
 	private boolean startRunning;
 	private boolean classificationFrozen;
 	private boolean startRunningAtClassification;
@@ -2602,6 +2624,8 @@ final class DirectParticipantPhaseGate {
 	private ShutdownContext requestedContext;
 	@Nullable
 	private ShutdownPhase claimedPhase;
+	@Nullable
+	private ShutdownContext frozenForcedContext;
 
 	synchronized boolean claimStart() {
 		if (this.startRunning || this.classificationFrozen)
@@ -2616,10 +2640,22 @@ final class DirectParticipantPhaseGate {
 
 	@Nullable
 	synchronized ShutdownContext completeStartCall() {
+		PhaseDelivery delivery = completeStartCallDelivery();
+		return delivery == null ? null : delivery.context();
+	}
+
+	@Nullable
+	synchronized PhaseDelivery completeStartCallDelivery() {
 		if (!this.startRunning)
 			return null;
 		this.startRunning = false;
-		return claimPhaseDelivery();
+		if (this.classificationFrozen && this.frozenForcedContext != null
+				&& this.claimedPhase != ShutdownPhase.FORCED) {
+			this.claimedPhase = ShutdownPhase.FORCED;
+			return new PhaseDelivery(this.frozenForcedContext, true);
+		}
+		ShutdownContext context = claimPhaseDelivery();
+		return context == null ? null : new PhaseDelivery(context, false);
 	}
 
 	@Nullable
@@ -2633,9 +2669,19 @@ final class DirectParticipantPhaseGate {
 	}
 
 	synchronized void freezeForClassification() {
+		freezeForClassification(null);
+	}
+
+	synchronized void freezeForClassification(
+			@Nullable ShutdownContext forcedContext) {
 		if (this.classificationFrozen)
 			return;
+		if (forcedContext != null
+				&& forcedContext.getShutdownPhase() != ShutdownPhase.FORCED)
+			throw new IllegalArgumentException("Late startup cleanup requires forced shutdown");
 		this.startRunningAtClassification = this.startRunning;
+		if (this.startRunning)
+			this.frozenForcedContext = forcedContext;
 		this.classificationFrozen = true;
 	}
 

@@ -36,6 +36,10 @@ import static java.util.Objects.requireNonNull;
  * Instances can be acquired via the {@link #withMarshaledResponse(MarshaledResponse)} builder factory method.
  * A convenience instance factory is also available via {@link #fromMarshaledResponse(MarshaledResponse)}.
  * <p>
+ * This type is also delivered to the response consumers of {@link HttpServer.RequestHandler}
+ * and {@link SseServer.RequestHandler}. Custom SSE transports use {@link #getSseHandshakeResult()}
+ * to obtain the logical handshake and any accepted client initializer or client context.
+ * <p>
  * The Server-Sent Event equivalent of this type is {@link SseRequestResult}, which is used for integration testing via {@link Simulator#performSseRequest(Request)}.
  * <p>
  * See <a href="https://www.soklet.com/docs/testing#integration-testing">https://www.soklet.com/docs/testing#integration-testing</a> for detailed documentation.
@@ -57,6 +61,10 @@ public final class HttpRequestResult {
 	// Transport-only HEAD planning input, deliberately kept out of lifecycle/log response objects.
 	@Nullable
 	private final MarshaledResponseBody headResponseCompressionBody;
+	// Internal SSE establishment classification; omitted from public rendering/equality.
+	@Nullable
+	private final Throwable requestHandlingFailure;
+	@Nullable private final HttpResponseStreamObservation responseStreamObservation;
 
 	/**
 	 * Acquires a builder for {@link HttpRequestResult} instances.
@@ -100,6 +108,8 @@ public final class HttpRequestResult {
 		this.resourceMethod = builder.resourceMethod;
 		this.sseHandshakeResult = builder.sseHandshakeResult;
 		this.headResponseCompressionBody = builder.headResponseCompressionBody;
+		this.requestHandlingFailure = builder.requestHandlingFailure;
+		this.responseStreamObservation = builder.responseStreamObservation;
 	}
 
 	@Override
@@ -124,12 +134,8 @@ public final class HttpRequestResult {
 		if (resourceMethod != null)
 			components.add(format("resourceMethod=%s", resourceMethod));
 
-		// Hide this for now because handshake info is package-private and we don't want it to leak out
-
-		// SseHandshakeResult sseHandshakeResult = getSseHandshakeResult().orElse(null);
-
-		// if (sseHandshakeResult != null)
-		//	components.add(format("sseHandshakeResult=%s", sseHandshakeResult));
+		// The handshake retains application-owned context and an executable initializer.
+		// Deliberately omit it from diagnostic rendering.
 
 		return format("%s{%s}", getClass().getSimpleName(), components.stream().collect(Collectors.joining(", ")));
 	}
@@ -200,13 +206,36 @@ public final class HttpRequestResult {
 		return Optional.ofNullable(this.headResponseCompressionBody);
 	}
 
+	@NonNull
+	Optional<Throwable> getRequestHandlingFailure() {
+		return Optional.ofNullable(this.requestHandlingFailure);
+	}
+
+	@Nullable HttpResponseStreamObservation getResponseStreamObservation() { return this.responseStreamObservation; }
+
 	/**
-	 * The SSE handshake result, if available.
+	 * Returns the logical SSE handshake result, if request processing produced one.
+	 * <p>
+	 * Custom {@link SseServer} transports use an {@link SseHandshakeResult.Accepted}
+	 * result to retrieve its {@link SseHandshakeResult.Accepted#getClientInitializer() client initializer}
+	 * and {@link SseHandshakeResult.Accepted#getClientContext() client context}.
+	 * Acceptance is the application's decision; it does not prove that response headers
+	 * were written, initialization succeeded, or the connection joined a broadcaster.
+	 * Use {@link #getMarshaledResponse()} for the offered HTTP response and honor the
+	 * transport's framing, admission and shutdown requirements before activation.
+	 * <p>
+	 * Reading this accessor does not invoke the initializer or activate a connection.
+	 * Initializers and client contexts are application-owned references, not defensive
+	 * copies. The transport owns invoking an initializer once after the accepted response
+	 * is written, keeping initialization bounded, and preserving its context for that
+	 * connection. Queued initialization writes and broadcaster activation must wait for
+	 * successful initialization; failure or prior termination prevents activation.
+	 * Callers own any retention, logging or disclosure of those references.
 	 *
-	 * @return the SSE handshake result
+	 * @return the logical SSE handshake result, or {@link Optional#empty()} when unavailable
 	 */
 	@NonNull
-	Optional<SseHandshakeResult> getSseHandshakeResult() {
+	public Optional<@NonNull SseHandshakeResult> getSseHandshakeResult() {
 		return Optional.ofNullable(this.sseHandshakeResult);
 	}
 
@@ -231,6 +260,9 @@ public final class HttpRequestResult {
 		private SseHandshakeResult sseHandshakeResult;
 		@Nullable
 		private MarshaledResponseBody headResponseCompressionBody;
+		@Nullable
+		private Throwable requestHandlingFailure;
+		@Nullable private HttpResponseStreamObservation responseStreamObservation;
 
 		protected Builder(@NonNull MarshaledResponse marshaledResponse) {
 			requireNonNull(marshaledResponse);
@@ -296,6 +328,17 @@ public final class HttpRequestResult {
 		}
 
 		@NonNull
+		Builder requestHandlingFailure(@Nullable Throwable requestHandlingFailure) {
+			this.requestHandlingFailure = requestHandlingFailure;
+			return this;
+		}
+
+		@NonNull Builder responseStreamObservation(@Nullable HttpResponseStreamObservation observation) {
+			this.responseStreamObservation = observation;
+			return this;
+		}
+
+		@NonNull
 		public HttpRequestResult build() {
 			return new HttpRequestResult(this);
 		}
@@ -321,7 +364,9 @@ public final class HttpRequestResult {
 					.corsPreflightResponse(requestResult.getCorsPreflightResponse().orElse(null))
 					.resourceMethod(requestResult.getResourceMethod().orElse(null))
 					.sseHandshakeResult(requestResult.getSseHandshakeResult().orElse(null))
-					.headResponseCompressionBody(requestResult.getHeadResponseCompressionBody().orElse(null));
+					.headResponseCompressionBody(requestResult.getHeadResponseCompressionBody().orElse(null))
+					.requestHandlingFailure(requestResult.getRequestHandlingFailure().orElse(null))
+					.responseStreamObservation(requestResult.getResponseStreamObservation());
 		}
 
 		@NonNull
@@ -358,6 +403,17 @@ public final class HttpRequestResult {
 		@NonNull
 		Copier headResponseCompressionBody(@Nullable MarshaledResponseBody headResponseCompressionBody) {
 			this.builder.headResponseCompressionBody(headResponseCompressionBody);
+			return this;
+		}
+
+		@NonNull
+		Copier requestHandlingFailure(@Nullable Throwable requestHandlingFailure) {
+			this.builder.requestHandlingFailure(requestHandlingFailure);
+			return this;
+		}
+
+		@NonNull Copier responseStreamObservation(@Nullable HttpResponseStreamObservation observation) {
+			this.builder.responseStreamObservation(observation);
 			return this;
 		}
 

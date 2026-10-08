@@ -386,15 +386,15 @@ class McpLocalizationFleetPublicRuntimeTests {
 
 			// A whole-subscription revocation is authoritative on both nodes.
 			// Explicit reconciliation observes the denied authorization and closes
-			// each local stream as a reconciliation failure; the unrelated beta
+			// each local stream as an authorization denial; the unrelated beta
 			// stream on node A remains live.
 			fleet.first().authorized(TENANT_ALPHA, false);
 			fleet.second().authorized(TENANT_ALPHA, false);
 			fleet.broker().recover();
 			fleet.first().metrics().awaitSubscriptionClosed(
-					McpStreamTerminationReason.SUBSCRIPTION_RECONCILIATION_FAILED);
+					McpStreamTerminationReason.SUBSCRIPTION_AUTHORIZATION_DENIED);
 			fleet.second().metrics().awaitSubscriptionClosed(
-					McpStreamTerminationReason.SUBSCRIPTION_RECONCILIATION_FAILED);
+					McpStreamTerminationReason.SUBSCRIPTION_AUTHORIZATION_DENIED);
 			alphaOnFirst.awaitTransportClosed(WAIT);
 			alphaOnSecond.awaitTransportClosed(WAIT);
 			awaitRuntime(fleet.first(), 1, 1);

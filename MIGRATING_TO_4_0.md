@@ -104,6 +104,20 @@ each complete occurrence.
 For signatures or ordering across different query names, use `Request.getRawQuery()`;
 a grouped map preserves per-name order rather than the entire interleaved query.
 
+### Multipart field equality
+
+`MultipartField.equals()` and `hashCode()` now compare binary contents, along
+with name, filename, content type and explicitly configured charset. Fields
+built with separate arrays containing identical bytes compare equal and work
+as equivalent hash-map or hash-set keys. Lazy string decoding does not affect
+equality. Null and empty data arrays still represent an absent value.
+
+Equal multipart occurrences remain separate entries in the request's ordered
+lists. Scalar accessors and bindings still reject repeated occurrences.
+Backing bytes remain shared without defensive copying; do not modify the input
+array after building a field or the array returned by `getData()`. Clone the
+array when you need a mutable working copy.
+
 ### Public API naming pass
 
 The 4.0.0 release candidate uses the following names without deprecated aliases.
@@ -255,6 +269,37 @@ deadline, and idle-timeout access to `responseStream.getRequest()`,
 registration. `CancelationToken.onCancel(...)` returns `CallbackRegistration`,
 whose `close()` removes an unclaimed callback without checked exceptions.
 
+`RequestInterceptor.wrapRequest` and `interceptRequest` cover synchronous request
+handling and response handoff, not HTTP body production. The built-in HTTP server
+runs writers and source factories on a separate producer thread without propagating
+`ThreadLocal`, `ScopedValue`, transaction or tracing scopes. Production can overlap
+remaining wrapping or observer callbacks; do not assume those callbacks have all
+returned first. Capture needed immutable values in the Resource Method, bind them
+explicitly around producer work, and restore or remove thread-local bindings in
+`finally`. Do not capture cursors or lazy entities whose request transaction ends
+before they are used. Materialize the needed data or open a separate bounded
+transaction in the producer.
+
+Simulation materializes HTTP streaming bodies on the `performHttpRequest` caller's
+thread after request handling returns. Interceptor scopes have ended, but ambient
+bindings around the simulator call may still be visible; that does not establish
+production context propagation. Producer-local scopes also do not automatically
+cover later resource finalization, cancelation callbacks or publisher-owned threads.
+
+Indefinite HTTP feeds can observe graceful shutdown with the new
+`@NonNull Boolean ResponseStream.isGracefulShutdownRequested()` method. This
+thread-safe state belongs to each response execution. During graceful drain it
+requests normal completion without canceling the token, interrupting the producer,
+aborting resources or closing output. Finite responses may continue draining.
+Feed writers should check between items and use bounded waits well within the
+owner's graceful budget, write any final record and return normally. Owned
+encoders then finalize normally. Client disconnects, response/idle deadlines and
+forced shutdown can still cancel output; keep checking the cancelation token.
+`getDeadline()` remains the configured response deadline. Automatic InputStream,
+Reader and Publisher bodies retain their finite drain behavior. Custom
+`ResponseStream` implementations must implement this new method. There is no
+graceful-shutdown callback or additional callback executor.
+
 Use `.stream(responseStream -> { ... })` on `MarshaledResponse.Builder` or
 `Copier` to register a writer without wrapping it in `StreamingResponseBody`.
 The callback is non-null and remains lazy. This method does not remove a
@@ -327,7 +372,9 @@ before physical exit. Simulation keeps producer execution synchronous and tracks
 its caller until it exits. Simulation termination observers run on bounded
 callback workers; the request caller waits for their delivery. An application
 that blocks its own producer or observer can still block that synchronous call;
-scoped shutdown records the outstanding work within its own deadline.
+scoped shutdown records the outstanding work within its own deadline. Other
+admitted streams have independent termination-observer capacity and can finish
+while that observer remains blocked.
 
 Configure the built-in HTTP server's streaming lifecycle with:
 
@@ -353,6 +400,16 @@ invoking the producer or committing streaming headers. Callback workers are
 separate from producer execution; normal managed finalization still runs on the
 producer thread.
 
+`streamingCallbackConcurrency` limits cancelation batches and unadmitted
+rejection observers. Admitted termination notifications and diagnostics now use
+separate executors, each with at most `streamingLifecycleCapacity` workers and
+one prepaid observation per lifetime. Workers grow with outstanding work and
+are reused; idle workers expire. Observations can run more concurrently than
+the callback setting, so observers must support concurrent delivery. A blocked
+observation retains its own slot without queuing another admitted stream's
+observation behind it. Blocked cancelation workers can still queue later cancel
+batches; all admitted application work remains counted until it exits.
+
 Precommit HTTP streaming rejection now reports the finite failsafe status to request write/finish observers and metrics, with bounded termination observation retaining the original rejected stream. The finite response and request finish do not wait for termination observers. These observers use a separate bounded allowance on the managed callback executor; accepted work remains tracked through shutdown. If that allowance is exhausted or infrastructure has stopped, Soklet logs the omitted unadmitted-stream notification. Admitted streams retain their reserved callback jobs. Transport handoff exceptions reach `didFailToWriteResponse` instead of being reported as successful writes.
 
 The default HTTP streaming executor uses one virtual thread per admitted producer
@@ -362,6 +419,30 @@ and no pending producer queue: exhaustion returns 503 before streaming headers.
 A custom streaming executor must dispatch asynchronously and start accepted work
 promptly; use direct handoff and rejection to avoid queuing behind long-lived
 producers. Inline or caller-runs execution is rejected.
+
+Custom HTTP request-handler executors must also dispatch asynchronously. A direct
+executor or saturated caller-runs policy now receives a 503 response with
+connection closure before resource handling begins. Use a throwing rejection
+policy; Soklet does not add concurrency or queue-capacity controls around your
+executor. Custom SSE handshake executors must likewise dispatch asynchronously
+to avoid blocking connection admission.
+
+HTTP `requestHandlerTimeout` includes time in the handler queue. Already-admitted
+requests keep their original deadlines during graceful shutdown: expiry claims
+a 503 response and cooperatively interrupts a running handler. Returning that
+response does not establish handler termination; residual work remains tracked
+under the shared graceful/forced shutdown budgets. The request deadline scheduler
+retires after the handler executor terminates or when forced shutdown begins.
+
+SSE `requestHandlerTimeout` now covers queue wait and application handshake
+handling with one budget. Request-line/header reading and parsing pause that
+budget; successful parsing resumes its remaining duration, preserving time
+already spent in the queue. `requestHeaderTimeout` independently bounds reading
+once the worker begins. Partial-header read expiry uses `forUnparsedRequest(...)`
+with a default 408; rejection observation and marshaling use the remaining
+handler budget. Expiry while handling a rejection uses its bodyless fallback,
+while idle read expiry and EOF before complete headers close quietly without
+internal-error diagnostics. Queue or parsed application expiry still receives 503.
 
 HTTP and MCP output backpressure parks outside state monitors, including on JDK
 21. Synchronous publishers receive iterative one-item demand, without recursive
@@ -381,6 +462,12 @@ does not start or otherwise change the source transport, which is not retained
 by that state. Deriving again
 from a simulator configuration preserves the values. A simulator created without
 a source, or derived from a custom HTTP transport, uses the defaults above.
+
+Effective streaming total and idle timeouts must be nonnegative and representable in nanoseconds (at most `Duration.ofNanos(Long.MAX_VALUE)`, about 292 years). `build()` rejects larger values, including an oversized idle timeout inherited from `requestBodyTimeout`. Zero disables a timeout; `null` restores the total timeout’s disabled default or the idle timeout’s effective request-body default.
+
+Ordinary HTTP simulation runs streaming producers on the caller thread, materializes successful output, and waits for the admitted termination observer before returning. It does not apply HTTP streaming total or idle timeouts; `ResponseStream.getDeadline()` and `getIdleTimeout()` are empty. Cleanup supervision, scope shutdown and output limits still apply. A producer failure that wins termination throws `IllegalStateException` with the original cause without returning partial bytes; an application `Error` is rethrown when it wins that outcome. Use a real HTTP fixture to test response deadlines or committed partial delivery. In HTTP, the already committed status remains and producer failure aborts the body. Both runtimes report `PRODUCER_FAILED` with the original cause for that outcome; an earlier elected cancelation still wins.
+
+Exhausted HTTP streaming admission in simulation returns the same built-in finite `503` as HTTP: `Content-Type: text/plain; charset=UTF-8`, `Connection: close`, and body `HTTP 503: Service Unavailable`. The result clears the rejected logical response and retains the resource method. `didWriteResponse` and `didFinishRequestHandling` observers and metrics describe that finite response. `willWriteResponse` sees the original stream before admission, as it does in HTTP. The producer or source factory is never acquired; a bounded asynchronous rejection notification retains the original streaming descriptor and reports `BACKPRESSURE`, without delaying the finite result. An admitted simulator call still waits for its own termination observer.
 
 Publisher bodies share the same lifecycle accounting in HTTP and simulation.
 If `subscribe()` returns normally before delivering its first subscription,
@@ -430,6 +517,37 @@ with `PRODUCER_FAILED` unless another reason already won. After termination,
 unicast rejects; successful earlier queue acceptance does not guarantee client
 delivery.
 
+On the built-in server, an initializer failure after the accepted `200` now
+emits `didEstablishSseConnection`, `willTerminateSseConnection`, and
+`didTerminateSseConnection`, in that order, for both lifecycle observers and
+metrics collectors. This keeps connection accounting paired even though the
+connection never joins a broadcaster. Its elected reason and cause are
+preserved; it is not reported as an internal connection rejection or a failed
+handshake. Before the accepted response is written, capacity rejection uses
+`SseConnection.HandshakeFailureReason.CAPACITY_EXCEEDED`; processing,
+preparation, and write failures use `INTERNAL_ERROR` with their actual cause.
+Explicit application rejection remains `HANDSHAKE_REJECTED`.
+
+`HEAD` on an `@SseEventSource` route now receives a bodyless `405` through
+`ResponseMarshaler.forMethodNotAllowed`. It does not invoke the event source,
+initializer, or stream admission. `OPTIONS` advertises `GET` and `OPTIONS`.
+Custom and failsafe responses to parsed SSE `HEAD` requests also suppress
+content. Ordinary HTTP routes retain their automatic `HEAD`-to-`GET` fallback.
+
+Memoized `SseBroadcaster.broadcastEvent(...)` and `broadcastComment(...)` now
+retain both successful generation and failure once per key for each broadcast
+call, including a null key. A provider exception or serialization failure
+skips that key's clients while other groups continue; a later broadcast can
+retry. The built-in server logs once per failed key with the affected client
+count and original cause, without rendering the key or contexts.
+
+The simulator likewise reports provider failures, including forbidden null
+payloads, to `onBroadcastError` once per key per broadcast. Without a handler,
+or if it throws, that failure is logged once per key. Key-selector and
+simulator-consumer failures remain per client; a failing consumer does not
+invalidate the shared payload for other clients. These changes add no public
+method or type.
+
 Configure SSE lifecycle supervision separately from its per-connection queue:
 
 ```java
@@ -451,6 +569,27 @@ pending initialization. Applications needing more clients must raise lifecycle
 capacity and size their payload queues accordingly. Queue capacity counts
 events, not bytes; it is not a total memory bound.
 
+`concurrentConnectionLimit(0)` disables only the transport connection cap;
+lifecycle admission remains bounded. A positive connection cap and lifecycle
+capacity both apply, and retained cleanup can leave fewer slots available.
+Lifecycle admission happens after application handshake handling, so an event
+source method may run before a capacity 503. Put work that requires an admitted
+connection in its client initializer.
+
+SSE `heartbeatInterval` now fails at `build()` if it is below one millisecond
+or its whole-millisecond value overflows a `long`. Heartbeat waits discard
+fractional milliseconds; `null` restores the 15-second default. This prevents
+sub-millisecond polling loops and delayed overflow failures on established
+connections. `SseEvent` similarly rejects a `retry` whose whole-millisecond
+value overflows a `long` when the event is built. Retry remains non-negative,
+including zero; fractional milliseconds are discarded on the wire, while
+`getRetry()` retains the supplied duration.
+
+An SSE event name without data remains legal, but browser `EventSource` does
+not dispatch it. Include `.data("")` to deliver an event with empty data.
+ID-only and retry-only payloads update reconnect state without dispatching
+a message. See the [EventSource parsing and dispatch rules](https://html.spec.whatwg.org/multipage/server-sent-events.html#event-stream-interpretation).
+
 Derived simulators copy lifecycle capacity and connection queue capacity
 from a built-in SSE server into fresh state, without starting or changing the
 source transport. Re-derivation preserves them; default or custom source
@@ -460,6 +599,35 @@ simulates `CLIENT_DISCONNECTED`. Simulator teardown terminates remaining
 connections with `SERVER_STOPPING`, even when no event/comment consumers were
 registered. The first outcome wins. Closing removes delivery registrations,
 rejects new consumers and writes, and retains any physically unfinished work.
+
+Simulated SSE now calls the configured `LifecycleObserver` and `MetricsCollector`
+connection establishment and termination hooks. Each accepted lifetime has one
+immutable `SseConnection` metadata snapshot. Initializer failure still pairs
+establishment with termination; the termination hooks receive the first elected
+`StreamTermination`, its original cause and duration measured at election.
+Terminal callbacks run asynchronously after framework delivery state is released
+and establishment callbacks finish. `close()` does not wait for those callbacks;
+tests should await their own latch before asserting terminal observations.
+Teardown waits within its budgets, and unfinished observers remain physically
+accounted for and can cause incomplete teardown. Handshake failures use a separate
+bounded observation allowance; excess notifications are omitted with a log event.
+Typed simulator deliveries do not emit socket-write callbacks or wire metrics.
+
+For simulated SSE, the first event or comment consumer starts client reading.
+New payloads of unregistered types are then discarded, so an event-only test
+does not disconnect because the application also sends comments (and vice versa).
+Payloads captured before reading, including initializer output, remain available
+when their consumer registers later; payloads discarded after reading began
+are not replayed to a late consumer.
+
+Before any consumer registers, event and comment capture share one
+`connectionQueueCapacity` limit. Pending deliveries to registered consumers
+share a separate limit of the same size. Retained capture therefore does not
+consume delivery capacity: each buffer can retain at most the configured number
+of payloads, excluding consumer calls in progress. Payload sizes are not bounded
+by these counts. An unread client or a blocked registered consumer can still
+overflow its corresponding buffer and terminate the connection. `close()` clears
+both buffers while unfinished consumer calls remain lifecycle-accounted.
 
 SSE shutdown now signals `SERVER_STOPPING` during quiesce and closes the
 connection immediately. Accepted events may be discarded; queue acceptance is
@@ -569,6 +737,16 @@ for current examples and the codec contract.
 shut down the containing `Soklet` instead. A stopped instance cannot restart;
 construct a new configuration and a new `Soklet` for a new generation.
 
+`Soklet.fromConfig(config)` claims configured transport identities immediately,
+before `start()`. Reusing an already claimed identity throws
+`TransportOwnershipException`. `SokletApplication.fromConfig(config)` only
+configures a runner; it claims the identities when its run begins.
+
+Default HTTP and SSE listener threads keep the JVM alive if the caller returns
+from `start()`. Complete shutdown releases those threads. Custom transports
+own their thread-liveness policy.
+
+
 The old synchronous, void `Soklet.stop()` stopped transports before returning
 but provided no aggregate terminal evidence. It is replaced by:
 
@@ -579,7 +757,8 @@ ShutdownResult result = soklet.awaitShutdown();
 
 `shutdown()` promptly publishes intent and always returns the same read-only
 completion stage. `awaitShutdown()` takes no shutdown trigger and returns the
-immutable terminal result. `Soklet.close()` remains available for direct
+immutable terminal result. It only waits: it installs no JVM hook or signal
+trigger. `Soklet.close()` remains available for direct
 embedders; it requests shutdown, joins it uninterruptibly, restores interrupt
 status, and throws if the result is unsuccessful.
 
@@ -603,7 +782,14 @@ ShutdownResult result =
 
 `SokletApplication` owns the JVM shutdown hook and optional runner-scoped
 `ENTER_KEY` trigger. The core lifecycle itself does not read standard input or
-own process hooks. When a standalone process owns application resources too,
+own process hooks. Active registrations share one daemon listener, which reads
+one byte at a time and stops at the first LF or CR without adding read-ahead
+buffers or closing stdin. EOF without a line terminator leaves the runner and
+its signal hook active. When the last registration is removed during a blocked
+read, at most that one pending byte may be consumed before the listener retires;
+Java cannot portably cancel the read without closing process-owned stdin. Reserve
+stdin until that read completes. A trailing LF after a CR remains available to
+later consumers. When a standalone process owns application resources too,
 configure one one-shot application and supply the bounded cleanup and any
 additional triggers to its run:
 
@@ -628,6 +814,53 @@ with `SokletApplication.fromConfig(config)` and pass triggers and cleanup to its
 Embedders that already own process signals should continue to use
 `Soklet.fromConfig(config)`, `start()`, `shutdown()`, and `awaitShutdown()` and
 should not add the standalone runner's process ownership.
+A manually registered JVM hook must wait for shutdown to finish. Migrating
+`stop()` to the asynchronous `shutdown()` method reference loses that wait;
+use blocking `close()` instead:
+
+```java
+Soklet soklet = Soklet.fromConfig(config);
+Thread shutdownHook = new Thread(soklet::close, "application-shutdown");
+Runtime.getRuntime().addShutdownHook(shutdownHook);
+try (soklet) {
+  soklet.start();
+  ShutdownResult result = soklet.awaitShutdown();
+} finally {
+  try {
+    Runtime.getRuntime().removeShutdownHook(shutdownHook);
+  } catch (IllegalStateException shutdownInProgress) {
+    // The JVM is already executing its registered shutdown hooks.
+  }
+}
+```
+
+[JVM shutdown hooks](https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/lang/Runtime.html)
+run concurrently with no guaranteed order. Coordinate independent logging and
+resource hooks so their dependencies remain available during Soklet's drain.
+On signal-driven JVM shutdown, `run(...)`, post-run code and a caller's
+`finally` block may never finish. Required application cleanup belongs in the
+bounded `ShutdownCleanup` action. The runner does not select process exit
+status; successful drain does not promise exit code zero after a signal.
+
+Do not call `System.exit()` from work that shutdown must join, such as handlers,
+streaming producers or cleanup actions. The JVM hook can then wait for the
+same work that is waiting for JVM exit, exhausting the shutdown budget.
+Let an external process owner or supervisor terminate the process.
+
+Soklet-created auxiliary HTTP/SSE/MCP workers (including streaming callbacks,
+diagnostics, supervision, MCP platform handlers, policy/cancelation workers and
+protocol deadline timers) are daemon threads. A blocked residual callback alone
+cannot keep the JVM alive after `run()` returns or throws. It remains residual
+work: an incomplete result stays incomplete, and configured application cleanup
+is still skipped. Running built-in listener threads retain process liveness;
+complete shutdown releases them. Custom transports and supplied executors own
+their thread/liveness policies. The runner does not call `System.exit()` or
+`Runtime.halt()`.
+
+Shutdown requested during startup may return normally without reaching
+readiness; this alone does not imply `SokletStartupException`. Inspect the
+returned lifecycle result.
+
 
 ### Shared lifecycle policy and changed defaults
 
@@ -679,10 +912,41 @@ equal and behave as one key in sets and maps; code written against an earlier
 4.0.0 prerelease that deliberately depended on object identity should use an
 identity-based collection instead.
 
-Review the builder Javadocs before selecting zero-duration phases or changing
-the finite startup timeout. A normal running shutdown with defaults is bounded
+All four lifecycle timeouts accept `Duration.ZERO` as an immediate deadline,
+not an unlimited wait or a disabled phase. A zero startup budget leaves no
+waiting allowance for setup/startup and can immediately yield `TIMED_OUT`.
+Zero startup cancelation leaves no waiting allowance for the active startup
+call to return before the shutdown phases. Zero graceful drain moves unresolved
+participants straight to forced shutdown; zero forced shutdown leaves no
+waiting allowance for termination proof. With both shutdown budgets zero,
+even an idle running listener can produce `INCOMPLETE` because stop calls and
+proof arrive asynchronously. Proof already available at classification can
+still establish completion; zero does not promise an incomplete result in
+every lifecycle state. Use positive budgets for normal deployments.
+
+Review the builder Javadocs before changing the finite startup timeout.
+A normal running shutdown with defaults is bounded
 by 18 seconds; shutdown intent during startup is bounded by 20 seconds from
 that intent.
+
+### Standalone terminal report
+
+`SokletApplication` attempts a multiline `soklet-terminal-report` directly on
+standard error, captured when the run's runtime is created, if the runner's
+primary outcome indicates failure, startup fails or times out, shutdown is `FORCED` or
+`INCOMPLETE`, a component terminates unexpectedly, or configured application
+cleanup fails or times out. A complete `FORCED` shutdown still triggers it.
+Ordinary expected graceful shutdown is silent unless another trigger applies.
+
+The report bypasses `LifecycleObserver` and `LogEvent`. It contains bounded
+lifecycle/component/cleanup state, retention and observer diagnostics, and
+failure class names, without exception messages, stack traces or traversal of
+causes/suppressed exceptions. Output is capped at 16 KiB of valid UTF-8. The
+runner and JVM hook share one 250-millisecond reporting allowance; reporting
+is best effort, and failures or timeout do not replace the lifecycle result.
+A blocked stderr worker can outlive that allowance. There is no public reporter
+switch; account for this channel in process stderr capture and deployment
+budgets. This report is separate from the default observer's stderr logging.
 
 ### Kubernetes and orchestrator budget
 
@@ -707,6 +971,18 @@ setting retains a reserve. Adding a five-second cleanup budget raises the same
 example's minimum to 36 seconds, so use at least 40 seconds or reduce a measured
 component.
 
+### Docker stop budget
+
+[Docker stop](https://docs.docker.com/reference/cli/docker/container/stop/)
+uses a 10-second default on Linux unless configured otherwise. That is shorter
+than Soklet's default 18-second running shutdown. Set a larger container budget
+with `docker run --stop-timeout 40 ...`, Compose `stop_grace_period: 40s`, or
+`docker stop --timeout 40 myapp`. The 40-second example includes startup
+cancelation, graceful/forced phases, five seconds of application cleanup,
+terminal reporting, other hooks and reserve. Recalculate it for your configured
+budgets and external drain delay; Docker force-kills the container when its
+budget expires.
+
 ### Observer and result changes
 
 `LifecycleObserver.didFailToStopSoklet(...)` and the three transport-specific
@@ -715,6 +991,13 @@ callback now receives `ShutdownResult` or `ShutdownComponentResult`, which
 is the terminal evidence for successful, forced, unexpected, residual, and
 unknown termination. Observer callbacks are observational: exceptions are
 contained and do not rewrite lifecycle results.
+Lifecycle-transition callbacks are serialized on a daemon observer worker;
+returning from shutdown or `SokletApplication.run(...)` does not join their
+delivery. They may be lost at JVM exit. Required cleanup belongs in bounded
+`ShutdownCleanup`. Cleanup that depends on observer state needs an
+application-owned delivery barrier. Other callbacks retain the inline behavior
+documented on their individual methods.
+
 
 MCP shutdown metrics and downstream OpenTelemetry projections use exactly:
 
@@ -727,6 +1010,27 @@ MCP shutdown metrics and downstream OpenTelemetry projections use exactly:
 
 Do not infer this set dynamically from enum constants; use an exhaustive
 mapping so a future enum addition cannot silently change metric cardinality.
+
+### Log-event routing with custom observers
+
+`LifecycleObserver.didReceiveLogEvent(...)` now defaults to a no-op. The
+instance returned by `LifecycleObserver.defaultInstance()` retains the existing
+stderr message and attached-Throwable stack-trace output. `SokletConfig` selects
+that instance when no observer configuration is supplied, so unconfigured
+applications still receive diagnostics.
+
+Configuring a custom observer or observer collection replaces the unconfigured
+default. Custom observers that only handle tracing or other lifecycle callbacks
+no longer each print an implicit stderr copy. Override `didReceiveLogEvent` in
+an application logging observer, or explicitly include
+`LifecycleObserver.defaultInstance()` in the collection to retain stderr
+logging. Null/empty observer configuration remains silent. Fan-out order,
+exact event/Throwable identity and callback-failure handling are unchanged.
+
+`OpenTelemetryLifecycleObserver` records spans and does not log events or export
+OpenTelemetry logs. Pair it with your application's logging observer if you
+want routed logs. The standalone terminal report and bounded emergency fallback
+for a failing log observer remain separate stderr channels.
 
 ## HTTP, SSE, and custom transports
 
@@ -744,6 +1048,54 @@ method for an independently terminating child is
 `attachTransparentDelegate(...)`. Soklet can validate honest evidence presented
 through those contracts; it cannot detect a custom transport that lies about
 its own attestation or behavior.
+
+Custom SSE transports can now read the logical handshake through
+`@NonNull public Optional<@NonNull SseHandshakeResult> HttpRequestResult.getSseHandshakeResult()`.
+The response consumer supplied to `SseServer.RequestHandler.handleRequest(...)`
+receives an `HttpRequestResult`; its `getMarshaledResponse()` returns the offered
+HTTP response. An absent or rejected handshake does not become accepted because
+its offered HTTP status is `200`.
+
+An accepted result exposes the existing client initializer and client context.
+The transport invokes the initializer once after writing the accepted response,
+keeps setup bounded, and releases queued catch-up writes/joins the broadcaster
+only after successful initialization. Failure or prior termination prevents
+activation; establishment observation precedes termination observation even if
+initialization fails. An `Accepted` value alone is not proof of committed headers,
+successful initialization or an active connection. Initializers and contexts are
+application-owned references; the getter does not invoke or copy them. Callers
+own their retention/logging, and `HttpRequestResult.toString()` continues to omit
+the handshake. Builder/copier handshake setters remain internal.
+
+A synchronous `TransportRuntime.start(StartupContext)` failure must throw its
+original runtime exception/error, retaining a checked cause when wrapping is
+needed. Let the owner initiate rollback before reporting termination proof.
+Signaling failure or proof before that owner's shutdown intent describes an
+independent premature termination and can control the startup result instead
+of the thrown cause. Independent worker failures must still be signaled when
+observed, even before readiness.
+
+Both shutdown phase methods must be safe after partially failed startup. They
+initiate cleanup promptly; the runtime signals `signalTerminated()` only when
+all its owned resources and activity have ended. Returning from a failed start
+or a shutdown method alone is not proof. A termination-owning decorator must
+also drive its child's shutdown; the child's independent proof remains required.
+Built-in bind failures now preserve the original cause through transparent,
+termination-owning and nested decorators. Their rollback completed within the grace period is classified
+as `GRACEFUL_TERMINATION` for HTTP, SSE and MCP; this disposition describes
+cleanup, while `StartupDisposition.FAILED` still describes the failed startup.
+An earlier independent failure remains `UNEXPECTED_TERMINATION`.
+
+Soklet defers phase delivery while a configured custom runtime's `start()` is
+still running. If it ignores cancelation and returns or throws after the forced
+boundary, its existing tracked lifecycle worker delivers one best-effort
+`shutdownForcibly(...)` call with the original deadline; remaining time may be
+zero. No additional cleanup worker or fresh budget is allocated. Later proof or
+cleanup failure cannot rewrite the frozen shutdown result or its recorded
+causes. A blocked compensation remains on that daemon lifecycle worker, and the
+transport remains responsible for closing its resources. This fallback does not
+replace honoring startup cancelation or keeping shutdown methods prompt.
+
 
 Protocol numeric fields are now independent of the JVM's formatting locale,
 including file ranges, default weak ETags, cookie Max-Age, SSE error status and
@@ -785,18 +1137,22 @@ body-only bound counts received payload bytes after HTTP transfer framing is
 removed and before optional `Content-Encoding` decompression; transfer framing
 remains part of the aggregate bound.
 
-`ResponseMarshaler` now provides a separate hook for four parser-owned failures
-that occur before the standard HTTP transport can construct a valid request:
-malformed requests, overlong request targets, unsupported expectations, and
-oversized request headers. Direct implementations of the interface inherit the
+`ResponseMarshaler` provides a hook for input failures before the built-in HTTP
+or SSE transport can construct a valid request: malformed requests, overlong
+request targets, unsupported expectations, oversized request headers, partial
+read timeouts and early aggregate-size failures. HTTP URI/encoding validation,
+unsupported content coding and malformed compressed bodies also use this hook
+when no valid request exists. Direct implementations of the interface inherit the
 bodyless default for `forUnparsedRequest(UnparsedRequest)` and may override it;
 applications using `ResponseMarshaler.builder()` may keep the default
 implementation or configure `unparsedRequestHandler(...)`. The immutable value
 supplies `ServerType`, an `UnparsedRequestReason`, a best-effort remote address,
 a fresh read-only view of the bounded raw-input capture, the byte count
-attributed to the rejected request through the parser-proven failure boundary,
+attributed to the rejected request through its rejection boundary,
 and whether the capture omits any of those attributed bytes. The built-in HTTP
-capture is capped at 64 KiB. Bytes already read from the socket beyond the
+and SSE captures are capped at 64 KiB. Later HTTP construction failures report
+an observed wire count with an empty capture and `isCaptureTruncated() == true`,
+without retaining another raw copy for successfully parsed traffic. Bytes already read from the socket beyond the
 failure boundary are neither captured nor counted because they might belong to
 a pipelined request.
 
@@ -806,6 +1162,10 @@ The default marshaler and built-in fallback use these conventional statuses:
 - `REQUEST_TARGET_TOO_LONG` (`414`)
 - `EXPECTATION_FAILED` (`417`)
 - `REQUEST_HEADERS_TOO_LARGE` (`431`)
+- `REQUEST_READ_TIMEOUT` (`408`)
+- `REQUEST_TOO_LARGE` (`413`)
+- `UNSUPPORTED_CONTENT_ENCODING` (`415`)
+- `REQUEST_BODY_DECOMPRESSION_FAILED` (`400`)
 
 The enum does not own a status: a custom marshaler may return any final response
 status from `200` through `599`. It deliberately receives no synthetic or
@@ -814,14 +1174,15 @@ bytes are raw, unredacted network input and can contain credentials, cookies,
 body fragments, control bytes, or non-text data; do not log, meter, reflect, or
 persist them without application-specific redaction and retention controls.
 
-For each eligible parser rejection, Soklet submits one task to the configured
-request-handler executor. The framework-managed default executor has bounded
+For each eligible rejection, Soklet runs the observation and marshaling pipeline
+on the request-handler executor. Later HTTP construction failures use their
+already-admitted handler; parser and SSE rejections submit a bounded detail task. The framework-managed default executor has bounded
 concurrency and queue capacity; a custom executor controls its own capacity. If
 admitted, Soklet calls
 `LifecycleObserver.didRejectUnparsedRequest(UnparsedRequest)` before the
 marshaler; observer failures are contained, both operations share
-`requestHandlerTimeout`, and the marshaler runs only if budget remains after
-observation. That timeout bounds how long the transport waits and interrupts the
+`requestHandlerTimeout` (its remaining duration for later HTTP failures and SSE
+rejections), and the marshaler runs only if budget remains after observation. That timeout bounds how long the transport waits and interrupts the
 worker; application code that ignores interruption can continue until executor
 shutdown. Neither callback runs inline on the socket selector.
 If executor admission is rejected, the work times out, or response generation
@@ -833,9 +1194,11 @@ connection closing and `Connection`, `Content-Length`, and
 at 64 KiB and must use a finite in-memory body; an oversized, streaming, or
 file-backed response uses the bodyless fallback.
 
-Other failures before request construction, such as a partial-request read
-timeout or an aggregate-size violation before the request line can be trusted,
-may close the connection without either detailed callback.
+Idle read timeouts and EOF before complete headers close quietly. Admission,
+shutdown and broken-socket failsafes do not invoke either detailed callback.
+When a valid `Request` can be constructed for a size violation, including a
+bounded decompression size or ratio failure, `forContentTooLarge(...)` continues
+to handle it with the available request/resource context.
 
 `forContentTooLarge(Request, ResourceMethod)` is unchanged. It remains the
 route-aware `413` path when Soklet parsed enough input to construct a real
@@ -883,6 +1246,21 @@ ShutdownResult result = SokletSimulator.run(sokletConfig, simulator -> {
   // assertions
 });
 ```
+
+If teardown cannot prove completion, a successful body is followed by
+`SokletShutdownIncompleteException`. When the body already failed, the same
+teardown exception is suppressed on that original failure. Its message now
+identifies component dispositions and residual-activity categories. Outstanding
+work alone has no Throwable cause; inspect `getShutdownResult()` and the
+component's `getResidualActivityEvidence()` for the frozen evidence. Releasing a
+worker later does not change the published result.
+
+`ShutdownResult`, `ShutdownComponentResult` and `ResidualActivityEvidence` now
+have compact, bounded `toString()` diagnostics. They render enum categories,
+failure counts/presence and retained-activity counts when available, without
+invoking application Throwables or traversing retained objects. Free-text
+residual summaries and failure details remain available through typed accessors;
+these diagnostic strings are not a serialization format.
 
 Each call derives a fresh off-network HTTP, SSE, and MCP transport for every
 corresponding transport present in the source configuration. The simulator
@@ -995,6 +1373,23 @@ for their supported servlet operations.
 Empty 204 and 304 responses remain bodyless through either conversion method;
 ordinary empty 200 responses retain their byte-array representation.
 
+Both `SokletHttpServletResponse` implementations still capture their entire body
+in memory and copy it into a finite response through `toMarshaledResponse()` or
+`toResponse()`. Conversion does not send the response. `flushBuffer()` and writer
+or output-stream flushes affect local commitment, not network delivery;
+`isCommitted()` does not prove that Soklet has sent the response head.
+`setBufferSize(...)` is a local commit threshold, not a body-size or memory cap.
+Capture continues beyond it, and conversion adds body copies. Bound response
+sizes and concurrent captures in the application. Request-size settings and
+native streaming queue limits do not cap this output.
+
+There is no `ResponseStream`-backed response-adapter mode. Use native file-backed
+responses for large known-length files, native HTTP streaming for incremental
+production, and `SseServer` for event streams. The standalone
+`SokletServletOutputStream` helper can wrap a supplied sink, but it does not bridge
+the response adapter's status, headers or commitment state to that sink. See
+[response buffering guidance](https://www.soklet.com/docs/servlet-integration#response-buffering-and-streaming).
+
 See the [javax Javadocs](https://javax.javadoc.soklet.com/com/soklet/servlet/javax/package-summary.html)
 or [Jakarta Javadocs](https://jakarta.javadoc.soklet.com/com/soklet/servlet/jakarta/package-summary.html)
 for the matching container namespace.
@@ -1007,6 +1402,80 @@ Generated resources must survive shading and packaging.
 
 The processor rejects unsupported or ambiguous method/record shapes at build
 time. This can surface errors that 3.5.1 deferred until runtime.
+
+HTTP/SSE path placeholders must occupy a whole slash-delimited component:
+`/users/{id}` is valid; `/users/prefix{id}` and `/users/{id}suffix` are not.
+Empty, nested and unbalanced placeholders are rejected. A varargs placeholder
+such as `{tail*}` must be the final component, and its name must not duplicate
+another placeholder (`/{id}/{id*}` is invalid). The processor reports these
+errors on the annotated method, including each repeatable route declaration.
+`ResourcePathDeclaration.fromPath(...)` and explicit class/method resolvers
+apply the same syntax rules; malformed paths formerly accepted as literals
+now fail at construction or resolver setup. Correct these declarations and
+rebuild their generated indexes.
+
+Each HTTP/SSE Java parameter may have only one Soklet binding annotation
+(`@PathParameter`, `@QueryParameter`, `@FormParameter`, `@RequestHeader`,
+`@RequestCookie`, `@Multipart` or `@RequestBody`). Custom qualifier annotations
+are separate and remain supported. Path parameters cannot use `Optional<T>`,
+and a varargs path parameter must be a `String`.
+
+Varargs placeholders match zero or more path components. For example,
+`/assets/{tail*}` matches `/assets` and `/assets/`, and `/{tail*}` matches `/`.
+With the default parameter provider and String converter, these matches now
+inject `""` instead of failing with 400. Nonempty suffixes keep their existing
+conversion behavior; explicitly configured String converters still run for
+empty suffixes and may reject them. A matching fixed route still takes
+precedence. Handlers that require a nonempty suffix should check it explicitly
+and return the appropriate response, such as 404 for a missing file.
+
+`optional=true` on query, form, header, cookie and multipart bindings now requires
+a reference type. Replace optional primitives such as `int` with `Integer` or
+`Optional<Integer>`. Required primitives remain supported. An absent optional
+`@RequestBody` keeps its existing Java primitive default (`0`, `false`, etc.).
+The processor reports these mistakes on the parameter; the default runtime
+parameter provider also checks explicitly registered declarations during setup,
+before instance acquisition for dynamically resolved methods, and before direct
+extraction. Custom parameter providers retain their runtime binding control.
+With default value conversion, absent or single blank `Optional<T>` value
+bindings still produce `Optional.empty()`.
+
+The default `InstanceProvider` now checks resource classes during HTTP/SSE
+setup without instantiating them. They must be concrete and have a no-argument
+constructor accessible to Soklet (normally a public class and public constructor).
+If a custom provider constructs your resources, this default-constructor check
+does not apply; the processor does not reject non-public or constructor-injected
+resource classes. Custom value-converter targets are not limited to a built-in
+type list.
+
+During incremental HTTP/SSE compilation, the processor updates one prior route
+snapshot. Current compiler output takes precedence over the enabled sidecar
+and persistent caches; an empty current index is authoritative. Recompiled
+types replace their old declarations, and retained owners absent from the
+compiler's sources/classpath are removed. Untouched sources, compiled classes
+and dependency JARs must remain visible to the compiler.
+
+After deleting or renaming a resource, remove its old compiled classfiles or
+perform a clean build. An old classfile still on the compiler's classpath remains
+a usable type. A malformed selected index now fails compilation with its
+location; delete the reported generated index and rebuild all annotated code.
+The processor preserves that invalid snapshot and existing caches on a read
+failure. If a cache update fails, it invalidates the stale cache; inability to
+update or invalidate it also fails compilation.
+
+## HTTP and SSE route precedence
+
+Competing varargs routes now compare path components from left to right:
+a literal outranks a single-component placeholder, and both outrank a varargs
+suffix. For example, `/widgets/{id}/{rest*}` receives `/widgets/42/details`
+when `/{path*}` is also registered. At the first differing component,
+`/a/b/{rest*}` also outranks `/a/{id}/c/{rest*}` for `/a/b/c/file`.
+
+Declarations without varargs remain preferred; their existing rule of fewer
+placeholders, then more literals, is preserved. Equally specific overlapping
+routes are rejected by the processor and built-in resolvers. Rename-only
+differences between placeholder names do not break a tie. Review applications
+that relied on a catch-all winning over a specific varargs route.
 
 ## MCP JSON number equality and protected state
 
@@ -1089,6 +1558,114 @@ Client cancellation has no framework-provided free-form cause. Cancellation
 and expiry preserve a terminal reservation that already won and retain physical
 worker/evidence reservations until exit; cancellation is not rollback.
 
+## Legacy MCP HTTP metric routes
+
+For observed GET/DELETE requests handled by a 2025 MCP session endpoint, the
+default collector now uses the selected configured endpoint path as the
+`soklet_http_*` route label and exposes `RouteType.MATCHED` in snapshot keys.
+This includes endpoint-selected rejections such as an unknown session (404),
+invalid request (400), or unavailable session facility (405). They no longer
+share the `unmatched` route with ordinary unmatched HTTP requests. Query
+values, session IDs and arbitrary request targets are not used as route labels.
+
+Custom collectors and lifecycle observers still receive the actual HTTP
+request with `ServerType.HTTP` and a null `ResourceMethod`: the MCP transport
+does not invoke an HTTP resource method. Custom collectors own their route
+classification/export policy. MCP POST observations continue to use the MCP
+semantic callbacks.
+
+## OpenMetrics histogram bucket labels
+
+The default collector now renders finite histogram `le` labels in
+`OPEN_METRICS_1_0` using the canonical floating-point patterns from the
+[OpenMetrics 1.0 specification](https://prometheus.io/docs/specs/om/open_metrics_spec/#considerations-canonical-numbers).
+For example, `128` becomes `128.0`, `1000000` becomes `1e+06`, and
+`1048576` becomes `1.048576e+06`. The overflow bucket remains `+Inf`.
+This formatting change applies to HTTP, SSE and MCP histograms and preserves
+numeric thresholds, units and sample values. The separate sum and snapshot
+API changes are described below.
+
+`PROMETHEUS` (text format 0.0.4) retains its existing integer finite-boundary
+labels. For OpenMetrics, update queries and `SnapshotTextOptions.metricFilter`
+predicates that match `le` strings literally. Filters receive the exact label
+string used in the selected output format. Formatting is locale independent
+and preserves the integer boundary value without conversion to `double`.
+
+## Subscription-maintenance metrics
+
+The default collector now counts delivered `McpMetricsEvent.SubscriptionMaintenance`
+events in `McpMetricsSnapshot.getSubscriptionMaintenance()`, an immutable
+`Map<McpMetricsSnapshot.SubscriptionMaintenanceKey, Long>`. Create keys through
+`SubscriptionMaintenanceKey.fromDimensions(endpointPath, maintenanceWork,
+maintenanceOutcome)` using the existing `Work` and `Outcome` enums. The key
+exposes `getEndpointPath()`, `getWork()` and `getOutcome()`; its diagnostic
+rendering redacts the endpoint. This aggregate applies across supported MCP
+revisions.
+
+The snapshot builder's `subscriptionMaintenance(...)` setter copies its map,
+rejects null entries and negative counts, preserves explicit zero counts, and
+clears the map when passed null or an empty map. Earlier snapshots are immutable.
+`reset()` clears these cumulative counts while retaining live gauges.
+
+Both exporters add `soklet_mcp_subscription_maintenance_total`, labeled only by
+configured `endpoint`, fixed `work` and fixed `outcome`. Work/outcome values are
+lowercase. Maintenance-only observations are exported even without a
+subscription-open event. Counts describe delivered outcome events, including
+coalescing and stale-result discards; they are not unique subscriptions,
+started attempts, durations or active work. Retention uses the existing
+8,192-key limit; eviction or semantic-delivery overflow can omit observations.
+Concurrent snapshots and resets retain the existing weak observation semantics.
+
+## Histogram sums and snapshot values
+
+`MetricsCollector.HistogramSnapshot.getSum()` now returns nonnull `Double`.
+The shared histogram accumulator uses floating point, so totals can grow
+beyond `Long.MAX_VALUE`. This applies to duration, byte and queue-depth
+histograms. Duration values remain nanoseconds, including the `_nanos` metric
+families; other units and all metric names remain unchanged. Both text export
+formats serialize sums as floating-point numbers.
+
+These sums are approximate operational metrics. Rounding can discard a small
+addition to a large total, and concurrent accumulation order can affect the
+result. Use an application-owned exact total for exact accounting.
+
+The snapshot constructor now accepts `List<Long>` bucket boundaries and
+cumulative counts, `Long` count/min/max, and `Double` sum. Lists are
+defensively copied. Both lists must have the same size, all arguments and list
+elements must be nonnull, and the sum must be finite and nonnegative. Negative
+zero is normalized to `0.0`. Independently constructed snapshots retain the
+supplied count; it is not recomputed from the supplied buckets.
+
+All snapshot scalar accessors now return boxed values: `Integer` for
+`getBucketCount()`, `Double` for `getSum()`, and `Long` for boundary, cumulative
+count, total count, minimum, maximum and percentile accessors. Indexed
+accessors accept nonnull `Integer`; `getPercentile` accepts nonnull `Double`.
+Zero remains a present value. Update array constructor arguments to lists,
+use floating-point sum arguments, and replace sum assignments to `long`
+with `double` or `Double`. Integer getters retain their full `long` precision.
+Recompile applications using these changed signatures; the old primitive and
+array snapshot overloads are removed.
+
+## Histogram snapshots and reset
+
+Snapshots returned by `MetricsCollector.Histogram.snapshot()` now derive
+`getCount()` from the final captured cumulative bucket. The default collector's
+histogram `_count` and `+Inf` bucket therefore agree within the same exported
+point, including during concurrent recording or reset. This corrects a
+separate-counter race that could leave a persistent mismatch after reset.
+Metric names, labels, units and numeric bucket boundaries are unchanged.
+See the boxed snapshot API and floating-point sum migration above.
+An actual `Long.MAX_VALUE` sample also retains that minimum instead of being
+confused with the empty-histogram marker.
+
+Snapshots remain concurrent observations: the bucket vector, sum, minimum and
+maximum do not form an atomic transaction. A record overlapping `reset()` can
+be discarded or represented partly across those fields. Coordinate writers
+with reset if you need an exact observation-window boundary. With no recording
+in flight, reset clears the histogram and subsequent records start a new
+window; previously returned snapshots remain immutable. Collector reset still
+preserves live gauges and their lifecycle identity bookkeeping.
+
 ## Request diagnostics and privacy
 
 Framework-created diagnostics no longer embed request-controlled IDs, paths,
@@ -1099,6 +1676,20 @@ input-bearing conversion failure as a cause. If application code parsed
 `Request.toString()`, exception messages, or cause chains, replace that with
 typed `Request` and structured exception accessors and apply application-owned
 redaction before logging.
+
+The built-in MCP server deliberately omits Throwable, Request, ResourceMethod
+and MarshaledResponse attachments from its request-observer, semantic-metrics
+collector and transport failure `LogEvent`s. Messages identify the failing
+operation without exception text or stack traces. HTTP/SSE failure events may
+still attach the original Throwable. An empty `LogEvent.getThrowable()` on
+these MCP events therefore does not mean no exception occurred.
+
+This boundary does not redact typed MCP callback arguments, exact observed
+Throwables, application-created events, or the generic HTTP lifecycle callbacks
+for enabled 2025 session GET/DELETE requests. Those objects remain subject to
+application-owned logging and retention controls. Aggregate lifecycle-transition
+observer failure events also retain their original Throwable; they are a
+separate channel from MCP request observation.
 
 Custom `RequestBodyMarshaler` implementations now distinguish expected client
 parse failures from unexpected implementation failures. Catch the JSON/parser
@@ -1171,3 +1762,13 @@ covers identity and compressed bytes. Automatic weakening of an encoded 200 does
 make a separately constructed strong 304 validator correct. Weak tags are valid for
 If-None-Match cache validation; If-Match requires a strong, representation-specific
 validator. Bodyless responses retain the application's declared validator.
+
+### HTTP response stream metrics
+
+For admitted `HttpServer` response streams, `MetricsCollector.didFinishRequestHandling` marks application handling and transport handoff. The active HTTP request remains counted until `didTerminateResponseStream(StreamingResponseHandle, StreamTermination, Duration, Long)` runs. That default callback receives the original dispatch request, the terminal outcome, the full monotonic request duration, and observed payload bytes. It runs once after metrics handling finish and before lifecycle stream observers. Custom collectors overriding handling finish should defer stream duration/body-size samples and their active-request decrement to this callback.
+
+The duration starts at request processing entry and ends at logical transport termination. It excludes observer queue delay and later physical resource cleanup. `StreamTermination.getDuration()` still describes only the stream lifetime. Socket body-size observations count bytes accepted by socket writes, including partial writes before a later failure; they exclude headers and chunk framing and do not assert client receipt. Simulation counts accepted materialized bytes, including the prefix before a producer failure or simulator limit.
+
+`MetricsCollector.Snapshot.getHttpResponseStreamTerminations()` returns an immutable `Map<HttpResponseStreamTerminationKey, Long>`. Its builder setter defensively copies input; null/empty clears, zero is retained, and null keys/values or negative counts are rejected. Keys compose `HttpServerRouteStatusKey` with `StreamTerminationReason`; diagnostic rendering redacts application dimensions. The default collector exports `soklet_http_response_stream_terminations_total` with `method`, `route`, `status_class`, and uppercase `reason` labels, under the existing 8,192-key capacity. Reset clears cumulative termination counts while preserving live request state.
+
+A producer failure after a committed 200 remains `2xx` with `PRODUCER_FAILED`. Precommit finite replacements (including 505/503), HEAD/bodyless suppression, and unadmitted streams retain finite HTTP accounting and do not invoke the admitted-stream metrics callback. Existing handler-duration and approximate time-to-first-byte scopes remain unchanged. Dedicated SSE-server and semantic MCP metrics retain their existing ownership.

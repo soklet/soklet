@@ -210,6 +210,16 @@ final class McpChunkedHttpClient implements AutoCloseable {
 		return payload;
 	}
 
+	enum DisconnectMode { RESET, CLOSE, INPUT_END }
+
+	void disconnect(DisconnectMode mode) throws IOException {
+		switch (mode) {
+			case RESET -> closeWithReset();
+			case CLOSE -> close();
+			case INPUT_END -> socket.shutdownOutput();
+		}
+	}
+
 	void closeWithReset() throws IOException {
 		if (!socket.isClosed()) {
 			socket.setSoLinger(true, 0);

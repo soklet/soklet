@@ -25,8 +25,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
-import static java.util.Objects.requireNonNull;
-
 /**
  * Immutable output of one completed MCP prompt request.
  *
@@ -107,11 +105,12 @@ public final class McpPromptOutput implements McpCompletePayload {
 		private Builder() {
 		}
 
-		/** @param description prompt description
-		 * @return this builder */
+		/** @param description exact prompt description, without normalization
+		 * @return this builder
+		 * @throws IllegalArgumentException if the description contains an unpaired surrogate */
 		@NonNull
 		public Builder description(@NonNull String description) {
-			this.description = requireNonNull(description);
+			this.description = McpContentValueSupport.requireWellFormedString(description);
 			return this;
 		}
 

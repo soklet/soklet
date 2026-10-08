@@ -115,10 +115,14 @@ public enum LogEventType {
 	LIFECYCLE_OBSERVER_DID_FINISH_REQUEST_HANDLING_FAILED,
 	/**
 	 * Indicates {@link LifecycleObserver#didStartMcpRequestHandling(McpRequestContext)} threw an exception.
+	 * Built-in MCP emission omits Throwable, request, resource-method and
+	 * response attachments; see {@link LogEvent}'s privacy contract.
 	 */
 	LIFECYCLE_OBSERVER_DID_START_MCP_REQUEST_HANDLING_FAILED,
 	/**
 	 * Indicates {@link LifecycleObserver#didFinishMcpRequestHandling(McpRequestContext, McpRequestOutcome, McpJsonRpcError, Duration, List)} threw an exception.
+	 * Built-in MCP emission omits Throwable, request, resource-method and
+	 * response attachments; see {@link LogEvent}'s privacy contract.
 	 */
 	LIFECYCLE_OBSERVER_DID_FINISH_MCP_REQUEST_HANDLING_FAILED,
 	/**
@@ -171,6 +175,8 @@ public enum LogEventType {
 	LIFECYCLE_OBSERVER_DID_WRITE_SSE_COMMENT_FAILED,
 	/**
 	 * Indicates a {@link MetricsCollector} invocation threw an exception.
+	 * Built-in MCP semantic-metrics emission omits exception text and all
+	 * attachments. HTTP/SSE emission may attach the original Throwable.
 	 */
 	METRICS_COLLECTOR_FAILED,
 	/**
@@ -213,6 +219,8 @@ public enum LogEventType {
 	SERVER_INTERNAL_ERROR,
 	/**
 	 * Indicates an HTTP, SSE, or MCP transport encountered a low-level timeout, I/O error, or event-loop failure.
+	 * Built-in MCP emission omits exception text and all attachments.
+	 * HTTP/SSE emission may attach the original Throwable.
 	 */
 	SERVER_TRANSPORT_FAILURE,
 	/**

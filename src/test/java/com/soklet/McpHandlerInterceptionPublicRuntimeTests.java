@@ -415,6 +415,254 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 	}
 
 	@Test
+	public void interceptorsObserveAndRethrowExactHandlerErrorsOnEveryRevision() throws Exception {
+		for (McpProtocolVersion protocolVersion : List.of(McpProtocolVersion.V2025_06_18,
+				McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28)) {
+			AtomicReference<McpJsonRpcException> handlerFailure = new AtomicReference<>(intentionalFailure());
+			AtomicInteger observed = new AtomicInteger();
+			McpHandlerInterceptor inner = (requestContext, invocationFeatures, continuation) -> {
+				try {
+					return continuation.proceed();
+				} catch (McpJsonRpcException exception) {
+					Assertions.assertSame(handlerFailure.get(), exception);
+					observed.incrementAndGet();
+					throw exception;
+				}
+			};
+			McpServer server = errorServer(protocolVersion, handlerFailure)
+					.handlerInterceptor((requestContext, invocationFeatures, continuation) -> {
+						try {
+							return inner.interceptHandler(requestContext, invocationFeatures, continuation);
+						} catch (McpJsonRpcException exception) {
+							Assertions.assertSame(handlerFailure.get(), exception);
+							observed.incrementAndGet();
+							throw exception;
+						}
+					}).build();
+			try (Soklet owner = managedSoklet(server)) {
+				owner.start();
+				int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
+				List<ErrorOperation> operations = errorOperations(protocolVersion);
+				Assertions.assertAll(operations.stream().map(operation -> () -> {
+					HttpResponse<String> response = sendErrorOperation(port, protocolVersion, operation);
+					Assertions.assertEquals(protocolVersion == McpProtocolVersion.V2026_07_28 ? 400 : 200,
+							response.statusCode(), response.body());
+					assertContains(response.body(), "\"code\":3001");
+					assertContains(response.body(), "\"message\":\"Visible handler error\"");
+					assertContains(response.body(), "\"data\":{\"kind\":\"intentional\"}");
+				}));
+				handlerFailure.set(new McpJsonRpcException(McpJsonRpcError.fromResourceNotFound(RESOURCE_URI)));
+				HttpResponse<String> missingResource = sendErrorOperation(port, protocolVersion, operations.get(2));
+				Assertions.assertEquals(protocolVersion == McpProtocolVersion.V2026_07_28 ? 400 : 200,
+						missingResource.statusCode(), missingResource.body());
+				assertContains(missingResource.body(), "\"code\":"
+						+ (protocolVersion == McpProtocolVersion.V2026_07_28 ? -32602 : -32002));
+				assertContains(missingResource.body(), "\"uri\":\"" + RESOURCE_URI + "\"");
+				Assertions.assertEquals((operations.size() + 1) * 2, observed.get());
+			}
+		}
+	}
+
+	@Test
+	public void interceptorCanRecoverHandlerErrorsThroughNormalResultValidation() throws Exception {
+		for (McpProtocolVersion protocolVersion : List.of(McpProtocolVersion.V2025_06_18,
+				McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28)) {
+			AtomicReference<McpJsonRpcException> handlerFailure = new AtomicReference<>(intentionalFailure());
+			AtomicReference<McpOperationResult> recovery = new AtomicReference<>();
+			AtomicInteger sanitized = new AtomicInteger();
+			McpServer server = errorServer(protocolVersion, handlerFailure)
+					.handlerInterceptor((requestContext, invocationFeatures, continuation) -> {
+						try {
+							return continuation.proceed();
+						} catch (McpJsonRpcException exception) {
+							Assertions.assertSame(handlerFailure.get(), exception);
+							return recovery.get();
+						}
+					})
+					.toolResultSanitizer((requestContext, toolName, rawArguments, completeResult) -> {
+						sanitized.incrementAndGet();
+						return McpCompleteResult.fromToolText("sanitized-recovery");
+					}).build();
+			try (Soklet owner = managedSoklet(server)) {
+				owner.start();
+				int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
+				Assertions.assertAll(errorOperations(protocolVersion).stream().map(operation -> () -> {
+					recovery.set(operation.recovery());
+					HttpResponse<String> response = sendErrorOperation(port, protocolVersion, operation);
+					Assertions.assertEquals(200, response.statusCode(), response.body());
+					assertContains(response.body(), "recovery");
+					Assertions.assertFalse(response.body().contains("Visible handler error"), response.body());
+					if (operation.method().equals("tools/call"))
+						assertContains(response.body(), "sanitized-recovery");
+				}));
+				Assertions.assertEquals(1, sanitized.get());
+				// Catching a public handler error does not bypass method-specific result checks.
+				recovery.set(McpCompleteResult.fromToolText("wrong-operation-recovery"));
+				ErrorOperation completion = errorOperations(protocolVersion).get(4);
+				assertPrivateError(sendErrorOperation(port, protocolVersion, completion), protocolVersion);
+			}
+		}
+	}
+
+	@Test
+	public void copiedWrappedStaleAndInterceptorAuthoredErrorsStayPrivate() throws Exception {
+		for (McpProtocolVersion protocolVersion : List.of(McpProtocolVersion.V2025_06_18,
+				McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28)) {
+			McpJsonRpcException previousHandlerFailure = intentionalFailure();
+			AtomicReference<McpJsonRpcException> handlerFailure = new AtomicReference<>(previousHandlerFailure);
+			AtomicReference<String> mode = new AtomicReference<>("rethrow");
+			AtomicInteger interceptedFailures = new AtomicInteger();
+			McpServer server = errorServer(protocolVersion, handlerFailure)
+					.handlerInterceptor((requestContext, invocationFeatures, continuation) -> {
+						if (mode.get().equals("before"))
+							throw new McpJsonRpcException(McpJsonRpcError.fromApplication(3002, "Private interceptor error"));
+						McpOperationResult result;
+						try {
+							result = continuation.proceed();
+						} catch (McpJsonRpcException exception) {
+							Assertions.assertSame(handlerFailure.get(), exception);
+							interceptedFailures.incrementAndGet();
+							throw switch (mode.get()) {
+								case "copy" -> new McpJsonRpcException(exception.getError());
+								case "wrapped" -> new IllegalStateException("Private wrapper", exception);
+								case "stale" -> previousHandlerFailure;
+								default -> exception;
+							};
+						}
+						if (mode.get().equals("after-success"))
+							throw new McpJsonRpcException(McpJsonRpcError.fromApplication(3002, "Private interceptor error"));
+						return result;
+					}).build();
+			try (Soklet owner = managedSoklet(server)) {
+				owner.start();
+				int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
+				List<ErrorOperation> operations = errorOperations(protocolVersion);
+				// Establish the old object's real handler origin in an earlier invocation.
+				HttpResponse<String> prime = sendErrorOperation(port, protocolVersion, operations.get(0));
+				assertContains(prime.body(), "Visible handler error");
+				for (String errorMode : List.of("before", "after-success", "copy", "wrapped", "stale")) {
+					mode.set(errorMode);
+					handlerFailure.set(errorMode.equals("after-success") ? null : intentionalFailure());
+					Assertions.assertAll(operations.stream().map(operation -> () ->
+							assertPrivateError(sendErrorOperation(port, protocolVersion, operation), protocolVersion)));
+				}
+				Assertions.assertEquals(1 + operations.size() * 3, interceptedFailures.get());
+			}
+		}
+	}
+
+	private static McpJsonRpcException intentionalFailure() {
+		return new McpJsonRpcException(McpJsonRpcError.fromApplication(3001, "Visible handler error",
+				McpJsonObject.builder().put("kind", "intentional").build()));
+	}
+
+	private static McpServer.Builder errorServer(McpProtocolVersion protocolVersion,
+			AtomicReference<McpJsonRpcException> handlerFailure) {
+		Set<McpProtocolVersion> versions = Set.of(protocolVersion);
+		McpCompletionHandler completionHandler = (requestContext, completionContext, invocationFeatures) -> {
+			throwHandlerFailure(handlerFailure);
+			return McpArgumentCompletionResult.fromValues(List.of("recovery"));
+		};
+		McpEndpoint.Builder endpoint = McpEndpoint.withPath(MCP_PATH,
+				McpImplementation.withNameAndVersion("handler-error-interception", "1").build(), versions)
+				.toolRegistrations(List.of(McpToolRegistration.withName(TOOL_NAME, versions).jsonObjectArguments()
+						.handler((requestContext, arguments, invocationFeatures) -> {
+							throwHandlerFailure(handlerFailure);
+							return McpCompleteResult.fromToolText("recovery");
+						}).build()))
+				.promptRegistrations(List.of(McpPromptRegistration.withName(PROMPT_NAME, versions)
+						.handler((requestContext, promptGetContext, invocationFeatures) -> {
+							throwHandlerFailure(handlerFailure);
+							return promptRecovery();
+						}).arguments(List.of(McpPromptArgumentDeclaration.withName("subject").build()))
+						.completionHandler(completionHandler, versions).build()))
+				.resourceRegistrations(List.of(McpResourceRegistration.withUriTemplateAndName(
+						"test://interception/{subject}", "Resource", versions)
+						.handler((requestContext, resourceReadContext, invocationFeatures) -> {
+							throwHandlerFailure(handlerFailure);
+							return completeText(resourceReadContext.getUri(), "recovery");
+						}).completionHandler(completionHandler, versions).build()))
+				.resourceListHandler((requestContext, resourceListContext, invocationFeatures) -> {
+					throwHandlerFailure(handlerFailure);
+					return McpResourcePage.builder().metadata(recoveryMetadata()).build();
+				}, versions);
+		if (protocolVersion == McpProtocolVersion.V2026_07_28)
+			endpoint.skillListHandler((requestContext, skillListContext, invocationFeatures) -> {
+				throwHandlerFailure(handlerFailure);
+				return McpSkillPage.builder().metadata(recoveryMetadata()).build();
+			}, versions);
+		return serverBuilder(endpoint.build()).requestRateLimiter(rateLimitContext -> McpRateLimitDecision.allowed());
+	}
+
+	private static void throwHandlerFailure(AtomicReference<McpJsonRpcException> handlerFailure) {
+		McpJsonRpcException exception = handlerFailure.get();
+		if (exception != null)
+			throw exception;
+	}
+
+	private static McpJsonObject recoveryMetadata() {
+		return McpJsonObject.builder().put("recovery", true).build();
+	}
+
+	private static McpCompleteResult promptRecovery() {
+		return McpCompleteResult.fromPromptOutput(McpPromptOutput.fromMessages(
+				McpPromptMessage.fromUserContent(McpTextContent.fromText("recovery"))));
+	}
+
+	private static List<ErrorOperation> errorOperations(McpProtocolVersion protocolVersion) {
+		List<ErrorOperation> operations = new ArrayList<>(List.of(
+				new ErrorOperation("tools/call", ",\"name\":\"" + TOOL_NAME + "\",\"arguments\":{}",
+						Optional.of(TOOL_NAME), McpCompleteResult.fromToolText("recovery")),
+				new ErrorOperation("prompts/get", ",\"name\":\"" + PROMPT_NAME + "\",\"arguments\":{}",
+						Optional.of(PROMPT_NAME), promptRecovery()),
+				new ErrorOperation("resources/read", ",\"uri\":\"" + RESOURCE_URI + "\"",
+						Optional.of(RESOURCE_URI.toString()), completeText(RESOURCE_URI, "recovery")),
+				new ErrorOperation("resources/list", "", Optional.empty(),
+						McpResourcePage.builder().metadata(recoveryMetadata()).build()),
+				new ErrorOperation("completion/complete", ",\"ref\":{\"type\":\"ref/prompt\",\"name\":\""
+						+ PROMPT_NAME + "\"},\"argument\":{\"name\":\"subject\",\"value\":\"r\"}", Optional.empty(),
+						McpArgumentCompletionResult.fromValues(List.of("recovery"))),
+				new ErrorOperation("completion/complete", ",\"ref\":{\"type\":\"ref/resource\",\"uri\":\""
+						+ "test://interception/{subject}\"},\"argument\":{\"name\":\"subject\",\"value\":\"r\"}", Optional.empty(),
+						McpArgumentCompletionResult.fromValues(List.of("recovery")))));
+		if (protocolVersion == McpProtocolVersion.V2026_07_28)
+			operations.add(new ErrorOperation("skills/list", "", Optional.empty(),
+					McpSkillPage.builder().metadata(recoveryMetadata()).build()));
+		return operations;
+	}
+
+	private record ErrorOperation(String method, String parameters, Optional<String> name,
+			McpOperationResult recovery) { }
+
+	private static final HttpClient ERROR_HTTP = HttpClient.newBuilder()
+			.version(HttpClient.Version.HTTP_1_1).connectTimeout(Duration.ofSeconds(5)).build();
+
+	private static HttpResponse<String> sendErrorOperation(int port, McpProtocolVersion protocolVersion,
+			ErrorOperation operation) throws Exception {
+		boolean modern = protocolVersion == McpProtocolVersion.V2026_07_28;
+		String body = modern ? request("error", operation.method(), operation.parameters())
+				: "{\"jsonrpc\":\"2.0\",\"id\":\"error\",\"method\":\"" + operation.method() + "\",\"params\":{"
+						+ (operation.parameters().isEmpty() ? "" : operation.parameters().substring(1)) + "}}";
+		HttpRequest.Builder request = HttpRequest.newBuilder(URI.create("http://" + LOOPBACK + ":" + port + MCP_PATH))
+				.timeout(Duration.ofSeconds(5)).header("Content-Type", JSON_MEDIA_TYPE)
+				.header("Accept", JSON_MEDIA_TYPE + ", text/event-stream")
+				.header("MCP-Protocol-Version", protocolVersion.getWireValue());
+		if (modern) {
+			request.header("Mcp-Method", operation.method());
+			operation.name().ifPresent(name -> request.header("Mcp-Name", name));
+		}
+		return ERROR_HTTP.send(request.POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8)).build(),
+				HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+	}
+
+	private static void assertPrivateError(HttpResponse<String> response, McpProtocolVersion protocolVersion) {
+		Assertions.assertEquals(protocolVersion == McpProtocolVersion.V2026_07_28 ? 500 : 200,
+				response.statusCode(), response.body());
+		Assertions.assertEquals("{\"jsonrpc\":\"2.0\",\"id\":\"error\",\"error\":{\"code\":-32603,\"message\":\"Internal error\"}}",
+				response.body());
+	}
+
+	@Test
 	public void continuationIsOneShotThreadBoundAndCallScoped() throws Exception {
 		Map<String, AtomicInteger> handlerInvocations = new ConcurrentHashMap<>();
 		for (String toolName : List.of("one-shot", "wrong-thread", "retained"))

@@ -143,6 +143,61 @@ class BuiltInTransportLifecycleAdapterTests {
 		Assertions.assertEquals(1, operations.releaseCount.get());
 	}
 
+
+	@Test
+	void delegatedStartFailureDefersProofUntilOwnerRollback() {
+		RecordingOperations operations = new RecordingOperations(attempt -> true, Set.of());
+		BuiltInTransportLifecycleAdapter adapter = adapter(operations);
+		InternalTerminationGroup ownerGroup = delegatedOwnerGroup();
+		TransportTerminationSignal signal = new InternalTransportTerminationSignal(ownerGroup, ownerGroup.root()).publicSignal();
+		RuntimeException expected = new IllegalStateException("synchronous delegated bind failure");
+		TransportRuntime runtime = adapter.delegatedRuntime(signal, () -> {
+			BuiltInTransportLifecycleAdapter.Generation generation = adapter.beginStart();
+			adapter.failedStart(generation, expected, false);
+			throw expected;
+		});
+		Assertions.assertSame(expected, Assertions.assertThrows(IllegalStateException.class,
+				() -> runtime.start(new StartupContext(NanoClock.system(), Long.MAX_VALUE, Long.MAX_VALUE, () -> false))));
+		Assertions.assertTrue(ownerGroup.primaryEventsInSequence().isEmpty(), "Start must throw before publishing owner proof");
+		Assertions.assertEquals(0, operations.quiesceCount.get());
+		ownerGroup.recordShutdownIntent();
+		runtime.shutdownGracefully(new ShutdownContext(ShutdownPhase.GRACEFUL, NanoClock.system(), Long.MAX_VALUE));
+		Assertions.assertTrue(ownerGroup.controllingEvent().isEmpty());
+		Assertions.assertTrue(ownerGroup.isBarrierComplete());
+		Assertions.assertEquals(1, operations.quiesceCount.get());
+		Assertions.assertEquals(1, operations.releaseCount.get());
+	}
+
+	@Test
+	void delegatedStartFailureDoesNotEraseAnEarlierIndependentFailure() {
+		RecordingOperations operations = new RecordingOperations(attempt -> true, Set.of());
+		BuiltInTransportLifecycleAdapter adapter = adapter(operations);
+		InternalTerminationGroup ownerGroup = delegatedOwnerGroup();
+		TransportTerminationSignal signal = new InternalTransportTerminationSignal(ownerGroup, ownerGroup.root()).publicSignal();
+		RuntimeException independent = new IllegalStateException("independent pre-readiness failure");
+		RuntimeException later = new IllegalArgumentException("later startup throw");
+		TransportRuntime runtime = adapter.delegatedRuntime(signal, () -> {
+			BuiltInTransportLifecycleAdapter.Generation generation = adapter.beginStart();
+			adapter.signalUnexpectedFailure(generation, independent);
+			adapter.failedStart(generation, later, false);
+			throw later;
+		});
+		Assertions.assertSame(later, Assertions.assertThrows(IllegalArgumentException.class,
+				() -> runtime.start(new StartupContext(NanoClock.system(), Long.MAX_VALUE, Long.MAX_VALUE, () -> false))));
+		Assertions.assertSame(independent, ownerGroup.controllingEvent().orElseThrow().cause().orElseThrow());
+		ownerGroup.recordShutdownIntent();
+		runtime.shutdownGracefully(new ShutdownContext(ShutdownPhase.GRACEFUL, NanoClock.system(), Long.MAX_VALUE));
+		Assertions.assertTrue(ownerGroup.isBarrierComplete());
+		Assertions.assertSame(independent, ownerGroup.controllingEvent().orElseThrow().cause().orElseThrow());
+	}
+
+	private static InternalTerminationGroup delegatedOwnerGroup() {
+		LifecycleWorkers workers = new LifecycleWorkers((name, runnable) -> runnable.run());
+		InternalTerminationGroup group = new InternalTerminationGroup(new AdmissionFence(), () -> {}, workers);
+		group.commit();
+		return group;
+	}
+
 	@Test
 	void delegatedRuntimeNeverStartedProvesTerminationWithoutTransportWork() {
 		RecordingOperations operations = new RecordingOperations(

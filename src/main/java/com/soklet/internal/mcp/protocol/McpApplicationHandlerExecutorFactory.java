@@ -119,7 +119,7 @@ final class McpApplicationHandlerExecutors {
 		return runnable -> {
 			Thread thread = new Thread(requireNonNull(runnable),
 					THREAD_NAME_PREFIX + sequence.incrementAndGet());
-			thread.setDaemon(false);
+			thread.setDaemon(true);
 			return thread;
 		};
 	}

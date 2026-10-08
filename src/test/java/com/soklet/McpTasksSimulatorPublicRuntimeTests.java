@@ -59,6 +59,37 @@ public class McpTasksSimulatorPublicRuntimeTests {
 					.build();
 
 	@Test
+	public void ineligibleTaskReturnIsAnInternalErrorInSimulation()
+			throws Exception {
+		McpToolRegistration<McpJsonObject> tool = McpToolRegistration
+				.withName(TOOL_NAME, Set.of(McpProtocolVersion.V2026_07_28))
+				.jsonObjectArguments()
+				.handler((requestContext, arguments, invocationFeatures) -> {
+					Assertions.assertTrue(invocationFeatures.getTaskCreationContext().isEmpty());
+					return McpTaskCreatedResult.fromTaskId("simulation-private-task-canary");
+				})
+				.build();
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
+				McpImplementation.withNameAndVersion("task-gate", "1").build(),
+				Set.of(McpProtocolVersion.V2026_07_28))
+				.toolRegistrations(List.of(tool)).build();
+		McpServer server = McpServer.withPort(0).host(LOOPBACK)
+				.allowedHosts(Set.of(LOOPBACK))
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.taskManager(McpTaskManager.fromInMemoryDefaults())
+				.toolRateLimiter(rateLimitContext -> McpRateLimitDecision.allowed()).build();
+		SokletConfig config = SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).build();
+		SokletSimulator.run(config, simulator -> {
+			String error = performJson(simulator, request("tools/call", TOOL_NAME,
+					"ineligible", "\"name\":\"" + TOOL_NAME + "\",\"arguments\":{}", false),
+					500, "An MCP task result requires an available task creation context.");
+			Assertions.assertEquals("{\"jsonrpc\":\"2.0\",\"id\":\"ineligible\","
+					+ "\"error\":{\"code\":-32603,\"message\":\"Internal error\"}}", error);
+		});
+	}
+
+	@Test
 	public void inaccessibleCompletedTaskReturnsTheSameRedactedErrorInSimulation()
 			throws Exception {
 		AtomicReference<Boolean> visible = new AtomicReference<>(true);

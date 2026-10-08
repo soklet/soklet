@@ -296,7 +296,7 @@ public class MetricsCollectorReleaseRegressionTests {
 	}
 
 	@Test
-	public void histogramOverflowIsBoundedAndSumSaturates() {
+	public void histogramOverflowIsBoundedAndSumExceedsTheLongRange() {
 		MetricsCollector.Histogram percentileHistogram =
 				new MetricsCollector.Histogram(new long[]{10L});
 		percentileHistogram.record(11L);
@@ -306,14 +306,14 @@ public class MetricsCollectorReleaseRegressionTests {
 		Assertions.assertNotEquals(Long.MAX_VALUE,
 				percentile.getPercentile(99.0));
 
-		MetricsCollector.Histogram saturatingHistogram =
+		MetricsCollector.Histogram wideSumHistogram =
 				new MetricsCollector.Histogram(new long[]{1L});
-		saturatingHistogram.record(Long.MAX_VALUE);
-		saturatingHistogram.record(Long.MAX_VALUE);
-		MetricsCollector.HistogramSnapshot saturated =
-				saturatingHistogram.snapshot();
-		Assertions.assertEquals(2L, saturated.getCount());
-		Assertions.assertEquals(Long.MAX_VALUE, saturated.getSum());
+		wideSumHistogram.record(Long.MAX_VALUE);
+		wideSumHistogram.record(Long.MAX_VALUE);
+		MetricsCollector.HistogramSnapshot wideSum =
+				wideSumHistogram.snapshot();
+		Assertions.assertEquals(2L, wideSum.getCount());
+		Assertions.assertEquals(2D * Long.MAX_VALUE, wideSum.getSum());
 	}
 
 	@Test

@@ -34,6 +34,12 @@ import java.lang.annotation.Target;
  * method parameter. An exact URI contributes a descriptor to the static
  * {@code resources/list} fallback. A URI template is advertised separately by
  * {@code resources/templates/list}.
+ * <p>
+ * Level 1 simple variables cannot consume a raw slash: {@code file:///{path}}
+ * matches {@code file:///src%2Fmain.rs}, yielding {@code src/main.rs}, but not
+ * {@code file:///src/main.rs}. Reserved expansion ({@code {+path}}), explode
+ * and prefix modifiers are unsupported. Captured values are UTF-8
+ * percent-decoded exactly once.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

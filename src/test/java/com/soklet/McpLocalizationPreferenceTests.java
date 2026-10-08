@@ -92,6 +92,36 @@ class McpLocalizationPreferenceTests {
 	}
 
 	@Test
+	void commaEmptyElementsAndOptionalTabsPreserveRangesAndWeights() {
+		List<Locale.LanguageRange> expected = List.of(new Locale.LanguageRange("en-us"),
+				new Locale.LanguageRange("fr-ca", 0.8), new Locale.LanguageRange("de", 0));
+		for (String value : List.of(
+				",fr-CA;q=0.8,,en-US,de;q=0,",
+				"fr-CA\t;\tq=0.8,\ten-US, de\t; q=0",
+				"\t,\tfr-CA \t; \tq=0.8\t,, \ten-US\t, de;\tq=0,\t"))
+			assertEquals(expected, McpLocaleSupport.boundedLanguageRanges(List.of(value)), value);
+		assertEquals(expected, McpLocaleSupport.boundedLanguageRanges(
+				List.of(",fr-CA\t;\tq=0.8,", "\t", ",en-US,,de;q=0,")));
+	}
+
+	@Test
+	void normalizationDoesNotRepairMalformedTokensOrControlCharacters() {
+		for (String malformed : List.of("e\tn", "en;q\t=0.5", "en;q=\t0.5", "en;q=0.\t5",
+				"en\r; q=0.5", "en\n", "en;\u000bq=0.5", "en;\u00a0q=0.5", "en;", "en;;q=0.5"))
+			assertEquals(List.of(), McpLocaleSupport.boundedLanguageRanges(List.of("fr,," + malformed)), malformed);
+	}
+
+	@Test
+	void ignoredCommaElementsStillCountAtTheRawInputBoundary() {
+		String atBound = "en" + ",".repeat(4_094);
+		assertEquals(List.of(new Locale.LanguageRange("en")), McpLocaleSupport.boundedLanguageRanges(List.of(atBound)));
+		assertEquals(List.of(), McpLocaleSupport.boundedLanguageRanges(List.of(atBound + ",")));
+		assertEquals(List.of(), McpLocaleSupport.boundedLanguageRanges(List.of(",\t,\t,")));
+		assertEquals(List.of(new Locale.LanguageRange("en-us"), new Locale.LanguageRange("fr-ca", 0)),
+				McpLocaleSupport.boundedLanguageRanges(List.of(",fr-CA\t;\tq=0,", ",en-US,", ",fr-CA;q=1,")));
+	}
+
+	@Test
 	void observationContextRetainsPhysicalHeaderOrderAndDuplicates() {
 		List<String> physicalValues = List.of(
 				"fr-CA;q=0", "en-US", "fr-CA;q=1");
@@ -117,6 +147,15 @@ class McpLocalizationPreferenceTests {
 	@Test
 	void physicalDuplicateHeaderFieldsReachTheProviderInWireOrder()
 			throws Exception {
+		verifyPhysicalHeaders(List.of("fr-CA;q=0", "en-US", "fr-CA;q=1"));
+	}
+
+	@Test
+	void physicalEmptyElementsAndTabsReachTheProviderInWireOrder() throws Exception {
+		verifyPhysicalHeaders(List.of(",\tfr-CA\t;\tq=0,,", ",\ten-US,", ",fr-CA;q=1,"));
+	}
+
+	private void verifyPhysicalHeaders(List<String> headerValues) throws Exception {
 		AtomicReference<List<Locale.LanguageRange>> observedRanges =
 				new AtomicReference<>();
 		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> {
@@ -160,9 +199,9 @@ class McpLocalizationPreferenceTests {
 					+ "Accept: application/json, text/event-stream\r\n"
 					+ "MCP-Protocol-Version: " + PROTOCOL_VERSION + "\r\n"
 					+ "Mcp-Method: server/discover\r\n"
-					+ "Accept-Language: fr-CA;q=0\r\n"
-					+ "Accept-Language: en-US\r\n"
-					+ "Accept-Language: fr-CA;q=1\r\n"
+					+ "Accept-Language: " + headerValues.get(0) + "\r\n"
+					+ "Accept-Language: " + headerValues.get(1) + "\r\n"
+					+ "Accept-Language: " + headerValues.get(2) + "\r\n"
 					+ "Content-Length: " + body.length + "\r\n"
 					+ "Connection: close\r\n\r\n";
 

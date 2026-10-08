@@ -29,6 +29,13 @@ import static java.util.Objects.requireNonNull;
  * not share it with an unrelated transport member or lifecycle. Soklet owns the
  * recorded state and all completion derived from it; the transport can only
  * report observations through the methods below.
+ * <p>
+ * A failure or termination proof reported before the lifecycle owner's
+ * shutdown intent is independent premature termination, including before
+ * readiness. For a synchronous {@link TransportRuntime#start(StartupContext)}
+ * failure, throw from start and let the owner deliver rollback phases; report
+ * proof after their cleanup ends. Do not delay a separate worker's failure
+ * signal merely because startup is still running.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

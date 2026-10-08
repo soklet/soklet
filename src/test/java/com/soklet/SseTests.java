@@ -2536,10 +2536,11 @@ public class SseTests {
 				Assertions.assertTrue(lines[0].startsWith("HTTP/1.1 200"), "Expected 200 OK SSE handshake");
 
 				Map<String, List<String>> headers = Utilities.extractHeadersFromRawHeaderLines(Arrays.asList(lines));
-				// Origin not authorized => no CORS headers
+				// An unauthorized origin receives no access-control grants
 				Assertions.assertEquals("", firstOrEmpty(headers, "access-control-allow-origin"));
 				Assertions.assertEquals("", firstOrEmpty(headers, "access-control-allow-credentials"));
-				Assertions.assertEquals("", firstOrEmpty(headers, "vary"));
+				// Allowed and denied origins both affect the cached representation.
+				Assertions.assertEquals("Origin", firstOrEmpty(headers, "vary"));
 			}
 		}
 	}

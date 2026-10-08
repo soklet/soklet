@@ -308,6 +308,20 @@ public class McpProgressPublicRuntimeTests {
 	@Timeout(120)
 	public void disconnectCancelsSameFeatureInstanceAndRunsCallback()
 			throws Exception {
+		assertPublicDisconnect(McpChunkedHttpClient.DisconnectMode.RESET);
+	}
+
+	@Test
+	public void finDisconnectCancelsSameFeatureInstanceAndRunsCallback() throws Exception {
+		assertPublicDisconnect(McpChunkedHttpClient.DisconnectMode.CLOSE);
+	}
+
+	@Test
+	public void inputEndCancelsModernResponseWithExactlyOnceMetrics() throws Exception {
+		assertPublicDisconnect(McpChunkedHttpClient.DisconnectMode.INPUT_END);
+	}
+
+	private void assertPublicDisconnect(McpChunkedHttpClient.DisconnectMode mode) throws Exception {
 		List<McpMetricsEvent> metrics = new CopyOnWriteArrayList<>();
 		ExecutorService probeExecutor = Executors.newSingleThreadExecutor();
 		AtomicReference<McpProgressReporter> observedReporter =
@@ -404,7 +418,7 @@ public class McpProgressPublicRuntimeTests {
 					"\"progressToken\":\"disconnect-token\""));
 			Assertions.assertTrue(client.readChunkText().contains(
 					"\"progress\":2"));
-			client.closeWithReset();
+			client.disconnect(mode);
 
 			Assertions.assertTrue(callbackInvoked.await(5, TimeUnit.SECONDS),
 					"Disconnect did not run the public cancelation callback.");

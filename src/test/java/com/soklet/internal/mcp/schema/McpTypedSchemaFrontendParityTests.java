@@ -19,6 +19,7 @@ package com.soklet.internal.mcp.schema;
 import com.google.testing.compile.Compilation;
 import com.google.testing.compile.Compiler;
 import com.google.testing.compile.JavaFileObjects;
+import com.soklet.annotation.McpHeader;
 import com.soklet.annotation.McpToolProperty;
 import com.soklet.internal.mcp.protocol.McpJsonCodec;
 import com.soklet.internal.mcp.protocol.McpJsonLimits;
@@ -72,9 +73,9 @@ class McpTypedSchemaFrontendParityTests {
 			"primitiveLong", "boxedLong", "bigInteger", "primitiveFloat",
 			"boxedFloat", "primitiveDouble", "boxedDouble", "bigDecimal",
 			"string", "status", "primitiveInts", "strings", "stringList",
-			"longsByName", "box", "nestedBox", "input", "annotated");
+			"longsByName", "box", "nestedBox", "input", "annotated", "mirroredIntegers");
 	private static final Set<String> INPUT_FIELDS = Set.of("longsByName",
-			"input");
+			"input", "mirroredIntegers");
 	private static final Map<String, ExpectedFailure> EXPECTED_FAILURES =
 			Map.ofEntries(
 					Map.entry("rawList", failure(
@@ -213,6 +214,7 @@ class McpTypedSchemaFrontendParityTests {
 				package parity;
 
 				import com.soklet.internal.mcp.protocol.McpJsonValue;
+				import com.soklet.annotation.McpHeader;
 				import com.soklet.annotation.McpToolProperty;
 				import java.math.BigDecimal;
 				import java.math.BigInteger;
@@ -249,6 +251,7 @@ class McpTypedSchemaFrontendParityTests {
 				  ParityBox<ParityBox<String>> nestedBox;
 				  ParityInput input;
 				  ParityAnnotated annotated;
+				  ParityMirroredIntegers mirroredIntegers;
 				  List rawList;
 				  List<?> wildcardList;
 				  Map<Integer, String> badMap;
@@ -276,6 +279,10 @@ class McpTypedSchemaFrontendParityTests {
 				        description = "External description") String internalName,
 				    @McpToolProperty(title = "   ", description = "   ")
 				        Optional<Integer> ordinary) {}
+				record ParityMirroredIntegers(
+				    @McpHeader(name = "Primitive") long primitiveValue,
+				    @McpHeader(name = "Boxed") Long boxedValue,
+				    @McpHeader(name = "BigInteger") BigInteger bigIntegerValue) {}
 				record Expanding<T>(Expanding<List<T>> next) {}
 				record Phantom<T>(String value) {}
 				enum ParityStatus { SECOND, FIRST, THIRD }
@@ -306,6 +313,12 @@ class McpTypedSchemaFrontendParityTests {
 					description = "External description") String internalName,
 			@McpToolProperty(title = "   ", description = "   ")
 			Optional<Integer> ordinary) {
+	}
+
+	private record ParityMirroredIntegers(
+			@McpHeader(name = "Primitive") long primitiveValue,
+			@McpHeader(name = "Boxed") Long boxedValue,
+			@McpHeader(name = "BigInteger") BigInteger bigIntegerValue) {
 	}
 
 	private record Expanding<T>(Expanding<List<T>> next) {
@@ -358,6 +371,7 @@ class McpTypedSchemaFrontendParityTests {
 		private ParityBox<ParityBox<String>> nestedBox;
 		private ParityInput input;
 		private ParityAnnotated annotated;
+		private ParityMirroredIntegers mirroredIntegers;
 		private List rawList;
 		private List<?> wildcardList;
 		private Map<Integer, String> badMap;

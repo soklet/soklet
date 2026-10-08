@@ -298,7 +298,10 @@
     },
     {
       "boundaryTests": [
+        "src/test/java/com/soklet/McpAdmissionRejectionTests.java#existingCountAndByteLimitsAreInclusiveAndRejectedChangesAreAtomic",
         "src/test/java/com/soklet/McpLocalizationPreferenceTests.java#combinedInputAtTheCodeUnitBoundParsesAndOverTheBoundIsNotTruncated",
+        "src/test/java/com/soklet/McpLocalizationPreferenceTests.java#ignoredCommaElementsStillCountAtTheRawInputBoundary",
+        "src/test/java/com/soklet/McpLocalizationPreferenceTests.java#normalizationDoesNotRepairMalformedTokensOrControlCharacters",
         "src/test/java/com/soklet/McpLocalizationPreferenceTests.java#parsedRangeCountAtThirtyTwoParsesAndThirtyThreeIsNotTruncated",
         "src/test/java/com/soklet/McpRequestPropagationTests.java#baggageParsingIsBoundedDecodedAndImmutable",
         "src/test/java/com/soklet/McpServerFutureConfigurationTests.java#operationalControlsRejectNonpositiveAndUnrepresentableValues",
@@ -316,7 +319,7 @@
       ],
       "category": "HEADER",
       "deterministicFailure": {
-        "contract": "HTTP request-header overflow fails with 431 before dispatch; admission-rejection response headers are independently capped at 100 fields and 65,536 encoded bytes by validatedPolicyHeaders and fail closed as an internal policy error before response construction; mirrored values fail with the fixed mismatch response, while baggage and locale parsing stop, drop, or return empty according to their neutral public contracts without over-bound retention. Request-header and chunk-trailer section accounting is request-relative across tokenizer compaction, including section terminators, and cannot be bypassed by pipelined read fragmentation.",
+        "contract": "HTTP request-header overflow fails with 431 before dispatch; admission-rejection response headers are independently capped at 100 fields and 65,536 encoded bytes by the shared validatedPolicyHeaders validator and fail eagerly with IllegalArgumentException at the public rejection builder; transport revalidation remains fail closed; mirrored values fail with the fixed mismatch response, while baggage and locale parsing stop, drop, or return empty according to their neutral public contracts without over-bound retention. Request-header and chunk-trailer section accounting is request-relative across tokenizer compaction, including section terminators, and cannot be bypassed by pipelined read fragmentation.",
         "stage": "TRANSPORT_OR_HEADER_INPUT_VALIDATION"
       },
       "enforcementOwners": [
@@ -339,6 +342,9 @@
       "id": "FINITE-HEADER-001",
       "name": "HTTP and MCP header bounds",
       "positiveTests": [
+        "src/test/java/com/soklet/McpAdmissionRejectionTests.java#acceptedHeadersKeepExactSpellingValuesAndImmutableSnapshots",
+        "src/test/java/com/soklet/McpLocalizationPreferenceTests.java#commaEmptyElementsAndOptionalTabsPreserveRangesAndWeights",
+        "src/test/java/com/soklet/McpLocalizationPreferenceTests.java#physicalEmptyElementsAndTabsReachTheProviderInWireOrder",
         "src/test/java/com/soklet/McpServerFutureConfigurationTests.java#operationalControlsHavePositiveFiniteDefaultsAndAreRetained",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerCustomHeaderTests.java#custom_mirrors_decode_all_types_compare_numerically_and_strip_ows",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerPolicyPipelineTests.java#tightenedInboundHeaderLimitsDoNotConstrainAdmissionRejectionHeaders"
@@ -604,8 +610,10 @@
     },
     {
       "boundaryTests": [
+        "src/test/java/com/soklet/McpJsonAndSchemaLimitPublicRuntimeTests.java#limitsFailSafelyAndRecoverForEveryRevision",
         "src/test/java/com/soklet/internal/mcp/protocol/McpJsonCodecTests.java#productionJsonDepthAccepts128AndRejects129",
         "src/test/java/com/soklet/internal/mcp/protocol/McpJsonCodecTests.java#productionJsonLimitsAndHardCeilingsAreFrozen",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpJsonCodecTests.java#productionStringTokenCountsEscapesAtExactBoundary",
         "src/test/java/com/soklet/internal/mcp/protocol/McpJsonCodecTests.java#strictJsonParserAcceptsMaximumExponentMagnitude",
         "src/test/java/com/soklet/internal/mcp/protocol/McpJsonCodecTests.java#strictJsonParserAndWriterAcceptDepth256AndRejectDepth257",
         "src/test/java/com/soklet/internal/mcp/protocol/McpJsonCodecTests.java#strictJsonParserAndWriterEnforceExactNodeCounts",
@@ -613,11 +621,13 @@
         "src/test/java/com/soklet/internal/mcp/protocol/McpJsonCodecTests.java#strictJsonParserEnforcesRawTokenAndDecodedStringBounds",
         "src/test/java/com/soklet/internal/mcp/protocol/McpJsonCodecTests.java#strictJsonParserRejectsExponentBeyondMagnitudeLimit",
         "src/test/java/com/soklet/internal/mcp/protocol/McpJsonCodecTests.java#strictJsonParserRejectsNumberBeyondLengthLimit",
-        "src/test/java/com/soklet/internal/mcp/protocol/McpJsonCodecTests.java#strictJsonWriterEnforcesExactUtf8OutputBytes"
+        "src/test/java/com/soklet/internal/mcp/protocol/McpJsonCodecTests.java#strictJsonWriterEnforcesExactUtf8OutputBytes",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpJsonCodecTests.java#stringAndEscapedTokenLimitsAlsoApplyToObjectKeys",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpJsonCodecTests.java#stringTokenCountsWireSpellingAndUtf16RatherThanUtf8Bytes"
       ],
       "category": "JSON",
       "deterministicFailure": {
-        "contract": "Parsing and serialization throw a sanitized IllegalArgumentException before retaining a value beyond any configured resource limit. Restored durable-task arguments are revalidated through the dedicated restored-arguments profile before application use.",
+        "contract": "Parsing and serialization throw a sanitized IllegalArgumentException before retaining a value beyond any configured resource limit. Restored durable-task arguments are revalidated through the dedicated restored-arguments profile before application use. Stable request-state parameters use the same bounded canonical headroom as accepted task arguments, without widening transport or response acceptance. Decoded-string and escaped-token limits independently count UTF-16 units, exclude surrounding quotes and also cover object keys; byte limits remain separate.",
         "stage": "JSON_CODEC"
       },
       "enforcementOwners": [
@@ -625,6 +635,11 @@
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpJsonCodec.java",
           "member": "parse/toUtf8Bytes",
           "owner": "com.soklet.internal.mcp.protocol.McpJsonCodec"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpRequestStateBinding.java",
+          "member": "create",
+          "owner": "com.soklet.internal.mcp.protocol.McpRequestStateBinding"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpTaskOriginPersistedStateCodec.java",
@@ -638,13 +653,17 @@
         }
       ],
       "id": "FINITE-JSON-001",
-      "name": "Strict JSON production defaults, hard ceilings, and durable task-origin profiles",
+      "name": "Strict JSON production defaults, hard ceilings, and internal accepted-request profiles",
       "positiveTests": [
+        "src/test/java/com/soklet/McpRequestStateBoundaryPublicRuntimeTests.java#configuredRequestLimitPermitsArgumentsLargerThanTheDefault",
+        "src/test/java/com/soklet/McpRequestStateBoundaryPublicRuntimeTests.java#defaultRequestLimitPermitsLargeArgumentsWithSmallPortableState",
         "src/test/java/com/soklet/McpTaskPublicApiTests.java#taskOriginHasBoundedDurableTextRoundTrip",
         "src/test/java/com/soklet/McpTaskPublicApiTests.java#taskOriginRetainsArgumentsAndSchemaPastProductionNodeBudget",
         "src/test/java/com/soklet/McpTaskPublicApiTests.java#taskOriginRetainsWholeOriginNearDurableByteCeiling",
         "src/test/java/com/soklet/McpTasksPublicRuntimeTests.java#taskOriginLargerThanProductionJsonRestoresAtTaskBoundary",
-        "src/test/java/com/soklet/internal/mcp/protocol/McpJsonCodecTests.java#strictJsonCodecReplaysTheRetainedCorpus"
+        "src/test/java/com/soklet/internal/mcp/protocol/McpJsonCodecTests.java#strictJsonCodecReplaysTheRetainedCorpus",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpRequestStateBindingTests.java#acceptedParameterCanonicalizationHasHeadroomBeyondTheTransportCeiling",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpRequestStateBindingTests.java#bindsAcceptedParametersBeyondTheResponseByteLimit"
       ],
       "sourceOwners": [
         {
@@ -935,6 +954,12 @@
           "value": "1048576"
         },
         {
+          "accounting": "canonical UTF-8 stable request parameters; shares the accepted-task-argument profile without widening transport, response or state-envelope bounds",
+          "key": "request-state.parameters.canonical-bytes",
+          "unit": "UTF8_BYTES",
+          "value": "33554432"
+        },
+        {
           "accounting": "canonical UTF-8 JSON for one durable task origin",
           "key": "task.origin.persisted-bytes",
           "unit": "UTF8_BYTES",
@@ -998,6 +1023,9 @@
     },
     {
       "boundaryTests": [
+        "src/test/java/com/soklet/McpCatalogAccessLocalizationPublicRuntimeTests.java#callerProjectionBudgetIncludesServerMetadataAndKeepsOneContext",
+        "src/test/java/com/soklet/McpLocalizationCatalogExtractionTests.java#catalogServerMetadataCountsOnlyInTheModernPublishedProjection",
+        "src/test/java/com/soklet/McpLocalizationInitializationPublicRuntimeTests.java#juneInitializationCallbackBoundCountsOnlyPublishedText",
         "src/test/java/com/soklet/McpLocalizationPublicApiTests.java#localizerUsesDirectConstructionAndNullableDefaultResets",
         "src/test/java/com/soklet/McpLocalizationRendererTests.java#aReplacementOverTheCharacterLimitFailsBeforeRetentionAndLaterSlots",
         "src/test/java/com/soklet/internal/mcp/protocol/McpResourceListDiagnosticsTests.java#routeDiagnosticValuesAreBounded",
@@ -1023,6 +1051,8 @@
       "id": "FINITE-OUTPUT-001",
       "name": "Simulation capture, localization, and diagnostic output bounds",
       "positiveTests": [
+        "src/test/java/com/soklet/McpLocalizationInitializationPublicRuntimeTests.java#initializationLocalizesOnlyRevisionSupportedText",
+        "src/test/java/com/soklet/McpLocalizationRenderingRuntimeTests.java#everyFrameworkListLocalizesServerMetadataIncludingEmptyCatalogs",
         "src/test/java/com/soklet/internal/mcp/protocol/McpResourceListDiagnosticsTests.java#routeDiagnosticsIdentifyUriAndEndpointPath",
         "src/test/java/com/soklet/internal/mcp/protocol/McpSimulationCaptureRuntimeTests.java#jsonBodyBudgetIsInclusiveAndOverflowRetainsResponseHead"
       ],
@@ -1508,14 +1538,17 @@
     },
     {
       "boundaryTests": [
+        "src/test/java/com/soklet/McpJsonAndSchemaLimitPublicRuntimeTests.java#limitsFailSafelyAndRecoverForEveryRevision",
         "src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileLimitTests.java#diagnosticBudgetsTruncateWithoutChangingInvalidity",
         "src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileLimitTests.java#hardEvaluationLimitsHaveExactBoundaries",
+        "src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileLimitTests.java#legitimateRepeatedSchemaWorkStillExhaustsTheProductionBudget",
         "src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileLimitTests.java#maximumPendingDepthCompletesAndOneOverFailsTyped",
-        "src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileLimitTests.java#objectAndPointerWorkIsChargedBeforeBoundedAllocations"
+        "src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileLimitTests.java#objectAndPointerWorkIsChargedBeforeBoundedAllocations",
+        "src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileLimitTests.java#retainedDiagnosticPathCopyIsChargedBeforeAllocation"
       ],
       "category": "PROFILE_1_EVALUATOR",
       "deterministicFailure": {
-        "contract": "Evaluation returns a typed resource-limit outcome; diagnostic truncation preserves invalidity.",
+        "contract": "Evaluation returns a typed resource-limit outcome; diagnostic truncation preserves invalidity. A bounded per-call path stack avoids ancestor copies during valid traversal; suppressed diagnostics do not construct paths. Retained diagnostic copies are charged before allocation. Semantically valid values can still exhaust independent schema-work limits.",
         "stage": "SCHEMA_EVALUATION"
       },
       "enforcementOwners": [
@@ -1528,7 +1561,10 @@
       "id": "FINITE-PROFILE1-EVALUATOR-001",
       "name": "Tool Schema Profile 1 evaluation bounds",
       "positiveTests": [
-        "src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileLimitTests.java#productionEvaluationLimitsAndHardCeilingsAreFrozen"
+        "src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileLimitTests.java#deeplyNestedWideArrayUsesLinearPointerWorkWithinProductionBudget",
+        "src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileLimitTests.java#diagnosticsRetainIndependentPathsAcrossSiblingsAndSuppressedBranches",
+        "src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileLimitTests.java#productionEvaluationLimitsAndHardCeilingsAreFrozen",
+        "src/test/java/com/soklet/internal/mcp/schema/McpToolSchemaProfileLimitTests.java#suppressedBranchDiagnosticsDoNotChargeUnusedPointerWork"
       ],
       "sourceOwners": [
         {
@@ -2639,6 +2675,7 @@
     },
     {
       "boundaryTests": [
+        "src/test/java/com/soklet/McpContentValueBoundaryPublicRuntimeTests.java#contentBoundariesFailPrivatelyAndRecoverForEveryRevision",
         "src/test/java/com/soklet/McpResourcePublicRuntimeTests.java#blobOutputHonorsTheProductionJsonStringBound",
         "src/test/java/com/soklet/McpToolOutputSanitizerPublicRuntimeTests.java#applicationResultBoundsFailClosedWithoutLeaksAndServerRecovers",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerObservationTerminalRaceTests.java#application_encoding_fallback_reports_actual_internal_error",
@@ -2756,11 +2793,13 @@
     },
     {
       "boundaryTests": [
+        "src/test/java/com/soklet/McpSkillBundleTests.java#fileDirectoryConflictsFailBeforeRootParsingInEitherMapOrder",
         "src/test/java/com/soklet/internal/mcp/skills/SkillBundleTests.java#fileCountBoundaryIncludesRootAndPermitsExactly512Files",
         "src/test/java/com/soklet/internal/mcp/skills/SkillBundleTests.java#fileCountIsCheckedAgainstActualIterationNotReportedMapSize",
         "src/test/java/com/soklet/internal/mcp/skills/SkillBundleTests.java#totalRawByteCeilingIsInclusiveAndCountsTheRoot",
         "src/test/java/com/soklet/internal/mcp/skills/SkillPathsTests.java#asciiPathByteCeilingIsInclusive",
         "src/test/java/com/soklet/internal/mcp/skills/SkillPathsTests.java#fileCountCeilingIncludesTheRootAndIsInclusive",
+        "src/test/java/com/soklet/internal/mcp/skills/SkillPathsTests.java#rejectsFilesUsedAsDirectoriesRegardlessOfInputOrderOrInterveningNames",
         "src/test/java/com/soklet/internal/mcp/skills/SkillPathsTests.java#utf8ByteCeilingCountsMultibyteAndSupplementaryScalars"
       ],
       "category": "SKILLS",
@@ -2790,6 +2829,7 @@
       "positiveTests": [
         "src/test/java/com/soklet/internal/mcp/skills/SkillBundleTests.java#arbitraryBinaryAndEmptyFilesHaveByteExactResources",
         "src/test/java/com/soklet/internal/mcp/skills/SkillBundleTests.java#snapshotsCallerMapAndEveryCallerArray",
+        "src/test/java/com/soklet/internal/mcp/skills/SkillPathsTests.java#acceptsSharedDirectoriesDeepPathsAndDistinctCaseSensitiveFiles",
         "src/test/java/com/soklet/internal/mcp/skills/SkillPathsTests.java#canonicalOrderIsRootFirstThenUnsignedUtf8NotUtf16"
       ],
       "sourceOwners": [

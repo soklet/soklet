@@ -229,6 +229,11 @@ public final class McpProtectionConfig {
 		/**
 		 * Sets the maximum request-state lifetime. The default is 15 minutes.
 		 *
+		 * <p>The first emission starts the lifetime. Later emissions preserve
+		 * the original expiry. If state expires while a valid retry's handler
+		 * runs, returning more framework state fails at sealing after the
+		 * handler returns; it does not roll back application side effects.
+		 *
 		 * @param maximumRequestStateLifetime positive finite lifetime, or
 		 *                                    {@code null} to restore the default
 		 * @return this builder
@@ -245,6 +250,12 @@ public final class McpProtectionConfig {
 
 		/**
 		 * Sets the maximum request-state round count. The default is {@code 10}.
+		 *
+		 * <p>This counts emitted continuations, starting at one, rather than
+		 * handler invocations. A valid retry carrying the final allowed round
+		 * may complete, but returning further framework state fails at sealing
+		 * after the handler returns. The framework's round is not exposed by
+		 * {@link McpRequestContext#getFrameworkRequestState()}.
 		 *
 		 * @param maximumRequestStateRounds positive round limit, or {@code null}
 		 *                                  to restore the default

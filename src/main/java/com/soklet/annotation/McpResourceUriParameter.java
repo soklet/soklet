@@ -30,6 +30,11 @@ import java.lang.annotation.Target;
  * source-level Java parameter name captured by Soklet's annotation processor;
  * an explicit name keeps the public template contract stable across Java
  * refactoring.
+ * <p>
+ * Values are UTF-8 percent-decoded exactly once. An encoded slash
+ * ({@code %2F}) becomes {@code /}; {@code %252F} becomes the literal string
+ * {@code %2F}. A Level 1 variable cannot capture an unencoded slash. The
+ * application owns path authorization and filesystem containment checks.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

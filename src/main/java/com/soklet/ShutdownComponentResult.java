@@ -81,4 +81,21 @@ public final class ShutdownComponentResult {
 	getResidualActivityEvidence() {
 		return Optional.ofNullable(this.residualActivityEvidence);
 	}
+
+	/**
+	 * Returns a bounded, single-line diagnostic with the component type,
+	 * disposition, Throwable count and residual-activity categories. Does not
+	 * invoke Throwable methods or render residual-summary text.
+	 *
+	 * @return compact component diagnostic; not a serialization format
+	 */
+	@Override
+	@NonNull
+	public String toString() {
+		return "ShutdownComponentResult{shutdownComponentType=" + this.shutdownComponentType.name()
+				+ ", shutdownComponentDisposition=" + this.shutdownComponentDisposition.name()
+				+ ", throwableCount=" + this.throwables.size()
+				+ ", residualActivityTypes=" + (this.residualActivityEvidence == null ? "[]"
+						: this.residualActivityEvidence.getResidualActivityTypes()) + '}';
+	}
 }

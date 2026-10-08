@@ -26,7 +26,11 @@ import javax.annotation.concurrent.ThreadSafe;
  * Events and comments queued by the initializer are delivered only after it returns successfully, subject to
  * {@link SseServer.Builder#connectionQueueCapacity(Integer)}. Initialization must be bounded; this callback
  * is not an indefinite producer running after connection activation. An initializer failure terminates the
- * connection; queued writes are discarded. Do not retain the unicaster after this callback returns.
+ * connection; queued writes are discarded. The accepted response has already been written, so an initializer
+ * exception is reported by the stream-termination callbacks with {@link StreamTerminationReason#PRODUCER_FAILED}
+ * and its cause. Queue overflow elects {@link StreamTerminationReason#BACKPRESSURE}, even when caught by
+ * the initializer. An earlier termination reason still wins. Establishment observation precedes termination
+ * observation even if initialization never activates the connection. Do not retain the unicaster after this callback returns.
  * <p>
  * One initializer instance may be reused concurrently for different clients. Captured application state must
  * support that reuse.

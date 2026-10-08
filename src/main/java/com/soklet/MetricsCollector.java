@@ -31,6 +31,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.DoubleAdder;
 import java.util.concurrent.atomic.LongAdder;
 import java.util.function.Predicate;
 
@@ -43,6 +44,12 @@ import static java.util.Objects.requireNonNull;
  * connection accept/reject counters, immutable snapshots (via {@link #snapshot()}), and provides Prometheus
  * (text format v0.0.4) / OpenMetrics (1.0) export helpers for convenience.
  * To disable metrics collection without a custom implementation, use {@link #disabledInstance()}.
+ * <p>
+ * For observed HTTP GET/DELETE requests on 2025 MCP session endpoints, the default
+ * collector uses the selected configured endpoint path for the HTTP route, including
+ * rejected requests. It never uses query values or session IDs as route labels.
+ * Custom HTTP callbacks receive the original request and a null {@link ResourceMethod},
+ * because these operations are handled by the MCP transport.
  * <p>
  * If you prefer OpenTelemetry, Micrometer, or another metrics system for monitoring, you might choose to create your own
  * implementation of this interface.
@@ -203,6 +210,12 @@ public interface MetricsCollector {
 	 * deliver while another transition is withheld. Records within a transition
 	 * retain their order. Counters and gauges may be incomplete after overflow.
 	 * Collector delivery must remain nonblocking.
+	 * <p>
+	 * The default collector counts delivered
+	 * {@link McpMetricsEvent.SubscriptionMaintenance} records by endpoint, work
+	 * and outcome in {@link McpMetricsSnapshot#getSubscriptionMaintenance()}.
+	 * These counts include coalescing and stale-result discards, rather than
+	 * measuring unique subscriptions or started maintenance attempts.
 	 *
 	 * @param event immutable MCP metrics event
 	 */
@@ -254,9 +267,12 @@ public interface MetricsCollector {
 	}
 
 	/**
-	 * Called as soon as a request is received and a <em>Resource Method</em> has been resolved to handle it.
+	 * Called when request handling begins. The resource method may be null, including
+	 * for HTTP GET/DELETE requests handled by a 2025 MCP session endpoint.
 	 *
 	 * @param serverType the server type that received the request
+	 * @param request the actual request
+	 * @param resourceMethod the resolved HTTP resource method, or null when none applies
 	 */
 	default void didStartRequestHandling(@NonNull ServerType serverType,
 																			 @NonNull Request request,
@@ -265,7 +281,8 @@ public interface MetricsCollector {
 	}
 
 	/**
-	 * Called after a request finishes processing.
+	 * Called after application request processing and response handoff. Admitted HTTP streams
+	 * continue asynchronously; their terminal observations arrive through {@link #didTerminateResponseStream}.
 	 */
 	default void didFinishRequestHandling(@NonNull ServerType serverType,
 																				@NonNull Request request,
@@ -273,6 +290,24 @@ public interface MetricsCollector {
 																				@NonNull MarshaledResponse marshaledResponse,
 																				@NonNull Duration duration,
 																				@NonNull List<@NonNull Throwable> throwables) {
+		// No-op by default
+	}
+
+	/**
+	 * Called once after an admitted HTTP response stream terminates, after metrics handling finish
+	 * and before lifecycle stream observers. Finite replacements and suppressed bodies do not invoke it.
+	 * The handle retains the original dispatch request. Failures are isolated from transport completion.
+	 *
+	 * @param streamingResponseHandle the admitted HTTP response stream
+	 * @param streamTermination its logical terminal outcome; its duration covers the stream only
+	 * @param requestDuration monotonic duration from request processing entry to logical transport termination,
+	 *                        excluding observer queue delay and subsequent resource cleanup
+	 * @param responseBodySizeInBytes payload bytes accepted by socket writes (including partial writes),
+	 *                                excluding HTTP framing; simulator values count accepted materialized bytes
+	 */
+	default void didTerminateResponseStream(@NonNull StreamingResponseHandle streamingResponseHandle,
+			@NonNull StreamTermination streamTermination, @NonNull Duration requestDuration,
+			@NonNull Long responseBodySizeInBytes) {
 		// No-op by default
 	}
 
@@ -287,7 +322,8 @@ public interface MetricsCollector {
 	}
 
 	/**
-	 * Called after response data is written.
+	 * Called after the response is handed to transport. For streaming HTTP responses this is
+	 * not body completion; use {@link #didTerminateResponseStream} for terminal observations.
 	 */
 	default void didWriteResponse(@NonNull ServerType serverType,
 																@NonNull Request request,
@@ -320,13 +356,21 @@ public interface MetricsCollector {
 
 	/**
 	 * Called after an SSE connection is established.
+	 * <p>
+	 * If client initialization fails after the accepted response has been written, the built-in SSE server
+	 * invokes this callback immediately before the paired termination callbacks. Such a connection never
+	 * becomes available to a broadcaster. The termination retains its elected reason and cause.
 	 */
 	default void didEstablishSseConnection(@NonNull SseConnection sseConnection) {
 		// No-op by default
 	}
 
 	/**
-	 * Called if an SSE connection fails to establish.
+	 * Called if an SSE connection fails to establish before an accepted response has been written.
+	 * <p>
+	 * Capacity rejection is {@link SseConnection.HandshakeFailureReason#CAPACITY_EXCEEDED}; request processing,
+	 * response preparation and response writing failures use {@link SseConnection.HandshakeFailureReason#INTERNAL_ERROR}
+	 * with their cause. Failure during client initialization after acceptance uses the stream-termination callbacks.
 	 *
 	 * @param connectionHandshakeFailureReason    the handshake failure reason
 	 * @param throwable an optional underlying cause, or {@code null} if not applicable
@@ -532,6 +576,10 @@ public interface MetricsCollector {
 	 * Returns a text snapshot of metrics collected so far, if supported.
 	 * <p>
 	 * The default collector supports Prometheus (text format v0.0.4) and OpenMetrics (1.0) text exposition formats.
+	 * Its OpenMetrics histogram {@code le} labels use canonical floating-point
+	 * formatting (for example, {@code 128.0} and {@code 1e+06}); Prometheus
+	 * retains integer finite-boundary labels. Both formats use {@code +Inf}
+	 * for the overflow bucket. Thresholds and units are unchanged.
 	 *
 	 * @param options the snapshot rendering options
 	 * @return a textual metrics snapshot, or {@link Optional#empty()} if unsupported
@@ -568,8 +616,8 @@ public interface MetricsCollector {
 		PROMETHEUS,
 		/**
 		 * OpenMetrics text exposition format (1.0), including OpenMetrics
-		 * counter-family naming, structurally complete histogram points, and the
-		 * {@code # EOF} trailer.
+		 * counter-family naming, structurally complete histogram points,
+		 * canonical floating-point {@code le} labels, and the {@code # EOF} trailer.
 		 */
 		OPEN_METRICS_1_0
 	}
@@ -585,6 +633,10 @@ public interface MetricsCollector {
 	 *   <li>{@code histogramFormat} controls bucket vs count/sum output</li>
 	 *   <li>{@code includeZeroBuckets} drops empty bucket samples when false</li>
 	 * </ul>
+	 * The default collector supplies {@code metricFilter} with the exact
+	 * serialized label values for the selected format. A finite histogram
+	 * boundary can therefore have an integer {@code le} value in Prometheus
+	 * and a canonical floating-point value in OpenMetrics.
 	 */
 	@ThreadSafe
 	final class SnapshotTextOptions {
@@ -859,6 +911,8 @@ public interface MetricsCollector {
 		@NonNull
 		private final Map<@NonNull HttpServerRouteStatusKey, @NonNull HistogramSnapshot> httpResponseBodyBytes;
 		@NonNull
+		private final Map<@NonNull HttpResponseStreamTerminationKey, @NonNull Long> httpResponseStreamTerminations;
+		@NonNull
 		private final Map<@NonNull SseEventRouteKey, @NonNull Long> sseHandshakesAccepted;
 		@NonNull
 		private final Map<@NonNull SseEventRouteHandshakeFailureKey, @NonNull Long> sseHandshakesRejected;
@@ -919,6 +973,7 @@ public interface MetricsCollector {
 			this.httpTimeToFirstByte = copyOrEmpty(builder.httpTimeToFirstByte);
 			this.httpRequestBodyBytes = copyOrEmpty(builder.httpRequestBodyBytes);
 			this.httpResponseBodyBytes = copyOrEmpty(builder.httpResponseBodyBytes);
+			this.httpResponseStreamTerminations = copyStreamTerminations(builder.httpResponseStreamTerminations);
 			this.sseHandshakesAccepted = copyOrEmpty(builder.sseHandshakesAccepted);
 			this.sseHandshakesRejected = copyOrEmpty(builder.sseHandshakesRejected);
 			this.sseEventEnqueueOutcomes = copyOrEmpty(builder.sseEventEnqueueOutcomes);
@@ -1122,6 +1177,26 @@ public interface MetricsCollector {
 			return this.httpResponseBodyBytes;
 		}
 
+		/** @return immutable cumulative admitted HTTP stream counts by route, wire status class and reason */
+		@NonNull
+		public Map<@NonNull HttpResponseStreamTerminationKey, @NonNull Long> getHttpResponseStreamTerminations() {
+			return this.httpResponseStreamTerminations;
+		}
+
+		@NonNull
+		private static Map<@NonNull HttpResponseStreamTerminationKey, @NonNull Long> copyStreamTerminations(
+				@Nullable Map<@NonNull HttpResponseStreamTerminationKey, @NonNull Long> counts) {
+			if (counts == null || counts.isEmpty()) return Collections.emptyMap();
+			Map<HttpResponseStreamTerminationKey, Long> copy = new LinkedHashMap<>();
+			counts.forEach((key, value) -> {
+				requireNonNull(key, "HTTP stream termination key is required.");
+				requireNonNull(value, "HTTP stream termination count is required.");
+				if (value < 0L) throw new IllegalArgumentException("HTTP stream termination count must be nonnegative.");
+				copy.put(key, value);
+			});
+			return Collections.unmodifiableMap(copy);
+		}
+
 		/**
 		 * Returns SSE handshake acceptance counters keyed by route.
 		 *
@@ -1321,6 +1396,8 @@ public interface MetricsCollector {
 			private Map<@NonNull HttpServerRouteKey, @NonNull HistogramSnapshot> httpRequestBodyBytes;
 			@Nullable
 			private Map<@NonNull HttpServerRouteStatusKey, @NonNull HistogramSnapshot> httpResponseBodyBytes;
+			@Nullable
+			private Map<@NonNull HttpResponseStreamTerminationKey, @NonNull Long> httpResponseStreamTerminations;
 			@Nullable
 			private Map<@NonNull SseEventRouteKey, @NonNull Long> sseHandshakesAccepted;
 			@Nullable
@@ -1603,6 +1680,19 @@ public interface MetricsCollector {
 			}
 
 			/**
+			 * Replaces admitted HTTP stream termination counts with a defensive copy. Zero counts are retained.
+			 * @param httpResponseStreamTerminations counts, or {@code null} or empty to clear; keys and values
+			 *                                      must be nonnull and counts nonnegative
+			 * @return this builder
+			 */
+			@NonNull
+			public Builder httpResponseStreamTerminations(
+					@Nullable Map<@NonNull HttpResponseStreamTerminationKey, @NonNull Long> httpResponseStreamTerminations) {
+				this.httpResponseStreamTerminations = copyStreamTerminations(httpResponseStreamTerminations);
+				return this;
+			}
+
+			/**
 			 * Replaces all previously configured SSE handshake acceptance counters keyed by route.
 			 * <p>
 			 * Passing {@code null} or an empty map clears these counters; the default is an empty map.
@@ -1844,8 +1934,18 @@ public interface MetricsCollector {
 	 * A thread-safe histogram with fixed bucket boundaries.
 	 * <p>
 	 * Negative values are ignored. Buckets use inclusive upper bounds, and snapshots include
-	 * an overflow bucket represented by a {@link HistogramSnapshot#getBucketBoundary(int)} of
+	 * an overflow bucket represented by a {@link HistogramSnapshot#getBucketBoundary(Integer)} of
 	 * {@link Long#MAX_VALUE}.
+	 * The sum uses floating-point accumulation and can grow beyond the signed
+	 * {@code long} range. Rounding depends on magnitude and accumulation order;
+	 * very small additions to a large total can be rounded away.
+	 * <p>
+	 * A captured snapshot's sample count equals its final cumulative bucket.
+	 * Recording, snapshot reads and reset remain concurrent observations:
+	 * buckets, sum and min/max do not form an atomic transaction. Records
+	 * overlapping reset may be discarded or represented partly across those
+	 * fields. Coordinate writers with reset for an exact observation-window
+	 * boundary; previously captured snapshots remain immutable.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
@@ -1855,9 +1955,7 @@ public interface MetricsCollector {
 		@NonNull
 		private final LongAdder[] bucketCounts;
 		@NonNull
-		private final LongAdder count;
-		@NonNull
-		private final AtomicLong sum;
+		private final DoubleAdder sum;
 		@NonNull
 		private final AtomicLong min;
 		@NonNull
@@ -1876,8 +1974,7 @@ public interface MetricsCollector {
 			this.bucketCounts = new LongAdder[this.bucketBoundaries.length + 1];
 			for (int i = 0; i < this.bucketCounts.length; i++)
 				this.bucketCounts[i] = new LongAdder();
-			this.count = new LongAdder();
-			this.sum = new AtomicLong();
+			this.sum = new DoubleAdder();
 			this.min = new AtomicLong(Long.MAX_VALUE);
 			this.max = new AtomicLong(Long.MIN_VALUE);
 		}
@@ -1891,8 +1988,7 @@ public interface MetricsCollector {
 			if (value < 0)
 				return;
 
-			this.count.increment();
-			saturatingAdd(this.sum, value);
+			this.sum.add((double) value);
 			updateMin(value);
 			updateMax(value);
 
@@ -1902,6 +1998,9 @@ public interface MetricsCollector {
 
 		/**
 		 * Captures an immutable snapshot of the histogram.
+		 * Its count equals the final captured cumulative bucket, including
+		 * during concurrent recording or reset. Other fields may reflect
+		 * different instants; see the class concurrency contract.
 		 *
 		 * @return the histogram snapshot
 		 */
@@ -1917,12 +2016,13 @@ public interface MetricsCollector {
 				cumulativeCounts[i] = cumulative;
 			}
 
-			long countSnapshot = this.count.sum();
-			long sumSnapshot = this.sum.get();
+			long countSnapshot = cumulative;
+			double sumSnapshot = this.sum.sum();
 			long minSnapshot = this.min.get();
 			long maxSnapshot = this.max.get();
 
-			if (minSnapshot == Long.MAX_VALUE)
+			// Long.MAX_VALUE is both the empty sentinel and a valid sample.
+			if (minSnapshot == Long.MAX_VALUE && countSnapshot == 0)
 				minSnapshot = 0;
 			if (maxSnapshot == Long.MIN_VALUE)
 				maxSnapshot = 0;
@@ -1931,11 +2031,12 @@ public interface MetricsCollector {
 		}
 
 		/**
-		 * Resets all counts and min/max values.
+		 * Resets all bucket counts, the sum and min/max values.
+		 * This does not establish an atomic boundary with concurrent records
+		 * or snapshots. With writers quiescent, all histogram state is cleared.
 		 */
 		public void reset() {
-			this.count.reset();
-			this.sum.set(0L);
+			this.sum.reset();
 			this.min.set(Long.MAX_VALUE);
 			this.max.set(Long.MIN_VALUE);
 			for (LongAdder bucket : this.bucketCounts)
@@ -1965,20 +2066,6 @@ public interface MetricsCollector {
 					break;
 			}
 		}
-
-		private static void saturatingAdd(@NonNull AtomicLong accumulator,
-				long value) {
-			long current;
-			long updated;
-			do {
-				current = accumulator.get();
-				if (current == Long.MAX_VALUE)
-					return;
-				updated = value > Long.MAX_VALUE - current
-						? Long.MAX_VALUE
-						: current + value;
-			} while (!accumulator.compareAndSet(current, updated));
-		}
 	}
 
 	/**
@@ -1987,6 +2074,9 @@ public interface MetricsCollector {
 	 * Bucket counts are cumulative. Boundaries are inclusive upper bounds, and the final
 	 * boundary is {@link Long#MAX_VALUE} to represent the overflow bucket. Units are the same
 	 * as values passed to {@link Histogram#record(long)}.
+	 * The sum is an approximate floating-point total; counts, boundaries and
+	 * min/max remain integer values. All public scalar values and inputs are
+	 * nonnull references. Constructor bucket lists are defensively copied.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
@@ -1995,7 +2085,7 @@ public interface MetricsCollector {
 		private final long @NonNull [] bucketBoundaries;
 		private final long @NonNull [] bucketCumulativeCounts;
 		private final long count;
-		private final long sum;
+		private final double sum;
 		private final long min;
 		private final long max;
 
@@ -2005,28 +2095,46 @@ public interface MetricsCollector {
 		 * @param bucketBoundaries       inclusive upper bounds for buckets, including overflow
 		 * @param bucketCumulativeCounts cumulative counts for each bucket
 		 * @param count                  total number of samples recorded
-		 * @param sum                    sum of all recorded values
+		 * @param sum                    finite, nonnegative floating-point sum of recorded values
 		 * @param min                    smallest recorded value (or 0 if none)
 		 * @param max                    largest recorded value (or 0 if none)
+		 * @throws NullPointerException if an argument or bucket-list element is null
+		 * @throws IllegalArgumentException if the bucket lists differ in size, or the sum is not finite and nonnegative
 		 */
-		public HistogramSnapshot(long @NonNull [] bucketBoundaries,
-														 long @NonNull [] bucketCumulativeCounts,
-														 long count,
-														 long sum,
-														 long min,
-														 long max) {
+		public HistogramSnapshot(@NonNull List<@NonNull Long> bucketBoundaries,
+				@NonNull List<@NonNull Long> bucketCumulativeCounts,
+				@NonNull Long count, @NonNull Double sum,
+				@NonNull Long min, @NonNull Long max) {
+			this(primitiveValues(bucketBoundaries), primitiveValues(bucketCumulativeCounts),
+					requireNonNull(count), requireNonNull(sum), requireNonNull(min), requireNonNull(max));
+		}
+
+		// Owns arrays captured by Histogram or copied from the public constructor's lists.
+		private HistogramSnapshot(long @NonNull [] bucketBoundaries,
+				long @NonNull [] bucketCumulativeCounts,
+				long count, double sum, long min, long max) {
 			requireNonNull(bucketBoundaries);
 			requireNonNull(bucketCumulativeCounts);
 
 			if (bucketBoundaries.length != bucketCumulativeCounts.length)
 				throw new IllegalArgumentException("Bucket boundaries and cumulative counts must be the same length");
+			if (!Double.isFinite(sum) || sum < 0D)
+				throw new IllegalArgumentException("Histogram sum must be finite and nonnegative");
 
-			this.bucketBoundaries = bucketBoundaries.clone();
-			this.bucketCumulativeCounts = bucketCumulativeCounts.clone();
+			this.bucketBoundaries = bucketBoundaries;
+			this.bucketCumulativeCounts = bucketCumulativeCounts;
 			this.count = count;
-			this.sum = sum;
+			this.sum = sum == 0D ? 0D : sum;
 			this.min = min;
 			this.max = max;
+		}
+
+		private static long @NonNull [] primitiveValues(@NonNull List<@NonNull Long> values) {
+			requireNonNull(values);
+			long[] result = new long[values.size()];
+			for (int index = 0; index < result.length; index++)
+				result[index] = requireNonNull(values.get(index));
+			return result;
 		}
 
 		/**
@@ -2034,7 +2142,8 @@ public interface MetricsCollector {
 		 *
 		 * @return the bucket count
 		 */
-		public int getBucketCount() {
+		@NonNull
+		public Integer getBucketCount() {
 			return this.bucketBoundaries.length;
 		}
 
@@ -2044,8 +2153,9 @@ public interface MetricsCollector {
 		 * @param index the bucket index
 		 * @return the bucket boundary
 		 */
-		public long getBucketBoundary(int index) {
-			return this.bucketBoundaries[index];
+		@NonNull
+		public Long getBucketBoundary(@NonNull Integer index) {
+			return this.bucketBoundaries[requireNonNull(index)];
 		}
 
 		/**
@@ -2054,26 +2164,34 @@ public interface MetricsCollector {
 		 * @param index the bucket index
 		 * @return the cumulative count
 		 */
-		public long getBucketCumulativeCount(int index) {
-			return this.bucketCumulativeCounts[index];
+		@NonNull
+		public Long getBucketCumulativeCount(@NonNull Integer index) {
+			return this.bucketCumulativeCounts[requireNonNull(index)];
 		}
 
 		/**
 		 * Total number of recorded values.
+		 * For snapshots captured by {@link Histogram#snapshot()}, this equals
+		 * the final cumulative bucket. Independently constructed snapshots
+		 * retain the count supplied to their constructor.
 		 *
 		 * @return the count
 		 */
-		public long getCount() {
+		@NonNull
+		public Long getCount() {
 			return this.count;
 		}
 
 		/**
-		 * Sum of all recorded values.
+		 * Approximate floating-point sum of recorded values, in their original units.
+		 * Rounding can lose small additions to a large total and can depend on
+		 * concurrent accumulation order. This is an operational metric, not
+		 * an exact-accounting total. Empty histograms return {@code 0.0}.
 		 *
-		 * @return the sum, saturated at {@link Long#MAX_VALUE} if the exact
-		 * sum exceeds the signed {@code long} range
+		 * @return the finite, nonnegative sum without signed-long saturation
 		 */
-		public long getSum() {
+		@NonNull
+		public Double getSum() {
 			return this.sum;
 		}
 
@@ -2082,7 +2200,8 @@ public interface MetricsCollector {
 		 *
 		 * @return the minimum value
 		 */
-		public long getMin() {
+		@NonNull
+		public Long getMin() {
 			return this.min;
 		}
 
@@ -2091,7 +2210,8 @@ public interface MetricsCollector {
 		 *
 		 * @return the maximum value
 		 */
-		public long getMax() {
+		@NonNull
+		public Long getMax() {
 			return this.max;
 		}
 
@@ -2101,13 +2221,15 @@ public interface MetricsCollector {
 		 * @param percentile percentile between 0 and 100
 		 * @return the approximated percentile value
 		 */
-		public long getPercentile(double percentile) {
+		@NonNull
+		public Long getPercentile(@NonNull Double percentile) {
+			requireNonNull(percentile);
 			if (percentile <= 0.0)
 				return this.min;
 			if (percentile >= 100.0)
 				return this.max;
 			if (this.count == 0)
-				return 0;
+				return 0L;
 
 			long threshold = (long) Math.ceil((percentile / 100.0) * this.count);
 
@@ -2130,7 +2252,7 @@ public interface MetricsCollector {
 		@Override
 		@NonNull
 		public String toString() {
-			return String.format("%s{count=%d, min=%d, max=%d, sum=%d, bucketBoundaries=%s}",
+			return String.format("%s{count=%d, min=%d, max=%d, sum=%s, bucketBoundaries=%s}",
 					getClass().getSimpleName(), this.count, this.min, this.max, this.sum, Arrays.toString(this.bucketBoundaries));
 		}
 	}
@@ -2487,6 +2609,46 @@ public interface MetricsCollector {
 		public String toString() {
 			return "HttpServerRouteKey{method=" + this.method + ", routeType="
 					+ this.routeType + ", route=" + this.resourcePathDeclaration + "}";
+		}
+	}
+
+	/** Immutable admitted HTTP response stream termination dimensions. Diagnostics redact application dimensions. */
+	@ThreadSafe
+	final class HttpResponseStreamTerminationKey {
+		@NonNull private final HttpServerRouteStatusKey httpServerRouteStatusKey;
+		@NonNull private final StreamTerminationReason reason;
+
+		private HttpResponseStreamTerminationKey(@NonNull HttpServerRouteStatusKey httpServerRouteStatusKey,
+				@NonNull StreamTerminationReason streamTerminationReason) {
+			this.httpServerRouteStatusKey = requireNonNull(httpServerRouteStatusKey);
+			this.reason = requireNonNull(streamTerminationReason);
+		}
+
+		/**
+		 * @param httpServerRouteStatusKey HTTP method, route and actual wire status class
+		 * @param streamTerminationReason logical terminal reason
+		 * @return immutable dimensions
+		 */
+		@NonNull
+		public static HttpResponseStreamTerminationKey fromDimensions(@NonNull HttpServerRouteStatusKey httpServerRouteStatusKey,
+				@NonNull StreamTerminationReason streamTerminationReason) {
+			return new HttpResponseStreamTerminationKey(httpServerRouteStatusKey, streamTerminationReason);
+		}
+
+		/** @return HTTP method, route and actual wire status class */
+		@NonNull public HttpServerRouteStatusKey getHttpServerRouteStatusKey() { return this.httpServerRouteStatusKey; }
+		/** @return logical terminal reason */
+		@NonNull public StreamTerminationReason getReason() { return this.reason; }
+		/** @return whether both dimensions are equal */
+		@Override public boolean equals(@Nullable Object other) {
+			return this == other || (other instanceof HttpResponseStreamTerminationKey key
+					&& this.httpServerRouteStatusKey.equals(key.httpServerRouteStatusKey) && this.reason == key.reason);
+		}
+		/** @return value based hash code */
+		@Override public int hashCode() { return Objects.hash(this.httpServerRouteStatusKey, this.reason); }
+		/** @return diagnostic rendering with application dimensions redacted */
+		@Override @NonNull public String toString() {
+			return "HttpResponseStreamTerminationKey{httpServerRouteStatusKey=<redacted>, reason=" + this.reason + "}";
 		}
 	}
 

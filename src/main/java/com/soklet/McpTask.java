@@ -49,6 +49,13 @@ import static java.util.Objects.requireNonNull;
  * tenant, endpoint, and other application authorization context, and must not
  * return a snapshot to an unauthorized request.
  *
+ * <p>Construction validates the status-specific payload shape, not whether
+ * that payload can be delivered under the origin tool's contract. Soklet
+ * checks outstanding input declarations and completed output during delivery,
+ * using the current server's access policy and result sanitizer. A failed
+ * delivery does not change this authoritative snapshot or synthesize a
+ * {@link McpTaskStatus#FAILED} state.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe

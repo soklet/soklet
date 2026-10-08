@@ -63,9 +63,11 @@ public class SseInitializerRuntimeTests {
 			try (Socket socket = fixture.request("catchup")) {
 				assertStatus(socket, 200);
 				fixture.awaitClients(1);
+				// The fixture has a one-entry write queue. Drain catch-up before
+				// broadcasting so legitimate queue backpressure cannot close the client.
+				Assertions.assertEquals("data: catch-up\n\n", readUntil(socket, "\n\n"));
 				fixture.server.acquireBroadcaster(ResourcePath.fromPath("/ownership/catchup")).orElseThrow()
 						.broadcastEvent(SseEvent.withData("live").build());
-				Assertions.assertEquals("data: catch-up\n\n", readUntil(socket, "\n\n"));
 				Assertions.assertEquals("data: live\n\n", readUntil(socket, "\n\n"));
 				Assertions.assertThrows(IllegalStateException.class,
 						() -> initializerHandle.get().unicastEvent(SseEvent.withData("late").build()));

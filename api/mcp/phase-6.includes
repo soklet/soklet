@@ -46,6 +46,7 @@ com.soklet.McpMetricsSnapshot$Builder
 com.soklet.McpMetricsSnapshot$EndpointMethodKey
 com.soklet.McpMetricsSnapshot$RequestOutcomeKey
 com.soklet.McpMetricsSnapshot$RequestStreamTerminationKey
+com.soklet.McpMetricsSnapshot$SubscriptionMaintenanceKey
 com.soklet.McpMetricsSnapshot$SubscriptionTerminationKey
 com.soklet.McpRequestOutcome
 com.soklet.McpServerDiagnostics
