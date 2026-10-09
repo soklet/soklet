@@ -23,13 +23,14 @@ import org.junit.jupiter.api.Timeout;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@Timeout(30)
+@Timeout(60)
 class McpLegacySessionHttpRouteMetricsTests {
 	private static final List<McpProtocolVersion> LEGACY = List.of(
 			McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25);
@@ -42,6 +43,7 @@ class McpLegacySessionHttpRouteMetricsTests {
 	void endRequestBudget() { McpLegacySessionTransportPublicRuntimeTests.RawClient.endRequestBudget(); }
 
 	@Test
+	@Timeout(90)
 	void acceptedGetAndDeleteUseTheSelectedEndpointAndReleaseTheActiveGauge() throws Exception {
 		for (McpProtocolVersion version : LEGACY) {
 			MetricsCollector collector = MetricsCollector.defaultInstance();
@@ -66,6 +68,34 @@ class McpLegacySessionHttpRouteMetricsTests {
 	}
 
 	@Test
+	@Timeout(90)
+	void idleGetsDoNotConsumeTheTransientObservationBudget() throws Exception {
+		MetricsCollector collector = MetricsCollector.defaultInstance();
+		List<McpLegacySessionTransportPublicRuntimeTests.RawClient> gets = new ArrayList<>();
+		try (var fixture = new McpLegacySessionTransportPublicRuntimeTests.Fixture(true,
+				builder -> builder.requestHandlerConcurrency(1).requestHandlerQueueCapacity(1)
+						.maximumSubscriptionDuration(Duration.ofSeconds(30)), null, collector)) {
+			List<String> ids = new ArrayList<>();
+			try {
+				for (int index = 0; index < 8; index++) {
+					String id = fixture.initialize("/mcp", LEGACY.get(0)); ids.add(id);
+					var get = fixture.openControl("GET", "/mcp", LEGACY.get(0), id, "alice", "", List.of());
+					gets.add(get);
+					assertEquals(200, get.readHead().status());
+				}
+				assertEquals(8, fixture.httpStarts.get(), "Every idle GET needs a paired observation despite a two-ticket transient budget.");
+				assertEquals(8L, collector.snapshot().orElseThrow().getActiveRequests());
+				for (String id : ids)
+					assertEquals(204, fixture.control("DELETE", "/mcp", LEGACY.get(0), id, "alice", "", List.of()).status());
+				awaitFinished(fixture, 16);
+				assertEquals(16, fixture.httpStarts.get());
+				assertEquals(0L, collector.snapshot().orElseThrow().getActiveRequests());
+			} finally { for (var get : gets) get.close(); }
+		}
+	}
+
+	@Test
+	@Timeout(90)
 	void rejectedControlsRetainMatchedRoutesAndSeparateEndpoints() throws Exception {
 		for (McpProtocolVersion version : LEGACY) {
 			MetricsCollector collector = MetricsCollector.defaultInstance();

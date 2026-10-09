@@ -18,6 +18,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.ForkJoinWorkerThread;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.BooleanSupplier;
 
@@ -44,6 +45,7 @@ public final class StateChangeWaiters {
 		if (Thread.holdsLock(this.monitor))
 			throw new IllegalStateException("A state wait cannot retain its owner monitor");
 		Thread current = Thread.currentThread();
+		boolean compensate = current instanceof ForkJoinWorkerThread;
 		try {
 			while (true) {
 				synchronized (this.monitor) {
@@ -53,8 +55,9 @@ public final class StateChangeWaiters {
 						throw new InterruptedException();
 					this.waiters.add(current);
 				}
-				if (current instanceof ForkJoinWorkerThread)
-					ForkJoinPool.managedBlock(new ForkJoinPool.ManagedBlocker() {
+				if (compensate) {
+					try {
+						ForkJoinPool.managedBlock(new ForkJoinPool.ManagedBlocker() {
 						@Override public boolean isReleasable() {
 							if (current.isInterrupted())
 								return true;
@@ -67,8 +70,13 @@ public final class StateChangeWaiters {
 								LockSupport.park(StateChangeWaiters.this);
 							return isReleasable();
 						}
-					});
-				else
+						});
+					} catch (RejectedExecutionException exhaustedCompensation) {
+						// A saturated application pool cannot provide another worker.
+						// Keep waiting with the same backpressure and cancellation contract.
+						compensate = false;
+					}
+				} else
 					LockSupport.park(this);
 				if (Thread.interrupted())
 					throw new InterruptedException();

@@ -29,6 +29,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -42,6 +43,7 @@ public class McpCompletionPublicRuntimeTests {
 	private static final String TEMPLATE = "catalog://items/{sku}";
 
 	@Test
+	@Timeout(130)
 	public void completionUsesExactRoutesAndNeutralErrors() throws Exception {
 		AtomicInteger requestCharges = new AtomicInteger();
 		AtomicInteger interceptorEntries = new AtomicInteger();
@@ -309,6 +311,7 @@ public class McpCompletionPublicRuntimeTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void onlyCompletionHandlerErrorsAreClientVisible() throws Exception {
 		for (boolean promptReference : List.of(true, false)) {
 			for (String errorSource : List.of("handler", "interceptor-before", "interceptor-after")) {
@@ -338,7 +341,13 @@ public class McpCompletionPublicRuntimeTests {
 							return result;
 						}).corsAuthorizer(CorsAuthorizer.rejectAllInstance()).allowedHosts(Set.of(HOST)).build();
 				Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
-						.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).build());
+						.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+						.lifecyclePolicy(LifecyclePolicy.builder()
+								.startupTimeout(Duration.ofSeconds(10))
+								.startupCancelationTimeout(Duration.ofSeconds(1))
+								.gracefulShutdownTimeout(Duration.ofSeconds(1))
+								.forcedShutdownTimeout(Duration.ofSeconds(1))
+								.build()).build());
 				try {
 					soklet.start();
 					HttpResponse<String> response = send(server.getDiagnostics().getBoundAddress().orElseThrow().getPort(),
@@ -407,7 +416,12 @@ public class McpCompletionPublicRuntimeTests {
 				.header("Mcp-Method", method)
 				.POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
 				.build();
-		return HttpClient.newHttpClient().send(request,
+		var response = HttpClient.newHttpClient().sendAsync(request,
 				HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+		try {
+			return response.get(5, TimeUnit.SECONDS);
+		} finally {
+			response.cancel(true);
+		}
 	}
 }

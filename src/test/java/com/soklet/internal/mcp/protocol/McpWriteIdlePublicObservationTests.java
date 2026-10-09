@@ -156,6 +156,8 @@ class McpWriteIdlePublicObservationTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObservers(List.of(observer)).metricsCollector(collector)
 				.lifecyclePolicy(LifecyclePolicy.builder()
+						.startupTimeout(Duration.ofSeconds(10))
+						.startupCancelationTimeout(Duration.ofSeconds(1))
 						.gracefulShutdownTimeout(Duration.ofSeconds(2))
 						.forcedShutdownTimeout(Duration.ofSeconds(1)).build()).build());
 		WritableSource source = null;

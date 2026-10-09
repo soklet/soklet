@@ -87,6 +87,11 @@ Use list accessors or annotated `List<T>` parameters when repetition is allowed.
 Header names remain case insensitive, while query, form, and cookie names remain
 case sensitive. Header and outgoing-cookie values retain their supplied order.
 
+Outgoing header validation is stricter than 3.5.1: names are checked exactly as
+stored, so leading or trailing whitespace is rejected rather than validating a
+trimmed copy and later serializing the original. Header values also reject the
+literal DEL character (`0x7F`). Existing valid Latin-1 obs-text remains supported.
+
 Each request-header List entry now represents one complete field occurrence.
 For example, `Accept-Encoding: gzip, deflate, br` becomes
 `List.of("gzip, deflate, br")`, and a scalar `@RequestHeader String` receives
@@ -250,6 +255,20 @@ Method tokens are limited to 64 bytes; chunk-size lines, including extensions
 but excluding CRLF, are limited to 8,192 bytes. These are fixed bounds independent
 of the aggregate request-size setting. Malformed framing returns HTTP 400 and
 closes the connection before a resource method runs.
+
+The built-in HTTP transport owns finite-response framing. It recomputes
+`Content-Length`, removes application `Transfer-Encoding`, `Keep-Alive`,
+`Proxy-Connection`, `TE`, `Trailer` and headers nominated by `Connection`, and
+controls `Connection` itself. A valid single decimal `Content-Length` on a
+bodyless HEAD response is preserved as representation metadata. `Upgrade` and
+`Connection: Upgrade` are retained only for a validated `426 Upgrade Required`
+advertisement; other ordinary responses cannot initiate protocol switching.
+Final ordinary responses require a status from `200` through `599`; returning
+a `1xx` or out-of-range status fails processing with HTTP `500`. Put a streaming
+body in `MarshaledResponse.streamingResponseBody(...)` or `.stream(...)`:
+the default response marshaler rejects `StreamingResponseBody` in `Response.body(...)`.
+Expected typed cancellation during streaming cleanup is quiet; independent
+producer, cleanup and transport failures remain observable.
 
 SSE handshakes reject bare carriage returns, folded or whitespace-only header
 lines, signed content lengths, repeated content-length fields, and transfer
@@ -972,8 +991,9 @@ termination grace
 
 With the defaults, a five-second external drain, no application cleanup, two
 seconds for other hooks/VM halt, and a three-second reserve totals 30.25
-seconds. Round up to at least 31 seconds. The website deployment example uses a 45-second
-termination budget, retaining an operational reserve. Adding a five-second cleanup budget raises the same
+seconds. Round up to at least 31 seconds. The website deployment example uses a 46-second
+termination budget for its longer graceful phase, retaining an operational reserve.
+Adding a five-second cleanup budget raises the default-policy
 example's minimum to 36 seconds, so use at least 40 seconds or reduce a measured
 component.
 
@@ -1039,6 +1059,11 @@ want routed logs. The standalone terminal report and bounded emergency fallback
 for a failing log observer remain separate stderr channels.
 
 ## HTTP, SSE, and custom transports
+
+Startup dispositions are unified, but built-in bind-failure causes retain their
+transport wrappers: HTTP uses `UncheckedIOException`, SSE `IllegalStateException`,
+and MCP can expose `BindException` directly. Inspect the cause chain rather than
+assuming the same exception class across transports.
 
 Custom HTTP and SSE transport SPIs now participate in an aggregate lifecycle
 rather than being independently started and stopped. Migrate those custom
@@ -1164,7 +1189,8 @@ a pipelined request.
 
 The default marshaler and built-in fallback use these conventional statuses:
 
-- `MALFORMED_REQUEST` (`400`)
+- `MALFORMED_REQUEST` (`400`), including unrecognized methods, unsupported
+  transfer codings and unsupported HTTP versions under the current strict parser
 - `REQUEST_TARGET_TOO_LONG` (`414`)
 - `EXPECTATION_FAILED` (`417`)
 - `REQUEST_HEADERS_TOO_LARGE` (`431`)
@@ -1811,10 +1837,16 @@ IP literals are normalized with `InetAddress.getHostAddress()`, including IPv6.
 
 ### Static-file identity and cache metadata
 
-Static-file resolvers receive actual directory-entry spelling for case and Unicode
-normalization aliases. Distinct hard-link names keep their own policies. Unsupported
-aliases fail closed. No-follow mode retains link checks and revalidates file identity
-after application resolvers. Keep the served directory namespace stable during
+Static-file resolver spelling follows native real-path resolution. On platforms
+that canonicalize case and Unicode aliases, resolvers receive directory-entry
+spelling; some Linux case-insensitive mounts retain the requested spelling instead.
+Do not use spelling-only access checks on those mounts; use a case-sensitive
+static root or policy suited to its filesystem. Distinct hard-link names keep their
+own policies. No-follow mode rejects a symbolic-link root and links below it,
+retains the configured ancestor path and resolves trusted ancestor links afresh.
+With `followSymlinks` enabled, the root target is resolved at construction;
+swapping an ancestor link does not retarget that helper. No-follow mode revalidates
+file identity after application resolvers. Keep the served directory namespace stable during
 response delivery; path-backed bodies do not provide an atomic filesystem snapshot.
 
 The default response marshaler supplies Content-Type only when a body exists.

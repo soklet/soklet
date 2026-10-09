@@ -127,6 +127,7 @@ public class SimulatorStreamingContractTests {
 
 
 	@Test
+	@Timeout(115)
 	void interceptorOnlyStreamSupportsAbsentResourceMethodInBothRuntimes() throws Exception {
 		for (boolean simulated : new boolean[]{true, false}) {
 			AtomicInteger producers = new AtomicInteger();
@@ -182,6 +183,9 @@ public class SimulatorStreamingContractTests {
 	private static Request request() { return Request.withPath(HttpMethod.GET, "/contract").build(); }
 	private static SokletConfig config(HttpServer server, Resource resource, LifecycleObserver observer) {
 		return SokletConfig.withHttpServer(server).resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Resource.class)))
+				.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(10))
+						.startupCancelationTimeout(Duration.ofSeconds(1)).gracefulShutdownTimeout(Duration.ofSeconds(1))
+						.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
 				.instanceProvider(new InstanceProvider() {
 					@Override public <T> T provide(Class<T> type) { return type == Resource.class ? type.cast(resource) : InstanceProvider.defaultInstance().provide(type); }
 				}).lifecycleObserver(observer).build();

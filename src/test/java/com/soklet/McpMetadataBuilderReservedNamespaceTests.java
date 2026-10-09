@@ -94,6 +94,16 @@ public class McpMetadataBuilderReservedNamespaceTests {
 	}
 
 	@Test
+	void skillPagesAndInputRequiredResultsRejectReservedApplicationMetadata() {
+		Assertions.assertThrows(IllegalArgumentException.class, () -> McpSkillPage.builder().metadata(reservedMetadata()).build());
+		Assertions.assertThrows(IllegalArgumentException.class, () -> McpInputRequiredResult.withApplicationRequestState("state")
+				.metadata(reservedMetadata()).build());
+		McpJsonObject metadata = McpJsonObject.builder().put("example.com/value", "allowed").build();
+		Assertions.assertSame(metadata, McpSkillPage.builder().metadata(metadata).build().getMetadata());
+		Assertions.assertSame(metadata, McpInputRequiredResult.withApplicationRequestState("state").metadata(metadata).build().getMetadata());
+	}
+
+	@Test
 	public void behaviorAdapterKeysExactlyMatchGeneratedInventory()
 			throws IOException {
 		Set<String> inventoryKeys = inventoryKeys();

@@ -39,6 +39,7 @@ class McpLegacyNegotiationAndNotificationTests {
 			McpProtocolVersion.V2026_07_28);
 
 	@Test
+	@Timeout(300)
 	void missingVersionCanUseOnlyAnUnambiguousLegacyEndpointWithoutDowngradingModernFraming() throws Exception {
 		for (McpProtocolVersion version : LEGACY)
 			for (boolean sessions : List.of(false, true))
@@ -67,6 +68,7 @@ class McpLegacyNegotiationAndNotificationTests {
 	}
 
 	@Test
+	@Timeout(180)
 	void initializationCanCounterofferAStaticHeaderWithoutOverridingASupportedBodyVersion() throws Exception {
 		for (McpProtocolVersion version : LEGACY) {
 			McpProtocolVersion other = version == LEGACY.get(0) ? LEGACY.get(1) : LEGACY.get(0);
@@ -99,6 +101,7 @@ class McpLegacyNegotiationAndNotificationTests {
 	}
 
 	@Test
+	@Timeout(450)
 	void unsupportedLegacyNotificationsAreAcceptedOnlyAfterAdmissionAndSessionValidation() throws Exception {
 		for (McpProtocolVersion version : LEGACY)
 			for (boolean sessions : List.of(false, true)) {

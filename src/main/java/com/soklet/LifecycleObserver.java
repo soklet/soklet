@@ -391,8 +391,10 @@ public interface LifecycleObserver {
 	 * failures before production starts. Implementations must return promptly; their failures
 	 * are contained and do not cancel the stream. Custom transports own the corresponding
 	 * preparation and terminal notifications using the exact same handle instance and original
-	 * dispatched request. Terminal metrics may arrive before handling finish; collectors retain
-	 * one pending terminal outcome and return without waiting.
+	 * dispatched request. Stream termination notifications may arrive before handling finish;
+	 * observers that combine those events must retain the pending outcome and return without
+	 * waiting. Delegating observers must forward this preparation callback and the terminal
+	 * callbacks to preserve stream lifetime accounting.
 	 *
 	 * @param streamingResponseHandle the admitted HTTP response stream
 	 */

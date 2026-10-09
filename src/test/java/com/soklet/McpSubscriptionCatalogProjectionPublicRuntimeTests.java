@@ -131,11 +131,13 @@ public class McpSubscriptionCatalogProjectionPublicRuntimeTests {
 	}
 
 	@Test
+	@Timeout(210)
 	public void providerFailureUsesCanonicalCatalogBaselineAndRecovers() {
 		assertCatalogLocalizationFallback(true);
 	}
 
 	@Test
+	@Timeout(210)
 	public void lookupFailureUsesCanonicalCatalogBaselineAndRecovers() {
 		assertCatalogLocalizationFallback(false);
 	}
@@ -177,6 +179,7 @@ public class McpSubscriptionCatalogProjectionPublicRuntimeTests {
 	}
 
 	@Test
+	@Timeout(240)
 	public void failRequestCatalogBaselineIsSanitizedAndReleasesCapacity() {
 		for (boolean prompts : List.of(false, true)) for (boolean providerFailure : List.of(false, true)) {
 			AtomicBoolean failing = new AtomicBoolean(true);
@@ -227,6 +230,7 @@ public class McpSubscriptionCatalogProjectionPublicRuntimeTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void explicitCatalogPolicyContextFailureStillFailsBeforeEvaluation() {
 		for (boolean prompts : List.of(false, true)) {
 			AtomicBoolean failing = new AtomicBoolean(true); AtomicInteger evaluations = new AtomicInteger();
@@ -259,6 +263,7 @@ public class McpSubscriptionCatalogProjectionPublicRuntimeTests {
 	}
 
 	@Test
+	@Timeout(90)
 	public void localizedInvalidationDuringBaselineCatchesUpAndDropsStaleTerminal() {
 		for (boolean prompts : List.of(false, true)) {
 			AtomicReference<McpServer> server = new AtomicReference<>();
@@ -296,6 +301,7 @@ public class McpSubscriptionCatalogProjectionPublicRuntimeTests {
 	}
 
 	@Test
+	@Timeout(150)
 	public void catalogChurnDuringOpeningDoesNotRepeatAuthorization() {
 		for (boolean prompts : List.of(false, true)) {
 			McpSubscriptionEventPublisher publisher = McpSubscriptionEventPublisher.fromInMemoryDefaults();
@@ -324,6 +330,7 @@ public class McpSubscriptionCatalogProjectionPublicRuntimeTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void catalogChangeDuringBaselineCatchesUpAfterAcknowledgment() {
 		for (boolean prompts : List.of(false, true)) {
 			McpSubscriptionEventPublisher publisher = McpSubscriptionEventPublisher.fromInMemoryDefaults();
@@ -700,11 +707,13 @@ public class McpSubscriptionCatalogProjectionPublicRuntimeTests {
 	}
 
 	@Test
+	@Timeout(150)
 	public void coalescedToolOfferAdvancesBaselineWithoutLosingOscillatingChanges() {
 		assertCoalescedCatalogOscillation(false);
 	}
 
 	@Test
+	@Timeout(150)
 	public void coalescedPromptOfferAdvancesBaselineWithoutLosingOscillatingChanges() {
 		assertCoalescedCatalogOscillation(true);
 	}
@@ -929,6 +938,12 @@ public class McpSubscriptionCatalogProjectionPublicRuntimeTests {
 				.metricsCollector(metrics)
 				.lifecycleObservers(List.of(
 						LifecycleObserver.defaultInstance()))
+				.lifecyclePolicy(LifecyclePolicy.builder()
+					.startupTimeout(Duration.ofSeconds(10))
+					.startupCancelationTimeout(Duration.ofSeconds(1))
+					.gracefulShutdownTimeout(Duration.ofSeconds(1))
+					.forcedShutdownTimeout(Duration.ofSeconds(1))
+					.build())
 				.build();
 	}
 

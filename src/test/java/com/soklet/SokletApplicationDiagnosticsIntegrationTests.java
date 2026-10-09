@@ -45,6 +45,7 @@ final class SokletApplicationDiagnosticsIntegrationTests {
 	private static final int NESTED_HTTP_MEMBER_COUNT = 18;
 
 	@Test
+	@Timeout(value = 75, unit = TimeUnit.SECONDS)
 	void blockedFrameworkSetupSynthesizesFrameworkDiagnosticsAndSkipsCleanup()
 			throws Exception {
 		BlockingResourceMethodResolver resolver =
@@ -111,6 +112,7 @@ final class SokletApplicationDiagnosticsIntegrationTests {
 	}
 
 	@Test
+	@Timeout(value = 75, unit = TimeUnit.SECONDS)
 	void blockedNestedCustomHttpAttachProjectsBoundedTransportDiagnostics()
 			throws Exception {
 		InternalTransportIdentity identity = InternalTransportIdentity.create();

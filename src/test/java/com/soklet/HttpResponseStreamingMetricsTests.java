@@ -77,6 +77,9 @@ public class HttpResponseStreamingMetricsTests {
             }
         };
         SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(port).build())
+            .lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(10))
+                .startupCancelationTimeout(Duration.ofSeconds(1)).gracefulShutdownTimeout(Duration.ofSeconds(1))
+                .forcedShutdownTimeout(Duration.ofSeconds(1)).build())
             .resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Resource.class)))
             .metricsCollector(collector).lifecycleObserver(observer).build();
         ExecutorService client = Executors.newSingleThreadExecutor();

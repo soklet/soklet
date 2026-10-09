@@ -96,9 +96,12 @@ class McpSubscriptionShutdownAdmissionTests {
 		}
 	}
 
-	@Test void legacyGetPausedInCorsCannotOpenAfterQuiesce() throws Exception { assertPendingLegacyGet(LegacyGate.CORS); }
-	@Test void legacyGetPausedInAdmissionCannotOpenAfterQuiesce() throws Exception { assertPendingLegacyGet(LegacyGate.TRANSPORT_ADMISSION); }
-	@Test void legacyGetPausedInOwnerResolutionCannotOpenAfterQuiesce() throws Exception { assertPendingLegacyGet(LegacyGate.OWNER_RESOLUTION); }
+	@Test @Timeout(150)
+	void legacyGetPausedInCorsCannotOpenAfterQuiesce() throws Exception { assertPendingLegacyGet(LegacyGate.CORS); }
+	@Test @Timeout(150)
+	void legacyGetPausedInAdmissionCannotOpenAfterQuiesce() throws Exception { assertPendingLegacyGet(LegacyGate.TRANSPORT_ADMISSION); }
+	@Test @Timeout(150)
+	void legacyGetPausedInOwnerResolutionCannotOpenAfterQuiesce() throws Exception { assertPendingLegacyGet(LegacyGate.OWNER_RESOLUTION); }
 
 	private void assertPendingLegacyGet(LegacyGate gate) throws Exception {
 		for (McpProtocolVersion version : LEGACY) {
@@ -117,6 +120,7 @@ class McpSubscriptionShutdownAdmissionTests {
 	}
 
 	@Test
+	@Timeout(120)
 	void queuedLegacyGetIsRejectedWhileAdmittedFiniteRequestStillCompletes() throws Exception {
 		try (Fixture fixture = new Fixture(ModernGate.CORS, null)) {
 			String sessionId = fixture.initialize(McpProtocolVersion.V2025_11_25);
@@ -140,6 +144,7 @@ class McpSubscriptionShutdownAdmissionTests {
 	}
 
 	@Test
+	@Timeout(90)
 	void establishedModernAndLegacyStreamsCompleteGracefully() throws Exception {
 		try (Fixture fixture = new Fixture(null, null)) {
 			String sessionId = fixture.initialize(McpProtocolVersion.V2025_11_25);

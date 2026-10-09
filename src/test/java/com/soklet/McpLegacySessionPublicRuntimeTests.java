@@ -109,8 +109,37 @@ class McpLegacySessionPublicRuntimeTests {
 					assertTrue(admitted.body().contains(method.equals("tools/call") ? "\"code\":-32602" : "\"code\":-32601"), admitted.body());
 				}
 				Response malformed = fixture.post("/mcp", version, "tools/call", "", "1", "unknown-session", "alice", List.of());
-				assertEquals(200, malformed.status(), malformed.body());
-				assertTrue(malformed.body().contains("\"code\":-32602"), "Malformed operation fields remain outside admission: " + malformed.body());
+				assertEquals(404, malformed.status(), "Operation fields must not hide a dead session: " + malformed.body());
+			}
+		}
+	}
+
+	@Test
+	void operationParameterFailuresFollowAdmissionLimiterAndSessionBinding() throws Exception {
+		try (Fixture fixture = new Fixture(QUIET)) {
+			for (McpProtocolVersion version : LEGACY) {
+				String live = sessionId(fixture.initialize(version, "alice", null, "{}", "parameters"));
+				for (String[] operation : List.of(
+						new String[]{"ping", "\"unexpected\":true", "-32602"},
+						new String[]{"tools/call", "", "-32602"},
+						new String[]{"tools/list", "\"cursor\":42", "-32602"},
+						new String[]{"resources/read", "\"uri\":\"not a uri\"", "-32602"},
+						new String[]{"prompts/list", "\"cursor\":42", "-32601"},
+						new String[]{"resources/subscribe", "\"uri\":\"not a uri\"", "-32601"},
+						new String[]{"completion/complete", "", "-32601"})) {
+					String method = operation[0], params = operation[1];
+					assertEquals(404, fixture.post("/mcp", version, method, params, "1", "dead", "alice", List.of()).status(), method);
+					assertEquals(404, fixture.post("/mcp", version, method, params, "1", live, "bob", List.of()).status(), method);
+					assertEquals(403, fixture.post("/mcp", version, method, params, "1", "dead", "alice",
+							List.of(new HeaderValue("X-Admission-Status", "403"))).status(), method);
+					// Small ping controls deliberately bypass the request limiter.
+					if (!method.equals("ping"))
+						assertEquals(429, fixture.post("/mcp", version, method, params, "1", "dead", "alice",
+								List.of(new HeaderValue("X-Limit", "deny"))).status(), method);
+					Response admitted = fixture.post("/mcp", version, method, params, "1", live, "alice", List.of());
+					assertEquals(200, admitted.status(), admitted.body());
+					assertTrue(admitted.body().contains("\"code\":" + operation[2]), method + ": " + admitted.body());
+				}
 			}
 		}
 	}

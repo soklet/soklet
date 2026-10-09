@@ -28,7 +28,7 @@ import java.util.function.Function;
  * For example:
  * <pre>{@code // Acquire our SSE broadcaster (sends to anyone listening to "/examples/123")
  * SseServer server = ...;
- * SseBroadcaster broadcaster = server.acquireBroadcaster(ResourcePath.fromPath("/examples/123")).orElseThrow();
+ * ResourcePath resourcePath = ResourcePath.fromPath("/examples/123");
  *
  * // Create our SSE payload
  * SseEvent event = SseEvent.withEvent("test")
@@ -36,7 +36,8 @@ import java.util.function.Function;
  *   .build();
  *
  * // Publish SSE payload to all listening clients
- * broadcaster.broadcastEvent(event);}</pre>
+ * server.acquireBroadcaster(resourcePath)
+ *   .ifPresent(broadcaster -> broadcaster.broadcastEvent(event));}</pre>
  * <p>
  * Soklet's default {@link SseServer} implementation guarantees at most one broadcaster is registered per {@link ResourcePath} at a time; instances may be recreated after becoming idle. That implementation is responsible for the creation and management of {@link SseBroadcaster} instances.
  * <p>

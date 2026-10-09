@@ -91,6 +91,75 @@ function reviewedSyntheticRows(scopes, reviewsByName) {
   });
 }
 
+run('qualified fixture constructors retain exact types and multiplicities', () => {
+  const caller='src/test/java/com/soklet/QualifiedCallerTests.java';
+  const owner='src/test/java/com/soklet/OwnerTests.java';
+  const scopes=buildLifecycleScopeObservations(new Map([
+    [owner, `package com.soklet; class OwnerTests { static class Fixture {
+      Fixture() { Soklet s=Soklet.fromConfig(null); s.start(); s.close(); }
+    }}`],
+    [caller, `package com.soklet; class QualifiedCallerTests {
+      @Test void qualified() { new OwnerTests.Fixture(); new OwnerTests.Fixture(); }
+      @Test void fullyQualified() { new com.soklet.OwnerTests.Fixture(); }
+      @Test void unrelated() { new Other.Fixture(); }
+    }`],
+  ]));
+  assert.equal(scopes.find(row=>row.scopeName==='qualified').generationSiteCount,2);
+  assert.equal(scopes.find(row=>row.scopeName==='fullyQualified').generationSiteCount,1);
+  assert.ok(!scopes.some(row=>row.scopeName==='unrelated'));
+});
+
+run('qualified simulator runners require a visible unique local receiver', () => {
+  const scopes=syntheticScopes(`package com.soklet; class SyntheticLifecycleTests {
+    Fixture fixture;
+    @Test void positive() { Fixture local=new Fixture(); local.run(null); }
+    @Test void fullyQualified() { com.soklet.SyntheticLifecycleTests.Fixture local=new com.soklet.SyntheticLifecycleTests.Fixture(); local.run(null); }
+    @Test void unrelated() { Other local=new Other(); local.run(null); }
+    @Test void reassigned() { Fixture local=new Fixture(); local=new Other(); local.run(null); }
+    @Test void innerBlock() { { Fixture fixture=new Fixture(); } fixture.run(null); }
+    @Test void innerLambda() { Runnable r=()->{ Fixture fixture=new Fixture(); }; fixture.run(null); }
+    @Test void tryResource() { try(Fixture fixture=new Fixture()) {} fixture.run(null); }
+    @Test void forInitializer() { for(Fixture fixture=new Fixture(); false;) {} fixture.run(null); }
+    static class Fixture { Fixture() {} void run(Object action) { SokletSimulator.run(null, sim->{}); } }
+    static class Other { void run(Object action) {} }
+  }`);
+  assert.equal(scopes.find(row=>row.scopeName==='positive').generationSiteCount,1);
+  assert.equal(scopes.find(row=>row.scopeName==='fullyQualified').generationSiteCount,1);
+  for(const name of ['unrelated','reassigned','innerBlock','innerLambda','tryResource','forInitializer'])
+    assert.ok(!scopes.some(row=>row.scopeName===name&&row.hasExecution),name);
+});
+
+run('positive unresolved helper controls keep their source-bound composition', () => {
+  const scopes=syntheticScopes(`class SyntheticLifecycleTests {
+    @Test void bounded() { Soklet s=Soklet.fromConfig(null); s.start(); receiver.awaitDone(); s.close(); }
+  }`);
+  const source=clone(scopes[0]); source.fixedControlWaitSites=[];
+  source.fixedControlWaitCount=0; source.fixedControlWaitMillis=0;
+  source.unresolvedFixedControlWaitCount=1;
+  const row=reviewedSyntheticRows([source], {bounded:{controlJoinMillis:5000,
+    controlComposition:'REVIEWED_SEQUENTIAL_SOURCE_BOUND'}})[0];
+  assert.equal(row.review.totalComposedBoundMillis,55000);
+  const empty=clone(source); empty.unresolvedFixedControlWaitCount=0;
+  expectFailure(()=>reviewedSyntheticRows([empty],{bounded:{controlJoinMillis:5000,
+    controlComposition:'REVIEWED_SEQUENTIAL_SOURCE_BOUND'}}),/not source-applicable/u);
+});
+
+run('chained public application runner retains actual execution evidence', () => {
+  const scopes=syntheticScopes(`class SyntheticLifecycleTests {
+    @Test void chained() { SokletApplication.fromConfig(config).run(cleanup); }
+    @Test void nestedConfig() { SokletApplication.fromConfig(builder.build()).run(cleanup); }
+    @Test void unrelated() { Other.fromConfig(config).run(cleanup); }
+    @Test void inert() { SokletApplication.fromConfig(config); Other.run(cleanup); }
+    @Test void wrapped() { Wrapper.of(SokletApplication.fromConfig(config)).run(cleanup); }
+    @Test void converted() { SokletApplication.fromConfig(config).wrap().run(cleanup); }
+  }`);
+  for(const name of ['chained','nestedConfig']) {
+    const row=scopes.find(scope=>scope.scopeName===name);
+    assert.equal(row.hasExecution,true); assert.equal(row.applicationRunSiteCount,1);
+  }
+  for(const name of ['unrelated','inert','wrapped','converted'])assert.ok(!scopes.some(scope=>scope.scopeName===name&&scope.hasExecution));
+});
+
 run('positive production closure', () => {
   const result = verifyLifecycleBoundHarnessInventory({ root: ROOT });
   assert.equal(result.lifecycleScopes, INVENTORY.lifecycleScopes.length);
@@ -238,7 +307,15 @@ run('production imported fixtures cannot disappear or change without new evidenc
   const name = 'temporary_handler_capacity_keeps_get_fenced_and_retries_without_replacing_its_stream';
   const row = rowByName(INVENTORY, name);
   assert.equal(row.review.generationCount, 2);
-  assert.equal(row.source.importedLifecycleHelperEvidence.length, 1);
+  // The three-argument fixture delegates to its four-argument owner
+  // constructor. Both proof entries describe each same fixture; the two
+  // legacy revisions still create exactly two lifecycle owners.
+  assert.equal(row.source.importedLifecycleHelperEvidence.length, 2);
+  assert.equal(new Set(row.source.importedLifecycleHelperEvidence.map(
+    (helper) => helper.scopeSha256)).size, 2);
+  assert.ok(row.source.importedLifecycleHelperEvidence.every((helper) =>
+    helper.scopeName === 'Fixture' && helper.callCount === 1
+      && helper.path === 'src/test/java/com/soklet/McpLegacySessionTransportPublicRuntimeTests.java'));
   for (const mutate of [
     (source) => { delete source.importedLifecycleHelperEvidence; },
     (source) => { source.importedLifecycleHelperEvidence[0].fileSha256 = '0'.repeat(64); },
@@ -1544,6 +1621,162 @@ run('literal null lifecycle policy installation restores defaults', () => {
   assert.equal(row.review.phasePolicy.startupCancellationMillis, 2_000);
   assert.equal(row.review.phasePolicy.gracefulShutdownMillis, 15_000);
   assert.equal(row.review.phasePolicy.forcedShutdownMillis, 3_000);
+});
+
+for (const typeName of ['LifecyclePolicy', 'com.soklet.LifecyclePolicy']) {
+  run(`${typeName} default instance installation preserves the complete default budget`, () => {
+    const scopes = syntheticScopes(`
+      import org.junit.jupiter.api.Test;
+      class SyntheticLifecycleTests {
+        @Test void usesDefault() {
+          SokletConfig config = SokletConfig.withHttpServer(null)
+            .lifecyclePolicy(${typeName}.defaultInstance()).build();
+          Soklet soklet = Soklet.fromConfig(config); soklet.start(); soklet.close();
+        }
+      }
+    `);
+    assert.equal(scopes[0].unresolvedPolicyInstallationCount, 0);
+    const row = buildReviewedLifecycleScopeRows(scopes,
+      { requireRegistryCompleteness: false })[0];
+    assert.equal(row.review.totalComposedBoundMillis, 50_000);
+    assert.equal(row.review.phasePolicy.startupMillis, 30_000);
+  });
+}
+
+run('same-named policy locals are confined to their own callable', () => {
+  const scopes = syntheticScopes(`
+    import java.time.Duration;
+    import org.junit.jupiter.api.Test;
+    class SyntheticLifecycleTests {
+      @Test void readsDefault() { LifecyclePolicy policy = LifecyclePolicy.defaultInstance(); }
+      @Test void usesLocal() {
+        LifecyclePolicy policy = LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(1)).build();
+        SokletConfig config = SokletConfig.withHttpServer(null).lifecyclePolicy(policy).build();
+        Soklet soklet = Soklet.fromConfig(config); soklet.start(); soklet.close();
+      }
+      @Test void differentLocal() { LifecyclePolicy policy = LifecyclePolicy.builder().startupTimeout(Duration.ofHours(2)).build(); }
+    }
+  `);
+  const local = scopes.find(scope => scope.scopeName === 'usesLocal');
+  assert.equal(local.unresolvedPolicyBuilderCount, 0);
+  assert.ok(local.literalPhasePolicies.length > 0);
+  assert.ok(local.literalPhasePolicies.every(policy => policy.startupMillis === 1_000));
+  assert.equal(scopes.find(scope => scope.scopeName === 'readsDefault').unresolvedPolicyBuilderCount, 0);
+});
+
+run('qualified latch await cannot borrow a same-named local helper exclusion', () => {
+  const scopes = syntheticScopes(`
+    import java.time.Duration;
+    import org.junit.jupiter.api.Test;
+    import java.util.concurrent.TimeUnit;
+    class SyntheticLifecycleTests {
+      @Test void waits() throws Exception {
+        Soklet soklet = Soklet.fromConfig(SokletConfig.withHttpServer(null).build());
+        soklet.start();
+        await();
+        this.await();
+        latch.await(3, TimeUnit.SECONDS);
+        soklet.close();
+      }
+      void await() throws Exception { Thread.sleep(2_000); }
+    }
+  `);
+  const wait = scopes.find(scope => scope.scopeName === 'waits');
+  assert.equal(wait.fixedControlWaitMillis, 7_000);
+  assert.equal(wait.fixedControlWaitSites.filter(site => site.method === 'await').length, 1);
+});
+
+run('fully qualified builder installation keeps exact literal budgets', () => {
+  const scopes = syntheticScopes(`
+    import java.time.Duration;
+    import org.junit.jupiter.api.Test;
+    class SyntheticLifecycleTests {
+      @Test void usesQualifiedBuilder() {
+        SokletConfig config = SokletConfig.withHttpServer(null)
+          .lifecyclePolicy(com.soklet.LifecyclePolicy.builder()
+            .startupTimeout(Duration.ofSeconds(10))
+            .startupCancelationTimeout(Duration.ofSeconds(1))
+            .gracefulShutdownTimeout(Duration.ofSeconds(1))
+            .forcedShutdownTimeout(Duration.ofSeconds(1)).build()).build();
+        Soklet soklet = Soklet.fromConfig(config); soklet.start(); soklet.close();
+      }
+    }
+  `);
+  assert.equal(scopes[0].unresolvedPolicyInstallationCount, 0);
+  const row = buildReviewedLifecycleScopeRows(scopes,
+    { requireRegistryCompleteness: false })[0];
+  assert.equal(row.review.totalComposedBoundMillis, 13_000);
+});
+
+run('literal dynamic producers preserve their exact independently guarded node counts', () => {
+  const rows = buildLifecycleScopeObservations(sourceTexts(
+    'src/test/java/com/soklet/McpHandlerExecutorPublicRuntimeTests.java',
+    'src/test/java/com/soklet/ShutdownDiagnosticsTests.java',
+    'src/test/java/com/soklet/UnparsedRequestAdditionalTransportTests.java'));
+  for (const [name, count] of [
+    ['executorBoundariesForEachRevision', 15],
+    ['actualSimulatorResidualWorkIsExplainedWithoutChangingFailurePrecedence', 4],
+    ['sseInvalidOrFailedMarshalingUsesTheOriginalFallback', 3],
+  ]) {
+    const row = rows.find(source => source.scopeName === name);
+    assert.equal(row.dynamicNodeCount, count, name);
+    assert.equal(row.outerTimeoutScope, 'DYNAMIC_NODE', name);
+  }
+});
+
+run('dynamic producer field shadowing cannot borrow an unrelated smaller node count', () => {
+  const sources = [
+    `List<String> CASES = List.of("one", "two");
+     return CASES.stream().map(value -> DynamicTest.dynamicTest(value,
+       () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
+         Soklet owner = Soklet.fromConfig(null); owner.start(); owner.close();
+       })));`,
+    `return CASES.stream().flatMap(CASES -> CASES.stream().map(value ->
+       DynamicTest.dynamicTest(value,
+         () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
+           Soklet owner = Soklet.fromConfig(null); owner.start(); owner.close();
+         }))));`,
+  ];
+  for (const body of sources) {
+    const scopes = syntheticScopes(`
+      import java.util.List;
+      import java.util.stream.Stream;
+      import java.time.Duration;
+      import org.junit.jupiter.api.TestFactory;
+      import org.junit.jupiter.api.DynamicTest;
+      import org.junit.jupiter.api.Assertions;
+      class SyntheticLifecycleTests {
+        static final List<String> CASES = List.of("one");
+        @TestFactory Stream<DynamicTest> factory() { ${body} }
+      }
+    `);
+    const source = scopes.find(row => row.scopeName === 'factory');
+    assert.equal(source.dynamicNodeCount, 0);
+    expectFailure(() => reviewedSyntheticRows([source], {
+      factory: { dynamicNodeCount: 1 },
+    }), /source-bound node census/u);
+  }
+});
+
+run('sequential owners inside a dynamic node require independent exact cardinality authority', () => {
+  const rows = buildLifecycleScopeObservations(sourceTexts(
+    'src/test/java/com/soklet/McpLocalizationInitializationPublicRuntimeTests.java'));
+  const source = rows.find(row => row.scopeName ===
+    'wholeResponseFallbackAndNoLocalizerPreserveCanonicalBytes');
+  const review = {
+    dynamicNodeCount: 2,
+    generation: { count: 3, mode: 'SEQUENTIAL', complete: 3, prior: 2,
+      incomplete: 1 },
+  };
+  const result = reviewedSyntheticRows([source], {
+    [source.scopeName]: review,
+  });
+  assert.equal(result[0].review.generationCount, 3);
+  expectFailure(() => reviewedSyntheticRows([source], {
+    [source.scopeName]: { ...review, generation: {
+      count: 1, mode: 'SINGLE', complete: 1, prior: 0, incomplete: 1,
+    } },
+  }), /dynamic-node owner count drifted/u);
 });
 
 run('duplicate lifecycle setters use the effective last value', () => {

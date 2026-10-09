@@ -49,7 +49,7 @@ exactly which host/tool versions were manually exercised.
 | Invocation control | Request-scoped progress over the MCP response stream plus cooperative cancelation for every application handler |
 | Subscriptions | Long-lived `subscriptions/listen` streams for resource/tool/prompt list changes, requested-resource updates, and authorized task IDs; bounded authorization leases and application-owned local or distributed broadcast publishing |
 | Localization | Request-scoped library-neutral localization for framework-owned server, tool, prompt, resource, and schema text; no protocol capability or `_meta` extension |
-| Simulation | Asynchronous off-network MCP HTTP requests, including POST, session-enabled 2025 GET/DELETE, and OPTIONS preflight, through the real processor/lifecycle with bounded JSON and exact SSE capture; no listener, bound address, or public diagnostic activity |
+| Simulation | Asynchronous off-network MCP HTTP requests, including POST, session-enabled 2025 GET/DELETE with transport admission configured, and OPTIONS preflight; GET also needs enabled notification families and sources. Real processor/lifecycle with bounded JSON and exact SSE capture; no listener, bound address, or public diagnostic activity |
 | Bounded observation | Exactly one clean/residual outcome per successfully started listener generation, plus server-wide active-handler, queued-request, queue-full-rejection, and immutable handler-capacity, live-stream, protection, and trace-configuration diagnostics |
 | Trace logging | Default-off pseudonymous correlation and a separate raw-validated-trace-ID opt-in through bounded `MCP_TRACE_CORRELATION` log records; no trace metric dimensions |
 | Policy | Host and Origin checks, application admission, optional request limiting, mandatory fallback tool limiting for tool-bearing servers, bounded execution, and shared Soklet observation hosts |
@@ -128,6 +128,11 @@ notifications, and configured session GET/DELETE. A multi-version or modern
 endpoint still requires the header, including when a session ID is present;
 Soklet does not inspect an unauthenticated session to select an admission view.
 Clients should send the negotiated version on every subsequent request.
+An unsupported modern probe at a legacy-only endpoint receives an ordinary
+empty HTTP `400`, allowing clients that implement 2025 fallback to try
+`initialize` at that URL. Other unsupported selectors retain a nonempty
+configured-revision diagnostic; neither path reinterprets an initialize body
+as modern framing or silently enables another endpoint revision.
 Well-formed unsupported 2025 client notifications, including
 `notifications/roots/list_changed`, are admitted, request-limited, and ignored
 with empty HTTP 202. Session-enabled views verify the session first, so retired
@@ -616,7 +621,9 @@ Explicitly allowlisted names accept a valid public port or an omitted port;
 the public port need not match the private listener's port. Automatically
 allowed loopback aliases still require the listener port. Host syntax, one
 physical Host occurrence and independent Origin authorization remain required.
-Forwarded headers cannot authorize an otherwise unlisted hostname.
+Forwarded headers cannot authorize an otherwise unlisted hostname. Hostname
+labels use ASCII letters, digits and hyphens; underscores are rejected. Use a
+valid deployment alias for Docker or other service names containing underscores.
 
 ## Construction and builder conventions
 
@@ -1747,7 +1754,11 @@ authorized lookup. If any outstanding form or URL elicitation mode is
 unsupported, Soklet returns HTTP 400 / `-32021` with only the deduplicated
 missing modes in `data.requiredCapabilities`. It sends no partial task snapshot
 or input payload and leaves durable state unchanged. A later capable poll
-returns all outstanding requests. Capabilities from task creation or a prior
+returns all outstanding requests. Catalog-access revocation gates completed
+task results; it does not hide an already stored `INPUT_REQUIRED` snapshot or
+prevent `tasks/update` from continuing its authorized workflow. Applications
+must enforce those workflow permissions in their task manager.
+Capabilities from task creation or a prior
 poll are not remembered, and unused origin declarations do not require a
 capability on a poll. Working and terminal snapshots require no elicitation
 capability. Unknown and unauthorized tasks retain the same neutral error
@@ -1887,8 +1898,12 @@ modern-subscription admission limit follows `concurrentConnectionLimit`, with an
 8,192-subscription bound when that transport limit is disabled. Pending and active
 subscriptions both count; the per-partition limit still applies. Capacity rejects
 new listen requests before a stream opens, rather than retiring admitted peers
-when a publisher fans out. The shared scheduler uses up to four workers, with
-ordinary request-processing capacity reserved when concurrency exceeds one.
+when a publisher fans out. Maintenance and notification projection share the
+protocol and application handler pools. Their concurrency is bounded by the
+smaller half of those pools (16 jobs with the defaults), with a minimum of one
+and subject to available maintenance owner capacity. A pool of size one has no reserved
+ordinary-request capacity. Size callback latency, owner count and lease duration
+together; a larger connection limit does not increase maintenance throughput.
 
 Manager lookups are serialized within one subscription. Task notification lookup,
 catalog policy and result sanitization share a bounded application invocation
@@ -1929,10 +1944,16 @@ checks. This applies to all supported protocol revisions. A rejected caller
 receives its admission response for both known and unknown targets, without
 invoking an operation handler. `getOperationName()` is the syntactically validated
 requested name or URI; its presence does not establish that a target exists.
-Malformed wire shapes, URI syntax, endpoint/version selection and required
-protocol/name header consistency still fail before admission. Caller-aware
-catalog access policy continues to protect direct tool and prompt access after
-admission.
+Malformed envelopes, endpoint/version selection, profile metadata and required
+protocol/method/header-shape checks still fail before admission. Modern and
+stateless legacy requests also validate cheap operation parameters before
+admission. Session-enabled 2025 non-initialize requests defer operation-parameter
+errors through admission, applicable request limiting and session binding, so
+a retired or wrong-owner session receives neutral HTTP `404` before -32602. With a
+caller-aware catalog access policy, `tools/call` defers `Mcp-Name` agreement until
+after admission, catalog access policy and the tool rate limiter; other standard
+name comparisons remain earlier. Caller-aware catalog access policy continues
+to protect direct tool and prompt access after admission.
 
 `McpAdmissionController.acceptAllInstance()` deliberately accepts the
 canonical anonymous identity. It is convenient for a loopback example, not a
@@ -2088,7 +2109,9 @@ That application-handler mapping is distinct from a deadline that expires
 while Soklet still owns framework protocol work, before an application handoff.
 A framework-owned protocol-operation deadline returns a bodyless HTTP 504 with
 the normal bounded response headers; there is no JSON-RPC `-32603` body in that
-case. Both paths are recorded as deadline-exceeded outcomes.
+case. Both paths are recorded as deadline-exceeded outcomes. Protocol-executor
+saturation similarly returns a bodyless HTTP `503` before application dispatch,
+without a JSON-RPC error envelope; clients must inspect the HTTP status.
 
 An absolute request timeout, forced shutdown after the graceful
 budget, or response-stream backpressure failure cancels the invocation's
@@ -2112,7 +2135,10 @@ clients must keep their sending side open while awaiting the response.
 Before response commitment, EOF cancels the request. After commitment,
 modern requests cancel and legacy POST SSE writers detach under the existing
 rules above. TCP cannot distinguish full close from input half-close, so this
-is an MCP transport policy. Ordinary HTTP preserves half-close and buffered
+is an MCP transport policy. It also applies to fire-and-forget 2025 notifications
+and session DELETE: keep the socket open until its `202`/`204` response arrives.
+Closing sooner can discard the operation and records a request rejection.
+Ordinary HTTP preserves half-close and buffered
 pipelining; an idle HTTP feed still needs a finite timeout or further writes
 to bound an otherwise undetectable abandoned lifetime.
 
@@ -2428,19 +2454,28 @@ back and forth from silently leaving the client on an earlier view. The baseline
 is an invalidation comparison, not a client receipt or a retained catalog snapshot;
 clients re-list under current authorization when they receive a hint.
 
-Long-lived catalog and localization checks use a sanitized request context.
-They do not retain authentication headers, bodies, trace identifiers or baggage.
+Long-lived catalog and localization checks use a derived request context
+without any headers, body, trace identifiers or baggage.
 Use the current admitted principal, authorization partition and
 `applicationContext` for those checks. The subscription authorizer can inspect
-its original `initialRequestContext` when needed.
+its original `initialRequestContext` when needed. That original request,
+including its headers, remains retained for the subscription lifetime.
 
-Modern subscription maintenance concurrency is derived from the existing
-protocol and application handler concurrency settings, reserving one worker
-from each budget when possible and bounded by the retained owner count. With
-the default concurrency settings this allows 31 maintenance jobs. Each owner
-has one coalesced pending slot. This bound does not guarantee that arbitrary
+Modern subscription maintenance concurrency is
+`max(1, min(ownerCapacity, floor(protocolConcurrency / 2), floor(handlerConcurrency / 2)))`.
+It shares the existing protocol and application pools, reserving at least half
+of each pool for ordinary requests when its concurrency exceeds one. With
+the default concurrency settings this allows 16 maintenance jobs. Each owner
+has one coalesced pending slot. The deadline timer scans admitted subscriptions
+periodically, so idle maintenance cost grows with their count. This bound does not guarantee that arbitrary
 callback durations or short leases can be sustained; measure authorization,
 task lookup and catalog refresh work together when sizing a deployment.
+For example, 3,000 owners with 50-millisecond checks need about 9.4 seconds of
+idealized work at concurrency 16, before queueing and other projection work.
+At 400 milliseconds the same wave needs 75 seconds and cannot fit a 60-second
+lease. A renewal rejected by application-handler capacity ends the modern
+listen as `SUBSCRIPTION_AUTHORIZATION_CHECK_FAILED`, even if its earlier lease
+still has time remaining; clients must reconnect and reconcile.
 
 Resource invalidations received during authorization reconciliation retain bounded,
 coalesced dirty markers: at most one resource-list marker and one per accepted URI
@@ -2470,7 +2505,8 @@ maintenance event is `DENIED`; it is not a failed-check classification. Request
 outcomes and diagnostics also retain the underlying cancellation or failure.
 The simulator keeps that reason together with the terminal message. Exact
 2025-era GET streams have no listen request to complete and retain their
-existing close behavior.
+existing close behavior. After any modern `complete`, reopen the subscription
+and reconcile current catalogs, resources or task snapshots.
 
 Admission receives the immutable validated, deduplicated requested-resource URI list when authorizing a listen request.
 `McpAdmissionContext.getRequestedResourceSubscriptionUris()` preserves first-encounter order and is empty outside applicable subscription requests.
@@ -2650,7 +2686,9 @@ revive or replace that referenced session.
 
 Malformed, duplicate, oversized, or missing required session framing returns
 `400`. After fresh admission, unknown, expired, wrong-owner, and wrong-path IDs
-share a neutral `404`; a verified owner/path with the wrong stored revision
+share a neutral `404`; operation-parameter errors and unsupported methods are
+reported only after admission, applicable limiting and binding. Envelope,
+profile and wire-metadata errors remain earlier. A verified owner/path with the wrong stored revision
 returns `400` and preserves the record. Session-path admission rejections remap
 application `400`/`404`/`405` to neutral `403`, preserving validated safe headers.
 Accepted JSON-RPC operation results/errors use `200`. Per-owner capacity returns
@@ -2830,8 +2868,20 @@ operations. Safe headers and explicitly authored authentication challenges are
 preserved, while reserved application `400`/`404`/`405` statuses map to neutral
 `403` on session paths.
 
-Both methods require an empty body, one explicit selected protocol revision,
-and the live session ID. Host/Origin/CORS and framing run before fresh HTTP
+GET lifetime observation capacity follows twice the configured global session
+capacity (512 with the defaults), with a separate transient-control allowance
+(132 with the defaults). Retained callbacks or rapid turnover can still exhaust
+observation capacity; the start/finish pair is omitted together with a fixed
+configuration diagnostic at most once per minute. No callback runs on a selector
+as a saturation fallback.
+
+If a client disconnects while GET/DELETE admission is pending, generic HTTP
+observers can receive a synthetic `503` finish even though no such response
+reached that client. This describes aborted handling, not a delivered server error.
+
+Both methods require an empty body and the live session ID. Send the selected
+`MCP-Protocol-Version` header; it may be omitted only when the endpoint serves
+exactly one overall revision and that revision is legacy. Host/Origin/CORS and framing run before fresh HTTP
 admission and owner/path/revision/generation verification. DELETE is available
 on a session view with the controller even without notification families. A
 verified, still-authorized DELETE returns empty `204`, fences new use, and
@@ -3031,13 +3081,15 @@ wins:
 4. POST-only HTTP method and `Content-Type`/`Accept` negotiation;
 5. strict JSON parsing;
 6. JSON-RPC envelope validation;
-7. required mirrored-header cardinality/form and method/name agreement, plus
+7. required mirrored-header cardinality/form and method agreement, plus name
+   agreement except for caller-aware `tools/call`, and
    registration-independent custom-header policy for non-tool methods;
 8. the non-failing readable nested body-revision probe, followed by exact selector membership/profile selection and unsupported dispatch;
 9. selected-profile required `_meta`, metadata-key, extension/settings, and universal-spine validation, followed by post-map header/body revision agreement;
 10. cheap method/structural parameter validation;
 11. application admission, then caller-neutral target/descriptor lookup, custom
-    tool mirrored headers, request-state shape and required client capabilities,
+    tool mirrored headers, deferred caller-aware `Mcp-Name` agreement,
+    request-state shape and required client capabilities,
     followed by the optional request limiter and resolved tool limiter;
 12. bounded handler-queue admission and handler-slot acquisition;
 13. the application handler interceptor;
@@ -3051,7 +3103,9 @@ wins:
 Caller-aware tool/prompt catalogs defer descriptor checks through their existing
 access-policy and quota ordering after admission. Unsupported selectors on tool
 calls fail at profile selection without consulting registered custom headers;
-required protocol/method/name header errors still take precedence.
+protocol/method/header-shape errors still take precedence. Caller-aware
+`tools/call` defers `Mcp-Name` agreement until after admission, catalog access
+policy and the tool rate limiter.
 
 Notifications have a separate, shorter path. The shared transport prefix is
 limits, routing, Host, Origin/CORS, POST/media/Accept, strict JSON, and envelope classification.
@@ -3210,8 +3264,11 @@ deadline remains residual or unproven evidence in that immutable result.
 Repeated shutdown calls and eventual residual-work exit do not duplicate the
 terminal outcome. A new lifecycle requires fresh transport instances.
 
-Semantic metric delivery is asynchronous and may follow result publication.
-Tests inspecting counters must await the corresponding observation. A stopped
+Semantic metric delivery is asynchronous and may follow result publication,
+`run()`/`close()` return and application `ShutdownCleanup`, including the final
+`ServerStopped` event. Exporters closed during cleanup can therefore miss those
+late records; shutdown is not a collector-flush guarantee. Tests inspecting
+counters must await the corresponding observation. A stopped
 owner cannot restart, and separate owners have independent event queues.
 
 ### Tasks observability boundary

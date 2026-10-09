@@ -766,7 +766,8 @@ public class StreamingDisconnectMonitorTests {
         public void close() throws Exception {
             source.release();
             eventLoop.stop();
-            eventLoop.join();
+            Assertions.assertTrue(eventLoop.join(Duration.ofSeconds(3)),
+                    "The stopped event loop must terminate within the test cleanup bound");
         }
     }
 

@@ -1674,6 +1674,18 @@ final class McpApplicationExecution {
 			@NonNull McpApplicationClock clock,
 			@NonNull McpApplicationHandlerExecutorFactory executorFactory,
 			@Nullable McpProtocolDeadlineCycle protocolDeadlineCycle,
+			@NonNull McpApplicationExecutionObserver observer,
+			long maximumLegacyGetObservationReservations) {
+		this(configuration, clock, executorFactory, protocolDeadlineCycle,
+				McpApplicationRequestInterceptor.passThroughInstance(), observer,
+				maximumLegacyGetObservationReservations);
+	}
+
+	McpApplicationExecution(
+			@NonNull McpApplicationExecutionConfiguration configuration,
+			@NonNull McpApplicationClock clock,
+			@NonNull McpApplicationHandlerExecutorFactory executorFactory,
+			@Nullable McpProtocolDeadlineCycle protocolDeadlineCycle,
 			@NonNull McpApplicationRequestInterceptor requestInterceptor) {
 		this(configuration, clock, executorFactory, protocolDeadlineCycle,
 				requestInterceptor,
@@ -1687,6 +1699,18 @@ final class McpApplicationExecution {
 			@Nullable McpProtocolDeadlineCycle protocolDeadlineCycle,
 			@NonNull McpApplicationRequestInterceptor requestInterceptor,
 			@NonNull McpApplicationExecutionObserver observer) {
+		this(configuration, clock, executorFactory, protocolDeadlineCycle,
+				requestInterceptor, observer, 0L);
+	}
+
+	private McpApplicationExecution(
+			@NonNull McpApplicationExecutionConfiguration configuration,
+			@NonNull McpApplicationClock clock,
+			@NonNull McpApplicationHandlerExecutorFactory executorFactory,
+			@Nullable McpProtocolDeadlineCycle protocolDeadlineCycle,
+			@NonNull McpApplicationRequestInterceptor requestInterceptor,
+			@NonNull McpApplicationExecutionObserver observer,
+			long maximumLegacyGetObservationReservations) {
 		this.configuration = requireNonNull(configuration);
 		this.clock = requireNonNull(clock);
 		this.protocolDeadlineCycle = protocolDeadlineCycle;
@@ -1729,7 +1753,8 @@ final class McpApplicationExecution {
 					McpApplicationExecutionObserver.disabledInstance(), this::signalDeadlineTimer);
 			this.sessionOwnerPolicyExecutor = ownerExecutor;
 			this.legacyHttpObservations = new McpLegacyHttpObservationDispatcher(
-					sessionOwnerConcurrency, configuration.handlerQueueCapacity(), this::signalDeadlineTimer);
+					sessionOwnerConcurrency, configuration.handlerQueueCapacity(),
+					maximumLegacyGetObservationReservations, this::signalDeadlineTimer);
 		} catch (RuntimeException | Error failure) {
 			shutdownFailedConstructionExecutor(ownerExecutor, failure);
 			shutdownFailedConstructionExecutor(handlerExecutor, failure);
@@ -2530,9 +2555,11 @@ final class McpApplicationExecution {
 		return sessionOwnerPolicyDispatcher.snapshot();
 	}
 
-	McpLegacyHttpObservationDispatcher.@Nullable Reservation reserveLegacyHttpObservation() {
-		return legacyHttpObservations.reserve();
+	McpLegacyHttpObservationDispatcher.@Nullable Reservation reserveLegacyHttpObservation(boolean get) {
+		return legacyHttpObservations.reserve(get);
 	}
+
+	boolean legacyHttpObservationAccepting() { return legacyHttpObservations.isAccepting(); }
 
 	boolean legacyHttpObservationOutstanding() { return legacyHttpObservations.outstanding() != 0; }
 

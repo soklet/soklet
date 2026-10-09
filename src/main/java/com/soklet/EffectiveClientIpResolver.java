@@ -40,7 +40,11 @@ import static java.util.Objects.requireNonNull;
  * If the remote address is missing or not trusted, forwarded headers are ignored and the socket peer is returned when available.
  * <p>
  * Extraction order is: trusted {@code Forwarded for=} values, trusted {@code X-Forwarded-For} values, then the socket peer.
- * Only IP literals are accepted from forwarded headers; hostnames, obfuscated identifiers, {@code unknown}, and malformed values are ignored.
+ * Only IP literals are accepted from forwarded headers; resolution never performs DNS lookups.
+ * Under {@link TrustPolicy#TRUST_PROXY_ALLOWLIST}, a hostname, obfuscated identifier,
+ * {@code unknown}, malformed value, or invalid port stops the trusted-chain walk and
+ * falls back to the socket peer. Trusted proxies must emit IP literals. Under
+ * {@link TrustPolicy#TRUST_ALL}, unusable entries are skipped.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

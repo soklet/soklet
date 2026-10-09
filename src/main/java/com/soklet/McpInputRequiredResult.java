@@ -28,6 +28,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
+import static com.soklet.internal.mcp.protocol.McpApplicationMetadata.requireApplicationMetadata;
 
 /**
  * Immutable MCP result indicating that an operation needs additional client
@@ -105,7 +106,7 @@ public final class McpInputRequiredResult implements McpOperationResult {
 				new LinkedHashMap<>(builder.inputRequests));
 		this.frameworkRequestState = builder.frameworkRequestState;
 		this.applicationRequestState = builder.applicationRequestState;
-		this.metadata = builder.metadata;
+		this.metadata = requireApplicationMetadata(builder.metadata);
 	}
 
 	/**

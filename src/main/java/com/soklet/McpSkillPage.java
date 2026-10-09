@@ -26,6 +26,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
+import static com.soklet.internal.mcp.protocol.McpApplicationMetadata.requireApplicationMetadata;
 
 /**
  * One immutable complete {@code skills/list} page containing at most 32 skills.
@@ -59,7 +60,7 @@ public final class McpSkillPage implements McpOperationResult {
 
 	private McpSkillPage(@NonNull Builder builder) {
 		this.skillRegistrations = builder.skillRegistrations;
-		this.metadata = builder.metadata;
+		this.metadata = requireApplicationMetadata(builder.metadata);
 		this.nextCursor = builder.nextCursor;
 		this.cacheTimeToLiveOverride = builder.cacheTimeToLiveOverride;
 	}

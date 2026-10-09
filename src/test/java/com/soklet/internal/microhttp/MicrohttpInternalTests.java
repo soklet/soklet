@@ -840,6 +840,39 @@ public class MicrohttpInternalTests {
 	}
 
 	@Test
+	public void fileTransferIdentifiesSinkFailuresWithoutSilencingSourceFailures(@TempDir Path directory) throws Exception {
+		Path file = directory.resolve("source"); Files.writeString(file, "abc");
+		IOException original = new IOException("an arbitrary non-English socket failure");
+		try (FileChannel channel = FileChannel.open(file, READ)) {
+			FileChannelWritableSource source = new FileChannelWritableSource(channel, 0, 3, false);
+			SocketChannel socket = new PartialWriteSocketChannel(1) {
+				@Override public int write(ByteBuffer bytes) throws IOException { throw original; }
+			};
+			SocketChannelIo.SocketIoException failure = Assertions.assertThrows(SocketChannelIo.SocketIoException.class,
+					() -> source.writeTo(socket, 3));
+			Assertions.assertSame(original, failure.getCause());
+			Assertions.assertTrue(channel.isOpen());
+		}
+		try (FileChannel channel = FileChannel.open(file, READ); SocketChannel socket = SocketChannel.open()) {
+			socket.close();
+			FileChannelWritableSource source = new FileChannelWritableSource(channel, 0, 3, false);
+			SocketChannelIo.SocketIoException failure = Assertions.assertThrows(SocketChannelIo.SocketIoException.class,
+					() -> source.writeTo(socket, 3));
+			Assertions.assertInstanceOf(java.nio.channels.ClosedChannelException.class, failure.getCause());
+			Assertions.assertTrue(channel.isOpen());
+		}
+		FileChannel closed = FileChannel.open(file, READ); closed.close();
+		FileChannelWritableSource unavailable = new FileChannelWritableSource(closed, 0, 3, false);
+		Assertions.assertThrows(ResponseBodySourceException.class, () -> unavailable.writeTo(new PartialWriteSocketChannel(3), 3));
+		try (FileChannel channel = FileChannel.open(file, READ)) {
+			FileChannelWritableSource truncated = new FileChannelWritableSource(channel, 0, 4, false);
+			SocketChannel socket = new PartialWriteSocketChannel(4);
+			Assertions.assertEquals(3, truncated.writeTo(socket, 4));
+			Assertions.assertThrows(ResponseBodySourceException.class, () -> truncated.writeTo(socket, 4));
+		}
+	}
+
+	@Test
 	public void microhttpResponseWritableSourceWritesFileBody(@TempDir Path tempDir) throws IOException {
 		Path file = tempDir.resolve("example.txt");
 		Files.writeString(file, "abcdef", StandardCharsets.US_ASCII);

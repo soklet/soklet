@@ -209,7 +209,9 @@ public interface MetricsCollector {
 	 * Eligible records keep their enqueue order; an independent operation may
 	 * deliver while another transition is withheld. Records within a transition
 	 * retain their order. Counters and gauges may be incomplete after overflow.
-	 * Collector delivery must remain nonblocking.
+	 * Collector delivery must remain nonblocking. Final records, including ServerStopped,
+	 * may arrive after run()/close() returns and after application shutdown cleanup;
+	 * lifecycle completion is not a semantic-metrics flush barrier.
 	 * <p>
 	 * The default collector counts delivered
 	 * {@link McpMetricsEvent.SubscriptionMaintenance} records by endpoint, work

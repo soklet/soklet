@@ -187,6 +187,10 @@ public class HeadFallbackObservationTests {
 				@Override public Set<ResourceMethod> getResourceMethods() { return delegate.getResourceMethods(); }
 			};
 			return SokletConfig.withHttpServer(HttpServer.withPort(port).host("127.0.0.1").build())
+					.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(10))
+							.startupCancelationTimeout(Duration.ofSeconds(1))
+							.gracefulShutdownTimeout(Duration.ofSeconds(1))
+							.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
 					.resourceMethodResolver(resolver).instanceProvider(new InstanceProvider() {
 						@Override public <T> T provide(Class<T> type) { return type == Resource.class ? type.cast(resource) : InstanceProvider.defaultInstance().provide(type); }
 					}).responseMarshaler(ResponseMarshaler.builder().contentTooLargeHandler((request, resourceMethod) -> {

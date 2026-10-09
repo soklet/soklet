@@ -2379,6 +2379,7 @@ public class IntegrationTests {
 	}
 
 	@Test
+	@org.junit.jupiter.api.Timeout(70)
 	public void requestHandlerQueueCapacity_rejectsWhenFull() throws Exception {
 		int port = findFreePort();
 		QueueBlockingResource.reset();

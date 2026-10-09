@@ -109,6 +109,8 @@ public final class McpCatalogAccessPolicy {
 	public interface ToolAccessEvaluator {
 		/**
 		 * Determines whether a caller may discover or invoke a tool.
+		 * Subscription projections supply a header-free derived request context;
+		 * use its current admitted principal, partition and application context.
 		 *
 		 * @param requestContext admitted request context
 		 * @param toolRegistration canonical, untranslated registration
@@ -132,6 +134,8 @@ public final class McpCatalogAccessPolicy {
 	public interface PromptAccessEvaluator {
 		/**
 		 * Determines whether a caller may discover or access a prompt.
+		 * Subscription projections supply a header-free derived request context;
+		 * use its current admitted principal, partition and application context.
 		 *
 		 * @param requestContext admitted request context
 		 * @param promptRegistration canonical, untranslated registration

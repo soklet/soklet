@@ -28,6 +28,29 @@ import static org.junit.jupiter.api.Assertions.*;
 @Timeout(value = 60, unit = TimeUnit.SECONDS)
 class FiniteHttpResponseSafetyTests {
 	@Test
+	void customHeadRepresentationLengthSurvivesAndGetStillUsesActualLength() throws Exception {
+		ResponseMarshaler marshaler = ResponseMarshaler.builder().headHandler((request, response) ->
+				response.copy().body((MarshaledResponseBody) null).headers(Map.of("Content-Length", List.of("4242"))).finish()).build();
+		try (Fixture fixture = new Fixture(null, RequestInterceptor.defaultInstance(), marshaler)) {
+			assertEquals(List.of("4242"), fixture.pipeline("HEAD", "/clean", "/clean").get(0).headers().get("content-length"));
+			assertEquals(List.of("3"), fixture.pipeline("GET", "/clean", "/clean").get(0).headers().get("content-length"));
+			WireResponse noContent = fixture.pipeline("HEAD", "/status/204", "/clean").get(0);
+			assertEquals(204, noContent.status());
+			assertFalse(noContent.headers().containsKey("content-length"));
+		}
+	}
+
+	@Test
+	void upgradeRequiredRetainsItsAdvertisementWithoutAcceptingUnsafeFraming() throws Exception {
+		try (Fixture fixture = new Fixture(null, RequestInterceptor.defaultInstance(), ResponseMarshaler.defaultInstance())) {
+			WireResponse response = fixture.pipeline("GET", "/upgrade", "/clean").get(0);
+			assertEquals(426, response.status());
+			assertEquals(List.of("HTTP/2.0"), response.headers().get("upgrade"));
+			assertEquals(List.of("Upgrade"), response.headers().get("connection"));
+			assertFalse(response.headers().containsKey("transfer-encoding"));
+		}
+	}
+	@Test
 	void applicationFramingCannotDesynchronizePipelinedFiniteResponses() throws Exception {
 		try (Fixture fixture = new Fixture(null, RequestInterceptor.defaultInstance(), ResponseMarshaler.defaultInstance())) {
 			for (String method : List.of("GET", "HEAD")) {
@@ -127,6 +150,10 @@ class FiniteHttpResponseSafetyTests {
 					.body(new MarshaledResponseBody.File(this.file, 0L, 5L)).build();
 		}
 		@GET("/clean") public String clean() { return "def"; }
+		@GET("/upgrade") public MarshaledResponse upgrade() {
+			return MarshaledResponse.withStatusCode(426).headers(Map.of("Upgrade", List.of("HTTP/2.0"),
+					"Connection", List.of("Upgrade"), "Transfer-Encoding", List.of("chunked"))).build();
+		}
 		@GET("/status/{value}") public MarshaledResponse status(@PathParameter(name = "value") Integer value) {
 			return MarshaledResponse.withStatusCode(value).build();
 		}
@@ -169,6 +196,9 @@ class FiniteHttpResponseSafetyTests {
 			try (ServerSocket reserved = new ServerSocket(0)) { this.port = reserved.getLocalPort(); }
 			Resource resource = new Resource(file);
 			SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(this.port).host("127.0.0.1").build())
+					.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(java.time.Duration.ofSeconds(10))
+							.startupCancelationTimeout(java.time.Duration.ofSeconds(1)).gracefulShutdownTimeout(java.time.Duration.ofSeconds(1))
+							.forcedShutdownTimeout(java.time.Duration.ofSeconds(1)).build())
 					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Resource.class))).metricsCollector(this.metrics)
 					.requestInterceptor(interceptor).responseMarshaler(marshaler)
 					.lifecycleObserver(new LifecycleObserver() {

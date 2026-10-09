@@ -480,6 +480,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	private int legacyMaintenanceActive;
 	private @Nullable LegacySessionOwnerResolver legacySessionOwnerResolver;
 	private boolean legacySessionsConfigured;
+	private long maximumLegacyGetObservationReservations;
 	private boolean legacyAnonymousSessionsAllowed;
 
 	@FunctionalInterface
@@ -502,7 +503,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	private long lifecycleGracefulDeadlineNanos;
 	private boolean lifecycleForcedDeadlinePresent;
 	private long lifecycleForcedDeadlineNanos;
-	private boolean lifecycleStartupInProgress;
+	private volatile boolean lifecycleStartupInProgress;
 	private boolean lifecycleStartupClaimed;
 	private McpServerRuntimeBridge.LifecycleAdapter.@Nullable Generation
 			lifecycleStartupGeneration;
@@ -904,6 +905,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			legacySessionRevisions = Map.copyOf(selected);
 			if (sessionConfig.isPresent()) {
 				com.soklet.McpSessionConfig config = sessionConfig.orElseThrow();
+				maximumLegacyGetObservationReservations = (long) config.getMaximumSessions()
+						* McpLegacySessionStore.MAXIMUM_LOGICAL_GETS_PER_SESSION;
 				long requestEvidence = Math.addExact((long) transportConfiguration.maximumHeaderBytes(), 16_384L);
 				long sessionEvidence = Math.max(1_048_576L, Math.multiplyExact(2L, requestEvidence));
 				long ownerEvidence = Math.max(2_097_152L, Math.multiplyExact(2L, sessionEvidence));
@@ -1242,7 +1245,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			McpApplicationExecution application = new McpApplicationExecution(
 					applicationConfiguration, applicationClock,
 					applicationExecutorFactory, this::runProtocolDeadlineCycle,
-					this.applicationExecutionObserver);
+					this.applicationExecutionObserver, maximumLegacyGetObservationReservations);
 			List<SubscriptionSourceRegistrationControl> registrations =
 					new ArrayList<>();
 			generation = new SimulationGeneration(processor, application,
@@ -1759,7 +1762,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			return; // A later prepare observes the generation's published shutdown intent.
 		listenerState.stopRequested.set(true);
 		EventLoop loop = listenerState.loop.get();
-		if (loop != null) loop.stopAccepting();
+		if (loop != null) {
+			loop.stopAccepting();
+			// Startup has no admitted application requests to drain. A stuck
+			// publisher callback must not retain idle non-daemon transport loops.
+			if (lifecycleStartupInProgress) loop.stop();
+		}
 	}
 
 	private void publishStartupListener(@NonNull EventLoop loop,
@@ -1780,7 +1788,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		// Either cancellation sees the published loop, or this publication sees
 		// cancellation. No application callback or runtime lock lies in that handoff.
 		if (listenerState.stopRequested.get() || generation.shutdownRequested())
-			loop.stopAccepting();
+			loop.stop();
 	}
 
 	private McpServerRuntimeBridge.LifecycleAdapter.@NonNull Generation
@@ -1894,7 +1902,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			candidateApplicationExecution = new McpApplicationExecution(
 					applicationConfiguration, applicationClock,
 					applicationExecutorFactory, this::runProtocolDeadlineCycle,
-					this.applicationExecutionObserver);
+					this.applicationExecutionObserver, maximumLegacyGetObservationReservations);
 			synchronized (lifecycleLock) {
 				applicationExecution = candidateApplicationExecution;
 			}
@@ -3611,13 +3619,13 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				new ThreadPoolExecutor.AbortPolicy());
 	}
 
-	/** Retains one protocol worker and one application slot where those budgets allow it. */
+	/** Maintenance uses at most half of each shared pool; singleton pools cannot reserve a peer. */
 	static int subscriptionProjectionConcurrency(int protocolConcurrency,
 			int handlerConcurrency, long ownerCapacity) {
 		if (protocolConcurrency < 1 || handlerConcurrency < 1 || ownerCapacity < 1)
 			throw new IllegalArgumentException("Subscription projection budgets must be positive.");
 		return (int) Math.max(1L, Math.min(ownerCapacity,
-				Math.min((long) protocolConcurrency - 1L, (long) handlerConcurrency - 1L)));
+				Math.min((long) protocolConcurrency / 2L, (long) handlerConcurrency / 2L)));
 	}
 
 	/** Runs the registered graceful handoff exactly once after protocol drain. */
@@ -4882,12 +4890,18 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					&& !selectedRevision.equals(readableBodyProtocolVersion.orElseThrow()))
 				return headerMismatch(endpointBinding, wireRequest.id(), wireRequest.method(), true,
 						corsHeaders);
+			List<String> supported = this.protocolProfiles.revisions().stream()
+					.filter(endpointBinding.supportedRevisions()::contains)
+					.filter(revision -> legacy == McpLegacyHttpWire.isLegacyRevision(revision))
+					.toList();
+			// A recognized modern error identifies a modern server to dual-era
+			// clients. A legacy-only URL must allow their initialize fallback.
+			if (supported.isEmpty() && !legacy)
+				return emptyResponse(400, "Bad Request", corsHeaders);
+			if (supported.isEmpty())
+				supported = endpointBinding.supportedRevisions().stream().sorted().toList();
 			return jsonRpcError(400, "Bad Request", Optional.of(wireRequest.id()),
-					McpJsonRpcError.unsupportedProtocolVersion(selectedRevision,
-							this.protocolProfiles.revisions().stream()
-								.filter(endpointBinding.supportedRevisions()::contains)
-								.filter(revision -> legacy == McpLegacyHttpWire.isLegacyRevision(revision))
-								.toList()), corsHeaders);
+					McpJsonRpcError.unsupportedProtocolVersion(selectedRevision, supported), corsHeaders);
 		}
 		McpProtocolProfile protocolProfile = selectedProfile.orElseThrow();
 		McpNormalizedEndpoint endpoint = endpointBinding.revisionEndpoint(
@@ -4969,272 +4983,318 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				new AtomicReference<>();
 		boolean unsupportedSessionOperation = unsupportedLegacyMethod;
 
-		if (unsupportedLegacyMethod) {
-			// The valid envelope still needs admission and the owner/session fence.
-			// Unknown methods have no operation-specific parameter contract.
-		} else if (initializeRequest) {
-			// The 2025 mapper has already validated required initialization fields.
-			if (!mappedRequest.params().fields().members().keySet().containsAll(
-					Set.of("protocolVersion", "capabilities", "clientInfo")))
-				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
-		} else if (pingRequest) {
-			if (!mappedRequest.params().fields().members().isEmpty())
-				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
-		} else if (discoveryRequest) {
-			if (!mappedRequest.params().fields().members().isEmpty())
-				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
-		} else if (toolsListRequest) {
-			if (capabilityRegistry.tools().isEmpty()) {
-				if (!sessionEnabled)
-					return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
-				unsupportedSessionOperation = true;
-			}
-			if (!validFrameworkCatalogParams(mappedRequest.params().fields(), legacy))
-				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
-		} else if (promptsListRequest) {
-			if (capabilityRegistry.prompts().isEmpty()) {
-				if (!sessionEnabled)
-					return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
-				unsupportedSessionOperation = true;
-			}
-			if (!validFrameworkCatalogParams(mappedRequest.params().fields(), legacy))
-				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
-		} else if ("skills/list".equals(mappedRequest.method())
-				|| "skills/get".equals(mappedRequest.method())) {
-			if (endpoint.skillsPlan().isEmpty())
-				return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
-			McpServerRuntimeBridge.SkillsPlan skillsPlan = endpoint.skillsPlan().orElseThrow();
-			Map<String, McpJsonValue> fields = mappedRequest.params().fields().members();
-			if ("skills/list".equals(mappedRequest.method())) {
-				if (!Set.of("cursor").containsAll(fields.keySet())
-						|| !skillsPlan.customListHandler() && fields.containsKey("cursor"))
-					return invalidParams(protocolProfile, mappedRequest, corsHeaders);
-				if (fields.containsKey("cursor")
-						&& (!(fields.get("cursor") instanceof McpJsonString cursor)
-						|| !McpCursorValidator.fitsWithinUtf8ByteLimit(cursor.value(), skillsPlan.maximumCursorSizeInBytes())))
-					return invalidParams(protocolProfile, mappedRequest, corsHeaders);
-			} else {
-				if (!fields.keySet().equals(Set.of("uri"))
-						|| !(fields.get("uri") instanceof McpJsonString uri))
-					return invalidParams(protocolProfile, mappedRequest, corsHeaders);
-				try {
-					operationName = Optional.of(McpLevelOneUriTemplate.requireValidAbsoluteUri(uri.value(), "Skills URI"));
-				} catch (IllegalArgumentException ignored) {
-					return invalidParams(protocolProfile, mappedRequest, corsHeaders);
+		boolean invalidSessionOperationParameters = false;
+		try {
+			if (unsupportedLegacyMethod) {
+				// The valid envelope still needs admission and the owner/session fence.
+				// Unknown methods have no operation-specific parameter contract.
+			} else if (initializeRequest) {
+				// The 2025 mapper has already validated required initialization fields.
+				if (!mappedRequest.params().fields().members().keySet().containsAll(
+						Set.of("protocolVersion", "capabilities", "clientInfo")))
+					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+							sessionEnabled && !initializeRequest);
+			} else if (pingRequest) {
+				if (!mappedRequest.params().fields().members().isEmpty())
+					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+							sessionEnabled && !initializeRequest);
+			} else if (discoveryRequest) {
+				if (!mappedRequest.params().fields().members().isEmpty())
+					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+							sessionEnabled && !initializeRequest);
+			} else if (toolsListRequest) {
+				if (capabilityRegistry.tools().isEmpty()) {
+					if (!sessionEnabled)
+						return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
+					unsupportedSessionOperation = true;
 				}
-			}
-			applicationHandler = applicationRouter.resolve(mappedRequest.method());
-			if (applicationHandler.isEmpty())
-				return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
-		} else if (resourcesListRequest) {
-			if (capabilityRegistry.capabilities().resources().isEmpty()) {
-				if (!sessionEnabled)
+				if (!unsupportedSessionOperation
+						&& !validFrameworkCatalogParams(mappedRequest.params().fields(), legacy))
+					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+							sessionEnabled && !initializeRequest);
+			} else if (promptsListRequest) {
+				if (capabilityRegistry.prompts().isEmpty()) {
+					if (!sessionEnabled)
+						return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
+					unsupportedSessionOperation = true;
+				}
+				if (!unsupportedSessionOperation
+						&& !validFrameworkCatalogParams(mappedRequest.params().fields(), legacy))
+					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+							sessionEnabled && !initializeRequest);
+			} else if ("skills/list".equals(mappedRequest.method())
+					|| "skills/get".equals(mappedRequest.method())) {
+				if (endpoint.skillsPlan().isEmpty())
 					return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
-				unsupportedSessionOperation = true;
-			}
-			if (endpoint.customResourceListHandler()) {
+				McpServerRuntimeBridge.SkillsPlan skillsPlan = endpoint.skillsPlan().orElseThrow();
+				Map<String, McpJsonValue> fields = mappedRequest.params().fields().members();
+				if ("skills/list".equals(mappedRequest.method())) {
+					if (!Set.of("cursor").containsAll(fields.keySet())
+							|| !skillsPlan.customListHandler() && fields.containsKey("cursor"))
+						return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+								sessionEnabled && !initializeRequest);
+					if (fields.containsKey("cursor")
+							&& (!(fields.get("cursor") instanceof McpJsonString cursor)
+							|| !McpCursorValidator.fitsWithinUtf8ByteLimit(cursor.value(), skillsPlan.maximumCursorSizeInBytes())))
+						return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+								sessionEnabled && !initializeRequest);
+				} else {
+					if (!fields.keySet().equals(Set.of("uri"))
+							|| !(fields.get("uri") instanceof McpJsonString uri))
+						return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+								sessionEnabled && !initializeRequest);
+					try {
+						operationName = Optional.of(McpLevelOneUriTemplate.requireValidAbsoluteUri(uri.value(), "Skills URI"));
+					} catch (IllegalArgumentException ignored) {
+						return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+								sessionEnabled && !initializeRequest);
+					}
+				}
+				applicationHandler = applicationRouter.resolve(mappedRequest.method());
+				if (applicationHandler.isEmpty())
+					return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
+			} else if (resourcesListRequest) {
+				if (capabilityRegistry.capabilities().resources().isEmpty()) {
+					if (!sessionEnabled)
+						return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
+					unsupportedSessionOperation = true;
+				}
+				if (!unsupportedSessionOperation) {
+					if (endpoint.customResourceListHandler()) {
+						Map<String, McpJsonValue> fields =
+								mappedRequest.params().fields().members();
+						if (!Set.of("cursor").containsAll(fields.keySet()))
+							return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+									sessionEnabled && !initializeRequest);
+						Optional<String> cursor = Optional.empty();
+						if (fields.containsKey("cursor")) {
+							McpJsonValue cursorValue = fields.get("cursor");
+							if (!(cursorValue instanceof McpJsonString string)
+									|| !McpCursorValidator.fitsWithinUtf8ByteLimit(
+											string.value(), endpoint.maximumCursorSizeInBytes()))
+								return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+										sessionEnabled && !initializeRequest);
+							cursor = Optional.of(string.value());
+						}
+						Optional<McpApplicationResourceListRoute> listRoute =
+								applicationRouter.resourceListRoute();
+						if (listRoute.isEmpty())
+							return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
+						Optional<String> resolvedCursor = cursor;
+						McpApplicationResourceListRoute resolvedRoute = listRoute.orElseThrow();
+						applicationHandler = Optional.of(invocation -> resourceResultWithCachePolicy(
+									resolvedRoute.handler().handle(
+											new McpApplicationResourceListInvocation(invocation,
+													resolvedCursor,
+													capabilityRegistry.exactResourceDescriptors(),
+													endpoint.resourceListCachePolicy())),
+									endpoint.resourceListCachePolicy(), true, false,
+									endpointPolicy.localizationEnabled(),
+									endpoint.maximumCursorSizeInBytes(), endpointPolicy.path(),
+									applicationRouter));
+					} else {
+						if (!unsupportedSessionOperation
+							&& !validFrameworkCatalogParams(mappedRequest.params().fields(), legacy))
+							return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+									sessionEnabled && !initializeRequest);
+					}
+				}
+
+			} else if (resourceTemplatesListRequest) {
+				if (capabilityRegistry.capabilities().resources().isEmpty()) {
+					if (!sessionEnabled)
+						return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
+					unsupportedSessionOperation = true;
+				}
+				if (!unsupportedSessionOperation
+						&& !validFrameworkCatalogParams(mappedRequest.params().fields(), legacy))
+					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+							sessionEnabled && !initializeRequest);
+			} else if (legacyResourceSubscribe || legacyResourceUnsubscribe) {
+				if (!sessionEnabled || !legacyTransportFamilies.getOrDefault(endpointRuntime.path(), Map.of())
+						.getOrDefault(selectedRevision, Set.of()).contains(McpResourceNotificationType.RESOURCE_UPDATED)) {
+					if (!sessionEnabled)
+						return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
+					unsupportedSessionOperation = true;
+				}
+				if (!unsupportedSessionOperation) {
+					Map<String, McpJsonValue> fields = mappedRequest.params().fields().members();
+					if (!fields.keySet().equals(Set.of("uri")) || !(fields.get("uri") instanceof McpJsonString uri))
+						return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+								sessionEnabled && !initializeRequest);
+					try {
+						String validatedUri = McpLevelOneUriTemplate.requireValidAbsoluteUri(uri.value(), "Resource subscription URI");
+						operationName = Optional.of(validatedUri);
+						if (legacyResourceSubscribe)
+							acceptedSubscriptionFilter = Optional.of(new AcceptedSubscriptionFilter(false, false, false,
+									true, Map.of(URI.create(validatedUri), new SubscriptionResource(URI.create(validatedUri), validatedUri)),
+									false, List.of(), Set.of(), mappedRequest.params().metadata().clientCapabilities()));
+					} catch (IllegalArgumentException exception) {
+						return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+								sessionEnabled && !initializeRequest);
+					}
+				}
+
+			} else if (subscriptionListenRequest) {
+				if (endpoint.subscriptionConfig().isEmpty()
+						|| endpointBinding.subscriptionEventSources().isEmpty())
+					return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
+				try {
+					acceptedSubscriptionFilter = Optional.of(
+							parseAcceptedSubscriptionFilter(mappedRequest,
+									endpoint.subscriptionConfig().orElseThrow(),
+									endpointPolicy.catalogLocalizer()
+											.map(McpRuntimeCatalogLocalizer
+													::localizedResponseKinds)
+											.orElseGet(Set::of),
+									!capabilityRegistry.tools().isEmpty(),
+									!capabilityRegistry.prompts().isEmpty()));
+				} catch (IllegalArgumentException exception) {
+					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+							sessionEnabled && !initializeRequest);
+				}
+				if (acceptedSubscriptionFilter.orElseThrow().taskIdsRequested()
+						&& !mappedRequest.params().metadata().clientCapabilities()
+								.extensions().containsKey(TASKS_EXTENSION_IDENTIFIER))
+					return missingTasksCapability(protocolProfile, mappedRequest.id(),
+							corsHeaders);
+			} else if (completionRequestMethod) {
+				if (!capabilityRegistry.capabilities().completions()) {
+					if (!sessionEnabled)
+						return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
+					unsupportedSessionOperation = true;
+				}
+				if (!unsupportedSessionOperation) {
+					completionRequest = parseCompletionRequest(
+							mappedRequest.params().fields().members());
+					if (completionRequest.isEmpty())
+						return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+								sessionEnabled && !initializeRequest);
+					operationName = Optional.of(completionRequest.orElseThrow().reference());
+				}
+
+			} else if (taskRequest) {
+				Optional<McpApplicationRequestHandler> taskHandler =
+						applicationRouter.resolve(mappedRequest.method());
+				boolean tasksSupported = capabilityRegistry.capabilities().extensions()
+						.containsKey(TASKS_EXTENSION_IDENTIFIER)
+						&& taskHandler.isPresent();
+				if (!tasksSupported)
+					return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
+				if (!mappedRequest.params().metadata().clientCapabilities().extensions()
+						.containsKey(TASKS_EXTENSION_IDENTIFIER))
+					return missingTasksCapability(protocolProfile, mappedRequest.id(),
+							corsHeaders);
+
 				Map<String, McpJsonValue> fields =
 						mappedRequest.params().fields().members();
-				if (!Set.of("cursor").containsAll(fields.keySet()))
-					return invalidParams(protocolProfile, mappedRequest, corsHeaders);
-				Optional<String> cursor = Optional.empty();
-				if (fields.containsKey("cursor")) {
-					McpJsonValue cursorValue = fields.get("cursor");
-					if (!(cursorValue instanceof McpJsonString string)
-							|| !McpCursorValidator.fitsWithinUtf8ByteLimit(
-									string.value(), endpoint.maximumCursorSizeInBytes()))
-						return invalidParams(protocolProfile, mappedRequest, corsHeaders);
-					cursor = Optional.of(string.value());
+				McpJsonValue taskIdValue = fields.get("taskId");
+				if (!(taskIdValue instanceof McpJsonString taskId)
+						|| !validTaskId(taskId.value()))
+					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+							sessionEnabled && !initializeRequest);
+				operationName = Optional.of(taskId.value());
+
+				if ("tasks/update".equals(mappedRequest.method())) {
+					try {
+						Optional<McpJsonObject> parsedInputResponses =
+								parseTaskInputResponses(fields);
+						if (parsedInputResponses.isEmpty())
+							return invalidParams(protocolProfile, mappedRequest,
+									corsHeaders);
+						inputResponses = parsedInputResponses.orElseThrow();
+					} catch (IllegalArgumentException exception) {
+						return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+								sessionEnabled && !initializeRequest);
+					}
 				}
-				Optional<McpApplicationResourceListRoute> listRoute =
-						applicationRouter.resourceListRoute();
-				if (listRoute.isEmpty())
-					return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
-				Optional<String> resolvedCursor = cursor;
-				McpApplicationResourceListRoute resolvedRoute = listRoute.orElseThrow();
-				applicationHandler = Optional.of(invocation -> resourceResultWithCachePolicy(
-							resolvedRoute.handler().handle(
-									new McpApplicationResourceListInvocation(invocation,
-											resolvedCursor,
-											capabilityRegistry.exactResourceDescriptors(),
-											endpoint.resourceListCachePolicy())),
-							endpoint.resourceListCachePolicy(), true, false,
-							endpointPolicy.localizationEnabled(),
-							endpoint.maximumCursorSizeInBytes(), endpointPolicy.path(),
-							applicationRouter));
-			} else {
-				if (!validFrameworkCatalogParams(mappedRequest.params().fields(), legacy))
-					return invalidParams(protocolProfile, mappedRequest, corsHeaders);
-			}
-		} else if (resourceTemplatesListRequest) {
-			if (capabilityRegistry.capabilities().resources().isEmpty()) {
-				if (!sessionEnabled)
-					return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
-				unsupportedSessionOperation = true;
-			}
-			if (!validFrameworkCatalogParams(mappedRequest.params().fields(), legacy))
-				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
-		} else if (legacyResourceSubscribe || legacyResourceUnsubscribe) {
-			if (!sessionEnabled || !legacyTransportFamilies.getOrDefault(endpointRuntime.path(), Map.of())
-					.getOrDefault(selectedRevision, Set.of()).contains(McpResourceNotificationType.RESOURCE_UPDATED)) {
-				if (!sessionEnabled)
-					return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
-				unsupportedSessionOperation = true;
-			}
-			Map<String, McpJsonValue> fields = mappedRequest.params().fields().members();
-			if (!fields.keySet().equals(Set.of("uri")) || !(fields.get("uri") instanceof McpJsonString uri))
-				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
-			try {
-				String validatedUri = McpLevelOneUriTemplate.requireValidAbsoluteUri(uri.value(), "Resource subscription URI");
-				operationName = Optional.of(validatedUri);
-				if (legacyResourceSubscribe)
-					acceptedSubscriptionFilter = Optional.of(new AcceptedSubscriptionFilter(false, false, false,
-							true, Map.of(URI.create(validatedUri), new SubscriptionResource(URI.create(validatedUri), validatedUri)),
-							false, List.of(), Set.of(), mappedRequest.params().metadata().clientCapabilities()));
-			} catch (IllegalArgumentException exception) {
-				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
-			}
-		} else if (subscriptionListenRequest) {
-			if (endpoint.subscriptionConfig().isEmpty()
-					|| endpointBinding.subscriptionEventSources().isEmpty())
-				return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
-			try {
-				acceptedSubscriptionFilter = Optional.of(
-						parseAcceptedSubscriptionFilter(mappedRequest,
-								endpoint.subscriptionConfig().orElseThrow(),
-								endpointPolicy.catalogLocalizer()
-										.map(McpRuntimeCatalogLocalizer
-												::localizedResponseKinds)
-										.orElseGet(Set::of),
-								!capabilityRegistry.tools().isEmpty(),
-								!capabilityRegistry.prompts().isEmpty()));
-			} catch (IllegalArgumentException exception) {
-				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
-			}
-			if (acceptedSubscriptionFilter.orElseThrow().taskIdsRequested()
-					&& !mappedRequest.params().metadata().clientCapabilities()
-							.extensions().containsKey(TASKS_EXTENSION_IDENTIFIER))
-				return missingTasksCapability(protocolProfile, mappedRequest.id(),
-						corsHeaders);
-		} else if (completionRequestMethod) {
-			if (!capabilityRegistry.capabilities().completions()) {
-				if (!sessionEnabled)
-					return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
-				unsupportedSessionOperation = true;
-			}
-			completionRequest = parseCompletionRequest(
-					mappedRequest.params().fields().members());
-			if (completionRequest.isEmpty())
-				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
-			operationName = Optional.of(completionRequest.orElseThrow().reference());
-		} else if (taskRequest) {
-			Optional<McpApplicationRequestHandler> taskHandler =
-					applicationRouter.resolve(mappedRequest.method());
-			boolean tasksSupported = capabilityRegistry.capabilities().extensions()
-					.containsKey(TASKS_EXTENSION_IDENTIFIER)
-					&& taskHandler.isPresent();
-			if (!tasksSupported)
-				return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
-			if (!mappedRequest.params().metadata().clientCapabilities().extensions()
-					.containsKey(TASKS_EXTENSION_IDENTIFIER))
-				return missingTasksCapability(protocolProfile, mappedRequest.id(),
-						corsHeaders);
-
-			Map<String, McpJsonValue> fields =
-					mappedRequest.params().fields().members();
-			McpJsonValue taskIdValue = fields.get("taskId");
-			if (!(taskIdValue instanceof McpJsonString taskId)
-					|| !validTaskId(taskId.value()))
-				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
-			operationName = Optional.of(taskId.value());
-
-			if ("tasks/update".equals(mappedRequest.method())) {
+				applicationHandler = taskHandler;
+			} else if ("tools/call".equals(mappedRequest.method())) {
+				Map<String, McpJsonValue> fields =
+						mappedRequest.params().fields().members();
 				try {
 					Optional<McpJsonObject> parsedInputResponses =
-							parseTaskInputResponses(fields);
-					if (parsedInputResponses.isEmpty())
-						return invalidParams(protocolProfile, mappedRequest,
-								corsHeaders);
-					inputResponses = parsedInputResponses.orElseThrow();
+							parseInputResponses(fields);
+					inputResponses = parsedInputResponses.orElseGet(McpJsonObject::empty);
+					inputResponsesSupplied = parsedInputResponses.isPresent();
 				} catch (IllegalArgumentException exception) {
-					return invalidParams(protocolProfile, mappedRequest, corsHeaders);
+					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+							sessionEnabled && !initializeRequest);
 				}
-			}
-			applicationHandler = taskHandler;
-		} else if ("tools/call".equals(mappedRequest.method())) {
-			Map<String, McpJsonValue> fields =
-					mappedRequest.params().fields().members();
-			try {
-				Optional<McpJsonObject> parsedInputResponses =
-						parseInputResponses(fields);
-				inputResponses = parsedInputResponses.orElseGet(McpJsonObject::empty);
-				inputResponsesSupplied = parsedInputResponses.isPresent();
-			} catch (IllegalArgumentException exception) {
-				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
-			}
-			McpJsonValue nameValue = fields.get("name");
-			if (!(nameValue instanceof McpJsonString name) || name.value().isBlank())
-				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
-			operationName = Optional.of(name.value());
-			if (!callerAwareCatalog) {
-				McpJsonValue argumentsValue = fields.get("arguments");
-				if (argumentsValue != null
-						&& !(argumentsValue instanceof McpJsonObject))
-					return invalidParams(protocolProfile, mappedRequest, corsHeaders);
-			}
-		} else if ("prompts/get".equals(mappedRequest.method())) {
-			Map<String, McpJsonValue> fields =
-					mappedRequest.params().fields().members();
-			try {
-				Optional<McpJsonObject> parsedInputResponses =
-						parseInputResponses(fields);
-				inputResponses = parsedInputResponses.orElseGet(McpJsonObject::empty);
-				inputResponsesSupplied = parsedInputResponses.isPresent();
-			} catch (IllegalArgumentException exception) {
-				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
-			}
-			McpJsonValue nameValue = fields.get("name");
-			if (!(nameValue instanceof McpJsonString name) || name.value().isBlank())
-				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
-			operationName = Optional.of(name.value());
+				McpJsonValue nameValue = fields.get("name");
+				if (!(nameValue instanceof McpJsonString name) || name.value().isBlank())
+					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+							sessionEnabled && !initializeRequest);
+				operationName = Optional.of(name.value());
+				if (!callerAwareCatalog) {
+					McpJsonValue argumentsValue = fields.get("arguments");
+					if (argumentsValue != null
+							&& !(argumentsValue instanceof McpJsonObject))
+						return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+								sessionEnabled && !initializeRequest);
+				}
+			} else if ("prompts/get".equals(mappedRequest.method())) {
+				Map<String, McpJsonValue> fields =
+						mappedRequest.params().fields().members();
+				try {
+					Optional<McpJsonObject> parsedInputResponses =
+							parseInputResponses(fields);
+					inputResponses = parsedInputResponses.orElseGet(McpJsonObject::empty);
+					inputResponsesSupplied = parsedInputResponses.isPresent();
+				} catch (IllegalArgumentException exception) {
+					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+							sessionEnabled && !initializeRequest);
+				}
+				McpJsonValue nameValue = fields.get("name");
+				if (!(nameValue instanceof McpJsonString name) || name.value().isBlank())
+					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+							sessionEnabled && !initializeRequest);
+				operationName = Optional.of(name.value());
 
-			if (!callerAwareCatalog && !validPromptArgumentValues(fields.get("arguments")))
-				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
-		} else if ("resources/read".equals(mappedRequest.method())) {
-			Map<String, McpJsonValue> fields = mappedRequest.params().fields().members();
-			try {
-				Optional<McpJsonObject> parsedInputResponses =
-						parseInputResponses(fields);
-				inputResponses = parsedInputResponses.orElseGet(McpJsonObject::empty);
-				inputResponsesSupplied = parsedInputResponses.isPresent();
-			} catch (IllegalArgumentException exception) {
-				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
-			}
-			McpJsonValue uriValue = fields.get("uri");
-			if (!(uriValue instanceof McpJsonString uriString))
-				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
-			String uri;
-			try {
-				uri = McpLevelOneUriTemplate.requireValidAbsoluteUri(
-						uriString.value(), "Resource URI");
-			} catch (IllegalArgumentException exception) {
-				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
-			}
-			operationName = Optional.of(uri);
-		} else if (mappedRequest.method().startsWith("tasks/")
-				|| mappedRequest.method().startsWith("skills/")) {
-			// These framework extensions own their complete method namespaces.
-			// Unknown methods never fall through to an application route.
-			if (!sessionEnabled)
-				return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
-			unsupportedSessionOperation = true;
-		} else {
-			applicationHandler = applicationRouter.resolve(mappedRequest.method());
-			if (applicationHandler.isEmpty()) {
+				if (!callerAwareCatalog && !validPromptArgumentValues(fields.get("arguments")))
+					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+							sessionEnabled && !initializeRequest);
+			} else if ("resources/read".equals(mappedRequest.method())) {
+				Map<String, McpJsonValue> fields = mappedRequest.params().fields().members();
+				try {
+					Optional<McpJsonObject> parsedInputResponses =
+							parseInputResponses(fields);
+					inputResponses = parsedInputResponses.orElseGet(McpJsonObject::empty);
+					inputResponsesSupplied = parsedInputResponses.isPresent();
+				} catch (IllegalArgumentException exception) {
+					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+							sessionEnabled && !initializeRequest);
+				}
+				McpJsonValue uriValue = fields.get("uri");
+				if (!(uriValue instanceof McpJsonString uriString))
+					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+							sessionEnabled && !initializeRequest);
+				String uri;
+				try {
+					uri = McpLevelOneUriTemplate.requireValidAbsoluteUri(
+							uriString.value(), "Resource URI");
+				} catch (IllegalArgumentException exception) {
+					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+							sessionEnabled && !initializeRequest);
+				}
+				operationName = Optional.of(uri);
+			} else if (mappedRequest.method().startsWith("tasks/")
+					|| mappedRequest.method().startsWith("skills/")) {
+				// These framework extensions own their complete method namespaces.
+				// Unknown methods never fall through to an application route.
 				if (!sessionEnabled)
 					return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
 				unsupportedSessionOperation = true;
+			} else {
+				applicationHandler = applicationRouter.resolve(mappedRequest.method());
+				if (applicationHandler.isEmpty()) {
+					if (!sessionEnabled)
+						return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
+					unsupportedSessionOperation = true;
+				}
 			}
+		} catch (DeferredLegacyOperationValidation ignored) {
+			invalidSessionOperationParameters = true;
 		}
 
 		boolean completionPromptRequest = completionRequest
@@ -5339,6 +5399,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 		if (unsupportedSessionOperation)
 			return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
+		if (invalidSessionOperationParameters)
+			return invalidParams(protocolProfile, mappedRequest, corsHeaders);
 		if ("prompts/get".equals(mappedRequest.method())
 				&& capabilityRegistry.prompts().isEmpty()
 				&& applicationRouter.resolve(mappedRequest.method()).isEmpty())
@@ -6029,10 +6091,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					if (openResult == SubscriptionOpenResult.AUTHORIZATION_STALE) {
 						if (++staleAuthorizationAttempts < 3)
 							continue;
-						return observedSubscriptionAuthorizationFailure(requestControl,
-								mappedRequest.id(), corsHeaders,
-								SubscriptionAuthorizationResult.failed(new IllegalStateException(
-										"MCP subscription authorization changed during each opening attempt.")));
+						return observedPolicyCapacityRejected(requestControl,
+								mappedRequest.id(), corsHeaders);
 					}
 					if (openResult == SubscriptionOpenResult.LOCALIZATION_FAILED
 							|| openResult
@@ -9293,6 +9353,22 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						"Method not found", data), corsHeaders);
 	}
 
+	/** Carries no Throwable evidence; only defers an operation error behind session fencing. */
+	private static final class DeferredLegacyOperationValidation extends RuntimeException {
+		private static final long serialVersionUID = 1L;
+		private static final DeferredLegacyOperationValidation INSTANCE = new DeferredLegacyOperationValidation();
+		private DeferredLegacyOperationValidation() { super(null, null, false, false); }
+	}
+
+	@NonNull
+	private MicrohttpResponse invalidOperationParams(
+			@NonNull McpProtocolProfile protocolProfile,
+			McpJsonRpcMessage.@NonNull Request request,
+			@NonNull List<@NonNull Header> corsHeaders, boolean deferUntilSession) {
+		if (deferUntilSession) throw DeferredLegacyOperationValidation.INSTANCE;
+		return invalidParams(protocolProfile, request, corsHeaders);
+	}
+
 	@NonNull
 	private MicrohttpResponse invalidParams(
 			@NonNull McpProtocolProfile protocolProfile,
@@ -10825,7 +10901,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			synchronized (lock) {
 				legacyHttpControl = true; legacyHttpStartedNanos = applicationClock.nanoTime();
 				if (lifecycleTransportTerminated) return;
-				reservation = application.reserveLegacyHttpObservation();
+				reservation = application.reserveLegacyHttpObservation(
+						request.getHttpMethod() == HttpMethod.GET);
 				if (reservation != null) {
 					legacyHttpObservationReservation = reservation;
 					legacyHttpObservationStartPending = true;
@@ -10834,6 +10911,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				}
 			}
 			if (reservation == null) {
+				if (!application.legacyHttpObservationAccepting()) return;
 				try { applicationExecutionObserver.didSkipHttpRequestObservation(); }
 				catch (Throwable ignored) { /* Fixed diagnostics cannot alter transport handling. */ }
 				return;
@@ -11378,8 +11456,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					return result;
 			}
 			return recordInitialAuthorizationReservationFailure(filter,
-					SubscriptionAuthorizationResult.failed(new IllegalStateException(
-							"MCP subscription authorization changed during each initial check.")));
+					SubscriptionAuthorizationResult.capacityRejected(null));
 		}
 
 		@NonNull

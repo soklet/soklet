@@ -359,8 +359,8 @@ public final class StaticFiles {
 			Path realCandidate = candidate.toRealPath();
 			if (!realCandidate.startsWith(realRoot))
 				return Optional.empty();
-			// Native real-path resolution supplies actual case/Unicode spelling without
-			// listing directories. Preserve distinct hard-link names as policy paths.
+			// Native real-path resolution avoids directory scans. Alias spelling depends
+			// on the filesystem provider; preserve distinct hard-link names as policy paths.
 			Path canonical = this.noFollowRoot.resolve(realRoot.relativize(realCandidate));
 			return Files.isSymbolicLink(this.noFollowRoot) || hasSymlinkComponent(candidate)
 					|| hasSymlinkComponent(canonical) ? Optional.empty() : Optional.of(canonical);
@@ -699,8 +699,10 @@ public final class StaticFiles {
 		/**
 		 * Builds the static-file helper.
 		 * <p>
-		 * The configured root is resolved to a real path and validated as a directory when this method
-		 * is called.
+		 * The configured root is validated as a directory when this method is called.
+		 * With {@code followSymlinks} enabled it is resolved to a real path; otherwise
+		 * a symbolic-link root is rejected. Pass the root's {@link Path#toRealPath}
+		 * value explicitly to use its resolved directory without enabling symlink traversal.
 		 *
 		 * @return the configured static-file helper
 		 */

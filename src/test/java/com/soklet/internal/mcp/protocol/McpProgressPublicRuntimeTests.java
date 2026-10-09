@@ -45,6 +45,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -403,6 +404,9 @@ public class McpProgressPublicRuntimeTests {
 				});
 		McpServer server = server(List.of(tool));
 		Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.lifecyclePolicy(com.soklet.LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(10))
+						.startupCancelationTimeout(Duration.ofSeconds(1)).gracefulShutdownTimeout(Duration.ofSeconds(1))
+						.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
 				.metricsCollector(metricsCollector)
@@ -608,6 +612,9 @@ public class McpProgressPublicRuntimeTests {
 				});
 		McpServer server = server(List.of(tool));
 		Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.lifecyclePolicy(com.soklet.LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(10))
+						.startupCancelationTimeout(Duration.ofSeconds(1)).gracefulShutdownTimeout(Duration.ofSeconds(1))
+						.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.metricsCollector(metricsCollector)
 				.build());
@@ -797,6 +804,9 @@ public class McpProgressPublicRuntimeTests {
 
 	private static Soklet managedSoklet(McpServer server) {
 		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.lifecyclePolicy(com.soklet.LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(10))
+						.startupCancelationTimeout(Duration.ofSeconds(1)).gracefulShutdownTimeout(Duration.ofSeconds(1))
+						.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
 				.build());

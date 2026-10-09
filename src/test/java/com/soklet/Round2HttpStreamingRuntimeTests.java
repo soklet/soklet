@@ -18,6 +18,43 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @Timeout(60)
 class Round2HttpStreamingRuntimeTests {
+	@Test void abortedFileDownloadDoesNotBecomeAServerTransportError(@org.junit.jupiter.api.io.TempDir java.nio.file.Path directory) throws Exception {
+		java.nio.file.Path file = directory.resolve("download");
+		try (java.io.RandomAccessFile sparse = new java.io.RandomAccessFile(file.toFile(), "rw")) { sparse.setLength(64L * 1024 * 1024); }
+		for (boolean reset : List.of(false, true)) {
+			Fixture fixture = new Fixture(false, Duration.ofSeconds(3));
+			try (fixture) {
+				fixture.resource.file = file;
+				try (Socket client = fixture.request("/file", "HTTP/1.1")) {
+					assertTrue(readHeaders(client).startsWith("HTTP/1.1 200"));
+					if (reset) client.setSoLinger(true, 0);
+				}
+			}
+			assertTrue(fixture.logs.stream().noneMatch(event -> event.getLogEventType() == LogEventType.SERVER_TRANSPORT_FAILURE), fixture.logs.toString());
+		}
+	}
+
+	@Test
+	@Timeout(value = 110, unit = TimeUnit.SECONDS)
+	void zipCleanupAndInterruptibleUpstreamRemainQuietAfterLiveDisconnect() throws Exception {
+		for (String path : List.of("/zip", "/zip", "/zip", "/pipe")) {
+			Fixture fixture = new Fixture(false, Duration.ofSeconds(3));
+			try (fixture; Socket client = fixture.request(path, "HTTP/1.1")) {
+				assertTrue(readHeaders(client).startsWith("HTTP/1.1 200"));
+				assertTrue(fixture.resource.producerEntered.await(2, TimeUnit.SECONDS));
+				client.setSoLinger(true, 0); client.close();
+				if (path.equals("/zip")) {
+					await(() -> fixture.resource.token != null && fixture.resource.token.isCanceled());
+					fixture.resource.releaseProducer.countDown();
+				}
+				await(() -> !fixture.terminals.isEmpty());
+				assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED, fixture.terminals.get(0).getReason());
+				assertFalse(fixture.terminals.get(0).getCause().orElseThrow().getClass().getName().contains("SocketIoException"));
+			}
+			assertTrue(fixture.logs.stream().noneMatch(event -> event.getLogEventType() == LogEventType.RESPONSE_STREAM_FAILED
+					|| event.getLogEventType() == LogEventType.RESPONSE_STREAM_CLOSE_FAILED), fixture.logs.toString());
+		}
+	}
 	@Test void lateFiniteAndStreamingHandlersObserveTheTimeoutResponseWithoutStreamAdmission() throws Exception {
 		for (boolean streaming : List.of(false, true)) {
 			try (Fixture fixture = new Fixture(false, Duration.ofMillis(100)); Socket client = fixture.request("/late", "HTTP/1.1")) {
@@ -86,16 +123,36 @@ class Round2HttpStreamingRuntimeTests {
 	}
 
 	private static String read(Socket socket) throws Exception {
-		return new String(socket.getInputStream().readAllBytes(), StandardCharsets.ISO_8859_1);
+		java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+		int value;
+		while ((value = readWithDeadline(socket, deadline)) != -1) {
+			assertTrue(bytes.size() < 65_536, "Response exceeded the fixture byte bound");
+			bytes.write(value);
+		}
+		return bytes.toString(StandardCharsets.ISO_8859_1);
 	}
 	private static String readHeaders(Socket socket) throws Exception {
 		StringBuilder result = new StringBuilder();
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
 		while (!result.toString().endsWith("\r\n\r\n")) {
-			int value = socket.getInputStream().read();
+			assertTrue(result.length() < 16_384, "Headers exceeded the fixture byte bound");
+			int value = readWithDeadline(socket, deadline);
 			if (value < 0) break;
 			result.append((char) value);
 		}
 		return result.toString();
+	}
+	private static int readWithDeadline(Socket socket, long deadline) throws Exception {
+		long remaining = deadline - System.nanoTime();
+		if (remaining <= 0) throw new java.net.SocketTimeoutException("Fixture read deadline elapsed");
+		int original = socket.getSoTimeout();
+		try {
+			socket.setSoTimeout((int) Math.max(1, Math.min(3000, (remaining + 999_999) / 1_000_000)));
+			return socket.getInputStream().read();
+		} finally {
+			socket.setSoTimeout(original);
+		}
 	}
 	private static void await(BooleanSupplier condition) throws Exception {
 		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
@@ -103,10 +160,39 @@ class Round2HttpStreamingRuntimeTests {
 		assertTrue(condition.getAsBoolean());
 	}
 	public static final class Resource {
+		volatile java.nio.file.Path file;
+		volatile CancelationToken token;
 		final CountDownLatch handlerEntered = new CountDownLatch(1), releaseHandler = new CountDownLatch(1);
 		final CountDownLatch producerEntered = new CountDownLatch(1), releaseProducer = new CountDownLatch(1);
 		final AtomicInteger producerCalls = new AtomicInteger();
 		volatile boolean lateStreaming;
+		@GET("/file") public MarshaledResponse file() throws Exception {
+			return MarshaledResponse.withStatusCode(200).body(new MarshaledResponseBody.File(file, 0L, java.nio.file.Files.size(file))).build();
+		}
+		@GET("/zip") public MarshaledResponse zip() {
+			return MarshaledResponse.withStatusCode(200).stream(writer -> {
+				java.util.zip.ZipOutputStream zip = writer.own(new java.util.zip.ZipOutputStream(writer.asOutputStream()));
+				zip.putNextEntry(new java.util.zip.ZipEntry("payload"));
+				zip.write(new byte[]{1, 2, 3}); writer.flush(); token = writer.getCancelationToken();
+				producerEntered.countDown();
+				boolean interrupted = false;
+				while (true) {
+					try { releaseProducer.await(); break; }
+					catch (InterruptedException ignored) { interrupted = true; }
+				}
+				if (interrupted) Thread.currentThread().interrupt();
+				zip.closeEntry();
+			}).build();
+		}
+		@GET("/pipe") public MarshaledResponse pipe() {
+			return MarshaledResponse.withStatusCode(200).stream(writer -> {
+				java.nio.channels.Pipe pipe = java.nio.channels.Pipe.open();
+				try (var source = pipe.source(); var sink = pipe.sink()) {
+					writer.write(new byte[]{1}); writer.flush(); producerEntered.countDown();
+					source.read(java.nio.ByteBuffer.allocate(1));
+				}
+			}).build();
+		}
 		@GET("/stream") public MarshaledResponse stream() {
 			return MarshaledResponse.withStatusCode(200).stream(writer -> producerCalls.incrementAndGet()).build();
 		}
@@ -164,7 +250,9 @@ class Round2HttpStreamingRuntimeTests {
 						}
 						@Override public void didReceiveLogEvent(LogEvent event) { logs.add(event); }
 						@Override public void didTerminateResponseStream(StreamingResponseHandle handle, StreamTermination termination) { terminals.add(termination); }
-					}).build());
+					}).lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(10))
+							.startupCancelationTimeout(Duration.ofSeconds(1)).gracefulShutdownTimeout(Duration.ofSeconds(1))
+							.forcedShutdownTimeout(Duration.ofSeconds(1)).build()).build());
 			soklet.start();
 		}
 		Socket request(String path, String version) throws Exception {

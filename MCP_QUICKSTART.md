@@ -281,6 +281,16 @@ endpoint URL. The `SearchResult` record has object-shaped output, so it fits
 both 2025 profiles. Input requests, Tasks, Skills and Apps UI require their
 separate modern opt-ins and are not enabled by adding these tool versions.
 
+This mixed-revision URL requires clients to send `MCP-Protocol-Version` on
+later calls. For clients that omit it, including affected VS Code configurations,
+publish a dedicated endpoint with only `McpProtocolVersion.V2025_11_25` on its
+endpoint declaration and supported operations, then configure that URL in the
+client. Headerless inference applies only when the endpoint serves exactly one
+overall revision and it is legacy; a session ID does not relax that rule.
+If configuring a static version header, use one of the endpoint's configured
+2025 revisions. It selects the legacy framing before initialization negotiates
+a legacy revision; it cannot make a 2025 `initialize` body use 2026 framing.
+
 A November client initializes using its requested version in the body:
 
 ```sh

@@ -1580,6 +1580,7 @@ public final class Utilities {
 			return List.of();
 
 		List<Optional<InetAddress>> addresses = new ArrayList<>();
+		boolean hasForParameter = false;
 
 		for (String forwardedHeader : forwardedHeaders) {
 			String trimmed = trimAggressivelyToNull(forwardedHeader);
@@ -1602,13 +1603,14 @@ public final class Utilities {
 						continue;
 
 					String[] forwardedHeaderFieldNameAndValue = forwardedHeaderFieldComponent.split(Pattern.quote("="), 2);
-					if (forwardedHeaderFieldNameAndValue.length != 2)
-						continue;
-
 					String name = trimAggressivelyToNull(forwardedHeaderFieldNameAndValue[0]);
-					String value = trimAggressivelyToNull(forwardedHeaderFieldNameAndValue[1]);
-					if (name == null || value == null || !"for".equalsIgnoreCase(name))
+					if (name == null || !"for".equalsIgnoreCase(name))
 						continue;
+					hasForParameter = true;
+					String value = forwardedHeaderFieldNameAndValue.length == 2
+							? trimAggressivelyToNull(forwardedHeaderFieldNameAndValue[1]) : null;
+					if (value == null)
+						break;
 
 					address = parseForwardedIpLiteral(value);
 					break;
@@ -1617,7 +1619,9 @@ public final class Utilities {
 			}
 		}
 
-		return addresses.isEmpty() ? List.of() : Collections.unmodifiableList(addresses);
+		// A proto/host-only Forwarded field provides no client-IP chain. If any
+		// for parameter is present, retain every empty hop as an untrusted boundary.
+		return !hasForParameter || addresses.isEmpty() ? List.of() : Collections.unmodifiableList(addresses);
 	}
 
 	@NonNull

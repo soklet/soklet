@@ -19,6 +19,8 @@ package com.soklet.internal.mcp.protocol;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -26,6 +28,29 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @Timeout(60)
 class McpLegacyHttpObservationDispatcherTests {
+	@Test
+	void idleGetReservationsHaveTheirOwnSessionSizedBudgetAndLeaveTransientCapacity() throws Exception {
+		McpLegacyHttpObservationDispatcher delivery = new McpLegacyHttpObservationDispatcher(4, 128, 512, () -> {});
+		List<McpLegacyHttpObservationDispatcher.Reservation> gets = new ArrayList<>();
+		AtomicInteger finished = new AtomicInteger();
+		try {
+			for (int index = 0; index < 512; index++) {
+				var reservation = delivery.reserve(true);
+				assertNotNull(reservation, "Idle GET " + index + " must fit the admitted session capacity.");
+				gets.add(reservation);
+			}
+			var delete = delivery.reserve(false);
+			assertNotNull(delete, "GET lifetimes cannot consume DELETE observation capacity.");
+			delete.finish(finished::incrementAndGet, () -> {});
+		} finally {
+			for (var reservation : gets) reservation.finish(finished::incrementAndGet, () -> {});
+			delivery.stop(false);
+			delivery.awaitTermination(Duration.ofSeconds(5));
+		}
+		assertTrue(delivery.isTerminated());
+		assertEquals(513, finished.get());
+	}
+
 	@Test
 	void reservationsBoundBothPairsAndRetainLateFinishesThroughForce() throws Exception {
 		McpLegacyHttpObservationDispatcher delivery = new McpLegacyHttpObservationDispatcher(1, 1, () -> {});

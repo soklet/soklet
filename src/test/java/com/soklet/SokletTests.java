@@ -328,7 +328,10 @@ public class SokletTests {
 
 	@Test
 	public void testVarargs() {
-		SokletSimulator.run(configurationForResourceClasses(SimulatorConfig.builder(),
+		SokletSimulator.run(configurationForResourceClasses(SimulatorConfig.builder()
+				.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(java.time.Duration.ofSeconds(10))
+						.startupCancelationTimeout(java.time.Duration.ofSeconds(1)).gracefulShutdownTimeout(java.time.Duration.ofSeconds(1))
+						.forcedShutdownTimeout(java.time.Duration.ofSeconds(1)).build()),
 				Set.of(VarargsResource.class)), simulator -> {
 			HttpRequestResult requestResult = simulator.performHttpRequest(
 					Request.withPath(HttpMethod.GET, "/static/js/some/file/example.js")
@@ -349,7 +352,10 @@ public class SokletTests {
 
 		});
 		SokletStartupException failure = assertThrows(SokletStartupException.class,
-				() -> SokletSimulator.run(configurationForResourceClasses(SimulatorConfig.builder(),
+				() -> SokletSimulator.run(configurationForResourceClasses(SimulatorConfig.builder()
+						.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(java.time.Duration.ofSeconds(10))
+								.startupCancelationTimeout(java.time.Duration.ofSeconds(1)).gracefulShutdownTimeout(java.time.Duration.ofSeconds(1))
+								.forcedShutdownTimeout(java.time.Duration.ofSeconds(1)).build()),
 						Set.of(InvalidVarargsResource.class)), simulator -> {
 					throw new AssertionError("Invalid bindings must fail before request processing");
 				}));

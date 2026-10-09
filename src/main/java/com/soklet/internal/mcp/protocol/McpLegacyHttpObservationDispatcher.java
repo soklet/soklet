@@ -35,31 +35,54 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 final class McpLegacyHttpObservationDispatcher {
 	private final Object lock = new Object();
-	private final long capacity;
+	private final long transientCapacity;
+	private final long getCapacity;
 	private final ExecutorService executor;
 	private final McpApplicationHandlerDispatcher dispatcher;
 	private final Runnable exitObserver;
 	private long reservations;
+	private long getReservations;
 	private boolean accepting = true;
 	private boolean stopping;
 
 	McpLegacyHttpObservationDispatcher(int concurrency, int queueCapacity, @NonNull Runnable exitObserver) {
-		this.capacity = (long) concurrency + queueCapacity;
+		this(concurrency, queueCapacity, 0L, exitObserver);
+	}
+
+	McpLegacyHttpObservationDispatcher(int concurrency, int queueCapacity,
+			long maximumGetReservations, @NonNull Runnable exitObserver) {
+		if (maximumGetReservations < 0L)
+			throw new IllegalArgumentException("The GET observation limit must be nonnegative.");
+		this.transientCapacity = (long) concurrency + queueCapacity;
+		// A finish queue can contain at most Integer.MAX_VALUE elements. The
+		// queue is lazy; configured limits never allocate storage before use.
+		this.getCapacity = Math.min(maximumGetReservations,
+				Math.max(0L, Integer.MAX_VALUE - transientCapacity));
 		this.exitObserver = requireNonNull(exitObserver);
 		this.executor = McpApplicationHandlerExecutorFactory.production().create(concurrency);
-		this.dispatcher = new McpApplicationHandlerDispatcher(concurrency, queueCapacity, executor);
+		this.dispatcher = new McpApplicationHandlerDispatcher(concurrency,
+				(int) (queueCapacity + getCapacity), executor);
 	}
 
 	@Nullable Reservation reserve() {
+		return reserve(false);
+	}
+
+	@Nullable Reservation reserve(boolean get) {
 		synchronized (lock) {
-			if (!accepting || reservations == capacity) return null;
+			if (!accepting) return null;
+			boolean lifetime = get && getReservations < getCapacity;
+			if (!lifetime && reservations - getReservations == transientCapacity) return null;
 			reservations++;
-			return new Reservation();
+			if (lifetime) getReservations++;
+			return new Reservation(lifetime);
 		}
 	}
 
 	final class Reservation {
 		private final AtomicBoolean submitted = new AtomicBoolean();
+		private final boolean get;
+		private Reservation(boolean get) { this.get = get; }
 		void finish(@NonNull Runnable callback, @NonNull Runnable physicalExit) {
 			requireNonNull(callback); requireNonNull(physicalExit);
 			if (!submitted.compareAndSet(false, true)) return;
@@ -68,6 +91,7 @@ final class McpLegacyHttpObservationDispatcher {
 				finally {
 					synchronized (lock) {
 						reservations--;
+						if (get) getReservations--;
 						if (stopping && reservations == 0) executor.shutdown();
 					}
 					exitObserver.run();
@@ -88,6 +112,7 @@ final class McpLegacyHttpObservationDispatcher {
 	}
 
 	void quiesce() { synchronized (lock) { accepting = false; } }
+	boolean isAccepting() { synchronized (lock) { return accepting; } }
 	void stop(boolean interrupt) {
 		synchronized (lock) {
 			accepting = false; stopping = true;

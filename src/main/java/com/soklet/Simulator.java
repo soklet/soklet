@@ -146,7 +146,9 @@ public interface Simulator {
 	/**
 	 * Starts an asynchronous, off-network MCP HTTP simulation using default
 	 * bounded capture options. Supports POST and, on session-enabled 2025
-	 * endpoints, GET and DELETE, as well as OPTIONS preflight requests.
+	 * endpoints with {@link McpSessionConfig.Builder#transportAdmissionController}
+	 * configured, GET and DELETE, as well as OPTIONS preflight requests. GET also
+	 * requires enabled notification families and their effective sources.
 	 *
 	 * @param request request to simulate
 	 * @return simulation handle
@@ -158,8 +160,10 @@ public interface Simulator {
 
 	/**
 	 * Starts an asynchronous, off-network MCP HTTP simulation. Supports POST
-	 * and, on session-enabled 2025 endpoints, GET and DELETE, as well as OPTIONS
-	 * preflight requests.
+	 * and, on session-enabled 2025 endpoints with
+	 * {@link McpSessionConfig.Builder#transportAdmissionController} configured,
+	 * GET and DELETE, as well as OPTIONS preflight requests. GET also requires
+	 * enabled notification families and their effective sources.
 	 *
 	 * @param request request to simulate
 	 * @param options bounded response-capture options
@@ -229,9 +233,10 @@ public interface Simulator {
 	 *
 	 * @param request the Server-Sent Event HTTP request to process
 	 * @return the result (handshake outcode, etc.) that corresponds to the request
-	 * @throws IllegalStateException if an accepted initializer fails, overflows its
-	 *         bounded queue, or terminates before activation; accepted headers alone
-	 *         do not guarantee a returned active simulated connection
+	 * @throws IllegalStateException if an accepted initializer throws a checked
+	 *         exception, overflows its bounded queue, or terminates before activation;
+	 *         initializer RuntimeExceptions and Errors propagate unchanged. Accepted
+	 *         headers alone do not guarantee a returned active simulated connection
 	 */
 	@NonNull
 	SseRequestResult performSseRequest(@NonNull Request request);

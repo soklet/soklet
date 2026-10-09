@@ -21,8 +21,12 @@ import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.channels.ClosedChannelException;
+import java.nio.channels.WritableByteChannel;
+import java.nio.ByteBuffer;
+import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
+import static com.soklet.internal.ObjectIdentity.sameInstance;
 
 /**
  * A {@link WritableSource} backed by a {@link FileChannel}.
@@ -34,6 +38,7 @@ class FileChannelWritableSource implements WritableSource {
     private final boolean closeOnComplete;
     private long position;
     private long remaining;
+    private @Nullable SocketSink socketSink;
 
     FileChannelWritableSource(FileChannel fileChannel, long offset, long count, boolean closeOnComplete) {
         this.fileChannel = requireNonNull(fileChannel);
@@ -65,7 +70,13 @@ class FileChannelWritableSource implements WritableSource {
             throw new ResponseBodySourceException("Response file channel is closed", new ClosedChannelException());
         long written;
         try {
-            written = fileChannel.transferTo(position, bytesToWrite, socketChannel);
+            if (socketSink == null || !sameInstance(socketSink.channel, socketChannel))
+                socketSink = new SocketSink(socketChannel);
+            // A raw transferTo(socket) can fail in either the file or socket path.
+            // The channel adapter keeps the sink boundary typed, without guessing
+            // from an OS message or a later successful file read. JDK transferTo
+            // uses bounded buffered copying for this arbitrary channel.
+            written = fileChannel.transferTo(position, bytesToWrite, socketSink);
         } catch (IOException failure) {
             if (!fileChannel.isOpen())
                 throw new ResponseBodySourceException("Response file channel closed during delivery", failure);
@@ -100,5 +111,17 @@ class FileChannelWritableSource implements WritableSource {
         if (closeOnComplete) {
             fileChannel.close();
         }
+    }
+
+    private static final class SocketSink implements WritableByteChannel {
+        private final SocketChannel channel;
+        private SocketSink(SocketChannel channel) { this.channel = channel; }
+        @Override public int write(ByteBuffer buffer) throws IOException {
+            return SocketChannelIo.write(channel, buffer);
+        }
+        // The adapter is a borrowed sink. Checking the socket here would let
+        // FileChannel.transferTo throw before the typed socket-write boundary.
+        @Override public boolean isOpen() { return true; }
+        @Override public void close() { /* The connection owns the borrowed socket. */ }
     }
 }

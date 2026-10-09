@@ -79,17 +79,19 @@ public class McpSubscriptionAuthorizationSchedulingPublicRuntimeTests {
 	}
 
 	@Test
-	public void renewalWorkersFollowExistingHandlerBudgetInsteadOfAFixedFourWorkerLimit() throws Exception {
-		Assertions.assertEquals(31, McpHttpServerRuntime.subscriptionProjectionConcurrency(32, 32, 100));
-		Assertions.assertEquals(3, McpHttpServerRuntime.subscriptionProjectionConcurrency(32, 4, 100));
+	public void renewalWorkersReserveHalfOfTheSharedBudgetsForOrdinaryRequests() throws Exception {
+		Assertions.assertEquals(16, McpHttpServerRuntime.subscriptionProjectionConcurrency(32, 32, 100));
+		Assertions.assertEquals(2, McpHttpServerRuntime.subscriptionProjectionConcurrency(32, 4, 100));
 		Assertions.assertEquals(2, McpHttpServerRuntime.subscriptionProjectionConcurrency(32, 32, 2));
 		Assertions.assertEquals(1, McpHttpServerRuntime.subscriptionProjectionConcurrency(1, 32, 100));
-		CountDownLatch renewalsEntered = new CountDownLatch(8);
+		CountDownLatch renewalsEntered = new CountDownLatch(5);
 		CountDownLatch releaseRenewals = new CountDownLatch(1);
+		AtomicInteger activeRenewals = new AtomicInteger(), maximumActiveRenewals = new AtomicInteger();
 		McpServer server = server((context, features) -> {
 			if (context.getPreviousValidUntil().isPresent()) {
+				maximumActiveRenewals.accumulateAndGet(activeRenewals.incrementAndGet(), Math::max);
 				renewalsEntered.countDown();
-				releaseRenewals.await();
+				try { releaseRenewals.await(); } finally { activeRenewals.decrementAndGet(); }
 			}
 			return McpSubscriptionAuthorization.Allowed.fromValidUntil(Instant.now().plusSeconds(4));
 		}, builder -> builder.requestHandlerConcurrency(10));
@@ -101,13 +103,58 @@ public class McpSubscriptionAuthorizationSchedulingPublicRuntimeTests {
 				McpChunkedHttpClient client = listen(boundPort(server)); clients.add(client);
 				assertSseHead(client.readHead()); Assertions.assertEquals(acknowledgment(), client.readChunkText());
 			}
+			server.getSubscriptionReconciler().reconcileSubscriptions();
 			Assertions.assertTrue(renewalsEntered.await(3, TimeUnit.SECONDS),
-					"Eight renewals must enter within their remaining lease under the ten-handler budget.");
+					"Five renewals must enter while five handler slots remain for ordinary requests.");
+			String toolBody = "{\"jsonrpc\":\"2.0\",\"id\":\"normal-call\",\"method\":\"tools/call\","
+					+ "\"params\":{\"name\":\"scheduling.probe\",\"arguments\":{},\"_meta\":{"
+					+ "\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\","
+					+ "\"io.modelcontextprotocol/clientCapabilities\":{}}}}";
+			try (McpChunkedHttpClient tool = McpChunkedHttpClient.postMcpMessage(boundPort(server), toolBody, List.of(
+					new McpChunkedHttpClient.RequestHeader("MCP-Protocol-Version", PROTOCOL_VERSION),
+					new McpChunkedHttpClient.RequestHeader("Mcp-Method", "tools/call"),
+					new McpChunkedHttpClient.RequestHeader("Mcp-Name", "scheduling.probe")))) {
+				var head = tool.readHead();
+				Assertions.assertEquals(200, head.status());
+				Assertions.assertTrue(tool.readFixedBody(head).contains("unused"));
+			}
 			Assertions.assertEquals(8, server.getDiagnostics().getActiveSubscriptions());
+			Assertions.assertTrue(maximumActiveRenewals.get() <= 5, "Maintenance must reserve half the handler pool.");
 		} finally {
 			releaseRenewals.countDown();
 			for (McpChunkedHttpClient client : clients) client.closeWithReset();
 			owner.close();
+		}
+	}
+
+	@Test
+	public void threeThousandFiftyMillisecondChecksFitTheDefaultHalfLeaseBudget() throws Exception {
+		int count = 3_000;
+		ExecutorService protocol = Executors.newFixedThreadPool(32);
+		McpApplicationExecution application = new McpApplicationExecution(
+				McpApplicationExecutionConfiguration.productionDefaults(), McpApplicationClock.SYSTEM);
+		McpHttpServerRuntime.TaskNotificationProjectionScheduler scheduler = new McpHttpServerRuntime.TaskNotificationProjectionScheduler(
+				protocol, McpHttpServerRuntime.subscriptionProjectionConcurrency(32, 32, count), count);
+		List<Object> owners = new ArrayList<>();
+		for (int index = 0; index < count; index++) owners.add(new Object());
+		CountDownLatch completed = new CountDownLatch(count);
+		AtomicReference<Throwable> failure = new AtomicReference<>();
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+		try {
+			Assertions.assertTrue(scheduler.tryReserveOwners(owners));
+			for (Object owner : owners)
+				scheduler.execute(new McpHttpServerRuntime.TaskNotificationProjectionJob(owner, () -> {
+					try {
+						application.invokeBoundedPolicy(() -> { Thread.sleep(50); return Boolean.TRUE; }, deadline);
+					} catch (Throwable throwable) { failure.compareAndSet(null, throwable); }
+					finally { completed.countDown(); }
+				}, () -> { failure.compareAndSet(null, new AssertionError("Admitted maintenance was rejected.")); completed.countDown(); }));
+			Assertions.assertTrue(completed.await(25, TimeUnit.SECONDS), "The original 3000 x 50ms wave must finish before its 30s renewal window closes.");
+			Assertions.assertNull(failure.get());
+		} finally {
+			scheduler.shutdown(); protocol.shutdownNow(); application.stop();
+			Assertions.assertTrue(protocol.awaitTermination(5, TimeUnit.SECONDS));
+			Assertions.assertTrue(application.awaitTermination(Duration.ofSeconds(5)));
 		}
 	}
 
@@ -123,7 +170,7 @@ public class McpSubscriptionAuthorizationSchedulingPublicRuntimeTests {
 		try (Soklet owner = managedSoklet(server, new RecordingMetrics())) {
 			owner.start();
 			try (McpChunkedHttpClient client = listen(boundPort(server))) {
-				Assertions.assertEquals(500, client.readHead().status());
+				Assertions.assertEquals(503, client.readHead().status());
 				Assertions.assertEquals(3, calls.get(), "Continually stale authorization must not retry until request timeout.");
 			}
 			Assertions.assertEquals(0, server.getDiagnostics().getActiveSubscriptions());

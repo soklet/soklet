@@ -204,7 +204,8 @@ final class DefaultSseServer implements SseServer {
 		UNCLAIMED,
 		HANDLER,
 		TIMEOUT,
-		UNPARSED_RESPONSE
+		UNPARSED_RESPONSE,
+		QUIESCE
 	}
 
 	/** The reader publishes only an attributed header prefix, capped independently of request size. */
@@ -367,7 +368,7 @@ final class DefaultSseServer implements SseServer {
 	private boolean handshakeTimeoutDeliveryClosed;
 	private final Object headerPhaseMonitor = new Object();
 	// Guarded by headerPhaseMonitor. Admission and service retirement share this
-	// fence so graceful shutdown preserves every admitted header phase.
+	// fence so quiesce can close unparsed sockets without racing parsed admission.
 	private int activeHeaderPhases;
 	@Nullable
 	private volatile StreamLifecycleCoordinator streamLifecycleCoordinator;
@@ -386,6 +387,7 @@ final class DefaultSseServer implements SseServer {
 	// Tracks back-to-back accept() failures so the loop escalates backoff and coalesces logging
 	// instead of storming. Touched on the sse-event-loop thread; AtomicLong for safe publication on restart.
 	private final AtomicLong consecutiveAcceptFailures = new AtomicLong();
+	private final AtomicLong consecutivePendingHandshakeRejections = new AtomicLong();
 	// Does not need to be concurrent because it's calculated just once at initialization time and is never modified after
 	@NonNull
 	private volatile Map<@NonNull ResourcePathDeclaration, @NonNull ResourceMethod> resourceMethodsByResourcePathDeclaration;
@@ -1100,6 +1102,7 @@ final class DefaultSseServer implements SseServer {
 			getResourcePathDeclarationsByResourcePathCache().clear();
 			this.activeConnectionCount.set(0);
 			this.consecutiveAcceptFailures.set(0);
+			this.consecutivePendingHandshakeRejections.set(0);
 			this.lifecycleGeneration.incrementAndGet();
 			this.started = true; // set before thread starts to avoid early exit races
 			this.eventLoopThread = new Thread(() -> startInternal(
@@ -1163,28 +1166,31 @@ final class DefaultSseServer implements SseServer {
 
 		Throwable current = throwable;
 
-		while (current != null) {
-			if (current instanceof ClosedChannelException)
-				return true;
-			if (current instanceof EOFException)
-				return true;
-			if (current instanceof IOException) {
-				String message = current.getMessage();
-				if (message != null) {
-					String normalized = message.toLowerCase(Locale.ROOT);
-					if (normalized.contains("broken pipe")
-							|| normalized.contains("connection reset")
-							|| normalized.contains("connection aborted")
-							|| normalized.contains("connection reset by peer")
-							|| normalized.contains("software caused connection abort"))
-						return true;
-				}
-			}
-
+		for (int depth = 0; current != null && depth < 64; depth++) {
+			if (current instanceof SseSocketIoException) return true;
 			current = current.getCause();
 		}
 
 		return false;
+	}
+
+	private static final class SseSocketIoException extends IOException {
+		private static final long serialVersionUID = 1L;
+		private SseSocketIoException(IOException cause) { super("The SSE connection could not complete socket IO", cause); }
+	}
+
+	private static int readSocket(SocketChannel channel, ByteBuffer buffer) throws IOException {
+		try { return channel.read(buffer); }
+		catch (IOException failure) { throw new SseSocketIoException(failure); }
+	}
+
+	private static int writeSocket(SocketChannel channel, ByteBuffer buffer) throws IOException {
+		try { return channel.write(buffer); }
+		catch (IOException failure) { throw new SseSocketIoException(failure); }
+	}
+
+	private static @Nullable Throwable socketFailureCause(@Nullable Throwable failure) {
+		return failure instanceof SseSocketIoException ? requireNonNull(failure.getCause()) : failure;
 	}
 
 	@NonNull
@@ -1385,14 +1391,18 @@ final class DefaultSseServer implements SseServer {
 		requireNonNull(executorService);
 		requireNonNull(adapterGeneration);
 
-		HandshakeContext handshakeContext = null;
+		HandshakeContext handshakeContext = new HandshakeContext(null);
 		InetSocketAddress remoteAddress = null;
 		boolean submitted = false;
 		synchronized (this.headerPhaseMonitor) {
+			if (this.stopping) {
+				closeAcceptedSocketChannel(clientSocketChannel);
+				return;
+			}
 			AdmissionFence.Admission builtInAdmission = getLifecycleAdapter()
 					.tryAdmit(adapterGeneration).orElse(null);
 			SseHandshakeAdmission admission = builtInAdmission == null ? null
-					: SseHandshakeAdmission.acquire(builtInAdmission, this.outerRequestAdmissionSupplier);
+					: SseHandshakeAdmission.acquire(builtInAdmission, this.outerRequestAdmissionSupplier, handshakeContext);
 			if (admission == null) {
 				closeAcceptedSocketChannel(clientSocketChannel);
 				return;
@@ -1408,12 +1418,14 @@ final class DefaultSseServer implements SseServer {
 		}
 
 		try {
+			if (handshakeContext.handshakeResponseOwner.get() == HandshakeResponseOwner.QUIESCE)
+				return;
 			Socket socket = clientSocketChannel.socket();
 			socket.setKeepAlive(true);
 			socket.setTcpNoDelay(true);
 
 			remoteAddress = remoteAddress(clientSocketChannel);
-			handshakeContext = new HandshakeContext(remoteAddress);
+			handshakeContext.remoteAddressRef.set(remoteAddress);
 			notifyWillAcceptConnection(remoteAddress);
 			notifyDidAcceptConnection(remoteAddress);
 			notifyWillAcceptRequest(remoteAddress, null);
@@ -1424,8 +1436,18 @@ final class DefaultSseServer implements SseServer {
 			// blocking header phase off the application handshake workers. The accept
 			// loop is the sole producer; removals can only lower this count.
 			long pendingLimit = (long) getRequestHandlerConcurrency() + getRequestHandlerQueueCapacity();
-			if (this.activeHandshakes.size() > pendingLimit)
-				throw new RejectedExecutionException("Pending SSE handshake capacity exhausted");
+			if (this.activeHandshakes.size() > pendingLimit) {
+				RejectedExecutionException rejection = new RejectedExecutionException("Pending SSE handshake capacity exhausted");
+				notifyDidFailToAcceptRequest(remoteAddress, null, RequestRejectionReason.REQUEST_HANDLER_QUEUE_FULL, rejection);
+				finalizeFailedAcceptedHandshake(handshakeContext, remoteAddress, ConnectionRejectionReason.MAX_CONNECTIONS, rejection);
+				long failures = this.consecutivePendingHandshakeRejections.incrementAndGet();
+				if (AcceptLoopBackoff.shouldLogFailure(failures))
+					safelyLog(LogEvent.with(LogEventType.SSE_SERVER_CONNECTION_REJECTED,
+							"Pending SSE handshake capacity exhausted").throwable(rejection).build());
+				writeFailsafeHandshakeAndClose(clientSocketChannel, createFailsafeHandshakeHttpResponse(StatusCode.HTTP_503));
+				return;
+			}
+			this.consecutivePendingHandshakeRejections.set(0);
 			ExecutorService readerExecutor = getRequestReaderExecutorService()
 					.orElseThrow(() -> new RejectedExecutionException("SSE request reader unavailable"));
 			HandshakeContext handshakeContextSnapshot = handshakeContext;
@@ -1437,11 +1459,11 @@ final class DefaultSseServer implements SseServer {
 			submitted = true;
 			notifyDidAcceptRequest(remoteAddress, null);
 		} catch (RejectedExecutionException e) {
+			if (handshakeContext.handshakeResponseOwner.get() == HandshakeResponseOwner.QUIESCE)
+				return;
 			RequestRejectionReason rejectionReason = rejectionReasonFor(executorService);
-			if (handshakeContext != null) {
-				notifyDidFailToAcceptRequest(remoteAddress, null, rejectionReason, e);
-				finalizeFailedAcceptedHandshake(handshakeContext, remoteAddress, e);
-			}
+			notifyDidFailToAcceptRequest(remoteAddress, null, rejectionReason, e);
+			finalizeFailedAcceptedHandshake(handshakeContext, remoteAddress, ConnectionRejectionReason.INTERNAL_ERROR, e);
 
 			safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Request handler executor rejected task")
 					.throwable(e)
@@ -1449,9 +1471,11 @@ final class DefaultSseServer implements SseServer {
 
 			writeFailsafeHandshakeAndClose(clientSocketChannel, createFailsafeHandshakeHttpResponse(StatusCode.HTTP_503));
 		} catch (Throwable t) {
-			if (!submitted && handshakeContext != null) {
+			if (handshakeContext.handshakeResponseOwner.get() == HandshakeResponseOwner.QUIESCE)
+				return;
+			if (!submitted) {
 				notifyDidFailToAcceptRequest(remoteAddress, null, RequestRejectionReason.INTERNAL_ERROR, t);
-				finalizeFailedAcceptedHandshake(handshakeContext, remoteAddress, t);
+				finalizeFailedAcceptedHandshake(handshakeContext, remoteAddress, ConnectionRejectionReason.INTERNAL_ERROR, t);
 			}
 
 			safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR,
@@ -1503,15 +1527,16 @@ final class DefaultSseServer implements SseServer {
 
 	private void finalizeFailedAcceptedHandshake(@NonNull HandshakeContext handshakeContext,
 																							 @Nullable InetSocketAddress remoteAddress,
-																							 @NonNull Throwable throwable) {
+			@NonNull ConnectionRejectionReason rejectionReason, @NonNull Throwable throwable) {
 		requireNonNull(handshakeContext);
+		requireNonNull(rejectionReason);
 		requireNonNull(throwable);
 
 		cancelTimeout(handshakeContext.handshakeTimeoutFutureRef.getAndSet(null));
 		handshakeContext.handshakeResponseOwner.compareAndSet(
 				HandshakeResponseOwner.UNCLAIMED, HandshakeResponseOwner.HANDLER);
 		handshakeContext.acceptanceFinalized.compareAndSet(false, true);
-		notifyDidFailToAcceptConnection(remoteAddress, ConnectionRejectionReason.INTERNAL_ERROR, throwable);
+		notifyDidFailToAcceptConnection(remoteAddress, rejectionReason, throwable);
 	}
 
 	private void writeFailsafeHandshakeAndClose(@NonNull SocketChannel clientSocketChannel,
@@ -1553,16 +1578,16 @@ final class DefaultSseServer implements SseServer {
 	}
 
 	private record SseHandshakeAdmission(AdmissionFence.@NonNull Admission builtIn,
-			AdmissionFence.@Nullable Admission outer) implements AutoCloseable {
+			AdmissionFence.@Nullable Admission outer, @NonNull HandshakeContext context) implements AutoCloseable {
 		@Nullable
 		static SseHandshakeAdmission acquire(AdmissionFence.@NonNull Admission builtIn,
-				@Nullable Supplier<Optional<AdmissionFence.Admission>> outerSupplier) {
+				@Nullable Supplier<Optional<AdmissionFence.Admission>> outerSupplier, @NonNull HandshakeContext context) {
 			if (outerSupplier == null)
-				return new SseHandshakeAdmission(builtIn, null);
+				return new SseHandshakeAdmission(builtIn, null, context);
 			try {
 				AdmissionFence.Admission outer = outerSupplier.get().orElse(null);
 				if (outer != null)
-					return new SseHandshakeAdmission(builtIn, outer);
+					return new SseHandshakeAdmission(builtIn, outer, context);
 				builtIn.close();
 				return null;
 			} catch (RuntimeException | Error failure) {
@@ -1956,6 +1981,11 @@ final class DefaultSseServer implements SseServer {
 							UnparsedRequestReason.REQUEST_READ_TIMEOUT, StatusCode.HTTP_408);
 					return;
 				} catch (Exception e) {
+					if (isRemoteClose(e)) {
+						acceptanceFinalized.set(true);
+						closeSocketChannel(clientSocketChannel, channelLock);
+						return;
+					}
 					if (!claimHandshakeResponseForHandler(handshakeContext)) {
 						closeHandshakeChannelUnlessTimeoutOwned(clientSocketChannel,
 								handshakeContext);
@@ -1983,7 +2013,11 @@ final class DefaultSseServer implements SseServer {
 					throw e;
 				}
 
-				handshakeContext.requestRef.set(request);
+				synchronized (this.headerPhaseMonitor) {
+					if (this.stopping || handshakeResponseOwner.get() != HandshakeResponseOwner.UNCLAIMED)
+						return;
+					handshakeContext.requestRef.set(request);
+				}
 				scheduleHandshakeTimeout(clientSocketChannel, handshakeContext, false);
 				notifyDidReadRequest(remoteAddress, request.getRawPathAndQuery());
 				if (handshakeContext.dispatchApplicationPhase) {
@@ -2692,22 +2726,22 @@ final class DefaultSseServer implements SseServer {
 
 				try {
 					while (byteBuffer.hasRemaining()) {
-						clientSocketChannel.write(byteBuffer);
+						writeSocket(clientSocketChannel, byteBuffer);
 					}
 				} catch (Throwable t) {
 					writeThrowable = t;
 				} finally {
 					cancelTimeout(writeTimeoutTask);
 					if (writeTimedOut != null && writeTimedOut.get()
-							&& (writeThrowable == null || writeThrowable instanceof ClosedChannelException)) {
+							&& (writeThrowable == null || socketFailureCause(writeThrowable) instanceof ClosedChannelException)) {
 						writeThrowable = new SocketTimeoutException("SSE write timed out");
 					}
 
 					Duration writeDuration = Duration.ofNanos(Math.max(0L,
 							System.nanoTime() - writeStartedNanos));
-					Throwable writeThrowableSnapshot = writeThrowable;
+					Throwable writeThrowableSnapshot = socketFailureCause(writeThrowable);
 					if (writeThrowableSnapshot != null)
-						terminateAfterWriteFailure(sseConnection, writeThrowableSnapshot);
+						terminateAfterWriteFailure(sseConnection, requireNonNull(writeThrowable));
 					Duration deliveryLagSnapshot = deliveryLag;
 					Integer payloadByteCountSnapshot = payloadByteCount;
 					Integer queueDepthSnapshot = queueDepth;
@@ -2801,7 +2835,7 @@ final class DefaultSseServer implements SseServer {
 					}
 
 					if (writeThrowableSnapshot != null)
-						recordWriteTransportFailure(writeThrowableSnapshot);
+						recordWriteTransportFailure(requireNonNull(writeThrowable));
 				}
 
 				if (writeThrowable != null) {
@@ -2823,7 +2857,7 @@ final class DefaultSseServer implements SseServer {
 	private void terminateAfterWriteFailure(DefaultSseConnection connection, Throwable failure) {
 		connection.lifecycle.terminate(isStopping() ? StreamTerminationReason.SERVER_STOPPING
 				: isRemoteClose(failure) ? StreamTerminationReason.CLIENT_DISCONNECTED
-				: StreamTerminationReason.WRITE_FAILED, failure);
+				: StreamTerminationReason.WRITE_FAILED, socketFailureCause(failure));
 	}
 
 	private void terminateConnection(@NonNull ClientSocketChannelRegistration registration,
@@ -2873,7 +2907,7 @@ final class DefaultSseServer implements SseServer {
 			sseConnection.setTerminationReason(terminationReason);
 		}
 
-		sseConnection.lifecycle.terminate(terminationReason, throwable);
+		sseConnection.lifecycle.terminate(terminationReason, socketFailureCause(throwable));
 		StreamTermination electedTermination = sseConnection.lifecycle.termination().orElseThrow();
 		StreamTerminationReason effectiveTerminationReason = electedTermination.getReason();
 		Throwable terminationThrowable = electedTermination.getCause().orElse(null);
@@ -3180,7 +3214,7 @@ final class DefaultSseServer implements SseServer {
 
 		ByteBuffer buffer = ByteBuffer.wrap(bytes);
 		while (buffer.hasRemaining())
-			socketChannel.write(buffer);
+			writeSocket(socketChannel, buffer);
 	}
 
 	private void writeHandshakeResponseToChannel(@NonNull SocketChannel socketChannel,
@@ -4005,7 +4039,7 @@ final class DefaultSseServer implements SseServer {
 			ExecutorService requestReaderExecutorService = getRequestReaderExecutorService().orElse(null);
 
 			if (requestReaderExecutorService == null || requestReaderExecutorService.isShutdown())
-				throw new IOException("HttpServer is shutting down");
+				throw new IOException("SseServer is shutting down");
 
 			try {
 				readFuture = requestReaderExecutorService.submit(() -> {
@@ -4022,7 +4056,7 @@ final class DefaultSseServer implements SseServer {
 				boolean headersComplete = false;
 
 				while (!headersComplete) {
-					int bytesRead = clientSocketChannel.read(buffer);
+					int bytesRead = readSocket(clientSocketChannel, buffer);
 
 					// Standard interruption/EOF checks
 					if (Thread.interrupted())
@@ -4298,11 +4332,17 @@ final class DefaultSseServer implements SseServer {
 
 		Map<String, List<String>> headers = Utilities.extractHeadersFromRawHeaderLines(rawHeaderLines);
 
-		return Optional.of(Request.withRawUrl(httpMethod, rawUri)
-				.idGenerator(getIdGenerator())
-				.headers(headers)
-				.contentTooLarge(true)
-				.build());
+		try {
+			return Optional.of(Request.withRawUrl(httpMethod, rawUri)
+					.idGenerator(getIdGenerator())
+					.headers(headers)
+					.contentTooLarge(true)
+					.build());
+		} catch (IllegalRequestException malformedTarget) {
+			// This is best-effort attribution of an already oversized request.
+			// Invalid targets retain the unparsed 413 path, not an internal 500.
+			return Optional.empty();
+		}
 	}
 
 	private static final class UnparsedRequestTooLargeIOException extends IOException {
@@ -4482,10 +4522,32 @@ final class DefaultSseServer implements SseServer {
 		public void quiesce() {
 			SseRuntimeSnapshot snapshot = runtimeSnapshot();
 			this.retainedSnapshot.compareAndSet(null, snapshot);
-			if (DefaultSseServer.this.lifecycleGeneration.get()
-					== snapshot.lifecycleGeneration()) {
-				DefaultSseServer.this.stopping = true;
-				getStopPoisonPill().set(true);
+			List<Map.Entry<SocketChannel, SseHandshakeAdmission>> unparsedHandshakes = new ArrayList<>();
+			synchronized (headerPhaseMonitor) {
+				if (DefaultSseServer.this.lifecycleGeneration.get() == snapshot.lifecycleGeneration()) {
+					DefaultSseServer.this.stopping = true;
+					getStopPoisonPill().set(true);
+					for (Map.Entry<SocketChannel, SseHandshakeAdmission> entry : activeHandshakes.entrySet()) {
+						HandshakeContext context = entry.getValue().context();
+						if (context.requestRef.get() != null)
+							continue;
+						synchronized (context.deadlineLock) {
+							if (context.handshakeResponseOwner.compareAndSet(
+									HandshakeResponseOwner.UNCLAIMED, HandshakeResponseOwner.QUIESCE)) {
+								++context.deadlineGeneration;
+								context.acceptanceFinalized.compareAndSet(false, true);
+								unparsedHandshakes.add(entry);
+							}
+						}
+					}
+				}
+			}
+			// Channel closure wakes both the nested socket reader and its waiting
+			// header worker. No application callback or channel operation holds the
+			// admission/deadline fences. Parsed handshakes keep their deadlines.
+			for (Map.Entry<SocketChannel, SseHandshakeAdmission> entry : unparsedHandshakes) {
+				cancelTimeout(entry.getValue().context().handshakeTimeoutFutureRef.getAndSet(null));
+				closePendingHandshake(entry.getKey());
 			}
 
 			StreamLifecycleCoordinator streamLifecycleCoordinator = snapshot.streamLifecycleCoordinator();
@@ -4517,8 +4579,9 @@ final class DefaultSseServer implements SseServer {
 			synchronized (headerPhaseMonitor) {
 				retireHandshakeAdmissionServicesIfDrained();
 			}
-			// Admitted header phases still need the application queue, deadline
-			// delivery and response writers. Retire each service after its producers.
+			// Parsed work and already-elected unparsed rejection responses still
+			// need the application queue, deadline delivery and response writers.
+			// Retire each service after its producers physically return.
 		}
 
 		@Override

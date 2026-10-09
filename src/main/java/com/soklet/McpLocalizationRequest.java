@@ -38,7 +38,14 @@ import java.util.Optional;
  */
 @ThreadSafe
 public interface McpLocalizationRequest {
-	/** @return the admitted semantic MCP request context */
+	/**
+	 * Returns the admitted semantic MCP request context. Subscription projections
+	 * supply a derived request without headers, body, trace identifiers or baggage.
+	 * Its current admitted identity and application context remain available;
+	 * the authorizer separately receives the original initial request context.
+	 *
+	 * @return the admitted semantic MCP request context
+	 */
 	@NonNull
 	McpRequestContext getRequestContext();
 

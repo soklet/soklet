@@ -650,6 +650,39 @@ public class McpApplicationHandlerDispatcherTests {
 	}
 
 	@Test
+	public void rejected_only_handoff_finishes_stranded_tickets_without_further_admissions() throws Exception {
+		CountDownLatch submissionEntered = new CountDownLatch(1), releaseSubmission = new CountDownLatch(1);
+		RejectSecondSubmissionExecutor executor = new RejectSecondSubmissionExecutor(submissionEntered, releaseSubmission);
+		McpApplicationHandlerDispatcher dispatcher = new McpApplicationHandlerDispatcher(1, 2, executor);
+		CountDownLatch warmupExited = new CountDownLatch(1), queuedExited = new CountDownLatch(1);
+		AtomicReference<Throwable> rejectedFailure = new AtomicReference<>(), queuedFailure = new AtomicReference<>();
+		McpApplicationHandlerDispatcher.Ticket warmup = dispatcher.newTicket(() -> {}, ignored -> {}, ignored -> {}, warmupExited::countDown);
+		McpApplicationHandlerDispatcher.Ticket rejected = dispatcher.newTicket(() -> failWork(), rejectedFailure::set);
+		McpApplicationHandlerDispatcher.Ticket queued = dispatcher.newTicket(() -> failWork(), queuedFailure::set, ignored -> {}, queuedExited::countDown);
+		Thread submitter = new Thread(() -> dispatcher.admit(rejected), "mcp-only-rejected-handoff");
+		try {
+			dispatcher.admit(warmup);
+			Assertions.assertTrue(warmupExited.await(3, TimeUnit.SECONDS));
+			submitter.start(); Assertions.assertTrue(submissionEntered.await(3, TimeUnit.SECONDS));
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.Admission.QUEUED, dispatcher.admit(queued));
+			dispatcher.beginGracefulDrain();
+			releaseSubmission.countDown();
+			submitter.join(3000); Assertions.assertFalse(submitter.isAlive());
+			Assertions.assertTrue(queuedExited.await(3, TimeUnit.SECONDS), "No worker or later admission may be required to finish a stranded ticket.");
+			Assertions.assertInstanceOf(RejectedExecutionException.class, queuedFailure.get());
+			Assertions.assertSame(rejectedFailure.get(), queuedFailure.get());
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.TicketState.REJECTED, queued.state());
+			Assertions.assertEquals(0, dispatcher.snapshot().activeSlots());
+			Assertions.assertEquals(0, dispatcher.snapshot().queueDepth());
+			Assertions.assertEquals(2, executor.submissionCount(), "A rejecting handoff must not trigger recursive submissions.");
+		} finally {
+			releaseSubmission.countDown(); submitter.interrupt(); submitter.join(3000); stop(dispatcher, executor);
+		}
+	}
+
+	private static void failWork() { throw new AssertionError("Rejected work ran."); }
+
+	@Test
 	public void submission_error_releases_the_slot_before_it_propagates()
 			throws Exception {
 		RejectFirstSubmissionErrorExecutor executor =

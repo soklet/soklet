@@ -38,6 +38,37 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @Timeout(60)
 class SseHandshakeOutcomeRuntimeTests {
+	@Test void simulatedInterceptorFramingHeadersCannotActivateAnAcceptedHandshake() throws Exception { assertInterceptorFramingRejected(false); }
+	@Test @EnabledForJreRange(min = JRE.JAVA_21)
+	void liveInterceptorFramingHeadersCannotActivateAnAcceptedHandshake() throws Exception { assertInterceptorFramingRejected(true); }
+	private static void assertInterceptorFramingRejected(boolean live) throws Exception {
+		for (String header : List.of("Content-Length", "Transfer-Encoding")) {
+			RequestInterceptor interceptor = new RequestInterceptor() {
+				@Override public void interceptRequest(ServerType type, Request request, ResourceMethod method,
+						java.util.function.Function<Request, MarshaledResponse> generator,
+						java.util.function.Consumer<MarshaledResponse> writer) {
+					MarshaledResponse response = generator.apply(request);
+					Map<String, List<String>> headers = new java.util.LinkedHashMap<>(response.getHeaders());
+					headers.put(header, List.of(header.equals("Content-Length") ? "1" : "chunked"));
+					writer.accept(response.copy().headers(headers).finish());
+				}
+			};
+			try (Fixture fixture = new Fixture(8, 0, ResponseMarshaler.defaultInstance(), Duration.ofSeconds(10), interceptor)) {
+				if (live) {
+					fixture.app.start();
+					try (Socket socket = fixture.request(HttpMethod.GET, "ok")) { assertTrue(readHead(socket).startsWith("HTTP/1.1 500")); }
+				} else {
+					SokletSimulator.run(SimulatorConfig.fromSokletConfig(fixture.config), simulator -> {
+						SseRequestResult.RequestFailed result = assertInstanceOf(SseRequestResult.RequestFailed.class,
+								simulator.performSseRequest(Request.fromPath(HttpMethod.GET, "/events/ok")));
+						assertEquals(500, result.getHttpRequestResult().getMarshaledResponse().getStatusCode());
+					});
+				}
+				assertEquals(0, fixture.resource.initializers.get());
+				assertNull(fixture.establishedConnection.get());
+			}
+		}
+	}
 	@Test
 	void simulatedHeadRejectsWithoutInvokingTheEventSourceOrInitializer() throws Exception {
 		Fixture f = new Fixture(8, 0, ResponseMarshaler.defaultInstance());
@@ -305,6 +336,9 @@ class SseHandshakeOutcomeRuntimeTests {
 		}
 
 		Fixture(int capacity, int connections, ResponseMarshaler marshaler, Duration timeout) throws Exception {
+			this(capacity, connections, marshaler, timeout, RequestInterceptor.defaultInstance());
+		}
+		Fixture(int capacity, int connections, ResponseMarshaler marshaler, Duration timeout, RequestInterceptor interceptor) throws Exception {
 			server = (DefaultSseServer) SseServer.withPort(port).host("127.0.0.1")
 					.streamingLifecycleCapacity(capacity).concurrentConnectionLimit(connections)
 					.connectionQueueCapacity(1).requestHandlerTimeout(timeout)
@@ -317,7 +351,9 @@ class SseHandshakeOutcomeRuntimeTests {
 						}
 					})
 					.responseMarshaler(marshaler)
-					.lifecyclePolicy(LifecyclePolicy.builder().gracefulShutdownTimeout(Duration.ofMillis(300))
+					.requestInterceptor(interceptor)
+					.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(10)).startupCancelationTimeout(Duration.ofSeconds(1))
+							.gracefulShutdownTimeout(Duration.ofMillis(300))
 							.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
 					.lifecycleObserver(new LifecycleObserver() {
 						@Override public void didReceiveLogEvent(LogEvent logEvent) { logs.add(logEvent); }

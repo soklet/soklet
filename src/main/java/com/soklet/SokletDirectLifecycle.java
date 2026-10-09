@@ -2569,7 +2569,7 @@ final class SokletDirectLifecycle {
 		return (request, consumer) -> {
 			AdmissionFence.Admission admission = generation == null ? null
 					: request.claimLifecycleAdmission(generation.admissionFence());
-			if (generation != null && admission == null && !request.hasLifecycleAdmission())
+			if (generation != null && admission == null)
 				admission = generation.admissionFence().tryAdmit().orElse(null);
 			if (generation != null && admission == null) {
 				consumer.accept(serviceUnavailableResult(request));
@@ -2586,7 +2586,7 @@ final class SokletDirectLifecycle {
 		return (request, consumer) -> {
 			AdmissionFence.Admission admission = generation == null ? null
 					: request.claimLifecycleAdmission(generation.admissionFence());
-			if (generation != null && admission == null && !request.hasLifecycleAdmission())
+			if (generation != null && admission == null)
 				admission = generation.admissionFence().tryAdmit().orElse(null);
 			if (generation != null && admission == null) {
 				consumer.accept(serviceUnavailableResult(request));

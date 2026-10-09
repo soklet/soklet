@@ -173,8 +173,9 @@ public final class McpTextResourceContents implements McpResourceContents {
 		/**
 		 * Sets the resource MIME type.
 		 *
-		 * @param mimeType MIME type
+		 * @param mimeType syntactically valid media type
 		 * @return this builder
+		 * @throws IllegalArgumentException if {@code mimeType} is not a syntactically valid media type
 		 */
 		@NonNull
 		public Builder mimeType(@NonNull String mimeType) {

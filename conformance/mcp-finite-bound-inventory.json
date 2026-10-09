@@ -1714,8 +1714,9 @@
         "src/test/java/com/soklet/internal/mcp/protocol/McpCatalogProjectionQueueTests.java#resetAndInactiveFinishFenceLateWorkersAndClearBaselines",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerApplicationExecutionTests.java#bounded_handler_capacity_queues_one_and_rejects_the_third_exactly",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerApplicationExecutionTests.java#protocol_processor_submission_records_two_accepted_then_one_rejected_outside_request_control_lock",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacyHttpObservationDispatcherTests.java#idleGetReservationsHaveTheirOwnSessionSizedBudgetAndLeaveTransientCapacity",
         "src/test/java/com/soklet/internal/mcp/protocol/McpLegacyHttpObservationDispatcherTests.java#reservationsBoundBothPairsAndRetainLateFinishesThroughForce",
-        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationSchedulingPublicRuntimeTests.java#renewalWorkersFollowExistingHandlerBudgetInsteadOfAFixedFourWorkerLimit",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationSchedulingPublicRuntimeTests.java#renewalWorkersReserveHalfOfTheSharedBudgetsForOrdinaryRequests",
         "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java#configuredPerPrincipalCapRejectsWithoutDisturbingAndRecovers",
         "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java#configuredQueueContainsBackpressureAndReleasesTheFullCap",
         "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java#malformedRecognizedFilterFieldsFailBeforeAdmission",
@@ -1730,7 +1731,7 @@
       ],
       "category": "QUEUE_STREAM",
       "deterministicFailure": {
-        "contract": "Full request queues return their fixed capacity outcome. Running cancellation sidecars and queued cancellation sidecars are independently bounded by the configured application-handler concurrency; cancellation before handler entry is suppressed without creating a sidecar, and shutdown waits for admitted sidecars to exit. Each subscription retains at most one 32-byte SHA-256 baseline digest and one queued or active generation marker for each of the two fixed catalog families, retains no rendered catalog, submits at most one queued or running catalog-projection owner job, and coalesces newer invalidations; only the affected family's baseline advances, and only after transport acceptance. Each task subscription retains at most 256 unique task IDs for authoritative projection, submits at most one shared-scheduler job, and coalesces repeated IDs to the latest generation; a full shared projection scheduler applies its fixed owner outcome; the in-memory task manager rejects creation at its live-task capacity; subscription filters reject more than 256 distinct resource URIs or task IDs before admission; full stream queues apply bounded backpressure or the documented nonblocking offer outcome. Delivered nonterminal comparison state excludes origins, persisted arguments, full tasks, and completed results; terminal delivery retains only a marker. Visible status messages, input requests, and metadata remain variable-size and are retained only after bounded notification encoding. Owner termination/reset releases all catalog and task state, and late workers cannot restore it or clear a replacement generation. The shared projection scheduler derives worker concurrency from the existing protocol, application-handler and owner budgets: C=max(1,min(P-1,H-1,O)); the default is 31. Worker and owner bounds do not guarantee that every admitted fleet renews before expiry: for N owners, occupied work time W and effective lease T, a half-lease wave needs C>=ceil(2*N*W/T). Authorization and refresh work share W; delayed or failed renewal remains fail closed. The legacy four physical maintenance workers, 64 dispatches per sliding second and per-partition limits remain independent bounds. An admitted physical application worker drains queued tickets before it returns, preserving FIFO and preventing rejection cascades; a genuinely new handoff can still receive bounded backpressure if a caller-supplied executor has not returned its previous worker yet. Generic legacy HTTP observations use a separate internal dispatcher with C=min(4,H) workers and Q equal to the configured handler queue capacity. At most C+Q pairs are reserved before start (default 132); full or quiesced reservation capacity omits both callbacks with a fixed redacted diagnostic. Started pairs retain their reservation and request-control lifecycle ownership through physical finish; queued finishes and transport end during blocked start survive shutdown handoff. Forced shutdown interrupts active observers, preserves reserved finishes, and remains incomplete while callbacks resist interruption.",
+        "contract": "Full request queues return their fixed capacity outcome. Running cancellation sidecars and queued cancellation sidecars are independently bounded by the configured application-handler concurrency; cancellation before handler entry is suppressed without creating a sidecar, and shutdown waits for admitted sidecars to exit. Each subscription retains at most one 32-byte SHA-256 baseline digest and one queued or active generation marker for each of the two fixed catalog families, retains no rendered catalog, submits at most one queued or running catalog-projection owner job, and coalesces newer invalidations; only the affected family's baseline advances, and only after transport acceptance. Each task subscription retains at most 256 unique task IDs for authoritative projection, submits at most one shared-scheduler job, and coalesces repeated IDs to the latest generation; a full shared projection scheduler applies its fixed owner outcome; the in-memory task manager rejects creation at its live-task capacity; subscription filters reject more than 256 distinct resource URIs or task IDs before admission; full stream queues apply bounded backpressure or the documented nonblocking offer outcome. Delivered nonterminal comparison state excludes origins, persisted arguments, full tasks, and completed results; terminal delivery retains only a marker. Visible status messages, input requests, and metadata remain variable-size and are retained only after bounded notification encoding. Owner termination/reset releases all catalog and task state, and late workers cannot restore it or clear a replacement generation. The shared projection scheduler derives worker concurrency from the existing protocol, application-handler and owner budgets: C=max(1,min(floor(P/2),floor(H/2),O)); the default is 16. Worker and owner bounds do not guarantee that every admitted fleet renews before expiry: for N owners, occupied work time W and effective lease T, a half-lease wave needs C>=ceil(2*N*W/T). Authorization and refresh work share W; delayed or failed renewal remains fail closed. The legacy four physical maintenance workers, 64 dispatches per sliding second and per-partition limits remain independent bounds. An admitted physical application worker drains queued tickets before it returns, preserving FIFO and preventing rejection cascades; a genuinely new handoff can still receive bounded backpressure if a caller-supplied executor has not returned its previous worker yet. Generic legacy HTTP observations use a separate internal dispatcher with C=min(4,H) workers. A lifetime GET bucket has capacity 2*maximumSessions (default 512), clamped so its sum with transient capacity is at most Integer.MAX_VALUE; a separate transient bucket has capacity C+Q where Q is the configured handler queue (default 132). GET reserves its lifetime bucket first and may use transient headroom after lifetime exhaustion; DELETE uses transient capacity only. Ordinary admitted GET lifetimes therefore preserve DELETE observation capacity. Reservation is prepaid before start and held through physical finish; the finish queue is allocated lazily and bounded by the combined buckets. Full or quiesced observation capacity omits both callbacks with a fixed redacted MCP_SERVER_CONFIGURATION diagnostic at most once per minute; callbacks never fall back to an event-loop thread. Queued finishes and transport end during blocked start survive shutdown handoff. Forced shutdown interrupts active observers, preserves reserved finishes, and remains incomplete while callbacks resist interruption.",
         "stage": "APPLICATION_OR_STREAM_ADMISSION"
       },
       "enforcementOwners": [
@@ -1766,6 +1767,11 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "member": "configureLegacySessions",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
           "member": "parseAcceptedSubscriptionFilter",
           "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime"
         },
@@ -1778,6 +1784,11 @@
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
           "member": "startLegacyHttpObservation",
           "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacyHttpObservationDispatcher.java",
+          "member": "McpLegacyHttpObservationDispatcher",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacyHttpObservationDispatcher"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacyHttpObservationDispatcher.java",
@@ -1801,6 +1812,7 @@
         "src/test/java/com/soklet/McpServerFutureConfigurationTests.java#operationalControlsHavePositiveFiniteDefaultsAndAreRetained",
         "src/test/java/com/soklet/internal/mcp/protocol/McpCatalogProjectionQueueTests.java#familiesRetainRequestOrderAndActiveRerunsReturnAtTheTail",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRequestScopedSseTests.java#slow_reader_applies_bounded_backpressure_without_blocking_other_requests",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationSchedulingPublicRuntimeTests.java#threeThousandFiftyMillisecondChecksFitTheDefaultHalfLeaseBudget",
         "src/test/java/com/soklet/internal/mcp/protocol/McpTaskNotificationProjectionSchedulerTests.java#ownerContinuationReturnsToTailBehindAWaitingPeer",
         "src/test/java/com/soklet/internal/mcp/protocol/McpTaskNotificationProjectionSchedulerTests.java#transientExecutorRejectionRetainsBoundedProjectionWorkForRetry",
         "src/test/java/com/soklet/internal/mcp/protocol/McpTaskSubscriptionPublicRuntimeTests.java#deliveryComparisonPreservesSameTimestampChangesAndStaleSuppression"
@@ -1972,6 +1984,18 @@
           "value": "32"
         },
         {
+          "accounting": "lifetime GET observation reservations before any optional transient headroom; two per configured global maximum legacy sessions, clamped to leave the combined finish queue representable",
+          "key": "queue.legacy-http-observation-get-reservations.default",
+          "unit": "RESERVATIONS",
+          "value": "512"
+        },
+        {
+          "accounting": "separate transient legacy HTTP observation reservations; C=min(4,handler concurrency) plus configured handler queue capacity, used by DELETE and optional excess GET traffic",
+          "key": "queue.legacy-http-observation-transient-reservations.default",
+          "unit": "RESERVATIONS",
+          "value": "132"
+        },
+        {
           "accounting": "pending provisional metric identities awaiting bounded asynchronous delivery",
           "key": "queue.metric-events.pending",
           "unit": "EVENTS",
@@ -2026,10 +2050,10 @@
           "value": "1024"
         },
         {
-          "accounting": "shared subscription projection and renewal workers; C=max(1,min(protocol concurrency - 1, application-handler concurrency - 1, projection owner capacity)), retaining one protocol and handler slot where their configured budgets exceed one; default budgets 32/32 yield 31, while legacy physical maintenance remains independently bounded at four",
+          "accounting": "shared subscription projection and renewal workers; C=max(1,min(floor(protocol concurrency/2),floor(application-handler concurrency/2),projection owner capacity)), reserving at least half of both configured pools for ordinary work where each budget is at least two; singleton pools cannot reserve a peer; default budgets 32/32 yield 16, while legacy physical maintenance remains independently bounded at four",
           "key": "queue.task-notification-projection-concurrency",
           "unit": "WORKERS",
-          "value": "31"
+          "value": "16"
         },
         {
           "accounting": "four projection owner slots per default maximum admitted modern connection plus four legacy maintenance slots; runtime derives this from the configured connection bound",
@@ -3372,11 +3396,12 @@
     {
       "boundaryTests": [
         "src/test/java/com/soklet/McpSubscriptionServerConfigurationTests.java#maintenanceDurationsRejectNonpositiveAndUnrepresentableValues",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationSchedulingPublicRuntimeTests.java#repeatedReconciliationDuringOpeningHasAFiniteAuthorizationRetryBudget",
         "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeConfigurationTests.java#authorizationDurationsMustBePositiveAndFinite"
       ],
       "category": "TIME",
       "deterministicFailure": {
-        "contract": "Nonpositive or nanosecond-unrepresentable subscription-maintenance durations fail configuration; authorization checks are queue-inclusively deadline-clipped and successful grants are capped before acknowledgement or renewed delivery. The catalog-projection timeout is retained in runtime configuration for bounded projection scheduling.",
+        "contract": "Nonpositive or nanosecond-unrepresentable subscription-maintenance durations fail configuration; authorization checks are queue-inclusively deadline-clipped and successful grants are capped before acknowledgement or renewed delivery. The catalog-projection timeout is retained in runtime configuration for bounded projection scheduling. Repeated reconciliation that invalidates an initial grant before acknowledgement has a fixed three-attempt opening budget and returns bounded capacity HTTP 503 when exhausted, rather than retrying until the request deadline.",
         "stage": "CONFIGURATION_OR_DEADLINE"
       },
       "enforcementOwners": [
@@ -3467,6 +3492,12 @@
         }
       ],
       "values": [
+        {
+          "accounting": "maximum repeatedly stale initial authorization attempts before an opening subscription returns bounded capacity failure",
+          "key": "subscription.authorization.initial-stale-attempts",
+          "unit": "ATTEMPTS",
+          "value": "3"
+        },
         {
           "accounting": "maximum configured duration of one successful subscription-authorization grant",
           "key": "subscription.authorization.maximum-duration-nanos",

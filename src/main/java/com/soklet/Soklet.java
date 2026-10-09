@@ -1052,8 +1052,15 @@ public final class Soklet implements AutoCloseable {
 		if (response.getStatusCode() != 200 || response.isStreaming() || response.getBody().isPresent())
 			return false;
 		List<String> contentTypes = response.getHeaders().getOrDefault("Content-Type", List.of());
-		return contentTypes.size() == 1
+		boolean compatible = contentTypes.size() == 1
 				&& contentTypes.get(0).split(";", 2)[0].trim().equalsIgnoreCase("text/event-stream");
+		if (compatible) {
+			Set<String> forbidden = Set.of("content-length", "proxy-connection", "te", "trailer", "transfer-encoding", "upgrade");
+			for (String headerName : response.getHeaders().keySet())
+				if (forbidden.contains(headerName.toLowerCase(java.util.Locale.ENGLISH)))
+					throw new IllegalArgumentException("Unsupported framing header for an accepted SSE handshake");
+		}
+		return compatible;
 	}
 
 	private static void enforceBodylessStatusCode(@NonNull Integer statusCode,
@@ -1817,10 +1824,11 @@ public final class Soklet implements AutoCloseable {
 									? StreamTerminationReason.SERVER_STOPPING : StreamTerminationReason.BACKPRESSURE;
 							Runnable notification = () -> notifyDidTerminateSimulatorResponseStream(request, result, Instant.now(),
 									Duration.ZERO, reason, rejection);
-							if (coordinator == null || !coordinator.dispatchRejectionObserver(notification)) {
+							if ((coordinator == null || !coordinator.dispatchRejectionObserver(notification))
+									&& reason != StreamTerminationReason.SERVER_STOPPING) {
 								try {
 									server.getSokletConfig().orElseThrow().getAggregateLifecycleObserver().didReceiveLogEvent(
-											LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR,
+												LogEvent.with(LogEventType.RESPONSE_STREAM_CANCELED,
 													"Unadmitted stream rejection observer capacity was unavailable.").request(request).build());
 								} catch (Throwable observerFailure) {
 									LifecycleObserverLogFallback.report(observerFailure);
@@ -2419,7 +2427,7 @@ public final class Soklet implements AutoCloseable {
 					LogEventType.LIFECYCLE_OBSERVER_DID_ESTABLISH_SSE_CONNECTION_FAILED, "didFailToEstablishSseConnection",
 					observer -> observer.didFailToEstablishSseConnection(request, resourceMethod, reason, cause),
 					metrics -> metrics.didFailToEstablishSseConnection(request, resourceMethod, reason, cause)))) {
-				server.safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_ESTABLISH_SSE_CONNECTION_FAILED,
+				server.safelyLog(LogEvent.with(LogEventType.SSE_SERVER_CONNECTION_REJECTED,
 						"Simulated SSE handshake-failure observer capacity was unavailable.").request(request).build());
 			}
 		}

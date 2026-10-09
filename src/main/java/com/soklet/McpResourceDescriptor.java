@@ -232,9 +232,9 @@ public final class McpResourceDescriptor {
 		/**
 		 * Sets the resource MIME type.
 		 *
-		 * @param mimeType nonblank MIME type
+		 * @param mimeType syntactically valid media type
 		 * @return this builder
-		 * @throws IllegalArgumentException if {@code mimeType} is blank
+		 * @throws IllegalArgumentException if {@code mimeType} is not a syntactically valid media type
 		 */
 		@NonNull
 		public Builder mimeType(@NonNull String mimeType) {

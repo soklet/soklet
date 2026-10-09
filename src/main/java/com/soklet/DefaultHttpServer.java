@@ -767,8 +767,10 @@ final class DefaultHttpServer implements HttpServer {
 																: preparationFailure instanceof RejectedExecutionException
 																		? StreamTerminationReason.BACKPRESSURE : StreamTerminationReason.PRODUCER_FAILED,
 														preparationFailure);
-												if (terminationCoordinator == null || !terminationCoordinator.dispatchRejectionObserver(notification))
-													safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR,
+												if ((terminationCoordinator == null || !terminationCoordinator.dispatchRejectionObserver(notification))
+														&& (terminationCoordinator == null || terminationCoordinator.snapshot().accepting())
+														&& !streamingForcedShutdownStarted.get())
+													safelyLog(LogEvent.with(LogEventType.RESPONSE_STREAM_CANCELED,
 															"Unadmitted stream rejection observer capacity was unavailable.")
 															.request(requestForResponse).build());
 											} else
@@ -1414,7 +1416,8 @@ final class DefaultHttpServer implements HttpServer {
 		String reasonPhrase = reasonPhraseForStatusCode(marshaledResponse.getStatusCode());
 		StreamingResponseBody streamingResponseBody = marshaledResponse.getStreamingResponseBody().orElse(null);
 		if (streamingResponseBody == null)
-			headers = finiteResponseHeaders(headers);
+			headers = finiteResponseHeaders(headers, marshaledResponse.getStatusCode(),
+					request != null && request.getHttpMethod() == HttpMethod.HEAD);
 
 		if (streamingResponseBody != null) {
 			Request streamingRequest = requireNonNull(request);
@@ -1575,7 +1578,7 @@ final class DefaultHttpServer implements HttpServer {
 	}
 
 	@NonNull
-	private static List<Header> finiteResponseHeaders(@NonNull List<Header> headers) {
+	private static List<Header> finiteResponseHeaders(@NonNull List<Header> headers, int statusCode, boolean head) {
 		Set<String> connectionNamedHeaders = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
 		boolean close = false;
 		for (Header header : headers) {
@@ -1588,11 +1591,22 @@ final class DefaultHttpServer implements HttpServer {
 		}
 		Set<String> transportOwned = Set.of("connection", "content-length", "keep-alive", "proxy-connection",
 				"te", "trailer", "transfer-encoding", "upgrade");
+		List<Header> lengths = headers.stream().filter(header -> header.name().equalsIgnoreCase("Content-Length")).toList();
+		boolean preserveHeadLength = head && statusCode != 204 && lengths.size() == 1 && !lengths.get(0).value().isEmpty()
+				&& lengths.get(0).value().chars().allMatch(character -> character >= '0' && character <= '9');
+		List<Header> upgrades = statusCode == 426 ? headers.stream()
+				.filter(header -> header.name().equalsIgnoreCase("Upgrade")).toList() : List.of();
+		boolean preserveUpgrade = !upgrades.isEmpty() && upgrades.stream().allMatch(header -> validUpgradeValue(header.value()));
 		List<Header> result = new ArrayList<>(headers.size());
-		for (Header header : headers)
-			if (!transportOwned.contains(header.name().toLowerCase(Locale.ENGLISH)) && !connectionNamedHeaders.contains(header.name()))
+		for (Header header : headers) {
+			boolean representationLength = preserveHeadLength && header.name().equalsIgnoreCase("Content-Length");
+			boolean upgradeAdvertisement = preserveUpgrade && header.name().equalsIgnoreCase("Upgrade");
+			if (representationLength || upgradeAdvertisement
+					|| (!transportOwned.contains(header.name().toLowerCase(Locale.ENGLISH)) && !connectionNamedHeaders.contains(header.name())))
 				result.add(header);
-		if (close) result.add(new Header("Connection", "close"));
+		}
+		if (preserveUpgrade) result.add(new Header("Connection", close ? "Upgrade, close" : "Upgrade"));
+		else if (close) result.add(new Header("Connection", "close"));
 		result.sort(Comparator.comparing(Header::name));
 		return result;
 	}
@@ -1602,12 +1616,29 @@ final class DefaultHttpServer implements HttpServer {
 			int statusCode, long bodyLength, @Nullable Long headRepresentationLength) {
 		if (statusCode == 204 || statusCode == 304) return headers;
 		boolean head = request != null && request.getHttpMethod() == HttpMethod.HEAD;
+		if (head && headers.stream().anyMatch(header -> header.name().equalsIgnoreCase("Content-Length"))) return headers;
 		Long length = head && bodyLength == 0L ? headRepresentationLength : Long.valueOf(bodyLength);
 		if (length == null) return headers;
 		List<Header> result = new ArrayList<>(headers);
 		result.add(new Header("Content-Length", Long.toString(length)));
 		result.sort(Comparator.comparing(Header::name));
 		return result;
+	}
+
+	private static boolean validUpgradeValue(String value) {
+		for (String entry : value.split(",", -1)) {
+			String protocol = entry.trim();
+			if (protocol.isEmpty()) return false;
+			int separator = protocol.indexOf('/');
+			if (separator == 0 || separator == protocol.length() - 1) return false;
+			for (int index = 0; index < protocol.length(); index++) {
+				char character = protocol.charAt(index);
+				if (character == '/' && index == separator) continue;
+				if (!((character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z')
+						|| (character >= '0' && character <= '9') || "!#$%&'*+-.^_`|~".indexOf(character) >= 0)) return false;
+			}
+		}
+		return true;
 	}
 
 	private boolean isResponseCompressionCandidate(@Nullable Request request,

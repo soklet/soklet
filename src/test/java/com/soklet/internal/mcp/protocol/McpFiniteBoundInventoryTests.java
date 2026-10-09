@@ -276,6 +276,14 @@ public class McpFiniteBoundInventoryTests {
 				subscription.maximumSubscriptionDuration().toNanos());
 		put(values, "subscription.authorization.maximum-duration-nanos",
 				subscription.maximumAuthorizationDuration().toNanos());
+		java.util.regex.Matcher staleAuthorizationAttempts = java.util.regex.Pattern
+				.compile("if \\(\\+\\+staleAuthorizationAttempts < ([0-9]+)\\)")
+				.matcher(Files.readString(Path.of("src", "main", "java", "com",
+						"soklet", "internal", "mcp", "protocol", "McpHttpServerRuntime.java")));
+		Assertions.assertTrue(staleAuthorizationAttempts.find(),
+				"The initial stale authorization retry bound must remain explicit");
+		put(values, "subscription.authorization.initial-stale-attempts",
+				Integer.parseInt(staleAuthorizationAttempts.group(1)));
 		put(values, "subscription.authorization.renewal-maximum-stagger-nanos",
 				staticNumber(
 						"com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
@@ -613,6 +621,11 @@ public class McpFiniteBoundInventoryTests {
 				McpLegacySessionStore.class.getName(), "MAXIMUM_ANONYMOUS_SESSIONS"));
 		put(values, "session.maximum-logical-gets", staticNumber(
 				McpLegacySessionStore.class.getName(), "MAXIMUM_LOGICAL_GETS_PER_SESSION"));
+		put(values, "queue.legacy-http-observation-get-reservations.default",
+				(long) sessionConfig.getMaximumSessions() * staticNumber(
+						McpLegacySessionStore.class.getName(), "MAXIMUM_LOGICAL_GETS_PER_SESSION").longValue());
+		put(values, "queue.legacy-http-observation-transient-reservations.default",
+				(long) Math.min(4, application.handlerConcurrency()) + application.handlerQueueCapacity());
 		put(values, "session.maximum-uri-grants", staticNumber(
 				McpLegacySessionStore.class.getName(), "MAXIMUM_URI_GRANTS_PER_SESSION"));
 		put(values, "session.maximum-uri-grants-per-owner", staticNumber(

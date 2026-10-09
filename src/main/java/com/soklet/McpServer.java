@@ -1523,7 +1523,8 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 * rather than appends to, the previous set. Soklet snapshots the supplied
 		 * values during the call. The default is the empty set, which is valid only
 		 * when the configured bind host is a loopback literal or {@code localhost}.
-		 * A non-loopback bind host requires at least one explicit value.
+		 * A non-loopback bind host requires at least one explicit value. Hostname labels
+		 * accept ASCII letters, digits and hyphens; underscores are rejected.
 		 *
 		 * @param allowedHosts allowed hostnames or IP literals, or null to restore
 		 *                     the empty set

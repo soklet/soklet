@@ -108,6 +108,8 @@ public class StreamingCleanupDiagnosticsTests {
 	}
 
 	@Test
+	// Live HTTP and simulator owners run sequentially with separate cleanup budgets.
+	@Timeout(115)
 	void ordinaryWriterFailureIsStillAProducerFailureWithoutACleanupDiagnostic() throws Exception {
 		for (boolean simulated : List.of(false, true)) {
 			IOException failure = new IOException("application writer failed");

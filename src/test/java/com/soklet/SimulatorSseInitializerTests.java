@@ -47,8 +47,18 @@ public class SimulatorSseInitializerTests {
 				try { client.unicastEvent(event("helper")); }
 				catch (Throwable failure) { helperFailure.set(failure); }
 			}, "sse-catchup-helper");
+			helper.setDaemon(true);
 			helper.start();
-			helper.join();
+			try {
+				helper.join(3_000);
+				Assertions.assertFalse(helper.isAlive(), "Catch-up helper did not return");
+			} finally {
+				if (helper.isAlive()) {
+					helper.interrupt();
+					helper.join(1_000);
+					Assertions.assertFalse(helper.isAlive(), "Catch-up helper retained work after interruption");
+				}
+			}
 		};
 		SokletSimulator.run(config(fixture, Duration.ofSeconds(2)), simulator -> {
 			SseRequestResult.HandshakeAccepted accepted = accepted(simulator);

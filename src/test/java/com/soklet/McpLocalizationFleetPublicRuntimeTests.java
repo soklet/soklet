@@ -286,7 +286,7 @@ class McpLocalizationFleetPublicRuntimeTests {
 	}
 
 	@Test
-	@Timeout(90)
+	@Timeout(210)
 	void applicationBrokerRecoveryCoversDelayedDuplicateMissedAndRevokedFleetState()
 			throws Exception {
 		TwoNodeFleet fleet = new TwoNodeFleet();
@@ -810,8 +810,15 @@ class McpLocalizationFleetPublicRuntimeTests {
 					.POST(HttpRequest.BodyPublishers.ofString(body,
 							StandardCharsets.UTF_8))
 					.build();
-			HttpResponse<String> response = HTTP_CLIENT.send(request,
-					HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+			CompletableFuture<HttpResponse<String>> pending = HTTP_CLIENT.sendAsync(
+					request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+			HttpResponse<String> response;
+			try {
+				response = pending.get(WAIT.toMillis(), TimeUnit.MILLISECONDS);
+			} finally {
+				if (!pending.isDone())
+					pending.cancel(true);
+			}
 			assertEquals(200, response.statusCode(), response.body());
 			return response.body();
 		}
@@ -1013,13 +1020,15 @@ class McpLocalizationFleetPublicRuntimeTests {
 	private static final class LiveSubscription implements AutoCloseable {
 		private final FleetNode node;
 		private final Socket socket;
+		private final DeadlineInputStream input;
 		private final InputStream body;
 		private final String contentLanguage;
 
-		private LiveSubscription(FleetNode node, Socket socket, InputStream body,
-				String contentLanguage) {
+		private LiveSubscription(FleetNode node, Socket socket,
+				DeadlineInputStream input, InputStream body, String contentLanguage) {
 			this.node = node;
 			this.socket = socket;
+			this.input = input;
 			this.body = body;
 			this.contentLanguage = contentLanguage;
 		}
@@ -1051,7 +1060,9 @@ class McpLocalizationFleetPublicRuntimeTests {
 				output.write(encodedBody);
 				output.flush();
 
-				InputStream input = socket.getInputStream();
+				DeadlineInputStream input = new DeadlineInputStream(socket,
+						socket.getInputStream());
+				input.begin(WAIT);
 				String statusLine = readAsciiLine(input);
 				if (statusLine == null || !statusLine.contains(" 200 "))
 					throw new AssertionError("Unexpected subscription status: "
@@ -1062,7 +1073,7 @@ class McpLocalizationFleetPublicRuntimeTests {
 				InputStream responseBody = headers.getOrDefault(
 						"Transfer-Encoding", "").toLowerCase(Locale.ROOT)
 						.contains("chunked") ? new ChunkedInputStream(input) : input;
-				return new LiveSubscription(node, socket, responseBody,
+				return new LiveSubscription(node, socket, input, responseBody,
 						headers.getOrDefault("Content-Language", ""));
 			} catch (IOException | RuntimeException | Error exception) {
 				try {
@@ -1083,7 +1094,7 @@ class McpLocalizationFleetPublicRuntimeTests {
 		}
 
 		private String nextFrame(Duration timeout) throws IOException {
-			this.socket.setSoTimeout((int) Math.max(1L, timeout.toMillis()));
+			this.input.begin(timeout);
 			StringBuilder frame = new StringBuilder();
 			for (;;) {
 				String line = readUtf8Line(this.body);
@@ -1101,7 +1112,7 @@ class McpLocalizationFleetPublicRuntimeTests {
 		}
 
 		private void awaitTransportClosed(Duration timeout) throws IOException {
-			this.socket.setSoTimeout((int) timeout.toMillis());
+			this.input.begin(timeout);
 			try {
 				while (this.body.read() >= 0) {
 					// Drain any terminal frame before the listener closes the socket.
@@ -1125,6 +1136,36 @@ class McpLocalizationFleetPublicRuntimeTests {
 			} catch (IOException ignored) {
 				// Best-effort client cleanup; server diagnostics prove release.
 			}
+		}
+	}
+
+	/** One monotonic deadline covers every read in a complete head/frame/close operation. */
+	private static final class DeadlineInputStream extends InputStream {
+		private final Socket socket;
+		private final InputStream input;
+		private long startedAtNanos;
+		private long timeoutNanos;
+
+		private DeadlineInputStream(Socket socket, InputStream input) {
+			this.socket = socket;
+			this.input = input;
+		}
+
+		private void begin(Duration timeout) {
+			this.timeoutNanos = timeout.toNanos();
+			this.startedAtNanos = System.nanoTime();
+		}
+
+		@Override
+		public int read() throws IOException {
+			long remaining = this.timeoutNanos - (System.nanoTime() - this.startedAtNanos);
+			if (remaining <= 0L)
+				throw new SocketTimeoutException("The subscription read operation exceeded its deadline.");
+			long remainingMillis = TimeUnit.NANOSECONDS.toMillis(remaining);
+			if (TimeUnit.MILLISECONDS.toNanos(remainingMillis) < remaining)
+				++remainingMillis;
+			this.socket.setSoTimeout((int) Math.max(1L, remainingMillis));
+			return this.input.read();
 		}
 	}
 

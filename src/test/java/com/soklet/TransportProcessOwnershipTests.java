@@ -43,6 +43,18 @@ public class TransportProcessOwnershipTests {
 	}
 
 	@Test
+	void failedMcpStartupReleasesProcessLivenessWhilePublisherRemainsBlocked(@TempDir Path directory) throws Exception {
+		try (Child child = start("MCP_BLOCKED_STARTUP", directory)) {
+			awaitMarker(child, "publisher-entered");
+			// Startup plus cancellation and both shutdown phases can consume five
+			// seconds. Leave a reporting/process-exit reserve beyond that envelope.
+			assertTrue(child.process.waitFor(8, TimeUnit.SECONDS), "A retained daemon callback must not retain idle transport loops: " + child.log());
+			assertEquals(0, child.process.exitValue(), child.log());
+			assertEquals("false", Files.readString(directory.resolve("startup-complete")), "The blocked callback must remain truthful incomplete evidence.");
+		}
+	}
+
+	@Test
 	void sseKeepsProcessAliveAfterMainReturnsAndReleasesItOnClose(@TempDir Path directory) throws Exception {
 		assumeTrue(Runtime.version().feature() >= 21, "SSE requires virtual threads");
 		assertDirectLiveness("SSE", directory, List.of("sse-event-loop"));
@@ -194,14 +206,30 @@ public class TransportProcessOwnershipTests {
 					? SokletConfig.withSseServer(SseServer.withPort(0).host("127.0.0.1").build())
 					: SokletConfig.withHttpServer(HttpServer.withPort(0).host("127.0.0.1").concurrency(1).build());
 			if (mode.equals("BOTH")) builder.sseServer(SseServer.withPort(0).host("127.0.0.1").build());
-			if (mode.equals("MCP")) {
-				McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion("liveness-fixture", "1").build(),
-						java.util.Set.of(McpProtocolVersion.V2026_07_28)).build();
+			if (mode.startsWith("MCP")) {
+				McpEndpoint.Builder endpointBuilder = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion("liveness-fixture", "1").build(),
+						java.util.Set.of(McpProtocolVersion.V2026_07_28));
+				if (mode.equals("MCP_BLOCKED_STARTUP")) {
+					McpSubscriptionEventPublisher publisher = new McpSubscriptionEventPublisher() {
+						@Override public McpSubscriptionEventRegistration subscribe(McpSubscriptionEventListener listener) {
+							write(directory, "publisher-entered", "true");
+							for (;;) { java.util.concurrent.locks.LockSupport.parkNanos(TimeUnit.SECONDS.toNanos(1)); Thread.interrupted(); }
+						}
+						@Override public void publish(McpSubscriptionEvent event) {}
+					};
+					endpointBuilder.resourceListHandler((request, list, features) -> McpResourcePage.builder().build(),
+							java.util.Set.of(McpProtocolVersion.V2026_07_28))
+							.subscriptionProtocolVersions(java.util.Set.of(McpProtocolVersion.V2026_07_28))
+							.subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(publisher,
+									java.util.Set.of(McpSubscriptionNotificationType.RESOURCES_LIST_CHANGED)).build());
+				}
+				McpEndpoint endpoint = endpointBuilder.build();
 				builder = SokletConfig.withMcpServer(McpServer.withPort(0).host("127.0.0.1")
+						.subscriptionAuthorizer(McpSubscriptionAuthorizer.denyAllInstance())
 						.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint))).build());
 			}
 			var methods = new java.util.HashSet<java.lang.reflect.Method>();
-			if (!mode.equals("SSE") && !mode.equals("MCP")) methods.add(Routes.class.getMethod("ready"));
+			if (!mode.equals("SSE") && !mode.startsWith("MCP")) methods.add(Routes.class.getMethod("ready"));
 			if (mode.equals("SSE") || mode.equals("BOTH")) methods.add(Routes.class.getMethod("events"));
 			SokletConfig config = builder.resourceMethodResolver(ResourceMethodResolver.fromMethods(methods))
 					.lifecycleObserver(observer).lifecyclePolicy(LifecyclePolicy.builder()
@@ -233,6 +261,11 @@ public class TransportProcessOwnershipTests {
 				return;
 			}
 			Soklet soklet = Soklet.fromConfig(config);
+			if (mode.equals("MCP_BLOCKED_STARTUP")) {
+				try { soklet.start(); throw new AssertionError("Blocked startup succeeded."); }
+				catch (SokletStartupException failure) { write(directory, "startup-complete", failure.getShutdownResult().isComplete().toString()); }
+				return;
+			}
 			if (mode.equals("MANUAL_HOOK")) {
 				Runtime.getRuntime().addShutdownHook(new Thread(() -> {
 					soklet.close();

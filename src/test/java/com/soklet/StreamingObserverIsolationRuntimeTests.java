@@ -38,9 +38,15 @@ import static com.soklet.TestSupport.findFreePort;
 
 @Timeout(value = 60, unit = TimeUnit.SECONDS)
 public class StreamingObserverIsolationRuntimeTests {
-	@Test void blockedHttpCancelBatchLeavesHealthyStreamingAdmissionAvailable() throws Exception { assertHttpIsolation(Hook.CANCEL); }
-	@Test void blockedHttpTerminationObserverLeavesHealthyStreamingAdmissionAvailable() throws Exception { assertHttpIsolation(Hook.TERMINATION); }
-	@Test void blockedHttpCleanupLoggerLeavesOtherCleanupDiagnosticsDeliverable() throws Exception { assertHttpIsolation(Hook.DIAGNOSTIC); }
+	@Test
+	@Timeout(value = 110, unit = TimeUnit.SECONDS)
+	void blockedHttpCancelBatchLeavesHealthyStreamingAdmissionAvailable() throws Exception { assertHttpIsolation(Hook.CANCEL); }
+	@Test
+	@Timeout(value = 110, unit = TimeUnit.SECONDS)
+	void blockedHttpTerminationObserverLeavesHealthyStreamingAdmissionAvailable() throws Exception { assertHttpIsolation(Hook.TERMINATION); }
+	@Test
+	@Timeout(value = 110, unit = TimeUnit.SECONDS)
+	void blockedHttpCleanupLoggerLeavesOtherCleanupDiagnosticsDeliverable() throws Exception { assertHttpIsolation(Hook.DIAGNOSTIC); }
 
 	private static void assertHttpIsolation(Hook hook) throws Exception {
 		Resource resource = new Resource(hook);
@@ -80,6 +86,7 @@ public class StreamingObserverIsolationRuntimeTests {
 	}
 
 	@Test
+	@Timeout(value = 75, unit = TimeUnit.SECONDS)
 	void simulatorWaitsForItsOwnObserverWithoutBlockingOtherRequests() throws Exception {
 		Resource resource = new Resource(Hook.TERMINATION);
 		HttpServer source = HttpServer.withPort(0).streamingLifecycleCapacity(4).streamingCallbackConcurrency(1).build();

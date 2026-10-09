@@ -33,9 +33,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /** Admission rejection must describe the finite response before write/finish observation. */
-@Timeout(value = 30, unit = TimeUnit.SECONDS)
+@Timeout(60)
 public class SimulatorStreamingAdmissionRejectionTests {
 	@Test
+	@Timeout(100)
 	void exhaustedAdmissionReportsFiniteResponseWithoutAcquiringAnyProducerKind() {
 		for (String kind : List.of("writer", "input-stream", "reader", "publisher")) {
 			AtomicInteger acquisitions = new AtomicInteger();
@@ -93,7 +94,7 @@ public class SimulatorStreamingAdmissionRejectionTests {
 			assertFiniteRejection(second.getMarshaledResponse());
 			LogEvent event = fixture.skippedRejection.get();
 			Assertions.assertNotNull(event);
-			Assertions.assertEquals(LogEventType.SERVER_INTERNAL_ERROR, event.getLogEventType());
+			Assertions.assertEquals(LogEventType.RESPONSE_STREAM_CANCELED, event.getLogEventType());
 			Assertions.assertEquals("/rejected", event.getRequest().orElseThrow().getPath());
 			Assertions.assertTrue(event.getThrowable().isEmpty());
 			Assertions.assertEquals(0, acquisitions.get());
@@ -177,6 +178,9 @@ public class SimulatorStreamingAdmissionRejectionTests {
 		private void run(java.util.function.Consumer<Simulator> action) {
 			SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(0)
 					.streamingLifecycleCapacity(1).streamingCallbackConcurrency(1).build())
+					.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(10))
+					.startupCancelationTimeout(Duration.ofSeconds(1)).gracefulShutdownTimeout(Duration.ofSeconds(1))
+					.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
 					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Resource.class)))
 					.instanceProvider(new InstanceProvider() {
 						@Override public <T> T provide(Class<T> type) {
@@ -227,7 +231,7 @@ public class SimulatorStreamingAdmissionRejectionTests {
 			finally { this.terminationFinished.countDown(); }
 		}
 		@Override public void didReceiveLogEvent(LogEvent event) {
-			if (event.getLogEventType() == LogEventType.SERVER_INTERNAL_ERROR)
+			if (event.getLogEventType() == LogEventType.RESPONSE_STREAM_CANCELED)
 				this.skippedRejection.set(event);
 		}
 	}

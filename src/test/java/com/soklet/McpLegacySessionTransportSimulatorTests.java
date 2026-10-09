@@ -54,6 +54,7 @@ class McpLegacySessionTransportSimulatorTests {
 	}
 
 	@Test
+	@Timeout(100)
 	void getAndDeleteSnapshotsUseTheConfiguredEndpointInSimulation() throws Exception {
 		for (McpProtocolVersion version : LEGACY) {
 			MetricsCollector collector = MetricsCollector.defaultInstance();
@@ -90,6 +91,7 @@ class McpLegacySessionTransportSimulatorTests {
 	}
 
 	@Test
+	@Timeout(90)
 	void singleLegacyViewSupportsHeaderlessGetAndDeleteWithVerifiedSession() throws Exception {
 		for (McpProtocolVersion version : LEGACY)
 			SokletSimulator.run(configuration(new CopyOnWriteArrayList<>(), Set.of(version)), simulator -> {
@@ -106,6 +108,7 @@ class McpLegacySessionTransportSimulatorTests {
 	}
 
 	@Test
+	@Timeout(110)
 	void rejectedGetPublishesAFiniteEmptyResponseAndDiscardsTheUnopenedChannel() throws Exception {
 		for (McpProtocolVersion version : LEGACY) {
 			SokletSimulator.run(configuration(new CopyOnWriteArrayList<>()), simulator -> {

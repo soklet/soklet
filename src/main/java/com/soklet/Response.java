@@ -49,6 +49,14 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * Header and cookie collections are immutable snapshots, including the lists of header values.
  * <p>
+ * The built-in HTTP transport requires final ordinary response statuses from {@code 200} through
+ * {@code 599} and owns wire framing. It controls {@code Connection}, {@code Content-Length} and
+ * {@code Transfer-Encoding}, removes other hop-by-hop and Connection-nominated fields, and preserves
+ * a valid explicit representation length on a bodyless HEAD response when its status allows it.
+ * A validated {@code 426} response may advertise {@code Upgrade}. The default response marshaler
+ * rejects {@link StreamingResponseBody} as this response's body; return a {@link MarshaledResponse}
+ * with its streaming body configured instead.
+ * <p>
  * Full documentation is available at <a href="https://www.soklet.com/docs/response-writing">https://www.soklet.com/docs/response-writing</a>.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>

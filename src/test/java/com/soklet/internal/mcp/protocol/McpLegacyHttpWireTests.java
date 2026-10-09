@@ -53,6 +53,41 @@ public class McpLegacyHttpWireTests {
 			""";
 
 	@Test
+	@Timeout(60)
+	public void modernProbeOfLegacyOnlyUrlAllowsInitializationFallbackAndModernOnlyUrlKeepsDiagnostics() throws Exception {
+		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
+				McpImplementationMetadata.withNameAndVersion("era-fallback", "1")).build();
+		McpApplicationRequestRouter router = McpApplicationRequestRouter.fromHandlers(Map.of());
+		McpHttpEndpointPolicy legacyPolicy = new McpHttpEndpointPolicy("/legacy", Set.of(), McpAbsentOriginPolicy.ALLOW,
+				CorsAuthorizer.rejectAllInstance(), ignored -> McpAdmissionDecision.acceptedAnonymous());
+		McpHttpEndpointPolicy modernPolicy = new McpHttpEndpointPolicy("/modern", Set.of(), McpAbsentOriginPolicy.ALLOW,
+				CorsAuthorizer.rejectAllInstance(), ignored -> McpAdmissionDecision.acceptedAnonymous());
+		McpHttpEndpointBinding legacy = new McpHttpEndpointBinding(legacyPolicy, endpoint, router,
+				McpRuntimeObservationSink.disabledInstance(), List.of(), Optional.empty(),
+				Map.of("2025-06-18", endpoint, "2025-11-25", endpoint));
+		McpHttpEndpointBinding modern = new McpHttpEndpointBinding(modernPolicy, endpoint, router,
+				McpRuntimeObservationSink.disabledInstance(), List.of(), Optional.empty(), Map.of("2026-07-28", endpoint));
+		try (McpHttpServerRuntime runtime = new McpHttpServerRuntime(McpHttpTransportConfiguration.productionDefaults(0), List.of(legacy, modern))) {
+			int port = runtime.start().getPort();
+			HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
+			URI legacyUrl = URI.create("http://127.0.0.1:" + port + "/legacy"), modernUrl = URI.create("http://127.0.0.1:" + port + "/modern");
+			String probe = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"server/discover\",\"params\":{\"_meta\":{"
+					+ "\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\",\"io.modelcontextprotocol/clientCapabilities\":{}}}}";
+			HttpResponse<String> rejected = post(client, legacyUrl, Optional.of("2026-07-28"), Optional.of("server/discover"), probe);
+			Assertions.assertEquals(400, rejected.statusCode());
+			Assertions.assertEquals("", rejected.body(), "A recognized modern error would prevent initialize fallback.");
+			HttpResponse<String> initialized = post(client, legacyUrl, Optional.empty(), Optional.empty(), METHOD_MIRRORED_LEGACY_INITIALIZE);
+			Assertions.assertEquals(200, initialized.statusCode(), initialized.body());
+			Assertions.assertTrue(initialized.body().contains("\"protocolVersion\":\"2025-11-25\""), initialized.body());
+			HttpResponse<String> diagnostic = post(client, modernUrl, Optional.of("2025-11-25"), Optional.empty(),
+					"{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\",\"params\":{}}");
+			Assertions.assertEquals(400, diagnostic.statusCode());
+			Assertions.assertTrue(diagnostic.body().contains("\"supported\":[\"2026-07-28\"]"), diagnostic.body());
+			Assertions.assertFalse(diagnostic.body().contains("\"supported\":[]"), diagnostic.body());
+		}
+	}
+
+	@Test
 	public void methodOnlyInitializeMirrorIsAConstrainedLegacyBootstrap() {
 		McpJsonRpcEnvelope initialize = ENVELOPES.decode(
 				METHOD_MIRRORED_LEGACY_INITIALIZE);

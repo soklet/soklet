@@ -13,6 +13,22 @@ import java.util.zip.ZipOutputStream;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ManagedResponseStreamCancelationRaceTests {
+	@Test void encoderAdoptedAfterCancelationStillClosesWithoutAFalseCleanupFailure() {
+		Token token = new Token();
+		List<Throwable> cleanupFailures = new ArrayList<>();
+		AtomicInteger closes = new AtomicInteger();
+		ManagedResponseStream stream = stream(token, new ManagedResponseStream.Output() {
+			@Override public void write(ByteBuffer bytes) { fail("Canceled encoder wrote bytes"); }
+			@Override public void flush() { fail("Canceled encoder flushed"); }
+			@Override public boolean isOpen() { return !token.isCanceled(); }
+		}, cleanupFailures);
+		assertThrows(StreamingResponseCanceledException.class, () -> stream.run(writer -> {
+			token.canceled.set(true);
+			writer.own((AutoCloseable) () -> { writer.write(new byte[]{1}); writer.flush(); closes.incrementAndGet(); });
+		}));
+		assertEquals(1, closes.get());
+		assertTrue(cleanupFailures.isEmpty(), cleanupFailures.toString());
+	}
 	@Test void outputClosingDuringWritableCheckPreservesTheElectedReason() {
 		Token token = new Token();
 		List<Throwable> cleanupFailures = new ArrayList<>();

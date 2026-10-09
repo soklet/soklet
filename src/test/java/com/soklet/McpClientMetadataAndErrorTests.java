@@ -75,6 +75,7 @@ class McpClientMetadataAndErrorTests {
 	}
 
 	@Test
+	@Timeout(180)
 	void blankClientInformationSurvivesAdmissionAndRememberedSessionMetadata() throws Exception {
 		for (McpProtocolVersion version : List.of(McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28))
 			for (boolean sessions : version == McpProtocolVersion.V2026_07_28 ? List.of(false) : List.of(false, true)) {
@@ -112,6 +113,7 @@ class McpClientMetadataAndErrorTests {
 	}
 
 	@Test
+	@Timeout(150)
 	void sessionCallsAcceptBodiesLargerThanThePersistentEvidenceBudget() throws Exception {
 		String payload = "x".repeat(650_000);
 		for (McpProtocolVersion version : List.of(McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25))
@@ -136,6 +138,7 @@ class McpClientMetadataAndErrorTests {
 	}
 
 	@Test
+	@Timeout(180)
 	void missingOrNonstringClientInformationRemainsAProtocolError() throws Exception {
 		for (McpProtocolVersion version : List.of(McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28))
 			SokletSimulator.run(configuration(false, new CopyOnWriteArrayList<>(), new CopyOnWriteArrayList<>()), simulator -> {
@@ -179,7 +182,13 @@ class McpClientMetadataAndErrorTests {
 						return McpAdmissionDecision.accepted(McpAdmissionIdentity.withRateLimitPartitionKey("owner").authorizationPartitionKey("owner").principal("owner").build());
 					});
 			if (sessions) builder.sessionConfig(McpSessionConfig.withOwnerKeyResolver(identity -> "owner").build());
-		}).resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).build();
+		}).resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecyclePolicy(LifecyclePolicy.builder()
+					.startupTimeout(Duration.ofSeconds(10))
+					.startupCancelationTimeout(Duration.ofSeconds(1))
+					.gracefulShutdownTimeout(Duration.ofSeconds(1))
+					.forcedShutdownTimeout(Duration.ofSeconds(1))
+					.build()).build();
 	}
 
 	private static String initializeBody(McpProtocolVersion version, String clientInfo) {

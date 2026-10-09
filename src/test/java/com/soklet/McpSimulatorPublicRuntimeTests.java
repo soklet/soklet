@@ -1303,8 +1303,8 @@ public class McpSimulatorPublicRuntimeTests {
 					.metricsCollector(metrics)
 					.lifecycleObservers(List.of(lifecycle))
 					.lifecyclePolicy(LifecyclePolicy.builder()
-							.startupTimeout(Duration.ofSeconds(30))
-							.startupCancelationTimeout(Duration.ofSeconds(2))
+							.startupTimeout(Duration.ofSeconds(10))
+							.startupCancelationTimeout(Duration.ofSeconds(1))
 							.gracefulShutdownTimeout(Duration.ZERO)
 							.forcedShutdownTimeout(
 									this.forcedShutdownTimeout)

@@ -1497,6 +1497,9 @@ class ConnectionEventLoop {
             if (!closed.compareAndSet(false, true))
                 return;
 
+            if (cause instanceof SocketChannelIo.SocketIoException)
+                cause = cause.getCause();
+
             StreamTerminationReason effectiveReason = cancelationReason == null
                     ? StreamTerminationReason.CLIENT_DISCONNECTED
                     : cancelationReason;

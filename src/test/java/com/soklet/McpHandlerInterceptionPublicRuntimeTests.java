@@ -415,6 +415,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 	}
 
 	@Test
+	@Timeout(180)
 	public void interceptorsObserveAndRethrowExactHandlerErrorsOnEveryRevision() throws Exception {
 		for (McpProtocolVersion protocolVersion : List.of(McpProtocolVersion.V2025_06_18,
 				McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28)) {
@@ -464,6 +465,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 	}
 
 	@Test
+	@Timeout(180)
 	public void interceptorCanRecoverHandlerErrorsThroughNormalResultValidation() throws Exception {
 		for (McpProtocolVersion protocolVersion : List.of(McpProtocolVersion.V2025_06_18,
 				McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28)) {
@@ -505,6 +507,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 	}
 
 	@Test
+	@Timeout(540)
 	public void copiedWrappedStaleAndInterceptorAuthoredErrorsStayPrivate() throws Exception {
 		for (McpProtocolVersion protocolVersion : List.of(McpProtocolVersion.V2025_06_18,
 				McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28)) {
@@ -651,8 +654,13 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 			request.header("Mcp-Method", operation.method());
 			operation.name().ifPresent(name -> request.header("Mcp-Name", name));
 		}
-		return ERROR_HTTP.send(request.POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8)).build(),
+		var response = ERROR_HTTP.sendAsync(request.POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8)).build(),
 				HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+		try {
+			return response.get(5, TimeUnit.SECONDS);
+		} finally {
+			response.cancel(true);
+		}
 	}
 
 	private static void assertPrivateError(HttpResponse<String> response, McpProtocolVersion protocolVersion) {
@@ -844,6 +852,12 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecyclePolicy(LifecyclePolicy.builder()
+					.startupTimeout(Duration.ofSeconds(10))
+					.startupCancelationTimeout(Duration.ofSeconds(1))
+					.gracefulShutdownTimeout(Duration.ofSeconds(1))
+					.forcedShutdownTimeout(Duration.ofSeconds(1))
+					.build())
 				.build());
 	}
 
@@ -874,13 +888,18 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 				.header("MCP-Protocol-Version", PROTOCOL_VERSION)
 				.header("Mcp-Method", method);
 		operationName.ifPresent(value -> request.header("Mcp-Name", value));
-		return HttpClient.newBuilder()
+		var response = HttpClient.newBuilder()
 				.connectTimeout(Duration.ofSeconds(5))
 				.version(HttpClient.Version.HTTP_1_1)
 				.build()
-				.send(request.POST(HttpRequest.BodyPublishers.ofString(
+				.sendAsync(request.POST(HttpRequest.BodyPublishers.ofString(
 						body, StandardCharsets.UTF_8)).build(),
 						HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+		try {
+			return response.get(5, TimeUnit.SECONDS);
+		} finally {
+			response.cancel(true);
+		}
 	}
 
 	private static String request(String id, String method,

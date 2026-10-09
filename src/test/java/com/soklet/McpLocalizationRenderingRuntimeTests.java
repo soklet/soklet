@@ -215,6 +215,7 @@ class McpLocalizationRenderingRuntimeTests {
 	}
 
 	@Test
+	@Timeout(value = 160, unit = TimeUnit.SECONDS)
 	void everyFrameworkListLocalizesServerMetadataIncludingEmptyCatalogs() {
 		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH,
 				request -> context(Locale.FRENCH, text -> McpLocalizationResult.localized("FR:" + text.getDefaultText())))
@@ -236,6 +237,7 @@ class McpLocalizationRenderingRuntimeTests {
 	}
 
 	@Test
+	@Timeout(value = 160, unit = TimeUnit.SECONDS)
 	void serverMetadataFailureUsesTheWholeCatalogFailurePolicy() {
 		for (McpLocalizationFailurePolicy policy : McpLocalizationFailurePolicy.values()) {
 			McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH,

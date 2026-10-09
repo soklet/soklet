@@ -178,7 +178,7 @@ final class McpApplicationHandlerDispatcher {
 		this.executorService = requireNonNull(executorService);
 		this.observer = requireNonNull(observer);
 		this.slotReleaseObserver = requireNonNull(slotReleaseObserver);
-		this.queue = new ArrayDeque<>(queueCapacity);
+		this.queue = new ArrayDeque<>();
 		this.activeTickets = Collections.newSetFromMap(new IdentityHashMap<>());
 		this.accepting = true;
 		this.draining = false;
@@ -474,6 +474,7 @@ final class McpApplicationHandlerDispatcher {
 	}
 
 	private void onSubmissionFailure(@NonNull Ticket ticket, @NonNull Throwable failure) {
+		List<Ticket> stranded = new ArrayList<>();
 		synchronized (lock) {
 			if (ticket.state != TicketState.DISPATCHED)
 				throw new IllegalStateException(
@@ -487,8 +488,22 @@ final class McpApplicationHandlerDispatcher {
 			recordHandlerExecutionFinished();
 			if (failure instanceof RejectedExecutionException)
 				recordHandlerCapacityRejected();
-			// Reject only this new handoff. Accepted queued tickets remain bounded
-			// and are drained by existing workers or a later successful admission.
+			// Existing physical workers can drain accepted work. If no worker
+			// remains, fail these tickets truthfully rather than leave them waiting
+			// until their deadline or recursively retry a rejecting executor.
+			if (activeSlots == 0) {
+				while (!queue.isEmpty()) {
+					Ticket queued = queue.remove();
+					queued.state = TicketState.REJECTED;
+					stranded.add(queued);
+					recordHandlerDequeued();
+					recordHandlerCapacityRejected();
+				}
+			}
+		}
+		for (Ticket queued : stranded) {
+			notifyFailure(queued, failure);
+			notifyPhysicalExit(queued);
 		}
 		notifySlotReleased();
 		notifyPhysicalExit(ticket);

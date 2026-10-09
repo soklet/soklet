@@ -145,7 +145,9 @@ public interface SseServer {
 		 * The {@link com.soklet.Soklet} instance hands an {@link HttpRequestResult} to the
 		 * response consumer. Use {@link HttpRequestResult#getMarshaledResponse()} for the
 		 * offered HTTP response and {@link HttpRequestResult#getSseHandshakeResult()} for
-		 * the logical handshake decision. An absent or rejected handshake must not be
+		 * the logical handshake decision. The public result does not expose a handling-failure
+		 * cause when that optional is absent, so a custom transport cannot reproduce every
+		 * built-in failure cause from the result alone. An absent or rejected handshake must not be
 		 * inferred to be accepted from an HTTP status code alone.
 		 * <p>
 		 * For an actually accepted connection, the transport preserves the
@@ -155,6 +157,9 @@ public interface SseServer {
 		 * writes and broadcaster activation wait for successful return. Initializer failure,
 		 * admission failure or prior termination prevents activation. The transport owns
 		 * connection lifetime, queue bounds, shutdown and honest termination proof.
+		 * Accepted responses use status 200. The transport validates headers and EventSource
+		 * framing and delivers establishment, failed-handshake and termination notifications
+		 * to its lifecycle observer and metrics collector, containing callback failures.
 		 * Establishment observation must precede termination observation even if
 		 * initialization fails. See {@link SseClientInitializer} for the failure contract.
 		 *
@@ -354,10 +359,11 @@ public interface SseServer {
 		}
 
 		/**
-		 * Sets the transport write timeout for established SSE streams.
+		 * Sets the transport write timeout for SSE stream, handshake and rejection writes.
 		 * <p>
 		 * Passing {@code null} restores the built-in default of 30 seconds. Use
-		 * {@link Duration#ZERO} to disable SSE stream write timeouts.
+		 * {@link Duration#ZERO} to disable all of these write timeouts, including
+		 * handshake and failsafe response writes.
 		 *
 		 * @param writeTimeout the write timeout, or {@code null} for the default
 		 * @return this builder

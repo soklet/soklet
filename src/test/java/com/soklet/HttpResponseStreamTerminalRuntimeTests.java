@@ -83,7 +83,9 @@ public class HttpResponseStreamTerminalRuntimeTests {
         } finally { if (interrupted) Thread.currentThread().interrupt(); }
     }
     private static SokletConfig config(HttpServer server, Observation observation) {
-        return config(server,observation,null);
+        return config(server,observation,LifecyclePolicy.builder()
+            .startupTimeout(Duration.ofSeconds(10)).startupCancelationTimeout(Duration.ofSeconds(1))
+            .gracefulShutdownTimeout(Duration.ofSeconds(1)).forcedShutdownTimeout(Duration.ofSeconds(1)).build());
     }
     private static SokletConfig config(HttpServer server, Observation observation, LifecyclePolicy policy) {
         return SokletConfig.withHttpServer(server).resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Resource.class)))
@@ -239,7 +241,8 @@ public class HttpResponseStreamTerminalRuntimeTests {
         Observation o=new Observation();CountDownLatch entered=new CountDownLatch(1);
         writer=stream->{entered.countDown();new CountDownLatch(1).await(5,TimeUnit.SECONDS);};int port=findFreePort();
         SokletConfig config=config(HttpServer.withPort(port).host("127.0.0.1").build(),o,
-            LifecyclePolicy.builder().gracefulShutdownTimeout(Duration.ZERO)
+            LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(10)).startupCancelationTimeout(Duration.ofSeconds(1))
+                .gracefulShutdownTimeout(Duration.ZERO)
                 .forcedShutdownTimeout(Duration.ofSeconds(2)).build());
         try(Soklet soklet=Soklet.fromConfig(config)) {
             soklet.start();try(Socket socket=request(port,"GET","HTTP/1.1")) {

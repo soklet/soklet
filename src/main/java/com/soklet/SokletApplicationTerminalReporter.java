@@ -139,8 +139,8 @@ final class DefaultLifecycleTerminalReporter implements LifecycleTerminalReporte
 				.append("cleanupFailure=").append(safeThrowable(failure))
 				.append('\n'));
 		result.retentionSummary().ifPresent(retention -> report
-				.append("retainedCounts=").append(retention.counts()).append('\n')
-				.append("retainedSummary=").append(retention.summary()).append('\n'));
+				.append("residualComponentCounts=").append(retention.counts()).append('\n')
+				.append("residualComponentSummary=").append(retention.summary()).append('\n'));
 
 		LifecycleTransitionSnapshot transitions = snapshot.coreDiagnostics()
 				.transitionSnapshot();

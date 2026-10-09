@@ -505,11 +505,11 @@ public class McpHttpServerRuntimeTests {
 			Assertions.assertEquals(200, discover(mcpPort, "1").status());
 
 			ordinary.stop();
-			ordinary.join();
+			Assertions.assertTrue(ordinary.join(Duration.ofSeconds(3)));
 			Assertions.assertEquals(200, discover(mcpPort, "2").status());
 		} finally {
 			ordinary.stop();
-			ordinary.join();
+			Assertions.assertTrue(ordinary.join(Duration.ofSeconds(3)));
 			mcp.close();
 		}
 	}

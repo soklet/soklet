@@ -155,8 +155,8 @@ class SokletApplicationTerminalReporterTests {
 		Assertions.assertTrue(report.contains("cleanupFailure="
 				+ TimeoutExceptionForTest.class.getName() + "\n"));
 		Assertions.assertTrue(report.contains(
-				"retainedCounts={CALLBACK=2, LIFECYCLE_CALL=1}\n"));
-		Assertions.assertTrue(report.contains("retainedSummary=retained\\nsummary\n"));
+				"residualComponentCounts={CALLBACK=2, LIFECYCLE_CALL=1}\n"));
+		Assertions.assertTrue(report.contains("residualComponentSummary=retained\\nsummary\n"));
 		Assertions.assertTrue(report.contains(
 				"observerAccepted=4,pending=2,active=true,sealed=true,disabled=false,failed=1\n"));
 		Assertions.assertTrue(report.contains(
@@ -241,9 +241,9 @@ class SokletApplicationTerminalReporterTests {
 				SokletApplicationPrimaryOutcome.INCOMPLETE_SHUTDOWN,
 				Optional.empty(), notConfigured(), diagnostics(result), 50L)));
 
-		Assertions.assertTrue(report.contains("retainedCounts={LIFECYCLE_CALL=3}"));
+		Assertions.assertTrue(report.contains("residualComponentCounts={LIFECYCLE_CALL=3}"));
 		Assertions.assertTrue(report.contains(
-				"retainedSummary=only-this-bounded-summary"));
+				"residualComponentSummary=only-this-bounded-summary"));
 		Assertions.assertTrue(result.retentionSummary().isPresent());
 	}
 

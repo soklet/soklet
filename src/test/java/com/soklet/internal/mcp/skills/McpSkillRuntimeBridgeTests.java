@@ -205,10 +205,9 @@ class McpSkillRuntimeBridgeTests {
 				endpoint, com.soklet.McpRequestId.fromInteger(java.math.BigInteger.ZERO)));
 		assertThrows(IllegalArgumentException.class, () -> McpSkillRuntimeBridge.preflightPage(
 				List.of(registration), page, endpoint, com.soklet.McpRequestId.fromString(large)));
-		var reserved = com.soklet.McpSkillPage.builder().metadata(com.soklet.McpJsonObject.builder()
-				.put("io.modelcontextprotocol/serverInfo", "secret").build()).build();
-		var failure = assertThrows(IllegalArgumentException.class, () -> McpSkillRuntimeBridge.preflightPage(
-				List.of(), reserved, endpoint, com.soklet.McpRequestId.fromString("id")));
+		var failure = assertThrows(IllegalArgumentException.class, () ->
+				com.soklet.McpSkillPage.builder().metadata(com.soklet.McpJsonObject.builder()
+						.put("io.modelcontextprotocol/serverInfo", "secret").build()).build());
 		assertFalse(failure.getMessage().contains("secret"));
 		assertNull(failure.getCause());
 	}

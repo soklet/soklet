@@ -229,6 +229,10 @@ public class ResourceMethodBindingValidationTests {
 	private static String returnType(String transport) { return transport.equals("GET") ? "String" : "SseHandshakeResult"; }
 	private static String returnValue(String transport) { return transport.equals("GET") ? "\"ok\"" : "SseHandshakeResult.accept()"; }
 	private static SokletConfig.Builder configBuilder(Class<?> resource) { return SokletConfig.withHttpServer(HttpServer.withPort(0).build())
+			.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(java.time.Duration.ofSeconds(5))
+					.startupCancelationTimeout(java.time.Duration.ofSeconds(1))
+					.gracefulShutdownTimeout(java.time.Duration.ofSeconds(1))
+					.forcedShutdownTimeout(java.time.Duration.ofSeconds(1)).build())
 			.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(resource))); }
 	private static SokletConfig config(Class<?> resource) { return configBuilder(resource).build(); }
 	private static String body(HttpRequestResult result) { assertEquals(200, result.getMarshaledResponse().getStatusCode());

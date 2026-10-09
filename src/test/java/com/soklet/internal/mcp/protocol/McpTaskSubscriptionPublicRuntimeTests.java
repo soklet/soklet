@@ -129,6 +129,7 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 	private static final Duration POLL_INTERVAL = Duration.ofMillis(250);
 
 	@Test
+	@Timeout(90)
 	public void acknowledgedTasksSurviveTransientMaintenanceLookupAndUnsupportedInputGenerations() throws Exception {
 		for (boolean unavailable : List.of(true, false)) {
 			ScriptedTaskManager manager = new ScriptedTaskManager();
@@ -1904,6 +1905,9 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 	private static Soklet managedSoklet(@NonNull McpServer server,
 			@NonNull MetricsCollector metricsCollector) {
 		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				.lifecyclePolicy(com.soklet.LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(10))
+						.startupCancelationTimeout(Duration.ofSeconds(1)).gracefulShutdownTimeout(Duration.ofSeconds(1))
+						.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
 				.metricsCollector(metricsCollector)
@@ -1912,6 +1916,17 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 
 	private static int boundPort(@NonNull McpServer server) {
 		return server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
+	}
+
+	private static HttpResponse<String> sendBounded(HttpClient client, HttpRequest request)
+			throws Exception {
+		var response = client.sendAsync(request,
+				HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+		try {
+			return response.get(5, TimeUnit.SECONDS);
+		} finally {
+			response.cancel(true);
+		}
 	}
 
 	private static void seedTask(int port, @NonNull String taskId,
@@ -1933,12 +1948,10 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 				.POST(HttpRequest.BodyPublishers.ofString(body,
 						StandardCharsets.UTF_8))
 				.build();
-		HttpResponse<String> response = HttpClient.newBuilder()
+		HttpResponse<String> response = sendBounded(HttpClient.newBuilder()
 				.connectTimeout(Duration.ofSeconds(5))
 				.version(HttpClient.Version.HTTP_1_1)
-				.build()
-				.send(request, HttpResponse.BodyHandlers.ofString(
-						StandardCharsets.UTF_8));
+				.build(), request);
 		Assertions.assertEquals(200, response.statusCode(), response.body());
 		Assertions.assertEquals("no-store",
 				response.headers().firstValue("Cache-Control").orElseThrow());
@@ -1960,12 +1973,10 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 				.POST(HttpRequest.BodyPublishers.ofString(body,
 						StandardCharsets.UTF_8))
 				.build();
-		HttpResponse<String> response = HttpClient.newBuilder()
+		HttpResponse<String> response = sendBounded(HttpClient.newBuilder()
 				.connectTimeout(Duration.ofSeconds(5))
 				.version(HttpClient.Version.HTTP_1_1)
-				.build()
-				.send(request, HttpResponse.BodyHandlers.ofString(
-						StandardCharsets.UTF_8));
+				.build(), request);
 		Assertions.assertEquals(200, response.statusCode(), response.body());
 		Assertions.assertTrue(response.body().contains(
 				"\"id\":\"storm-control\""), response.body());

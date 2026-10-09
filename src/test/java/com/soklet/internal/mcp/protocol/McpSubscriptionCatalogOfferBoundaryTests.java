@@ -99,6 +99,7 @@ public class McpSubscriptionCatalogOfferBoundaryTests {
 	}
 
 	@Test
+	@Timeout(80)
 	public void synchronousCaptureLimitClosureDuringCatalogOfferTerminatesCleanly() {
 		McpSubscriptionEventPublisher publisher =
 				McpSubscriptionEventPublisher.fromInMemoryDefaults();

@@ -446,7 +446,9 @@ public final class ManagedResponseStream implements ResponseStream {
 		if (invalid != null) {
 			if (this.phase != Phase.CLOSED)
 				recordFailure(invalid);
-			entry.finish(true);
+			this.cleanupDepth.incrementAndGet();
+			try { entry.finish(true); }
+			finally { this.cleanupDepth.decrementAndGet(); }
 			addSuppressed(invalid, entry.cleanupFailure());
 			rethrow(invalid);
 			throw new AssertionError("Unreachable");
@@ -750,9 +752,7 @@ public final class ManagedResponseStream implements ResponseStream {
 			try {
 				claimedResource.close();
 			} catch (Throwable throwable) {
-				if (expectedCanceledZipCloseFailure(claimedResource, throwable))
-					addSuppressed(requireNonNull(failure), throwable);
-				else
+				if (!expectedCanceledZipCloseFailure(claimedResource, throwable))
 					cleanupFailed(throwable);
 			} finally {
 				synchronized (this) {

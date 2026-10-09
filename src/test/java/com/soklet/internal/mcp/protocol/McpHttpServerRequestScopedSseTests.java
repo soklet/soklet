@@ -177,6 +177,7 @@ public class McpHttpServerRequestScopedSseTests {
 	}
 
 	@Test
+	@Timeout(130)
 	public void finBeforeHttpOfferCancelsAllocatedStreamInEveryRevision() throws Exception {
 		assertPreOfferDisconnect(McpChunkedHttpClient.DisconnectMode.CLOSE);
 	}

@@ -563,7 +563,15 @@ together. Earlier `v1` fingerprints could conflate distinct keys and different
 versions are incomparable during rollout. Trace fingerprints are independent
 of request-state protection mode. Rotation changes new snapshots only.
 Fingerprints are operational comparison values, not authentication inputs,
-and should not be per-request labels. High-entropy keys remain required.
+and should not be per-request labels or logs. Avoid unbounded retention of
+fingerprint histories. High-entropy keys remain required.
+
+The `soklet-mcp-trace-correlation-v1` token is HMAC-SHA-256 over the UTF-8
+bytes of `soklet-mcp-trace-correlation-v1\0` (a trailing NUL byte), followed
+by the decoded 16-byte trace ID. Soklet retains the first 16 digest bytes and
+encodes them as unpadded Base64URL, producing 22 characters. Invalid and
+all-zero trace IDs are rejected. Reproducing a historical token requires the
+key captured for that request; key rotation does not rewrite earlier records.
 
 The built-in MCP observer/collector/transport failure log events omit request,
 response and throwable attachments and use fixed messages. Exact context,

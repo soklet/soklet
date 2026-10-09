@@ -45,31 +45,126 @@ class Round2SseRuntimeTests {
 			await(() -> fixture.reading.get() == 2);
 			// The bound rejects the socket before header reading begins. Send no
 			// unread request bytes that a TCP close could reset after the failsafe.
-			try (Socket excess = fixture.openSocket()) {
-				assertTrue(read(excess).startsWith("HTTP/1.1 503"));
+			for (int attempt = 0; attempt < 9; attempt++) {
+				try (Socket excess = fixture.openSocket()) {
+					assertTrue(read(excess).startsWith("HTTP/1.1 503"));
+				}
 			}
 			assertEquals(2, fixture.acceptedRequests.get());
-			assertEquals(1, fixture.rejectedRequests.get());
+			assertEquals(9, fixture.rejectedRequests.get());
 			assertEquals(0, fixture.resource.initializers.get());
+			assertEquals(java.util.Collections.nCopies(9, ConnectionRejectionReason.MAX_CONNECTIONS), fixture.connectionRejections);
+			assertEquals(4, fixture.logs.size(), "Overload logs are coalesced at 1, 2, 4 and 8 rejections");
+			assertTrue(fixture.logs.stream().allMatch(event -> event.getLogEventType() == LogEventType.SSE_SERVER_CONNECTION_REJECTED
+					&& event.getMessage().equals("Pending SSE handshake capacity exhausted")), fixture.logs.toString());
+			assertTrue(fixture.transportFailures.isEmpty(), fixture.transportFailures.toString());
 		}
 	}
 
-	@Test void gracefulShutdownPreservesAdmittedHeaderReadAndJoinsItsReader() throws Exception {
-		try (ReaderFixture fixture = new ReaderFixture(Duration.ofMillis(500), Duration.ofSeconds(3), 1);
-				Socket partial = fixture.partialRequest()) {
+	@Test void gracefulShutdownQuietlyClosesIdleSocketWithDefaultTimeoutsAndJoinsReaders() throws Exception {
+		assertDefaultHeaderPhaseShutdown(false);
+	}
+
+	@Test void gracefulShutdownQuietlyClosesPartialHeaderWithDefaultTimeoutsAndJoinsReaders() throws Exception {
+		assertDefaultHeaderPhaseShutdown(true);
+	}
+
+	private static void assertDefaultHeaderPhaseShutdown(boolean partial) throws Exception {
+		// Header reads are connection preparation, not admitted application work.
+		// Keep the real 60s header/15s graceful defaults: the old 500ms fixture
+		// hid the forced-shutdown regression and asserted the wrong drain policy.
+		try (ReaderFixture fixture = new ReaderFixture(null, null, 1);
+				Socket client = partial ? fixture.partialRequest() : fixture.openSocket()) {
+			assertEquals(Duration.ofSeconds(60), fixture.server.getRequestHeaderTimeout());
 			await(() -> fixture.reading.get() == 1);
 			var readerExecutor = fixture.server.getRequestReaderExecutorService().orElseThrow();
-			var shutdown = fixture.soklet.shutdown().toCompletableFuture();
-			await(fixture.server::isStopping);
-			assertFalse(shutdown.isDone());
-			assertFalse(readerExecutor.isShutdown(), "Admitted header reads retain their execution service");
-			assertTrue(read(partial).startsWith("HTTP/1.1 408"));
-			ShutdownResult result = shutdown.get(3, TimeUnit.SECONDS);
+			ShutdownResult result = fixture.soklet.shutdown().toCompletableFuture().get(3, TimeUnit.SECONDS);
+			assertEquals("", read(client), "Unparsed sockets close without synthetic error responses");
 			assertTrue(result.isComplete());
 			assertEquals(ShutdownDisposition.GRACEFUL, result.getShutdownDisposition());
 			assertTrue(readerExecutor.isTerminated());
 			assertEquals(1, fixture.acceptedRequests.get());
 			assertEquals(0, fixture.rejectedRequests.get());
+			assertEquals(0, fixture.resource.calls.get());
+			assertTrue(fixture.logs.isEmpty(), fixture.logs.toString());
+			assertTrue(fixture.connectionRejections.isEmpty(), fixture.connectionRejections.toString());
+			assertTrue(fixture.readFailures.isEmpty(), fixture.readFailures.toString());
+			assertTrue(fixture.transportFailures.isEmpty(), fixture.transportFailures.toString());
+		}
+	}
+
+	@Test void gracefulShutdownPreservesParsedQueuedHandshakesAndTheirResponse() throws Exception {
+		try (ReaderFixture fixture = new ReaderFixture(null, null, 3);
+				Socket running = fixture.request("GET /slow HTTP/1.1\r\nHost: localhost\r\n\r\n")) {
+			assertTrue(fixture.resource.entered.await(2, TimeUnit.SECONDS));
+			try (Socket queued = fixture.completeRequest()) {
+				var executor = (java.util.concurrent.ThreadPoolExecutor) fixture.server.getRequestHandlerExecutorService().orElseThrow();
+				await(() -> executor.getQueue().size() == 1);
+				var shutdown = fixture.soklet.shutdown().toCompletableFuture();
+				await(fixture.server::isStopping);
+				assertFalse(shutdown.isDone(), "Admitted application work retains its response obligation");
+				fixture.resource.release.countDown();
+				assertTrue(read(running).startsWith("HTTP/1.1 503"));
+				assertTrue(read(queued).startsWith("HTTP/1.1 503"));
+				ShutdownResult result = shutdown.get(3, TimeUnit.SECONDS);
+				assertTrue(result.isComplete());
+				assertEquals(ShutdownDisposition.GRACEFUL, result.getShutdownDisposition());
+				assertEquals(1, fixture.resource.calls.get(), "The parsed queued endpoint is still invoked during drain");
+				assertEquals(0, fixture.resource.initializers.get());
+				assertTrue(fixture.logs.isEmpty(), fixture.logs.toString());
+				assertTrue(fixture.connectionRejections.isEmpty(), fixture.connectionRejections.toString());
+			}
+		}
+	}
+
+	@Test void requestFinishingParsingAfterQuiesceCannotEnterTheApplication() throws Exception {
+		CountDownLatch constructingRequest = new CountDownLatch(1), releaseParsing = new CountDownLatch(1);
+		IdGenerator<String> idGenerator = request -> {
+			constructingRequest.countDown();
+			try {
+				if (!releaseParsing.await(3, TimeUnit.SECONDS)) throw new AssertionError("Parsing was not released");
+			} catch (InterruptedException interrupted) {
+				Thread.currentThread().interrupt();
+				throw new AssertionError(interrupted);
+			}
+			return "late-parsed-request";
+		};
+		try (ReaderFixture fixture = new ReaderFixture(null, null, 1, null, idGenerator);
+				Socket client = fixture.completeRequest()) {
+			try {
+				assertTrue(constructingRequest.await(2, TimeUnit.SECONDS));
+				var shutdown = fixture.soklet.shutdown().toCompletableFuture();
+				await(fixture.server::isStopping);
+				assertFalse(shutdown.isDone(), "Physical parsing work must still be joined");
+				releaseParsing.countDown();
+				assertEquals("", read(client));
+				ShutdownResult result = shutdown.get(3, TimeUnit.SECONDS);
+				assertTrue(result.isComplete());
+				assertEquals(ShutdownDisposition.GRACEFUL, result.getShutdownDisposition());
+				assertEquals(0, fixture.resource.calls.get());
+				assertTrue(fixture.logs.isEmpty(), fixture.logs.toString());
+				assertTrue(fixture.readFailures.isEmpty(), fixture.readFailures.toString());
+				assertTrue(fixture.transportFailures.isEmpty(), fixture.transportFailures.toString());
+			} finally { releaseParsing.countDown(); }
+		}
+	}
+
+	@Test void malformedOversizedTargetsUseUnparsed413WithoutInternalFailures() throws Exception {
+		for (String target : List.of("/ev%zzents", "http://[bad/events", "*")) {
+			String prefix = "GET " + target + " HTTP/1.1\r\nHost: localhost\r\nX-Fill: ";
+			// Cross the aggregate bound by exactly one byte. Extra unread bytes at
+			// close can cause a TCP reset that hides the finite rejection response.
+			String request = prefix + "a".repeat(1025 - prefix.length());
+			try (ReaderFixture fixture = new ReaderFixture(Duration.ofSeconds(2), Duration.ofSeconds(3), 1, 1024);
+					Socket client = fixture.request(request)) {
+				String wire = read(client);
+				assertTrue(wire.startsWith("HTTP/1.1 413"), target + ": " + wire);
+				assertEquals(List.of(RequestReadFailureReason.REQUEST_READ_REJECTED), fixture.readFailures);
+				assertEquals(List.of(MetricsCollector.TransportFailureReason.REQUEST_TOO_LARGE), fixture.transportFailures);
+				assertEquals(0, fixture.resource.calls.get());
+				assertTrue(fixture.logs.stream().noneMatch(event -> event.getLogEventType() == LogEventType.SSE_SERVER_INTERNAL_ERROR
+						|| event.getLogEventType() == LogEventType.SSE_SERVER_UNPARSEABLE_REQUEST), fixture.logs.toString());
+			}
 		}
 	}
 
@@ -238,23 +333,46 @@ class Round2SseRuntimeTests {
 		final DefaultSseServer server;
 		final Soklet soklet;
 		final AtomicInteger reading = new AtomicInteger(), acceptedRequests = new AtomicInteger(), rejectedRequests = new AtomicInteger();
+		final List<LogEvent> logs = new CopyOnWriteArrayList<>();
+		final List<ConnectionRejectionReason> connectionRejections = new CopyOnWriteArrayList<>();
+		final List<RequestReadFailureReason> readFailures = new CopyOnWriteArrayList<>();
+		final List<MetricsCollector.TransportFailureReason> transportFailures = new CopyOnWriteArrayList<>();
 		ReaderFixture(Duration headerTimeout, Duration gracefulTimeout, int queueCapacity) throws Exception {
+			this(headerTimeout, gracefulTimeout, queueCapacity, null);
+		}
+		ReaderFixture(Duration headerTimeout, Duration gracefulTimeout, int queueCapacity, Integer maximumRequestSize) throws Exception {
+			this(headerTimeout, gracefulTimeout, queueCapacity, maximumRequestSize, null);
+		}
+		ReaderFixture(Duration headerTimeout, Duration gracefulTimeout, int queueCapacity, Integer maximumRequestSize,
+				IdGenerator<?> idGenerator) throws Exception {
 			server = (DefaultSseServer) SseServer.withPort(port).host("127.0.0.1")
 					.requestHandlerConcurrency(1).requestHandlerQueueCapacity(queueCapacity)
 					.requestHeaderTimeout(headerTimeout).requestHandlerTimeout(Duration.ofSeconds(2))
+					.maximumRequestSizeInBytes(maximumRequestSize)
+					.idGenerator(idGenerator)
 					.verifyConnectionOnceEstablished(false).build();
 			SokletConfig config = SokletConfig.withSseServer(server)
 					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Resource.class)))
 					.instanceProvider(new InstanceProvider() { @Override public <T> T provide(Class<T> type) {
 						return type == Resource.class ? type.cast(resource) : InstanceProvider.defaultInstance().provide(type);
-					}}).lifecyclePolicy(LifecyclePolicy.builder().gracefulShutdownTimeout(gracefulTimeout)
-							.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
+					}}).lifecyclePolicy(gracefulTimeout == null ? LifecyclePolicy.defaultInstance()
+							: LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(5)).startupCancelationTimeout(Duration.ofSeconds(1))
+							.gracefulShutdownTimeout(gracefulTimeout).forcedShutdownTimeout(Duration.ofSeconds(1)).build())
+					.metricsCollector(new MetricsCollector() {
+						@Override public void didRecordTransportFailure(ServerType type, TransportFailureReason reason, Throwable failure) {
+							transportFailures.add(reason);
+						}
+					})
 					.lifecycleObserver(new LifecycleObserver() {
-						@Override public void didReceiveLogEvent(LogEvent event) { /* Quiet test observer. */ }
+						@Override public void didReceiveLogEvent(LogEvent event) { logs.add(event); }
 						@Override public void willReadRequest(ServerType type, java.net.InetSocketAddress remote, String target) { reading.incrementAndGet(); }
 						@Override public void didAcceptRequest(ServerType type, java.net.InetSocketAddress remote, String target) { acceptedRequests.incrementAndGet(); }
 						@Override public void didFailToAcceptRequest(ServerType type, java.net.InetSocketAddress remote, String target,
 								RequestRejectionReason reason, Throwable failure) { rejectedRequests.incrementAndGet(); }
+						@Override public void didFailToAcceptConnection(ServerType type, java.net.InetSocketAddress remote,
+								ConnectionRejectionReason reason, Throwable failure) { connectionRejections.add(reason); }
+						@Override public void didFailToReadRequest(ServerType type, java.net.InetSocketAddress remote, String target,
+								RequestReadFailureReason reason, Throwable failure) { readFailures.add(reason); }
 					}).build();
 			soklet = Soklet.fromConfig(config);
 			soklet.start();
@@ -280,11 +398,13 @@ class Round2SseRuntimeTests {
 	public static final class Resource {
 		final CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1), interrupted = new CountDownLatch(1);
 		final AtomicInteger initializers = new AtomicInteger();
+		final AtomicInteger calls = new AtomicInteger();
 		final AtomicInteger producerCalls = new AtomicInteger();
 		final IllegalStateException failure = new IllegalStateException("initializer failed");
 		volatile String initializerMode = "normal";
 		volatile boolean invalidHeader;
 		@SseEventSource("/events") public SseHandshakeResult events() {
+			calls.incrementAndGet();
 			return SseHandshakeResult.Accepted.builder().headers(invalidHeader ? Map.of("Content-Length", List.of("0")) : Map.of())
 					.clientInitializer(unicaster -> {
 						initializers.incrementAndGet();
@@ -319,7 +439,8 @@ class Round2SseRuntimeTests {
 					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Resource.class)))
 					.instanceProvider(new InstanceProvider() { @Override public <T> T provide(Class<T> type) {
 						return type == Resource.class ? type.cast(resource) : InstanceProvider.defaultInstance().provide(type);
-					}}).lifecyclePolicy(LifecyclePolicy.builder().gracefulShutdownTimeout(Duration.ofSeconds(3)).forcedShutdownTimeout(Duration.ofSeconds(1)).build())
+					}}).lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(5)).startupCancelationTimeout(Duration.ofSeconds(1))
+							.gracefulShutdownTimeout(Duration.ofSeconds(3)).forcedShutdownTimeout(Duration.ofSeconds(1)).build())
 					.lifecycleObserver(new LifecycleObserver() {
 						@Override public void didReceiveLogEvent(LogEvent event) { logs.add(event); }
 						@Override public void didTerminateSseConnection(SseConnection connection, StreamTermination termination) { terminations.add(termination); }

@@ -981,6 +981,9 @@ public class McpSubscriptionAuthorizationPublicRuntimeTests {
 						? allowed(null) : McpSubscriptionAuthorization.deniedInstance(), null);
 		SimulatorConfig config = SimulatorConfig.withSokletConfig(
 				SokletConfig.withMcpServer(source)
+						.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(10))
+								.startupCancelationTimeout(Duration.ofSeconds(1)).gracefulShutdownTimeout(Duration.ofSeconds(1))
+								.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
 						.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 						.metricsCollector(metrics).build()).build();
 		SokletSimulator.run(config, simulator -> {

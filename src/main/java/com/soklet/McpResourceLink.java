@@ -254,8 +254,10 @@ public final class McpResourceLink implements McpContentBlock {
 			return this;
 		}
 
-		/** @param mimeType resource MIME type
-		 * @return this builder */
+		/** @param mimeType syntactically valid resource media type
+		 * @return this builder
+		 * @throws IllegalArgumentException if {@code mimeType} is not a syntactically valid media type
+		 */
 		@NonNull
 		public Builder mimeType(@NonNull String mimeType) {
 			this.mimeType = McpContentValueSupport.requireMimeType(mimeType);

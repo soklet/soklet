@@ -134,6 +134,9 @@ class McpRequestStateBoundaryPublicRuntimeTests {
 					.admissionController(admissionContext -> McpAdmissionDecision.accepted(identity))
 					.toolRateLimiter(rateLimitContext -> McpRateLimitDecision.allowed()).build();
 			soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+					.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(java.time.Duration.ofSeconds(10))
+							.startupCancelationTimeout(java.time.Duration.ofSeconds(1)).gracefulShutdownTimeout(java.time.Duration.ofSeconds(1))
+							.forcedShutdownTimeout(java.time.Duration.ofSeconds(1)).build())
 					.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).build());
 			soklet.start();
 		}

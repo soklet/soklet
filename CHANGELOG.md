@@ -12,6 +12,13 @@
 - **Observer logging:** a custom observer replaces the default stderr logger;
   `didReceiveLogEvent` defaults to a no-op. Explicitly configure a logging sink.
   See [Log-event routing](MIGRATING_TO_4_0.md#log-event-routing-with-custom-observers).
+- **Finite response framing:** the built-in HTTP transport owns framing and
+  removes application hop-by-hop headers. Valid bodyless HEAD representation
+  lengths and validated `426` Upgrade advertisements are preserved. Ordinary
+  final statuses must be `200`–`599`, and the default marshaler rejects a
+  `StreamingResponseBody` in `Response.body(...)`. Use a marshaled streaming
+  response. Expected typed streaming cancelation is quiet; independent failures
+  remain observable. See [HTTP and SSE framing](MIGRATING_TO_4_0.md#http-and-sse-framing).
 - **Histogram snapshots:** snapshot values are boxed and histogram sums are
   floating point. See [Histogram sums and snapshot values](MIGRATING_TO_4_0.md#histogram-sums-and-snapshot-values).
 - **Graceful HTTP feeds:** implementations of `ResponseStream` must implement
@@ -54,6 +61,9 @@
   and server-stopping teardown even without consumers. The first termination
   outcome wins, and admitted work remains accounted for through physical exit.
   See [SSE client initialization and connection admission](MIGRATING_TO_4_0.md#sse-client-initialization-and-connection-admission).
+- **SSE write deadlines:** `writeTimeout` applies to stream, handshake and
+  rejection-response writes. `Duration.ZERO` disables all of those deadlines,
+  including failsafe responses. Keep a finite deadline when clients can stall.
 - **Naming and collection APIs:** completed the scoped 4.0 renames for streaming
   bodies, transport attachment signals, metric route properties, servlet response
   factories, and MCP role types. MCP endpoint/registration/output/page builders
@@ -149,6 +159,8 @@
   opening, verified DELETE, and authorized resource/catalog invalidations. Applications declare exact revisions
   on endpoints and tools; there is no implicit profile fallback. See
   [current MCP compatibility](MCP.md#compatibility-and-unsupported-features).
+  Named-host and exact-candidate qualification remain pending; development
+  observations do not establish publication approval.
 - **2025 argument completion:** prompt and URI-template completers now select
   `2025-06-18`, `2025-11-25`, and `2026-07-28` independently within their
   owning operation's revisions. Annotation and programmatic declarations use

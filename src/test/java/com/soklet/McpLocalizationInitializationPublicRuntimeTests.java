@@ -123,7 +123,10 @@ class McpLocalizationInitializationPublicRuntimeTests {
 		return LEGACY.stream().map(version -> DynamicTest.dynamicTest(version.getWireValue(), () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
 			McpLocalizer localizer = localizer(request -> context(text ->
 					McpLocalizationResult.localized("FR:" + text.getDefaultText())), McpLocalizationFailurePolicy.FAIL_REQUEST);
-			SokletSimulator.run(SimulatorConfig.builder().configureMcpServer(builder -> configure(builder,
+			SokletSimulator.run(SimulatorConfig.builder()
+					.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(10))
+							.startupCancelationTimeout(Duration.ofSeconds(1)).gracefulShutdownTimeout(Duration.ofSeconds(1))
+							.forcedShutdownTimeout(Duration.ofSeconds(1)).build()).configureMcpServer(builder -> configure(builder,
 					endpoint(version, false, true), localizer, false))
 					.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).build(), simulator -> {
 				Request request = Request.withPath(HttpMethod.POST, "/mcp")
@@ -244,6 +247,9 @@ class McpLocalizationInitializationPublicRuntimeTests {
 			configure(builder, endpoint, localizer, sessions);
 			McpServer server = builder.build();
 			this.soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+					.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(10))
+							.startupCancelationTimeout(Duration.ofSeconds(1)).gracefulShutdownTimeout(Duration.ofSeconds(1))
+							.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
 					.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).build());
 			soklet.start();
 			this.port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();

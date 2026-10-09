@@ -42,6 +42,8 @@ import static com.soklet.TestSupport.findFreePort;
 @Timeout(value = 60, unit = TimeUnit.SECONDS)
 public class HttpStreamingProtocolRejectionTests {
 	@Test
+	// Four sequential owners, each with its own shutdown and observation waits.
+	@Timeout(205)
 	void httpOneDotZeroRejectionReportsActualResponseAndRetainsOriginalStreamHandle() throws Exception {
 		for (String kind : List.of("writer", "input-stream", "reader", "publisher")) {
 			AtomicInteger producerCalls = new AtomicInteger();

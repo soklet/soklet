@@ -219,7 +219,7 @@ class McpLegacySubscriptionPublicRuntimeTests {
 	}
 
 	@Test
-	void invalidUriFailsBeforeAdmissionAndMissingOrDeniedReadableRoutesAreNeutral() throws Exception {
+	void invalidUriRequiresAdmissionAndSessionValidationAndMissingOrDeniedReadableRoutesAreNeutral() throws Exception {
 		for (McpProtocolVersion version : LEGACY) {
 			Harness harness = new Harness();
 			SokletSimulator.run(harness.simulatorConfig(), simulator -> {
@@ -227,7 +227,9 @@ class McpLegacySubscriptionPublicRuntimeTests {
 				int admitted = harness.admissions.size();
 				for (String params : List.of("{}", "{\"uri\":42}", "{\"uri\":\"relative\"}", "{\"uri\":\"test:///exact\",\"extra\":true}"))
 					assertError(rpc(simulator, version, id, "resources/subscribe", params), -32602);
-				assertEquals(admitted, harness.admissions.size()); assertTrue(harness.authorizations.isEmpty());
+				assertEquals(admitted + 4, harness.admissions.size(),
+						"Session-bound operation parameters are validated after admission and session binding.");
+				assertTrue(harness.authorizations.isEmpty());
 				McpJsonObject missing = rpc(simulator, version, id, "resources/subscribe", "{\"uri\":\"test:///missing\"}");
 				assertError(missing, -32002); assertTrue(harness.authorizations.isEmpty());
 				assertError(rpc(simulator, version, id, "resources/subscribe", "{\"uri\":\"test:///modern\"}"), -32002);

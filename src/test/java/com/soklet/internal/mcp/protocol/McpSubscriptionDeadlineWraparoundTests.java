@@ -98,7 +98,7 @@ public class McpSubscriptionDeadlineWraparoundTests {
 		RecordingObservation observation = new RecordingObservation();
 		McpHttpServerRuntime runtime = runtime(clock, events,
 				McpResourceNotificationType.RESOURCES_LIST_CHANGED, Optional.empty(), authorizer, observation);
-		CountDownLatch workersEntered = new CountDownLatch(4);
+		CountDownLatch workersEntered = new CountDownLatch(2);
 		CountDownLatch releaseWorkers = new CountDownLatch(1);
 		List<Object> blockers = List.of(new Object(), new Object(), new Object(), new Object());
 		McpHttpServerRuntime.TaskNotificationProjectionScheduler scheduler = null;
@@ -112,8 +112,8 @@ public class McpSubscriptionDeadlineWraparoundTests {
 				Object processor = field(control, "processor");
 				scheduler = (McpHttpServerRuntime.TaskNotificationProjectionScheduler)
 						field(processor, "taskNotificationProjectionScheduler");
-				Assertions.assertEquals(4, field(scheduler, "maximumWorkers"),
-						"Five application slots retain one slot and yield four projection workers.");
+				Assertions.assertEquals(2, field(scheduler, "maximumWorkers"),
+						"Five application slots cap shared projection workers at floor(5 / 2).");
 				Assertions.assertTrue(scheduler.tryReserveOwners(blockers));
 				for (Object blocker : blockers)
 					scheduler.execute(new McpHttpServerRuntime.TaskNotificationProjectionJob(blocker, () -> {

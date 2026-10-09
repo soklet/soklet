@@ -564,8 +564,7 @@ final class SokletDirectMcpLifecycleTests {
 				InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN,
 				mcp.disposition());
 		Assertions.assertTrue(mcp.failures().isEmpty());
-		Assertions.assertEquals(Set.of(InternalResidualActivityType.EVENT_LOOP,
-				InternalResidualActivityType.EXECUTOR_TASK,
+		Assertions.assertEquals(Set.of(InternalResidualActivityType.EXECUTOR_TASK,
 				InternalResidualActivityType.CALLBACK,
 				InternalResidualActivityType.LIFECYCLE_CALL),
 				mcp.residualActivity());

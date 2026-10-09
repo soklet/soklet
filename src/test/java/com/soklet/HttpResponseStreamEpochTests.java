@@ -121,6 +121,10 @@ class HttpResponseStreamEpochTests {
 
 	private static SokletConfig config(HttpServer server, Observation observation, Resource resource) {
 		return SokletConfig.withHttpServer(server).resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Resource.class)))
+				.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(10))
+						.startupCancelationTimeout(Duration.ofSeconds(1))
+						.gracefulShutdownTimeout(Duration.ofSeconds(1))
+						.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
 				.metricsCollector(observation).lifecycleObserver(observation.lifecycle).instanceProvider(new InstanceProvider() {
 					@Override public <T> T provide(Class<T> type) { return type.cast(resource); }
 				}).build();

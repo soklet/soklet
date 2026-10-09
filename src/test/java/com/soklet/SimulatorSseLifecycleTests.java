@@ -277,7 +277,7 @@ class SimulatorSseLifecycleTests {
 				assertEquals(1, probe.handshakeFailures.size());
 				assertEquals(20, probe.logs.size());
 				assertTrue(probe.logs.stream().allMatch(log -> log.getLogEventType()
-						== LogEventType.LIFECYCLE_OBSERVER_DID_ESTABLISH_SSE_CONNECTION_FAILED));
+						== LogEventType.SSE_SERVER_CONNECTION_REJECTED));
 				release.countDown(); await(() -> coordinator(simulator).snapshot().callbacks() == 0);
 				assertEquals(2, probe.handshakeFailures.size());
 			});
@@ -333,7 +333,8 @@ class SimulatorSseLifecycleTests {
 				.instanceProvider(new InstanceProvider() {
 					@Override public <T> T provide(Class<T> type) { return type == Fixture.class ? type.cast(fixture) : InstanceProvider.defaultInstance().provide(type); }
 				}).lifecycleObserver(probe.observer()).metricsCollector(probe.metrics())
-				.lifecyclePolicy(LifecyclePolicy.builder().gracefulShutdownTimeout(budget).forcedShutdownTimeout(budget).build()).build());
+				.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(10))
+						.startupCancelationTimeout(Duration.ofSeconds(1)).gracefulShutdownTimeout(budget).forcedShutdownTimeout(budget).build()).build());
 	}
 	private static void await(BooleanSupplier condition) {
 		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);

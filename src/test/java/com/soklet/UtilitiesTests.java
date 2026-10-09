@@ -435,6 +435,20 @@ public class UtilitiesTests {
 	}
 
 	@Test
+	public void protoOnlyForwardedFallsThroughToXffButMissingForInsideAChainRemainsABoundary() throws Exception {
+		for (String forwarded : List.of("proto=https;host=example.com", "host=example.com, proto=https", "")) {
+			assertEquals(Optional.of(address("198.51.100.10")), EffectiveClientIpResolver.withHeaders(Map.of(
+					"Forwarded", List.of(forwarded), "X-Forwarded-For", List.of("198.51.100.10")), TrustPolicy.TRUST_PROXY_ALLOWLIST)
+					.remoteAddress(remoteAddress("10.0.0.1")).trustedProxyAddresses(Set.of(address("10.0.0.1"))).resolve());
+		}
+		for (String forwarded : List.of("for=198.51.100.10, proto=https", "for=unknown", "for=", "for")) {
+			assertEquals(Optional.of(address("10.0.0.1")), EffectiveClientIpResolver.withHeaders(Map.of(
+					"Forwarded", List.of(forwarded), "X-Forwarded-For", List.of("198.51.100.10")), TrustPolicy.TRUST_PROXY_ALLOWLIST)
+					.remoteAddress(remoteAddress("10.0.0.1")).trustedProxyAddresses(Set.of(address("10.0.0.1"))).resolve());
+		}
+	}
+
+	@Test
 	public void effectiveClientIpFromHeaders_rejectsNonIpv6TokensBeforeFallback()
 			throws Exception {
 		Map<String, List<String>> headers = Map.of(

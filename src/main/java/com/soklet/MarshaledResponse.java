@@ -62,6 +62,13 @@ import static java.util.Objects.requireNonNull;
  * resources; callers must honor the ownership and mutation requirements documented by {@link MarshaledResponseBody}
  * and {@link StreamingResponseBody}.
  * <p>
+ * The built-in HTTP transport requires final ordinary response statuses from {@code 200} through
+ * {@code 599} and owns {@code Connection}, {@code Content-Length} and {@code Transfer-Encoding}
+ * framing. Other hop-by-hop and Connection-nominated fields are removed. A valid explicit length
+ * on a bodyless HEAD response is preserved when its status allows it; a validated {@code 426}
+ * response may advertise {@code Upgrade}. File-backed delivery uses bounded transfer buffers;
+ * native zero-copy socket delivery is not promised.
+ * <p>
  * Full documentation is available at <a href="https://www.soklet.com/docs/response-writing">https://www.soklet.com/docs/response-writing</a>.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>

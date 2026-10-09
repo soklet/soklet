@@ -13,6 +13,27 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class SseFramingTests {
     @Test
+    void oversizedTargetAttributionLeavesMalformedTargetsUnparsed() {
+        DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0).build();
+        for (String target : List.of("/ev%zzents", "http://[bad/events", "*"))
+            assertTrue(server.parseTooLargeRequestForRawRequest("GET " + target
+                    + " HTTP/1.1\r\nHost: localhost\r\n\r\n").isEmpty(), target);
+        Request attributed = server.parseTooLargeRequestForRawRequest(
+                "GET /events HTTP/1.1\r\nHost: localhost\r\n\r\n").orElseThrow();
+        assertEquals("/events", attributed.getPath());
+        assertTrue(attributed.isContentTooLarge());
+    }
+
+    @Test
+    void unavailableReaderNamesTheSseServer() throws Exception {
+        DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0).build();
+        try (java.nio.channels.SocketChannel channel = java.nio.channels.SocketChannel.open()) {
+            var failure = assertThrows(java.io.IOException.class, () -> server.readRequest(channel));
+            assertEquals("SseServer is shutting down", failure.getMessage());
+        }
+    }
+
+    @Test
     void bareCarriageReturnsCannotCreateRequestLinesOrHeaders() {
         DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0).build();
         for (String raw : List.of("GET /events HTTP/1.1\rHost: a\r\n\r\n",

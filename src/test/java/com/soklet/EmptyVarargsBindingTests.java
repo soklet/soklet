@@ -174,6 +174,10 @@ public class EmptyVarargsBindingTests {
 
 	private static SimulatorConfig config(Class<?> resource, ValueConverterRegistry registry) {
 		return SimulatorConfig.builder().httpServer().sseServer()
+				.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(java.time.Duration.ofSeconds(10))
+						.startupCancelationTimeout(java.time.Duration.ofSeconds(1))
+						.gracefulShutdownTimeout(java.time.Duration.ofSeconds(1))
+						.forcedShutdownTimeout(java.time.Duration.ofSeconds(1)).build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(resource)))
 				.valueConverterRegistry(registry).lifecycleObserver(new LifecycleObserver() {
 					@Override public void didReceiveLogEvent(LogEvent logEvent) {}

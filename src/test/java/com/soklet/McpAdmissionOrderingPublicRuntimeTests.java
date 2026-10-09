@@ -186,6 +186,10 @@ class McpAdmissionOrderingPublicRuntimeTests {
 					.requestRateLimiter(context -> { requestCharges.incrementAndGet(); return McpRateLimitDecision.allowed(); })
 					.toolRateLimiter(context -> { charges.incrementAndGet(); return McpRateLimitDecision.allowed(); }).build();
 			owner = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+					.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(10))
+							.startupCancelationTimeout(Duration.ofSeconds(1))
+							.gracefulShutdownTimeout(Duration.ofSeconds(1))
+							.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
 					.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 					.lifecycleObserver(new LifecycleObserver() {}).build());
 			owner.start();

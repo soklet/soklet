@@ -74,7 +74,6 @@ import static java.util.Objects.requireNonNull;
  * Finally, broadcast to all clients who had their handshakes accepted:
  * <pre>{@code // Sometime later, acquire a broadcaster...
  * ResourcePath resourcePath = ResourcePath.fromPath("/chats/123/event-source");
- * SseBroadcaster broadcaster = sseServer.acquireBroadcaster(resourcePath).orElseThrow();
  *
  * // ...construct the payload...
  * SseEvent event = SseEvent.withEvent("chat-message")
@@ -83,7 +82,8 @@ import static java.util.Objects.requireNonNull;
  *   .build();
  *
  * // ...and send it to all connected clients.
- * broadcaster.broadcastEvent(event);}</pre>
+ * sseServer.acquireBroadcaster(resourcePath)
+ *   .ifPresent(broadcaster -> broadcaster.broadcastEvent(event));}</pre>
  * <p>
  * Full documentation is available at <a href="https://www.soklet.com/docs/server-sent-events">https://www.soklet.com/docs/server-sent-events</a>.
  *

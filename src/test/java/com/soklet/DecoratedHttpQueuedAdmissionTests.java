@@ -22,6 +22,27 @@ import static org.junit.jupiter.api.Assertions.*;
 @Timeout(60)
 class DecoratedHttpQueuedAdmissionTests {
 	@Test
+	void transparentDecoratorCanRedispatchACopyWhileAdmissionIsOpen() throws Exception {
+		int port;
+		try (ServerSocket reserved = new ServerSocket(0)) { port = reserved.getLocalPort(); }
+		Resource resource = new Resource();
+		Decorator decorator = new Decorator(HttpServer.withPort(port).host("127.0.0.1").build(), false);
+		SokletConfig config = SokletConfig.withHttpServer(decorator)
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Resource.class)))
+				.instanceProvider(new InstanceProvider() { @Override public <T> T provide(Class<T> type) { return type.cast(resource); } })
+				.lifecycleObserver(new LifecycleObserver() { @Override public void didReceiveLogEvent(LogEvent event) {} }).build();
+		try (Soklet soklet = Soklet.fromConfig(config)) {
+			soklet.start();
+			try (Socket socket = open(port, "/fallback")) {
+				String response = read(socket);
+				assertTrue(response.startsWith("HTTP/1.1 200"), response);
+				assertTrue(response.endsWith("queued"), response);
+				assertEquals(1, resource.queuedCalls.get());
+			}
+			assertEquals(ShutdownDisposition.GRACEFUL, soklet.shutdown().toCompletableFuture().get(3, TimeUnit.SECONDS).getShutdownDisposition());
+		}
+	}
+	@Test
 	void transparentDecoratorPreservesQueuedAdmissionAcrossQuiesce() throws Exception { assertQueuedAdmission(false); }
 
 	@Test
@@ -97,7 +118,11 @@ class DecoratedHttpQueuedAdmissionTests {
 			this.upstream = context.getAdmissionFencedRequestHandler();
 			RequestHandler wrapped = (request, consumer) -> {
 				if (request.getPath().equals("/queued")) this.lastQueued.set(request);
-				this.upstream.handleRequest(request.copy().finish(), consumer);
+				this.upstream.handleRequest(request.copy().finish(), result -> {
+					if (request.getPath().equals("/fallback") && result.getMarshaledResponse().getStatusCode() == 404)
+						this.upstream.handleRequest(request.copy().path("/queued").finish(), consumer);
+					else consumer.accept(result);
+				});
 			};
 			if (!this.owning) return context.attachTransparentDelegate(this.delegate, wrapped);
 			TransportRuntime child = context.attachTerminationOwningDelegate(this.delegate, wrapped).getTransportRuntime();

@@ -140,7 +140,8 @@ class HttpStreamGracefulShutdownTests {
 		};
 	}
 	private static LifecyclePolicy policy() {
-		return LifecyclePolicy.builder().gracefulShutdownTimeout(Duration.ofSeconds(3)).forcedShutdownTimeout(Duration.ofSeconds(1)).build();
+		return LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(10))
+				.startupCancelationTimeout(Duration.ofSeconds(1)).gracefulShutdownTimeout(Duration.ofSeconds(3)).forcedShutdownTimeout(Duration.ofSeconds(1)).build();
 	}
 
 	public static final class Resource {

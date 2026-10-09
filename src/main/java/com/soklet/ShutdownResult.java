@@ -188,7 +188,7 @@ public final class ShutdownResult {
 
 	/**
 	 * Returns a bounded, single-line diagnostic with dispositions, component
-	 * results, failure presence and retained-activity counts when available.
+	 * results, failure presence and residual-component counts when available.
 	 * Does not render Throwable instances, residual-summary text or retained
 	 * runtime objects. Inspect the typed accessors for full evidence.
 	 *

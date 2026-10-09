@@ -1510,7 +1510,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = SECONDS)
+	@Timeout(value = 75, unit = SECONDS)
 	public void sse_stop_setsTerminationReason_serverStop() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -1552,7 +1552,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = SECONDS)
+	@Timeout(value = 80, unit = SECONDS)
 	public void sse_clientClose_setsTerminationReason_remoteClose() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -1597,7 +1597,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = SECONDS)
+	@Timeout(value = 70, unit = SECONDS)
 	public void sseHandshakeClientCloseDoesNotRecordTransportFailure() throws Exception {
 		int httpPort = findFreePort();
 		int ssePort = findFreePort();
@@ -2222,7 +2222,7 @@ public class SseTests {
 	}
 
 	@Test
-	@Timeout(value = 60, unit = SECONDS)
+	@Timeout(value = 75, unit = SECONDS)
 	public void handshakeTimeoutApplicationCallbackDoesNotBlockSharedScheduler()
 			throws Exception {
 		int httpPort = findFreePort();

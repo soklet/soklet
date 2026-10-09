@@ -46,6 +46,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class CombinedTransportShutdownTests {
 
 	@Test
+	@Timeout(80) // One owner plus the sequential phase/physical-termination checks.
 	void gracefulShutdownClosesSseAndDrainsFiniteHttpAndMcpWithOneDeadline() throws Exception {
 		try (Fixture fixture = new Fixture(false, Duration.ofSeconds(3))) {
 			fixture.openWork();
@@ -82,6 +83,7 @@ class CombinedTransportShutdownTests {
 	}
 
 	@Test
+	@Timeout(80) // One owner plus the sequential phase/physical-termination checks.
 	void forcedShutdownRetainsAllBlockedWorkersAndLateExitCannotRewriteFrozenResult() throws Exception {
 		try (Fixture fixture = new Fixture(true, Duration.ofMillis(300))) {
 			fixture.openWork();
@@ -176,7 +178,8 @@ class CombinedTransportShutdownTests {
 						@Override public void didTerminateSseConnection(SseConnection sseConnection, StreamTermination streamTermination) {
 							sseTermination.set(streamTermination); sseTerminated.countDown();
 						}
-					}).lifecyclePolicy(LifecyclePolicy.builder().gracefulShutdownTimeout(gracefulTimeout)
+					}).lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(10))
+							.startupCancelationTimeout(Duration.ofSeconds(1)).gracefulShutdownTimeout(gracefulTimeout)
 							.forcedShutdownTimeout(Duration.ofMillis(300)).build()).build());
 			this.mcpBridge = (McpServerRuntimeBridge) field(this.mcpServer, "runtimeBridge");
 			this.mcpRuntime = field(this.mcpBridge, "runtime");

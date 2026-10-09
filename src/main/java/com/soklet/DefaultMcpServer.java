@@ -92,7 +92,9 @@ import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BooleanSupplier;
@@ -441,9 +443,14 @@ final class DefaultMcpServer implements McpServer {
 	@NonNull
 	private McpApplicationExecutionObserver applicationExecutionObserver() {
 		return new McpApplicationExecutionObserver() {
+			private final AtomicLong lastCapacityDiagnostic = new AtomicLong(Long.MIN_VALUE);
 			@Override
 			public void didSkipHttpRequestObservation() {
-				safelyLogRequestObservation(lifecycleObserver, LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR,
+				long now = System.nanoTime();
+				long previous = lastCapacityDiagnostic.get();
+				if (previous != Long.MIN_VALUE && now - previous < TimeUnit.MINUTES.toNanos(1)
+						|| !lastCapacityDiagnostic.compareAndSet(previous, now)) return;
+				safelyLogRequestObservation(lifecycleObserver, LogEvent.with(LogEventType.MCP_SERVER_CONFIGURATION,
 						"MCP HTTP observation callbacks were omitted because their bounded delivery capacity is unavailable.")
 						.build(), null);
 			}

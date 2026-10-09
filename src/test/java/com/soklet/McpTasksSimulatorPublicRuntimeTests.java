@@ -605,6 +605,9 @@ public class McpTasksSimulatorPublicRuntimeTests {
 					.allowedHosts(Set.of(LOOPBACK))
 					.build();
 			this.sokletConfig = SokletConfig.withMcpServer(this.sourceServer)
+					.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(10))
+							.startupCancelationTimeout(Duration.ofSeconds(1)).gracefulShutdownTimeout(Duration.ofSeconds(1))
+							.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
 					.resourceMethodResolver(
 							ResourceMethodResolver.fromMethods(Set.of()))
 					.build();

@@ -673,6 +673,7 @@ public final class StreamingMicrohttpResponses {
 				if (remaining-- <= 0)
 					return true; // Beyond the evidence budget, independence cannot be established.
 				if (cause instanceof InterruptedException || cause instanceof java.io.InterruptedIOException
+						|| cause instanceof java.nio.channels.ClosedByInterruptException
 						|| cause instanceof StreamingResponseCanceledException)
 					return true;
 			}

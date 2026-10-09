@@ -60,6 +60,7 @@ import static java.util.Objects.requireNonNull;
 public class StreamingLifecycleTests {
 	private static final Duration WAIT = Duration.ofSeconds(3);
 	private static final LifecyclePolicy SHUTDOWN_POLICY = LifecyclePolicy.builder()
+			.startupTimeout(Duration.ofSeconds(10)).startupCancelationTimeout(Duration.ofSeconds(1))
 			.gracefulShutdownTimeout(Duration.ofMillis(200))
 			.forcedShutdownTimeout(Duration.ofMillis(200)).build();
 
