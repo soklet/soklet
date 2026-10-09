@@ -1705,6 +1705,8 @@
       "boundaryTests": [
         "src/test/java/com/soklet/McpInMemoryTaskManagerTests.java#creationIsImmediatelyReadableAndCapacityNeverEvictsLiveTasks",
         "src/test/java/com/soklet/McpInMemoryTaskManagerTests.java#defaultsAndBuilderResetsAreFiniteAndValidated",
+        "src/test/java/com/soklet/McpLegacySessionTransportPublicRuntimeTests.java#blockingHttpFinishObserverDoesNotStallUnrelatedPostAndRetainsCallbackOwnership",
+        "src/test/java/com/soklet/McpLegacySessionTransportPublicRuntimeTests.java#transportEndDuringBlockedHttpStartDeliversFinishOnlyAfterStartReturns",
         "src/test/java/com/soklet/McpServerFutureConfigurationTests.java#operationalControlsRejectNonpositiveAndUnrepresentableValues",
         "src/test/java/com/soklet/internal/mcp/protocol/McpApplicationExecutionTests.java#cancellation_sidecars_remain_bounded_by_handler_concurrency",
         "src/test/java/com/soklet/internal/mcp/protocol/McpCatalogProjectionQueueTests.java#digestIsExactlyThirtyTwoBytesDefensiveAndValueBased",
@@ -1712,6 +1714,8 @@
         "src/test/java/com/soklet/internal/mcp/protocol/McpCatalogProjectionQueueTests.java#resetAndInactiveFinishFenceLateWorkersAndClearBaselines",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerApplicationExecutionTests.java#bounded_handler_capacity_queues_one_and_rejects_the_third_exactly",
         "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerApplicationExecutionTests.java#protocol_processor_submission_records_two_accepted_then_one_rejected_outside_request_control_lock",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpLegacyHttpObservationDispatcherTests.java#reservationsBoundBothPairsAndRetainLateFinishesThroughForce",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationSchedulingPublicRuntimeTests.java#renewalWorkersFollowExistingHandlerBudgetInsteadOfAFixedFourWorkerLimit",
         "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java#configuredPerPrincipalCapRejectsWithoutDisturbingAndRecovers",
         "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java#configuredQueueContainsBackpressureAndReleasesTheFullCap",
         "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionPublicRuntimeTests.java#malformedRecognizedFilterFieldsFailBeforeAdmission",
@@ -1726,7 +1730,7 @@
       ],
       "category": "QUEUE_STREAM",
       "deterministicFailure": {
-        "contract": "Full request queues return their fixed capacity outcome. Running cancellation sidecars and queued cancellation sidecars are independently bounded by the configured application-handler concurrency; cancellation before handler entry is suppressed without creating a sidecar, and shutdown waits for admitted sidecars to exit. Each subscription retains at most one 32-byte SHA-256 baseline digest and one queued or active generation marker for each of the two fixed catalog families, retains no rendered catalog, submits at most one queued or running catalog-projection owner job, and coalesces newer invalidations; only the affected family's baseline advances, and only after transport acceptance. Each task subscription retains at most 256 unique task IDs for authoritative projection, submits at most one shared-scheduler job, and coalesces repeated IDs to the latest generation; a full shared projection scheduler applies its fixed owner outcome; the in-memory task manager rejects creation at its live-task capacity; subscription filters reject more than 256 distinct resource URIs or task IDs before admission; full stream queues apply bounded backpressure or the documented nonblocking offer outcome. Delivered nonterminal comparison state excludes origins, persisted arguments, full tasks, and completed results; terminal delivery retains only a marker. Visible status messages, input requests, and metadata remain variable-size and are retained only after bounded notification encoding. Owner termination/reset releases all catalog and task state, and late workers cannot restore it or clear a replacement generation.",
+        "contract": "Full request queues return their fixed capacity outcome. Running cancellation sidecars and queued cancellation sidecars are independently bounded by the configured application-handler concurrency; cancellation before handler entry is suppressed without creating a sidecar, and shutdown waits for admitted sidecars to exit. Each subscription retains at most one 32-byte SHA-256 baseline digest and one queued or active generation marker for each of the two fixed catalog families, retains no rendered catalog, submits at most one queued or running catalog-projection owner job, and coalesces newer invalidations; only the affected family's baseline advances, and only after transport acceptance. Each task subscription retains at most 256 unique task IDs for authoritative projection, submits at most one shared-scheduler job, and coalesces repeated IDs to the latest generation; a full shared projection scheduler applies its fixed owner outcome; the in-memory task manager rejects creation at its live-task capacity; subscription filters reject more than 256 distinct resource URIs or task IDs before admission; full stream queues apply bounded backpressure or the documented nonblocking offer outcome. Delivered nonterminal comparison state excludes origins, persisted arguments, full tasks, and completed results; terminal delivery retains only a marker. Visible status messages, input requests, and metadata remain variable-size and are retained only after bounded notification encoding. Owner termination/reset releases all catalog and task state, and late workers cannot restore it or clear a replacement generation. The shared projection scheduler derives worker concurrency from the existing protocol, application-handler and owner budgets: C=max(1,min(P-1,H-1,O)); the default is 31. Worker and owner bounds do not guarantee that every admitted fleet renews before expiry: for N owners, occupied work time W and effective lease T, a half-lease wave needs C>=ceil(2*N*W/T). Authorization and refresh work share W; delayed or failed renewal remains fail closed. The legacy four physical maintenance workers, 64 dispatches per sliding second and per-partition limits remain independent bounds. An admitted physical application worker drains queued tickets before it returns, preserving FIFO and preventing rejection cascades; a genuinely new handoff can still receive bounded backpressure if a caller-supplied executor has not returned its previous worker yet. Generic legacy HTTP observations use a separate internal dispatcher with C=min(4,H) workers and Q equal to the configured handler queue capacity. At most C+Q pairs are reserved before start (default 132); full or quiesced reservation capacity omits both callbacks with a fixed redacted diagnostic. Started pairs retain their reservation and request-control lifecycle ownership through physical finish; queued finishes and transport end during blocked start survive shutdown handoff. Forced shutdown interrupts active observers, preserves reserved finishes, and remains incomplete while callbacks resist interruption.",
         "stage": "APPLICATION_OR_STREAM_ADMISSION"
       },
       "enforcementOwners": [
@@ -1764,6 +1768,26 @@
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
           "member": "parseAcceptedSubscriptionFilter",
           "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "member": "subscriptionProjectionConcurrency",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "member": "startLegacyHttpObservation",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacyHttpObservationDispatcher.java",
+          "member": "reserve",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacyHttpObservationDispatcher"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacyHttpObservationDispatcher.java",
+          "member": "finish",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacyHttpObservationDispatcher.Reservation"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/transport/McpOutboundChannel.java",
@@ -1808,13 +1832,6 @@
           "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#MAXIMUM_RESOURCE_SUBSCRIPTION_URIS",
           "matcherRuleId": "FINITE-MATCH-001",
           "member": "MAXIMUM_RESOURCE_SUBSCRIPTION_URIS",
-          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime"
-        },
-        {
-          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
-          "key": "FINITE-MATCH-001:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#MAXIMUM_TASK_NOTIFICATION_PROJECTION_CONCURRENCY",
-          "matcherRuleId": "FINITE-MATCH-001",
-          "member": "MAXIMUM_TASK_NOTIFICATION_PROJECTION_CONCURRENCY",
           "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime"
         },
         {
@@ -2009,10 +2026,10 @@
           "value": "1024"
         },
         {
-          "accounting": "task-notification projection workers; effective concurrency is the lesser of this ceiling and protocol concurrency minus one",
+          "accounting": "shared subscription projection and renewal workers; C=max(1,min(protocol concurrency - 1, application-handler concurrency - 1, projection owner capacity)), retaining one protocol and handler slot where their configured budgets exceed one; default budgets 32/32 yield 31, while legacy physical maintenance remains independently bounded at four",
           "key": "queue.task-notification-projection-concurrency",
           "unit": "WORKERS",
-          "value": "4"
+          "value": "31"
         },
         {
           "accounting": "four projection owner slots per default maximum admitted modern connection plus four legacy maintenance slots; runtime derives this from the configured connection bound",

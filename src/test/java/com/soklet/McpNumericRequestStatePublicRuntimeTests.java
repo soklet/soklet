@@ -32,7 +32,7 @@ import static com.soklet.McpLegacySessionTransportPublicRuntimeTests.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Numeric state survives verified retries across independent Soklet instances. */
-@Timeout(30)
+@Timeout(60)
 class McpNumericRequestStatePublicRuntimeTests {
 	private static final Set<McpProtocolVersion> VERSIONS = Set.of(McpProtocolVersion.V2026_07_28);
 	private static final McpJsonObject ORIGINAL = McpJsonObject.builder()

@@ -29,6 +29,17 @@ import java.util.concurrent.atomic.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class StreamingPayloadMetricsTests {
+    @Test public void directSocketFailuresKeepTypedOriginAndExactLocalizedCause() throws Exception {
+        IOException localized = new IOException("La connexion a été interrompue");
+        try (RecordingSocketChannel socket = new RecordingSocketChannel(0, localized)) {
+            var source = new ByteBufferWritableSource(ByteBuffer.wrap(new byte[]{1}));
+            var writeFailure = assertThrows(SocketChannelIo.SocketIoException.class, () -> source.writeTo(socket, 1));
+            assertSame(localized, writeFailure.getCause());
+            socket.readFailure = localized;
+            var readFailure = assertThrows(SocketChannelIo.SocketIoException.class, () -> SocketChannelIo.read(socket, ByteBuffer.allocate(1)));
+            assertSame(localized, readFailure.getCause());
+        }
+    }
     @Test public void partialPayloadBeforeLaterSocketFailureExcludesHeadersAndChunkFraming() throws Exception {
         ExecutorService executor=Executors.newSingleThreadExecutor();
         ScheduledExecutorService timer=Executors.newSingleThreadScheduledExecutor();
@@ -63,15 +74,22 @@ public class StreamingPayloadMetricsTests {
 	private static final class RecordingSocketChannel extends SocketChannel {
 		private final ByteArrayOutputStream outputStream;
         private int budget;
+        private final IOException writeFailure;
+        private IOException readFailure;
 
 		private RecordingSocketChannel(int budget) {
+            this(budget, new IOException("controlled-socket-write-failure"));
+        }
+        private RecordingSocketChannel(int budget, IOException writeFailure) {
             super(SelectorProvider.provider());
             this.budget = budget;
+			this.writeFailure = writeFailure;
 			this.outputStream = new ByteArrayOutputStream();
 		}
 
 		@Override
-		public int read(ByteBuffer dst) {
+		public int read(ByteBuffer dst) throws IOException {
+			if (this.readFailure != null) throw this.readFailure;
 			return -1;
 		}
 
@@ -82,7 +100,7 @@ public class StreamingPayloadMetricsTests {
 
 		@Override
         public int write(ByteBuffer src) throws IOException {
-            if (this.budget == 0) throw new IOException("controlled-socket-write-failure");
+            if (this.budget == 0) throw this.writeFailure;
             int size = Math.min(this.budget, src.remaining());
             byte[] bytes = new byte[size]; src.get(bytes); this.outputStream.writeBytes(bytes);
             this.budget -= size; return size;

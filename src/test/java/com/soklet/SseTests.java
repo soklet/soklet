@@ -1329,6 +1329,49 @@ public class SseTests {
 
 	@Test
 	@Timeout(value = 60, unit = SECONDS)
+	public void handshakeAndFailsafeResponseWritesUseTheConfiguredWriteDeadline() throws Exception {
+		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0).writeTimeout(Duration.ofMillis(50)).build();
+		TimeoutScheduler scheduler = new TimeoutScheduler(task -> {
+			Thread thread = new Thread(task, "sse-handshake-write-timeout-test");
+			thread.setDaemon(true);
+			return thread;
+		});
+		Field schedulerField = DefaultSseServer.class.getDeclaredField("requestHandlerTimeoutScheduler");
+		schedulerField.setAccessible(true);
+		schedulerField.set(server, scheduler);
+		try {
+			for (boolean failsafe : List.of(false, true)) {
+				try (BlockingWriteSocketChannel channel = new BlockingWriteSocketChannel()) {
+					Method writer = DefaultSseServer.class.getDeclaredMethod(failsafe ? "writeFailsafeHandshakeAndClose"
+							: "writeMarshaledResponseToChannel", SocketChannel.class, failsafe ? byte[].class : MarshaledResponse.class);
+					writer.setAccessible(true);
+					long started = System.nanoTime();
+					Object response = failsafe ? new byte[]{1} : MarshaledResponse.withStatusCode(401).body(new byte[]{1}).build();
+					if (failsafe) writer.invoke(server, channel, response);
+					else {
+						InvocationTargetException failure = Assertions.assertThrows(InvocationTargetException.class,
+								() -> writer.invoke(server, channel, response));
+						Assertions.assertInstanceOf(IOException.class, failure.getCause());
+					}
+					Assertions.assertTrue(channel.awaitClosed(1, SECONDS));
+					Assertions.assertTrue(Duration.ofNanos(System.nanoTime() - started).compareTo(Duration.ofSeconds(2)) < 0);
+				}
+			}
+			DefaultSseServer disabled = (DefaultSseServer) SseServer.withPort(0).writeTimeout(Duration.ZERO).build();
+			Method writer = DefaultSseServer.class.getDeclaredMethod("writeMarshaledResponseToChannel", SocketChannel.class, MarshaledResponse.class);
+			writer.setAccessible(true);
+			try (PartialWriteSocketChannel channel = new PartialWriteSocketChannel(4)) {
+				writer.invoke(disabled, channel, MarshaledResponse.fromStatusCode(401));
+				Assertions.assertTrue(channel.getWrittenBytes().length > 0);
+			}
+		} finally {
+			scheduler.shutdownNow();
+			Assertions.assertTrue(scheduler.awaitTermination(2, SECONDS));
+		}
+	}
+
+	@Test
+	@Timeout(value = 60, unit = SECONDS)
 	public void sseWriteTimeoutClosesConnectionAndRecordsTransportFailure() throws Exception {
 		WriteTimeoutLifecycle lifecycle = new WriteTimeoutLifecycle();
 		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
@@ -3556,7 +3599,8 @@ public class SseTests {
 
 	@Test
 	public void writeMarshaledResponseToChannel_handlesPartialWrites() throws Exception {
-		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0).build();
+		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0)
+				.writeTimeout(Duration.ZERO).build();
 		ResponseCookie cookie = ResponseCookie.with("session", "abc").path("/").build();
 
 		MarshaledResponse response = MarshaledResponse.withStatusCode(503)
@@ -3654,6 +3698,7 @@ public class SseTests {
 	public void headerOverflowClaimsHandlerBeforeTimeoutCanTakeChannel()
 			throws Exception {
 		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0)
+				.writeTimeout(Duration.ZERO)
 				.maximumHeadersSizeInBytes(19)
 				.build();
 		Class<?> contextClass = Class.forName(

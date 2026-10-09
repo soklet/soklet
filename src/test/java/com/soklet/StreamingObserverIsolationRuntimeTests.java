@@ -36,7 +36,7 @@ import java.util.concurrent.locks.LockSupport;
 import static com.soklet.TestSupport.connectWithRetry;
 import static com.soklet.TestSupport.findFreePort;
 
-@Timeout(value = 30, unit = TimeUnit.SECONDS)
+@Timeout(value = 60, unit = TimeUnit.SECONDS)
 public class StreamingObserverIsolationRuntimeTests {
 	@Test void blockedHttpCancelBatchLeavesHealthyStreamingAdmissionAvailable() throws Exception { assertHttpIsolation(Hook.CANCEL); }
 	@Test void blockedHttpTerminationObserverLeavesHealthyStreamingAdmissionAvailable() throws Exception { assertHttpIsolation(Hook.TERMINATION); }

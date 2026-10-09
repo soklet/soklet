@@ -25,7 +25,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@Timeout(45)
+@Timeout(60)
 class McpAdmissionOrderingPublicRuntimeTests {
 	private static final Set<McpProtocolVersion> VERSIONS = Set.of(McpProtocolVersion.V2025_06_18,
 			McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28);

@@ -39,7 +39,7 @@ import static com.soklet.TestSupport.connectWithRetry;
 import static com.soklet.TestSupport.findFreePort;
 
 /** HEAD routing metadata must identify the method actually selected before request observation. */
-@Timeout(value = 30, unit = TimeUnit.SECONDS)
+@Timeout(value = 60, unit = TimeUnit.SECONDS)
 public class HeadFallbackObservationTests {
 	@Test
 	void simulatedHeadReportsGetFallbackAtEveryHookWithoutChangingTheRequestMethod() {

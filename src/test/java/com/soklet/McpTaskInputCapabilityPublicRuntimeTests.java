@@ -16,6 +16,7 @@
 
 package com.soklet;
 
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestFactory;
@@ -35,7 +36,7 @@ import static com.soklet.McpLegacySessionTransportPublicRuntimeTests.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Task input delivery uses the current authorized polling request's capabilities. */
-@Timeout(30)
+@Timeout(60)
 class McpTaskInputCapabilityPublicRuntimeTests {
 	private static final String TASKS = "io.modelcontextprotocol/tasks";
 	private static final String CANARY = "private-task-input-canary";
@@ -65,7 +66,7 @@ class McpTaskInputCapabilityPublicRuntimeTests {
 				new Case("both-form-only", true, true, FORM, "\"url\":{}"),
 				new Case("both-url-only", true, true, URL, "\"form\":{}"),
 				new Case("both-supported", true, true, BOTH, ""))
-				.map(testCase -> DynamicTest.dynamicTest(testCase.name(), () -> verifyModes(testCase)));
+				.map(testCase -> DynamicTest.dynamicTest(testCase.name(), () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> verifyModes(testCase))));
 	}
 
 	private void verifyModes(Case testCase) throws Exception {

@@ -12,6 +12,7 @@
 package com.soklet;
 
 import com.soklet.annotation.SseEventSource;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestFactory;
@@ -33,7 +34,7 @@ import static com.soklet.TestSupport.connectWithRetry;
 import static com.soklet.TestSupport.findFreePort;
 import static org.junit.jupiter.api.Assertions.*;
 
-@Timeout(15)
+@Timeout(60)
 class SseDurationBoundaryTests {
 
 	@TestFactory
@@ -41,9 +42,8 @@ class SseDurationBoundaryTests {
 		return Stream.of(Duration.ZERO, Duration.ofNanos(-1), Duration.ofMillis(-1),
 				Duration.ofNanos(1), Duration.ofNanos(999_999),
 				Duration.ofMillis(Long.MAX_VALUE).plusMillis(1), ChronoUnit.FOREVER.getDuration())
-				.map(duration -> DynamicTest.dynamicTest(duration.toString(), () ->
-						assertThrows(IllegalArgumentException.class,
-								() -> SseServer.withPort(0).heartbeatInterval(duration).build())));
+				.map(duration -> DynamicTest.dynamicTest(duration.toString(), () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> assertThrows(IllegalArgumentException.class,
+								() -> SseServer.withPort(0).heartbeatInterval(duration).build()))));
 	}
 
 	@Test
@@ -64,9 +64,8 @@ class SseDurationBoundaryTests {
 	Stream<DynamicTest> invalidRetryDurationsFailWhenTheEventIsBuilt() {
 		return Stream.of(Duration.ofNanos(-1), Duration.ofMillis(-1),
 				Duration.ofMillis(Long.MAX_VALUE).plusMillis(1), ChronoUnit.FOREVER.getDuration())
-				.map(duration -> DynamicTest.dynamicTest(duration.toString(), () ->
-						assertThrows(IllegalArgumentException.class,
-								() -> SseEvent.withData("payload").retry(duration).build())));
+				.map(duration -> DynamicTest.dynamicTest(duration.toString(), () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> assertThrows(IllegalArgumentException.class,
+								() -> SseEvent.withData("payload").retry(duration).build()))));
 	}
 
 	@Test

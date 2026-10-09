@@ -22,8 +22,11 @@ import com.soklet.exception.IllegalQueryParameterException;
 import com.soklet.exception.IllegalRequestCookieException;
 import com.soklet.exception.IllegalRequestHeaderException;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -32,6 +35,21 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 class HttpValueListTests {
+	@Test
+	void fileResponseHeadersMergeCaseVariantsInOccurrenceOrder(@TempDir Path root) throws Exception {
+		Path file = Files.writeString(root.resolve("asset.txt"), "asset");
+		List<String> first = new ArrayList<>(List.of("second", "first", "first"));
+		Map<String, List<String>> headers = new LinkedHashMap<>();
+		headers.put("X-Value", first);
+		headers.put("x-value", List.of("third"));
+		var builder = MarshaledResponse.withFile(file, Request.fromPath(HttpMethod.GET, "/asset.txt")).headers(headers);
+		MarshaledResponse response = builder.build();
+		first.clear();
+		headers.clear();
+		assertEquals(List.of("second", "first", "first", "third"), response.getHeaders().get("X-VALUE"));
+		assertThrows(UnsupportedOperationException.class, () -> response.getHeaders().get("x-value").add("fourth"));
+	}
+
 	@Test
 	void queryListsPreserveDuplicatesAndPerNameOrderWhileRawQueryPreservesInterleaving() {
 		Request request = Request.withRawUrl(HttpMethod.GET, "/?id=one&other=x&id=one&id=two").build();

@@ -230,10 +230,7 @@ final class UnparsedRequestResponseSupport {
 			}
 		}
 
-		headers.sort(Comparator.comparing(Header::name,
-				String.CASE_INSENSITIVE_ORDER)
-				.thenComparing(Header::name)
-				.thenComparing(Header::value));
+		headers.sort(Comparator.comparing(Header::name, String.CASE_INSENSITIVE_ORDER));
 
 		MicrohttpResponse response = new MicrohttpResponse(statusCode,
 				reasonPhrase, headers, body);

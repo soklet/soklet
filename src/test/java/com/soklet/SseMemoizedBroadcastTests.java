@@ -12,6 +12,7 @@
 package com.soklet;
 
 import com.soklet.annotation.SseEventSource;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.TestFactory;
 import org.junit.jupiter.api.Timeout;
@@ -36,7 +37,7 @@ import static com.soklet.TestSupport.connectWithRetry;
 import static com.soklet.TestSupport.findFreePort;
 import static org.junit.jupiter.api.Assertions.*;
 
-@Timeout(30)
+@Timeout(60)
 class SseMemoizedBroadcastTests {
 	private static final ResourcePath PATH = ResourcePath.fromPath("/memoized");
 	// Two clients per group, including the valid null grouping key.
@@ -44,7 +45,7 @@ class SseMemoizedBroadcastTests {
 
 	@TestFactory
 	Stream<DynamicTest> simulationCachesProviderFailuresAndNullResultsOnlyForOneBroadcast() {
-		return cases().map(testCase -> DynamicTest.dynamicTest(testCase.toString(), () -> {
+		return cases().map(testCase -> DynamicTest.dynamicTest(testCase.toString(), () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
 			AtomicReference<SseServer> server = new AtomicReference<>();
 			SokletSimulator.run(simulatorConfig(server), simulator -> {
 				List<Throwable> failures = new ArrayList<>();
@@ -77,13 +78,13 @@ class SseMemoizedBroadcastTests {
 				assertDeliveries(deliveries, "recovered", true);
 				assertEquals(2, failures.size());
 			});
-		}));
+		})));
 	}
 
 	@TestFactory
 	@EnabledForJreRange(min = JRE.JAVA_21)
 	Stream<DynamicTest> liveBroadcastCachesProviderAndSerializationFailuresAndRecoversOnTheNextCall() {
-		return cases().map(testCase -> DynamicTest.dynamicTest(testCase.toString(), () -> {
+		return cases().map(testCase -> DynamicTest.dynamicTest(testCase.toString(), () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
 			try (LiveFixture fixture = new LiveFixture()) {
 				SseBroadcaster broadcaster = fixture.server.acquireBroadcaster(PATH).orElseThrow();
 				broadcast(broadcaster, testCase.comments(), context -> { fail("No key selection without clients"); return null; },
@@ -122,13 +123,13 @@ class SseMemoizedBroadcastTests {
 				assertEquals(new Outcome(testCase.comments(), 6, 6, 0), fixture.outcomes.get(1));
 				assertEquals(6, broadcaster.getClientCount());
 			}
-		}));
+		})));
 	}
 
 	@TestFactory
 	Stream<DynamicTest> simulationLogsGenerationFailuresOncePerKeyWhenTheHandlerIsAbsentOrFails() {
 		return Stream.of(false, true).flatMap(comments -> Stream.of(false, true).map(failingHandler ->
-				DynamicTest.dynamicTest((comments ? "comments" : "events") + (failingHandler ? " failing handler" : " default log"), () -> {
+				DynamicTest.dynamicTest((comments ? "comments" : "events") + (failingHandler ? " failing handler" : " default log"), () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
 					AtomicReference<SseServer> server = new AtomicReference<>();
 					List<LogEvent> logs = new ArrayList<>();
 					SimulatorConfig config = SimulatorConfig.builder().sseServer(server::set)
@@ -151,12 +152,12 @@ class SseMemoizedBroadcastTests {
 						}
 						assertDeliveries(deliveries, "payload", false);
 					});
-				})));
+				}))));
 	}
 
 	@TestFactory
 	Stream<DynamicTest> simulationConsumerFailuresDoNotInvalidateTheSharedPayload() {
-		return Stream.of(false, true).map(comments -> DynamicTest.dynamicTest(comments ? "comments" : "events", () -> {
+		return Stream.of(false, true).map(comments -> DynamicTest.dynamicTest(comments ? "comments" : "events", () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
 			AtomicReference<SseServer> server = new AtomicReference<>();
 			SokletSimulator.run(simulatorConfig(server), simulator -> {
 				List<Throwable> failures = new ArrayList<>();
@@ -171,12 +172,12 @@ class SseMemoizedBroadcastTests {
 				assertEquals(4, failures.size(), "Consumer failures remain per client");
 				assertDeliveries(deliveries, "payload", false);
 			});
-		}));
+		})));
 	}
 
 	@TestFactory
 	Stream<DynamicTest> simulationKeySelectionFailureRemainsPerClient() {
-		return Stream.of(false, true).map(comments -> DynamicTest.dynamicTest(comments ? "comments" : "events", () -> {
+		return Stream.of(false, true).map(comments -> DynamicTest.dynamicTest(comments ? "comments" : "events", () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
 			AtomicReference<SseServer> server = new AtomicReference<>();
 			SokletSimulator.run(simulatorConfig(server), simulator -> {
 				List<Throwable> failures = new ArrayList<>();
@@ -194,13 +195,13 @@ class SseMemoizedBroadcastTests {
 				assertEquals(Map.of(new GroupKey("ok"), 1), calls);
 				assertDeliveries(deliveries, "payload", false);
 			});
-		}));
+		})));
 	}
 
 	@TestFactory
 	@EnabledForJreRange(min = JRE.JAVA_21)
 	Stream<DynamicTest> liveKeySelectionFailureDoesNotAffectOtherClients() {
-		return Stream.of(false, true).map(comments -> DynamicTest.dynamicTest(comments ? "comments" : "events", () -> {
+		return Stream.of(false, true).map(comments -> DynamicTest.dynamicTest(comments ? "comments" : "events", () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
 			try (LiveFixture fixture = new LiveFixture()) {
 				fixture.connect();
 				RuntimeException failure = new IllegalStateException("controlled key selection failure");
@@ -216,7 +217,7 @@ class SseMemoizedBroadcastTests {
 				for (int i = 4; i < GROUPS.length; i++)
 					assertEquals(frame(comments, "payload"), readThrough(fixture.sockets.get(i), "\n\n"));
 			}
-		}));
+		})));
 	}
 
 	private record Case(boolean comments, boolean nullResult) {

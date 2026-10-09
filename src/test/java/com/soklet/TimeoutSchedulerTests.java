@@ -19,6 +19,9 @@ package com.soklet;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -29,6 +32,36 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TimeoutSchedulerTests {
+	@Test
+	@SuppressWarnings("unchecked")
+	public void pendingPublicationAfterItsTickExpiredRunsOnTheNextTick() throws Exception {
+		TimeoutScheduler scheduler = new TimeoutScheduler(new DefaultHttpServer.NonvirtualThreadFactory("overdue-timeout-test"),
+				Duration.ofMillis(10), 512);
+		CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1), overdueRan = new CountDownLatch(1);
+		try {
+			scheduler.schedule(() -> {
+				entered.countDown();
+				try { release.await(); } catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
+			}, Duration.ofMillis(1));
+			assertTrue(entered.await(1, TimeUnit.SECONDS));
+			// Reproduce a scheduling thread paused after calculating tick1, while
+			// the worker has expired tick1 and is delivering its callback.
+			Constructor<TimeoutScheduler.ScheduledTask> constructor = TimeoutScheduler.ScheduledTask.class
+					.getDeclaredConstructor(Runnable.class, long.class);
+			constructor.setAccessible(true);
+			Field pending = TimeoutScheduler.class.getDeclaredField("pendingTasks");
+			pending.setAccessible(true);
+			((ConcurrentLinkedQueue<TimeoutScheduler.ScheduledTask>) pending.get(scheduler))
+					.add(constructor.newInstance((Runnable) overdueRan::countDown, 1L));
+			release.countDown();
+			assertTrue(overdueRan.await(1, TimeUnit.SECONDS), "An overdue timeout must not wait the5.12s wheel rotation");
+		} finally {
+			release.countDown();
+			scheduler.shutdownNow();
+			assertTrue(scheduler.awaitTermination(2, TimeUnit.SECONDS));
+		}
+	}
+
 	@Test
 	public void scheduledTaskRunsAfterDelay() throws Exception {
 		TimeoutScheduler scheduler = newScheduler();

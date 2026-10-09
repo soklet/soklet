@@ -1694,6 +1694,10 @@ public class McpAnnotationProcessorValidationTests {
 		assertThat(rawUnicode).failed();
 		assertThat(rawUnicode).hadErrorContaining(
 				"MCP endpoint path must be a normalized ASCII raw URI path");
+		assertThat(compileEndpointPath("/mcp/")).hadErrorContaining("a trailing slash is not allowed");
+		assertThat(compileEndpointPath("/catalog//mcp")).hadErrorContaining("empty path segments are not allowed");
+		assertThat(compileEndpointPath("/catalog/../mcp")).hadErrorContaining("dot path segments are not allowed");
+		assertThat(compileEndpointPath("/mcp ")).hadErrorContaining("whitespace and control characters are not allowed");
 
 		Compilation oversizedAscii = compileEndpointPath(asciiBoundary + "a");
 		assertThat(oversizedAscii).failed();

@@ -39,8 +39,10 @@ public class HttpResponseStreamMetricsAggregationTests {
         MarshaledResponse response = response();
         collector.didStartRequestHandling(ServerType.HTTP, request, null);
         collector.willWriteResponse(ServerType.HTTP, request, null, response);
+        StreamingResponseHandle handle = new DefaultStreamingResponseHandle(ServerType.HTTP, request, null, response, Instant.now());
+        collector.willWriteResponseStream(handle);
         collector.didFinishRequestHandling(ServerType.HTTP, request, null, response, Duration.ofNanos(1), List.of());
-        return new DefaultStreamingResponseHandle(ServerType.HTTP, request, null, response, Instant.now());
+        return handle;
     }
     private static void end(DefaultMetricsCollector collector, StreamingResponseHandle handle, StreamTerminationReason reason, long bytes) {
         collector.didTerminateResponseStream(handle, StreamTermination.with(reason, Duration.ofNanos(2)).build(), Duration.ofNanos(7), bytes);
@@ -142,8 +144,10 @@ public class HttpResponseStreamMetricsAggregationTests {
             Request request=Request.withPath(HttpMethod.GET,"/capacity/"+i).build();
             collector.didStartMcpHttpRequestHandling(request,"/capacity/"+i);
             MarshaledResponse response=response();
+            StreamingResponseHandle handle=new DefaultStreamingResponseHandle(ServerType.HTTP,request,null,response,Instant.now());
+            collector.willWriteResponseStream(handle);
             collector.didFinishRequestHandling(ServerType.HTTP,request,null,response,Duration.ZERO,List.of());
-            end(collector,new DefaultStreamingResponseHandle(ServerType.HTTP,request,null,response,Instant.now()),StreamTerminationReason.COMPLETED,0);
+            end(collector,handle,StreamTerminationReason.COMPLETED,0);
         }
         var keys=collector.snapshot().orElseThrow().getHttpResponseStreamTerminations();
         assertEquals(8192,keys.size());assertFalse(keys.containsKey(key("/capacity/0",StreamTerminationReason.COMPLETED)));
@@ -160,11 +164,11 @@ public class HttpResponseStreamMetricsAggregationTests {
                 assertSame(handle,h);assertSame(termination,t);assertEquals(7L,bytes);durations.add(duration);
             }
         };
-        var observation=new HttpResponseStreamObservation(100L);observation.completeHandling(true);
+        var observation=new HttpResponseStreamObservation(handle.getRequest(),100L);observation.completeHandling(true);
         observation.deliver(handle,termination,150L,7L,custom,log->fail("Unexpected metric failure"));
         observation.deliver(handle,termination,999L,7L,custom,log->fail("Unexpected metric failure"));
         assertEquals(List.of(Duration.ofNanos(50)),durations);
-        var finite=new HttpResponseStreamObservation(100L);finite.completeHandling(false);
+        var finite=new HttpResponseStreamObservation(handle.getRequest(),100L);finite.completeHandling(false);
         finite.deliver(handle,termination,150L,7L,custom,log->fail("Unexpected metric failure"));
         assertEquals(1,durations.size());
         assertTrue(Arrays.stream(HttpRequestResult.class.getMethods()).noneMatch(m->m.getName().contains("StreamObservation")));

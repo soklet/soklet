@@ -236,11 +236,71 @@ public class StreamingOwnershipSupervisionTests {
 				Assertions.assertTrue(fixture.diagnostics.stream().anyMatch(failure ->
 						failure == lexicalFailure || List.of(failure.getSuppressed()).contains(lexicalFailure)),
 						"A later producer failure must remain observable without replacing the winning cancelation");
+				Assertions.assertEquals(1, fixture.diagnostics.size());
 				Assertions.assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED, fixture.reason.get());
 				Assertions.assertNull(fixture.cause.get());
 				Assertions.assertEquals(1, fixture.terminationCalls.get());
 			} finally {
 				releaseConsumer.countDown();
+			}
+		}
+	}
+
+	@Test
+	public void typedCancelationAndWrappedInterruptionDoNotClaimProducerDiagnostics() throws Exception {
+		for (Exception exit : List.of(
+				new StreamingResponseCanceledException(StreamTerminationReason.CLIENT_DISCONNECTED),
+				new IOException("wrapped upstream interruption", new InterruptedException()))) {
+			CountDownLatch entered = new CountDownLatch(1);
+			CountDownLatch release = new CountDownLatch(1);
+			try (Fixture fixture = new Fixture()) {
+				try {
+					fixture.start(responseStream -> {
+						entered.countDown();
+						awaitUninterruptibly(release);
+						throw exit;
+					});
+					await(entered);
+					fixture.source.close(StreamTerminationReason.CLIENT_DISCONNECTED, null);
+					await(fixture.terminated);
+					release.countDown();
+					fixture.awaitRetirement();
+					Assertions.assertTrue(fixture.diagnostics.isEmpty());
+					Assertions.assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED, fixture.reason.get());
+					Assertions.assertEquals(1, fixture.terminationCalls.get());
+				} finally {
+					release.countDown();
+				}
+			}
+		}
+	}
+
+	@Test
+	public void boundedCyclicAndDeepCancelationEvidenceKeepsTheElectedOutcome() throws Exception {
+		for (boolean deep : List.of(false, true)) {
+			IOException independent = new IOException("independent failure behind cancellation wrappers");
+			StreamingResponseCanceledException root = new StreamingResponseCanceledException(StreamTerminationReason.CLIENT_DISCONNECTED);
+			StreamingResponseCanceledException tail = root;
+			for (int index = 0; index < (deep ? 96 : 1); index++) {
+				StreamingResponseCanceledException next = new StreamingResponseCanceledException(StreamTerminationReason.CLIENT_DISCONNECTED);
+				tail.addSuppressed(next); tail = next;
+			}
+			if (!deep) tail.addSuppressed(root);
+			tail.addSuppressed(independent);
+			CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
+			try (Fixture fixture = new Fixture()) {
+				try {
+					fixture.start(responseStream -> { entered.countDown(); awaitUninterruptibly(release); throw root; });
+					await(entered);
+					fixture.source.close(StreamTerminationReason.CLIENT_DISCONNECTED, null);
+					await(fixture.terminated);
+					release.countDown(); fixture.awaitRetirement();
+					Assertions.assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED, fixture.reason.get());
+					Assertions.assertNull(fixture.cause.get());
+					Assertions.assertEquals(1, fixture.terminationCalls.get());
+					if (deep) Assertions.assertTrue(fixture.diagnostics.isEmpty(), "Unknown deep evidence must not become a framework failure");
+					else Assertions.assertEquals(List.of(independent), fixture.diagnostics);
+				} finally { release.countDown(); }
 			}
 		}
 	}

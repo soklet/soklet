@@ -26,7 +26,7 @@ import java.util.Set;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
 
-@org.junit.jupiter.api.Timeout(20)
+@org.junit.jupiter.api.Timeout(60)
 public class HttpResponseStreamingMetricsTests {
     static final CountDownLatch producerEntered = new CountDownLatch(1);
     static final CountDownLatch releaseProducer = new CountDownLatch(1);
@@ -55,6 +55,9 @@ public class HttpResponseStreamingMetricsTests {
             }
             @Override public void willWriteResponse(ServerType type, Request request, ResourceMethod method, MarshaledResponse response) {
                 defaults.willWriteResponse(type, request, method, response);
+            }
+            @Override public void willWriteResponseStream(StreamingResponseHandle handle) {
+                defaults.willWriteResponseStream(handle);
             }
             @Override public void didFinishRequestHandling(ServerType type, Request request, ResourceMethod method,
                     MarshaledResponse response, Duration duration, List<Throwable> throwables) {

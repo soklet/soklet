@@ -47,7 +47,42 @@ public class SokletProcessorMcpIndexPersistenceTests {
 			"mcp-endpoint-descriptor-providers";
 
 	@Test
-	void cleanClassOutputRestoresUntouchedMcpEndpointRowsFromSidecar(
+	void deletedAndRenamedEndpointOwnersArePrunedByDefault(@TempDir Path directory) throws IOException {
+		for (String mode : List.of("none", "sidecar", "persistent")) {
+			Fixture fixture = createFixture(directory.resolve(mode));
+			String cacheMode = "-Asoklet.cacheMode=" + mode;
+			String cacheDirectory = "-Asoklet.cacheDir=" + directory.resolve(mode).resolve("cache");
+			Assertions.assertTrue(fixture.compile(List.of(fixture.firstEndpoint(), fixture.secondEndpoint()), cacheMode, cacheDirectory));
+			Files.delete(fixture.secondEndpoint());
+			Files.delete(fixture.classDirectory().resolve("example/BEndpoint.class"));
+			Path plain = fixture.firstEndpoint().getParent().resolve("Plain.java");
+			Files.writeString(plain, "package example; public final class Plain {}", StandardCharsets.UTF_8);
+			Assertions.assertTrue(fixture.compile(List.of(plain), cacheMode, cacheDirectory));
+			Assertions.assertEquals(List.of("example.AEndpoint"), endpointNames(classOutputIndex(fixture.classDirectory())));
+			Path renamed = fixture.firstEndpoint().getParent().resolve("RenamedEndpoint.java");
+			Files.writeString(renamed, endpointSource("RenamedEndpoint", "/a"), StandardCharsets.UTF_8);
+			Files.delete(fixture.firstEndpoint());
+			Files.delete(fixture.classDirectory().resolve("example/AEndpoint.class"));
+			Assertions.assertTrue(fixture.compile(List.of(renamed), cacheMode, cacheDirectory));
+			Assertions.assertEquals(List.of("example.RenamedEndpoint"), endpointNames(classOutputIndex(fixture.classDirectory())));
+			if (!mode.equals("none"))
+				Assertions.assertEquals(List.of("example.RenamedEndpoint"), endpointNames(sidecarPath(fixture.classDirectory())));
+		}
+	}
+
+	@Test
+	void unavailableGeneratedProviderIsPrunedByDefault(@TempDir Path directory) throws IOException {
+		Fixture fixture = createFixture(directory);
+		Assertions.assertTrue(fixture.compile(List.of(fixture.firstEndpoint(), fixture.secondEndpoint()), "-Asoklet.cacheMode=sidecar"));
+		String provider = providerName(classOutputIndex(fixture.classDirectory()), "example.BEndpoint");
+		Files.delete(fixture.classDirectory().resolve(provider.replace('.', '/') + ".class"));
+		Assertions.assertTrue(fixture.compile(List.of(fixture.firstEndpoint()), "-Asoklet.cacheMode=sidecar"));
+		Assertions.assertEquals(List.of("example.AEndpoint"), endpointNames(classOutputIndex(fixture.classDirectory())));
+		Assertions.assertEquals(List.of("example.AEndpoint"), endpointNames(sidecarPath(fixture.classDirectory())));
+	}
+
+	@Test
+	void cleanClassOutputDoesNotRestoreUnavailableMcpEndpointRowsFromSidecar(
 			@TempDir Path temporaryDirectory) throws IOException {
 		Fixture fixture = createFixture(temporaryDirectory);
 		Assertions.assertTrue(fixture.compile(List.of(fixture.firstEndpoint(),
@@ -57,6 +92,7 @@ public class SokletProcessorMcpIndexPersistenceTests {
 		Assertions.assertEquals(List.of("example.AEndpoint",
 				"example.BEndpoint"), endpointNames(sidecar));
 
+		Files.delete(fixture.secondEndpoint());
 		deleteRecursively(fixture.classDirectory());
 		Files.createDirectories(fixture.classDirectory());
 		Path secondGeneratedDirectory =
@@ -67,11 +103,9 @@ public class SokletProcessorMcpIndexPersistenceTests {
 				List.of(fixture.firstEndpoint()),
 				List.of("-Asoklet.cacheMode=sidecar")));
 
-		Assertions.assertEquals(List.of("example.AEndpoint",
-				"example.BEndpoint"), endpointNames(classOutputIndex(
+		Assertions.assertEquals(List.of("example.AEndpoint"), endpointNames(classOutputIndex(
 				fixture.classDirectory())));
-		Assertions.assertEquals(List.of("example.AEndpoint",
-				"example.BEndpoint"), endpointNames(sidecar));
+		Assertions.assertEquals(List.of("example.AEndpoint"), endpointNames(sidecar));
 	}
 
 	@Test
@@ -238,7 +272,7 @@ public class SokletProcessorMcpIndexPersistenceTests {
 	}
 
 	@Test
-	void persistentCacheRestoresRowsWhenClassOutputAndSidecarAreClean(
+	void persistentCacheDoesNotRestoreUnavailableRowsWhenClassOutputAndSidecarAreClean(
 			@TempDir Path temporaryDirectory) throws IOException {
 		Fixture fixture = createFixture(temporaryDirectory);
 		Path cacheDirectory = temporaryDirectory.resolve("cache");
@@ -247,6 +281,7 @@ public class SokletProcessorMcpIndexPersistenceTests {
 				fixture.secondEndpoint()), "-Asoklet.cacheMode=persistent",
 				cacheOption));
 
+		Files.delete(fixture.secondEndpoint());
 		deleteRecursively(fixture.classDirectory());
 		Files.createDirectories(fixture.classDirectory());
 		Files.delete(sidecarPath(fixture.classDirectory()));
@@ -258,8 +293,7 @@ public class SokletProcessorMcpIndexPersistenceTests {
 				List.of(fixture.firstEndpoint()), List.of(
 						"-Asoklet.cacheMode=persistent", cacheOption)));
 
-		Assertions.assertEquals(List.of("example.AEndpoint",
-				"example.BEndpoint"), endpointNames(classOutputIndex(
+		Assertions.assertEquals(List.of("example.AEndpoint"), endpointNames(classOutputIndex(
 				fixture.classDirectory())));
 	}
 

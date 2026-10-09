@@ -42,7 +42,8 @@ public enum ShutdownTrigger {
 	 * registration prevents further reads, except that an already-pending byte
 	 * read may finish before the listener retires. Java cannot portably cancel
 	 * that read without closing stdin. Reserve stdin while using this trigger;
-	 * a trailing LF after a CR is left available to later input consumers.
+	 * the manager remembers a CR so a later registration ignores its immediately
+	 * following LF on the same stream as part of the earlier keystroke.
 	 */
 	ENTER_KEY
 }

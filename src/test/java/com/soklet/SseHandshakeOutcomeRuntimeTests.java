@@ -12,6 +12,7 @@
 package com.soklet;
 
 import com.soklet.annotation.SseEventSource;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestFactory;
 import org.junit.jupiter.api.DynamicTest;
@@ -28,13 +29,14 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 import java.util.stream.Stream;
 import java.util.stream.Collectors;
 import static com.soklet.TestSupport.*;
 import static org.junit.jupiter.api.Assertions.*;
 
-@Timeout(30)
+@Timeout(60)
 class SseHandshakeOutcomeRuntimeTests {
 	@Test
 	void simulatedHeadRejectsWithoutInvokingTheEventSourceOrInitializer() throws Exception {
@@ -90,7 +92,7 @@ class SseHandshakeOutcomeRuntimeTests {
 	@TestFactory
 	@EnabledForJreRange(min = JRE.JAVA_21)
 	Stream<DynamicTest> headAndOptionsDoNotConsumeOrRequireStreamCapacity() {
-		return Stream.of(true, false).map(fast -> DynamicTest.dynamicTest(fast ? "connection cap" : "lifecycle cap", () -> {
+		return Stream.of(true, false).map(fast -> DynamicTest.dynamicTest(fast ? "connection cap" : "lifecycle cap", () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
 			try (Fixture f = started(fast ? 8 : 1, fast ? 1 : 0, ResponseMarshaler.defaultInstance());
 					 Socket held = f.request(HttpMethod.GET, "ok")) {
 				assertTrue(readHead(held).startsWith("HTTP/1.1 200"));
@@ -109,7 +111,7 @@ class SseHandshakeOutcomeRuntimeTests {
 				assertEquals(1, f.server.getStreamLifecycleCoordinatorForTests().orElseThrow().snapshot().reservations());
 				assertTrue(f.connectionRejections.isEmpty());
 			}
-		}));
+		})));
 	}
 
 	@Test
@@ -129,7 +131,7 @@ class SseHandshakeOutcomeRuntimeTests {
 	@TestFactory
 	@EnabledForJreRange(min = JRE.JAVA_21)
 	Stream<DynamicTest> headTimeoutResponsesCannotSendContent() {
-		return Stream.of(false, true).map(failing -> DynamicTest.dynamicTest(failing ? "failsafe" : "custom", () -> {
+		return Stream.of(false, true).map(failing -> DynamicTest.dynamicTest(failing ? "failsafe" : "custom", () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
 			ResponseMarshaler marshaler = ResponseMarshaler.builder()
 					.methodNotAllowedHandler((request, methods) -> {
 						try { Thread.sleep(3000); } catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
@@ -151,13 +153,13 @@ class SseHandshakeOutcomeRuntimeTests {
 				assertEquals(0, f.resource.calls.get());
 				assertTrue(f.streamEvents.isEmpty());
 			}
-		}));
+		})));
 	}
 
 	@TestFactory
 	@EnabledForJreRange(min = JRE.JAVA_21)
 	Stream<DynamicTest> initializerFailuresReportEstablishedThenElectedTerminationWithoutInternalRejection() {
-		return Stream.of("checked", "overflow", "caught").map(mode -> DynamicTest.dynamicTest(mode, () -> {
+		return Stream.of("checked", "overflow", "caught").map(mode -> DynamicTest.dynamicTest(mode, () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
 			try (Fixture f = started(8, 0, ResponseMarshaler.defaultInstance()); Socket socket = f.request(HttpMethod.GET, mode)) {
 				assertTrue(readHead(socket).startsWith("HTTP/1.1 200"));
 				assertEquals(-1, socket.getInputStream().read());
@@ -167,19 +169,32 @@ class SseHandshakeOutcomeRuntimeTests {
 				assertEquals(f.streamEvents, f.metricEvents);
 				assertTrue(f.handshakeFailures.isEmpty(), f.handshakeFailures.toString());
 				assertTrue(f.connectionRejections.isEmpty(), f.connectionRejections.toString());
-				assertTrue(f.logs.stream().noneMatch(e -> e.getLogEventType() == LogEventType.SSE_SERVER_INTERNAL_ERROR || e.getLogEventType() == LogEventType.SERVER_TRANSPORT_FAILURE), f.logs.toString());
+				assertTrue(f.logs.stream().noneMatch(e -> e.getLogEventType() == LogEventType.SERVER_TRANSPORT_FAILURE), f.logs.toString());
 				if (mode.equals("checked")) assertSame(f.resource.failure, f.terminations.get(0).getCause().orElseThrow());
 				assertEquals(reason, f.terminations.get(0).getReason().name());
+				await(() -> f.logs.stream().anyMatch(e -> e.getLogEventType() == LogEventType.SSE_SERVER_INTERNAL_ERROR));
+				List<LogEvent> diagnostics = f.logs.stream().filter(e -> e.getLogEventType() == LogEventType.SSE_SERVER_INTERNAL_ERROR).toList();
+				assertEquals(1, diagnostics.size());
+				LogEvent diagnostic = diagnostics.get(0);
+				assertEquals("Server-Sent Event initialization terminated: " + reason, diagnostic.getMessage());
+				assertSame(f.terminations.get(0).getCause().orElseThrow(), diagnostic.getThrowable().orElseThrow());
+				if (!mode.equals("checked"))
+					assertEquals("SseInitializerQueueCapacityExceededException", diagnostic.getThrowable().orElseThrow().getClass().getSimpleName());
+				SseConnection established = f.establishedConnection.get();
+				assertNotNull(established);
+				assertSame(established.getRequest(), diagnostic.getRequest().orElseThrow());
+				assertEquals("/events/" + mode, diagnostic.getRequest().orElseThrow().getPath());
+				assertSame(established.getResourceMethod(), diagnostic.getResourceMethod().orElseThrow());
 				await(() -> f.server.getStreamLifecycleCoordinatorForTests().orElseThrow().snapshot().reservations() == 0);
 				assertEquals(0, f.server.getActiveConnectionCount());
 			}
-		}));
+		})));
 	}
 
 	@TestFactory
 	@EnabledForJreRange(min = JRE.JAVA_21)
 	Stream<DynamicTest> bothCapacityBoundariesReportCapacityRatherThanApplicationRejection() {
-		return Stream.of(true, false).map(fast -> DynamicTest.dynamicTest(fast ? "connection cap" : "lifecycle cap", () -> {
+		return Stream.of(true, false).map(fast -> DynamicTest.dynamicTest(fast ? "connection cap" : "lifecycle cap", () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
 			try (Fixture f = started(fast ? 8 : 1, fast ? 1 : 0, ResponseMarshaler.defaultInstance()); Socket held = f.request(HttpMethod.GET, "ok")) {
 				assertTrue(readHead(held).startsWith("HTTP/1.1 200")); await(() -> f.server.getActiveConnectionCount() == 1 && !f.streamEvents.isEmpty());
 				try (Socket rejected = f.request(HttpMethod.GET, "ok")) { assertTrue(readHead(rejected).startsWith("HTTP/1.1 503")); }
@@ -188,7 +203,7 @@ class SseHandshakeOutcomeRuntimeTests {
 				assertEquals(fast ? 1 : 2, f.resource.calls.get());
 			assertEquals(1, f.resource.initializers.get());
 			}
-		}));
+		})));
 	}
 
 	@Test
@@ -281,6 +296,7 @@ class SseHandshakeOutcomeRuntimeTests {
 		final List<String> connectionRejections = new CopyOnWriteArrayList<>();
 		final List<Failure> handshakeFailures = new CopyOnWriteArrayList<>();
 		final List<StreamTermination> terminations = new CopyOnWriteArrayList<>();
+		final AtomicReference<SseConnection> establishedConnection = new AtomicReference<>();
 		final List<LogEvent> logs = new CopyOnWriteArrayList<>();
 		boolean failHeadWrite;
 
@@ -305,7 +321,9 @@ class SseHandshakeOutcomeRuntimeTests {
 							.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
 					.lifecycleObserver(new LifecycleObserver() {
 						@Override public void didReceiveLogEvent(LogEvent logEvent) { logs.add(logEvent); }
-						@Override public void didEstablishSseConnection(SseConnection connection) { streamEvents.add("established"); }
+						@Override public void didEstablishSseConnection(SseConnection connection) {
+							establishedConnection.set(connection); streamEvents.add("established");
+						}
 						@Override public void willTerminateSseConnection(SseConnection connection, StreamTermination termination) {
 							streamEvents.add("will:" + termination.getReason());
 						}

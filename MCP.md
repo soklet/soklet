@@ -1607,8 +1607,9 @@ task-required tool's preflight capability rejection.
 The client declares that it understands task handles; it does not command the
 server to run a tool asynchronously. The selected application handler decides
 whether to return a task. Tasks do not augment prompts, resource reads, or
-other operations, and Soklet deliberately rejects the obsolete request-level
-`task` parameter, `tasks/list`, and `tasks/result` forms.
+other operations. The obsolete request-level `task` member is ignored by
+`tools/call`; it does not opt into task creation. `tasks/list` and `tasks/result`
+remain unsupported methods.
 
 ### Authoring a task-returning tool
 
@@ -1734,7 +1735,11 @@ rendered as the extension-required wire value `"cancelled"`. Status-specific
 payloads are exclusive: outstanding input requests belong to
 `INPUT_REQUIRED`, a complete tool result to `COMPLETED`, and a JSON-RPC error
 to `FAILED`. A complete tool result whose `isError` value is true is still a
-completed task.
+completed task. Worker failures should use a client-safe application error,
+for example `McpJsonRpcError.fromApplication(-31903, "Operation failed")`,
+with no secrets or internal exception messages. Reserved JSON-RPC errors such
+as `-32603` are framework-owned and cannot be constructed through that factory.
+Keep the full worker exception in application-owned logs.
 
 An `INPUT_REQUIRED` poll is checked against the independently admitted
 `tasks/get` request's current client capabilities after the manager's
@@ -2423,6 +2428,20 @@ back and forth from silently leaving the client on an earlier view. The baseline
 is an invalidation comparison, not a client receipt or a retained catalog snapshot;
 clients re-list under current authorization when they receive a hint.
 
+Long-lived catalog and localization checks use a sanitized request context.
+They do not retain authentication headers, bodies, trace identifiers or baggage.
+Use the current admitted principal, authorization partition and
+`applicationContext` for those checks. The subscription authorizer can inspect
+its original `initialRequestContext` when needed.
+
+Modern subscription maintenance concurrency is derived from the existing
+protocol and application handler concurrency settings, reserving one worker
+from each budget when possible and bounded by the retained owner count. With
+the default concurrency settings this allows 31 maintenance jobs. Each owner
+has one coalesced pending slot. This bound does not guarantee that arbitrary
+callback durations or short leases can be sustained; measure authorization,
+task lookup and catalog refresh work together when sizing a deployment.
+
 Resource invalidations received during authorization reconciliation retain bounded,
 coalesced dirty markers: at most one resource-list marker and one per accepted URI
 (up to 256). Successful reauthorization sends catch-up hints under the current
@@ -2849,7 +2868,7 @@ On an explicitly subscription-enabled 2025 session view, `resources/subscribe`
 and `resources/unsubscribe` are real POST requests through fresh admission
 and session verification. Subscribe uses ordinary request limiting; small,
 valid unsubscribe uses the reserved control quota. Subscribe exposes the one validated
-URI through `McpAdmissionContext.getResourceSubscriptionUris()` and requires a
+URI through `McpAdmissionContext.getRequestedResourceSubscriptionUris()` and requires a
 readable route in that revision. Unsubscribe exposes its validated URI through
 `getOperationName()` with an empty selection. Both successful operations return
 the matching JSON-RPC ID with `result: {}`. Missing and denied subscribe targets
@@ -2903,8 +2922,9 @@ that pending invalidation. A message fully written to one GET is not resent to
 another GET or on reconnect. A failed offer or dropped unwritten frame leaves
 its invalidation pending; another writer must wait until the original frame's
 write/drop outcome is known. URI changes arriving during a queued frame remain
-pending for a subsequent hint. Catalog hints remain coalesced until a freshly
-admitted corresponding list operation rearms them. This follows the
+pending for a subsequent hint. Catalog hints remain coalesced until a corresponding first list page is
+successfully rendered. A failed or later page does not acknowledge the hint; a
+concurrent catalog change keeps it pending. This follows the
 [2025 single-stream rule](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports#multiple-connections).
 These bits provide neither event history nor receipt guarantees. No legacy
 subscription acknowledgement, subscription-ended, or Tasks notification is sent.
@@ -2922,7 +2942,13 @@ Byte reservations release exactly once after write, drop, or close.
 GET and URI maintenance share the four-job and 64-dispatches-per-second scheduler;
 due renewals are ordered by the shortest remaining authorization lease across
 both kinds of work, including after reconciliation. Priority does not interrupt
-an already running callback or extend an authorization deadline.
+an already running callback or extend an authorization deadline. The fixed
+four-job and 64-dispatches-per-second budget limits renewal throughput: size
+leases and retained sessions for the measured duration of application callbacks.
+A renewal backlog can exhaust a lease and retire the session. Tenant-scoped
+authorization partitions share the four-concurrent/64-attempts-per-second
+control budget, so a burst of cancellation, ping, initialization or other
+cleanup controls can receive capacity rejections even across distinct owners.
 Short leases also consume a bounded aggregate maintenance-demand reservation.
 Physical callbacks and historical evidence stay charged until actual exit.
 Framework byte accounting does not measure arbitrary application principal or
@@ -2934,7 +2960,15 @@ named-host OAuth recovery and exact-candidate qualification remain pending.
 
 GET/DELETE use the existing generic HTTP lifecycle/metrics boundary with
 `ServerType.HTTP` and no `ResourceMethod`; they do not create MCP RPC request or
-limiter events. GET lifetimes use `SubscriptionOpened`/`SubscriptionClosed`, not
+limiter events. Generic finish callbacks run on dedicated bounded workers,
+never on the connection selector. Their worker count is the smaller of four
+and `requestHandlerConcurrency`; pending capacity is `requestHandlerQueueCapacity`.
+One slot is reserved before the start callback and held through physical finish,
+including the whole GET lifetime. A full or quiesced observation budget skips
+both callbacks and emits a fixed diagnostic; it does not deliver an unpaired
+start or delay protocol traffic. Slow callbacks still consume their reserved
+slots and can make shutdown incomplete. Transport end during a blocked start
+is remembered and delivers finish once that start returns. GET lifetimes use `SubscriptionOpened`/`SubscriptionClosed`, not
 RPC `RequestStreamOpened`/`RequestStreamClosed`. Sensitive original requests and
 Throwables at application observer boundaries require application retention
 policy. No public session lifecycle callback or session/owner metric dimension
@@ -3493,7 +3527,7 @@ Tasks is a namespaced protocol extension implemented by Soklet on the
 and opts the endpoint into Tasks for that revision,
 and it is negotiated only when the current request declares the exact
 `io.modelcontextprotocol/tasks` client extension capability. The legacy `task`
-member of `tools/call` is rejected rather than treated as opt-in, and obsolete
+member of `tools/call` is ignored rather than treated as opt-in, and obsolete
 `tasks/list` and `tasks/result` methods remain unknown. See
 [Durable Tasks](#durable-tasks) for the supported API and protocol boundary.
 

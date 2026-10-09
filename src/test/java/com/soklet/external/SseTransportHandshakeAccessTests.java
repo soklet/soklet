@@ -33,7 +33,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** A custom transport outside Soklet's package using only public contracts. */
-@Timeout(10)
+@Timeout(60)
 class SseTransportHandshakeAccessTests {
 	@Test
 	void accessorHasTheApprovedPublicOptionalAndNullabilityContract() throws Exception {

@@ -259,6 +259,7 @@ public final class SokletProcessor extends AbstractProcessor {
 
 	// Collected during this compilation invocation
 	private final List<ResourceMethodDeclaration> collected = new ArrayList<>();
+	private final Map<String, Element> collectedResourceMethodElements = new LinkedHashMap<>();
 	private final Set<String> touchedTopLevelBinaries = new LinkedHashSet<>();
 	private boolean resourceMethodAmbiguityDetected;
 	private final List<McpEndpointProviderDeclaration> collectedMcpEndpoints =
@@ -473,7 +474,7 @@ public final class SokletProcessor extends AbstractProcessor {
 				return false;
 			}
 			mergeAndWriteIndex(collected, touchedTopLevelBinaries);
-			if (resourceMethodIndexErrorDetected)
+			if (resourceMethodIndexErrorDetected || resourceMethodAmbiguityDetected)
 				return false;
 			mergeAndWriteMcpEndpointIndex(collectedMcpEndpoints,
 					touchedMcpTopLevelBinaries);
@@ -559,6 +560,7 @@ public final class SokletProcessor extends AbstractProcessor {
 					);
 					detectResourceMethodAmbiguity(method, declaration);
 					collected.add(declaration);
+					collectedResourceMethodElements.put(generateKey(declaration), method);
 				}
 			}
 		}
@@ -1014,12 +1016,11 @@ public final class SokletProcessor extends AbstractProcessor {
 			mcpError(endpointType,
 					"Soklet: MCP endpoint path parameters are not supported by the annotated MCP processor; use a fixed path.");
 		} else {
-			if (!McpEndpointPathLimit.isValidWirePath(path))
-				mcpError(endpointType,
-						"Soklet: MCP endpoint path must be a normalized ASCII raw URI path; percent-encode non-ASCII characters.");
-			else if (!McpEndpointPathLimit.isWithinLimit(path))
-				mcpError(endpointType,
-						"Soklet: MCP endpoint path must not exceed 8192 ASCII request-target bytes.");
+			try {
+				McpEndpointPathLimit.requireValidWirePath(path);
+			} catch (IllegalArgumentException exception) {
+				mcpError(endpointType, "Soklet: %s", exception.getMessage());
+			}
 		}
 
 		String name = annotationString(annotation, "name");
@@ -4217,6 +4218,21 @@ public final class SokletProcessor extends AbstractProcessor {
 				declaration.className(), this::resourceOwnerTypeAvailable));
 		debug("SokletProcessor: afterRemovingTouched=%d", merged.size());
 
+		// Untouched classes participate in declaration validation during incremental
+		// compiles just as they do in the complete runtime routing snapshot.
+		for (ResourceMethodDeclaration declaration : dedupeAndOrder(newlyCollected)) {
+			for (ResourceMethodDeclaration existing : merged.values()) {
+				if (resourceMethodDeclarationsAmbiguous(existing, declaration)) {
+					resourceMethodAmbiguityDetected = true;
+					error(collectedResourceMethodElements.get(generateKey(declaration)),
+							"Soklet: Ambiguous resource method declarations detected. %s overlaps %s",
+							describeResourceMethodDeclaration(declaration), describeResourceMethodDeclaration(existing));
+				}
+			}
+		}
+		if (resourceMethodAmbiguityDetected)
+			return;
+
 		// Add new entries
 		for (ResourceMethodDeclaration r : dedupeAndOrder(newlyCollected)) {
 			merged.put(generateKey(r), r);
@@ -4313,6 +4329,10 @@ public final class SokletProcessor extends AbstractProcessor {
 
 		merged.values().removeIf(declaration -> touchedTopLevelBinaries
 				.contains(declaration.topLevelBinaryName()));
+		Map<String, Boolean> availableOwners = new LinkedHashMap<>();
+		merged.values().removeIf(declaration -> !availableOwners.computeIfAbsent(
+				declaration.endpointBinaryName(), this::resourceOwnerTypeAvailable)
+				|| !availableOwners.computeIfAbsent(declaration.providerBinaryName(), this::resourceOwnerTypeAvailable));
 		for (McpEndpointProviderDeclaration declaration : newlyCollected)
 			merged.put(declaration.endpointBinaryName(), declaration);
 

@@ -303,6 +303,24 @@ public class UtilitiesTests {
 	}
 
 	@Test
+	public void effectiveClientIpFromHeaders_doesNotCrossUnknownOrMalformedAllowlistHops() throws Exception {
+		for (String invalid : List.of("unknown", "_hidden", "host.example", "bad:port", "")) {
+			for (Map<String, List<String>> headers : List.of(
+					Map.of("X-Forwarded-For", List.of("198.51.100.10, " + invalid + ", 10.0.0.2")),
+					Map.of("Forwarded", List.of("for=198.51.100.10", "for=" + invalid + ", for=10.0.0.2"),
+							"X-Forwarded-For", List.of("198.51.100.30")))) {
+				assertEquals(Optional.of(address("10.0.0.3")), EffectiveClientIpResolver.withHeaders(headers, TrustPolicy.TRUST_PROXY_ALLOWLIST)
+						.remoteAddress(remoteAddress("10.0.0.3"))
+						.trustedProxyAddresses(Set.of(address("10.0.0.2"), address("10.0.0.3"))).resolve());
+			}
+		}
+		assertEquals(Optional.of(address("203.0.113.99")), EffectiveClientIpResolver.withHeaders(Map.of(
+				"X-Forwarded-For", List.of("198.51.100.10, unknown, 203.0.113.99, 10.0.0.2")), TrustPolicy.TRUST_PROXY_ALLOWLIST)
+				.remoteAddress(remoteAddress("10.0.0.3"))
+				.trustedProxyAddresses(Set.of(address("10.0.0.2"), address("10.0.0.3"))).resolve());
+	}
+
+	@Test
 	public void effectiveClientIpFromHeaders_doesNotTrustSpoofedLeftmostForwardedForAddress() throws Exception {
 		Map<String, List<String>> headers = Map.of(
 				"X-Forwarded-For", List.of("198.51.100.10, 203.0.113.99, 10.0.0.2")

@@ -608,6 +608,13 @@ public final class StreamingMicrohttpResponses {
 				completeProducer();
 			} catch (Throwable t) {
 				failProducer(t);
+				StreamTerminationReason electedReason = this.cancelationToken.getCancelationReason().orElse(null);
+				if (electedReason != null && electedReason != StreamTerminationReason.PRODUCER_FAILED) {
+					Throwable evidence = competingProducerFailure(t,
+							this.cancelationToken.getCancelationCause().orElse(null), new IdentityHashMap<>());
+					if (evidence != null && this.reservation != null)
+						this.reservation.reportProducerFailure(evidence);
+				}
 			} finally {
 				synchronized (this.lock) {
 					this.producerThread = null;
@@ -617,14 +624,8 @@ public final class StreamingMicrohttpResponses {
 		}
 
 		private void failProducer(@NonNull Throwable throwable) {
-			// A transport outcome can precede producer exit. Preserve later application
-			// failure evidence even though a second terminal signal cannot replace it.
-			if (this.cancelationToken.isCanceled()
-					&& !sameInstance(throwable, this.cancelationToken.getCancelationCause().orElse(null))
-					&& !(throwable instanceof InterruptedException)
-					&& (!(throwable instanceof StreamingResponseCanceledException)
-							|| hasUnexpectedCancelationSuppression(throwable)))
-				reportCleanupFailure(throwable);
+			// Canceling owned upstream work can make the producer throw. That is
+			// producer exit evidence; cleanup diagnostics belong to close/abort hooks.
 			if (throwable instanceof StreamingResponseCanceledException canceledException) {
 				fail(canceledException.getCancelationReason(), canceledException.getCancelationCause().orElse(null));
 			} else if (throwable instanceof InterruptedException) {
@@ -640,28 +641,40 @@ public final class StreamingMicrohttpResponses {
 			}
 		}
 
-		private boolean hasUnexpectedCancelationSuppression(@NonNull Throwable throwable) {
-			Queue<Throwable> pending = new ArrayDeque<>();
-			IdentityHashMap<Throwable, Boolean> visited = new IdentityHashMap<>();
-			visited.put(throwable, Boolean.TRUE);
-			for (Throwable suppressed : throwable.getSuppressed()) {
-				if (pending.size() == 64) return true;
-				pending.add(suppressed);
-			}
-			while (!pending.isEmpty()) {
-				Throwable suppressed = pending.remove();
-				if (visited.put(suppressed, Boolean.TRUE) != null) continue;
-				if (visited.size() > 64) return true;
-				boolean matchingCancelation = suppressed instanceof StreamingResponseCanceledException canceled
-						&& canceled.getCancelationReason() == this.cancelationToken.getCancelationReason().orElse(null)
-						&& sameInstance(canceled.getCancelationCause().orElse(null),
-								this.cancelationToken.getCancelationCause().orElse(null));
-				if (!(suppressed instanceof InterruptedException) && !matchingCancelation)
-					return true;
-				for (Throwable nested : suppressed.getSuppressed()) {
-					if (pending.size() == 64) return true;
-					pending.add(nested);
+		@Nullable
+		private static Throwable competingProducerFailure(Throwable throwable, @Nullable Throwable electedCause,
+				IdentityHashMap<Throwable, Boolean> visited) {
+			ArrayDeque<Throwable> pending = new ArrayDeque<>();
+			pending.add(throwable);
+			int remaining = 64;
+			while (!pending.isEmpty() && remaining-- > 0) {
+				Throwable current = pending.removeFirst();
+				if (sameInstance(current, electedCause) || visited.put(current, Boolean.TRUE) != null)
+					continue;
+				if (!hasRoutineCancelationCause(current))
+					return current;
+				// Managed lexical scopes preserve a later body failure as suppression
+				// on the elected cancellation. The wrapper is routine exit evidence.
+				for (Throwable suppressed : current.getSuppressed()) {
+					if (remaining-- <= 0)
+						return null;
+					if (!visited.containsKey(suppressed))
+						pending.addLast(suppressed);
 				}
+			}
+			return null;
+		}
+
+		private static boolean hasRoutineCancelationCause(Throwable throwable) {
+			IdentityHashMap<Throwable, Boolean> visited = new IdentityHashMap<>();
+			int remaining = 64;
+			for (Throwable cause = throwable; cause != null && visited.put(cause, Boolean.TRUE) == null;
+					 cause = cause.getCause()) {
+				if (remaining-- <= 0)
+					return true; // Beyond the evidence budget, independence cannot be established.
+				if (cause instanceof InterruptedException || cause instanceof java.io.InterruptedIOException
+						|| cause instanceof StreamingResponseCanceledException)
+					return true;
 			}
 			return false;
 		}
@@ -1089,7 +1102,7 @@ public final class StreamingMicrohttpResponses {
 
 				long written;
 				try {
-					written = socketChannel.write(buffer);
+					written = SocketChannelIo.write(socketChannel, buffer);
 				} finally {
 					buffer.limit(originalLimit);
 				}

@@ -170,7 +170,9 @@ public class McpResultEnvelopeGoldenProductionTests {
 		Set<String> expectedRuntimeMethods = new LinkedHashSet<>(REQUEST_METHODS);
 		expectedRuntimeMethods.addAll(Set.of("notifications/cancelled",
 				"tasks/get", "tasks/update", "tasks/cancel",
-				"completion/complete", "skills/list", "skills/get"));
+				"completion/complete", "skills/list", "skills/get",
+				"initialize", "ping", "notifications/initialized",
+				"resources/subscribe", "resources/unsubscribe"));
 		Assertions.assertEquals(expectedRuntimeMethods, runtimeMethods);
 		for (String method : runtimeMethods)
 			Assertions.assertEquals(INPUT_REQUIRED_METHODS.contains(method),

@@ -275,7 +275,8 @@ public final class McpEndpoint {
 				if (resource == null || !hasAppsMimeType(resource))
 					throw new IllegalStateException(
 							"MCP Apps tool associations require an exact UI resource "
-									+ "registration with the Apps MIME profile on the same endpoint.");
+									+ "registration with the Apps MIME profile on the same endpoint for tool "
+									+ tool.getName() + versionContext(tool.getProtocolVersions()));
 				tool.getAppToolMetadata().ifPresent(metadata -> requireSubset(
 						metadata.getProtocolVersions(), resource.getProtocolVersions(),
 						"Apps UI resource for tool " + tool.getName()));

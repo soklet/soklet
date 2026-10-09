@@ -66,6 +66,9 @@ final class McpSimulationRuntime implements McpSimulation,
 
 	@NonNull
 	private final Object lock;
+	@NonNull
+	private final McpApplicationClock clock;
+	private long lastCapturedFrameNanos;
 	private final int streamItemQueueCapacity;
 	private final int maximumCapturedSizeInBytes;
 	@NonNull
@@ -99,6 +102,13 @@ final class McpSimulationRuntime implements McpSimulation,
 
 	McpSimulationRuntime(@NonNull McpSimulationOptions options,
 			@NonNull Runnable completionCallback) {
+		this(options, McpApplicationClock.SYSTEM, completionCallback);
+	}
+
+	McpSimulationRuntime(@NonNull McpSimulationOptions options,
+			@NonNull McpApplicationClock clock, @NonNull Runnable completionCallback) {
+		this.clock = requireNonNull(clock);
+		this.lastCapturedFrameNanos = clock.nanoTime();
 		McpSimulationOptions requiredOptions = requireNonNull(options);
 		this.lock = new Object();
 		this.streamItemQueueCapacity =
@@ -365,6 +375,15 @@ final class McpSimulationRuntime implements McpSimulation,
 	}
 
 	@Override
+	public McpOutboundChannel.@NonNull OfferResult offerIfWriteIdleExpired(
+			McpRequestSseStream.@NonNull Frame frame, long nowNanos,
+			long idleIntervalNanos) {
+		return offer(requireNonNull(frame), null,
+				() -> nowNanos - this.lastCapturedFrameNanos >= idleIntervalNanos)
+				.orElse(McpOutboundChannel.OfferResult.NOT_IDLE);
+	}
+
+	@Override
 	public McpOutboundChannel.@NonNull OfferResult offer(
 			McpRequestSseStream.@NonNull Frame frame) {
 		return offer(frame, null, () -> true).orElseThrow();
@@ -624,6 +643,7 @@ final class McpSimulationRuntime implements McpSimulation,
 		if (coalescingKey != null)
 			this.pendingCoalescingKeys.add(coalescingKey);
 		this.capturedBytes += encodedBytes.length;
+		this.lastCapturedFrameNanos = this.clock.nanoTime();
 		this.lock.notifyAll();
 		return null;
 	}

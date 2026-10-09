@@ -228,13 +228,18 @@ final class DefaultMcpLocalizationCatalogExtractor {
 			case PROMPTS_LIST -> endpoint.getPromptRegistrations().stream()
 					.anyMatch(prompt -> prompt.getProtocolVersions().contains(modern));
 			case RESOURCES_LIST -> !endpoint.getResourceListHandlerProtocolVersions().contains(modern)
-					&& endpoint.getResourceRegistrations().stream()
-							.anyMatch(resource -> resource.getProtocolVersions().contains(modern));
+					&& hasModernResourceSurface(endpoint);
 			case RESOURCE_TEMPLATES_LIST -> endpoint.getResourceListHandlerProtocolVersions().contains(modern)
-					|| endpoint.getResourceRegistrations().stream()
-							.anyMatch(resource -> resource.getProtocolVersions().contains(modern));
+					|| hasModernResourceSurface(endpoint);
 			default -> false;
 		};
+	}
+
+	private static boolean hasModernResourceSurface(McpEndpoint endpoint) {
+		return !endpoint.skillIndex().registrations().isEmpty()
+				|| endpoint.getSkillListHandler().isPresent()
+				|| endpoint.getResourceRegistrations().stream().anyMatch(resource ->
+						resource.getProtocolVersions().contains(McpProtocolVersion.V2026_07_28));
 	}
 
 	private static void addResponse(

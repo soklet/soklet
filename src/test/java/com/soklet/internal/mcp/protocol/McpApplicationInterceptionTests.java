@@ -255,7 +255,8 @@ public class McpApplicationInterceptionTests {
 			Assertions.assertEquals(0, handlerInvocations.get());
 
 			runCommand(executor.takeCommand(), "mcp-interceptor-first-admitted-test");
-			runCommand(executor.takeCommand(), "mcp-interceptor-second-admitted-test");
+			Assertions.assertNull(executor.takeCommand(),
+					"The same physical worker must drain its accepted successor.");
 
 			Assertions.assertEquals(2, interceptorInvocations.get());
 			Assertions.assertEquals(2, handlerInvocations.get());

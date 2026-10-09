@@ -1598,6 +1598,8 @@ final class McpApplicationExecution {
 	@NonNull
 	private final ExecutorService sessionOwnerPolicyExecutor;
 	@NonNull
+	private final McpLegacyHttpObservationDispatcher legacyHttpObservations;
+	@NonNull
 	private final McpApplicationHandlerDispatcher dispatcher;
 	@NonNull
 	private final McpApplicationHandlerDispatcher sessionOwnerPolicyDispatcher;
@@ -1726,6 +1728,8 @@ final class McpApplicationExecution {
 					sessionOwnerConcurrency, configuration.handlerQueueCapacity(), ownerExecutor,
 					McpApplicationExecutionObserver.disabledInstance(), this::signalDeadlineTimer);
 			this.sessionOwnerPolicyExecutor = ownerExecutor;
+			this.legacyHttpObservations = new McpLegacyHttpObservationDispatcher(
+					sessionOwnerConcurrency, configuration.handlerQueueCapacity(), this::signalDeadlineTimer);
 		} catch (RuntimeException | Error failure) {
 			shutdownFailedConstructionExecutor(ownerExecutor, failure);
 			shutdownFailedConstructionExecutor(handlerExecutor, failure);
@@ -2526,6 +2530,12 @@ final class McpApplicationExecution {
 		return sessionOwnerPolicyDispatcher.snapshot();
 	}
 
+	McpLegacyHttpObservationDispatcher.@Nullable Reservation reserveLegacyHttpObservation() {
+		return legacyHttpObservations.reserve();
+	}
+
+	boolean legacyHttpObservationOutstanding() { return legacyHttpObservations.outstanding() != 0; }
+
 	void stop() {
 		stop(StreamTerminationReason.SERVER_STOPPING);
 	}
@@ -2539,6 +2549,7 @@ final class McpApplicationExecution {
 		}
 		dispatcher.beginGracefulDrain();
 		sessionOwnerPolicyDispatcher.beginGracefulDrain();
+		legacyHttpObservations.quiesce();
 		finishGracefulDrainIfComplete();
 		signalDeadlineTimer();
 	}
@@ -2577,6 +2588,7 @@ final class McpApplicationExecution {
 		// the logical handler slot charged forever.
 		handlerExecutor.shutdown();
 		sessionOwnerPolicyExecutor.shutdown();
+		legacyHttpObservations.stop(true);
 		cancellationCallbackExecutor.shutdown();
 		LockSupport.unpark(timerThread);
 	}
@@ -2588,6 +2600,7 @@ final class McpApplicationExecution {
 		McpApplicationHandlerDispatcher.Snapshot ownerSnapshot = sessionOwnerPolicyDispatcher.snapshot();
 		if (snapshot.activeSlots() != 0 || snapshot.queueDepth() != 0
 				|| ownerSnapshot.activeSlots() != 0 || ownerSnapshot.queueDepth() != 0
+				|| legacyHttpObservations.outstanding() != 0
 				|| !retainedExchanges.isEmpty() || !requestsByIdentity.isEmpty())
 			return;
 		synchronized (executionBoundaryLock) {
@@ -2597,12 +2610,14 @@ final class McpApplicationExecution {
 			McpApplicationHandlerDispatcher.Snapshot confirmedOwner = sessionOwnerPolicyDispatcher.snapshot();
 			if (confirmed.activeSlots() != 0 || confirmed.queueDepth() != 0
 					|| confirmedOwner.activeSlots() != 0 || confirmedOwner.queueDepth() != 0
+					|| legacyHttpObservations.outstanding() != 0
 					|| !retainedExchanges.isEmpty() || !requestsByIdentity.isEmpty())
 				return;
 			stopped.set(true);
 		}
 		handlerExecutor.shutdown();
 		sessionOwnerPolicyExecutor.shutdown();
+		legacyHttpObservations.stop(false);
 		cancellationCallbackExecutor.shutdown();
 		LockSupport.unpark(timerThread);
 	}
@@ -2636,6 +2651,10 @@ final class McpApplicationExecution {
 		if (!cancellationCallbackExecutor.isTerminated() && remaining > 0L)
 			cancellationCallbackExecutor.awaitTermination(
 					remaining, TimeUnit.NANOSECONDS);
+		elapsed = System.nanoTime() - startedAt;
+		remaining = Math.max(0L, timeoutNanos - Math.max(0L, elapsed));
+		if (!legacyHttpObservations.isTerminated() && remaining > 0L)
+			legacyHttpObservations.awaitTermination(Duration.ofNanos(remaining));
 		return isTerminated();
 	}
 
@@ -2645,6 +2664,7 @@ final class McpApplicationExecution {
 		McpApplicationHandlerDispatcher.Snapshot ownerSnapshot = sessionOwnerPolicyDispatcher.snapshot();
 		return stopped.get() && !timerThread.isAlive() && handlerExecutor.isTerminated()
 				&& sessionOwnerPolicyExecutor.isTerminated()
+				&& legacyHttpObservations.isTerminated()
 				&& cancellationCallbackExecutor.isTerminated()
 				&& dispatcherSnapshot.activeSlots() == 0
 				&& dispatcherSnapshot.queueDepth() == 0

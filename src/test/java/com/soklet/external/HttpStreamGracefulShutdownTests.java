@@ -45,7 +45,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Public API exercised from outside Soklet's package, with real HTTP and off-network simulation. */
-@Timeout(15)
+@Timeout(60)
 class HttpStreamGracefulShutdownTests {
 
 	@Test

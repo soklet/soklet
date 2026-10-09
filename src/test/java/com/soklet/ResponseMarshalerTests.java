@@ -35,6 +35,23 @@ import java.util.concurrent.atomic.AtomicReference;
 
 class ResponseMarshalerTests {
 	@Test
+	void streamingBodyCannotAccidentallyRenderAsObjectText() throws Exception {
+		ResourceMethod resourceMethod = ResourceMethod.fromComponents(HttpMethod.GET,
+				ResourcePathDeclaration.fromPath("/stream"),
+				StreamingBodyResource.class.getMethod("stream"), false);
+		Response response = Response.withStatusCode(200)
+				.body(StreamingResponseBody.fromWriter(responseStream -> {})).build();
+		IllegalArgumentException failure = Assertions.assertThrows(IllegalArgumentException.class,
+				() -> DefaultResponseMarshaler.defaultInstance().forResourceMethod(
+						Request.fromPath(HttpMethod.GET, "/stream"), response, resourceMethod));
+		Assertions.assertTrue(failure.getMessage().contains("MarshaledResponse.stream"));
+	}
+
+	public static class StreamingBodyResource {
+		public Response stream() { return Response.fromStatusCode(200); }
+	}
+
+	@Test
 	void unparsedRequestReasonsArePureClassifications() {
 		Assertions.assertEquals(Set.of(
 				UnparsedRequestReason.MALFORMED_REQUEST,

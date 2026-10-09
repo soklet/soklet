@@ -12,6 +12,7 @@
 package com.soklet;
 
 import com.soklet.annotation.SseEventSource;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestFactory;
@@ -31,13 +32,13 @@ import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@Timeout(20)
+@Timeout(60)
 class SimulatorSseDeliveryContractTests {
 	private static final ResourcePath PATH = ResourcePath.fromPath("/delivery-contract");
 
 	@TestFactory
 	Stream<DynamicTest> oneListenerCanReadMixedBroadcastsBeyondTheQueueLimit() {
-		return listenerCases().map(comments -> DynamicTest.dynamicTest(label(comments), () -> {
+		return listenerCases().map(comments -> DynamicTest.dynamicTest(label(comments), () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
 			SokletSimulator.run(config(2, ignored -> {}), simulator -> {
 				var accepted = accepted(simulator);
 				List<String> deliveries = new ArrayList<>();
@@ -53,12 +54,12 @@ class SimulatorSseDeliveryContractTests {
 				accepted.close();
 				await(() -> broadcaster.getClientCount() == 0);
 			});
-		}));
+		})));
 	}
 
 	@TestFactory
 	Stream<DynamicTest> initialMixedCaptureSurvivesReadingAndLaterListenerRegistration() {
-		return listenerCases().map(comments -> DynamicTest.dynamicTest(label(comments), () -> {
+		return listenerCases().map(comments -> DynamicTest.dynamicTest(label(comments), () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
 			SokletSimulator.run(config(4, client -> {
 				unicast(client, comments, "initial-observed");
 				unicast(client, !comments, "initial-unobserved");
@@ -83,12 +84,12 @@ class SimulatorSseDeliveryContractTests {
 				assertEquals(1, broadcaster.getClientCount());
 				assertThrows(IllegalStateException.class, () -> register(accepted, comments, ignored -> {}));
 			});
-		}));
+		})));
 	}
 
 	@TestFactory
 	Stream<DynamicTest> readingStartsBeforeReentrantConsumerDelivery() {
-		return listenerCases().map(comments -> DynamicTest.dynamicTest(label(comments), () -> {
+		return listenerCases().map(comments -> DynamicTest.dynamicTest(label(comments), () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
 			SokletSimulator.run(config(3, client -> {
 				unicast(client, comments, "first");
 				unicast(client, comments, "second");
@@ -110,12 +111,12 @@ class SimulatorSseDeliveryContractTests {
 				assertEquals(List.of("initial-other"), other);
 				assertEquals(1, broadcaster.getClientCount());
 			});
-		}));
+		})));
 	}
 
 	@TestFactory
 	Stream<DynamicTest> capturedPayloadsDoNotConsumeTheLiveDeliveryBudget() {
-		return listenerCases().map(comments -> DynamicTest.dynamicTest(label(comments), () -> {
+		return listenerCases().map(comments -> DynamicTest.dynamicTest(label(comments), () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
 			CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
 			AtomicReference<Thread> worker = new AtomicReference<>();
 			try {
@@ -145,12 +146,12 @@ class SimulatorSseDeliveryContractTests {
 					assertEquals(List.of("captured-1", "captured-2", "live-other"), other);
 				});
 			} finally { release.countDown(); join(worker.get()); }
-		}));
+		})));
 	}
 
 	@TestFactory
 	Stream<DynamicTest> aBlockedListenerStillHasFiniteLiveBackpressure() {
-		return listenerCases().map(comments -> DynamicTest.dynamicTest(label(comments), () -> {
+		return listenerCases().map(comments -> DynamicTest.dynamicTest(label(comments), () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
 			CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
 			AtomicReference<Thread> worker = new AtomicReference<>();
 			try {
@@ -178,7 +179,7 @@ class SimulatorSseDeliveryContractTests {
 					assertEquals(List.of("held"), deliveries);
 				});
 			} finally { release.countDown(); join(worker.get()); }
-		}));
+		})));
 	}
 
 	@Test

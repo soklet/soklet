@@ -46,7 +46,7 @@ class ByteBufferWritableSource implements WritableSource {
         int maxBytesThisWrite = (int) Math.min(maxBytes, (long) buffer.remaining());
         buffer.limit(buffer.position() + maxBytesThisWrite);
         try {
-            return socketChannel.write(buffer);
+            return SocketChannelIo.write(socketChannel, buffer);
         } finally {
             buffer.limit(originalLimit);
         }

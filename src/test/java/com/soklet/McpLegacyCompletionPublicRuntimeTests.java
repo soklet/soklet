@@ -339,7 +339,7 @@ public class McpLegacyCompletionPublicRuntimeTests {
 						Capture capture = send(port(server), version, "completion/complete",
 								params(prompt, prompt ? "deadline" : uriTemplate("deadline"), "value", "a", null),
 								"deadline", null);
-						assertEquals(504, capture.status(), capture.body());
+						assertEquals(200, capture.status(), capture.body());
 						assertError(capture, -32603);
 						assertFalse(capture.body().contains("late"), capture.body());
 					}

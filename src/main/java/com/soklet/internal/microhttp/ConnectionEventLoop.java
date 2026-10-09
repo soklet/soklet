@@ -6,12 +6,10 @@ import com.soklet.StreamTerminationReason;
 import com.soklet.StreamingResponseCanceledException;
 import org.jspecify.annotations.Nullable;
 
-import java.io.EOFException;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.channels.ClosedChannelException;
 import java.nio.channels.ClosedSelectorException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
@@ -21,7 +19,6 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Locale;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -485,7 +482,7 @@ class ConnectionEventLoop {
             }
 
             buffer.clear();
-            int numBytes = socketChannel.read(buffer);
+            int numBytes = SocketChannelIo.read(socketChannel, buffer);
             if (numBytes < 0) {
                 if (logger.enabled()) {
                     logger.log(
@@ -553,7 +550,7 @@ class ConnectionEventLoop {
             int remainingCapacity = options.maxRequestSize() - byteTokenizer.size();
             boolean overflowProbe = remainingCapacity <= 0;
             buffer.limit(overflowProbe ? 1 : Math.min(buffer.capacity(), remainingCapacity));
-            int numBytes = socketChannel.read(buffer);
+            int numBytes = SocketChannelIo.read(socketChannel, buffer);
 
             if (numBytes < 0) {
                 if (logger.enabled()) {
@@ -621,7 +618,7 @@ class ConnectionEventLoop {
             int remainingCapacity = options.maxRequestSize() - bufferedBytes;
             boolean overflowProbe = remainingCapacity <= 0;
             buffer.limit(overflowProbe ? 1 : Math.min(buffer.capacity(), remainingCapacity));
-            int numBytes = socketChannel.read(buffer);
+            int numBytes = SocketChannelIo.read(socketChannel, buffer);
 
             if (numBytes < 0) {
                 if (logger.enabled()) {
@@ -1312,7 +1309,7 @@ class ConnectionEventLoop {
                 return;
             }
 
-            socketChannel.write(activeContinueResponseBuffer);
+            SocketChannelIo.write(socketChannel, activeContinueResponseBuffer);
             if (activeContinueResponseBuffer.hasRemaining()) {
                 if (!selectionKey.isValid()) {
                     failSafeClose();
@@ -1686,7 +1683,7 @@ class ConnectionEventLoop {
         private void applyConnectionPolicy(MicrohttpRequest request) {
             closeAfterResponse = false;
             httpOneDotZero = request.version().equalsIgnoreCase(HTTP_1_0);
-            headRequest = "HEAD".equalsIgnoreCase(request.method());
+            headRequest = "HEAD".equals(request.method());
 
             boolean hasClose = hasHeaderToken(request.headers(), HEADER_CONNECTION, CLOSE);
             boolean hasKeepAlive = hasHeaderToken(request.headers(), HEADER_CONNECTION, KEEP_ALIVE);
@@ -1758,25 +1755,10 @@ class ConnectionEventLoop {
         // Sources can supply arbitrary exception chains, including cycles. Classification
         // must not strand the event loop before it can close the failed response.
         for (int depth = 0; current != null && depth < MAX_REMOTE_CLOSE_CAUSE_DEPTH; ++depth) {
-            if (current instanceof ClosedChannelException)
+            if (current instanceof ResponseBodySourceException)
+                return false;
+            if (current instanceof SocketChannelIo.SocketIoException)
                 return true;
-            if (current instanceof EOFException)
-                return true;
-            if (current instanceof IOException) {
-                String message = current.getMessage();
-
-                if (message != null) {
-                    String normalized = message.toLowerCase(Locale.ROOT);
-
-                    if (normalized.contains("broken pipe")
-                            || normalized.contains("connection reset")
-                            || normalized.contains("connection aborted")
-                            || normalized.contains("connection reset by peer")
-                            || normalized.contains("software caused connection abort")
-                            || normalized.contains("socket closed"))
-                        return true;
-                }
-            }
 
             current = current.getCause();
         }

@@ -53,6 +53,8 @@ final class ResourceMethodBindingValidation {
 	}
 
 	static void validate(@NonNull ResourceMethod resourceMethod) {
+		if (resourceMethod.hasValidatedBindings())
+			return;
 		for (Parameter parameter : resourceMethod.getMethod().getParameters()) {
 			int bindingCount = 0;
 			boolean optionalPrimitive = false;
@@ -77,5 +79,6 @@ final class ResourceMethodBindingValidation {
 				throw new IllegalArgumentException(String.format("Resource Method %s has an invalid parameter binding: %s",
 						resourceMethod.getMethod().toGenericString(), failure));
 		}
+		resourceMethod.markBindingsValidated();
 	}
 }

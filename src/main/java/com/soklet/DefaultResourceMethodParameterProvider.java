@@ -444,7 +444,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 			else
 				message = format(
 						"Unable to automatically detect resource method parameter name. "
-								+ "You must either explicitly specify a @%s value for parameter %s - for example, @%s(\"name-goes-here\") - "
+								+ "You must either explicitly specify a @%s name for parameter %s - for example, @%s(name=\"name-goes-here\") - "
 								+ "or compile with javac flag \"-parameters\" to preserve parameter names for reflection. Offending resource method was %s",
 						annotation.annotationType().getSimpleName(), parameter, annotation.annotationType().getSimpleName(), resourceMethod);
 
@@ -559,10 +559,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 
 		String parameterDescription = "request cookie";
 		String parameterName = extractParameterName(resourceMethod, parameter, requestCookie, requestCookie.name());
-		List<String> values = request.getCookies().get(parameterName);
-
-		if (values == null)
-			values = List.of();
+		List<String> values = request.cookieValuesForName(parameterName);
 
 		RequestValueExtractionConfig<String> requestValueExtractionConfig = new RequestValueExtractionConfig.Builder<String>(resourceMethod, parameter, parameterType, parameterName, parameterDescription)
 				.optional(requestCookie.optional())

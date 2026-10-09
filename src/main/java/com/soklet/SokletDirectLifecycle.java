@@ -2568,7 +2568,9 @@ final class SokletDirectLifecycle {
 	private HttpServer.RequestHandler guardedHttpHandler(@Nullable LocalGeneration generation) {
 		return (request, consumer) -> {
 			AdmissionFence.Admission admission = generation == null ? null
-					: generation.admissionFence().tryAdmit().orElse(null);
+					: request.claimLifecycleAdmission(generation.admissionFence());
+			if (generation != null && admission == null && !request.hasLifecycleAdmission())
+				admission = generation.admissionFence().tryAdmit().orElse(null);
 			if (generation != null && admission == null) {
 				consumer.accept(serviceUnavailableResult(request));
 				return;
@@ -2583,7 +2585,9 @@ final class SokletDirectLifecycle {
 	private SseServer.RequestHandler guardedSseHandler(@Nullable LocalGeneration generation) {
 		return (request, consumer) -> {
 			AdmissionFence.Admission admission = generation == null ? null
-					: generation.admissionFence().tryAdmit().orElse(null);
+					: request.claimLifecycleAdmission(generation.admissionFence());
+			if (generation != null && admission == null && !request.hasLifecycleAdmission())
+				admission = generation.admissionFence().tryAdmit().orElse(null);
 			if (generation != null && admission == null) {
 				consumer.accept(serviceUnavailableResult(request));
 				return;

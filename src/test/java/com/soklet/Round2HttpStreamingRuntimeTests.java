@@ -1,0 +1,177 @@
+package com.soklet;
+
+import com.soklet.annotation.GET;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
+import java.net.Socket;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BooleanSupplier;
+import static com.soklet.TestSupport.*;
+import static org.junit.jupiter.api.Assertions.*;
+
+@Timeout(60)
+class Round2HttpStreamingRuntimeTests {
+	@Test void lateFiniteAndStreamingHandlersObserveTheTimeoutResponseWithoutStreamAdmission() throws Exception {
+		for (boolean streaming : List.of(false, true)) {
+			try (Fixture fixture = new Fixture(false, Duration.ofMillis(100)); Socket client = fixture.request("/late", "HTTP/1.1")) {
+				fixture.resource.lateStreaming = streaming;
+				assertTrue(fixture.resource.handlerEntered.await(2, TimeUnit.SECONDS));
+				assertTrue(read(client).startsWith("HTTP/1.1 503"));
+				fixture.resource.releaseHandler.countDown();
+				await(() -> fixture.finishes.size() == 1);
+				assertEquals(List.of(503), fixture.writes);
+				assertEquals(List.of(503), fixture.finishes);
+				assertTrue(fixture.terminals.isEmpty());
+				assertEquals(0, fixture.resource.producerCalls.get());
+				assertEquals(0, fixture.server.getStreamLifecycleCoordinatorForTests().orElseThrow().snapshot().reservations());
+				assertEquals(0L, fixture.metrics.snapshot().orElseThrow().getActiveRequests());
+				assertTrue(fixture.metrics.snapshot().orElseThrow().getHttpResponseStreamTerminations().isEmpty());
+				assertTrue(fixture.logs.stream().noneMatch(event -> event.getLogEventType() == LogEventType.RESPONSE_STREAM_CANCELED));
+			}
+		}
+	}
+
+	@Test void throwingWillWriteObserverStillWritesBeforeFinishForNormalAndProtocolReplacedStreams() throws Exception {
+		for (String version : List.of("HTTP/1.1", "HTTP/1.0")) {
+			try (Fixture fixture = new Fixture(true, Duration.ofSeconds(3)); Socket client = fixture.request("/stream", version)) {
+				String wire = read(client);
+				int status = version.equals("HTTP/1.0") ? 505 : 200;
+				assertTrue(wire.startsWith(version + " " + status), wire);
+				await(() -> fixture.metrics.snapshot().orElseThrow().getActiveRequests() == 0 && fixture.finishes.size() == 1);
+				assertEquals(List.of(status), fixture.writes);
+				assertEquals(List.of(status), fixture.finishes);
+				assertEquals(List.of("write", "finish"), fixture.order);
+				assertTrue(fixture.logs.stream().anyMatch(event -> event.getLogEventType() == LogEventType.LIFECYCLE_OBSERVER_WILL_WRITE_RESPONSE_FAILED));
+				assertTrue(fixture.logs.stream().noneMatch(event -> event.getLogEventType() == LogEventType.REQUEST_INTERCEPTOR_WRAP_REQUEST_FAILED));
+				assertEquals(status == 200 ? 1 : 0, fixture.resource.producerCalls.get());
+				assertEquals(status == 200 ? 1 : 0, fixture.metrics.snapshot().orElseThrow().getHttpResponseStreamTerminations().size());
+			}
+		}
+	}
+
+	@Test void throwingWillWriteObserverDoesNotLeakMetricsOnCapacityReplacement() throws Exception {
+		try (Fixture fixture = new Fixture(true, Duration.ofSeconds(3)); Socket held = fixture.request("/held", "HTTP/1.1")) {
+			assertTrue(readHeaders(held).startsWith("HTTP/1.1 200"));
+			assertTrue(fixture.resource.producerEntered.await(2, TimeUnit.SECONDS));
+			try (Socket rejected = fixture.request("/stream", "HTTP/1.1")) {
+				assertTrue(read(rejected).startsWith("HTTP/1.1 503"));
+			}
+			await(() -> fixture.finishes.size() == 2);
+			assertEquals(List.of(200, 503), fixture.writes);
+			assertEquals(1L, fixture.metrics.snapshot().orElseThrow().getActiveRequests());
+			fixture.resource.releaseProducer.countDown();
+			read(held);
+			await(() -> fixture.metrics.snapshot().orElseThrow().getActiveRequests() == 0);
+			assertEquals(1L, fixture.metrics.snapshot().orElseThrow().getHttpResponseStreamTerminations().values().stream().mapToLong(Long::longValue).sum());
+		}
+	}
+
+	@Test void routineDisconnectRetainsItsTerminationWithoutCancelationStackTraceLog() throws Exception {
+		try (Fixture fixture = new Fixture(false, Duration.ofSeconds(3)); Socket client = fixture.request("/writing", "HTTP/1.1")) {
+			assertTrue(readHeaders(client).startsWith("HTTP/1.1 200"));
+			assertTrue(fixture.resource.producerEntered.await(2, TimeUnit.SECONDS));
+			client.setSoLinger(true, 0);
+			client.close();
+			await(() -> !fixture.terminals.isEmpty());
+			assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED, fixture.terminals.get(0).getReason());
+			assertTrue(fixture.logs.stream().noneMatch(event -> event.getLogEventType() == LogEventType.RESPONSE_STREAM_CANCELED));
+		}
+	}
+
+	private static String read(Socket socket) throws Exception {
+		return new String(socket.getInputStream().readAllBytes(), StandardCharsets.ISO_8859_1);
+	}
+	private static String readHeaders(Socket socket) throws Exception {
+		StringBuilder result = new StringBuilder();
+		while (!result.toString().endsWith("\r\n\r\n")) {
+			int value = socket.getInputStream().read();
+			if (value < 0) break;
+			result.append((char) value);
+		}
+		return result.toString();
+	}
+	private static void await(BooleanSupplier condition) throws Exception {
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+		while (!condition.getAsBoolean() && System.nanoTime() < deadline) Thread.sleep(5);
+		assertTrue(condition.getAsBoolean());
+	}
+	public static final class Resource {
+		final CountDownLatch handlerEntered = new CountDownLatch(1), releaseHandler = new CountDownLatch(1);
+		final CountDownLatch producerEntered = new CountDownLatch(1), releaseProducer = new CountDownLatch(1);
+		final AtomicInteger producerCalls = new AtomicInteger();
+		volatile boolean lateStreaming;
+		@GET("/stream") public MarshaledResponse stream() {
+			return MarshaledResponse.withStatusCode(200).stream(writer -> producerCalls.incrementAndGet()).build();
+		}
+		@GET("/held") public MarshaledResponse held() {
+			return MarshaledResponse.withStatusCode(200).stream(writer -> {
+				producerCalls.incrementAndGet(); producerEntered.countDown(); releaseProducer.await();
+			}).build();
+		}
+		@GET("/writing") public MarshaledResponse writing() {
+			return MarshaledResponse.withStatusCode(200).stream(writer -> {
+				producerCalls.incrementAndGet(); producerEntered.countDown();
+				while (true) {
+					writer.write(new byte[]{1});
+					Thread.sleep(10);
+				}
+			}).build();
+		}
+		@GET("/late") public MarshaledResponse late() {
+			handlerEntered.countDown();
+			boolean interrupted = false;
+			while (true) {
+				try { releaseHandler.await(); break; }
+				catch (InterruptedException ignored) { interrupted = true; }
+			}
+			if (interrupted) Thread.currentThread().interrupt();
+			return lateStreaming ? stream() : MarshaledResponse.withStatusCode(200).body(new byte[]{1}).build();
+		}
+	}
+	private static final class Fixture implements AutoCloseable {
+		final int port = findFreePort();
+		final Resource resource = new Resource();
+		final DefaultHttpServer server;
+		final Soklet soklet;
+		final DefaultMetricsCollector metrics = DefaultMetricsCollector.defaultInstance();
+		final List<Integer> writes = new CopyOnWriteArrayList<>(), finishes = new CopyOnWriteArrayList<>();
+		final List<String> order = new CopyOnWriteArrayList<>();
+		final List<LogEvent> logs = new CopyOnWriteArrayList<>();
+		final List<StreamTermination> terminals = new CopyOnWriteArrayList<>();
+		Fixture(boolean throwWillWrite, Duration timeout) throws Exception {
+			server = (DefaultHttpServer) HttpServer.withPort(port).host("127.0.0.1").concurrency(2)
+					.requestHandlerTimeout(timeout).streamingLifecycleCapacity(1).streamingCallbackConcurrency(1).build();
+			soklet = Soklet.fromConfig(SokletConfig.withHttpServer(server)
+					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Resource.class)))
+					.instanceProvider(new InstanceProvider() { @Override public <T> T provide(Class<T> type) {
+						return type == Resource.class ? type.cast(resource) : InstanceProvider.defaultInstance().provide(type);
+					}}).metricsCollector(metrics).lifecycleObserver(new LifecycleObserver() {
+						@Override public void willWriteResponse(ServerType type, Request request, ResourceMethod method, MarshaledResponse response) {
+							if (throwWillWrite) throw new IllegalStateException("observer failure");
+						}
+						@Override public void didWriteResponse(ServerType type, Request request, ResourceMethod method, MarshaledResponse response, Duration duration) {
+							writes.add(response.getStatusCode()); order.add("write");
+						}
+						@Override public void didFinishRequestHandling(ServerType type, Request request, ResourceMethod method, MarshaledResponse response, Duration duration, List<Throwable> failures) {
+							finishes.add(response.getStatusCode()); order.add("finish");
+						}
+						@Override public void didReceiveLogEvent(LogEvent event) { logs.add(event); }
+						@Override public void didTerminateResponseStream(StreamingResponseHandle handle, StreamTermination termination) { terminals.add(termination); }
+					}).build());
+			soklet.start();
+		}
+		Socket request(String path, String version) throws Exception {
+			Socket socket = connectWithRetry("127.0.0.1", port, 2000); socket.setSoTimeout(3000);
+			socket.getOutputStream().write(("GET " + path + " " + version + "\r\nHost: localhost\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.ISO_8859_1));
+			return socket;
+		}
+		@Override public void close() { resource.releaseHandler.countDown(); resource.releaseProducer.countDown(); soklet.close(); }
+	}
+}

@@ -248,8 +248,12 @@ final class McpTransportLifecycleAdapter
 	boolean recordExternallyCoordinatedShutdownIntent(
 			@NonNull Generation exactGeneration) {
 		requireCurrent(exactGeneration);
-		return this.delegate.recordExternallyCoordinatedShutdownIntent(
+		boolean recorded = this.delegate.recordExternallyCoordinatedShutdownIntent(
 				exactGeneration.delegate);
+		McpServerRuntimeBridge runtimeBridge = this.runtime.get();
+		if (runtimeBridge != null)
+			runtimeBridge.stopStartupListener(exactGeneration);
+		return recorded;
 	}
 
 	@NonNull
@@ -413,7 +417,7 @@ final class McpTransportLifecycleAdapter
 				residual.add(InternalResidualActivityType.EXECUTOR_TASK);
 			if (evidence.stream())
 				residual.add(InternalResidualActivityType.STREAM);
-			if (evidence.callback())
+			if (evidence.callback() || evidence.subscriptionRegistration())
 				residual.add(InternalResidualActivityType.CALLBACK);
 			return Collections.unmodifiableSet(residual);
 		}

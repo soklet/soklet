@@ -229,6 +229,9 @@ public interface Simulator {
 	 *
 	 * @param request the Server-Sent Event HTTP request to process
 	 * @return the result (handshake outcode, etc.) that corresponds to the request
+	 * @throws IllegalStateException if an accepted initializer fails, overflows its
+	 *         bounded queue, or terminates before activation; accepted headers alone
+	 *         do not guarantee a returned active simulated connection
 	 */
 	@NonNull
 	SseRequestResult performSseRequest(@NonNull Request request);

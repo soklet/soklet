@@ -61,6 +61,8 @@ public final class HttpRequestResult {
 	// Transport-only HEAD planning input, deliberately kept out of lifecycle/log response objects.
 	@Nullable
 	private final MarshaledResponseBody headResponseCompressionBody;
+	@Nullable
+	private final Long headResponseBodyLength;
 	// Internal SSE establishment classification; omitted from public rendering/equality.
 	@Nullable
 	private final Throwable requestHandlingFailure;
@@ -108,6 +110,7 @@ public final class HttpRequestResult {
 		this.resourceMethod = builder.resourceMethod;
 		this.sseHandshakeResult = builder.sseHandshakeResult;
 		this.headResponseCompressionBody = builder.headResponseCompressionBody;
+		this.headResponseBodyLength = builder.headResponseBodyLength;
 		this.requestHandlingFailure = builder.requestHandlingFailure;
 		this.responseStreamObservation = builder.responseStreamObservation;
 	}
@@ -207,6 +210,11 @@ public final class HttpRequestResult {
 	}
 
 	@NonNull
+	Optional<Long> getHeadResponseBodyLength() {
+		return Optional.ofNullable(this.headResponseBodyLength);
+	}
+
+	@NonNull
 	Optional<Throwable> getRequestHandlingFailure() {
 		return Optional.ofNullable(this.requestHandlingFailure);
 	}
@@ -260,6 +268,8 @@ public final class HttpRequestResult {
 		private SseHandshakeResult sseHandshakeResult;
 		@Nullable
 		private MarshaledResponseBody headResponseCompressionBody;
+		@Nullable
+		private Long headResponseBodyLength;
 		@Nullable
 		private Throwable requestHandlingFailure;
 		@Nullable private HttpResponseStreamObservation responseStreamObservation;
@@ -328,6 +338,12 @@ public final class HttpRequestResult {
 		}
 
 		@NonNull
+		Builder headResponseBodyLength(@Nullable Long headResponseBodyLength) {
+			this.headResponseBodyLength = headResponseBodyLength;
+			return this;
+		}
+
+		@NonNull
 		Builder requestHandlingFailure(@Nullable Throwable requestHandlingFailure) {
 			this.requestHandlingFailure = requestHandlingFailure;
 			return this;
@@ -365,6 +381,7 @@ public final class HttpRequestResult {
 					.resourceMethod(requestResult.getResourceMethod().orElse(null))
 					.sseHandshakeResult(requestResult.getSseHandshakeResult().orElse(null))
 					.headResponseCompressionBody(requestResult.getHeadResponseCompressionBody().orElse(null))
+					.headResponseBodyLength(requestResult.getHeadResponseBodyLength().orElse(null))
 					.requestHandlingFailure(requestResult.getRequestHandlingFailure().orElse(null))
 					.responseStreamObservation(requestResult.getResponseStreamObservation());
 		}
@@ -403,6 +420,12 @@ public final class HttpRequestResult {
 		@NonNull
 		Copier headResponseCompressionBody(@Nullable MarshaledResponseBody headResponseCompressionBody) {
 			this.builder.headResponseCompressionBody(headResponseCompressionBody);
+			return this;
+		}
+
+		@NonNull
+		Copier headResponseBodyLength(@Nullable Long headResponseBodyLength) {
+			this.builder.headResponseBodyLength(headResponseBodyLength);
 			return this;
 		}
 

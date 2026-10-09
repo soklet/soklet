@@ -328,7 +328,8 @@ final class AdmissionFence {
 		if (remaining < 0)
 			throw new IllegalStateException("Admission count underflow");
 		try {
-			this.stateChanged.run();
+			if (this.state.get() != State.OPEN)
+				this.stateChanged.run();
 		} finally {
 			if (remaining == 0) {
 				for (Runnable callback : this.admittedWorkReleased)
@@ -339,20 +340,31 @@ final class AdmissionFence {
 
 	@ThreadSafe
 	static final class Admission implements AutoCloseable {
-		@NonNull
-		private final AdmissionFence fence;
+		@Nullable
+		private volatile AdmissionFence fence;
 		@NonNull
 		private final AtomicBoolean closed;
+		private final AtomicBoolean claimedForHandling = new AtomicBoolean();
 
 		private Admission(@NonNull AdmissionFence fence) {
 			this.fence = requireNonNull(fence);
 			this.closed = new AtomicBoolean();
 		}
 
+		boolean claimForHandling(@NonNull AdmissionFence expectedFence) {
+			return this.fence == requireNonNull(expectedFence) && !this.closed.get()
+					&& this.claimedForHandling.compareAndSet(false, true) && !this.closed.get();
+		}
+
 		@Override
 		public void close() {
-			if (this.closed.compareAndSet(false, true))
-				this.fence.release();
+			if (this.closed.compareAndSet(false, true)) {
+				AdmissionFence admittedFence = requireNonNull(this.fence);
+				// Request copies may retain a consumed handoff; a closed permit must
+				// not retain the completed lifecycle through its owner callbacks.
+				this.fence = null;
+				admittedFence.release();
+			}
 		}
 	}
 }
@@ -397,7 +409,7 @@ final class TransportIdentityClaimRegistry {
 		for (InternalTransportIdentity identity : identities) {
 			requireNonNull(identity, "identity");
 			if (!unique.add(identity))
-				throw new IllegalArgumentException("Transport identity appears more than once in one claim");
+				throw new IllegalArgumentException("HTTP and SSE transport slots require distinct transport identities; one transport identity was configured more than once");
 			if (this.claims.containsKey(identity))
 				throw new IllegalStateException("Transport identity is already owned by another lifecycle");
 		}
@@ -421,7 +433,7 @@ final class TransportIdentityClaimRegistry {
 			requireNonNull(exact.transportClass(), "descriptor.transportClass()");
 			if (!unique.add(identity))
 				throw new IllegalArgumentException(
-						"Transport identity appears more than once in one claim");
+						"HTTP and SSE transport slots require distinct transport identities; one transport identity was configured more than once");
 			exactDescriptors.add(exact);
 		}
 		for (ClaimDescriptor exact : exactDescriptors) {
@@ -807,6 +819,11 @@ final class InternalTerminationGroup {
 		this.ownerEventElection = ownerEventElection;
 		this.state = State.OPEN;
 		this.admissionFence.onAdmittedWorkReleased(this::admittedWorkReleased);
+	}
+
+	@NonNull
+	Optional<AdmissionFence.Admission> tryAdmitBuiltInDispatch() {
+		return this.admissionFence.tryAdmit();
 	}
 
 	@NonNull
@@ -1337,6 +1354,11 @@ final class InternalTransportAttachmentContext<H> {
 	@NonNull
 	H requestHandler() {
 		return this.requestHandler;
+	}
+
+	@NonNull
+	Supplier<Optional<AdmissionFence.Admission>> builtInDispatchAdmissionSupplier() {
+		return this.group::tryAdmitBuiltInDispatch;
 	}
 
 	@NonNull

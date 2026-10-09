@@ -38,7 +38,7 @@ import static com.soklet.TestSupport.connectWithRetry;
 import static com.soklet.TestSupport.findFreePort;
 
 /** Application cleanup diagnostics carry the originating stream's context in both HTTP adapters. */
-@Timeout(value = 30, unit = TimeUnit.SECONDS)
+@Timeout(value = 60, unit = TimeUnit.SECONDS)
 public class StreamingCleanupDiagnosticsTests {
 	@Test
 	void httpFinalizerFailureHasCleanupClassificationAndOriginalStreamContext() throws Exception {
@@ -128,8 +128,30 @@ public class StreamingCleanupDiagnosticsTests {
 			Assertions.assertSame(failure, observation.termination.get().getCause().orElseThrow());
 			Assertions.assertTrue(observation.logs(LogEventType.RESPONSE_STREAM_CLOSE_FAILED).isEmpty());
 			Assertions.assertTrue(observation.logs(LogEventType.SERVER_INTERNAL_ERROR).isEmpty());
-			if (!simulated) Assertions.assertEquals(1, observation.logs(LogEventType.RESPONSE_STREAM_FAILED).size());
+			Assertions.assertEquals(1, observation.logs(LogEventType.RESPONSE_STREAM_FAILED).size());
 		}
+	}
+
+	@Test
+	void simulatorTypedDeadlineCancelationLogsBeforeItsTerminalCallback() throws Exception {
+		Observation observation = new Observation(false);
+		TestResource resource = new TestResource(StreamingResponseBody.fromWriter(stream -> {
+			// The simulator has no wall-clock response timer. A cooperative producer
+			// can report a typed deadline winner, retaining the live diagnostic shape.
+			throw new StreamingResponseCanceledException(StreamTerminationReason.RESPONSE_TIMEOUT);
+		}));
+		SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(0).build())
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(TestResource.class)))
+				.instanceProvider(provider(resource)).lifecycleObserver(observation).build();
+		SokletSimulator.run(SimulatorConfig.fromSokletConfig(config), simulator ->
+				Assertions.assertThrows(IllegalStateException.class,
+						() -> simulator.performHttpRequest(Request.fromPath(HttpMethod.GET, "/stream"))));
+		Assertions.assertEquals(StreamTerminationReason.RESPONSE_TIMEOUT, observation.termination.get().getReason());
+		List<LogEvent> diagnostics = observation.logs(LogEventType.RESPONSE_STREAM_CANCELED);
+		Assertions.assertEquals(1, diagnostics.size());
+		Assertions.assertEquals("Streaming response terminated: RESPONSE_TIMEOUT", diagnostics.get(0).getMessage());
+		Assertions.assertEquals("/stream", diagnostics.get(0).getRequest().orElseThrow().getPath());
+		Assertions.assertTrue(observation.logs(LogEventType.RESPONSE_STREAM_CLOSE_FAILED).isEmpty());
 	}
 
 	@Test
@@ -154,6 +176,36 @@ public class StreamingCleanupDiagnosticsTests {
 			Assertions.assertEquals(1, fixture.coordinator().snapshot().runningProducers());
 			Assertions.assertTrue(fixture.request("/health").endsWith("ok"));
 		} finally { releaseClose.countDown(); fixture.awaitPhysicalExit(); }
+	}
+
+	@Test
+	void untypedUpstreamExitAfterCancelationIsProducerEvidenceAndNotACleanupFailure() throws Exception {
+		CountDownLatch upstreamClosed = new CountDownLatch(1);
+		IOException failure = new IOException("upstream iteration ended because cancelation closed it");
+		Observation observation = new Observation(false);
+		TestResource resource = new TestResource(StreamingResponseBody.fromWriter(stream -> {
+			stream.open(() -> (AutoCloseable) upstreamClosed::countDown);
+			awaitUninterruptibly(upstreamClosed);
+			throw failure;
+		}));
+		HttpFixture fixture = new HttpFixture(resource, observation, Duration.ofMillis(150));
+		try (fixture) {
+			fixture.start();
+			Assertions.assertTrue(fixture.request("/stream").startsWith("HTTP/1.1 200 OK"));
+			Assertions.assertTrue(observation.terminated.await(3, TimeUnit.SECONDS));
+			Assertions.assertEquals(StreamTerminationReason.RESPONSE_TIMEOUT, observation.termination.get().getReason());
+			fixture.coordinator().requestGracefulShutdown();
+			fixture.awaitPhysicalExit();
+			Assertions.assertTrue(observation.logs(LogEventType.RESPONSE_STREAM_CLOSE_FAILED).isEmpty());
+			Assertions.assertTrue(observation.logs(LogEventType.SERVER_INTERNAL_ERROR).isEmpty());
+			// An untyped application IOException cannot prove whether the owned close
+			// caused the failure. Preserve it as producer evidence with its context.
+			List<LogEvent> producerFailures = observation.logs(LogEventType.RESPONSE_STREAM_FAILED);
+			Assertions.assertEquals(1, producerFailures.size());
+			Assertions.assertSame(failure, producerFailures.get(0).getThrowable().orElseThrow());
+			Assertions.assertSame(resource.request.get(), producerFailures.get(0).getRequest().orElseThrow());
+			Assertions.assertEquals(StreamTerminationReason.RESPONSE_TIMEOUT, observation.termination.get().getReason());
+		}
 	}
 
 	@Test

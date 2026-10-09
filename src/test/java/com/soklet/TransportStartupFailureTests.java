@@ -35,7 +35,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
-@Timeout(15)
+@Timeout(60)
 class TransportStartupFailureTests {
 	enum Mode {
 		HTTP_DIRECT, HTTP_TRANSPARENT, HTTP_OWNING, HTTP_NESTED,

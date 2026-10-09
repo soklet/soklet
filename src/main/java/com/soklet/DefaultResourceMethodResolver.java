@@ -168,7 +168,13 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 
 			// Declarations for this method
 			var decls = byMethod.computeIfAbsent(method, __ -> new HashSet<>());
-			var rpd = ResourcePathDeclaration.fromPath(resourceMethodDeclaration.path());
+			ResourcePathDeclaration rpd;
+			try {
+				rpd = ResourcePathDeclaration.fromPath(resourceMethodDeclaration.path());
+			} catch (IllegalArgumentException failure) {
+				throw invalidResourcePathDeclaration(method, resourceMethodDeclaration.sseEventSource()
+						? "SseEventSource" : resourceMethodDeclaration.httpMethod().name(), failure);
+			}
 			boolean sse = resourceMethodDeclaration.sseEventSource();
 			decls.add(new HttpMethodResourcePathDeclaration(resourceMethodDeclaration.httpMethod(), rpd, sse));
 
@@ -722,62 +728,66 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 			Set<HttpMethodResourcePathDeclaration> matchedHttpMethodResourcePathDeclarations = new HashSet<>();
 
 			for (Annotation annotation : method.getAnnotations()) {
-				if (annotation instanceof GET) {
-					matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.GET, ResourcePathDeclaration.fromPath
-							(((GET) annotation).value())));
-				} else if (annotation instanceof POST) {
-					matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.POST, ResourcePathDeclaration.fromPath
-							(((POST) annotation).value())));
-				} else if (annotation instanceof PUT) {
-					matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.PUT, ResourcePathDeclaration.fromPath
-							(((PUT) annotation).value())));
-				} else if (annotation instanceof PATCH) {
-					matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.PATCH, ResourcePathDeclaration.fromPath
-							(((PATCH) annotation).value())));
-				} else if (annotation instanceof DELETE) {
-					matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.DELETE, ResourcePathDeclaration.fromPath
-							(((DELETE) annotation).value())));
-				} else if (annotation instanceof OPTIONS) {
-					matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.OPTIONS, ResourcePathDeclaration.fromPath
-							(((OPTIONS) annotation).value())));
-				} else if (annotation instanceof HEAD) {
-					matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.HEAD, ResourcePathDeclaration.fromPath
-							(((HEAD) annotation).value())));
-				} else if (annotation instanceof SseEventSource) {
-					matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.GET, ResourcePathDeclaration.fromPath
-							(((SseEventSource) annotation).value()), true));
-				} else if (annotation instanceof GETs) {
-					for (GET get : ((GETs) annotation).value())
+				try {
+					if (annotation instanceof GET) {
 						matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.GET, ResourcePathDeclaration.fromPath
-								(get.value())));
-				} else if (annotation instanceof POSTs) {
-					for (POST post : ((POSTs) annotation).value())
+								(((GET) annotation).value())));
+					} else if (annotation instanceof POST) {
 						matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.POST, ResourcePathDeclaration.fromPath
-								(post.value())));
-				} else if (annotation instanceof PUTs) {
-					for (PUT put : ((PUTs) annotation).value())
+								(((POST) annotation).value())));
+					} else if (annotation instanceof PUT) {
 						matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.PUT, ResourcePathDeclaration.fromPath
-								(put.value())));
-				} else if (annotation instanceof PATCHes) {
-					for (PATCH patch : ((PATCHes) annotation).value())
+								(((PUT) annotation).value())));
+					} else if (annotation instanceof PATCH) {
 						matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.PATCH, ResourcePathDeclaration.fromPath
-								(patch.value())));
-				} else if (annotation instanceof DELETEs) {
-					for (DELETE delete : ((DELETEs) annotation).value())
+								(((PATCH) annotation).value())));
+					} else if (annotation instanceof DELETE) {
 						matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.DELETE, ResourcePathDeclaration.fromPath
-								(delete.value())));
-				} else if (annotation instanceof OPTIONSes) {
-					for (OPTIONS options : ((OPTIONSes) annotation).value())
+								(((DELETE) annotation).value())));
+					} else if (annotation instanceof OPTIONS) {
 						matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.OPTIONS, ResourcePathDeclaration.fromPath
-								(options.value())));
-				} else if (annotation instanceof HEADs) {
-					for (HEAD head : ((HEADs) annotation).value())
+								(((OPTIONS) annotation).value())));
+					} else if (annotation instanceof HEAD) {
 						matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.HEAD, ResourcePathDeclaration.fromPath
-								(head.value())));
-				} else if (annotation instanceof SseEventSources) {
-					for (SseEventSource sseEventSource : ((SseEventSources) annotation).value())
+								(((HEAD) annotation).value())));
+					} else if (annotation instanceof SseEventSource) {
 						matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.GET, ResourcePathDeclaration.fromPath
-								(sseEventSource.value()), true));
+								(((SseEventSource) annotation).value()), true));
+					} else if (annotation instanceof GETs) {
+						for (GET get : ((GETs) annotation).value())
+							matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.GET, ResourcePathDeclaration.fromPath
+									(get.value())));
+					} else if (annotation instanceof POSTs) {
+						for (POST post : ((POSTs) annotation).value())
+							matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.POST, ResourcePathDeclaration.fromPath
+									(post.value())));
+					} else if (annotation instanceof PUTs) {
+						for (PUT put : ((PUTs) annotation).value())
+							matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.PUT, ResourcePathDeclaration.fromPath
+									(put.value())));
+					} else if (annotation instanceof PATCHes) {
+						for (PATCH patch : ((PATCHes) annotation).value())
+							matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.PATCH, ResourcePathDeclaration.fromPath
+									(patch.value())));
+					} else if (annotation instanceof DELETEs) {
+						for (DELETE delete : ((DELETEs) annotation).value())
+							matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.DELETE, ResourcePathDeclaration.fromPath
+									(delete.value())));
+					} else if (annotation instanceof OPTIONSes) {
+						for (OPTIONS options : ((OPTIONSes) annotation).value())
+							matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.OPTIONS, ResourcePathDeclaration.fromPath
+									(options.value())));
+					} else if (annotation instanceof HEADs) {
+						for (HEAD head : ((HEADs) annotation).value())
+							matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.HEAD, ResourcePathDeclaration.fromPath
+									(head.value())));
+					} else if (annotation instanceof SseEventSources) {
+						for (SseEventSource sseEventSource : ((SseEventSources) annotation).value())
+							matchedHttpMethodResourcePathDeclarations.add(new HttpMethodResourcePathDeclaration(HttpMethod.GET, ResourcePathDeclaration.fromPath
+									(sseEventSource.value()), true));
+					}
+				} catch (IllegalArgumentException failure) {
+					throw invalidResourcePathDeclaration(method, annotation.annotationType().getSimpleName(), failure);
 				}
 
 				Set<HttpMethodResourcePathDeclaration> httpMethodResourcePathDeclarations =
@@ -787,6 +797,13 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		}
 
 		return httpMethodResourcePathDeclarationsByMethod;
+	}
+
+	@NonNull
+	private static IllegalArgumentException invalidResourcePathDeclaration(@NonNull Method method,
+			@NonNull String annotationName, @NonNull IllegalArgumentException failure) {
+		return new IllegalArgumentException(format("Resource method %s#%s has an invalid @%s declaration: %s",
+				method.getDeclaringClass().getName(), method.getName(), annotationName, failure.getMessage()));
 	}
 
 	@NonNull

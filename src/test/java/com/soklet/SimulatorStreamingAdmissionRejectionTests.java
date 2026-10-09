@@ -93,7 +93,7 @@ public class SimulatorStreamingAdmissionRejectionTests {
 			assertFiniteRejection(second.getMarshaledResponse());
 			LogEvent event = fixture.skippedRejection.get();
 			Assertions.assertNotNull(event);
-			Assertions.assertEquals(LogEventType.LIFECYCLE_OBSERVER_DID_TERMINATE_RESPONSE_STREAM_FAILED, event.getLogEventType());
+			Assertions.assertEquals(LogEventType.SERVER_INTERNAL_ERROR, event.getLogEventType());
 			Assertions.assertEquals("/rejected", event.getRequest().orElseThrow().getPath());
 			Assertions.assertTrue(event.getThrowable().isEmpty());
 			Assertions.assertEquals(0, acquisitions.get());
@@ -227,7 +227,7 @@ public class SimulatorStreamingAdmissionRejectionTests {
 			finally { this.terminationFinished.countDown(); }
 		}
 		@Override public void didReceiveLogEvent(LogEvent event) {
-			if (event.getLogEventType() == LogEventType.LIFECYCLE_OBSERVER_DID_TERMINATE_RESPONSE_STREAM_FAILED)
+			if (event.getLogEventType() == LogEventType.SERVER_INTERNAL_ERROR)
 				this.skippedRejection.set(event);
 		}
 	}

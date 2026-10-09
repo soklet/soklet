@@ -166,7 +166,7 @@ public final class McpResourceRegistration {
 		this.inputRequestDeclarations =
 				List.copyOf(state.inputRequestDeclarations);
 		this.requestStateMode = state.requestStateMode;
-		this.metadata = state.metadata;
+		this.metadata = com.soklet.internal.mcp.protocol.McpApplicationMetadata.requireApplicationMetadata(state.metadata);
 		this.handler = state.handler;
 		this.completionHandler = state.completionHandler;
 		this.completionProtocolVersions = state.completionProtocolVersions;

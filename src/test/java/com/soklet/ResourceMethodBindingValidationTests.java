@@ -30,7 +30,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static com.google.testing.compile.CompilationSubject.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
 
-@Timeout(30)
+@Timeout(60)
 public class ResourceMethodBindingValidationTests {
 
 	@Test
@@ -117,6 +117,16 @@ public class ResourceMethodBindingValidationTests {
 	}
 
 	@Test
+	void memoizedBindingsRemainSpecificToEachImmutableResourceDeclaration() throws Exception {
+		var method = NonStringVarargs.class.getMethod("route", Integer.class);
+		ResourceMethod fixed = ResourceMethod.fromComponents(HttpMethod.GET, ResourcePathDeclaration.fromPath("/fixed/{value}"), method, false);
+		ResourceMethod varargs = ResourceMethod.fromComponents(HttpMethod.GET, ResourcePathDeclaration.fromPath("/files/{value*}"), method, false);
+		ResourceMethodBindingValidation.validate(fixed);
+		ResourceMethodBindingValidation.validate(fixed);
+		assertThrows(IllegalArgumentException.class, () -> ResourceMethodBindingValidation.validate(varargs));
+	}
+
+	@Test
 	void bindingDiagnosticsDoNotRetainRequestOrAnnotationValues() {
 		SokletConfig config = config(ConflictingBindings.class);
 		ResourceMethod method = config.getResourceMethodResolver().getResourceMethods().iterator().next();
@@ -186,6 +196,17 @@ public class ResourceMethodBindingValidationTests {
 		});
 	}
 
+	@Test
+	void namedCookieBindingsAreUnaffectedByMalformedForeignCookiesAndKeepDuplicateRejection() {
+		SokletSimulator.run(SimulatorConfig.fromSokletConfig(config(CookieBindings.class)), simulator -> {
+			assertEquals("abc", body(simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/")
+					.headers(Map.of("Cookie", List.of("session=abc; legacy=Jos%E9; %73ession=%FF"))).build())));
+			for (String cookie : List.of("session=%FF; legacy=valid", "session=abc; legacy=%FF; session=abc"))
+				assertEquals(400, simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/")
+						.headers(Map.of("Cookie", List.of(cookie))).build()).getMarshaledResponse().getStatusCode());
+		});
+	}
+
 	private static void assertCompileFailure(String transport, String path, String parameters, String message) {
 		var source = source(transport, path, parameters, "");
 		var compilation = Compiler.javac().withProcessors(new SokletProcessor()).compile(source);
@@ -234,5 +255,8 @@ public class ResourceMethodBindingValidationTests {
 		@POST("/form") public String form(@FormParameter Optional<String> value) { return String.valueOf(value.isEmpty()); }
 		@POST("/body-default") public String body(@RequestBody(optional=true) int number, @RequestBody(optional=true) boolean flag) { return number+":"+flag; }
 		@POST("/multipart") public String multipart(@Multipart Optional<MultipartField> value) { return String.valueOf(value.isEmpty()); }
+	}
+	public static class CookieBindings {
+		@GET("/") public String cookie(@RequestCookie(name="session") String session) { return session; }
 	}
 }

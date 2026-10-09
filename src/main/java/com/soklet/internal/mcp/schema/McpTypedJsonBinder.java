@@ -32,6 +32,7 @@ import java.lang.reflect.Array;
 import java.lang.reflect.InvocationTargetException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -158,11 +159,19 @@ final class McpTypedJsonBinder {
 		// compact exponent merely to check whether it fits the target type.
 		BigDecimal normalized = value;
 		if (value.scale() > 0) {
-			if (value.scale() < value.precision())
-				normalized = value.stripTrailingZeros();
-			if (normalized.scale() > 0)
+			// A nonzero magnitude below one cannot be integral. Check this before
+			// setScale, so compact negative exponents never allocate huge divisors.
+			if (value.scale() >= value.precision())
 				throw failure(McpTypedJsonBindingException.Operation.FROM_JSON,
 						McpTypedJsonBindingException.Reason.NON_INTEGER_NUMBER, path);
+			try {
+				// One division, rather than stripping every trailing zero separately
+				// on JDK 17/21. The scale is bounded by the original precision here.
+				normalized = value.setScale(0, RoundingMode.UNNECESSARY);
+			} catch (ArithmeticException exception) {
+				throw failure(McpTypedJsonBindingException.Operation.FROM_JSON,
+						McpTypedJsonBindingException.Reason.NON_INTEGER_NUMBER, path);
+			}
 		}
 
 		long expandedLength = (long) normalized.precision() - normalized.scale()

@@ -38,6 +38,22 @@ class McpLegacySessionTransportSimulatorTests {
 	private static final Set<McpProtocolVersion> ALL = Set.of(McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28);
 
 	@Test
+	void simulatedLegacyGetCapturesKeepAliveOnlyAfterTheConfiguredIdleInterval() throws Exception {
+		for (McpProtocolVersion version : LEGACY)
+			SokletSimulator.run(configuration(new CopyOnWriteArrayList<>()), simulator -> {
+				String id = initialize(simulator, version);
+				try (McpSimulation get = simulator.startMcpRequest(request(HttpMethod.GET, version, id, ""))) {
+					assertEquals(200, get.awaitResponse(WAIT).orElseThrow().getStatusCode());
+					assertTrue(get.awaitStreamItem(Duration.ofMillis(200)).isEmpty());
+					assertEquals(McpSimulationStreamItemType.KEEP_ALIVE_COMMENT,
+							get.awaitStreamItem(Duration.ofSeconds(2)).orElseThrow().getType());
+					assertTrue(get.awaitStreamItem(Duration.ofMillis(200)).isEmpty());
+					assertTrue(get.awaitCompletion(Duration.ZERO).isEmpty());
+				}
+			});
+	}
+
+	@Test
 	void getAndDeleteSnapshotsUseTheConfiguredEndpointInSimulation() throws Exception {
 		for (McpProtocolVersion version : LEGACY) {
 			MetricsCollector collector = MetricsCollector.defaultInstance();

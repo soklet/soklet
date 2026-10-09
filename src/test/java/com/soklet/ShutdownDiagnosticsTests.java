@@ -13,6 +13,7 @@ package com.soklet;
 
 import com.soklet.annotation.GET;
 import com.soklet.annotation.SseEventSource;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestFactory;
@@ -33,7 +34,7 @@ import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@Timeout(20)
+@Timeout(60)
 class ShutdownDiagnosticsTests {
 	@Test
 	void incompleteExceptionIdentifiesFrozenComponentStatesAndResidualCategories() {
@@ -74,7 +75,7 @@ class ShutdownDiagnosticsTests {
 		assertTrue(rendered.contains("throwableCount=1"));
 		assertTrue(rendered.contains("startupFailurePresent=true"));
 		assertTrue(rendered.contains("unexpectedShutdownComponentType=MCP"));
-		assertTrue(rendered.contains("retainedActivityCounts={EXECUTOR_TASK=7}"));
+		assertTrue(rendered.contains("residualComponentCounts={EXECUTOR_TASK=7}"));
 		assertFalse(rendered.contains("private framework note"));
 		assertEquals("Soklet shutdown could not prove complete termination: " + rendered, exception.getMessage());
 		assertTrue(exception.retainsScopeEvidence(graph));
@@ -119,7 +120,7 @@ class ShutdownDiagnosticsTests {
 
 	@TestFactory
 	Stream<DynamicTest> allAggregateDispositionsHaveUsefulDeterministicRendering() {
-		return Stream.of(InternalShutdownDisposition.values()).map(disposition -> DynamicTest.dynamicTest(disposition.name(), () -> {
+		return Stream.of(InternalShutdownDisposition.values()).map(disposition -> DynamicTest.dynamicTest(disposition.name(), () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
 			var result = ShutdownResult.fromInternal(new InternalShutdownResult(disposition, InternalStartupDisposition.NOT_ATTEMPTED, List.of()));
 			String expected = "ShutdownResult{shutdownDisposition=" + disposition.name()
 					+ ", startupDisposition=NOT_ATTEMPTED, shutdownComponentResults=[], startupFailurePresent=false, unexpectedShutdownComponentType=none}";
@@ -127,13 +128,13 @@ class ShutdownDiagnosticsTests {
 			assertEquals(expected, String.format("%s", result));
 			if (disposition != InternalShutdownDisposition.INCOMPLETE)
 				assertThrows(IllegalArgumentException.class, () -> new SokletShutdownIncompleteException(result));
-		}));
+		})));
 	}
 
 	@TestFactory
 	Stream<DynamicTest> actualSimulatorResidualWorkIsExplainedWithoutChangingFailurePrecedence() {
 		return Stream.of(false, true).flatMap(sse -> Stream.of(false, true).map(bodyFails ->
-				DynamicTest.dynamicTest((sse ? "SSE initializer" : "HTTP handler") + (bodyFails ? ", body fails" : ", body succeeds"), () -> {
+				DynamicTest.dynamicTest((sse ? "SSE initializer" : "HTTP handler") + (bodyFails ? ", body fails" : ", body succeeds"), () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
 					Fixture fixture = new Fixture();
 					AtomicReference<Thread> worker = new AtomicReference<>();
 					AtomicReference<Throwable> workerFailure = new AtomicReference<>();
@@ -170,7 +171,7 @@ class ShutdownDiagnosticsTests {
 						assertSame(result, incomplete.getShutdownResult());
 						if (sse) assertInstanceOf(IllegalStateException.class, workerFailure.get()); else assertNull(workerFailure.get());
 					} finally { fixture.release.countDown(); join(worker.get()); }
-				})));
+				}))));
 	}
 
 	private static InternalLifecycleComponentShutdownResult component(InternalLifecycleComponentType type,

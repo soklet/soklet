@@ -153,6 +153,80 @@ class McpLegacySessionTransportPublicRuntimeTests {
 	}
 
 	@Test
+	void modernInitializeFramingDoesNotAdvertiseRejectedLegacySelectors() throws Exception {
+		try (Fixture fixture = new Fixture(true, builder -> {})) {
+			for (McpProtocolVersion version : LEGACY) {
+				String body = "{\"jsonrpc\":\"2.0\",\"id\":\"mixed-era\",\"method\":\"initialize\",\"params\":{\"protocolVersion\":\""
+						+ version.getWireValue() + "\",\"capabilities\":{},\"clientInfo\":{\"name\":\"test\",\"version\":\"1\"}}}";
+				Response response = fixture.exchange("POST", "/mcp", body, List.of(
+						new HeaderValue("MCP-Protocol-Version", version.getWireValue()), new HeaderValue("Mcp-Method", "initialize")));
+				assertEquals(400, response.status(), response.body());
+				assertTrue(response.body().contains("\"code\":-32022"), response.body());
+				assertTrue(response.body().contains("\"supported\":[\"2026-07-28\"]"), response.body());
+				assertEquals(0, fixture.rpcAdmissions.get());
+			}
+		}
+	}
+
+	@Test
+	void blockingHttpFinishObserverDoesNotStallUnrelatedPostAndRetainsCallbackOwnership() throws Exception {
+		CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1), exited = new CountDownLatch(1);
+		MetricsCollector collector = new MetricsCollector() {
+			@Override public void didFinishRequestHandling(ServerType type, Request request, ResourceMethod method,
+					MarshaledResponse response, Duration duration, List<Throwable> failures) {
+				entered.countDown();
+				try { while (release.getCount() != 0) { try { release.await(20, TimeUnit.MILLISECONDS); } catch (InterruptedException ignored) {} } }
+				finally { exited.countDown(); }
+			}
+		};
+		Fixture fixture = new Fixture(true, builder -> builder.requestHandlerConcurrency(1).requestHandlerQueueCapacity(1), null, collector);
+		try {
+				String id = fixture.initialize("/mcp", McpProtocolVersion.V2025_11_25);
+				assertEquals(404, fixture.control("DELETE", "/mcp", McpProtocolVersion.V2025_11_25, "unknown.valid", "alice", "", List.of()).status());
+				assertTrue(entered.await(5, TimeUnit.SECONDS));
+				assertEquals(404, fixture.control("DELETE", "/mcp", McpProtocolVersion.V2025_11_25, "second.unknown", "alice", "", List.of()).status());
+				assertEquals(404, fixture.control("DELETE", "/mcp", McpProtocolVersion.V2025_11_25, "third.unknown", "alice", "", List.of()).status());
+				assertEquals(2, fixture.httpStarts.get(), "Capacity pressure omits both callbacks before start.");
+				assertEquals(200, fixture.ping(McpProtocolVersion.V2025_11_25, id).status());
+				assertEquals(0, fixture.httpFinishes.get());
+				SokletShutdownIncompleteException failure = assertThrows(SokletShutdownIncompleteException.class, fixture.soklet::close);
+				assertTrue(failure.getInternalShutdownResult().participantResult(
+						InternalLifecycleComponentType.MCP).orElseThrow().residualActivity()
+						.contains(InternalResidualActivityType.CALLBACK));
+		} finally {
+			release.countDown(); assertTrue(exited.await(5, TimeUnit.SECONDS));
+			awaitCondition(() -> fixture.httpFinishes.get() == 2);
+			try { fixture.close(); } catch (SokletShutdownIncompleteException ignored) { /* The first result remains immutable after late callback exit. */ }
+		}
+	}
+
+	@Test
+	void transportEndDuringBlockedHttpStartDeliversFinishOnlyAfterStartReturns() throws Exception {
+		CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
+		AtomicInteger finishes = new AtomicInteger();
+		MetricsCollector collector = new MetricsCollector() {
+			@Override public void didStartRequestHandling(ServerType type, Request request, ResourceMethod method) {
+				entered.countDown();
+				while (release.getCount() != 0) {
+					try { release.await(20, TimeUnit.MILLISECONDS); } catch (InterruptedException ignored) {}
+				}
+			}
+			@Override public void didFinishRequestHandling(ServerType type, Request request, ResourceMethod method,
+					MarshaledResponse response, Duration duration, List<Throwable> failures) { finishes.incrementAndGet(); }
+		};
+		try (Fixture fixture = new Fixture(true, builder -> builder.requestTimeout(Duration.ofMillis(150)), null, collector)) {
+			try (RawClient client = fixture.openControl("DELETE", "/mcp", McpProtocolVersion.V2025_11_25,
+					"unknown.valid", "alice", "", List.of())) {
+				assertTrue(entered.await(5, TimeUnit.SECONDS));
+				Head head = client.readHead();
+				assertTrue(head.status() >= 500, "The bounded transport deadline must finish while start remains blocked.");
+				client.readBody(head); assertEquals(0, finishes.get());
+			} finally { release.countDown(); }
+			awaitCondition(() -> finishes.get() == 1 && fixture.httpFinishes.get() == 1);
+		}
+	}
+
+	@Test
 	void absenceOfControllerPreservesPostOnlySessions() throws Exception {
 		try (Fixture fixture = new Fixture(false, builder -> {})) {
 			for (McpProtocolVersion version : LEGACY) {

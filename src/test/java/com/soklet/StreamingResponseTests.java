@@ -431,7 +431,7 @@ public class StreamingResponseTests {
 		CountDownLatch requestFinished = new CountDownLatch(1);
 		AtomicReference<Throwable> requestFailure = new AtomicReference<>();
 		AtomicReference<StreamTermination> termination = new AtomicReference<>();
-		AtomicReference<LogEventType> logEventType = new AtomicReference<>();
+		List<LogEvent> logEvents = new java.util.concurrent.CopyOnWriteArrayList<>();
 		AtomicReference<Thread> requestThread = new AtomicReference<>();
 		LifecycleWorkers workers = new LifecycleWorkers((name, task) -> {
 			if ("lifecycle-quiesce-http".equals(name))
@@ -457,7 +457,7 @@ public class StreamingResponseTests {
 
 								@Override
 								public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
-									logEventType.set(logEvent.getLogEventType());
+									logEvents.add(logEvent);
 								}
 							})
 							.build(), simulator -> {
@@ -486,15 +486,26 @@ public class StreamingResponseTests {
 					IllegalStateException.class, requestFailure.get());
 			Assertions.assertInstanceOf(SealDuringStreamFailure.class,
 					failure.getCause());
-			Assertions.assertEquals(
-					LogEventType.RESPONSE_STREAM_CANCELATION_CALLBACK_FAILED,
-					logEventType.get());
+			List<LogEvent> callbackFailures = logEvents.stream().filter(event ->
+					event.getLogEventType() == LogEventType.RESPONSE_STREAM_CANCELATION_CALLBACK_FAILED).toList();
+			Assertions.assertEquals(1, callbackFailures.size());
+			Assertions.assertEquals("Expected cancelation callback failure",
+					callbackFailures.get(0).getThrowable().orElseThrow().getMessage());
+			Assertions.assertEquals("/seal-during-stream",
+					callbackFailures.get(0).getRequest().orElseThrow().getPath());
 			StreamTermination observedTermination = termination.get();
 			Assertions.assertNotNull(observedTermination);
 			Assertions.assertEquals(StreamTerminationReason.PRODUCER_FAILED,
 					observedTermination.getReason());
 			Assertions.assertInstanceOf(SealDuringStreamFailure.class,
 					observedTermination.getCause().orElseThrow());
+			List<LogEvent> streamFailures = logEvents.stream().filter(event ->
+					event.getLogEventType() == LogEventType.RESPONSE_STREAM_FAILED).toList();
+			Assertions.assertEquals(1, streamFailures.size());
+			Assertions.assertSame(observedTermination.getCause().orElseThrow(),
+					streamFailures.get(0).getThrowable().orElseThrow());
+			Assertions.assertSame(callbackFailures.get(0).getRequest().orElseThrow(),
+					streamFailures.get(0).getRequest().orElseThrow());
 		} finally {
 			SealDuringStreamResource.releaseStream.countDown();
 			Thread worker = requestThread.get();

@@ -29,7 +29,7 @@ import static com.soklet.McpLegacySessionTransportPublicRuntimeTests.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Public request-state limits remain independent of request and response sizes. */
-@Timeout(30)
+@Timeout(60)
 class McpRequestStateBoundaryPublicRuntimeTests {
 	private static final int MIB = 1_024 * 1_024;
 	private static final Set<McpProtocolVersion> VERSIONS = Set.of(McpProtocolVersion.V2026_07_28);

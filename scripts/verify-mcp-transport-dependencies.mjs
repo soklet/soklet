@@ -945,6 +945,22 @@ function writableFloorParameterNames(method, label) {
   return { maximumBytes: match[2], socketChannel: match[1] };
 }
 
+function requireSocketIoBoundary(method, operation) {
+  const modifiers = '(?:(?:final\\s+)|(?:@[A-Za-z_$][\\w$]*(?:\\s*\\.\\s*[A-Za-z_$][\\w$]*)*(?:\\s*\\([^)]*\\))?\\s+))*';
+  const socketType = '(?:java\\s*\\.\\s*nio\\s*\\.\\s*channels\\s*\\.\\s*)?SocketChannel';
+  const bufferType = '(?:java\\s*\\.\\s*nio\\s*\\.\\s*)?ByteBuffer';
+  const exceptionType = '(?:java\\s*\\.\\s*io\\s*\\.\\s*)?IOException';
+  const signature = new RegExp(
+    `^${operation}\\s*\\(\\s*${modifiers}${socketType}\\s+([A-Za-z_$][\\w$]*)\\s*,\\s*${modifiers}${bufferType}\\s+([A-Za-z_$][\\w$]*)\\s*\\)\\s*throws\\s+${exceptionType}\\s*$`, 'u');
+  const parameters = signature.exec(method.signatureCode.trim());
+  if (parameters === null) {
+    fail(`Transport characterization structural assertion failed: SocketChannelIo.${operation} must retain its SocketChannel/ByteBuffer IO boundary`);
+  }
+  requireStructural(method, new RegExp(
+    `^\\s*try\\s*\\{\\s*return\\s+${escapeRegex(parameters[1])}\\s*\\.\\s*${operation}\\s*\\(\\s*${escapeRegex(parameters[2])}\\s*\\)\\s*;\\s*\\}\\s*catch\\s*\\(\\s*${exceptionType}\\s+([A-Za-z_$][\\w$]*)\\s*\\)\\s*\\{\\s*throw\\s+new\\s+SocketIoException\\s*\\(\\s*\\1\\s*\\)\\s*;\\s*\\}\\s*$`, 'u'),
+  `SocketChannelIo.${operation} must return the actual socket ${operation} result and wrap its IOException in the typed boundary`);
+}
+
 function oneAnonymousMethod(outerMethod, anonymousType, methodName) {
   const construction = new RegExp(`\\bnew\\s+${escapeRegex(anonymousType)}\\s*\\(\\s*\\)\\s*\\{`, 'gu');
   const constructions = [...outerMethod.bodyCode.matchAll(construction)];
@@ -1229,6 +1245,7 @@ function verifyCharacterizationSources(root, sourceFiles) {
   const outboundPath = 'src/main/java/com/soklet/internal/mcp/transport/McpOutboundChannel.java';
   const writablePath = 'src/main/java/com/soklet/internal/microhttp/WritableSource.java';
   const eventLoopPath = 'src/main/java/com/soklet/internal/microhttp/ConnectionEventLoop.java';
+  const socketIoPath = 'src/main/java/com/soklet/internal/microhttp/SocketChannelIo.java';
   const handlerPath = 'src/main/java/com/soklet/internal/microhttp/Handler.java';
   const serverPath = 'src/main/java/com/soklet/McpServer.java';
   const request = sourceBundle(root, requestPath, cache);
@@ -1242,6 +1259,7 @@ function verifyCharacterizationSources(root, sourceFiles) {
   const outbound = sourceBundle(root, outboundPath, cache);
   const writable = sourceBundle(root, writablePath, cache);
   const eventLoop = sourceBundle(root, eventLoopPath, cache);
+  const socketIo = sourceBundle(root, socketIoPath, cache);
   const handler = sourceBundle(root, handlerPath, cache);
   const server = sourceBundle(root, serverPath, cache);
   const process = oneMethod(runtime.lexed, runtimePath,
@@ -1588,7 +1606,26 @@ function verifyCharacterizationSources(root, sourceFiles) {
     'the live readable dispatcher must route committed monitored streams to the discard path');
   const discard = oneMethod(eventLoop.lexed, eventLoopPath, 'com.soklet.internal.microhttp.ConnectionEventLoop.Connection', 'doOnReadableDuringStreamingResponse');
   requireStructural(discard, /if\s*\(\s*streamingResponseInputPolicy\s*==\s*Handler\s*\.\s*StreamingResponseInputPolicy\s*\.\s*NONE\s*\|\|\s*writableSource\s*==\s*null\s*\)/u, 'streaming readable path must be guarded by the active input policy and source');
-  requireStructural(discard, /socketChannel\s*\.\s*read\s*\(\s*buffer\s*\)/u, 'streaming readable path must consume client bytes');
+  for (const operation of ['read', 'write']) {
+    requireSocketIoBoundary(oneMethod(socketIo.lexed, socketIoPath,
+      'com.soklet.internal.microhttp.SocketChannelIo', operation), operation);
+  }
+  for (const readPath of [readable, discard,
+    oneMethod(eventLoop.lexed, eventLoopPath,
+      'com.soklet.internal.microhttp.ConnectionEventLoop.Connection',
+      'doOnReadableWhileAwaitingResponse')]) {
+    requireStructural(readPath,
+      /int\s+numBytes\s*=\s*SocketChannelIo\s*\.\s*read\s*\(\s*socketChannel\s*,\s*buffer\s*\)\s*;/u,
+      'live readable paths must consume client bytes through the typed socket read');
+    requireExactSimpleAssignments(readPath, 'numBytes',
+      ['SocketChannelIo.read(socketChannel,buffer)'],
+      'live readable paths must retain the actual typed socket read result');
+    const socketReads = [...readPath.bodyCode.matchAll(
+      /\bSocketChannelIo\s*\.\s*read\s*\(/gu)];
+    if (socketReads.length !== 1) {
+      fail('Transport characterization structural assertion failed: live readable paths must perform exactly one typed socket read');
+    }
+  }
   requireStructural(discard,
     /boolean\s+retainPipelinedRequests\s*=\s*streamingResponseInputPolicy\s*==\s*Handler\s*\.\s*StreamingResponseInputPolicy\s*\.\s*RETAIN\s*;/u,
     'only RETAIN may buffer pipelined streaming input');

@@ -22,10 +22,13 @@ import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
+import java.net.InetAddress;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
+import static com.soklet.internal.ObjectIdentity.sameInstance;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
@@ -611,7 +614,7 @@ public final class SokletConfig {
 		 * Builds an immutable Soklet configuration.
 		 *
 		 * @return the completed configuration
-		 * @throws IllegalStateException if no HTTP, SSE, or MCP server is configured
+		 * @throws IllegalStateException if no HTTP, SSE, or MCP server is configured, or configured built-in listeners may overlap on a nonzero port
 		 */
 		@NonNull
 		public SokletConfig build() {
@@ -619,9 +622,66 @@ public final class SokletConfig {
 				throw new IllegalStateException(format("At least one of %s, %s, or %s must be configured",
 						HttpServer.class.getSimpleName(), SseServer.class.getSimpleName(), McpServer.class.getSimpleName()));
 
+			// Preserve the lifecycle's duplicate-identity diagnostic for a shared
+			// HTTP/SSE object before considering its configured listener settings.
+			if (this.httpServer == null || !sameInstance(this.httpServer, this.sseServer))
+				validateConfiguredListenerAuthorities(this.httpServer, this.sseServer, this.mcpServer);
+
 			return new SokletConfig(this);
 		}
 	}
+
+	private static void validateConfiguredListenerAuthorities(@Nullable HttpServer httpServer,
+			@Nullable SseServer sseServer, @Nullable McpServer mcpServer) {
+		List<ConfiguredListenerAuthority> listeners = new ArrayList<>(3);
+		if (httpServer instanceof DefaultHttpServer server)
+			listeners.add(new ConfiguredListenerAuthority("HTTP", server.getHost(), server.getPort()));
+		if (sseServer instanceof DefaultSseServer server)
+			listeners.add(new ConfiguredListenerAuthority("SSE", server.getHost(), server.getPort()));
+		if (mcpServer instanceof DefaultMcpServer server)
+			listeners.add(new ConfiguredListenerAuthority("MCP", server.getConfiguredHost(), server.getConfiguredPort()));
+
+		for (int i = 0; i < listeners.size(); ++i) {
+			ConfiguredListenerAuthority first = listeners.get(i);
+			if (first.port() == 0)
+				continue;
+			for (int j = i + 1; j < listeners.size(); ++j) {
+				ConfiguredListenerAuthority second = listeners.get(j);
+				if (first.port() != second.port())
+					continue;
+				// Parsing literals is DNS-free. Hostnames, scoped literals and other
+				// unresolved forms cannot establish disjoint listener authorities.
+				InetAddress firstAddress = listenerAddressLiteral(first.host());
+				InetAddress secondAddress = listenerAddressLiteral(second.host());
+				if (firstAddress != null && secondAddress != null
+						&& !firstAddress.isAnyLocalAddress() && !secondAddress.isAnyLocalAddress()
+						&& !firstAddress.equals(secondAddress))
+					continue;
+
+				throw new IllegalStateException(format(
+						"Configured %s listener %s:%d and %s listener %s:%d may overlap. "
+								+ "Use different ports, port 0, or distinct specific IP address literals; "
+								+ "hostnames cannot prove separation without DNS resolution.",
+						first.kind(), first.host(), first.port(), second.kind(), second.host(), second.port()));
+			}
+		}
+	}
+
+	@Nullable
+	private static InetAddress listenerAddressLiteral(@NonNull String configuredHost) {
+		String host = configuredHost;
+		if (host.startsWith("[") && host.endsWith("]"))
+			host = host.substring(1, host.length() - 1);
+		for (int i = 0; i < host.length(); ++i) {
+			char character = host.charAt(i);
+			if (!(character >= '0' && character <= '9') && !(character >= 'a' && character <= 'f')
+					&& !(character >= 'A' && character <= 'F') && character != ':' && character != '.')
+				return null;
+		}
+		return Utilities.parseIpLiteral(host).orElse(null);
+	}
+
+	private record ConfiguredListenerAuthority(@NonNull String kind, @NonNull String host, int port) {}
 
 	@NonNull
 	private static List<LifecycleObserver> copyLifecycleObservers(@Nullable Collection<? extends LifecycleObserver> lifecycleObservers) {

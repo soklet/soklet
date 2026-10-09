@@ -416,6 +416,12 @@ public class McpShutdownObservabilityTests {
 							+ "shared grace-plus-force budget: " + stopDuration);
 			publisher.awaitCloseEntered();
 			Assertions.assertEquals(1, publisher.getCloseAttempts());
+			Set<InternalResidualActivityType> residual = result.participantResult(
+					InternalLifecycleComponentType.MCP).orElseThrow().residualActivity();
+			Assertions.assertTrue(residual.contains(InternalResidualActivityType.CALLBACK),
+					"A blocked registration close is application callback activity.");
+			Assertions.assertTrue(residual.contains(InternalResidualActivityType.EXECUTOR_TASK));
+			Assertions.assertFalse(residual.contains(InternalResidualActivityType.STREAM));
 			assertIncompleteShutdownParity(observer, collector, result);
 			Assertions.assertTrue(bridge.getRuntimeState().stopRequired());
 
@@ -915,6 +921,11 @@ public class McpShutdownObservabilityTests {
 					soklet.getDirectLifecycle().result().orElseThrow());
 			Assertions.assertTrue(handlerInterrupted.await(5, TimeUnit.SECONDS),
 					"Shutdown did not interrupt the held handler.");
+			Set<InternalResidualActivityType> residual = result.participantResult(
+					InternalLifecycleComponentType.MCP).orElseThrow().residualActivity();
+			Assertions.assertTrue(residual.contains(InternalResidualActivityType.CALLBACK));
+			Assertions.assertFalse(residual.contains(InternalResidualActivityType.STREAM),
+					"A retained request control does not mean its transport stream remains open.");
 			Assertions.assertEquals(
 					McpServerStatus.RESIDUAL_ACTIVITY,
 					server.getDiagnostics().getStatus());

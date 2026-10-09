@@ -104,6 +104,11 @@ public interface SseServer {
 	 * A handle from the default server may be retained for the server's lifetime.
 	 * It follows the current broadcaster across idle eviction and new connections;
 	 * a broadcast while no clients are connected has no recipients.
+	 * Acquisition is unavailable before startup and after transport termination.
+	 * During graceful shutdown, the default server permits handle acquisition
+	 * while it is still started, without admitting new connections. A sibling HTTP
+	 * handler may still be draining after this SSE transport has terminated, so
+	 * optional notifications should use {@code ifPresent} or a retained handle.
 	 * <p>
 	 * See <a href="https://www.soklet.com/docs/server-sent-events">https://www.soklet.com/docs/server-sent-events</a> for detailed documentation.
 	 *

@@ -70,6 +70,52 @@ class McpLegacySessionPublicRuntimeTests {
 	void endRequestBudget() { RawClient.endRequestBudget(); }
 
 	@Test
+	void correlatedLegacyDeadlineErrorsUseHttp200WithAndWithoutSessions() throws Exception {
+		try (Fixture fixture = new Fixture((context, arguments, features) -> {
+			new CountDownLatch(1).await(); return McpCompleteResult.fromToolText("unreachable");
+		}, builder -> builder, builder -> builder.requestTimeout(Duration.ofSeconds(1)))) {
+			for (McpProtocolVersion version : LEGACY) {
+				String id = sessionId(fixture.initialize(version, "alice", null, "{}", "deadline"));
+				for (String path : List.of("/mcp", "/stateless")) {
+					Response response = fixture.post(path, version, "tools/call", toolParams(""),
+							"\"deadline\"", path.equals("/mcp") ? id : null, "alice", List.of());
+					assertEquals(200, response.status(), response.body());
+					assertTrue(response.body().contains("\"id\":\"deadline\""), response.body());
+					assertTrue(response.body().contains("\"code\":-32603"), response.body());
+				}
+			}
+		}
+	}
+
+	@Test
+	void deadSessionPrecedesRegistrationErrorsAfterSuccessfulAdmission() throws Exception {
+		try (Fixture fixture = new Fixture(QUIET)) {
+			for (McpProtocolVersion version : LEGACY) {
+				String liveId = sessionId(fixture.initialize(version, "alice", null, "{}", "precedence"));
+				for (String method : List.of("unknown/call", "tasks/list", "prompts/list", "resources/list", "tools/call")) {
+					String params = method.equals("tools/call") ? "\"name\":\"missing\",\"arguments\":{}" : "";
+					Response unknown = fixture.post("/mcp", version, method, params,
+							"1", "unknown-session", "alice", List.of());
+					assertEquals(404, unknown.status(), method + ": " + unknown.body());
+					Response wrongOwner = fixture.post("/mcp", version, method, params,
+							"1", liveId, "bob", List.of());
+					assertEquals(404, wrongOwner.status(), method + ": " + wrongOwner.body());
+					assertEquals(unknown.body(), wrongOwner.body(), "Session existence must not reveal its owner.");
+					Response denied = fixture.post("/mcp", version, method, params,
+							"1", "unknown-session", "alice", List.of(new HeaderValue("X-Admission-Status", "403")));
+					assertEquals(403, denied.status(), "Admission must precede session existence: " + denied.body());
+					Response admitted = fixture.post("/mcp", version, method, params, "1", liveId, "alice", List.of());
+					assertEquals(200, admitted.status(), admitted.body());
+					assertTrue(admitted.body().contains(method.equals("tools/call") ? "\"code\":-32602" : "\"code\":-32601"), admitted.body());
+				}
+				Response malformed = fixture.post("/mcp", version, "tools/call", "", "1", "unknown-session", "alice", List.of());
+				assertEquals(200, malformed.status(), malformed.body());
+				assertTrue(malformed.body().contains("\"code\":-32602"), "Malformed operation fields remain outside admission: " + malformed.body());
+			}
+		}
+	}
+
+	@Test
 	void defaultStatelessServersNeitherIssueNorRequireSessionIds() throws Exception {
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp",
 				McpImplementation.withNameAndVersion("plain", "1").build(), ALL)

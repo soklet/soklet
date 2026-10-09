@@ -180,7 +180,10 @@ final class TimeoutScheduler {
 
 		while ((scheduledTask = this.pendingTasks.poll()) != null)
 			if (!scheduledTask.isCanceled())
-				bucketFor(scheduledTask.deadlineTick).add(scheduledTask);
+				// schedule() can be paused between reading currentTick and publishing
+				// the task. File overdue work in this tick's bucket before it expires,
+				// rather than waiting a whole wheel rotation for the old bucket.
+				bucketFor(Math.max(scheduledTask.deadlineTick, this.currentTick)).add(scheduledTask);
 	}
 
 	private void expireBucket(long tick) {

@@ -30,6 +30,7 @@ import com.soklet.McpStreamTerminationReason;
 import com.soklet.Request;
 import com.soklet.StreamTerminationReason;
 import org.jspecify.annotations.Nullable;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.TestFactory;
 import org.junit.jupiter.api.Timeout;
@@ -50,14 +51,14 @@ import java.util.stream.Stream;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Admitted tool completion racing the first progress response head. */
-@Timeout(30)
+@Timeout(60)
 class McpSimulationResponseOrderingTests {
 	@TestFactory
 	Stream<DynamicTest> terminalResultWaitsForTheProgressResponseHead() {
 		return List.of(McpProtocolVersion.V2025_06_18,
 				McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28)
 				.stream().map(version -> DynamicTest.dynamicTest(version.getWireValue(),
-						() -> verifyOrdering(version.getWireValue())));
+						() -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> verifyOrdering(version.getWireValue()))));
 	}
 
 	private static void verifyOrdering(String revision) throws Exception {

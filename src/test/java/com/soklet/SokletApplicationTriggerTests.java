@@ -131,6 +131,26 @@ final class SokletApplicationTriggerTests {
 	}
 
 	@Test
+	void carriageReturnLineFeedIsOneEnterAcrossListenerGenerations() {
+		ByteArrayInputStream input = new ByteArrayInputStream("\r\nnext\n".getBytes(StandardCharsets.UTF_8));
+		QueuedLauncher launcher = new QueuedLauncher();
+		SokletApplicationInputManager manager = new SokletApplicationInputManager(
+				RecordingProcessAccess.withInput(input), launcher);
+		AtomicInteger firstCalls = new AtomicInteger(), secondCalls = new AtomicInteger();
+		SokletApplicationTriggerRegistration first = manager.register(firstCalls::incrementAndGet);
+		launcher.runNext();
+		first.unregister();
+		Assertions.assertEquals(1, firstCalls.get());
+		Assertions.assertEquals(6, input.available(), "The first generation must not read past CR");
+		SokletApplicationTriggerRegistration second = manager.register(secondCalls::incrementAndGet);
+		try {
+			launcher.runNext();
+			Assertions.assertEquals(1, secondCalls.get());
+			Assertions.assertEquals(0, input.available(), "The leftover LF must not cancel the second generation");
+		} finally { second.unregister(); }
+	}
+
+	@Test
 	void triggeringLineLeavesFollowingInputAvailable() {
 		ByteArrayInputStream input = new ByteArrayInputStream("\nfollow-up\n".getBytes(StandardCharsets.UTF_8));
 		QueuedLauncher launcher = new QueuedLauncher();

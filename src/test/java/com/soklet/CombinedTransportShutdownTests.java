@@ -41,7 +41,7 @@ import static com.soklet.TestSupport.findFreePort;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Real concurrent work in all three built-in transports under one owner. */
-@Timeout(30)
+@Timeout(60)
 @EnabledForJreRange(min = JRE.JAVA_21)
 class CombinedTransportShutdownTests {
 

@@ -758,7 +758,10 @@ ShutdownResult result = soklet.awaitShutdown();
 `shutdown()` promptly publishes intent and always returns the same read-only
 completion stage. `awaitShutdown()` takes no shutdown trigger and returns the
 immutable terminal result. It only waits: it installs no JVM hook or signal
-trigger. `Soklet.close()` remains available for direct
+trigger. In 3.5.1, bare `awaitShutdown()` installed a JVM shutdown hook; in
+4.0.0 it does not. Migrate standalone applications to `SokletApplication`, or
+have the embedding process explicitly request and await shutdown on termination.
+`Soklet.close()` remains available for direct
 embedders; it requests shutdown, joins it uninterruptibly, restores interrupt
 status, and throws if the result is unsuccessful.
 
@@ -849,8 +852,11 @@ Let an external process owner or supervisor terminate the process.
 
 Soklet-created auxiliary HTTP/SSE/MCP workers (including streaming callbacks,
 diagnostics, supervision, MCP platform handlers, policy/cancelation workers and
-protocol deadline timers) are daemon threads. A blocked residual callback alone
-cannot keep the JVM alive after `run()` returns or throws. It remains residual
+protocol deadline timers) are daemon threads. A blocked residual callback on those auxiliary workers alone
+cannot keep the JVM alive after `run()` returns or throws. Built-in HTTP/SSE
+listener threads remain non-daemon: an inline connection observer or metric
+callback that never returns can retain the listener and keep the JVM alive.
+Keep those callbacks prompt. It remains residual
 work: an incomplete result stays incomplete, and configured application cleanup
 is still skipped. Running built-in listener threads retain process liveness;
 complete shutdown releases them. Custom transports and supplied executors own
@@ -966,8 +972,8 @@ termination grace
 
 With the defaults, a five-second external drain, no application cleanup, two
 seconds for other hooks/VM halt, and a three-second reserve totals 30.25
-seconds. Round up to at least 31 seconds. The commonly documented 35-second
-setting retains a reserve. Adding a five-second cleanup budget raises the same
+seconds. Round up to at least 31 seconds. The website deployment example uses a 45-second
+termination budget, retaining an operational reserve. Adding a five-second cleanup budget raises the same
 example's minimum to 36 seconds, so use at least 40 seconds or reduce a measured
 component.
 
@@ -1614,6 +1620,13 @@ does not invoke an HTTP resource method. Custom collectors own their route
 classification/export policy. MCP POST observations continue to use the MCP
 semantic callbacks.
 
+Generic GET/DELETE finish callbacks now run on dedicated bounded workers.
+Capacity is reserved before start and retained through the request lifetime
+and physical finish. Saturation or quiescence skips both callbacks with a
+fixed diagnostic. A blocked callback retains capacity and may leave shutdown
+incomplete. See [Legacy URI grants and catalog invalidations](MCP.md#legacy-uri-grants-and-catalog-invalidations) for
+the worker and queue limits.
+
 ## OpenMetrics histogram bucket labels
 
 The default collector now renders finite histogram `le` labels in
@@ -1827,3 +1840,49 @@ The duration starts at request processing entry and ends at logical transport te
 `MetricsCollector.Snapshot.getHttpResponseStreamTerminations()` returns an immutable `Map<HttpResponseStreamTerminationKey, Long>`. Its builder setter defensively copies input; null/empty clears, zero is retained, and null keys/values or negative counts are rejected. Keys compose `HttpServerRouteStatusKey` with `StreamTerminationReason`; diagnostic rendering redacts application dimensions. The default collector exports `soklet_http_response_stream_terminations_total` with `method`, `route`, `status_class`, and uppercase `reason` labels, under the existing 8,192-key capacity. Reset clears cumulative termination counts while preserving live request state.
 
 A producer failure after a committed 200 remains `2xx` with `PRODUCER_FAILED`. Precommit finite replacements (including 505/503), HEAD/bodyless suppression, and unadmitted streams retain finite HTTP accounting and do not invoke the admitted-stream metrics callback. Existing handler-duration and approximate time-to-first-byte scopes remain unchanged. Dedicated SSE-server and semantic MCP metrics retain their existing ownership.
+
+### Custom transport streaming completion
+
+Both `MetricsCollector` and `LifecycleObserver` have a default callback:
+
+```java
+default void willWriteResponseStream(
+    @NonNull StreamingResponseHandle streamingResponseHandle);
+```
+
+A transport calls it before request-handling finish only when it guarantees a
+later `didTerminateResponseStream` callback, including failed handoff. Use the
+same handle instance and the original dispatched `Request` identity throughout.
+The terminal callback may precede handling finish; collectors must buffer that
+observation without blocking the transport. A streaming response alone does not
+establish that guarantee. Without preparation, the built-in metrics collector
+and OTel finish request accounting at handoff. Decorators must forward both the
+preparation and terminal callbacks to preserve lifetime accounting.
+
+Request-handler decorators should preserve the returned `HttpRequestResult`,
+using its `copy().finish()` path for changes. Reconstructing it from scratch
+drops the dispatch association. When the decorator also copies the request,
+observers may then treat termination as an independent stream observation.
+
+Custom HTTP/SSE `TransportRuntime` shutdown methods must also tolerate
+shutdown when `start` was never invoked. Report affirmative termination proof
+when no owned resources or activity were started, as well as after partial
+startup cleanup.
+
+### Simulation and shutdown diagnostics
+
+An accepted SSE initializer that fails, overflows its queue or terminates before
+activation makes `Simulator.performSseRequest` throw. Established simulated
+consumers run synchronously on the broadcasting or registration thread. Their
+reentrant/concurrent pending deliveries remain bounded, but simulation does not
+model network backpressure and emits no broadcast/drop or socket-write metrics.
+
+`ShutdownResult.toString()` labels residual counts as
+`residualComponentCounts`: each count is the number of components reporting a
+category, not the number of retained tasks or callbacks. One object used in both
+HTTP and SSE configuration slots must provide distinct transport identities.
+
+Lifecycle completion stages are handed off to isolated completion execution.
+`awaitShutdown` waits for lifecycle classification and does not wait for arbitrary
+dependents of the public stage. Join the stage explicitly when its completion
+publication or your dependent action is required. Keep dependent actions bounded.

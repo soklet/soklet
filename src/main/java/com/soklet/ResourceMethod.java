@@ -45,6 +45,7 @@ public final class ResourceMethod {
 	private final Method method;
 	@NonNull
 	private final Boolean sseEventSource;
+	private volatile boolean bindingsValidated;
 
 	/**
 	 * Vends a <em>Resource Method</em> given its unique components.
@@ -107,6 +108,14 @@ public static ResourceMethod fromComponents(@NonNull HttpMethod httpMethod,
 	@Override
 	public int hashCode() {
 		return Objects.hash(getHttpMethod(), getResourcePathDeclaration(), getMethod(), isSseEventSource());
+	}
+
+	boolean hasValidatedBindings() {
+		return this.bindingsValidated;
+	}
+
+	void markBindingsValidated() {
+		this.bindingsValidated = true;
 	}
 
 	/**

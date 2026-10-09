@@ -173,6 +173,8 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		} else {
 			byte[] body = null;
 			Object bodyAsObject = response.getBody().orElse(null);
+			if (bodyAsObject instanceof StreamingResponseBody)
+				throw new IllegalArgumentException("StreamingResponseBody requires MarshaledResponse.stream or streamingResponseBody; Response.body does not open a stream.");
 			boolean binaryResponse = false;
 
 			// If response body is a byte array, pass through as-is.

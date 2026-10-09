@@ -49,6 +49,7 @@ public class EventLoop {
     private int terminatedConnectionEventLoops;
     private boolean unexpectedTerminationRuntimeCleanupComplete;
     private boolean started;
+    private boolean acceptLoopStarted;
     private boolean closedBeforeStart;
 
     // Tracks a run of back-to-back accept() failures so the loop can escalate its backoff and
@@ -204,29 +205,35 @@ public class EventLoop {
 
     public void start() {
         synchronized (lifecycleLock) {
-            // Preserve stop-before-start as an idempotent terminal operation. Historically tests
-            // sometimes called start() after stop() solely to drive cleanup; cleanup is now
-            // synchronous, so there is nothing left to start.
+            // Preserve the historical start-after-pre-start-stop no-op.
             if (closedBeforeStart) {
                 return;
             }
             if (started) {
                 throw new IllegalStateException("Event loop has already been started.");
             }
-
             started = true;
-            try {
-                connectionEventLoops.forEach(ConnectionEventLoop::start);
+        }
+
+        try {
+            // A failed connection-thread start may deliver its termination
+            // observation synchronously. Keep that callback outside our lock.
+            connectionEventLoops.forEach(ConnectionEventLoop::start);
+            synchronized (lifecycleLock) {
+                acceptLoopStarted = true;
                 thread.start();
-            } catch (RuntimeException | Error throwable) {
-                stopAccepting.set(true);
-                stopConnections.set(true);
-                connectionEventLoops.forEach(ConnectionEventLoop::wakeup);
-                connectionEventLoops.forEach(ConnectionEventLoop::closeBeforeStart);
+            }
+        } catch (RuntimeException | Error throwable) {
+            stopAccepting.set(true);
+            stopConnections.set(true);
+            connectionEventLoops.forEach(ConnectionEventLoop::wakeup);
+            synchronized (lifecycleLock) {
                 CloseUtils.closeQuietly(serverSocketChannel);
                 CloseUtils.closeQuietly(selector);
-                throw throwable;
             }
+            // Termination notifications may complete application observations.
+            connectionEventLoops.forEach(ConnectionEventLoop::closeBeforeStart);
+            throw throwable;
         }
     }
 
@@ -234,6 +241,14 @@ public class EventLoop {
         try {
             doRun();
         } catch (Throwable throwable) {
+            if ((stopAccepting.get() || stopConnections.get())
+                    && !serverSocketChannel.isOpen()
+                    && (throwable instanceof java.nio.channels.ClosedChannelException
+                    || throwable instanceof java.nio.channels.CancelledKeyException)) {
+                // A prompt intentional listener close can race accept/key use.
+                // It does not elect an unexpected transport termination.
+                return;
+            }
             try {
                 if (logger.failureEnabled()) {
                     logger.logFailure(throwable, new LogEntry("event", "event_loop_terminate"));
@@ -455,7 +470,22 @@ public class EventLoop {
 
     public void stopAccepting() {
         stopAccepting.set(true);
+        // Listener admission can close independently of application startup or
+        // shutdown callbacks, including a bound loop that has not started yet.
+        CloseUtils.closeQuietly(serverSocketChannel);
         selector.wakeup();
+        synchronized (lifecycleLock) {
+            if (!acceptLoopStarted && selector.isOpen()) {
+                // A registered channel's native descriptor can remain until its
+                // canceled key is deregistered. No accept thread exists yet to
+                // process that cancellation, so purge it before returning.
+                try {
+                    selector.selectNow();
+                } catch (IOException failure) {
+                    CloseUtils.closeQuietly(selector);
+                }
+            }
+        }
     }
 
     public void beginDrain() {
@@ -605,10 +635,12 @@ public class EventLoop {
             }
 
             closedBeforeStart = true;
-            connectionEventLoops.forEach(ConnectionEventLoop::closeBeforeStart);
             CloseUtils.closeQuietly(serverSocketChannel);
             CloseUtils.closeQuietly(selector);
         }
+        // Closing each loop publishes its termination observation. The physical
+        // pre-start resources close before this method returns, outside our lock.
+        connectionEventLoops.forEach(ConnectionEventLoop::closeBeforeStart);
     }
 
     private void handleAcceptFailure(IOException e) {

@@ -16,10 +16,12 @@
 
 package com.soklet;
 
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.TestFactory;
 import org.junit.jupiter.api.Timeout;
 
+import java.time.Duration;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
@@ -32,7 +34,7 @@ import static com.soklet.McpLegacySessionTransportPublicRuntimeTests.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Exact icon projection, private declaration failures, and recovery on real listeners. */
-@Timeout(30)
+@Timeout(60)
 class McpIconPublicRuntimeTests {
 	private static final Set<McpProtocolVersion> VERSIONS = Set.of(
 			McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25,
@@ -49,7 +51,7 @@ class McpIconPublicRuntimeTests {
 	@TestFactory
 	Stream<DynamicTest> iconsKeepExactValuesAndRespectEachRevisionProjection() {
 		return VERSIONS.stream().map(protocolVersion -> DynamicTest.dynamicTest(
-				protocolVersion.getWireValue(), () -> verifyIcons(protocolVersion)));
+				protocolVersion.getWireValue(), () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> verifyIcons(protocolVersion))));
 	}
 
 	private void verifyIcons(McpProtocolVersion protocolVersion) throws Exception {

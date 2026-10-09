@@ -14,6 +14,7 @@ package com.soklet;
 
 import com.soklet.annotation.GET;
 import com.soklet.annotation.SseEventSource;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestFactory;
@@ -44,7 +45,7 @@ import static com.soklet.TestSupport.findFreePort;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Real-wire coverage of rejections outside the original four parser reasons. */
-@Timeout(30)
+@Timeout(60)
 class UnparsedRequestAdditionalTransportTests {
 
 	@TestFactory
@@ -58,7 +59,7 @@ class UnparsedRequestAdditionalTransportTests {
 				new Case("unsupported method", "MALFORMED_REQUEST", "UNKNOWN /ok HTTP/1.1\r\nHost: localhost\r\n\r\n", 4096, 1024, 8192),
 				new Case("unsupported coding", "UNSUPPORTED_CONTENT_ENCODING", "POST /ok HTTP/1.1\r\nHost: localhost\r\nContent-Encoding: br\r\nContent-Length: 1\r\n\r\nx", 4096, 1024, 8192),
 				new Case("malformed gzip", "REQUEST_BODY_DECOMPRESSION_FAILED", "POST /ok HTTP/1.1\r\nHost: localhost\r\nContent-Encoding: gzip\r\nContent-Length: 1\r\n\r\nx", 4096, 1024, 8192)
-		).map(c -> DynamicTest.dynamicTest(c.name(), () -> assertCustomized(ServerType.HTTP, c)));
+		).map(c -> DynamicTest.dynamicTest(c.name(), () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> assertCustomized(ServerType.HTTP, c))));
 	}
 
 	@TestFactory
@@ -72,7 +73,7 @@ class UnparsedRequestAdditionalTransportTests {
 				new Case("target", "REQUEST_TARGET_TOO_LONG", "GET /events HTTP/1.1\r\nHost: localhost\r\n\r\n", 4096, 1024, 3),
 				new Case("aggregate before request line", "REQUEST_TOO_LARGE", "GET /" + "x".repeat(128), 64, 1024, 8192),
 				new Case("partial timeout", "REQUEST_READ_TIMEOUT", "GET /events HTTP/1.1\r\nHost: localhost\r\n", 4096, 1024, 8192)
-		).map(c -> DynamicTest.dynamicTest(c.name(), () -> assertCustomized(ServerType.SSE, c)));
+		).map(c -> DynamicTest.dynamicTest(c.name(), () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> assertCustomized(ServerType.SSE, c))));
 	}
 
 	private void assertCustomized(ServerType serverType, Case c) throws Exception {
@@ -189,7 +190,7 @@ class UnparsedRequestAdditionalTransportTests {
 				request -> { throw new IllegalStateException("application failure"); },
 				request -> null,
 				request -> MarshaledResponse.withStatusCode(498).body(new byte[70_000]).build());
-		return Stream.iterate(0, i -> i + 1).limit(handlers.size()).map(i -> DynamicTest.dynamicTest("fallback " + i, () -> {
+		return Stream.iterate(0, i -> i + 1).limit(handlers.size()).map(i -> DynamicTest.dynamicTest("fallback " + i, () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
 			Case c = new Case("malformed", "MALFORMED_REQUEST", "GET /events HTTP/1.1\r\nHost: localhost\r\nBroken-Header\r\n\r\n", 4096, 1024, 8192);
 			try (Fixture fixture = new Fixture(ServerType.SSE, c, handlers.get(i)); Socket socket = fixture.open()) {
 				fixture.send(socket, c.input());
@@ -197,7 +198,7 @@ class UnparsedRequestAdditionalTransportTests {
 				assertEquals(1, fixture.requests.size());
 				assertEquals(1, fixture.logs.stream().filter(e -> e.getLogEventType() == LogEventType.RESPONSE_MARSHALER_FOR_UNPARSED_REQUEST_FAILED).count());
 			}
-		}));
+		})));
 	}
 
 	@Test

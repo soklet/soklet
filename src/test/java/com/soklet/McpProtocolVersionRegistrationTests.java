@@ -47,6 +47,32 @@ class McpProtocolVersionRegistrationTests {
 	}
 
 	@Test
+	void rejectedEndpointPathsIdentifyTheActualNormalizationProblem() {
+		for (var example : List.of(java.util.Map.entry("/mcp/", "trailing slash"),
+				java.util.Map.entry("/catalog//mcp", "empty path segments"),
+				java.util.Map.entry(" /mcp", "whitespace"),
+				java.util.Map.entry("/catalog/../mcp", "dot path segments"))) {
+			IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
+					() -> McpEndpoint.withPath(example.getKey(), implementation(), Set.of(V2026_07_28)));
+			assertTrue(failure.getMessage().contains(example.getValue()), failure.getMessage());
+			org.junit.jupiter.api.Assertions.assertFalse(failure.getMessage().contains("percent-encode"), failure.getMessage());
+		}
+	}
+
+	@Test
+	void appsAssociationErrorIdentifiesToolEndpointAndRevision() {
+		McpToolRegistration<?> tool = McpToolRegistration.withName("missing-ui-tool", Set.of(V2026_07_28))
+				.argumentType(EmptyArguments.class).handler((context, arguments, features) -> McpCompleteResult.fromToolText("ok"))
+				.appToolMetadata(McpAppToolMetadata.withProtocolVersions(Set.of(V2026_07_28))
+						.resourceUri(java.net.URI.create("ui://missing/resource")).build()).build();
+		IllegalStateException failure = assertThrows(IllegalStateException.class,
+				() -> McpEndpoint.withPath("/apps-diagnostic", implementation(), Set.of(V2026_07_28))
+						.toolRegistrations(List.of(tool)).build());
+		for (String expected : List.of("missing-ui-tool", "/apps-diagnostic", V2026_07_28.getWireValue()))
+			assertTrue(failure.getMessage().contains(expected), failure.getMessage());
+	}
+
+	@Test
 	void legacyOutputSchemaFailsAtEndpointConstructionWithActionableContext() {
 		for (McpProtocolVersion legacy : List.of(V2025_06_18, McpProtocolVersion.V2025_11_25)) {
 			Set<McpProtocolVersion> versions = Set.of(legacy, V2026_07_28);

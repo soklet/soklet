@@ -82,8 +82,11 @@ import static java.util.Objects.requireNonNull;
  * not choose a process exit status.
  * <p>
  * Soklet-created auxiliary workers are daemon threads. A residual handler or
- * callback therefore does not by itself keep the JVM alive after this run
- * ends, but daemon status does not establish termination proof or make an
+ * callback on those workers therefore does not by itself keep the JVM alive
+ * after this run ends. Built-in listener threads are non-daemon; an inline
+ * connection observer or metric callback that never returns can retain that
+ * listener and process liveness. Keep those callbacks prompt. Daemon status
+ * does not establish termination proof or make an
  * incomplete result complete. Running built-in listeners retain process
  * liveness. Custom transports and supplied executors own their thread and
  * process-liveness policies.
@@ -746,6 +749,8 @@ final class SokletApplicationInputManager
 	private long registrationEpoch;
 	@Nullable
 	private InputStream latestInput;
+	@Nullable
+	private InputStream pendingCarriageReturnInput;
 
 	SokletApplicationInputManager(@NonNull LifecycleProcessAccess processAccess,
 			@NonNull DaemonLauncher launcher) {
@@ -845,9 +850,15 @@ final class SokletApplicationInputManager
 				int value = requireNonNull(input).read();
 				List<Registration> snapshot;
 				synchronized (this.listenerMonitor) {
+					// A CR-triggered generation intentionally performs no read-ahead.
+					// Consume its LF only when the next generation reads that same input.
+					boolean previousCarriageReturn = sameInstance(this.pendingCarriageReturnInput, input);
+					this.pendingCarriageReturnInput = null;
 					observedRegistrationEpoch = this.registrationEpoch;
 					if (this.registrations.isEmpty())
 						return;
+					if (previousCarriageReturn && value == '\n')
+						continue;
 					if (value < 0) {
 						warning = "Ignoring ENTER_KEY shutdown because stdin reached EOF";
 						warningRegistrations = List.copyOf(this.registrations);
@@ -855,6 +866,8 @@ final class SokletApplicationInputManager
 					}
 					if (value != '\n' && value != '\r')
 						continue;
+					if (value == '\r')
+						this.pendingCarriageReturnInput = input;
 					snapshot = List.copyOf(this.registrations);
 				}
 				broadcastShutdownIntent(snapshot);

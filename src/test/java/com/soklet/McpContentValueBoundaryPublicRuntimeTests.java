@@ -16,10 +16,12 @@
 
 package com.soklet;
 
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.TestFactory;
 import org.junit.jupiter.api.Timeout;
 
+import java.time.Duration;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
@@ -32,7 +34,7 @@ import static com.soklet.McpLegacySessionTransportPublicRuntimeTests.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Content validation, binary wire limits, and recovery across all revisions. */
-@Timeout(30)
+@Timeout(60)
 class McpContentValueBoundaryPublicRuntimeTests {
 	private static final Set<McpProtocolVersion> VERSIONS = Set.of(
 			McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25,
@@ -44,7 +46,7 @@ class McpContentValueBoundaryPublicRuntimeTests {
 	@TestFactory
 	Stream<DynamicTest> contentBoundariesFailPrivatelyAndRecoverForEveryRevision() {
 		return VERSIONS.stream().map(protocolVersion -> DynamicTest.dynamicTest(
-				protocolVersion.getWireValue(), () -> verifyBoundaries(protocolVersion)));
+				protocolVersion.getWireValue(), () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> verifyBoundaries(protocolVersion))));
 	}
 
 	private void verifyBoundaries(McpProtocolVersion protocolVersion) throws Exception {

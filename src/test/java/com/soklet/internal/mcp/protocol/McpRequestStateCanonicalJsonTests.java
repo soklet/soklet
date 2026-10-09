@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -58,6 +59,29 @@ public class McpRequestStateCanonicalJsonTests {
 						+ "\"text\":\"\\\"\\\\\\b\\f\\n\\r\\t\\u0001 café 🚀\","
 						+ "\"thousand\":1E+3,\"zero\":0}",
 				canonical(new McpJsonObject(fields)));
+	}
+
+	@Test
+	public void boundedNumberNormalizationMatchesTheExistingExactCanonicalForm() {
+		McpJsonLimits limits = McpJsonLimits.productionDefaults();
+		for (String coefficient : List.of("0", "1", "-1", "10", "-1000", "123450000",
+				"999999999999999999999999999999999999999999999999990000",
+				"7" + "0".repeat(1_020), "-9" + "0".repeat(1_019))) {
+			for (int scale : List.of(-100, -1, 0, 1, 100, 1_100)) {
+				BigDecimal supplied = new BigDecimal(new BigInteger(coefficient), scale);
+				BigDecimal expected = supplied.signum() == 0 ? BigDecimal.ZERO : supplied.stripTrailingZeros();
+				McpRequestStateCanonicalJson.Canonicalization actual =
+						McpRequestStateCanonicalJson.canonicalizeWithNormalizedValue(new McpJsonNumber(supplied), limits);
+				Assertions.assertEquals(expected, ((McpJsonNumber) actual.normalizedValue()).value());
+				Assertions.assertArrayEquals(new McpJsonCodec(limits).toUtf8Bytes(new McpJsonNumber(expected)),
+						actual.canonicalUtf8());
+				Assertions.assertEquals(0, supplied.compareTo(((McpJsonNumber) actual.normalizedValue()).value()));
+			}
+		}
+		BigDecimal overflowingScale = new BigDecimal(BigInteger.TEN, Integer.MIN_VALUE);
+		Assertions.assertThrows(ArithmeticException.class, overflowingScale::stripTrailingZeros);
+		Assertions.assertThrows(ArithmeticException.class, () ->
+				McpRequestStateCanonicalJson.canonicalize(new McpJsonNumber(overflowingScale), limits));
 	}
 
 	@Test

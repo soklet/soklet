@@ -260,6 +260,11 @@ class RequestParser {
         if (token.length() > maxRequestTargetLength) {
             throw requestTooLarge(RequestTooLargeException.Reason.URI_TOO_LONG);
         }
+        for (int i = 0; i < token.length(); i++) {
+            char character = token.charAt(i);
+            if (character < 0x21 || character == 0x7f)
+                throw new MalformedRequestException("invalid request target");
+        }
         uri = token;
         state = State.VERSION;
         return true;
@@ -272,8 +277,7 @@ class RequestParser {
 
         for (int i = 0; i < prefixBytesAvailable; i++) {
             failureBoundaryExclusive = start + i + 1;
-            if (!asciiByteEqualsIgnoreCase(tokenizer.rawByte(start + i),
-                    HTTP_VERSION_PREFIX.charAt(i)))
+            if (tokenizer.rawByte(start + i) != HTTP_VERSION_PREFIX.charAt(i))
                 throw new MalformedRequestException("unsupported http version");
         }
 
@@ -813,14 +817,6 @@ class RequestParser {
 
     int failureBoundaryExclusive() {
         return this.failureBoundaryExclusive;
-    }
-
-    private static boolean asciiByteEqualsIgnoreCase(byte actual,
-                                                      char expected) {
-        int normalized = actual & 0xFF;
-        if (normalized >= 'a' && normalized <= 'z')
-            normalized -= 'a' - 'A';
-        return normalized == expected;
     }
 
     private void markRequestLineTokenFailureBoundary() {

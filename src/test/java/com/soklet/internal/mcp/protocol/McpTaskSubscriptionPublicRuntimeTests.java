@@ -129,6 +129,63 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 	private static final Duration POLL_INTERVAL = Duration.ofMillis(250);
 
 	@Test
+	public void acknowledgedTasksSurviveTransientMaintenanceLookupAndUnsupportedInputGenerations() throws Exception {
+		for (boolean unavailable : List.of(true, false)) {
+			ScriptedTaskManager manager = new ScriptedTaskManager();
+			McpServer server = serverBuilder(manager, new AtomicInteger())
+					.subscriptionAuthorizer((context, features) -> McpSubscriptionAuthorization.Allowed.fromValidUntil(Instant.now().plusSeconds(300)))
+					.build();
+			try (Soklet soklet = managedSoklet(server)) {
+				soklet.start(); int port = boundPort(server);
+				seedTask(port, "maintenance-transient", ALPHA); seedTask(port, "maintenance-peer", ALPHA);
+				try (McpChunkedHttpClient client = listen(port, "\"maintenance\"", ALPHA, true,
+						taskIdsFilter(List.of("maintenance-transient", "maintenance-peer")))) {
+					assertSseHead(client.readHead());
+					Assertions.assertEquals(acknowledgment("\"maintenance\"", List.of("maintenance-transient", "maintenance-peer")), client.readChunkText());
+					manager.resetFindInvocations();
+					if (unavailable) manager.failNextFind("maintenance-transient");
+					else manager.replaceTask(inputRequiredTask(manager.requireTask("maintenance-transient")));
+					server.getSubscriptionReconciler().reconcileSubscriptions();
+					manager.awaitFindCompletions("maintenance-transient", 1);
+					manager.awaitFindCompletions("maintenance-peer", 2);
+					// Consume the peer refresh to prove the maintenance grant is active.
+					String peerFrame;
+					do { peerFrame = client.readChunkText(); } while (peerFrame != null && !peerFrame.contains("maintenance-peer"));
+					Assertions.assertEquals(workingNotification("\"maintenance\"", "maintenance-peer"), peerFrame);
+					manager.replaceTask(completedTask(manager.requireTask("maintenance-transient")));
+					manager.publishTaskChanged("maintenance-transient");
+					String frame;
+					do { frame = client.readChunkText(); } while (frame != null && !frame.contains("\"status\":\"completed\""));
+					Assertions.assertEquals(completedNotification("\"maintenance\"", "maintenance-transient"), frame);
+					client.closeWithReset();
+				}
+			}
+		}
+	}
+
+	@Test
+	public void terminalTaskSnapshotSurvivesAnEarlierFleetClockThanTheLastWorkingSnapshot() throws Exception {
+		ScriptedTaskManager manager = new ScriptedTaskManager();
+		McpServer server = server(manager, new AtomicInteger());
+		try (Soklet soklet = managedSoklet(server)) {
+			soklet.start(); int port = boundPort(server);
+			seedTask(port, "clock-skew", ALPHA);
+			try (McpChunkedHttpClient client = listen(port, "\"clock-skew\"", ALPHA, true, taskIdsFilter(List.of("clock-skew")))) {
+				assertSseHead(client.readHead()); client.readChunkText();
+				McpTask previous = manager.requireTask("clock-skew");
+				manager.replaceTask(McpTask.withTaskId(previous.getTaskId(), previous.getTaskOrigin(), McpTaskStatus.WORKING,
+						CREATED_AT, INPUT_REQUIRED_UPDATED_AT).taskStatusMessage("newer-working")
+						.timeToLive(TASK_TIME_TO_LIVE).pollInterval(POLL_INTERVAL).build());
+				manager.publishTaskChanged("clock-skew");
+				Assertions.assertTrue(client.readChunkText().contains("newer-working"));
+				manager.replaceTask(completedTask(previous)); manager.publishTaskChanged("clock-skew");
+				Assertions.assertEquals(completedNotification("\"clock-skew\"", "clock-skew"), client.readChunkText());
+				client.closeWithReset();
+			}
+		}
+	}
+
+	@Test
 	public void lateTaskOfferSuppressesExpiredProjectionWithoutAbsorbingTerminal() throws Exception {
 		ScriptedTaskManager manager = new ScriptedTaskManager();
 		AtomicInteger offers = new AtomicInteger();

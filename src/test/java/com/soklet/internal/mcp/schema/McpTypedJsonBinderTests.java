@@ -57,6 +57,20 @@ public class McpTypedJsonBinderTests {
 	private static final McpTypedJsonBinder BINDER = new McpTypedJsonBinder();
 
 	@Test
+	void integralDecimalsUseOneBoundedScaleConversionAndRetainExactMagnitude() {
+		String digits = "1" + "0".repeat(1021);
+		McpJsonNumber decimalInteger = number(digits + ".0");
+		assertTrue(McpSchemaType.INTEGER.matches(decimalInteger));
+		assertEquals(new BigInteger(digits), BINDER.fromJson(decimalInteger, binding(BigInteger.class)));
+		assertFalse(McpSchemaType.INTEGER.matches(number("1e-2147483647")));
+		assertTrue(McpSchemaType.INTEGER.matches(number("0e-2147483647")));
+		assertFailure(McpTypedJsonBindingException.Operation.FROM_JSON,
+				McpTypedJsonBindingException.Reason.NON_INTEGER_NUMBER,
+				() -> BINDER.fromJson(number("1e-2147483647"), binding(BigInteger.class)));
+		assertFalse(McpSchemaType.INTEGER.matches(number("1234.001")));
+	}
+
+	@Test
 	void recordRoundTripUsesExactStringsOptionalsAndImmutableCollections()
 			throws ReflectiveOperationException {
 		McpTypedJsonBinding<Payload> binding = binding(Payload.class);

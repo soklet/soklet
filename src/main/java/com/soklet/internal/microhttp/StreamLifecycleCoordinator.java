@@ -22,12 +22,14 @@ import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledFuture;
@@ -59,6 +61,7 @@ import static java.util.Objects.requireNonNull;
 public final class StreamLifecycleCoordinator {
 
 	private static final AtomicInteger THREAD_SEQUENCE = new AtomicInteger();
+	private static final int MAX_DIAGNOSTIC_GRAPH_STEPS = 64;
 	private final Object lock = new Object();
 	private final int capacity;
 	private final long cleanupGraceNanos;
@@ -103,7 +106,7 @@ public final class StreamLifecycleCoordinator {
 		this.nanoClock = requireNonNull(nanoClock);
 		this.rejectionObserverCapacity = Math.min(capacity, Integer.MAX_VALUE - capacity * 2);
 		this.callbackExecutor = new ThreadPoolExecutor(callbackConcurrency, callbackConcurrency,
-				0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(capacity + this.rejectionObserverCapacity),
+				0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(capacity + this.rejectionObserverCapacity),
 				threadFactory("stream-callback"), new ThreadPoolExecutor.AbortPolicy());
 		// Each reservation prepays one termination notification and one diagnostic.
 		// Independent workers prevent blocked application observations from queuing
@@ -438,6 +441,10 @@ public final class StreamLifecycleCoordinator {
 		private boolean diagnosticPending;
 		@Nullable
 		private Consumer<Throwable> cleanupFailureObserver;
+		@Nullable
+		private Consumer<Throwable> producerFailureObserver;
+		@Nullable
+		private Throwable producerFailure;
 
 		private Reservation(long id) {
 			this.id = id;
@@ -554,12 +561,16 @@ public final class StreamLifecycleCoordinator {
 			try {
 				executor.execute(task);
 				return true;
-			} catch (RejectedExecutionException rejected) {
+			} catch (Throwable rejected) {
 				synchronized (lock) {
 					if (this.producerState == ProducerState.SUBMITTING)
 						this.producerState = ProducerState.RETIRED;
 				}
-				throw rejected;
+				if (rejected instanceof Error error)
+					throw error;
+				if (rejected instanceof RuntimeException runtimeException)
+					throw runtimeException;
+				throw new IllegalStateException("Unable to submit streaming producer", rejected);
 			} finally {
 				synchronized (lock) {
 					this.submissionPending = false;
@@ -737,6 +748,30 @@ public final class StreamLifecycleCoordinator {
 				observer = this.cleanupFailureObserver == null ? diagnostics : this.cleanupFailureObserver;
 			}
 			report(requireNonNull(failure), observer);
+		}
+
+		/** Binds contextual evidence for a competing producer failure before accepting producer work. */
+		public void bindProducerFailureObserver(@NonNull Consumer<Throwable> observer) {
+			requireNonNull(observer);
+			synchronized (lock) {
+				if (this.retired || this.producerState != ProducerState.RESERVED || this.producerFailureObserver != null)
+					throw new IllegalStateException("Producer failure observation must be bound once before producer admission");
+				this.producerFailureObserver = observer;
+			}
+		}
+
+		/**
+		 * Retains one competing producer failure until physical retirement, preserving cleanup diagnostic priority
+		 * and the reservation's single prepaid diagnostic allowance. This does not change the elected outcome.
+		 */
+		public void reportProducerFailure(@NonNull Throwable failure) {
+			requireNonNull(failure);
+			synchronized (lock) {
+				if (this.retired || this.producerFailure != null)
+					return;
+				this.producerFailure = failure;
+				retireIfFinished();
+			}
 		}
 
 		/** Starts one non-resetting terminal-cleanup grace, including normal finalization. */
@@ -991,11 +1026,21 @@ public final class StreamLifecycleCoordinator {
 		private void publishDiagnostic(Throwable failure, Consumer<Throwable> observer) {
 			try {
 				diagnosticExecutor.execute(() -> {
+					Throwable secondary;
+					synchronized (lock) { secondary = this.producerFailure; }
 					try {
+						attachProducerEvidence(failure, secondary);
 						observer.accept(failure);
 					} catch (Throwable ignored) {
 						// Diagnostics must not compromise state publication or accounting.
 					} finally {
+						// A producer may exit while the diagnostic observer is running. All
+						// Throwable graph/monitor access stays on this counted worker, outside
+						// the coordinator lock. No second diagnostic allowance is created.
+						Throwable laterSecondary;
+						synchronized (lock) { laterSecondary = this.producerFailure; }
+						if (!sameInstance(secondary, laterSecondary))
+							attachProducerEvidence(failure, laterSecondary);
 						synchronized (lock) {
 							this.diagnosticPending = false;
 							retireIfFinished();
@@ -1018,16 +1063,68 @@ public final class StreamLifecycleCoordinator {
 			for (JobState job : this.jobs)
 				if (job == JobState.QUEUED || job == JobState.RUNNING)
 					return;
+			// All producer, callback, publisher, and retained work has returned. Only
+			// now may competing producer evidence use an otherwise unclaimed slot.
+			if (this.producerFailure != null && !this.diagnosticClaimed) {
+				claimDiagnostic();
+				publishDiagnostic(this.producerFailure,
+						this.producerFailureObserver == null ? diagnostics : this.producerFailureObserver);
+				return;
+			}
 			this.retired = true;
 			if (this.cleanupTimer != null)
 				this.cleanupTimer.cancel(false);
 			this.terminationHandler = null;
 			this.cleanupFailureObserver = null;
+			this.producerFailureObserver = null;
+			this.producerFailure = null;
 			this.producerTask = null;
 			reservations.remove(this);
 			stopInfrastructureIfDrained();
 			lock.notifyAll();
 		}
+	}
+
+	private enum GraphContainment { PRESENT, ABSENT, UNKNOWN }
+
+	/** Attaches only when bounded inspection finds no existing path or back edge. */
+	private static void attachProducerEvidence(Throwable primary, @Nullable Throwable secondary) {
+		if (secondary == null || sameInstance(primary, secondary))
+			return;
+		try {
+			if (containsDiagnosticThrowable(primary, secondary) == GraphContainment.ABSENT
+					&& containsDiagnosticThrowable(secondary, primary) == GraphContainment.ABSENT)
+				primary.addSuppressed(secondary);
+		} catch (Throwable ignored) {
+			// Application Throwable access cannot erase the already claimed primary diagnostic.
+		}
+	}
+
+	private static GraphContainment containsDiagnosticThrowable(Throwable root, Throwable target) {
+		ArrayDeque<Throwable> pending = new ArrayDeque<>();
+		IdentityHashMap<Throwable, Boolean> visited = new IdentityHashMap<>();
+		pending.add(root);
+		int remaining = MAX_DIAGNOSTIC_GRAPH_STEPS;
+		while (!pending.isEmpty()) {
+			if (remaining-- <= 0)
+				return GraphContainment.UNKNOWN;
+			Throwable current = pending.removeFirst();
+			if (sameInstance(current, target))
+				return GraphContainment.PRESENT;
+			if (visited.put(current, Boolean.TRUE) != null)
+				continue;
+			Throwable cause = current.getCause();
+			if (cause != null && !visited.containsKey(cause))
+				pending.addLast(cause);
+			for (Throwable suppressed : current.getSuppressed()) {
+				if (remaining-- <= 0)
+					return GraphContainment.UNKNOWN;
+				if (!visited.containsKey(suppressed)) {
+					pending.addLast(suppressed);
+				}
+			}
+		}
+		return GraphContainment.ABSENT;
 	}
 
 	private final class ProducerTask implements Runnable {
@@ -1109,7 +1206,7 @@ public final class StreamLifecycleCoordinator {
 		private int pendingTasks;
 
 		private ObservationExecutor(int capacity, String prefix) {
-			super(0, capacity, 30L, TimeUnit.SECONDS, new ArrayBlockingQueue<>(capacity),
+			super(0, capacity, 30L, TimeUnit.SECONDS, new LinkedBlockingQueue<>(capacity),
 					threadFactory(prefix), new AbortPolicy());
 			allowCoreThreadTimeOut(true);
 		}

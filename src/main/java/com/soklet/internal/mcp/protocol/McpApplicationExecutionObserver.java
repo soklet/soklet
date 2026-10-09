@@ -49,6 +49,12 @@ public interface McpApplicationExecutionObserver {
 				@NonNull Duration duration, @NonNull List<@NonNull Throwable> throwables);
 	}
 
+	/** Reports an application admission failure without retaining wire credentials. */
+	default void didFailAdmission(@NonNull String endpointPath, @NonNull Throwable failure) {
+		if (endpointPath == null || failure == null)
+			throw new NullPointerException("admission failure property");
+	}
+
 	/** Begins HTTP observation after selection of a configured MCP endpoint path. */
 	@NonNull
 	default HttpRequestObservation didStartHttpRequest(@NonNull Request request, @NonNull String endpointPath) {
@@ -56,6 +62,9 @@ public interface McpApplicationExecutionObserver {
 			throw new NullPointerException("HTTP observation property");
 		return (statusCode, headers, duration, throwables) -> {};
 	}
+
+	/** Both HTTP callbacks are omitted when the paired observation budget is full. */
+	default void didSkipHttpRequestObservation() {}
 
 	/** Records one successfully opened HTTP legacy subscription channel. */
 	default void recordSubscriptionOpened(@NonNull String endpointPath) {

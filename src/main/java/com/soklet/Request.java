@@ -86,6 +86,16 @@ public final class Request {
 
 	@NonNull
 	private final Object id;
+	private final AdmissionFence.@Nullable Admission lifecycleAdmission;
+
+	AdmissionFence.@Nullable Admission claimLifecycleAdmission(@NonNull AdmissionFence fence) {
+		AdmissionFence.Admission admission = this.lifecycleAdmission;
+		return admission != null && admission.claimForHandling(fence) ? admission : null;
+	}
+
+	boolean hasLifecycleAdmission() {
+		return this.lifecycleAdmission != null;
+	}
 	@NonNull
 	private final HttpMethod httpMethod;
 	@NonNull
@@ -282,6 +292,8 @@ public final class Request {
 		}
 
 		this.idGenerator = builderIdGenerator == null ? DEFAULT_ID_GENERATOR : builderIdGenerator;
+		this.lifecycleAdmission = pathBuilder != null ? pathBuilder.lifecycleAdmission
+				: requireNonNull(rawBuilder).lifecycleAdmission;
 		this.multipartParser = builderMultipartParser == null ? DefaultMultipartParser.defaultInstance() : builderMultipartParser;
 
 		URI absoluteRequestTarget = rawBuilder == null ? null : absoluteRequestTarget(rawBuilder.rawUrl);
@@ -317,7 +329,7 @@ public final class Request {
 			if (!path.startsWith("/") && !path.equals("*"))
 				throw new IllegalRequestException("Path must start with '/' or be '*'");
 
-			if (path.contains("?"))
+			if (path.contains("?") && !pathBuilder.preserveDecodedPath)
 				throw new IllegalRequestException(format("Path should not contain a query string. Use %s.withPath(...).queryParameters(...) to specify query parameters as a %s.",
 						Request.class.getSimpleName(), Map.class.getSimpleName()));
 
@@ -435,7 +447,10 @@ public final class Request {
 			return null;
 
 		try {
-			URI uri = new URI(target);
+			if (target.indexOf('#') >= 0)
+				throw new IllegalRequestException("Invalid absolute request URL.");
+			int queryStart = target.indexOf('?');
+			URI uri = new URI(queryStart < 0 ? target : target.substring(0, queryStart));
 			if (!("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme()))
 					|| uri.getRawUserInfo() != null || uri.getRawFragment() != null
 					|| !HostHeaderValidator.isValidHostHeaderValue(uri.getRawAuthority()))
@@ -568,6 +583,18 @@ public final class Request {
 		return result;
 	}
 
+	@NonNull
+	List<@NonNull String> cookieValuesForName(@NonNull String name) {
+		requireNonNull(name);
+		Map<String, List<String>> parsed = this.cookies;
+		if (parsed != null)
+			return parsed.getOrDefault(name, List.of());
+		List<String> cookieHeaderValues = getHeaderValues("Cookie").orElse(List.of());
+		if (cookieHeaderValues.isEmpty())
+			return List.of();
+		return Utilities.extractCookiesFromHeaders(Map.of("Cookie", cookieHeaderValues), name).getOrDefault(name, List.of());
+	}
+
 	/**
 	 * The decoded query parameters provided by the client for this request.
 	 * <p>
@@ -610,7 +637,8 @@ public final class Request {
 	 * <p>
 	 * Form pairs are parsed directly, so literal {@code #} and spaces are retained as data.
 	 * Names and values are not trimmed. A bare name and a name followed by {@code =} each yield one empty value;
-	 * repeated empty values remain separate occurrences. Pairs without a name are ignored.
+	 * repeated empty values remain separate occurrences. Explicit empty names ({@code =value})
+	 * are retained under {@code ""}; empty separator segments are ignored.
 	 * <p>
 	 * <em>Note that form parameters have case-sensitive names per the HTTP spec.</em>
 	 * <p>
@@ -1203,7 +1231,7 @@ public final class Request {
 		requireNonNull(name);
 
 		try {
-			return singleValueForName(name, getCookies());
+			return singleValueForName(name, Map.of(name, cookieValuesForName(name)));
 		} catch (MultipleValuesException e) {
 			@SuppressWarnings("unchecked")
 			String valuesAsString = format("[%s]", ((List<String>) e.getValues()).stream().collect(Collectors.joining(", ")));
@@ -1504,6 +1532,7 @@ public final class Request {
 	 */
 	@NotThreadSafe
 	public static final class RawBuilder {
+		private AdmissionFence.@Nullable Admission lifecycleAdmission;
 		@NonNull
 		private HttpMethod httpMethod;
 		@NonNull
@@ -1602,6 +1631,12 @@ public final class Request {
 			return this;
 		}
 
+		@NonNull
+		RawBuilder lifecycleAdmission(AdmissionFence.@Nullable Admission admission) {
+			this.lifecycleAdmission = admission;
+			return this;
+		}
+
 		/**
 		 * Configures the request's trace context explicitly.
 		 * <p>
@@ -1691,6 +1726,7 @@ public final class Request {
 	 */
 	@NotThreadSafe
 	public static final class PathBuilder {
+		private AdmissionFence.@Nullable Admission lifecycleAdmission;
 		@Nullable
 		private String requestTargetScheme;
 		@NonNull
@@ -1701,6 +1737,7 @@ public final class Request {
 		private String rawPath;
 		@Nullable
 		private String rawQuery;
+		private boolean preserveDecodedPath;
 		@Nullable
 		private Object id;
 		@Nullable
@@ -1935,6 +1972,14 @@ public final class Request {
 					.rawPath(this.originalRawPath)
 					.rawQuery(this.originalRawQuery);
 			this.builder.requestTargetScheme = request.requestTargetScheme;
+			this.builder.preserveDecodedPath = true;
+			this.builder.lifecycleAdmission = request.lifecycleAdmission;
+		}
+
+		@NonNull
+		Copier lifecycleAdmission(AdmissionFence.@Nullable Admission admission) {
+			this.builder.lifecycleAdmission = admission;
+			return this;
 		}
 
 		@NonNull
@@ -1948,6 +1993,7 @@ public final class Request {
 		public Copier path(@NonNull String path) {
 			requireNonNull(path);
 			this.builder.path(path);
+			this.builder.preserveDecodedPath = false;
 			// Clear preserved raw path since decoded path changed
 			this.builder.rawPath(null);
 			return this;

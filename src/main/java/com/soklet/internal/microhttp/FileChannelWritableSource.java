@@ -20,6 +20,7 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.channels.SocketChannel;
+import java.nio.channels.ClosedChannelException;
 
 import static java.util.Objects.requireNonNull;
 
@@ -60,15 +61,30 @@ class FileChannelWritableSource implements WritableSource {
         }
 
         long bytesToWrite = Math.min(maxBytes, remaining);
-        long written = fileChannel.transferTo(position, bytesToWrite, socketChannel);
+        if (!fileChannel.isOpen())
+            throw new ResponseBodySourceException("Response file channel is closed", new ClosedChannelException());
+        long written;
+        try {
+            written = fileChannel.transferTo(position, bytesToWrite, socketChannel);
+        } catch (IOException failure) {
+            if (!fileChannel.isOpen())
+                throw new ResponseBodySourceException("Response file channel closed during delivery", failure);
+            throw failure;
+        }
         if (written > 0) {
             position += written;
             remaining -= written;
             return written;
         }
 
-        if (fileChannel.size() <= position) {
-            throw new EOFException("File ended before the expected response body length was written.");
+        try {
+            if (fileChannel.size() <= position)
+                throw new ResponseBodySourceException("File ended before the expected response body length was written",
+                        new EOFException("Response file was truncated"));
+        } catch (ResponseBodySourceException failure) {
+            throw failure;
+        } catch (IOException failure) {
+            throw new ResponseBodySourceException("Unable to inspect the response file", failure);
         }
 
         return 0L;

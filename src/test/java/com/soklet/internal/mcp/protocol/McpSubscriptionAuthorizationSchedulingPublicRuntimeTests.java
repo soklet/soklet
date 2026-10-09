@@ -47,6 +47,7 @@ import javax.annotation.concurrent.NotThreadSafe;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
@@ -56,6 +57,8 @@ import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 /**
  * Deterministic scheduling-order coverage for renewal/reconciliation races.
@@ -73,6 +76,58 @@ public class McpSubscriptionAuthorizationSchedulingPublicRuntimeTests {
 	@AfterEach
 	public void resetTestHooks() {
 		McpHttpServerRuntime.setSubscriptionAuthorizationSchedulingTestHooks(null);
+	}
+
+	@Test
+	public void renewalWorkersFollowExistingHandlerBudgetInsteadOfAFixedFourWorkerLimit() throws Exception {
+		Assertions.assertEquals(31, McpHttpServerRuntime.subscriptionProjectionConcurrency(32, 32, 100));
+		Assertions.assertEquals(3, McpHttpServerRuntime.subscriptionProjectionConcurrency(32, 4, 100));
+		Assertions.assertEquals(2, McpHttpServerRuntime.subscriptionProjectionConcurrency(32, 32, 2));
+		Assertions.assertEquals(1, McpHttpServerRuntime.subscriptionProjectionConcurrency(1, 32, 100));
+		CountDownLatch renewalsEntered = new CountDownLatch(8);
+		CountDownLatch releaseRenewals = new CountDownLatch(1);
+		McpServer server = server((context, features) -> {
+			if (context.getPreviousValidUntil().isPresent()) {
+				renewalsEntered.countDown();
+				releaseRenewals.await();
+			}
+			return McpSubscriptionAuthorization.Allowed.fromValidUntil(Instant.now().plusSeconds(4));
+		}, builder -> builder.requestHandlerConcurrency(10));
+		Soklet owner = managedSoklet(server, new RecordingMetrics());
+		List<McpChunkedHttpClient> clients = new ArrayList<>();
+		try {
+			owner.start();
+			for (int index = 0; index < 8; index++) {
+				McpChunkedHttpClient client = listen(boundPort(server)); clients.add(client);
+				assertSseHead(client.readHead()); Assertions.assertEquals(acknowledgment(), client.readChunkText());
+			}
+			Assertions.assertTrue(renewalsEntered.await(3, TimeUnit.SECONDS),
+					"Eight renewals must enter within their remaining lease under the ten-handler budget.");
+			Assertions.assertEquals(8, server.getDiagnostics().getActiveSubscriptions());
+		} finally {
+			releaseRenewals.countDown();
+			for (McpChunkedHttpClient client : clients) client.closeWithReset();
+			owner.close();
+		}
+	}
+
+	@Test
+	public void repeatedReconciliationDuringOpeningHasAFiniteAuthorizationRetryBudget() throws Exception {
+		AtomicReference<McpServer> reference = new AtomicReference<>();
+		AtomicInteger calls = new AtomicInteger();
+		McpServer server = server((context, features) -> {
+			calls.incrementAndGet(); reference.get().getSubscriptionReconciler().reconcileSubscriptions();
+			return McpSubscriptionAuthorization.Allowed.fromValidUntil(Instant.now().plusSeconds(30));
+		});
+		reference.set(server);
+		try (Soklet owner = managedSoklet(server, new RecordingMetrics())) {
+			owner.start();
+			try (McpChunkedHttpClient client = listen(boundPort(server))) {
+				Assertions.assertEquals(500, client.readHead().status());
+				Assertions.assertEquals(3, calls.get(), "Continually stale authorization must not retry until request timeout.");
+			}
+			Assertions.assertEquals(0, server.getDiagnostics().getActiveSubscriptions());
+		}
 	}
 
 	@Test
@@ -158,6 +213,12 @@ public class McpSubscriptionAuthorizationSchedulingPublicRuntimeTests {
 	@NonNull
 	private static McpServer server(
 			@NonNull McpSubscriptionAuthorizer authorizer) {
+		return server(authorizer, ignored -> {});
+	}
+
+	@NonNull
+	private static McpServer server(@NonNull McpSubscriptionAuthorizer authorizer,
+			@NonNull Consumer<McpServer.Builder> options) {
 		McpSubscriptionEventPublisher publisher =
 				McpSubscriptionEventPublisher.fromInMemoryDefaults();
 		McpSubscriptionConfig subscriptions = McpSubscriptionConfig
@@ -175,7 +236,7 @@ public class McpSubscriptionAuthorizationSchedulingPublicRuntimeTests {
 						.build()))
 				.subscriptionProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).subscriptionConfig(subscriptions)
 				.build();
-		return McpServer.withPort(0)
+		McpServer.Builder builder = McpServer.withPort(0)
 				.host(LOOPBACK)
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.admissionController(McpAdmissionController.acceptAllInstance())
@@ -186,8 +247,9 @@ public class McpSubscriptionAuthorizationSchedulingPublicRuntimeTests {
 				.maximumSubscriptionAuthorizationDuration(Duration.ofSeconds(4))
 				.maximumSubscriptionDuration(Duration.ofMinutes(5))
 				.corsAuthorizer(CorsAuthorizer.acceptAllInstance())
-				.allowedHosts(Set.of(LOOPBACK))
-				.build();
+				.allowedHosts(Set.of(LOOPBACK));
+		options.accept(builder);
+		return builder.build();
 	}
 
 	@NonNull

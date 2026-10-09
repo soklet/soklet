@@ -671,7 +671,7 @@ producer thread; that callback can throw `Exception`. Its `stop` method must be
 safe to call concurrently to unblock generation. An asynchronous provider must
 hand events back to the producer thread before writing to `ResponseStream`.
 
-Streaming responses use HTTP/1.1 chunked transfer encoding. Soklet owns `Transfer-Encoding`, rejects caller-supplied `Content-Length`, and gives the producer one [`ResponseStream`](https://javadoc.soklet.com/com/soklet/ResponseStream.html) for output and runtime metadata. Its `getCancelationToken()` allows upstream work to react when Soklet observes a client disconnect, the server shuts down, or a streaming timeout fires. `getRequest()`, `getDeadline()`, and `getIdleTimeout()` expose the originating request and timing policy; producers can use [`Request::getId`](<https://javadoc.soklet.com/com/soklet/Request.html#getId()>) for correlation without ambient thread-local state. Closing a [`CallbackRegistration`](https://javadoc.soklet.com/com/soklet/CallbackRegistration.html) removes the cancelation callback if it has not already been claimed.
+Streaming responses use HTTP/1.1 chunked transfer encoding. Soklet owns `Transfer-Encoding`, rejects caller-supplied `Content-Length`, and gives the producer one [`ResponseStream`](https://javadoc.soklet.com/com/soklet/ResponseStream.html) for output and runtime metadata. Its `getCancelationToken()` allows upstream work to react when Soklet observes a client disconnect, forced shutdown begins after the graceful budget, or a streaming timeout fires. Indefinite HTTP feeds should check `ResponseStream.isGracefulShutdownRequested()` and finish cooperatively during graceful shutdown; the cancelation token is not canceled by that advisory signal. `getRequest()`, `getDeadline()`, and `getIdleTimeout()` expose the originating request and timing policy; producers can use [`Request::getId`](<https://javadoc.soklet.com/com/soklet/Request.html#getId()>) for correlation without ambient thread-local state. Closing a [`CallbackRegistration`](https://javadoc.soklet.com/com/soklet/CallbackRegistration.html) removes the cancelation callback if it has not already been claimed.
 
 An HTTP/1.0 request that produces a streaming response receives a bodyless `505 HTTP Version Not Supported` with `Connection: close`. The producer/factory is never invoked, and its original stream handle terminates once with `PROTOCOL_UNSUPPORTED`. The handler and interceptors have already run, so their side effects are not undone. `willWriteResponse` sees the logical candidate; write and request-finish callbacks and metrics see the finite 505 replacement. Configure the reverse proxy's connection to Soklet to use HTTP/1.1; for nginx, set [`proxy_http_version 1.1;`](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_http_version). Buffered HTTP/1.0 responses and normal HEAD body omission still work. The simulator has no HTTP wire version and does not exercise this rejection.
 
@@ -763,13 +763,11 @@ public class ChatResource {
   @POST("/chat")
   public void postMessage(@RequestBody ChatMessage message,
                           SseServer sseServer) {
-    SseBroadcaster broadcaster = sseServer
-      .acquireBroadcaster(ResourcePath.fromPath("/chat"))
-      .orElseThrow();
-
-    broadcaster.broadcastEvent(SseEvent.withEvent("message")
+    SseEvent event = SseEvent.withEvent("message")
       .data(message.message())
-      .build());
+      .build();
+    sseServer.acquireBroadcaster(ResourcePath.fromPath("/chat"))
+      .ifPresent(broadcaster -> broadcaster.broadcastEvent(event));
   }
 }
 ```
@@ -840,11 +838,10 @@ public void sseTest() {
       try (accepted) {
         accepted.registerEventConsumer(events::add);
 
-        SseBroadcaster broadcaster = simulator.getSseServer().orElseThrow()
-          .acquireBroadcaster(ResourcePath.fromPath("/chat")).orElseThrow();
-        broadcaster.broadcastEvent(SseEvent.withEvent("message")
-          .data("hello")
-          .build());
+        simulator.getSseServer().orElseThrow()
+          .acquireBroadcaster(ResourcePath.fromPath("/chat"))
+          .ifPresent(broadcaster -> broadcaster.broadcastEvent(
+            SseEvent.withEvent("message").data("hello").build()));
       }
     } else {
       throw new IllegalStateException("SSE handshake failed: " + result);

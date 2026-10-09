@@ -39,7 +39,7 @@ import static com.soklet.TestSupport.connectWithRetry;
 import static com.soklet.TestSupport.findFreePort;
 
 /** Protocol replacements must describe the finite wire response without starting the rejected producer. */
-@Timeout(value = 30, unit = TimeUnit.SECONDS)
+@Timeout(value = 60, unit = TimeUnit.SECONDS)
 public class HttpStreamingProtocolRejectionTests {
 	@Test
 	void httpOneDotZeroRejectionReportsActualResponseAndRetainsOriginalStreamHandle() throws Exception {

@@ -36,7 +36,7 @@ const verifierPath = resolve(projectRoot,
 const temporaryRoot = mkdtempSync(join(tmpdir(),
   'soklet-mcp-transport-dependencies-self-test-'));
 const goldenRoot = resolve(temporaryRoot, 'golden');
-const EXPECTED_CASE_COUNT = 117;
+const EXPECTED_CASE_COUNT = 123;
 let passedCases = 0;
 
 const FIXTURE_SOURCES = Object.freeze([
@@ -62,6 +62,7 @@ const FIXTURE_SOURCES = Object.freeze([
   'src/main/java/com/soklet/internal/mcp/schema/McpSchemaEvaluationLimits.java',
   'src/main/java/com/soklet/internal/mcp/transport/McpOutboundChannel.java',
   'src/main/java/com/soklet/internal/microhttp/ConnectionEventLoop.java',
+  'src/main/java/com/soklet/internal/microhttp/SocketChannelIo.java',
   'src/main/java/com/soklet/internal/microhttp/Handler.java',
   'src/main/java/com/soklet/internal/microhttp/WritableSource.java',
 ]);
@@ -81,6 +82,7 @@ const BRIDGE =
 const EVENT_LOOP =
   'src/main/java/com/soklet/internal/microhttp/ConnectionEventLoop.java';
 const HANDLER = 'src/main/java/com/soklet/internal/microhttp/Handler.java';
+const SOCKET_IO = 'src/main/java/com/soklet/internal/microhttp/SocketChannelIo.java';
 
 function write(root, path, value) {
   const absolute = resolve(root, path);
@@ -936,6 +938,49 @@ try {
         'int remainingCapacity = options.maxRequestSize() - bufferedBytes;',
         'int remainingCapacity = Integer.MAX_VALUE - bufferedBytes;'));
     }, /streaming input reads must remain bounded/u);
+
+  expectRejected('streaming socket read cannot be replaced by a comment decoy',
+    (root) => {
+      mutateSource(root, EVENT_LOOP, (source) => replaceAfter(source,
+        'private void doOnReadableDuringStreamingResponse(',
+        'int numBytes = SocketChannelIo.read(socketChannel, buffer);',
+        'int numBytes = 0; /* SocketChannelIo.read(socketChannel, buffer) */'));
+    }, /consume client bytes through the typed socket read/u);
+
+  expectRejected('direct streaming read cannot bypass the typed IO boundary',
+    (root) => {
+      mutateSource(root, EVENT_LOOP, (source) => replaceAfter(source,
+        'private void doOnReadableDuringStreamingResponse(',
+        'SocketChannelIo.read(socketChannel, buffer)', 'socketChannel.read(buffer)'));
+    }, /consume client bytes through the typed socket read/u);
+
+  expectRejected('streaming input cannot discard its typed socket read result',
+    (root) => {
+      mutateSource(root, EVENT_LOOP, (source) => replaceAfter(source,
+        'private void doOnReadableDuringStreamingResponse(',
+        'int numBytes = SocketChannelIo.read(socketChannel, buffer);',
+        'int numBytes = SocketChannelIo.read(socketChannel, buffer); numBytes = 0;'));
+    }, /retain the actual typed socket read result/u);
+
+  expectRejected('streaming input cannot read twice per bounded buffer turn',
+    (root) => {
+      mutateSource(root, EVENT_LOOP, (source) => replaceAfter(source,
+        'private void doOnReadableDuringStreamingResponse(',
+        'int numBytes = SocketChannelIo.read(socketChannel, buffer);',
+        'int numBytes = SocketChannelIo.read(socketChannel, buffer); SocketChannelIo.read(socketChannel, buffer);'));
+    }, /exactly one typed socket read/u);
+
+  expectRejected('typed read helper must perform real socket IO',
+    (root) => {
+      mutateSource(root, SOCKET_IO, (source) => source.replace(
+        'return channel.read(buffer);', 'return 0; /* channel.read(buffer) */'));
+    }, /SocketChannelIo.read must return the actual socket read result/u);
+
+  expectRejected('typed write helper must retain the socket failure boundary',
+    (root) => {
+      mutateSource(root, SOCKET_IO, (source) => replaceAfter(source,
+        'static int write(', 'throw new SocketIoException(failure);', 'throw failure;'));
+    }, /SocketChannelIo.write must return the actual socket write result/u);
 
   expectRejected('discard accounting cannot be restored by a comment decoy',
     (root) => {

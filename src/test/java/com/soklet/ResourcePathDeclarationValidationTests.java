@@ -162,10 +162,27 @@ public class ResourcePathDeclarationValidationTests {
 	@Test
 	void explicitClassAndMethodResolversRejectMalformedPaths() {
 		for (Class<?> type : List.of(PartialHttp.class, PartialSse.class, NonFinalHttp.class)) {
-			assertThrows(IllegalArgumentException.class, () -> ResourceMethodResolver.fromClasses(Set.of(type)), type.getName());
-			assertThrows(IllegalArgumentException.class,
-					() -> ResourceMethodResolver.fromMethods(Set.copyOf(Arrays.asList(type.getDeclaredMethods()))), type.getName());
+			for (IllegalArgumentException failure : List.of(
+					assertThrows(IllegalArgumentException.class, () -> ResourceMethodResolver.fromClasses(Set.of(type)), type.getName()),
+					assertThrows(IllegalArgumentException.class,
+							() -> ResourceMethodResolver.fromMethods(Set.copyOf(Arrays.asList(type.getDeclaredMethods()))), type.getName()))) {
+				assertTrue(failure.getMessage().contains(type.getName() + "#route"));
+				assertTrue(failure.getMessage().contains(type == PartialSse.class ? "@SseEventSource" : "@GET"));
+				assertFalse(failure.getMessage().contains("/prefix{id}"));
+				assertFalse(failure.getMessage().contains("/{rest*}/bad"));
+				assertEquals(null, failure.getCause());
+			}
 		}
+	}
+
+	@Test
+	void resolverDeclarationDiagnosticsNeverEchoConfiguredPathsOrPlaceholderNames() {
+		IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
+				() -> ResourceMethodResolver.fromClasses(Set.of(RedactedPath.class)));
+		assertTrue(failure.getMessage().contains(RedactedPath.class.getName() + "#route"));
+		assertTrue(failure.getMessage().contains("@GET"));
+		assertFalse(failure.getMessage().contains("PRIVATE_"));
+		assertEquals(null, failure.getCause());
 	}
 
 	@Test
@@ -211,6 +228,8 @@ public class ResourcePathDeclarationValidationTests {
 				        throw new AssertionError("Malformed packaged route must fail before serving");
 				      } catch (IllegalArgumentException expected) {
 				        if (!expected.getMessage().contains("entire path component")) throw expected;
+				        if (!expected.getMessage().contains("example.Routes#route") || !expected.getMessage().contains("@GET")) throw expected;
+				        if (expected.getMessage().contains("PRIVATE_")) throw expected;
 				      }
 				    }
 				  }
@@ -219,7 +238,7 @@ public class ResourcePathDeclarationValidationTests {
 		assertTrue(compile(source, classes, false));
 		Path index = classes.resolve(SokletProcessor.RESOURCE_METHOD_LOOKUP_TABLE_PATH);
 		Files.createDirectories(index.getParent());
-		Files.writeString(index, "GET|" + encoded("/prefix{id}") + "|" + encoded("example.Routes") + "|" + encoded("route") + "||false\n");
+		Files.writeString(index, "GET|" + encoded("/PRIVATE_CONFIG/prefix{PRIVATE_NAME}") + "|" + encoded("example.Routes") + "|" + encoded("route") + "||false\n");
 		Path output = directory.resolve("verification.log");
 		Process process = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin", "java").toString(),
 				"-Xmx128m", "-XX:ActiveProcessorCount=2", "-cp", classes + System.getProperty("path.separator") + System.getProperty("java.class.path"),
@@ -268,4 +287,5 @@ public class ResourcePathDeclarationValidationTests {
 	public static class PartialHttp { @GET("/prefix{id}") public void route() {} }
 	public static class PartialSse { @SseEventSource("/prefix{id}") public SseHandshakeResult route() { return SseHandshakeResult.accept(); } }
 	public static class NonFinalHttp { @GET("/{rest*}/bad") public void route() {} }
+	public static class RedactedPath { @GET("/PRIVATE_CONFIG/prefix{PRIVATE_NAME}") public void route() {} }
 }

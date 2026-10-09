@@ -533,9 +533,10 @@ public class McpFiniteBoundInventoryTests {
 								"MAXIMUM_LEGACY_MAINTENANCE_JOBS").longValue());
 		put(values, "queue.metric-events.pending", staticNumber(
 				"com.soklet.DefaultMcpServer", "MAXIMUM_PENDING_MCP_METRIC_EVENTS"));
-		put(values, "queue.task-notification-projection-concurrency", staticNumber(
-				"com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
-				"MAXIMUM_TASK_NOTIFICATION_PROJECTION_CONCURRENCY"));
+		put(values, "queue.task-notification-projection-concurrency",
+				McpHttpServerRuntime.subscriptionProjectionConcurrency(transport.requestProcessorConcurrency(),
+						McpApplicationExecutionConfiguration.productionDefaults().handlerConcurrency(),
+						(long) transport.maximumConnections() * 4 + McpHttpServerRuntime.MAXIMUM_LEGACY_MAINTENANCE_JOBS));
 		put(values, "task.manager.poll-interval-nanos.default",
 				taskManager.getPollInterval().toNanos());
 		McpSimulationOptions simulation = McpSimulationOptions.defaultInstance();

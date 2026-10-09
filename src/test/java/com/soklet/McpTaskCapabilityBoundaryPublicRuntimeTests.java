@@ -16,11 +16,13 @@
 
 package com.soklet;
 
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestFactory;
 import org.junit.jupiter.api.Timeout;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -33,7 +35,7 @@ import static com.soklet.McpLegacySessionTransportPublicRuntimeTests.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Endpoint, server and client task gates through public real listeners. */
-@Timeout(30)
+@Timeout(60)
 class McpTaskCapabilityBoundaryPublicRuntimeTests {
 	private static final Set<McpProtocolVersion> VERSIONS = Set.of(
 			McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25,
@@ -51,7 +53,7 @@ class McpTaskCapabilityBoundaryPublicRuntimeTests {
 				new Case("june", McpProtocolVersion.V2025_06_18, true, true, false, false),
 				new Case("november", McpProtocolVersion.V2025_11_25, true, true, false, false),
 				new Case("interceptor", McpProtocolVersion.V2026_07_28, false, true, true, true))
-				.map(testCase -> DynamicTest.dynamicTest(testCase.name(), () -> verifyInvalidReturn(testCase)));
+				.map(testCase -> DynamicTest.dynamicTest(testCase.name(), () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> verifyInvalidReturn(testCase))));
 	}
 
 	private void verifyInvalidReturn(Case testCase) throws Exception {

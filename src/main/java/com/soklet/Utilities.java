@@ -421,15 +421,7 @@ public final class Utilities {
 		requireNonNull(queryFormat);
 		requireNonNull(charset);
 
-		URI uri;
-
-		try {
-			uri = parseUrl(url);
-		} catch (URISyntaxException e) {
-			throw new IllegalRequestException("Invalid request URL.");
-		}
-
-		String query = uri.getRawQuery();
+		String query = extractRawQueryFromUrlStrict(url).orElse(null);
 
 		if (query == null)
 			return Map.of();
@@ -555,6 +547,12 @@ public final class Utilities {
 	 */
 	@NonNull
 	public static Map<@NonNull String, @NonNull List<@NonNull String>> extractCookiesFromHeaders(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
+		return extractCookiesFromHeaders(headers, null);
+	}
+
+	@NonNull
+	static Map<@NonNull String, @NonNull List<@NonNull String>> extractCookiesFromHeaders(
+			@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers, @Nullable String selectedName) {
 		requireNonNull(headers);
 
 		// Cookie *names* must be case-sensitive; keep LinkedHashMap (NOT case-insensitive)
@@ -583,7 +581,7 @@ public final class Utilities {
 					String rawName = trimAggressivelyToNull(cookiePair[0]);
 					String rawValue = (cookiePair.length == 2 ? trimAggressivelyToNull(cookiePair[1]) : null);
 
-					if (rawName == null) continue;
+					if (rawName == null || (selectedName != null && !selectedName.equals(rawName))) continue;
 
 					// DO NOT decode the name; cookie names are case-sensitive and rarely encoded
 					String cookieName = rawName;
@@ -774,6 +772,12 @@ public final class Utilities {
 		// Special case for OPTIONS * requests
 		if (url.equals("*"))
 			return "*";
+		int queryStart = url.indexOf('?');
+		int fragmentStart = url.indexOf('#');
+		int pathEnd = queryStart < 0 ? url.length() : queryStart;
+		if (fragmentStart >= 0)
+			pathEnd = Math.min(pathEnd, fragmentStart);
+		url = url.substring(0, pathEnd);
 
 		// Parse with java.net.URI to isolate raw path; then percent-decode only the path
 		try {
@@ -857,18 +861,12 @@ public final class Utilities {
 		if ("*".equals(url))
 			return Optional.empty();
 
-		try {
-			URI uri = parseUrl(url);
-			return Optional.ofNullable(trimAggressivelyToNull(uri.getRawQuery()));
-		} catch (URISyntaxException e) {
-			// Not a valid URI, try to extract query manually
-			int q = url.indexOf('?');
-			if (q == -1)
-				return Optional.empty();
-
-			String query = trimAggressivelyToNull(url.substring(q + 1));
-			return Optional.ofNullable(query);
-		}
+		int q = url.indexOf('?');
+		int fragment = url.indexOf('#');
+		if (q < 0 || (fragment >= 0 && fragment < q))
+			return Optional.empty();
+		return Optional.ofNullable(trimAggressivelyToNull(url.substring(q + 1,
+				fragment < 0 ? url.length() : fragment)));
 	}
 
 	@NonNull
@@ -880,12 +878,34 @@ public final class Utilities {
 		if ("*".equals(url))
 			return Optional.empty();
 
-		try {
-			URI uri = parseUrl(url);
-			return Optional.ofNullable(trimAggressivelyToNull(uri.getRawQuery()));
-		} catch (URISyntaxException e) {
-			throw new IllegalRequestException("Invalid request URL.");
+		// URI rejects browser-emitted query characters such as '|', '{', and '\\'.
+		// Isolate the query first, retaining strict percent syntax and wire-text checks.
+		int q = url.indexOf('?');
+		int fragment = url.indexOf('#');
+		int prefixEnd = q < 0 ? url.length() : q;
+		if (fragment >= 0)
+			prefixEnd = Math.min(prefixEnd, fragment);
+		if (!url.startsWith("/")) {
+			try {
+				parseUrl(url.substring(0, prefixEnd));
+			} catch (URISyntaxException ignored) {
+				throw new IllegalRequestException("Invalid request URL.");
+			}
 		}
+		String query = extractRawQueryFromUrl(url).orElse(null);
+		if (query == null)
+			return Optional.empty();
+		for (int i = 0; i < query.length(); i++) {
+			char character = query.charAt(i);
+			if (character <= ' ' || character == 0x7f || character == '"' || character == '<' || character == '>')
+				throw new IllegalRequestException("Invalid request URL.");
+			if (character == '%') {
+				if (i + 2 >= query.length() || hex(query.charAt(i + 1)) < 0 || hex(query.charAt(i + 2)) < 0)
+					throw new IllegalRequestException("Invalid request URL.");
+				i += 2;
+			}
+		}
+		return Optional.of(query);
 	}
 
 	/**
@@ -1460,18 +1480,22 @@ public final class Utilities {
 		if (!shouldTrustForwardedHeaders(effectiveClientIpResolver))
 			return Optional.ofNullable(remoteInetAddress);
 
-		List<InetAddress> forwardedForAddresses = forwardedForAddresses(effectiveClientIpResolver.getHeaders());
-		Optional<InetAddress> effectiveClientIp = effectiveClientIpResolver.getTrustPolicy() == EffectiveOriginResolver.TrustPolicy.TRUST_ALL
-				? leftmostAddress(forwardedForAddresses)
-				: firstUntrustedAddressFromRight(forwardedForAddresses, effectiveClientIpResolver.getTrustedProxyPredicate());
+		List<Optional<InetAddress>> forwardedForAddresses = forwardedForAddresses(effectiveClientIpResolver.getHeaders());
+		boolean allowlisted = effectiveClientIpResolver.getTrustPolicy() == EffectiveOriginResolver.TrustPolicy.TRUST_PROXY_ALLOWLIST;
+		ClientIpSelection selection = allowlisted
+				? firstUntrustedAddressFromRight(forwardedForAddresses, effectiveClientIpResolver.getTrustedProxyPredicate())
+				: new ClientIpSelection(leftmostAddress(forwardedForAddresses), false);
+		Optional<InetAddress> effectiveClientIp = selection.address();
+		if (selection.blocked())
+			return Optional.ofNullable(remoteInetAddress);
 
 		if (effectiveClientIp.isPresent())
 			return effectiveClientIp;
 
-		List<InetAddress> xForwardedForAddresses = xForwardedForAddresses(effectiveClientIpResolver.getHeaders());
-		effectiveClientIp = effectiveClientIpResolver.getTrustPolicy() == EffectiveOriginResolver.TrustPolicy.TRUST_ALL
-				? leftmostAddress(xForwardedForAddresses)
-				: firstUntrustedAddressFromRight(xForwardedForAddresses, effectiveClientIpResolver.getTrustedProxyPredicate());
+		List<Optional<InetAddress>> xForwardedForAddresses = xForwardedForAddresses(effectiveClientIpResolver.getHeaders());
+		effectiveClientIp = allowlisted
+				? firstUntrustedAddressFromRight(xForwardedForAddresses, effectiveClientIpResolver.getTrustedProxyPredicate()).address()
+				: leftmostAddress(xForwardedForAddresses);
 
 		if (effectiveClientIp.isPresent())
 			return effectiveClientIp;
@@ -1512,52 +1536,66 @@ public final class Utilities {
 	}
 
 	@NonNull
-	private static Optional<InetAddress> leftmostAddress(@NonNull List<@NonNull InetAddress> addresses) {
+	private static Optional<InetAddress> leftmostAddress(@NonNull List<@NonNull Optional<InetAddress>> addresses) {
 		requireNonNull(addresses);
-		return addresses.isEmpty() ? Optional.empty() : Optional.of(addresses.get(0));
+		for (Optional<InetAddress> address : addresses)
+			if (address.isPresent())
+				return address;
+		return Optional.empty();
 	}
 
+	private record ClientIpSelection(@NonNull Optional<InetAddress> address, boolean blocked) {}
+
 	@NonNull
-	private static Optional<InetAddress> firstUntrustedAddressFromRight(@NonNull List<@NonNull InetAddress> addresses,
+	private static ClientIpSelection firstUntrustedAddressFromRight(@NonNull List<@NonNull Optional<InetAddress>> addresses,
 																																		 @Nullable Predicate<InetSocketAddress> trustedProxyPredicate) {
 		requireNonNull(addresses);
 
 		if (trustedProxyPredicate == null)
-			return Optional.empty();
+			return new ClientIpSelection(Optional.empty(), false);
 
 		InetAddress leftmostAddress = null;
 
 		for (int i = addresses.size() - 1; i >= 0; i--) {
-			InetAddress address = addresses.get(i);
+			InetAddress address = addresses.get(i).orElse(null);
+			// An unknown or malformed hop is an untrusted boundary. Removing it
+			// would let a client-controlled address farther left acquire trust.
+			if (address == null)
+				return new ClientIpSelection(Optional.empty(), true);
 			leftmostAddress = address;
 
 			if (!trustedProxyPredicate.test(new InetSocketAddress(address, 0)))
-				return Optional.of(address);
+				return new ClientIpSelection(Optional.of(address), false);
 		}
 
-		return Optional.ofNullable(leftmostAddress);
+		return new ClientIpSelection(Optional.ofNullable(leftmostAddress), false);
 	}
 
 	@NonNull
-	private static List<@NonNull InetAddress> forwardedForAddresses(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
+	private static List<@NonNull Optional<InetAddress>> forwardedForAddresses(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
 		requireNonNull(headers);
 		List<String> forwardedHeaders = headers.get("Forwarded");
 
 		if (forwardedHeaders == null || forwardedHeaders.isEmpty())
 			return List.of();
 
-		List<InetAddress> addresses = new ArrayList<>();
+		List<Optional<InetAddress>> addresses = new ArrayList<>();
 
 		for (String forwardedHeader : forwardedHeaders) {
 			String trimmed = trimAggressivelyToNull(forwardedHeader);
-			if (trimmed == null)
+			if (trimmed == null) {
+				addresses.add(Optional.empty());
 				continue;
+			}
 
 			for (String forwardedEntry : splitCommaAware(trimmed)) {
 				String entry = trimAggressivelyToNull(forwardedEntry);
-				if (entry == null)
+				if (entry == null) {
+					addresses.add(Optional.empty());
 					continue;
+				}
 
+				Optional<InetAddress> address = Optional.empty();
 				for (String forwardedHeaderFieldComponent : splitSemicolonAware(entry)) {
 					forwardedHeaderFieldComponent = trimAggressivelyToNull(forwardedHeaderFieldComponent);
 					if (forwardedHeaderFieldComponent == null)
@@ -1572,9 +1610,10 @@ public final class Utilities {
 					if (name == null || value == null || !"for".equalsIgnoreCase(name))
 						continue;
 
-					parseForwardedIpLiteral(value).ifPresent(addresses::add);
+					address = parseForwardedIpLiteral(value);
 					break;
 				}
+				addresses.add(address);
 			}
 		}
 
@@ -1582,22 +1621,24 @@ public final class Utilities {
 	}
 
 	@NonNull
-	private static List<@NonNull InetAddress> xForwardedForAddresses(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
+	private static List<@NonNull Optional<InetAddress>> xForwardedForAddresses(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
 		requireNonNull(headers);
 		List<String> xForwardedForHeaders = headers.get("X-Forwarded-For");
 
 		if (xForwardedForHeaders == null || xForwardedForHeaders.isEmpty())
 			return List.of();
 
-		List<InetAddress> addresses = new ArrayList<>();
+		List<Optional<InetAddress>> addresses = new ArrayList<>();
 
 		for (String xForwardedForHeader : xForwardedForHeaders) {
 			String trimmed = trimAggressivelyToNull(xForwardedForHeader);
-			if (trimmed == null)
+			if (trimmed == null) {
+				addresses.add(Optional.empty());
 				continue;
+			}
 
 			for (String part : splitCommaAware(trimmed))
-				parseForwardedIpLiteral(part).ifPresent(addresses::add);
+				addresses.add(parseForwardedIpLiteral(part));
 		}
 
 		return addresses.isEmpty() ? List.of() : Collections.unmodifiableList(addresses);
@@ -1648,7 +1689,7 @@ public final class Utilities {
 	}
 
 	@NonNull
-	private static Optional<InetAddress> parseIpLiteral(@Nullable String value) {
+	static Optional<InetAddress> parseIpLiteral(@Nullable String value) {
 		String trimmed = trimAggressivelyToNull(value);
 
 		if (trimmed == null)

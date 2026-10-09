@@ -105,9 +105,11 @@ reachable bind host and provide appropriate network controls. Soklet does not
 terminate TLS, so expose a non-loopback listener only behind suitable TLS
 termination and access controls.
 
-Host and Origin checks are independent. Soklet validates `Host`, including its
-effective port. A loopback bind literal or `localhost` seeds the listener's
-effective authority; every non-loopback bind must configure at least one
+Host and Origin checks are independent. Soklet validates `Host` syntax and
+the hostname allowlist. Explicitly allowed hostnames or IP literals accept any
+valid port or an omitted port, including behind a TLS proxy. Automatic loopback
+aliases require the listener's bound port. A loopback bind literal or `localhost`
+seeds those aliases; every non-loopback bind must configure at least one
 deployment hostname or IP literal with `McpServer.Builder.allowedHosts(...)`,
 or server construction fails. A request without `Origin` is allowed by default,
 unless `McpAbsentOriginPolicy.REQUIRE_ORIGIN` is configured. A request with

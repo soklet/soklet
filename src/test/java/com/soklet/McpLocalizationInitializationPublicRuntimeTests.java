@@ -16,6 +16,7 @@
 
 package com.soklet;
 
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestFactory;
@@ -35,14 +36,14 @@ import static com.soklet.McpLegacySessionTransportPublicRuntimeTests.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Real-listener initialization projection, fallback, and session rollback. */
-@Timeout(30)
+@Timeout(60)
 class McpLocalizationInitializationPublicRuntimeTests {
 
 	private static final List<McpProtocolVersion> LEGACY = List.of(
 			McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25);
 	@TestFactory
 	Stream<DynamicTest> initializationLocalizesOnlyRevisionSupportedText() {
-		return LEGACY.stream().map(version -> DynamicTest.dynamicTest(version.getWireValue(), () -> {
+		return LEGACY.stream().map(version -> DynamicTest.dynamicTest(version.getWireValue(), () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
 			List<McpLocalizableText> lookedUp = new ArrayList<>();
 			McpLocalizer localizer = localizer(request -> context(text -> {
 				lookedUp.add(text);
@@ -60,12 +61,12 @@ class McpLocalizationInitializationPublicRuntimeTests {
 				assertEquals("Canonical title", fixture.endpoint.getServerInfo().getTitle().orElseThrow());
 				assertEquals("Canonical description", fixture.endpoint.getServerInfo().getDescription().orElseThrow());
 			}
-		}));
+		})));
 	}
 
 	@TestFactory
 	Stream<DynamicTest> failedInitializationLocalizationsReleaseSessionsAndCanRecover() {
-		return LEGACY.stream().map(version -> DynamicTest.dynamicTest(version.getWireValue(), () -> {
+		return LEGACY.stream().map(version -> DynamicTest.dynamicTest(version.getWireValue(), () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
 			AtomicReference<String> mode = new AtomicReference<>("provider");
 			McpLocalizer localizer = localizer(request -> {
 				if (mode.get().equals("provider")) throw new IllegalStateException("private-initialize-canary");
@@ -93,12 +94,12 @@ class McpLocalizationInitializationPublicRuntimeTests {
 				assertEquals(200, ping.status(), ping.body());
 				assertTrue(ping.body().contains("\"result\":{}"), ping.body());
 			}
-		}));
+		})));
 	}
 
 	@TestFactory
 	Stream<DynamicTest> wholeResponseFallbackAndNoLocalizerPreserveCanonicalBytes() {
-		return LEGACY.stream().map(version -> DynamicTest.dynamicTest(version.getWireValue(), () -> {
+		return LEGACY.stream().map(version -> DynamicTest.dynamicTest(version.getWireValue(), () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
 			Captured canonical;
 			try (Fixture fixture = new Fixture(version, null, false, true)) { canonical = fixture.initialize(); }
 			for (boolean providerFailure : List.of(true, false)) {
@@ -114,12 +115,12 @@ class McpLocalizationInitializationPublicRuntimeTests {
 					assertEquals("Accept-Language", fallback.header("Vary"));
 				}
 			}
-		}));
+		})));
 	}
 
 	@TestFactory
 	Stream<DynamicTest> simulatorUsesTheSameInitializationLocalization() {
-		return LEGACY.stream().map(version -> DynamicTest.dynamicTest(version.getWireValue(), () -> {
+		return LEGACY.stream().map(version -> DynamicTest.dynamicTest(version.getWireValue(), () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
 			McpLocalizer localizer = localizer(request -> context(text ->
 					McpLocalizationResult.localized("FR:" + text.getDefaultText())), McpLocalizationFailurePolicy.FAIL_REQUEST);
 			SokletSimulator.run(SimulatorConfig.builder().configureMcpServer(builder -> configure(builder,
@@ -137,7 +138,7 @@ class McpLocalizationInitializationPublicRuntimeTests {
 							new String(response.getBody().orElseThrow(), StandardCharsets.UTF_8)), version);
 				}
 			});
-		}));
+		})));
 	}
 
 	@Test

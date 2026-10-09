@@ -39,6 +39,100 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 class EventLoopUnexpectedTerminationTests {
 	@Test
+	@org.junit.jupiter.api.Timeout(60)
+	void ownedStartupCleanupDeliversCompletedObservationsOutsideStartLock() throws Exception {
+		for (boolean failStart : List.of(false, true)) {
+			EventLoop loop = new EventLoop(Options.builder().withHost("127.0.0.1")
+					.withPort(0).withConcurrency(1).build(), (request, callback) -> {});
+			int port = loop.getPort();
+			Field lockField = EventLoop.class.getDeclaredField("lifecycleLock");
+			lockField.setAccessible(true);
+			Object frameworkLock = lockField.get(loop);
+			CountDownLatch observationEntered = new CountDownLatch(1), releaseObservation = new CountDownLatch(1);
+			java.util.concurrent.atomic.AtomicBoolean heldFrameworkLock = new java.util.concurrent.atomic.AtomicBoolean();
+			// Isolate the outstanding observation's last-loop completion obligation.
+			// Earlier transport cleanup may already have completed before this loop
+			// closes or fails to start; that final notification owns scope delivery.
+			Field cleanupComplete = EventLoop.class.getDeclaredField("unexpectedTerminationRuntimeCleanupComplete");
+			cleanupComplete.setAccessible(true); cleanupComplete.setBoolean(loop, true);
+			Field observationField = EventLoop.class.getDeclaredField("unexpectedTerminationObservation");
+			observationField.setAccessible(true);
+			observationField.set(loop, (TransportFailureObserver.Observation) () -> {
+				heldFrameworkLock.set(Thread.holdsLock(frameworkLock));
+				observationEntered.countDown();
+				try { Assertions.assertTrue(releaseObservation.await(2, TimeUnit.SECONDS)); }
+				catch (InterruptedException failure) { Thread.currentThread().interrupt(); throw new AssertionError(failure); }
+			});
+			AssertionError nativeStartFailure = new AssertionError("native connection thread start failed");
+			if (failStart) {
+				Field loopsField = EventLoop.class.getDeclaredField("connectionEventLoops");
+				loopsField.setAccessible(true);
+				ConnectionEventLoop connectionLoop = (ConnectionEventLoop) ((List<?>) loopsField.get(loop)).get(0);
+				Field threadField = ConnectionEventLoop.class.getDeclaredField("thread");
+				threadField.setAccessible(true);
+				threadField.set(connectionLoop, new Thread() {
+					@Override public synchronized void start() { throw nativeStartFailure; }
+				});
+			}
+			java.util.concurrent.ExecutorService worker = java.util.concurrent.Executors.newSingleThreadExecutor();
+			java.util.concurrent.Future<Throwable> cleanup = worker.submit(() -> {
+				try { if (failStart) loop.start(); else loop.stop(); return null; }
+				catch (Throwable failure) { return failure; }
+			});
+			try {
+				Assertions.assertTrue(observationEntered.await(2, TimeUnit.SECONDS));
+				Assertions.assertFalse(heldFrameworkLock.get(), "Application observation must run outside the start lock");
+				loop.stopAccepting();
+				Assertions.assertEquals(1L, releaseObservation.getCount());
+				try (java.net.ServerSocket rebound = new java.net.ServerSocket()) {
+					rebound.setReuseAddress(true); rebound.bind(new InetSocketAddress("127.0.0.1", port));
+				}
+				releaseObservation.countDown();
+				if (failStart) Assertions.assertSame(nativeStartFailure, cleanup.get(2, TimeUnit.SECONDS));
+				else Assertions.assertNull(cleanup.get(2, TimeUnit.SECONDS));
+				Assertions.assertTrue(loop.join(Duration.ofSeconds(2)));
+				Assertions.assertTrue(loop.resourcesClosed());
+			} finally {
+				releaseObservation.countDown(); cleanup.cancel(true); worker.shutdownNow();
+				Assertions.assertTrue(worker.awaitTermination(2, TimeUnit.SECONDS));
+				loop.stop(); Assertions.assertTrue(loop.join(Duration.ofSeconds(2)));
+			}
+		}
+	}
+
+	@Test
+	void intentionalListenerCloseRacingAcceptDoesNotElectUnexpectedTermination() throws Exception {
+		CountDownLatch accepting = new CountDownLatch(1), releaseAccept = new CountDownLatch(1);
+		AtomicInteger failures = new AtomicInteger();
+		EventLoop loop = new EventLoop(Options.builder().withHost("127.0.0.1")
+				.withPort(0).withConcurrency(1).build(), NoopLogger.instance(),
+				(request, callback) -> {}, NoopConnectionListener.instance(), reason -> {
+			failures.incrementAndGet(); return () -> {};
+		}) {
+			@Override boolean acceptReadyConnection() throws IOException {
+				accepting.countDown();
+				try { Assertions.assertTrue(releaseAccept.await(2, TimeUnit.SECONDS)); }
+				catch (InterruptedException failure) { Thread.currentThread().interrupt(); throw new IOException(failure); }
+				throw new java.nio.channels.ClosedChannelException();
+			}
+		};
+		try {
+			loop.start();
+			try (Socket client = new Socket("127.0.0.1", loop.getPort())) {
+				Assertions.assertTrue(accepting.await(2, TimeUnit.SECONDS));
+				loop.stopAccepting();
+				releaseAccept.countDown();
+				loop.stopConnections();
+				Assertions.assertTrue(loop.join(Duration.ofSeconds(2)));
+				Assertions.assertEquals(0, failures.get());
+			}
+		} finally {
+			releaseAccept.countDown(); loop.stop();
+			Assertions.assertTrue(loop.join(Duration.ofSeconds(2)));
+		}
+	}
+
+	@Test
 	void bounded_join_remaining_time_survives_signed_nano_time_wrap() {
 		long beforeWrap = Long.MAX_VALUE - 5L;
 		long afterWrap = Long.MIN_VALUE + 4L;

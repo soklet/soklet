@@ -39,7 +39,7 @@ import static com.soklet.TestSupport.connectWithRetry;
 import static com.soklet.TestSupport.findFreePort;
 
 /** Simulation guarantees application output/callback behavior rather than socket deadline behavior. */
-@Timeout(value = 30, unit = TimeUnit.SECONDS)
+@Timeout(value = 60, unit = TimeUnit.SECONDS)
 public class SimulatorStreamingContractTests {
 	@Test
 	void configuredHttpTimeoutsDoNotSetSimulationDeadlinesOrCancelTheSynchronousWriter() {

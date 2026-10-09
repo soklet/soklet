@@ -553,7 +553,7 @@ public class McpApplicationHandlerDispatcherTests {
 	}
 
 	@Test
-	public void rejected_promotion_reuses_the_worker_without_rejecting_admitted_work()
+	public void queued_promotions_reuse_the_worker_without_another_executor_handoff()
 			throws Exception {
 		RejectSecondSubmissionExecutor executor = new RejectSecondSubmissionExecutor();
 		RecordingExecutionObserver observer = new RecordingExecutionObserver();
@@ -592,7 +592,7 @@ public class McpApplicationHandlerDispatcherTests {
 					second.state());
 			Assertions.assertEquals(McpApplicationHandlerDispatcher.TicketState.EXITED,
 					third.state());
-			Assertions.assertEquals(3, executor.submissionCount());
+			Assertions.assertEquals(1, executor.submissionCount());
 			Assertions.assertEquals(1, dispatcher.snapshot().maximumObservedActiveSlots());
 			Assertions.assertEquals(2, dispatcher.snapshot().maximumObservedQueueDepth());
 			Assertions.assertEquals(List.of(
@@ -611,6 +611,41 @@ public class McpApplicationHandlerDispatcherTests {
 		} finally {
 			releaseFirst.countDown();
 			stop(dispatcher, executor);
+		}
+	}
+
+	@Test
+	public void rejected_first_handoff_does_not_cascade_into_accepted_queued_tickets() throws Exception {
+		CountDownLatch secondSubmissionEntered = new CountDownLatch(1);
+		CountDownLatch rejectSecondSubmission = new CountDownLatch(1);
+		RejectSecondSubmissionExecutor executor = new RejectSecondSubmissionExecutor(secondSubmissionEntered, rejectSecondSubmission);
+		McpApplicationHandlerDispatcher dispatcher = new McpApplicationHandlerDispatcher(2, 2, executor);
+		CountDownLatch firstEntered = new CountDownLatch(1), releaseFirst = new CountDownLatch(1), queuedRan = new CountDownLatch(2);
+		AtomicReference<Throwable> newTicketFailure = new AtomicReference<>(), queuedFailure = new AtomicReference<>();
+		McpApplicationHandlerDispatcher.Ticket first = dispatcher.newTicket(() -> { firstEntered.countDown(); releaseFirst.await(); }, queuedFailure::set);
+		McpApplicationHandlerDispatcher.Ticket rejected = dispatcher.newTicket(() -> { throw new AssertionError("Rejected handoff ran."); }, newTicketFailure::set);
+		McpApplicationHandlerDispatcher.Ticket second = dispatcher.newTicket(queuedRan::countDown, queuedFailure::set);
+		McpApplicationHandlerDispatcher.Ticket third = dispatcher.newTicket(queuedRan::countDown, queuedFailure::set);
+		Thread submitter = new Thread(() -> dispatcher.admit(rejected), "mcp-rejected-initial-handoff");
+		try {
+			dispatcher.admit(first); Assertions.assertTrue(firstEntered.await(3, TimeUnit.SECONDS));
+			submitter.start(); Assertions.assertTrue(secondSubmissionEntered.await(3, TimeUnit.SECONDS));
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.Admission.QUEUED, dispatcher.admit(second));
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.Admission.QUEUED, dispatcher.admit(third));
+			rejectSecondSubmission.countDown(); submitter.join(3000); Assertions.assertFalse(submitter.isAlive());
+			Assertions.assertInstanceOf(RejectedExecutionException.class, newTicketFailure.get());
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.TicketState.QUEUED, second.state());
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.TicketState.QUEUED, third.state());
+			Assertions.assertEquals(2, executor.submissionCount());
+			releaseFirst.countDown(); Assertions.assertTrue(queuedRan.await(3, TimeUnit.SECONDS));
+			awaitCondition(() -> dispatcher.snapshot().activeSlots() == 0);
+			Assertions.assertNull(queuedFailure.get());
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.TicketState.EXITED, second.state());
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.TicketState.EXITED, third.state());
+			Assertions.assertEquals(2, executor.submissionCount(), "An accepted physical worker must drain both queued tickets.");
+			Assertions.assertEquals(2, dispatcher.snapshot().maximumObservedQueueDepth());
+		} finally {
+			rejectSecondSubmission.countDown(); releaseFirst.countDown(); submitter.interrupt(); submitter.join(3000); stop(dispatcher, executor);
 		}
 	}
 
@@ -991,10 +1026,16 @@ public class McpApplicationHandlerDispatcherTests {
 			extends AbstractExecutorService {
 		private final ExecutorService delegate;
 		private final AtomicInteger submissionCount;
+		private final CountDownLatch secondEntered;
+		private final CountDownLatch releaseSecond;
 
 		private RejectSecondSubmissionExecutor() {
+			this(new CountDownLatch(0), new CountDownLatch(0));
+		}
+		private RejectSecondSubmissionExecutor(CountDownLatch secondEntered, CountDownLatch releaseSecond) {
 			this.delegate = singleThreadExecutor("mcp-application-rejection-test");
 			this.submissionCount = new AtomicInteger();
+			this.secondEntered = secondEntered; this.releaseSecond = releaseSecond;
 		}
 
 		@Override
@@ -1027,8 +1068,12 @@ public class McpApplicationHandlerDispatcherTests {
 		public void execute(Runnable command) {
 			int submission = submissionCount.incrementAndGet();
 
-			if (submission == 2)
+			if (submission == 2) {
+				secondEntered.countDown();
+				try { if (!releaseSecond.await(3, TimeUnit.SECONDS)) throw new AssertionError("Second handoff was not released."); }
+				catch (InterruptedException exception) { Thread.currentThread().interrupt(); }
 				throw new RejectedExecutionException("Synthetic second-submission failure.");
+			}
 
 			delegate.execute(command);
 		}

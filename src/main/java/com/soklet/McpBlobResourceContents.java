@@ -192,8 +192,7 @@ public final class McpBlobResourceContents implements McpResourceContents {
 		 */
 		@NonNull
 		public Builder mimeType(@NonNull String mimeType) {
-			this.mimeType = McpResourceValueSupport.requireNonBlank(mimeType,
-					"MCP resource MIME type");
+			this.mimeType = McpContentValueSupport.requireMimeType(mimeType);
 			return this;
 		}
 

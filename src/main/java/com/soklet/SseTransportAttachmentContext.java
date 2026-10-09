@@ -20,6 +20,8 @@ import com.google.errorprone.annotations.CheckReturnValue;
 import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.Optional;
+import java.util.function.Supplier;
 
 import static java.util.Objects.requireNonNull;
 
@@ -71,6 +73,11 @@ public final class SseTransportAttachmentContext {
 	 */
 	public SseServer.@NonNull RequestHandler getAdmissionFencedRequestHandler() {
 		return this.internalContext.requestHandler();
+	}
+
+	@NonNull
+	Supplier<Optional<AdmissionFence.Admission>> builtInDispatchAdmissionSupplier() {
+		return this.internalContext.builtInDispatchAdmissionSupplier();
 	}
 
 	/**

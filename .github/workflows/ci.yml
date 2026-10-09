@@ -24,6 +24,32 @@ permissions:
   contents: read
 
 jobs:
+  filesystem-identity:
+    name: Case-insensitive filesystem (JDK ${{ matrix.jdk }})
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: macos-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        jdk: ['17', '21']
+    env:
+      MAVEN_OPTS: -Xmx512m -XX:ActiveProcessorCount=2
+      JAVA_TOOL_OPTIONS: -Xmx512m -XX:ActiveProcessorCount=2
+    steps:
+      - name: Check out
+        uses: actions/checkout@v6
+      - name: Set up JDK ${{ matrix.jdk }}
+        uses: actions/setup-java@v6
+        with:
+          distribution: corretto
+          java-version: ${{ matrix.jdk }}
+          cache: maven
+      - name: Verify static-file identity and containment
+        run: >-
+          mvn -B -ntp -Dtest=StaticFileIdentityTests,StaticFilesTests
+          -Dsoklet.test.requireCaseInsensitiveFilesystem=true test
+
   test:
     name: Test (JDK ${{ matrix.jdk }})
     if: github.event_name == 'push' || github.event_name == 'pull_request'

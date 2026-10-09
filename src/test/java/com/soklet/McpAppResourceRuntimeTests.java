@@ -115,11 +115,14 @@ public class McpAppResourceRuntimeTests {
 			return result.get();
 		});
 		run(endpoint, simulator -> {
+			assertThrows(IllegalArgumentException.class, () ->
+					McpTextResourceContents.withUriAndText(URI_VALUE, "SECRET")
+							.mimeType("text/html;profile=\"broken"));
 			List<McpResourceContents> invalid = List.of(
 					McpTextResourceContents.withUriAndText(URI_VALUE, "SECRET").build(),
 					McpTextResourceContents.withUriAndText(URI_VALUE, "SECRET").mimeType("text/plain").build(),
 					McpTextResourceContents.withUriAndText(URI_VALUE, "SECRET").mimeType(MIME + ";charset=utf-8").build(),
-					McpTextResourceContents.withUriAndText(URI_VALUE, "SECRET").mimeType("text/html;profile=\"broken").build(),
+					McpTextResourceContents.withUriAndText(URI_VALUE, "SECRET").mimeType("text/html;profile=other").build(),
 					McpBlobResourceContents.withUriAndData(URI.create("ui://example/SECRET"), new byte[]{1})
 							.mimeType(MIME).build());
 			assertEquals(5, invalid.size());

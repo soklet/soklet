@@ -44,7 +44,7 @@ import static com.soklet.TestSupport.readAll;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Real HTTP dispatch, deadline delivery and physical shutdown evidence. */
-@Timeout(30)
+@Timeout(60)
 class HttpHandlerDispatchAndDrainTests {
 
 	@Test

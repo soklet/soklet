@@ -90,6 +90,18 @@ The [MCP privacy boundary](../../release/MCP_PRIVACY_BOUNDARY.md) separately
 records which exact request, diagnostic, metric, exception, and simulator
 surfaces are core-redacted or deliberately application- and operator-owned.
 
+The current-source privacy inventory semantic SHA-256 is
+`2976301c58b8e5821e5fab7dac9a4254f9477737ba4dc21b89a55f4c3e29877b`.
+It preserves strict MCP log redaction, including admission failures, while
+generic HTTP/SSE stream callbacks and logs retain their documented exact
+application boundaries. The current finite-bound inventory semantic SHA-256 is
+`55473066e8f073697a86ce0373a20573ba7594629524dde19e34e2cd473c1c5c`.
+Shared subscription projection concurrency now derives from the existing
+protocol, handler and owner budgets as `max(1, min(P - 1, H - 1, O))`, yielding
+31 under the default 32/32 budgets. The independently bounded legacy
+maintenance remains four physical jobs and 64 dispatches per sliding second.
+These current-source inventories do not replace historical candidate evidence.
+
 `phase-0-incompatibilities.jsonl` is the immutable 566-record historical removal surface from deleting the legacy MCP implementation. It initially
 matched the then-current set, but it intentionally does not evolve as the
 greenfield implementation reuses legacy names or adds new API.
@@ -172,10 +184,10 @@ scope has exactly one owner:
 
 The 304-entry current-source MCP union plus the 94-entry non-MCP allowlist owns
 exactly 398 current types. All 304 MCP owners have reviewed phase or
-provisional signature snapshots: 1,378/240/466/143 records respectively, or
-2,227 MCP signatures. Ownership and signature coverage are checked separately;
+provisional signature snapshots: 1,380/240/466/143 records respectively, or
+2,229 MCP signatures. Ownership and signature coverage are checked separately;
 the two reviewed cross-cutting signatures bring the complete frozen set to
-2,229 entries.
+2,231 entries.
 The current Phase 4, Phase 5, and Phase 6 include inventories have respective
 SHA-256 values
 `db7577ffe05d7ccf0cf559668e95d2af32ec925b609972f7518213cabef8da71`,
@@ -3424,3 +3436,21 @@ The non-MCP allowlist adds existing `Response`, its builder/copier, and
 in the comparison report; it contains 90 owners, for 393 reviewed owners in total.
 Genuine policy and capability sets remain sets. This amendment is a source/API review and
 does not establish immutable candidate qualification.
+
+### 2026-10-09 approved transport completion enrollment
+
+The owner approved `willWriteResponseStream(StreamingResponseHandle)` as a
+default method on both `MetricsCollector` and `LifecycleObserver`. Preparation
+declares a later termination callback, using the same handle instance and
+original dispatched request identity. It precedes handling finish; termination
+may arrive first and is buffered without blocking. Unprepared streams finish
+accounting at handoff. No public type or abstract method was added.
+
+Exactly these two canonical signatures were added to Phase4; all prior records
+are unchanged. The current Phase4 snapshot has 1,380 records, SHA-256
+`99e72744cf60cdb396413faaf2bac45bdf24e15feb91223aaedfc30db39d3cbc`. The 776-record incompatibility set is unchanged.
+
+The Phase4 JSpecify layout digest is
+`a1251b02a164e6d8661feccba2a3bf34ea4d0a624ba9f96a2a401383466eac5d`.
+Removing only the eight canonical entries for the two approved callbacks
+reproduces the preceding `4b8439b0…` digest; all other nullability is unchanged.

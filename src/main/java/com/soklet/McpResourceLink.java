@@ -242,7 +242,7 @@ public final class McpResourceLink implements McpContentBlock {
 		 * @return this builder */
 		@NonNull
 		public Builder title(@NonNull String title) {
-			this.title = requireNonNull(title);
+			this.title = McpContentValueSupport.requireWellFormedString(title);
 			return this;
 		}
 
@@ -250,7 +250,7 @@ public final class McpResourceLink implements McpContentBlock {
 		 * @return this builder */
 		@NonNull
 		public Builder description(@NonNull String description) {
-			this.description = requireNonNull(description);
+			this.description = McpContentValueSupport.requireWellFormedString(description);
 			return this;
 		}
 
@@ -258,8 +258,7 @@ public final class McpResourceLink implements McpContentBlock {
 		 * @return this builder */
 		@NonNull
 		public Builder mimeType(@NonNull String mimeType) {
-			this.mimeType = McpResourceValueSupport.requireNonBlank(mimeType,
-					"MCP resource MIME type");
+			this.mimeType = McpContentValueSupport.requireMimeType(mimeType);
 			return this;
 		}
 

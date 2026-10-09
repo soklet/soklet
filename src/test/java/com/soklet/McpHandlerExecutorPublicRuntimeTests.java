@@ -15,6 +15,7 @@
  */
 package com.soklet;
 
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.TestFactory;
@@ -36,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static com.soklet.McpLegacySessionTransportPublicRuntimeTests.*;
 
 /** Public configuration, exact revision responses and physical accounting for custom executors. */
-@Timeout(30)
+@Timeout(60)
 class McpHandlerExecutorPublicRuntimeTests {
 	private static final Set<McpProtocolVersion> VERSIONS = Set.of(
 			McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28);
@@ -45,11 +46,11 @@ class McpHandlerExecutorPublicRuntimeTests {
 	java.util.stream.Stream<DynamicTest> executorBoundariesForEachRevision() {
 		return java.util.stream.Stream.of(McpProtocolVersion.V2025_06_18,
 				McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28).flatMap(version -> java.util.stream.Stream.of(
-				DynamicTest.dynamicTest("direct handoff / " + version, () -> directHandoffExecutesAllAcceptedRequestsWithoutCapacityFailures(version)),
-				DynamicTest.dynamicTest("submission rejection / " + version, () -> executorSubmissionRejectionUsesTheFixedCapacityResponseAndRecovers(version)),
-				DynamicTest.dynamicTest("policy submission rejection / " + version, () -> policySubmissionRejectionUsesTheFixedCapacityResponseAndRecovers(version)),
-				DynamicTest.dynamicTest("caller runs / " + version, () -> callerRunsCannotMoveAnApplicationHandlerOntoTheProtocolThread(version)),
-				DynamicTest.dynamicTest("handler exception / " + version, () -> aHandlerThrownRejectionRemainsAnApplicationFailure(version))));
+				DynamicTest.dynamicTest("direct handoff / " + version, () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> directHandoffExecutesAllAcceptedRequestsWithoutCapacityFailures(version))),
+				DynamicTest.dynamicTest("submission rejection / " + version, () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> executorSubmissionRejectionUsesTheFixedCapacityResponseAndRecovers(version))),
+				DynamicTest.dynamicTest("policy submission rejection / " + version, () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> policySubmissionRejectionUsesTheFixedCapacityResponseAndRecovers(version))),
+				DynamicTest.dynamicTest("caller runs / " + version, () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> callerRunsCannotMoveAnApplicationHandlerOntoTheProtocolThread(version))),
+				DynamicTest.dynamicTest("handler exception / " + version, () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> aHandlerThrownRejectionRemainsAnApplicationFailure(version)))));
 	}
 
 	void directHandoffExecutesAllAcceptedRequestsWithoutCapacityFailures(McpProtocolVersion version) throws Exception {

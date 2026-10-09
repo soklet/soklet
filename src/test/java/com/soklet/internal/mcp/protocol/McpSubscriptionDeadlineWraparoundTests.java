@@ -112,6 +112,8 @@ public class McpSubscriptionDeadlineWraparoundTests {
 				Object processor = field(control, "processor");
 				scheduler = (McpHttpServerRuntime.TaskNotificationProjectionScheduler)
 						field(processor, "taskNotificationProjectionScheduler");
+				Assertions.assertEquals(4, field(scheduler, "maximumWorkers"),
+						"Five application slots retain one slot and yield four projection workers.");
 				Assertions.assertTrue(scheduler.tryReserveOwners(blockers));
 				for (Object blocker : blockers)
 					scheduler.execute(new McpHttpServerRuntime.TaskNotificationProjectionJob(blocker, () -> {
@@ -384,7 +386,8 @@ public class McpSubscriptionDeadlineWraparoundTests {
 		return new McpHttpServerRuntime(
 				McpHttpTransportConfiguration.productionDefaults(0),
 				List.of(binding), McpJsonLimits.productionDefaults(),
-				McpApplicationExecutionConfiguration.productionDefaults(), clock,
+				new McpApplicationExecutionConfiguration(5, 128,
+						Duration.ofSeconds(60), Duration.ofMillis(10)), clock,
 				McpApplicationHandlerExecutorFactory.production(), ignored -> {},
 				ignored -> {}, Optional.empty(),
 				McpFrameworkRequestStateRuntime.disabledInstance(), subscriptions);

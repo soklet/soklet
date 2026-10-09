@@ -29,6 +29,36 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class RequestParsingRegressionTests {
 	@Test
+	void browserQueryCharactersAreAcceptedWithoutChangingPathOrStrictDecoding() {
+		for (String value : List.of("a|b", "{x}", "a^b", "a`b", "a\\b")) {
+			for (String prefix : List.of("/files/a|b", "https://example.com/files/example")) {
+				String target = prefix + "?selected=" + value + "&tail=%C3%A9";
+				Request request = Request.fromRawUrl(HttpMethod.GET, target);
+				assertEquals(prefix.startsWith("/") ? prefix : "/files/example", request.getRawPath());
+				assertEquals(value, request.getQueryParameter("selected").orElseThrow());
+				assertEquals("é", request.getQueryParameter("tail").orElseThrow());
+				assertEquals(request.getQueryParameters(), Utilities.extractQueryParametersFromUrl(target, QueryFormat.RFC_3986_STRICT));
+				assertEquals(request.getRawQuery(), Utilities.extractRawQueryFromUrl(target));
+			}
+		}
+		for (String value : List.of("a b", "a\tb", "a\u0000b", "a\u007fb", "a\"b", "a<b", "%ZZ", "%FF", "%C3"))
+			assertThrows(IllegalRequestException.class, () -> Request.fromRawUrl(HttpMethod.GET, "/?selected=ok&other=" + value));
+		assertEquals(List.of("ÿ"), Utilities.extractQueryParametersFromUrl("/?selected=%FF", QueryFormat.RFC_3986_STRICT, StandardCharsets.ISO_8859_1).get("selected"));
+		assertEquals(Optional.of("selected={x}"), Utilities.extractRawQueryFromUrl("/?selected={x}#fragment?ignored=yes"));
+	}
+
+	@Test
+	void copiedEncodedQuestionMarkPathsPreserveTheDecodedAndRawForms() {
+		Request original = Request.fromRawUrl(HttpMethod.HEAD, "/files/a%3Fb?selected=ok");
+		Request copy = original.copy().httpMethod(HttpMethod.GET).finish();
+		assertEquals("/files/a?b", copy.getPath());
+		assertEquals("/files/a%3Fb", copy.getRawPath());
+		assertEquals(original.getRawQuery(), copy.getRawQuery());
+		assertThrows(IllegalRequestException.class, () -> original.copy().path("/files/a?b").finish());
+		assertThrows(IllegalRequestException.class, () -> Request.fromPath(HttpMethod.GET, "/files/a?b"));
+	}
+
+	@Test
 	void originFormPreservesEveryRawPathComponentAndExistingDecodedNormalization() {
 		Map<String, String> paths = Map.of(
 				"//x/admin", "/x/admin",

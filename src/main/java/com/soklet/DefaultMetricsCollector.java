@@ -257,7 +257,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 	void initialize(@NonNull SokletConfig sokletConfig) {
 		requireNonNull(sokletConfig);
-		this.includeSseMetrics.set(sokletConfig.getSseServer().isPresent());
+		if (sokletConfig.getSseServer().isPresent()) this.includeSseMetrics.set(true);
 		this.includeMcpHandlerMetrics.set(sokletConfig.getMcpServer().isPresent());
 		this.includeMcpTransportMetrics.set(
 				sokletConfig.getMcpServer().isPresent());
@@ -288,8 +288,10 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 		if (serverType == ServerType.HTTP)
 			this.httpConnectionsAccepted.increment();
-		else if (serverType == ServerType.SSE)
+		else if (serverType == ServerType.SSE) {
+			this.includeSseMetrics.set(true);
 			this.sseConnectionsAccepted.increment();
+		}
 	}
 
 	@Override
@@ -302,8 +304,10 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 		if (serverType == ServerType.HTTP)
 			this.httpConnectionsRejected.increment();
-		else if (serverType == ServerType.SSE)
+		else if (serverType == ServerType.SSE) {
+			this.includeSseMetrics.set(true);
 			this.sseConnectionsRejected.increment();
+		}
 	}
 
 	@Override
@@ -473,14 +477,28 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		if (serverType != ServerType.HTTP)
 			return;
 
-		if (marshaledResponse.isStreaming()) {
-			this.requestStateByThread.remove();
-			return;
-		}
-
-		RequestState state = removeRequestState(request);
+		RequestState state = requestStateFor(request);
 		if (state == null)
 			return;
+		StreamMetricTerminal terminal;
+		synchronized (state) {
+			if (state.isFinished() || state.handlingFinished)
+				return;
+			state.handlingFinished = true;
+			terminal = state.pendingStreamTerminal;
+			state.pendingStreamTerminal = null;
+			if (marshaledResponse.isStreaming() && state.responseStreamHandle != null && terminal == null) {
+				this.requestStateByThread.remove();
+				return;
+			}
+			state = removeRequestState(request);
+		}
+		if (state == null)
+			return;
+		if (marshaledResponse.isStreaming() && terminal != null) {
+			recordStreamTermination(state, terminal);
+			return;
+		}
 
 		this.activeRequests.decrement();
 		String statusClass = statusClassFor(marshaledResponse.getStatusCode());
@@ -497,6 +515,20 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	}
 
 	@Override
+	public void willWriteResponseStream(@NonNull StreamingResponseHandle streamingResponseHandle) {
+		requireNonNull(streamingResponseHandle);
+		if (streamingResponseHandle.getServerType() != ServerType.HTTP)
+			return;
+		RequestState state = this.requestsInFlightByIdentity.get(new IdentityKey<>(streamingResponseHandle.getRequest()));
+		if (state == null)
+			return;
+		synchronized (state) {
+			if (!state.isFinished() && !state.handlingFinished && state.responseStreamHandle == null)
+				state.responseStreamHandle = streamingResponseHandle;
+		}
+	}
+
+	@Override
 	public void didTerminateResponseStream(@NonNull StreamingResponseHandle streamingResponseHandle,
 			@NonNull StreamTermination streamTermination, @NonNull Duration requestDuration,
 			@NonNull Long responseBodySizeInBytes) {
@@ -506,20 +538,40 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		requireNonNull(responseBodySizeInBytes);
 		if (responseBodySizeInBytes < 0L) throw new IllegalArgumentException("Response body size must be nonnegative.");
 		if (streamingResponseHandle.getServerType() != ServerType.HTTP) return;
-		RequestState state = removeRequestState(streamingResponseHandle.getRequest(), true);
+		Request request = streamingResponseHandle.getRequest();
+		RequestState state = this.requestsInFlightByIdentity.get(new IdentityKey<>(request));
 		if (state == null) return;
+		StreamMetricTerminal terminal = new StreamMetricTerminal(streamingResponseHandle.getMarshaledResponse().getStatusCode(),
+				streamTermination.getReason(), requestDuration, responseBodySizeInBytes);
+		synchronized (state) {
+			if (state.isFinished() || !sameInstance(state.responseStreamHandle, streamingResponseHandle) || state.pendingStreamTerminal != null)
+				return;
+			if (!state.handlingFinished) {
+				state.pendingStreamTerminal = terminal;
+				return;
+			}
+			state = removeRequestState(request, true);
+		}
+		if (state != null) recordStreamTermination(state, terminal);
+	}
+
+	private record StreamMetricTerminal(int statusCode, @NonNull StreamTerminationReason reason,
+			@NonNull Duration requestDuration, long bodyBytes) {}
+
+	private void recordStreamTermination(@NonNull RequestState state, @NonNull StreamMetricTerminal terminal) {
 		this.activeRequests.decrement();
 		HttpServerRouteStatusKey statusKey = new HttpServerRouteStatusKey(state.getMethod(), state.getRouteType(),
-				state.getRoute(), statusClassFor(streamingResponseHandle.getMarshaledResponse().getStatusCode()));
-		histogramFor(this.httpRequestDurationByRouteStatus, statusKey, HTTP_LATENCY_BUCKETS_NANOS).record(nonNegativeNanos(requestDuration));
-		histogramFor(this.httpResponseBodyBytesByRouteStatus, statusKey, HTTP_BODY_BYTES_BUCKETS).record(responseBodySizeInBytes);
+				state.getRoute(), statusClassFor(terminal.statusCode()));
+		histogramFor(this.httpRequestDurationByRouteStatus, statusKey, HTTP_LATENCY_BUCKETS_NANOS).record(nonNegativeNanos(terminal.requestDuration()));
+		histogramFor(this.httpResponseBodyBytesByRouteStatus, statusKey, HTTP_BODY_BYTES_BUCKETS).record(terminal.bodyBytes());
 		counterFor(this.httpResponseStreamTerminations,
-				HttpResponseStreamTerminationKey.fromDimensions(statusKey, streamTermination.getReason())).increment();
+				HttpResponseStreamTerminationKey.fromDimensions(statusKey, terminal.reason())).increment();
 	}
 
 
 	@Override
 	public void didEstablishSseConnection(@NonNull SseConnection sseConnection) {
+		this.includeSseMetrics.set(true);
 		requireNonNull(sseConnection);
 
 		RouteContext routeContext = routeFor(sseConnection);
@@ -540,6 +592,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 																													@Nullable ResourceMethod resourceMethod,
 																													SseConnection.@NonNull HandshakeFailureReason connectionHandshakeFailureReason,
 																													@Nullable Throwable throwable) {
+		this.includeSseMetrics.set(true);
 		requireNonNull(request);
 		requireNonNull(connectionHandshakeFailureReason);
 
@@ -553,6 +606,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	@Override
 	public void willWriteSseEvent(@NonNull SseConnection sseConnection,
 																			 @NonNull SseEvent sseEvent) {
+		this.includeSseMetrics.set(true);
 		requireNonNull(sseConnection);
 		requireNonNull(sseEvent);
 
@@ -576,6 +630,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 																			@Nullable Duration deliveryLag,
 																			@Nullable Integer payloadBytes,
 																			@Nullable Integer queueDepth) {
+		this.includeSseMetrics.set(true);
 		requireNonNull(sseConnection);
 		requireNonNull(sseEvent);
 		requireNonNull(writeDuration);
@@ -617,6 +672,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 																						 @Nullable Duration deliveryLag,
 																						 @Nullable Integer payloadBytes,
 																						 @Nullable Integer queueDepth) {
+		this.includeSseMetrics.set(true);
 		requireNonNull(sseConnection);
 		requireNonNull(sseComment);
 		requireNonNull(writeDuration);
@@ -654,6 +710,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 																						@Nullable Duration deliveryLag,
 																						@Nullable Integer payloadBytes,
 																						@Nullable Integer queueDepth) {
+		this.includeSseMetrics.set(true);
 		requireNonNull(sseConnection);
 		requireNonNull(sseEvent);
 		requireNonNull(writeDuration);
@@ -694,6 +751,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 																									 @Nullable Duration deliveryLag,
 																									 @Nullable Integer payloadBytes,
 																									 @Nullable Integer queueDepth) {
+		this.includeSseMetrics.set(true);
 		requireNonNull(sseConnection);
 		requireNonNull(sseComment);
 		requireNonNull(writeDuration);
@@ -730,6 +788,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 																		 @NonNull SseEventDropReason reason,
 																		 @Nullable Integer payloadBytes,
 																		 @Nullable Integer queueDepth) {
+		this.includeSseMetrics.set(true);
 		requireNonNull(sseConnection);
 		requireNonNull(sseEvent);
 		requireNonNull(reason);
@@ -748,6 +807,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 																						@NonNull SseEventDropReason reason,
 																						@Nullable Integer payloadBytes,
 																						@Nullable Integer queueDepth) {
+		this.includeSseMetrics.set(true);
 		requireNonNull(sseConnection);
 		requireNonNull(sseComment);
 		requireNonNull(reason);
@@ -766,6 +826,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 																					@NonNull Integer attempted,
 																					@NonNull Integer enqueued,
 																					@NonNull Integer dropped) {
+		this.includeSseMetrics.set(true);
 		requireNonNull(resourcePathDeclaration);
 		requireNonNull(attempted);
 		requireNonNull(enqueued);
@@ -796,6 +857,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 																								 @NonNull Integer attempted,
 																								 @NonNull Integer enqueued,
 																								 @NonNull Integer dropped) {
+		this.includeSseMetrics.set(true);
 		requireNonNull(resourcePathDeclaration);
 		requireNonNull(commentType);
 		requireNonNull(attempted);
@@ -824,6 +886,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	@Override
 	public void didTerminateSseConnection(@NonNull SseConnection sseConnection,
 																			@NonNull StreamTermination streamTermination) {
+		this.includeSseMetrics.set(true);
 		requireNonNull(sseConnection);
 		requireNonNull(streamTermination);
 
@@ -2318,6 +2381,11 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		private final AtomicBoolean handlerDurationRecorded;
 		@NonNull
 		private final AtomicBoolean finished;
+		@Nullable
+		private StreamingResponseHandle responseStreamHandle;
+		private boolean handlingFinished;
+		@Nullable
+		private StreamMetricTerminal pendingStreamTerminal;
 
 		private RequestState(@NonNull IdentityKey<Request> identityKey,
 												 @NonNull Object requestId,

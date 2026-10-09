@@ -16,6 +16,8 @@ import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.ForkJoinWorkerThread;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.BooleanSupplier;
 
@@ -51,7 +53,23 @@ public final class StateChangeWaiters {
 						throw new InterruptedException();
 					this.waiters.add(current);
 				}
-				LockSupport.park(this);
+				if (current instanceof ForkJoinWorkerThread)
+					ForkJoinPool.managedBlock(new ForkJoinPool.ManagedBlocker() {
+						@Override public boolean isReleasable() {
+							if (current.isInterrupted())
+								return true;
+							synchronized (monitor) {
+								return !waiting.getAsBoolean();
+							}
+						}
+						@Override public boolean block() {
+							if (!isReleasable())
+								LockSupport.park(StateChangeWaiters.this);
+							return isReleasable();
+						}
+					});
+				else
+					LockSupport.park(this);
 				if (Thread.interrupted())
 					throw new InterruptedException();
 			}

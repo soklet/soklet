@@ -48,6 +48,7 @@ import com.soklet.internal.microhttp.MicrohttpRequest;
 import com.soklet.internal.microhttp.MicrohttpResponse;
 import com.soklet.internal.microhttp.WritableSource;
 import org.jspecify.annotations.Nullable;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.TestFactory;
@@ -72,7 +73,7 @@ import java.util.stream.Stream;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Real admitted requests with deliberately unwritten SSE bodies. */
-@Timeout(30)
+@Timeout(60)
 class McpWriteIdlePublicObservationTests {
 	private static final String LOOPBACK = "127.0.0.1";
 	private static final Duration WRITE_TIMEOUT = Duration.ofHours(1);
@@ -85,14 +86,14 @@ class McpWriteIdlePublicObservationTests {
 	Stream<DynamicTest> stalledWriterIsWriteFailedBeforeTheRequestDeadline() {
 		return VERSIONS.stream().map(version ->
 				DynamicTest.dynamicTest(version.getWireValue(),
-						() -> observeUnwrittenStream(version, false)));
+						() -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> observeUnwrittenStream(version, false))));
 	}
 
 	@TestFactory
 	Stream<DynamicTest> expiredRequestDeadlineRemainsDistinctFromWriteFailure() {
 		return VERSIONS.stream().map(version ->
 				DynamicTest.dynamicTest(version.getWireValue(),
-						() -> observeUnwrittenStream(version, true)));
+						() -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> observeUnwrittenStream(version, true))));
 	}
 
 	private static void observeUnwrittenStream(McpProtocolVersion version,

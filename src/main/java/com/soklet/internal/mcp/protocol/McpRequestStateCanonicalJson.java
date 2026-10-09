@@ -21,6 +21,7 @@ import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -146,6 +147,27 @@ final class McpRequestStateCanonicalJson {
 		return Integer.compare(left.length, right.length);
 	}
 
+	@NonNull
+	private static BigDecimal normalizeNumber(@NonNull BigDecimal value) {
+		if (value.signum() == 0)
+			return BigDecimal.ZERO;
+		// JDK 17/21 stripTrailingZeros divides a large coefficient once per
+		// trailing decimal zero. The wire already bounds the coefficient length;
+		// scan its digits and reconstruct it once instead of repeatedly dividing.
+		String coefficient = value.unscaledValue().toString();
+		int normalizedLength = coefficient.length();
+		while (coefficient.charAt(normalizedLength - 1) == '0')
+			normalizedLength--;
+		int trailingZeros = coefficient.length() - normalizedLength;
+		if (trailingZeros == 0)
+			return value;
+		long normalizedScale = (long) value.scale() - trailingZeros;
+		if (normalizedScale < Integer.MIN_VALUE)
+			throw new ArithmeticException("Canonical JSON number scale underflow.");
+		return new BigDecimal(new BigInteger(coefficient.substring(0, normalizedLength)),
+				(int) normalizedScale);
+	}
+
 	record Canonicalization(@NonNull McpJsonValue normalizedValue,
 			byte @NonNull [] canonicalUtf8) {
 		Canonicalization {
@@ -188,9 +210,7 @@ final class McpRequestStateCanonicalJson {
 				return new McpJsonArray(elements);
 			}
 			if (value instanceof McpJsonNumber number) {
-				BigDecimal decimal = number.value();
-				return new McpJsonNumber(decimal.signum() == 0
-						? BigDecimal.ZERO : decimal.stripTrailingZeros());
+				return new McpJsonNumber(normalizeNumber(number.value()));
 			}
 			if (value instanceof McpJsonString
 					|| value instanceof McpJsonBoolean

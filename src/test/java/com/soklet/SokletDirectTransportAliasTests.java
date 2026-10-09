@@ -69,7 +69,7 @@ final class SokletDirectTransportAliasTests {
 				() -> Soklet.fromConfig(httpAndSseConfig(http, sse)));
 
 		Assertions.assertEquals(
-				"Transport identity appears more than once in one claim",
+				"HTTP and SSE transport slots require distinct transport identities; one transport identity was configured more than once",
 				duplicate.getMessage());
 		assertUntouched(http, sse);
 
@@ -106,7 +106,7 @@ final class SokletDirectTransportAliasTests {
 							duplicateSse)));
 
 			Assertions.assertEquals(
-					"Transport identity appears more than once in one claim",
+					"HTTP and SSE transport slots require distinct transport identities; one transport identity was configured more than once",
 					duplicate.getMessage());
 			assertUntouched(claimed, duplicateHttp, duplicateSse);
 		}

@@ -1,5 +1,13 @@
 # Soklet 4.0.0 remediation plan — October 4, 2026
 
+## Round 2 follow-up
+
+The October 8 review is assessed in
+[Soklet 4.0 Round 2 review](SOKLET_4_0_ROUND2_REVIEW_2026-10-09.md),
+including the approved two-callback streaming amendment, current fixes,
+retained policies and validation status. Earlier completed slices below retain
+their original scope and evidence; they are not immutable candidate acceptance.
+
 ## Recommendation
 
 Finish the correctness and security work below before declaring 4.0.0 ready for publication. The review identifies real remaining implementation work. Prioritize shared root causes, with a small regression-driven change per slice, rather than treating its 201 catalog entries as 201 independent projects.

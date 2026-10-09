@@ -68,6 +68,82 @@ class McpLegacySubscriptionPublicRuntimeTests {
 	void endRequestBudget() { RawClient.endRequestBudget(); }
 
 	@Test
+	void failedFirstPagesAndSuccessfulContinuationPagesPreservePendingCatalogHints() throws Exception {
+		for (McpProtocolVersion version : LEGACY) {
+			Harness harness = new Harness(); AtomicBoolean fail = new AtomicBoolean(true);
+			harness.endpointOptions = endpoint -> endpoint.resourceListHandler((context, list, features) ->
+					McpResourcePage.builder().resourceDescriptors(list.getRegisteredResourceDescriptors()).build(), Set.copyOf(LEGACY));
+			harness.additional = builder -> builder.catalogAccessPolicy(McpCatalogAccessPolicy.fromEvaluators(
+					(context, registration, features) -> { if (fail.get()) throw new IllegalStateException("temporary catalog failure"); return true; },
+					(context, registration, features) -> true));
+			SokletSimulator.run(harness.simulatorConfig(), simulator -> {
+				String id = initialize(simulator, version);
+				harness.publisher.publishToolsListChanged();
+				assertError(rpc(simulator, version, id, "tools/list", "{}"), -32603);
+				harness.publisher.publishResourcesListChanged();
+				McpJsonObject continuationPage = rpc(simulator, version, id, "resources/list", "{\"cursor\":\"page-two\"}");
+				assertNotNull(continuationPage.getMembers().get("result"));
+				try (McpSimulation get = simulator.startMcpRequest(request(HttpMethod.GET, version, id, "", null))) {
+					assertEquals(200, get.awaitResponse(WAIT).orElseThrow().getStatusCode());
+					Set<String> methods = new java.util.HashSet<>();
+					for (int count = 0; count < 2; count++) methods.add(((McpJsonString) ((McpJsonObject) nextSimulatorNotification(get)).getMembers().get("method")).getValue());
+					assertEquals(Set.of("notifications/tools/list_changed", "notifications/resources/list_changed"), methods);
+					fail.set(false);
+					McpJsonObject firstPage = rpc(simulator, version, id, "tools/list", "{}");
+					assertNotNull(firstPage.getMembers().get("result"));
+					harness.publisher.publishToolsListChanged();
+					assertEquals("notifications/tools/list_changed", ((McpJsonString) ((McpJsonObject) nextSimulatorNotification(get)).getMembers().get("method")).getValue());
+				}
+			});
+		}
+	}
+
+	@Test
+	void aChangeDuringSuccessfulFirstPageProjectionRemainsPending() throws Exception {
+		for (McpProtocolVersion version : LEGACY) {
+			Harness harness = new Harness(); AtomicBoolean publishDuringProjection = new AtomicBoolean();
+			harness.additional = builder -> builder.catalogAccessPolicy(McpCatalogAccessPolicy.fromEvaluators(
+					(context, registration, features) -> { if (publishDuringProjection.getAndSet(false)) harness.publisher.publishToolsListChanged(); return true; },
+					(context, registration, features) -> true));
+			SokletSimulator.run(harness.simulatorConfig(), simulator -> {
+				String id = initialize(simulator, version); harness.publisher.publishToolsListChanged();
+				publishDuringProjection.set(true);
+				McpJsonObject firstPage = rpc(simulator, version, id, "tools/list", "{}");
+				assertNotNull(firstPage.getMembers().get("result"));
+				try (McpSimulation get = simulator.startMcpRequest(request(HttpMethod.GET, version, id, "", null))) {
+					assertEquals(200, get.awaitResponse(WAIT).orElseThrow().getStatusCode());
+					assertEquals("notifications/tools/list_changed", ((McpJsonString) ((McpJsonObject) nextSimulatorNotification(get)).getMembers().get("method")).getValue());
+				}
+			});
+		}
+	}
+
+	@Test
+	void failedDuplicateSubscribePreservesTheEstablishedSessionAndRenewsItsFencedGrant() throws Exception {
+		for (McpProtocolVersion version : LEGACY) {
+			Harness harness = new Harness(); AtomicInteger checks = new AtomicInteger();
+			harness.additional = builder -> builder.subscriptionAuthorizer((context, features) -> {
+				if (checks.incrementAndGet() == 2) throw new IOException("one transient duplicate-subscribe failure");
+				return McpSubscriptionAuthorization.Allowed.withValidUntil(Instant.now().plusSeconds(30)).build();
+			});
+			SokletSimulator.run(harness.simulatorConfig(), simulator -> {
+				String id = initialize(simulator, version);
+				assertEmptyResult(rpc(simulator, version, id, "resources/subscribe", "{\"uri\":\"test:///exact\"}"), 10);
+				McpJsonObject failed = rpc(simulator, version, id, "resources/subscribe", "{\"uri\":\"test:///exact\"}");
+				assertError(failed, -32603);
+				assertEmptyResult(rpc(simulator, version, id, "ping", "{}"), 10);
+				try (McpSimulation get = simulator.startMcpRequest(request(HttpMethod.GET, version, id, "", null))) {
+					assertEquals(200, get.awaitResponse(WAIT).orElseThrow().getStatusCode());
+					simulator.getMcpServer().orElseThrow().getSubscriptionReconciler().reconcileSubscriptions();
+					harness.publisher.publishResourceUpdated(EXACT);
+					assertNotification(nextSimulatorNotification(get), "notifications/resources/updated", EXACT);
+					assertTrue(checks.get() >= 3);
+				}
+			});
+		}
+	}
+
+	@Test
 	void liveNotificationsUseOneStreamAndDoNotReplayOnNewGetOrReconnect() throws Exception {
 		for (McpProtocolVersion version : LEGACY) {
 			try (SocketFixture fixture = new SocketFixture(new Harness())) {

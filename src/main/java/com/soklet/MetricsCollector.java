@@ -294,8 +294,31 @@ public interface MetricsCollector {
 	}
 
 	/**
-	 * Called once after an admitted HTTP response stream terminates, after metrics handling finish
-	 * and before lifecycle stream observers. Finite replacements and suppressed bodies do not invoke it.
+	 * Called once before an admitted HTTP response stream is offered for writing, before
+	 * its producer starts and before {@link #didFinishRequestHandling}. This enrolls the original
+	 * dispatched {@link Request} object by identity for a paired
+	 * {@link #didTerminateResponseStream} callback; it does not mean headers or body bytes
+	 * have reached the client. Finite replacements and suppressed bodies are not enrolled.
+	 * <p>
+	 * A custom transport that invokes this method must report one terminal callback with
+	 * the exact same handle instance and original dispatched request, including failures before body production. Record elapsed
+	 * request time from entry into the framework request handler using a monotonic clock.
+	 * If termination occurs before handling finish, collectors must retain at most one pending
+	 * terminal observation and return without waiting. Unenrolled streams are accounted at
+	 * handling handoff by the default collector. Collector decorators must forward this callback
+	 * to retain accounting through stream termination. Callback failures are contained by the transport.
+	 *
+	 * @param streamingResponseHandle the admitted HTTP response stream
+	 */
+	default void willWriteResponseStream(@NonNull StreamingResponseHandle streamingResponseHandle) {
+		// No-op by default
+	}
+
+	/**
+	 * Called once after an admitted HTTP response stream terminates. The built-in transport delivers
+	 * this after metrics handling finish and before lifecycle stream observers; custom transports may
+	 * report an early terminal outcome as described by {@link #willWriteResponseStream}.
+	 * Finite replacements and suppressed bodies do not invoke it.
 	 * The handle retains the original dispatch request. Failures are isolated from transport completion.
 	 *
 	 * @param streamingResponseHandle the admitted HTTP response stream
@@ -370,7 +393,10 @@ public interface MetricsCollector {
 	 * <p>
 	 * Capacity rejection is {@link SseConnection.HandshakeFailureReason#CAPACITY_EXCEEDED}; request processing,
 	 * response preparation and response writing failures use {@link SseConnection.HandshakeFailureReason#INTERNAL_ERROR}
-	 * with their cause. Failure during client initialization after acceptance uses the stream-termination callbacks.
+	 * with their cause. {@link SseConnection.HandshakeFailureReason#HANDSHAKE_REJECTED}
+	 * also covers finite route/method mismatch responses on the SSE listener,
+	 * including HEAD and OPTIONS; an event-source method need not have run.
+	 * Failure during client initialization after acceptance uses the stream-termination callbacks.
 	 *
 	 * @param connectionHandshakeFailureReason    the handshake failure reason
 	 * @param throwable an optional underlying cause, or {@code null} if not applicable

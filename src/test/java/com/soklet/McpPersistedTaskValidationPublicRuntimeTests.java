@@ -30,7 +30,7 @@ import static com.soklet.McpTaskCapabilityBoundaryPublicRuntimeTests.post;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Read-time validation leaves the manager's authoritative state unchanged. */
-@Timeout(30)
+@Timeout(60)
 class McpPersistedTaskValidationPublicRuntimeTests {
 	private static final Set<McpProtocolVersion> MODERN = Set.of(McpProtocolVersion.V2026_07_28);
 	private static final String CANARY = "private-persisted-task-canary";

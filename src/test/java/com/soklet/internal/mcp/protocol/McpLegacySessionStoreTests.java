@@ -47,6 +47,26 @@ class McpLegacySessionStoreTests {
 			Optional.of(McpImplementationMetadata.withNameAndVersion("private-client", "1")));
 
 	@Test
+	void transientPublicationPressureDoesNotEvictIdleSessionsThatCannotReleaseIt() {
+		McpLegacySessionStore store = store(new McpLegacySessionStore.Config(8, 8,
+				120 * SECOND, 300 * SECOND, 65536, false, 1024, 1024, 4096));
+		McpLegacySessionStore.Initialization idle = publish(store, JUNE);
+		McpLegacySessionStore.Call proof = acquire(store, idle, JUNE, null, null, new Target());
+		proof.acceptedUse(); proof.physicalComplete(); idle.physicalComplete();
+		McpLegacySessionStore.Initialization busy = publish(store, JUNE);
+		McpLegacySessionStore.Call active = store.acquire(busy.sessionId(), owner, "/mcp", JUNE,
+				generation, integer(1), null, new Target(), 900).call().orElseThrow();
+		active.acceptedUse(); busy.physicalComplete(); now.set(31 * SECOND);
+		assertEquals(TRANSIENT_CAPACITY, store.publish(owner, "/mcp", JUNE, generation, snapshot, new Target(), 600).status());
+		assertEquals(2, store.counts().liveSessions());
+		McpLegacySessionStore.Acquisition available = store.acquire(idle.sessionId(), owner, "/mcp", JUNE,
+				generation, integer(2), null, new Target());
+		assertEquals(ACCEPTED, available.status());
+		available.call().orElseThrow().physicalComplete();
+		store.close(); active.physicalComplete();
+	}
+
+	@Test
 	void existing_session_use_expires_its_own_record_while_periodic_maintenance_sweeps_others() {
 		McpLegacySessionStore store = store(config(4, 4));
 		McpLegacySessionStore.Initialization old = publish(store, JUNE);

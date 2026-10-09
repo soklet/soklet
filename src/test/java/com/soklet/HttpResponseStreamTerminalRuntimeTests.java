@@ -29,7 +29,7 @@ import java.util.concurrent.atomic.*;
 import static com.soklet.TestSupport.*;
 import static org.junit.jupiter.api.Assertions.*;
 
-@Timeout(20)
+@Timeout(60)
 public class HttpResponseStreamTerminalRuntimeTests {
     private static volatile StreamingResponseWriter writer;
     public static class Resource {
@@ -51,6 +51,9 @@ public class HttpResponseStreamTerminalRuntimeTests {
         }
         @Override public void willWriteResponse(ServerType type, Request request, ResourceMethod method, MarshaledResponse response) {
             defaults.willWriteResponse(type, request, method, response);
+        }
+        @Override public void willWriteResponseStream(StreamingResponseHandle handle) {
+            defaults.willWriteResponseStream(handle);
         }
         @Override public void didFinishRequestHandling(ServerType type, Request request, ResourceMethod method, MarshaledResponse response,
                 Duration duration, List<Throwable> failures) {

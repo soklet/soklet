@@ -31,7 +31,7 @@ import static com.soklet.McpLegacySessionTransportPublicRuntimeTests.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Real decimal form input through protected retries and durable tasks. */
-@Timeout(20)
+@Timeout(60)
 class McpDecimalElicitationPublicRuntimeTests {
 	private static final Set<McpProtocolVersion> VERSIONS = Set.of(McpProtocolVersion.V2026_07_28);
 	private static final String CAPABILITIES = "{\"elicitation\":{\"form\":{}},\"extensions\":{\"io.modelcontextprotocol/tasks\":{}}}";

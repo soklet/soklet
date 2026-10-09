@@ -682,7 +682,7 @@ public interface HttpServer {
 		 * exits. Cleanup supervision does not replace the response or idle timeout during healthy transport delivery.
 		 * Healthy queue backpressure during encoder finalization pauses the remaining cleanup budget; cancelation
 		 * starts a finite cleanup budget even if an output wait remains active. Successful socket writes refresh
-		 * response idle activity after production finishes, so a progressing drain can complete.
+		 * response idle activity during or after production, so a progressing drain can complete.
 		 * <p>
 		 * Owned-resource close/abort and publisher cancel failures use {@link LogEventType#RESPONSE_STREAM_CLOSE_FAILED} with the original
 		 * exception, request, optional resource method and streaming response. Framework supervision failures and
@@ -743,7 +743,7 @@ public interface HttpServer {
 		}
 
 		/**
-		 * Sets the maximum idle duration between bytes produced for a streaming response.
+		 * Sets the maximum idle duration with neither producer output nor socket write progress for a streaming response.
 		 * <p>
 		 * Use {@link Duration#ZERO} to disable the timeout. Passing {@code null}
 		 * derives the default from the effective request-body timeout, which is 60

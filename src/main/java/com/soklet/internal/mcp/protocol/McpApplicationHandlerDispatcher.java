@@ -130,10 +130,6 @@ final class McpApplicationHandlerDispatcher {
 		}
 	}
 
-	private record SubmissionFailure(@NonNull Ticket ticket,
-			@NonNull Throwable throwable) {
-	}
-
 	@NonNull
 	private final Object lock;
 	private final int concurrency;
@@ -218,7 +214,7 @@ final class McpApplicationHandlerDispatcher {
 	@NonNull
 	Admission admit(@NonNull Ticket ticket) {
 		requireOwnedTicket(ticket);
-		boolean dispatch = false;
+		Ticket ticketToDispatch = null;
 		Admission admission;
 
 		synchronized (lock) {
@@ -231,16 +227,20 @@ final class McpApplicationHandlerDispatcher {
 			if (!accepting) {
 				ticket.state = TicketState.REJECTED;
 				admission = Admission.CLOSED;
-			} else if (activeSlots < concurrency) {
+			} else if (activeSlots < concurrency && queue.isEmpty()) {
 				ticket.state = TicketState.DISPATCHED;
 				activeTickets.add(ticket);
 				activeSlots++;
 				recordHandlerExecutionStarted();
 				maximumObservedActiveSlots = Math.max(maximumObservedActiveSlots,
 						activeSlots);
-				dispatch = true;
+				ticketToDispatch = ticket;
 				admission = Admission.DISPATCHED;
-			} else if (queue.size() < queueCapacity) {
+			} else if (queue.size() < queueCapacity || activeSlots < concurrency) {
+				// An earlier failed handoff can leave accepted queued work waiting
+				// for a physical worker. A fresh admission may start that work, while
+				// preserving its FIFO position and the configured queue bound.
+				if (activeSlots < concurrency) ticketToDispatch = promoteNextLocked();
 				ticket.state = TicketState.QUEUED;
 				queue.add(ticket);
 				recordHandlerQueued();
@@ -255,8 +255,8 @@ final class McpApplicationHandlerDispatcher {
 		}
 
 		drainObserver();
-		if (dispatch)
-			dispatch(ticket, false);
+		if (ticketToDispatch != null)
+			dispatch(ticketToDispatch);
 
 		return admission;
 	}
@@ -377,6 +377,13 @@ final class McpApplicationHandlerDispatcher {
 		}
 	}
 
+	/** Interrupts physical work while retaining all accepted queued tickets. */
+	void interruptActiveWork() {
+		List<Ticket> tickets;
+		synchronized (lock) { tickets = List.copyOf(activeTickets); }
+		for (Ticket ticket : tickets) ticket.requestInterrupt();
+	}
+
 	@NonNull
 	Snapshot snapshot() {
 		synchronized (lock) {
@@ -391,49 +398,20 @@ final class McpApplicationHandlerDispatcher {
 		}
 	}
 
-	/** Returns a promoted ticket to the accepted worker only if handoff rejects. */
-	private @Nullable Ticket dispatch(@NonNull Ticket ticket, boolean reuseWorkerOnRejection) {
-		List<SubmissionFailure> submissionFailures = new ArrayList<>();
-		Ticket ticketToSubmit = ticket;
-		Ticket retainedContinuation = null;
-		Error fatalFailure = null;
-
-		while (ticketToSubmit != null) {
-			Ticket submittedTicket = ticketToSubmit;
-			Thread submittingThread = Thread.currentThread();
-			AtomicBoolean submissionActive = new AtomicBoolean(true);
-
-			try {
-				executorService.execute(() -> {
-					if (sameInstance(Thread.currentThread(), submittingThread) && submissionActive.get())
-						throw new RejectedExecutionException(
-								"MCP application work cannot run on the submitting thread.");
-					run(submittedTicket);
-				});
-				ticketToSubmit = null;
-			} catch (RuntimeException | Error failure) {
-				if (reuseWorkerOnRejection && failure instanceof RejectedExecutionException
-						&& fatalFailure == null) {
-					// The current worker has not returned to a direct-handoff pool yet.
-					// Keep this accepted ticket and its slot; do not reject the queue or
-					// create retry jobs. The same worker enters it through the run loop.
-					retainedContinuation = submittedTicket;
-					break;
-				}
-				submissionFailures.add(new SubmissionFailure(submittedTicket, failure));
-				ticketToSubmit = onSubmissionFailure(submittedTicket, failure);
-				if (failure instanceof Error error && fatalFailure == null)
-					fatalFailure = error;
-			} finally {
-				submissionActive.set(false);
-			}
-		}
-
-		for (SubmissionFailure submissionFailure : submissionFailures)
-			notifyFailure(submissionFailure.ticket(), submissionFailure.throwable());
-		if (fatalFailure != null)
-			throw fatalFailure;
-		return retainedContinuation;
+	private void dispatch(@NonNull Ticket ticket) {
+		Thread submittingThread = Thread.currentThread();
+		AtomicBoolean submissionActive = new AtomicBoolean(true);
+		try {
+			executorService.execute(() -> {
+				if (sameInstance(Thread.currentThread(), submittingThread) && submissionActive.get())
+					throw new RejectedExecutionException("MCP application work cannot run on the submitting thread.");
+				run(ticket);
+			});
+		} catch (RuntimeException | Error failure) {
+			onSubmissionFailure(ticket, failure);
+			notifyFailure(ticket, failure);
+			if (failure instanceof Error error) throw error;
+		} finally { submissionActive.set(false); }
 	}
 
 	private void run(@NonNull Ticket firstTicket) {
@@ -465,7 +443,10 @@ final class McpApplicationHandlerDispatcher {
 				Thread.interrupted();
 				next = onHandlerExited(ticket);
 			}
-			ticketToRun = next == null ? null : dispatch(next, true);
+			// This physical worker already satisfies the application's executor
+			// contract. Drain accepted queued work before returning it to a
+			// direct-handoff executor; do not resubmit from an exiting worker.
+			ticketToRun = next;
 		}
 	}
 
@@ -492,8 +473,7 @@ final class McpApplicationHandlerDispatcher {
 		return next;
 	}
 
-	private @Nullable Ticket onSubmissionFailure(@NonNull Ticket ticket, @NonNull Throwable failure) {
-		Ticket next;
+	private void onSubmissionFailure(@NonNull Ticket ticket, @NonNull Throwable failure) {
 		synchronized (lock) {
 			if (ticket.state != TicketState.DISPATCHED)
 				throw new IllegalStateException(
@@ -507,12 +487,12 @@ final class McpApplicationHandlerDispatcher {
 			recordHandlerExecutionFinished();
 			if (failure instanceof RejectedExecutionException)
 				recordHandlerCapacityRejected();
-			next = promoteNextLocked();
+			// Reject only this new handoff. Accepted queued tickets remain bounded
+			// and are drained by existing workers or a later successful admission.
 		}
 		notifySlotReleased();
 		notifyPhysicalExit(ticket);
 		drainObserver();
-		return next;
 	}
 
 	private @Nullable Ticket promoteNextLocked() {

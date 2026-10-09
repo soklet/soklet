@@ -30,6 +30,67 @@ import java.util.function.Consumer;
 
 public class ConnectionEventLoopDispatchTests {
 	@Test
+	public void pipelinedModernRequestIsCanceledWhenFinWasObservedBeforeItsDispatch() throws Exception {
+		CountDownLatch firstHandled = new CountDownLatch(1);
+		CountDownLatch finObserved = new CountDownLatch(1);
+		CountDownLatch canceled = new CountDownLatch(1);
+		AtomicReference<Consumer<MicrohttpResponse>> firstResponse = new AtomicReference<>();
+		AtomicReference<MicrohttpRequest> canceledRequest = new AtomicReference<>();
+		AtomicReference<StreamTerminationReason> canceledReason = new AtomicReference<>();
+		AtomicInteger secondHandlerCalls = new AtomicInteger();
+		AtomicInteger cancelCalls = new AtomicInteger();
+		Handler handler = new Handler() {
+			@Override public void handle(MicrohttpRequest request, Consumer<MicrohttpResponse> response) {
+				if (request.uri().equals("/first")) {
+					firstResponse.set(response); firstHandled.countDown();
+				} else {
+					secondHandlerCalls.incrementAndGet();
+					response.accept(new MicrohttpResponse(200, "OK", List.of(), ascii("must-not-run")));
+				}
+			}
+			@Override public boolean monitorClientDisconnectsBeforeResponse(MicrohttpRequest request) { return true; }
+			@Override public boolean closeConnectionOnInputEnd(MicrohttpRequest request) { return request.uri().equals("/mcp"); }
+			@Override public void cancel(MicrohttpRequest request, StreamTerminationReason reason, Throwable cause) {
+				canceledRequest.set(request); canceledReason.set(reason); cancelCalls.incrementAndGet(); canceled.countDown();
+			}
+		};
+		Logger logger = new Logger() {
+			@Override public boolean enabled() { return true; }
+			@Override public void log(LogEntry... entries) {
+				for (LogEntry entry : entries)
+					if (entry.key().equals("event") && entry.value().equals("read_half_close_while_response_pending"))
+						finObserved.countDown();
+			}
+			@Override public void log(Exception exception, LogEntry... entries) { log(entries); }
+		};
+		EventLoop eventLoop = new EventLoop(testOptions(), logger, handler);
+		try {
+			eventLoop.start();
+			try (Socket socket = new Socket("localhost", eventLoop.getPort())) {
+				socket.setSoTimeout(3000);
+				String body = "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"probe\",\"arguments\":{}}}";
+				socket.getOutputStream().write(ascii("GET /first HTTP/1.1\r\nHost: localhost\r\n\r\n"
+						+ "POST /mcp HTTP/1.1\r\nHost: localhost\r\nMCP-Protocol-Version: 2026-07-28\r\n"
+						+ "Content-Type: application/json\r\nContent-Length: " + body.length() + "\r\n\r\n" + body));
+				socket.getOutputStream().flush(); socket.shutdownOutput();
+				Assertions.assertTrue(firstHandled.await(3, TimeUnit.SECONDS));
+				Assertions.assertTrue(finObserved.await(3, TimeUnit.SECONDS), "The fixture must observe FIN while the first response is pending");
+				// Handoff queues work to this same event loop. The EOF turn sets inputHalfClosed
+				// before that work can run, so no sleep or scheduling assumption controls the second dispatch.
+				firstResponse.get().accept(new MicrohttpResponse(200, "OK", List.of(), ascii("first")));
+				String wire = new String(socket.getInputStream().readAllBytes(), StandardCharsets.US_ASCII);
+				Assertions.assertTrue(canceled.await(3, TimeUnit.SECONDS));
+				Assertions.assertEquals("/mcp", canceledRequest.get().uri());
+				Assertions.assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED, canceledReason.get());
+				Assertions.assertEquals(1, cancelCalls.get()); Assertions.assertEquals(0, secondHandlerCalls.get());
+				Assertions.assertTrue(wire.endsWith("first"), wire); Assertions.assertFalse(wire.contains("must-not-run"), wire);
+			}
+		} finally {
+			eventLoop.stop(); eventLoop.join();
+		}
+	}
+
+	@Test
 	public void oversizedClosingRequestDoesNotRetainUploadWhilePreparing413()
 			throws Exception {
 		CountDownLatch handled = new CountDownLatch(1);

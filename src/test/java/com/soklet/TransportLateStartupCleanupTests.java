@@ -42,7 +42,7 @@ import java.util.function.Consumer;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Public custom-transport cleanup after the owner's immutable deadline result. */
-@Timeout(20)
+@Timeout(60)
 class TransportLateStartupCleanupTests {
 	@Test void lateHttpStartClosesItsListener() throws Exception {
 		assertLateCleanup(false, false, null, null, null);

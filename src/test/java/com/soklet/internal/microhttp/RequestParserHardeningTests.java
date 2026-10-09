@@ -12,6 +12,21 @@ class RequestParserHardeningTests {
     private static final String CHUNKED_PREFIX = "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n";
 
     @Test
+    void targetsRejectControlsAndVersionsRequireExactHttpPrefix() {
+        for (char control : new char[]{0, 1, '\r', '\n', 0x1b, 0x7f}) {
+            ByteTokenizer tokenizer = new ByteTokenizer();
+            add(tokenizer, "GET /a" + control + "b HTTP/1.1\r\nHost: a\r\n\r\n");
+            assertThrows(MalformedRequestException.class, new RequestParser(tokenizer)::parse);
+        }
+        for (String version : List.of("http/1.1", "Http/1.1", "HTTP/1.1")) {
+            ByteTokenizer tokenizer = new ByteTokenizer();
+            add(tokenizer, "GET / HTTP/1.1\r\nHost: a\r\n\r\n".replace("HTTP/1.1", version));
+            if (version.equals("HTTP/1.1")) assertTrue(new RequestParser(tokenizer).parse());
+            else assertThrows(MalformedRequestException.class, new RequestParser(tokenizer)::parse);
+        }
+    }
+
+    @Test
     void http10TransferEncodingIsMalformedRegardlessOfKeepAliveOrContentLength() {
         for (String fields : List.of("Transfer-Encoding: chunked\r\n",
                 "Transfer-Encoding: chunked\r\nContent-Length: 0\r\n",

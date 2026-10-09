@@ -29,9 +29,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Instant;
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.ArrayList;
 import java.util.Locale;
 import java.util.List;
 import java.util.Map;
@@ -321,16 +318,7 @@ final class FileResponse {
 			@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
 		requireNonNull(headers);
 
-		Map<String, List<String>> copiedHeaders = new LinkedHashMap<>();
-
-		for (Map.Entry<String, List<String>> entry : headers.entrySet()) {
-			String headerName = requireNonNull(entry.getKey());
-			List<String> copiedHeaderValues = new ArrayList<>(requireNonNull(entry.getValue()));
-			copiedHeaderValues.forEach(value -> requireNonNull(value, format("Header '%s' includes a null value.", headerName)));
-			copiedHeaders.put(headerName, Collections.unmodifiableList(copiedHeaderValues));
-		}
-
-		return Collections.unmodifiableMap(copiedHeaders);
+		return Utilities.immutableValueLists(headers, true);
 	}
 
 	static void rejectControlledHeaderConflicts(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers,

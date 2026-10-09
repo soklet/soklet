@@ -104,7 +104,25 @@ public final class McpEndpointPathLimit {
 		requireNonNull(path);
 		if (!isValidWirePath(path))
 			throw new IllegalArgumentException(
-					"MCP endpoint path must be a normalized ASCII raw URI path; percent-encode non-ASCII characters.");
+					"MCP endpoint path must be a normalized ASCII raw URI path; " + invalidPathReason(path));
 		return requireWithinLimit(path);
+	}
+
+	@NonNull
+	private static String invalidPathReason(@NonNull String path) {
+		if (path.codePoints().anyMatch(character -> character > 0x7F))
+			return "percent-encode non-ASCII characters.";
+		if (path.codePoints().anyMatch(character -> character <= 0x20 || character == 0x7F))
+			return "whitespace and control characters are not allowed.";
+		if (!path.startsWith("/") || path.length() == 1)
+			return "use a non-root absolute path.";
+		if (path.endsWith("/"))
+			return "a trailing slash is not allowed.";
+		if (path.contains("//"))
+			return "empty path segments are not allowed.";
+		for (String segment : path.split("/", -1))
+			if (segment.equals(".") || segment.equals(".."))
+				return "dot path segments are not allowed.";
+		return "queries, fragments, malformed escapes and unescaped URI delimiters are not allowed.";
 	}
 }

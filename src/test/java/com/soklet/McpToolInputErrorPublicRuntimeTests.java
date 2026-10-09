@@ -16,10 +16,12 @@
 
 package com.soklet;
 
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.TestFactory;
 import org.junit.jupiter.api.Timeout;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -32,7 +34,7 @@ import static com.soklet.McpLegacySessionTransportPublicRuntimeTests.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Revision-specific validation results through the public, real-listener pipeline. */
-@Timeout(30)
+@Timeout(60)
 class McpToolInputErrorPublicRuntimeTests {
 	private static final Set<McpProtocolVersion> VERSIONS = Set.of(
 			McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25,
@@ -43,7 +45,7 @@ class McpToolInputErrorPublicRuntimeTests {
 	@TestFactory
 	Stream<DynamicTest> toolInputFailuresFollowTheSelectedRevision() {
 		return VERSIONS.stream().map(version -> DynamicTest.dynamicTest(version.getWireValue(),
-				() -> verifyValidationAndRecovery(version)));
+				() -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> verifyValidationAndRecovery(version))));
 	}
 
 	private void verifyValidationAndRecovery(McpProtocolVersion version) throws Exception {

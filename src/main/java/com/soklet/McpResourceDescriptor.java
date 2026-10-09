@@ -28,6 +28,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
+import static com.soklet.internal.mcp.protocol.McpApplicationMetadata.requireApplicationMetadata;
 
 /**
  * Immutable concrete resource descriptor emitted by {@code resources/list}.
@@ -79,7 +80,7 @@ public final class McpResourceDescriptor {
 		this.icons = List.copyOf(builder.icons);
 		this.annotations = builder.annotations;
 		this.sizeInBytes = builder.sizeInBytes;
-		this.metadata = builder.metadata;
+		this.metadata = requireApplicationMetadata(builder.metadata);
 	}
 
 	/** @return absolute normalized resource URI in ASCII wire form */
@@ -178,11 +179,7 @@ public final class McpResourceDescriptor {
 
 	@NonNull
 	private static String requireMimeType(@NonNull String mimeType) {
-		requireNonNull(mimeType);
-		if (mimeType.isBlank())
-			throw new IllegalArgumentException(
-					"MCP resource MIME types must not be blank.");
-		return mimeType;
+		return McpContentValueSupport.requireMimeType(mimeType);
 	}
 
 	/**
@@ -213,14 +210,14 @@ public final class McpResourceDescriptor {
 
 		private Builder(@NonNull URI uri, @NonNull String name) {
 			this.uri = requireNonNull(uri);
-			this.name = requireNonNull(name);
+			this.name = McpContentValueSupport.requireWellFormedString(name);
 		}
 
 		/** @param title human-readable title
 		 * @return this builder */
 		@NonNull
 		public Builder title(@NonNull String title) {
-			this.title = requireNonNull(title);
+			this.title = McpContentValueSupport.requireWellFormedString(title);
 			return this;
 		}
 
@@ -228,7 +225,7 @@ public final class McpResourceDescriptor {
 		 * @return this builder */
 		@NonNull
 		public Builder description(@NonNull String description) {
-			this.description = requireNonNull(description);
+			this.description = McpContentValueSupport.requireWellFormedString(description);
 			return this;
 		}
 

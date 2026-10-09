@@ -1338,3 +1338,15 @@ phase signature ledgers nor the released-artifact incompatibility ledger is
 regenerated at this checkpoint. `McpOperationResult` remains open until the
 Completion and Skills result types can be sealed together in one compiling
 change.
+
+## 2026-10-09 streaming completion preparation amendment
+
+The owner approved two additive default methods:
+`LifecycleObserver.willWriteResponseStream(StreamingResponseHandle)` and
+`MetricsCollector.willWriteResponseStream(StreamingResponseHandle)`. Their
+nonnull parameter is named `streamingResponseHandle`. Preparation uses the
+original dispatched request and the same handle later passed to termination;
+it precedes handling finish, while termination may precede finish. Collection
+buffers one early terminal observation without blocking. Without preparation,
+request accounting ends at handoff. Built-in transports and delegating adapters
+forward this guarantee explicitly. No new type or abstract method is added.

@@ -502,6 +502,9 @@ final class McpLegacySessionStore {
 			if (!sourceActive.getAsBoolean()) return;
 			for (Session session : endpointSessions.getOrDefault(new EndpointRevision(path, revision), Set.of())) {
 				CatalogDirty dirty = session.catalogDirty.computeIfAbsent(notificationType, ignored -> new CatalogDirty());
+				if (dirty.changeGeneration == Long.MAX_VALUE)
+					throw new IllegalStateException("The MCP catalog change generation cannot overflow.");
+				dirty.changeGeneration++;
 				if (!dirty.dirty || !dirty.sourceActive.getAsBoolean()) {
 					dirty.dirty = true; dirty.sequence++;
 				}
@@ -530,16 +533,44 @@ final class McpLegacySessionStore {
 		}
 	}
 
-	/** Only a freshly admitted corresponding list operation rearms the catalog hint. */
-	boolean rearmCatalog(@NonNull Call verifiedUse, @NonNull McpResourceNotificationType notificationType) {
+	record CatalogReadGeneration(@NonNull Call verifiedUse,
+			@NonNull McpResourceNotificationType notificationType, long changeGeneration) {}
+
+	/** Captures the catalog generation before a first-page projection begins. */
+	@NonNull Optional<@NonNull CatalogReadGeneration> beginCatalogRead(
+			@NonNull Call verifiedUse, @NonNull McpResourceNotificationType notificationType) {
 		requireNonNull(verifiedUse); requireCatalogType(notificationType);
 		synchronized (lock) {
 			if (!owned(verifiedUse) || !verifiedUse.logical || !verifiedUse.accepted || !verifiedUse.session.live)
+				return Optional.empty();
+			CatalogDirty dirty = verifiedUse.session.catalogDirty.computeIfAbsent(notificationType, ignored -> new CatalogDirty());
+			return Optional.of(new CatalogReadGeneration(verifiedUse, notificationType, dirty.changeGeneration));
+		}
+	}
+
+	/** A successful first-page write rearms only changes already represented by its projection. */
+	boolean acknowledgeCatalogRead(@NonNull CatalogReadGeneration generation) {
+		requireNonNull(generation);
+		Call verifiedUse = generation.verifiedUse();
+		synchronized (lock) {
+			if (!owned(verifiedUse) || !verifiedUse.physical || !verifiedUse.accepted || !verifiedUse.session.live)
 				return false;
-			CatalogDirty dirty = verifiedUse.session.catalogDirty.get(notificationType);
-			if (dirty != null) { dirty.dirty = false; dirty.sequence++; }
+			CatalogDirty dirty = verifiedUse.session.catalogDirty.get(generation.notificationType());
+			if (dirty == null)
+				return false;
+			if (dirty.changeGeneration != generation.changeGeneration()) {
+				// A previous hint may already have prompted this list. A change
+				// arriving during projection needs a fresh hint after that write.
+				if (dirty.dirty && dirty.writtenSequence == dirty.sequence) dirty.sequence++;
+				return false;
+			}
+			dirty.dirty = false; dirty.sequence++;
 			return true;
 		}
+	}
+
+	boolean rearmCatalog(@NonNull Call verifiedUse, @NonNull McpResourceNotificationType notificationType) {
+		return beginCatalogRead(verifiedUse, notificationType).map(this::acknowledgeCatalogRead).orElse(false);
 	}
 
 	/** The bounded dirty state contains no event history and produces at most one attempt per session/key. */
@@ -772,7 +803,7 @@ final class McpLegacySessionStore {
 			else {
 				OwnerUsage usage = owners.get(owner);
 				Status capacity = publicationCapacityWhileLocked(owner, usage, bytes, retainedRequestEvidenceBytes);
-				while (capacity != Status.ACCEPTED) {
+				while (capacity == Status.OWNER_CAPACITY || capacity == Status.GLOBAL_CAPACITY) {
 					Session evictable = oldestEvictableWhileLocked(owner, now);
 					if (evictable == null) break;
 					retireWhileLocked(evictable, Cause.SESSION_CLOSED, actions);
@@ -1776,6 +1807,7 @@ final class McpLegacySessionStore {
 	}
 	private final class CatalogDirty {
 		private boolean dirty;
+		private long changeGeneration;
 		private long sequence;
 		private long writtenSequence;
 		private @Nullable DeliveryAttempt pendingAttempt;

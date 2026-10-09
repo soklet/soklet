@@ -42,6 +42,36 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Timeout(30)
 public class SokletProcessorRouteIndexPersistenceTests {
+	@Test
+	void incrementalAmbiguityFailsBeforePublishingMetadata(@TempDir Path directory) throws Exception {
+		Fixture fixture = new Fixture(directory, "sidecar");
+		Files.writeString(fixture.alpha, """
+				package example;
+				import com.soklet.annotation.GET;
+				import com.soklet.annotation.PathParameter;
+				public class Alpha {
+				  @GET("/item/{id}") public String get(@PathParameter String id) { return id; }
+				}
+				""", StandardCharsets.UTF_8);
+		fixture.compile(fixture.alpha);
+		String index = Files.readString(fixture.index());
+		String sidecar = Files.readString(fixture.sidecar());
+		Files.writeString(fixture.beta, """
+				package example;
+				import com.soklet.annotation.GET;
+				import com.soklet.annotation.PathParameter;
+				public class Beta {
+				  @GET("/item/{other}") public String get(@PathParameter String other) { return other; }
+				}
+				""", StandardCharsets.UTF_8);
+		assertFalse(fixture.tryCompile("sidecar", List.of(fixture.beta), List.of(), List.of()));
+		for (String context : List.of("HTTP GET", "overlaps", "example.Alpha#get(java.lang.String)",
+				"example.Beta#get(java.lang.String)", "/item/{id}", "/item/{other}"))
+			assertTrue(fixture.diagnostics.contains(context), fixture.diagnostics);
+		assertEquals(index, Files.readString(fixture.index()));
+		assertEquals(sidecar, Files.readString(fixture.sidecar()));
+	}
+
 
 	@Test
 	void deletedOwnerIsPrunedWhileUntouchedOwnerRemains(@TempDir Path directory) throws Exception {

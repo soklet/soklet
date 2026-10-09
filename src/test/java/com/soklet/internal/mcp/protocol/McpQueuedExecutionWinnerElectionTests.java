@@ -380,7 +380,7 @@ public class McpQueuedExecutionWinnerElectionTests {
 		private final List<RaceEvent> order;
 		private final MonotonicManualClock clock;
 		private final ManualExecutorService executor;
-		private final CountingExecutionObserver observer;
+		private final BlockingPromotionExecutionObserver observer;
 		private final McpApplicationExecution execution;
 		private final MicrohttpRequest queuedTransportRequest;
 		private final McpJsonRpcMessage.Request queuedRequest;
@@ -392,12 +392,15 @@ public class McpQueuedExecutionWinnerElectionTests {
 		private final AtomicInteger queuedCleanups;
 		private final AtomicReference<McpApplicationResponse> activeResponse;
 		private final AtomicReference<McpApplicationResponse> queuedResponse;
+		private final AtomicReference<Throwable> promotionFailure = new AtomicReference<>();
+		private @Nullable Thread promotionWorker;
 
 		private LinearizationFixture(List<RaceEvent> order) throws Exception {
 			this.order = List.copyOf(order);
 			this.clock = new MonotonicManualClock();
 			this.executor = new ManualExecutorService();
-			this.observer = new CountingExecutionObserver();
+			this.observer = new BlockingPromotionExecutionObserver(
+					order.get(0) == RaceEvent.PROMOTION);
 			this.execution = new McpApplicationExecution(
 					new McpApplicationExecutionConfiguration(
 							1, 1, Duration.ofNanos(QUEUED_DEADLINE_NANOS),
@@ -498,10 +501,26 @@ public class McpQueuedExecutionWinnerElectionTests {
 			}, "mcp-queued-race-" + event.name().toLowerCase());
 		}
 
-		private void run(RaceEvent event) {
+		private void run(RaceEvent event) throws InterruptedException {
 			switch (event) {
-				case PROMOTION -> Assertions.assertTrue(this.executor.runNext(),
-						"The active owner was not submitted: " + orderString());
+				case PROMOTION -> {
+					this.promotionWorker = new Thread(() -> {
+						try {
+							Assertions.assertTrue(this.executor.runNext(),
+									"The active owner was not submitted: " + orderString());
+						} catch (Throwable throwable) {
+							this.promotionFailure.compareAndSet(null, throwable);
+						}
+					}, "mcp-queued-race-physical-worker");
+					this.promotionWorker.start();
+					if (this.order.get(0) == RaceEvent.PROMOTION)
+						this.observer.awaitPromotion();
+					else {
+						this.promotionWorker.join(TimeUnit.SECONDS.toMillis(5));
+						Assertions.assertFalse(this.promotionWorker.isAlive(), orderString());
+						Assertions.assertNull(this.promotionFailure.get(), orderString());
+					}
+				}
 				case DEADLINE -> this.clock.advanceAndRun(QUEUED_DEADLINE_NANOS,
 						this.execution::runTimerCycle);
 				case CLIENT_DISCONNECT -> this.execution.cancel(
@@ -510,7 +529,7 @@ public class McpQueuedExecutionWinnerElectionTests {
 			}
 		}
 
-		private void assertOutcome() {
+		private void assertOutcome() throws InterruptedException {
 			boolean promotionFirst = this.order.get(0) == RaceEvent.PROMOTION;
 			boolean deadlineWins = this.order.indexOf(RaceEvent.DEADLINE)
 					< this.order.indexOf(RaceEvent.CLIENT_DISCONNECT);
@@ -524,12 +543,17 @@ public class McpQueuedExecutionWinnerElectionTests {
 					beforePromotedRun.retainedExchanges(), orderString());
 			Assertions.assertEquals(0, beforePromotedRun.retainedTransportLeases(),
 					orderString());
-			Assertions.assertEquals(promotionFirst ? 1 : 0,
-					this.executor.pendingCommands(), orderString());
-			Assertions.assertEquals(promotionFirst ? 2 : 1,
-					this.executor.submissionCount(), orderString());
+			Assertions.assertEquals(0, this.executor.pendingCommands(), orderString());
+			Assertions.assertEquals(1, this.executor.submissionCount(),
+					"Promotion retains its physical worker: " + orderString());
 			Assertions.assertEquals(0, this.queuedInvocations.get(), orderString());
 
+			this.observer.releasePromotion();
+			if (this.promotionWorker != null) {
+				this.promotionWorker.join(TimeUnit.SECONDS.toMillis(5));
+				Assertions.assertFalse(this.promotionWorker.isAlive(), orderString());
+			}
+			Assertions.assertNull(this.promotionFailure.get(), orderString());
 			this.executor.runAll();
 			McpApplicationExecutionSnapshot finished = this.execution.snapshot();
 			Assertions.assertEquals(0, finished.activeHandlerSlots(), orderString());
@@ -593,6 +617,9 @@ public class McpQueuedExecutionWinnerElectionTests {
 		@Override
 		public void close() throws Exception {
 			this.execution.stop();
+			this.observer.releasePromotion();
+			if (this.promotionWorker != null)
+				this.promotionWorker.join(TimeUnit.SECONDS.toMillis(5));
 			this.clock.releaseBackgroundCycle();
 			this.executor.runAll();
 			Assertions.assertTrue(
@@ -667,15 +694,15 @@ public class McpQueuedExecutionWinnerElectionTests {
 				throw new IllegalStateException("Observer deferral is not active.");
 		}
 
-		private int deferralDepth() {
+		final int deferralDepth() {
 			return deferralDepth.get();
 		}
 
-		private int executionStartedCount() {
+		final int executionStartedCount() {
 			return executionStarted.get();
 		}
 
-		private int executionFinishedCount() {
+		final int executionFinishedCount() {
 			return executionFinished.get();
 		}
 
@@ -689,6 +716,37 @@ public class McpQueuedExecutionWinnerElectionTests {
 
 		final int capacityRejectedCount() {
 			return capacityRejected.get();
+		}
+	}
+
+	/** Holds the physical worker after promotion accounting and before successor entry. */
+	private static final class BlockingPromotionExecutionObserver
+			extends CountingExecutionObserver {
+		private final boolean enabled;
+		private final AtomicBoolean consumed = new AtomicBoolean();
+		private final CountDownLatch promoted = new CountDownLatch(1);
+		private final CountDownLatch release = new CountDownLatch(1);
+
+		private BlockingPromotionExecutionObserver(boolean enabled) {
+			this.enabled = enabled;
+		}
+
+		@Override
+		public void drain() {
+			if (this.enabled && executionStartedCount() == 2
+					&& executionFinishedCount() == 1
+					&& this.consumed.compareAndSet(false, true)) {
+				this.promoted.countDown();
+				awaitUninterruptibly(this.release);
+			}
+		}
+
+		private void awaitPromotion() throws InterruptedException {
+			await(this.promoted, "The physical worker did not reserve its queued successor.");
+		}
+
+		private void releasePromotion() {
+			this.release.countDown();
 		}
 	}
 

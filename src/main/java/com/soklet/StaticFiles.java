@@ -27,15 +27,12 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
-import java.nio.file.DirectoryStream;
-import java.nio.file.DirectoryIteratorException;
 import java.nio.file.InvalidPathException;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.text.Normalizer;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.HexFormat;
@@ -133,11 +130,10 @@ public final class StaticFiles {
 			validateIndexFileName(indexFileName);
 
 		try {
-			Path configuredNoFollowRoot = this.root.toRealPath(LinkOption.NOFOLLOW_LINKS);
 			this.followRoot = this.root.toRealPath();
-			// The configured root is trusted input. Retain a root symlink for validation,
-			// but use the actual root spelling for resolver identity on ordinary roots.
-			this.noFollowRoot = Files.isSymbolicLink(configuredNoFollowRoot) ? configuredNoFollowRoot : this.followRoot;
+			// Preserve the configured ancestor spelling and resolve trusted ancestor links
+			// on each request, so resolver policies and atomic deployment swaps keep working.
+			this.noFollowRoot = this.root;
 		} catch (IOException e) {
 			throw new UncheckedIOException(format("Unable to resolve static file root '%s'.", this.root), e);
 		}
@@ -145,6 +141,8 @@ public final class StaticFiles {
 		if (getFollowSymlinks()) {
 			if (!Files.isDirectory(this.followRoot))
 				throw new IllegalArgumentException(format("Static file root '%s' is not a directory.", this.root));
+		} else if (Files.isSymbolicLink(this.noFollowRoot)) {
+			throw new IllegalArgumentException(format("Static file root '%s' is a symbolic link; enable followSymlinks to use it.", this.root));
 		} else if (!Files.isDirectory(this.noFollowRoot, LinkOption.NOFOLLOW_LINKS)) {
 			throw new IllegalArgumentException(format("Static file root '%s' is not a directory.", this.root));
 		}
@@ -353,47 +351,20 @@ public final class StaticFiles {
 
 	@NonNull
 	private Optional<Path> canonicalNoFollowPath(@NonNull Path candidate) {
-		if (!candidate.startsWith(this.noFollowRoot) || hasSymlinkComponent(candidate))
+		if (!candidate.startsWith(this.noFollowRoot) || Files.isSymbolicLink(this.noFollowRoot)
+				|| hasSymlinkComponent(candidate))
 			return Optional.empty();
-		Path current = this.noFollowRoot;
 		try {
-			for (Path segment : this.noFollowRoot.relativize(candidate)) {
-				if (segment.toString().isEmpty())
-					continue;
-				Path requested = current.resolve(segment);
-				BasicFileAttributes requestedAttributes = Files.readAttributes(requested, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
-				if (requestedAttributes.isSymbolicLink())
-					return Optional.empty();
-				Path matched = null;
-				try (DirectoryStream<Path> entries = Files.newDirectoryStream(current)) {
-					for (Path entry : entries) {
-						Path fileName = entry.getFileName();
-						if (fileName == null)
-							continue;
-						String entryName = fileName.toString();
-						if (entryName.equals(segment.toString())) {
-							matched = entry;
-							break;
-						}
-						// Other hard-link names are distinct policy paths, not spelling aliases.
-						if (!Normalizer.normalize(entryName, Normalizer.Form.NFC)
-								.equalsIgnoreCase(Normalizer.normalize(segment.toString(), Normalizer.Form.NFC)))
-							continue;
-						BasicFileAttributes entryAttributes = Files.readAttributes(entry, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
-						if (!entryAttributes.isSymbolicLink() && requestedAttributes.fileKey() != null
-								&& requestedAttributes.fileKey().equals(entryAttributes.fileKey())) {
-							if (matched != null)
-								return Optional.empty();
-							matched = entry;
-						}
-					}
-				}
-				if (matched == null)
-					return Optional.empty();
-				current = matched;
-			}
-			return hasSymlinkComponent(current) ? Optional.empty() : Optional.of(current);
-		} catch (IOException | DirectoryIteratorException e) {
+			Path realRoot = this.noFollowRoot.toRealPath();
+			Path realCandidate = candidate.toRealPath();
+			if (!realCandidate.startsWith(realRoot))
+				return Optional.empty();
+			// Native real-path resolution supplies actual case/Unicode spelling without
+			// listing directories. Preserve distinct hard-link names as policy paths.
+			Path canonical = this.noFollowRoot.resolve(realRoot.relativize(realCandidate));
+			return Files.isSymbolicLink(this.noFollowRoot) || hasSymlinkComponent(candidate)
+					|| hasSymlinkComponent(canonical) ? Optional.empty() : Optional.of(canonical);
+		} catch (IOException e) {
 			return Optional.empty();
 		}
 	}

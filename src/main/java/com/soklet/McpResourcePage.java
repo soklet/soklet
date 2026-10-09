@@ -27,6 +27,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
+import static com.soklet.internal.mcp.protocol.McpApplicationMetadata.requireApplicationMetadata;
 
 /**
  * One immutable complete {@code resources/list} page.
@@ -58,7 +59,7 @@ public final class McpResourcePage implements McpOperationResult {
 
 	private McpResourcePage(@NonNull Builder builder) {
 		this.resourceDescriptors = List.copyOf(builder.resourceDescriptors);
-		this.metadata = builder.metadata;
+		this.metadata = requireApplicationMetadata(builder.metadata);
 		this.nextCursor = builder.nextCursor;
 		this.cacheTimeToLiveOverride = builder.cacheTimeToLiveOverride;
 	}

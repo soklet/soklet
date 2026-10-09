@@ -1156,11 +1156,13 @@ public final class McpServerRuntimeBridge {
 				if (sessionConfig.isEmpty() || controller.isEmpty()
 						|| !endpoint.getSessionProtocolVersions().contains(protocolVersion))
 					throw new IllegalStateException(
-							"Legacy subscriptions require matching sessions and an HTTP admission controller.");
+							"Legacy subscriptions require matching sessions and an HTTP admission controller "
+									+ "(endpoint=" + endpoint.getPath() + ", revision=" + protocolVersion.getWireValue() + ").");
 				Set<McpResourceNotificationType> families = legacySubscriptionFamilies(endpointPlan, protocolVersion);
 				if (families.isEmpty())
 					throw new IllegalStateException(
-							"Legacy subscriptions require effective event-source notification families for each selected revision.");
+							"Legacy subscriptions require effective event-source notification families "
+									+ "(endpoint=" + endpoint.getPath() + ", revision=" + protocolVersion.getWireValue() + ").");
 				familiesByRevision.put(protocolVersion.getWireValue(), families);
 			}
 			if (!familiesByRevision.isEmpty())
@@ -1205,7 +1207,8 @@ public final class McpServerRuntimeBridge {
 				&& endpoint.getResourceRegistrations().stream().noneMatch(resource ->
 						resource.getProtocolVersions().contains(protocolVersion)))
 			throw new IllegalStateException(
-					"Legacy resource notification families require a resource surface at each selected revision.");
+					"Legacy resource notification families require a resource surface (endpoint="
+							+ endpoint.getPath() + ", revision=" + protocolVersion.getWireValue() + ").");
 		endpointPlan.catalogLocalizer().ifPresent(localizer -> {
 			if (endpoint.getToolRegistrations().stream()
 					.anyMatch(tool -> tool.getProtocolVersions().contains(protocolVersion)
@@ -1974,6 +1977,11 @@ public final class McpServerRuntimeBridge {
 	public void prepareLifecycleStart(
 			LifecycleAdapter.@NonNull Generation lifecycleGeneration) {
 		this.runtime.prepareLifecycleStart(requireNonNull(lifecycleGeneration));
+	}
+
+	/** Closes physical listener admission without delivering application phases. */
+	public void stopStartupListener(LifecycleAdapter.@NonNull Generation lifecycleGeneration) {
+		this.runtime.stopStartupListener(requireNonNull(lifecycleGeneration));
 	}
 
 	@NonNull

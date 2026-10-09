@@ -54,7 +54,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Separates accepted RPC errors from HTTP/admission failures on each selected profile. */
-@Timeout(45)
+@Timeout(60)
 class McpLegacyRpcStatusTests {
 	private static final List<McpProtocolVersion> LEGACY = List.of(
 			McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25);

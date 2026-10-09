@@ -206,7 +206,7 @@ public final class ShutdownResult {
 				.append(this.unexpectedShutdownComponentTermination == null ? "none"
 						: this.unexpectedShutdownComponentTermination.getShutdownComponentType().name());
 		this.internalResult.retentionSummary().ifPresent(retention -> diagnostic
-				.append(", retainedActivityCounts=").append(retention.counts()));
+				.append(", residualComponentCounts=").append(retention.counts()));
 		return diagnostic.append('}').toString();
 	}
 

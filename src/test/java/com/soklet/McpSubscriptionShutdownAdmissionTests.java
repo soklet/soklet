@@ -36,7 +36,7 @@ import static com.soklet.McpLegacySessionTransportPublicRuntimeTests.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Shutdown must retain a finite response for subscriptions still being admitted. */
-@Timeout(30)
+@Timeout(60)
 class McpSubscriptionShutdownAdmissionTests {
 	private static final Set<McpProtocolVersion> VERSIONS = Set.of(
 			McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25,

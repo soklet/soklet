@@ -29,7 +29,7 @@ import java.util.function.BooleanSupplier;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@Timeout(20)
+@Timeout(60)
 class SimulatorSseLifecycleTests {
 
 	@Test

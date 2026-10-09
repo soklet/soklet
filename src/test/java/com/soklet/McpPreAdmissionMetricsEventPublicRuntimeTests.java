@@ -64,6 +64,34 @@ public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 					.build();
 
 	@Test
+	public void throwingAdmissionLogsABoundedFailureTypeWithoutCredentialCarriers() throws Exception {
+		String secret = "PRIVATE-ADMISSION-CREDENTIAL-CANARY";
+		IllegalStateException failure = new IllegalStateException(secret + " message", new RuntimeException(secret + " cause"));
+		failure.addSuppressed(new RuntimeException(secret + " suppressed"));
+		RecordingLifecycleObserver observer = new RecordingLifecycleObserver(0);
+		McpServer server = serverBuilder(endpoint("admission-failure-diagnostics"))
+				.admissionController(context -> { throw failure; }).build();
+		try (Soklet soklet = managedSoklet(server, new RecordingMetricsCollector(1), observer)) {
+			soklet.start();
+			HttpResponse<String> response = send(boundPort(server), discoveryRequest("admission-failed"),
+					"server/discover", Map.of("Authorization", "Bearer " + secret));
+			Assertions.assertEquals(500, response.statusCode());
+			Assertions.assertFalse(response.body().contains(failure.getMessage()));
+			LogEvent diagnostic = observer.logEvents().stream()
+					.filter(event -> event.getLogEventType() == LogEventType.SERVER_INTERNAL_ERROR)
+					.findFirst().orElseThrow();
+			Assertions.assertTrue(diagnostic.getThrowable().isEmpty());
+			Assertions.assertTrue(diagnostic.getRequest().isEmpty());
+			Assertions.assertTrue(diagnostic.getMessage().contains("failureType=java.lang.IllegalStateException"));
+			Assertions.assertTrue(diagnostic.getMessage().contains("endpoint=/mcp"));
+			for (LogEvent event : observer.logEvents()) {
+				Assertions.assertFalse(event.getMessage().contains(secret));
+				Assertions.assertTrue(event.getThrowable().isEmpty());
+			}
+		}
+	}
+
+	@Test
 	public void acceptedMalformedRequestEmitsExactProtocolErrorThenRejectionWithoutAdmission()
 			throws Exception {
 		RecordingMetricsCollector collector = new RecordingMetricsCollector(1);

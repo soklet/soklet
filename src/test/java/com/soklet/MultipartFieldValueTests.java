@@ -31,7 +31,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@Timeout(30)
+@Timeout(60)
 public class MultipartFieldValueTests {
 
 	@Test

@@ -63,7 +63,10 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 	 * and duration measured at election. Terminal observation runs asynchronously after framework state is
 	 * released and establishment observation finishes; {@link #close()} does not wait for application observers.
 	 * Observer work remains counted until it returns, including after an incomplete simulator teardown.
-	 * Typed payload delivery does not produce socket-write callbacks or byte/write-duration metrics.
+	 * Consumer delivery runs synchronously on the broadcasting or registration thread; a slow
+	 * consumer delays that caller and other clients in the same broadcast. Reentrant/concurrent
+	 * pending deliveries have the bounded queue described above. Typed payload delivery does not
+	 * produce broadcast/drop metrics, socket-write callbacks or byte/write-duration metrics.
 	 * <p>
 	 * The data provided when the handshake was accepted is available via {@link #getSseHandshakeResult()}, and the final data sent to the client is available via {@link #getHttpRequestResult()}.
 	 */

@@ -42,6 +42,46 @@ public class StreamLifecycleCoordinatorTests {
 	private static final Duration GRACE = Duration.ofSeconds(30);
 
 	@Test
+	public void arbitraryExecutorSubmissionFailureRetiresUnenteredProducerWork() throws Exception {
+		for (Throwable failure : List.of(new IllegalStateException("executor failed"), new OutOfMemoryError("thread creation failed"))) {
+			StreamLifecycleCoordinator coordinator = new StreamLifecycleCoordinator(1, 1, GRACE, ignored -> {});
+			ExecutorService executor = Executors.newSingleThreadExecutor(task -> {
+				if (failure instanceof Error error) throw error;
+				throw (RuntimeException) failure;
+			});
+			try {
+				var reservation = reserve(coordinator);
+				assertSameFailure(failure, () -> reservation.execute(executor, () -> Assertions.fail("Producer entered")));
+				reservation.complete();
+				Assertions.assertEquals(0, coordinator.snapshot().reservations());
+				var recovered = reserve(coordinator);
+				recovered.abandon();
+			} finally {
+				executor.shutdownNow();
+				coordinator.force();
+				Assertions.assertTrue(coordinator.awaitTermination(System.nanoTime() + TimeUnit.SECONDS.toNanos(3)));
+			}
+		}
+	}
+
+	private static void assertSameFailure(Throwable failure, org.junit.jupiter.api.function.Executable action) {
+		Assertions.assertSame(failure, Assertions.assertThrows(failure.getClass(), action));
+	}
+
+	@Test
+	public void maximumConfiguredCapacityDoesNotEagerlyAllocateCapacitySizedArrays() throws Exception {
+		StreamLifecycleCoordinator coordinator = new StreamLifecycleCoordinator(Integer.MAX_VALUE / 2, 1, GRACE, ignored -> {});
+		try {
+			var reservation = reserve(coordinator);
+			reservation.abandon();
+			Assertions.assertEquals(0, coordinator.snapshot().reservations());
+		} finally {
+			coordinator.force();
+			Assertions.assertTrue(coordinator.awaitTermination(System.nanoTime() + TimeUnit.SECONDS.toNanos(3)));
+		}
+	}
+
+	@Test
 	public void rejection_observers_share_callback_capacity_and_retain_physical_shutdown_work() throws Exception {
 		StreamLifecycleCoordinator coordinator = new StreamLifecycleCoordinator(1, 1, GRACE, ignored -> {});
 		var reservation = reserve(coordinator);
@@ -1148,6 +1188,172 @@ public class StreamLifecycleCoordinatorTests {
 			reservation.complete();
 			coordinator.force();
 			Assertions.assertTrue(coordinator.awaitTermination(deadlineAfterSeconds(5)));
+		}
+	}
+
+	@Test
+	@org.junit.jupiter.api.Timeout(value = 60, unit = TimeUnit.SECONDS)
+	public void competingProducerEvidenceWaitsForPhysicalRetirementAndKeepsCleanupPrimary() throws Exception {
+		AtomicReference<Throwable> observedCleanup = new AtomicReference<>();
+		AtomicInteger producerDiagnostics = new AtomicInteger();
+		CountDownLatch cleanupEntered = new CountDownLatch(1);
+		CountDownLatch releaseCleanup = new CountDownLatch(1);
+		StreamLifecycleCoordinator coordinator = new StreamLifecycleCoordinator(1, 1, GRACE,
+				ignored -> Assertions.fail("Unexpected framework diagnostic"));
+		StreamLifecycleCoordinator.Reservation reservation = reserve(coordinator);
+		AtomicReference<StreamLifecycleCoordinator.PublisherWork> publisher = new AtomicReference<>();
+		IOException producerFailure = new IOException("independent producer failure");
+		IOException cleanupFailure = new IOException("later publisher cancel failed");
+		reservation.bindProducerFailureObserver(ignored -> producerDiagnostics.incrementAndGet());
+		reservation.bindCleanupFailureObserver(failure -> {
+			observedCleanup.set(failure);
+			cleanupEntered.countDown();
+			awaitUninterruptibly(releaseCleanup);
+		});
+		try {
+			Assertions.assertTrue(reservation.executeInline(() -> {
+				publisher.set(reservation.retainPublisher());
+				reservation.reportProducerFailure(producerFailure);
+				reservation.complete();
+			}));
+			Assertions.assertEquals(0, coordinator.snapshot().diagnostics());
+			Assertions.assertEquals(0, producerDiagnostics.get());
+			Assertions.assertEquals(1, coordinator.snapshot().reservations());
+			reservation.reportCleanupFailure(cleanupFailure);
+			await(cleanupEntered);
+			Assertions.assertSame(cleanupFailure, observedCleanup.get());
+			Assertions.assertArrayEquals(new Throwable[]{producerFailure}, cleanupFailure.getSuppressed());
+			publisher.get().close();
+			coordinator.stopAdmission();
+			Assertions.assertFalse(coordinator.awaitTermination(System.nanoTime()));
+			releaseCleanup.countDown();
+			Assertions.assertTrue(coordinator.awaitTermination(deadlineAfterSeconds(5)));
+			Assertions.assertEquals(0, producerDiagnostics.get());
+			Assertions.assertEquals(0, coordinator.snapshot().reservations());
+		} finally {
+			releaseCleanup.countDown();
+			if (publisher.get() != null) publisher.get().close();
+			reservation.complete();
+			coordinator.force();
+			Assertions.assertTrue(coordinator.awaitTermination(deadlineAfterSeconds(5)));
+		}
+	}
+
+	@Test
+	@org.junit.jupiter.api.Timeout(value = 60, unit = TimeUnit.SECONDS)
+	public void producerEvidenceDoesNotCreateSuppressionCyclesOrScanPastItsBudget() throws Exception {
+		for (boolean deep : List.of(false, true)) {
+			AtomicReference<Throwable> observed = new AtomicReference<>();
+			AtomicInteger causeReads = new AtomicInteger();
+			AtomicInteger producerDiagnostics = new AtomicInteger();
+			CountDownLatch diagnosed = new CountDownLatch(1);
+			StreamLifecycleCoordinator coordinator = new StreamLifecycleCoordinator(1, 1, GRACE, observed::set);
+			StreamLifecycleCoordinator.Reservation reservation = reserve(coordinator);
+			AtomicReference<StreamLifecycleCoordinator.PublisherWork> publisher = new AtomicReference<>();
+			IOException cleanupFailure = new IOException("cleanup primary");
+			Throwable candidate = cleanupFailure;
+			if (deep) {
+				for (int index = 0; index < 96; index++) {
+					CauseProbe enclosing = new CauseProbe(causeReads, null);
+					enclosing.initCause(candidate);
+					candidate = enclosing;
+				}
+			} else {
+				candidate = new IOException("lexical primary");
+				candidate.addSuppressed(cleanupFailure);
+			}
+			Throwable producerFailure = candidate;
+			reservation.bindProducerFailureObserver(ignored -> producerDiagnostics.incrementAndGet());
+			reservation.bindCleanupFailureObserver(failure -> { observed.set(failure); diagnosed.countDown(); });
+			try {
+				Assertions.assertTrue(reservation.executeInline(() -> {
+					publisher.set(reservation.retainPublisher());
+					reservation.reportProducerFailure(producerFailure);
+					reservation.complete();
+				}));
+				reservation.reportCleanupFailure(cleanupFailure);
+				await(diagnosed);
+				publisher.get().close();
+				coordinator.stopAdmission();
+				Assertions.assertTrue(coordinator.awaitTermination(deadlineAfterSeconds(5)));
+				Assertions.assertSame(cleanupFailure, observed.get());
+				Assertions.assertEquals(0, cleanupFailure.getSuppressed().length,
+						"An observed or uncertain back edge must not be added to the cleanup primary");
+				Assertions.assertEquals(0, producerDiagnostics.get());
+				if (deep) Assertions.assertTrue(causeReads.get() > 0 && causeReads.get() <= 64);
+				else Assertions.assertArrayEquals(new Throwable[]{cleanupFailure}, producerFailure.getSuppressed());
+			} finally {
+				if (publisher.get() != null) publisher.get().close();
+				reservation.complete();
+				coordinator.force();
+				Assertions.assertTrue(coordinator.awaitTermination(deadlineAfterSeconds(5)));
+			}
+		}
+	}
+
+	@Test
+	@org.junit.jupiter.api.Timeout(value = 60, unit = TimeUnit.SECONDS)
+	public void applicationThrowableMonitorDoesNotBlockCoordinatorState() throws Exception {
+		CountDownLatch monitorHeld = new CountDownLatch(1), releaseMonitor = new CountDownLatch(1);
+		CountDownLatch causeReadEntered = new CountDownLatch(1), reportReturned = new CountDownLatch(1);
+		CountDownLatch stateReturned = new CountDownLatch(1);
+		CauseProbe cleanupFailure = new CauseProbe(new AtomicInteger(), causeReadEntered);
+		StreamLifecycleCoordinator coordinator = new StreamLifecycleCoordinator(1, 1, GRACE, ignored -> {});
+		StreamLifecycleCoordinator.Reservation reservation = reserve(coordinator);
+		AtomicReference<StreamLifecycleCoordinator.PublisherWork> publisher = new AtomicReference<>();
+		AtomicReference<Throwable> stateFailure = new AtomicReference<>();
+		AtomicReference<StreamLifecycleCoordinator.Snapshot> snapshot = new AtomicReference<>();
+		Thread holder = new Thread(() -> {
+			synchronized (cleanupFailure) {
+				monitorHeld.countDown();
+				awaitUninterruptibly(releaseMonitor);
+			}
+		}, "diagnostic-throwable-monitor-holder");
+		Thread reporter = new Thread(() -> {
+			try { reservation.reportCleanupFailure(cleanupFailure); }
+			finally { reportReturned.countDown(); }
+		}, "diagnostic-throwable-reporter");
+		Thread stateProbe = new Thread(() -> {
+			try { coordinator.force(); snapshot.set(coordinator.snapshot()); }
+			catch (Throwable failure) { stateFailure.set(failure); }
+			finally { stateReturned.countDown(); }
+		}, "diagnostic-coordinator-state-probe");
+		holder.setDaemon(true); reporter.setDaemon(true); stateProbe.setDaemon(true);
+		try {
+			Assertions.assertTrue(reservation.executeInline(() -> {
+				publisher.set(reservation.retainPublisher());
+				reservation.reportProducerFailure(new IOException("independent producer failure"));
+				reservation.complete();
+			}));
+			holder.start(); await(monitorHeld);
+			reporter.start();
+			Assertions.assertTrue(reportReturned.await(2, TimeUnit.SECONDS), "Diagnostic publication held the Throwable monitor");
+			await(causeReadEntered);
+			stateProbe.start();
+			Assertions.assertTrue(stateReturned.await(2, TimeUnit.SECONDS), "Throwable access held the coordinator lock");
+			Assertions.assertNull(stateFailure.get());
+			Assertions.assertEquals(1, snapshot.get().diagnostics());
+			Assertions.assertEquals(1, snapshot.get().reservations());
+		} finally {
+			releaseMonitor.countDown();
+			holder.join(2_000); reporter.join(2_000); stateProbe.join(2_000);
+			if (publisher.get() != null) publisher.get().close();
+			reservation.complete();
+			coordinator.force();
+			Assertions.assertTrue(coordinator.awaitTermination(deadlineAfterSeconds(5)));
+		}
+	}
+
+	private static final class CauseProbe extends IOException {
+		private final AtomicInteger reads;
+		private final CountDownLatch entered;
+		private CauseProbe(AtomicInteger reads, CountDownLatch entered) {
+			super("controlled cause access"); this.reads = reads; this.entered = entered;
+		}
+		@Override public Throwable getCause() {
+			this.reads.incrementAndGet();
+			if (this.entered != null) this.entered.countDown();
+			return super.getCause();
 		}
 	}
 

@@ -172,9 +172,7 @@ class McpAppResourceAttachmentTests {
 		assertThrows(IllegalArgumentException.class, text::build);
 		assertThrows(IllegalArgumentException.class, blob::build);
 		for (String invalidMimeType : List.of("text/html", "text/plain;profile=mcp-app",
-				"text/html;profile=MCP-APP", "text/html;profile=mcp-app;charset=utf-8",
-				"text/html;profile=mcp-app;PROFILE=mcp-app", "text/html;profile=\"mcp-app",
-				"text/html;profile=mcp-app\n")) {
+				"text/html;profile=MCP-APP", "text/html;profile=mcp-app;charset=utf-8")) {
 			text.mimeType(invalidMimeType);
 			blob.mimeType(invalidMimeType);
 			assertThrows(IllegalArgumentException.class, text::build);
@@ -182,6 +180,15 @@ class McpAppResourceAttachmentTests {
 		}
 		assertEquals(typed, text.mimeType(APP_MIME_TYPE).build().getAppResourceMetadata().orElseThrow());
 		assertEquals(typed, blob.mimeType(APP_MIME_TYPE).build().getAppResourceMetadata().orElseThrow());
+		McpTextResourceContents beforeText = text.build();
+		McpBlobResourceContents beforeBlob = blob.build();
+		for (String malformedMimeType : List.of("text/html;profile=mcp-app;PROFILE=mcp-app",
+				"text/html;profile=\"mcp-app", "text/html;profile=mcp-app\n")) {
+			assertThrows(IllegalArgumentException.class, () -> text.mimeType(malformedMimeType));
+			assertThrows(IllegalArgumentException.class, () -> blob.mimeType(malformedMimeType));
+			assertEquals(beforeText, text.build());
+			assertEquals(beforeBlob, blob.build());
+		}
 	}
 
 	@Test

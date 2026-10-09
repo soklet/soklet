@@ -207,8 +207,9 @@ public static ResourcePathDeclaration fromPath(@NonNull String path) {
 	 * For example, placeholder extraction for resource path declaration {@code /users/{userId}} and resource path {@code /users/123}
 	 * would result in a value equivalent to {@code Map.of("userId", "123")}.
 	 * <p>
-	 * Resource path declaration placeholder values are automatically URL-decoded.  For example, placeholder extraction for resource path declaration {@code /users/{userId}}
-	 * and resource path {@code /users/ab%20c} would result in a value equivalent to {@code Map.of("userId", "ab c")}.
+	 * Placeholder values are copied from the already-decoded {@link ResourcePath}; this method does not
+	 * perform percent-decoding. For example, {@code /users/ab%20c} yields {@code "ab%20c"}, while
+	 * {@code /users/ab c} yields {@code "ab c"}. {@link Request#getResourcePath()} supplies decoded input.
 	 * <p>
 	 * Varargs placeholders combine zero or more remaining path components (joined with {@code /}).
 	 * A match with no remaining components includes the varargs name mapped to {@code ""}.

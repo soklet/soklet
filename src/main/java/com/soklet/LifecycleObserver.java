@@ -383,6 +383,24 @@ public interface LifecycleObserver {
 	}
 
 	/**
+	 * Called once before an admitted HTTP response stream is offered for writing and before
+	 * its producer starts and before {@link #didFinishRequestHandling}. The handle retains the
+	 * original dispatched {@link Request} object by identity. Preparation does
+	 * not mean headers or body bytes reached the client. Finite replacements and suppressed
+	 * bodies do not invoke this callback. It is paired with stream termination, including
+	 * failures before production starts. Implementations must return promptly; their failures
+	 * are contained and do not cancel the stream. Custom transports own the corresponding
+	 * preparation and terminal notifications using the exact same handle instance and original
+	 * dispatched request. Terminal metrics may arrive before handling finish; collectors retain
+	 * one pending terminal outcome and return without waiting.
+	 *
+	 * @param streamingResponseHandle the admitted HTTP response stream
+	 */
+	default void willWriteResponseStream(@NonNull StreamingResponseHandle streamingResponseHandle) {
+		// No-op by default
+	}
+
+	/**
 	 * Called before a streaming response termination is reported as complete.
 	 * <p>
 	 * This is paired with {@link #didTerminateResponseStream(StreamingResponseHandle, StreamTermination)}. Admitted HTTP stream notifications follow metrics handling finish
@@ -607,7 +625,10 @@ public interface LifecycleObserver {
 	 * <p>
 	 * Capacity rejection is {@link SseConnection.HandshakeFailureReason#CAPACITY_EXCEEDED}; request processing,
 	 * response preparation and response writing failures use {@link SseConnection.HandshakeFailureReason#INTERNAL_ERROR}
-	 * with their cause. Failure during client initialization after acceptance uses the stream-termination callbacks.
+	 * with their cause. {@link SseConnection.HandshakeFailureReason#HANDSHAKE_REJECTED}
+	 * also covers finite route/method mismatch responses on the SSE listener,
+	 * including HEAD and OPTIONS; an event-source method need not have run.
+	 * Failure during client initialization after acceptance uses the stream-termination callbacks.
 	 *
 	 * @param connectionHandshakeFailureReason    the handshake failure reason
 	 * @param throwable an optional underlying cause, or {@code null} if not applicable

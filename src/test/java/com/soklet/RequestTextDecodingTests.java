@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -76,6 +77,26 @@ class RequestTextDecodingTests {
 		}
 		assertEquals(List.of("🍪"), Utilities.extractCookiesFromHeaders(Map.of("Cookie", List.of("id=🍪"))).get("id"));
 		assertEquals(List.of("100%"), Utilities.extractCookiesFromHeaders(Map.of("Cookie", List.of("id=100%"))).get("id"));
+	}
+
+	@Test
+	void namedCookieLookupsStrictlyDecodeOnlyTheConsumedName() {
+		Request request = Request.withPath(HttpMethod.GET, "/").headers(Map.of("Cookie", List.of(
+				"session=abc; legacy=Jos%E9; %73ession=%FF; Session=%C3; ordinary=é"))).build();
+		assertEquals(Optional.of("abc"), request.getCookie("session"));
+		assertEquals(Optional.of("é"), request.getCookie("ordinary"));
+		assertEquals(Optional.empty(), request.getCookie("missing"));
+		assertRedactedUrl(() -> request.getCookie("legacy"));
+		assertRedactedUrl(() -> request.getCookie("%73ession"));
+		assertRedactedUrl(() -> request.getCookie("Session"));
+		assertRedactedUrl(request::getCookies);
+		assertEquals(Optional.of("abc"), request.getCookie("session"));
+		Request duplicates = Request.withPath(HttpMethod.GET, "/").headers(Map.of("Cookie", List.of(
+				"session=abc; legacy=%FF", "session=abc"))).build();
+		assertThrows(com.soklet.exception.IllegalRequestCookieException.class, () -> duplicates.getCookie("session"));
+		Request encodedDuplicates = Request.withPath(HttpMethod.GET, "/").headers(Map.of("Cookie", List.of(
+				"%73ession=abc; legacy=%FF; %73ession=abc"))).build();
+		assertThrows(com.soklet.exception.IllegalRequestCookieException.class, () -> encodedDuplicates.getCookie("%73ession"));
 	}
 
 	@Test

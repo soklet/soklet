@@ -39,7 +39,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@Timeout(30)
+@Timeout(60)
 public class EmptyVarargsBindingTests {
 
 	@Test

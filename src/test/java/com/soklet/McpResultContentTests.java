@@ -41,6 +41,22 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @ThreadSafe
 class McpResultContentTests {
 	@Test
+	void resourceStringsRejectMalformedUnicodeAndMimeTypesBeforeSerialization() {
+		URI uri = URI.create("catalog://resource");
+		String lone = "\ud800";
+		assertThrows(IllegalArgumentException.class, () -> McpResourceLink.withUriAndName(uri, lone));
+		assertThrows(IllegalArgumentException.class, () -> McpResourceLink.withUriAndName(uri, "name").title(lone));
+		assertThrows(IllegalArgumentException.class, () -> McpResourceLink.withUriAndName(uri, "name").description(lone));
+		assertThrows(IllegalArgumentException.class, () -> McpResourceDescriptor.withUriAndName(uri, lone));
+		for (String invalid : List.of("text/plain\r\nx-header: value", "text/" + lone)) {
+			assertThrows(IllegalArgumentException.class, () -> McpResourceLink.withUriAndName(uri, "name").mimeType(invalid));
+			assertThrows(IllegalArgumentException.class, () -> McpResourceDescriptor.withUriAndName(uri, "name").mimeType(invalid));
+			assertThrows(IllegalArgumentException.class, () -> McpTextResourceContents.withUriAndText(uri, "text").mimeType(invalid));
+			assertThrows(IllegalArgumentException.class, () -> McpBlobResourceContents.withUriAndData(uri, new byte[]{1}).mimeType(invalid));
+		}
+	}
+
+	@Test
 	void toolOutputPreservesContentInsertionOrderAndStructuredContent() {
 		McpTextContent first = McpTextContent.fromText("first");
 		McpTextContent second = McpTextContent.fromText("second");

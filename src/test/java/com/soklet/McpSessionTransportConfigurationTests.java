@@ -168,7 +168,13 @@ class McpSessionTransportConfigurationTests {
 						.subscriptionConfig(publisher(Set.of(family))).resourceRegistrations(resources).build();
 				IllegalStateException failure = assertThrows(IllegalStateException.class, () -> server(endpoint).sessionConfig(config(true))
 						.subscriptionAuthorizer(McpSubscriptionAuthorizer.denyAllInstance()).build());
-				assertTrue(failure.getMessage().contains("at each selected revision"), failure.getMessage());
+				assertTrue(failure.getMessage().contains("require a resource surface"), failure.getMessage());
+				assertTrue(failure.getMessage().contains("endpoint=/mcp"), failure.getMessage());
+				assertTrue(LEGACY.stream()
+						.filter(revision -> resources.stream().noneMatch(resource ->
+								resource.getProtocolVersions().contains(revision)))
+						.anyMatch(revision -> failure.getMessage().contains("revision=" + revision.getWireValue())),
+						failure.getMessage());
 			}
 	}
 

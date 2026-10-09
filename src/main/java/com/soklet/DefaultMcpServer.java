@@ -94,6 +94,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -125,6 +126,8 @@ final class DefaultMcpServer implements McpServer {
 					+ "request and notification will be admitted as anonymous.";
 	@NonNull
 	private static final Set<@NonNull String> BOUNDED_METRIC_METHODS = Set.of(
+			"initialize", "notifications/initialized", "ping",
+			"resources/subscribe", "resources/unsubscribe",
 			"server/discover", "tools/list", "tools/call", "prompts/list",
 			"prompts/get", "resources/list", "resources/templates/list",
 			"resources/read", "completion/complete", "subscriptions/listen", "notifications/cancelled",
@@ -140,6 +143,9 @@ final class DefaultMcpServer implements McpServer {
 			Pattern.compile("[A-Za-z0-9_.-]+");
 	@NonNull
 	private final Object lifecycleLock;
+	private final int configuredPort;
+	@NonNull
+	private final String configuredHost;
 	private final int maximumCursorSizeInBytes;
 	private final int maximumSubscriptionsPerPartition;
 	private final int streamQueueCapacity;
@@ -283,6 +289,8 @@ final class DefaultMcpServer implements McpServer {
 			@Nullable McpLocalizer localizer,
 			McpServer.@NonNull Builder simulatorBuilderTemplate) {
 		this.lifecycleLock = new Object();
+		this.configuredPort = port;
+		this.configuredHost = requireNonNull(host);
 		this.maximumCursorSizeInBytes = maximumCursorSizeInBytes;
 		this.maximumSubscriptionsPerPartition =
 				maximumSubscriptionsPerPartition;
@@ -415,6 +423,15 @@ final class DefaultMcpServer implements McpServer {
 		this.lifecycleAdapter.bindRuntime(this.runtimeBridge);
 	}
 
+	int getConfiguredPort() {
+		return this.configuredPort;
+	}
+
+	@NonNull
+	String getConfiguredHost() {
+		return this.configuredHost;
+	}
+
 	McpServer.@NonNull Builder copyBuilderForSimulator(
 			@NonNull SimulatorMcpBuildRegistrar simulatorBuildRegistrar) {
 		return this.simulatorBuilderTemplate.copyForSimulator(
@@ -424,6 +441,23 @@ final class DefaultMcpServer implements McpServer {
 	@NonNull
 	private McpApplicationExecutionObserver applicationExecutionObserver() {
 		return new McpApplicationExecutionObserver() {
+			@Override
+			public void didSkipHttpRequestObservation() {
+				safelyLogRequestObservation(lifecycleObserver, LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR,
+						"MCP HTTP observation callbacks were omitted because their bounded delivery capacity is unavailable.")
+						.build(), null);
+			}
+
+			@Override
+			public void didFailAdmission(@NonNull String endpointPath, @NonNull Throwable failure) {
+				String failureType = requireNonNull(failure).getClass().getName();
+				if (failureType.length() > 256) failureType = failureType.substring(0, 256);
+				safelyLogRequestObservation(lifecycleObserver, LogEvent.with(
+						LogEventType.SERVER_INTERNAL_ERROR,
+						"An MCP admission callback failed (endpoint=" + endpointPath + ", failureType=" + failureType + ").")
+						.build(), null);
+			}
+
 			@Override
 			@NonNull
 			public HttpRequestObservation didStartHttpRequest(@NonNull Request request, @NonNull String endpointPath) {
@@ -3215,6 +3249,8 @@ final class DefaultMcpServer implements McpServer {
 	private final class DefaultMcpProgressReporter
 			implements McpProgressReporter {
 		@NonNull
+		private final ReentrantLock reportLock = new ReentrantLock();
+		@NonNull
 		private final CancelationToken cancelationToken;
 		@NonNull
 		private final ProgressEmitter progressEmitter;
@@ -3238,7 +3274,13 @@ final class DefaultMcpServer implements McpServer {
 		@Override
 		public void report(@NonNull McpProgressUpdate update) {
 			McpProgressUpdate requiredUpdate = requireNonNull(update);
-			synchronized (this) {
+			try {
+				this.reportLock.lockInterruptibly();
+			} catch (InterruptedException exception) {
+				Thread.currentThread().interrupt();
+				return;
+			}
+			try {
 				if (this.cancelationToken.isCanceled()
 						|| !this.progressEmitter.isActive())
 					return;
@@ -3265,9 +3307,11 @@ final class DefaultMcpServer implements McpServer {
 				}
 
 				this.lastAcceptedProgress = progress;
+			} finally {
+				this.reportLock.unlock();
 			}
-			// The writer may block. Its progress lock never defers other operations'
-			// metrics, and collector callbacks run only after this lock is released.
+			// The writer may block. An interruptible lock preserves report ordering
+			// without pinning a virtual-thread carrier while the outbound queue waits.
 			DefaultMcpServer.this.mcpMetricEventDelivery.recordAndDrain(
 					McpMetricsEvent.progressEmitted(this.endpointPath, this.jsonRpcMethod));
 		}

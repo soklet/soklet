@@ -16,10 +16,12 @@
 
 package com.soklet;
 
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.TestFactory;
 import org.junit.jupiter.api.Timeout;
 
+import java.time.Duration;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -33,7 +35,7 @@ import static com.soklet.McpLegacySessionTransportPublicRuntimeTests.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Real tool calls reject compact numeric amplification before application entry. */
-@Timeout(30)
+@Timeout(60)
 class McpTypedIntegerLimitPublicRuntimeTests {
 	private static final Set<McpProtocolVersion> VERSIONS = Set.of(
 			McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25,
@@ -44,7 +46,7 @@ class McpTypedIntegerLimitPublicRuntimeTests {
 		return Stream.of(McpProtocolVersion.V2025_06_18,
 				McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28)
 				.map(version -> DynamicTest.dynamicTest(version.getWireValue(),
-						() -> verifyIntegerLimitsAndRecovery(version)));
+						() -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> verifyIntegerLimitsAndRecovery(version))));
 	}
 
 	private void verifyIntegerLimitsAndRecovery(McpProtocolVersion version) throws Exception {

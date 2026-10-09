@@ -508,7 +508,7 @@ public class StreamingDisconnectMonitorTests {
             Assertions.assertTrue(readHeaders(socket.getInputStream()).startsWith("HTTP/1.1 200 OK"));
             socket.shutdownOutput();
             await(() -> fixture.logger.halfCloses.get() == 1, "Input FIN was not observed");
-            fixture.source.writeFailure = new IOException("Broken pipe");
+            fixture.source.writeFailure = new SocketChannelIo.SocketIoException(new IOException("Le canal est fermé"));
             fixture.source.release();
             Assertions.assertTrue(fixture.source.closed.await(3, TimeUnit.SECONDS));
             Assertions.assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED, fixture.source.closeReason.get());
@@ -520,6 +520,13 @@ public class StreamingDisconnectMonitorTests {
     @Test
     void unrelatedWriteFailureRetainsWriteErrorReasonAndDiagnostic() throws Exception {
         assertUnrelatedWriteFailure(new IOException("Source unavailable"));
+    }
+
+    @Test
+    void sourceFailureWithSocketErrorTextIsNotMisclassifiedAsClientDisconnect() throws Exception {
+        assertUnrelatedWriteFailure(new IOException("Broken pipe"));
+        assertUnrelatedWriteFailure(new java.io.EOFException("Application body ended early"));
+        assertUnrelatedWriteFailure(new java.nio.channels.ClosedChannelException());
     }
 
     @Test

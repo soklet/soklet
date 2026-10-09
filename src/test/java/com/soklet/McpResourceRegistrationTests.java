@@ -127,7 +127,7 @@ class McpResourceRegistrationTests {
 				.audience(McpRole.ASSISTANT)
 				.build();
 		McpJsonObject metadata = McpJsonObject.builder()
-				.put("example.mcp/existing", "preserved")
+				.put("example.test/existing", "preserved")
 				.build();
 		McpResourceDescriptor descriptor = McpResourceDescriptor
 				.withUriAndName(URI.create("catalog://manual"), "manual")
@@ -154,6 +154,26 @@ class McpResourceRegistrationTests {
 		assertSame(metadata, link.getMetadata());
 		assertThrows(NullPointerException.class,
 				() -> McpResourceLink.fromResourceDescriptor(null));
+	}
+
+	@Test
+	void resourceCatalogMetadataRejectsReservedPrefixesAtConstruction() {
+		for (String key : List.of("io.modelcontextprotocol/related-task", "dev.mcp/secret")) {
+			McpJsonObject metadata = McpJsonObject.builder().put(key, "must-not-leak").build();
+			assertThrows(IllegalArgumentException.class, () -> McpResourcePage.builder().metadata(metadata).build());
+			assertThrows(IllegalArgumentException.class, () -> McpResourceDescriptor
+					.withUriAndName(URI.create("catalog://items/42"), "exact").metadata(metadata).build());
+			assertThrows(IllegalArgumentException.class, () -> McpResourceRegistration
+					.withUriAndName(URI.create("catalog://items/42"), "exact", java.util.Set.of(McpProtocolVersion.V2026_07_28))
+					.handler(resourceHandler()).metadata(metadata).build());
+			assertThrows(IllegalArgumentException.class, () -> McpResourceRegistration
+					.withUriTemplateAndName("catalog://items/{itemId}", "template", java.util.Set.of(McpProtocolVersion.V2026_07_28))
+					.handler(resourceHandler()).metadata(metadata).build());
+		}
+		McpJsonObject metadata = McpJsonObject.builder().put("example/catalog", "allowed").build();
+		assertSame(metadata, McpResourcePage.builder().metadata(metadata).build().getMetadata());
+		assertSame(metadata, McpResourceDescriptor.withUriAndName(URI.create("catalog://items/42"), "exact")
+				.metadata(metadata).build().getMetadata());
 	}
 
 	@Test

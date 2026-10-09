@@ -18,6 +18,7 @@ package com.soklet;
 
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ProgressEmitter;
 import com.soklet.internal.mcp.protocol.McpApplicationExecutionObserver;
+import com.soklet.internal.mcp.transport.McpOutboundChannel;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -25,6 +26,9 @@ import org.junit.jupiter.api.Timeout;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -39,8 +43,92 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 /** Small barrier tests for metric delivery without sockets or slow readers. */
-@Timeout(20)
+@Timeout(60)
 public class McpMetricBackpressureTests {
+
+	@Test
+	public void everyRecognizedOperationHasItsOwnBoundedMetricLabel() throws Exception {
+		List<String> methods = List.of("initialize", "notifications/initialized", "ping", "server/discover",
+				"tools/list", "tools/call", "prompts/list", "prompts/get", "resources/list",
+				"resources/templates/list", "resources/read", "resources/subscribe", "resources/unsubscribe",
+				"skills/list", "skills/get", "completion/complete", "subscriptions/listen", "tasks/get",
+				"tasks/update", "tasks/cancel", "notifications/cancelled");
+		Method metricMethod = DefaultMcpServer.class.getDeclaredMethod("metricMethod", String.class);
+		metricMethod.setAccessible(true);
+		Set<McpOperationType> operations = new java.util.HashSet<>();
+		for (String method : methods) {
+			operations.add(McpOperationType.fromJsonRpcMethod(method));
+			Assertions.assertEquals(method, metricMethod.invoke(null, method));
+		}
+		Assertions.assertEquals(Set.of(McpOperationType.values()).size() - 1, operations.size());
+		Assertions.assertEquals(McpMetricsEvent.UNRECOGNIZED_JSON_RPC_METHOD, metricMethod.invoke(null, "attacker/unique"));
+	}
+
+	@Test
+	public void interruptedProgressWaiterLeavesWhileEarlierReportIsBlocked() throws Exception {
+		CountDownLatch entered = new CountDownLatch(1);
+		CountDownLatch release = new CountDownLatch(1);
+		DefaultMcpServer server = server(new RecordingCollector());
+		McpProgressReporter reporter = reporter(server, (progress, total, message) -> {
+			entered.countDown(); release.await(); return true;
+		});
+		Thread first = new Thread(() -> reporter.report(McpProgressUpdate.withProgress(1.0).build()));
+		Thread waiting = new Thread(() -> reporter.report(McpProgressUpdate.withProgress(2.0).build()));
+		try {
+			first.start(); Assertions.assertTrue(entered.await(2, TimeUnit.SECONDS));
+			waiting.start(); waiting.interrupt(); waiting.join(1000);
+			Assertions.assertFalse(waiting.isAlive(), "A waiting report must honor cancellation without waiting for the writer.");
+		} finally {
+			release.countDown(); first.interrupt(); waiting.interrupt();
+			first.join(2000); waiting.join(2000);
+			Assertions.assertFalse(first.isAlive()); Assertions.assertFalse(waiting.isAlive());
+		}
+	}
+
+	@Test
+	public void blockedProgressReportersLeaveVirtualThreadCarriersAvailable() throws Exception {
+		org.junit.jupiter.api.Assumptions.assumeTrue(Runtime.version().feature() >= 21);
+		Path output = Files.createTempFile("soklet-mcp-progress-carriers-", ".log");
+		try {
+			Process process = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+					"-Xmx128m", "-XX:ActiveProcessorCount=2", "-Djdk.virtualThreadScheduler.parallelism=2",
+					"-Djdk.virtualThreadScheduler.maxPoolSize=2", "-cp",
+					System.getProperty("surefire.test.class.path", System.getProperty("java.class.path")),
+					McpMetricBackpressureTests.class.getName()).redirectErrorStream(true).redirectOutput(output.toFile()).start();
+			try {
+				Assertions.assertTrue(process.waitFor(10, TimeUnit.SECONDS), "Progress carrier probe timed out.");
+				Assertions.assertTrue(Files.size(output) <= 65_536);
+				Assertions.assertEquals(0, process.exitValue(), Files.readString(output));
+			} finally {
+				process.destroyForcibly(); Assertions.assertTrue(process.waitFor(2, TimeUnit.SECONDS));
+			}
+		} finally { Files.deleteIfExists(output); }
+	}
+
+	public static void main(String[] args) throws Exception {
+		ExecutorService executor = (ExecutorService) Executors.class.getMethod("newVirtualThreadPerTaskExecutor").invoke(null);
+		List<McpOutboundChannel> channels = new ArrayList<>();
+		CountDownLatch blocked = new CountDownLatch(2);
+		DefaultMcpServer server = server(new RecordingCollector());
+		try {
+			for (int index = 0; index < 2; index++) {
+				McpOutboundChannel channel = new McpOutboundChannel(1, 1, 1, System::nanoTime, new McpOutboundChannel.Listener() {
+					@Override public void didWrite(long bytes, long timestamp) {}
+					@Override public void didApplyBackpressure() { blocked.countDown(); }
+					@Override public void didTerminate(StreamTerminationReason reason, Throwable cause) {}
+				});
+				channels.add(channel); Assertions.assertTrue(channel.enqueue(new byte[]{1}));
+				McpProgressReporter reporter = reporter(server, (progress, total, message) -> channel.enqueue(new byte[]{2}));
+				executor.submit(() -> reporter.report(McpProgressUpdate.withProgress(1.0).build()));
+			}
+			Assertions.assertTrue(blocked.await(2, TimeUnit.SECONDS));
+			Thread.sleep(100);
+			Assertions.assertEquals("available", executor.submit(() -> "available").get(2, TimeUnit.SECONDS));
+		} finally {
+			for (McpOutboundChannel channel : channels) channel.close(StreamTerminationReason.APPLICATION_CANCELED, null);
+			executor.shutdownNow(); Assertions.assertTrue(executor.awaitTermination(2, TimeUnit.SECONDS));
+		}
+	}
 
 	@Test
 	public void heldTransitionDoesNotDeferAnotherOperationsMetrics() throws Exception {

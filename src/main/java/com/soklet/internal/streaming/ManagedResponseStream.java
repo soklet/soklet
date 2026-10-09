@@ -43,6 +43,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
+import java.util.zip.ZipOutputStream;
 
 import static com.soklet.internal.ObjectIdentity.sameInstance;
 import static java.util.Objects.requireNonNull;
@@ -206,8 +207,14 @@ public final class ManagedResponseStream implements ResponseStream {
 			if (byteBuffer.hasRemaining())
 				this.output.write(byteBuffer);
 		} catch (InterruptedException interruptedException) {
+			if (discardTerminalCleanupOutput()) {
+				Thread.currentThread().interrupt();
+				return;
+			}
 			outputInterrupted(interruptedException);
 		} catch (IOException | RuntimeException | Error throwable) {
+			if (throwable instanceof StreamingResponseCanceledException && discardTerminalCleanupOutput())
+				return;
 			recordFailure(throwable);
 			throw throwable;
 		}
@@ -230,8 +237,14 @@ public final class ManagedResponseStream implements ResponseStream {
 			drainStaging();
 			this.output.flush();
 		} catch (InterruptedException interruptedException) {
+			if (discardTerminalCleanupOutput()) {
+				Thread.currentThread().interrupt();
+				return;
+			}
 			outputInterrupted(interruptedException);
 		} catch (IOException | RuntimeException | Error throwable) {
+			if (throwable instanceof StreamingResponseCanceledException && discardTerminalCleanupOutput())
+				return;
 			recordFailure(throwable);
 			throw throwable;
 		}
@@ -254,8 +267,14 @@ public final class ManagedResponseStream implements ResponseStream {
 			this.staging[this.stagedBytes++] = (byte) value;
 			this.output.didStageBytes();
 		} catch (InterruptedException interruptedException) {
+			if (discardTerminalCleanupOutput()) {
+				Thread.currentThread().interrupt();
+				return;
+			}
 			outputInterrupted(interruptedException);
 		} catch (IOException | RuntimeException | Error throwable) {
+			if (throwable instanceof StreamingResponseCanceledException && discardTerminalCleanupOutput())
+				return;
 			recordFailure(throwable);
 			throw throwable;
 		}
@@ -491,8 +510,14 @@ public final class ManagedResponseStream implements ResponseStream {
 		if (this.failure != null)
 			throw new IOException("Response production has failed", this.failure);
 		checkInterrupted();
-		if (!this.output.isOpen())
+		if (!this.output.isOpen()) {
+			// The transport can elect cancelation between the first token check and
+			// closing its output. Preserve the elected outcome for producer writes.
+			this.cancelationToken.throwIfCanceled();
+			if (this.failure != null)
+				throw new IOException("Response production has failed", this.failure);
 			throw new IOException("Response output is no longer open");
+		}
 	}
 
 	private void checkAcquisition() throws Exception {
@@ -725,13 +750,36 @@ public final class ManagedResponseStream implements ResponseStream {
 			try {
 				claimedResource.close();
 			} catch (Throwable throwable) {
-				cleanupFailed(throwable);
+				if (expectedCanceledZipCloseFailure(claimedResource, throwable))
+					addSuppressed(requireNonNull(failure), throwable);
+				else
+					cleanupFailed(throwable);
 			} finally {
 				synchronized (this) {
 					this.closeFinished = true;
 					this.stateChangeWaiters.signalAll();
 				}
 			}
+		}
+
+		private boolean expectedCanceledZipCloseFailure(T resource, Throwable closeFailure) {
+			// ZipOutputStream.closeEntry ends its Deflater after an output IOException.
+			// Its later owned close retries that entry using the ended Deflater. Limit
+			// this exception to the exact JDK encoder and a proven canceled entry write.
+			if (this.abortMode != AbortMode.NONE || resource.getClass() != ZipOutputStream.class
+					|| !cancelationToken.isCanceled() || !(failure instanceof StreamingResponseCanceledException)
+					|| !(closeFailure instanceof IllegalStateException || closeFailure instanceof NullPointerException))
+				return false;
+			boolean canceledEntryWrite = false;
+			for (StackTraceElement frame : failure.getStackTrace())
+				if (frame.getClassName().equals("java.util.zip.ZipOutputStream") && frame.getMethodName().equals("closeEntry"))
+					canceledEntryWrite = true;
+			if (!canceledEntryWrite)
+				return false;
+			for (StackTraceElement frame : closeFailure.getStackTrace())
+				if (frame.getClassName().equals("java.util.zip.Deflater") && frame.getMethodName().equals("ensureOpen"))
+					return true;
+			return false;
 		}
 
 		private void cleanupFailed(Throwable throwable) {

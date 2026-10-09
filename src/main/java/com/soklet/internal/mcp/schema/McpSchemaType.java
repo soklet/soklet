@@ -25,6 +25,8 @@ import com.soklet.internal.mcp.protocol.McpJsonString;
 import com.soklet.internal.mcp.protocol.McpJsonValue;
 import org.jspecify.annotations.NonNull;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
@@ -71,8 +73,18 @@ enum McpSchemaType {
 			case NUMBER -> instance instanceof McpJsonNumber;
 			case STRING -> instance instanceof McpJsonString;
 			case INTEGER -> instance instanceof McpJsonNumber number
-					&& (number.value().scale() <= 0
-					|| number.value().stripTrailingZeros().scale() <= 0);
+					&& isIntegral(number.value());
 		};
+	}
+	private static boolean isIntegral(BigDecimal value) {
+		if (value.scale() <= 0 || value.signum() == 0)
+			return true;
+		if (value.scale() >= value.precision())
+			return false;
+		try {
+			return value.setScale(0, RoundingMode.UNNECESSARY).scale() == 0;
+		} catch (ArithmeticException exception) {
+			return false;
+		}
 	}
 }

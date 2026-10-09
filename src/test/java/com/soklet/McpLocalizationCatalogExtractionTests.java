@@ -67,6 +67,24 @@ class McpLocalizationCatalogExtractionTests {
 					.build();
 
 	@Test
+	void skillsOnlyResourceCatalogsIncludeFrameworkServerInformationLocalizationSlots() {
+		Set<McpProtocolVersion> versions = Set.of(McpProtocolVersion.V2026_07_28);
+		byte[] root = "---\nname: localization-skill\ndescription: A skill\n---\nSkill body\n".getBytes(StandardCharsets.UTF_8);
+		McpSkillRegistration skill = McpSkillRegistration.withUriAndSkillBundle(
+				URI.create("skill://host/localization-skill/SKILL.md"), McpSkillBundle.fromFiles(Map.of("SKILL.md", root)), versions).build();
+		McpEndpoint endpoint = McpEndpoint.withPath("/skills-only", McpImplementation.withNameAndVersion("skills-only", "1")
+				.title("Canonical server title").description("Canonical server description").build(), versions)
+				.skillRegistrations(List.of(skill)).build();
+		McpCanonicalLocalizationPlan plan = DefaultMcpLocalizationCatalogExtractor.plan(McpEndpointRegistry.fromEndpoints(List.of(endpoint)), 10);
+		for (McpCanonicalLocalizationPlan.ResponseKind kind : List.of(McpCanonicalLocalizationPlan.ResponseKind.RESOURCES_LIST,
+				McpCanonicalLocalizationPlan.ResponseKind.RESOURCE_TEMPLATES_LIST)) {
+			assertEquals(2, plan.endpoints().get(0).response(kind).orElseThrow().slots().size());
+			assertEquals(List.of(McpTextOwnerType.SERVER_INFORMATION, McpTextOwnerType.SERVER_INFORMATION),
+					plan.endpoints().get(0).response(kind).orElseThrow().slots().stream().map(McpCanonicalLocalizationPlan.Slot::ownerType).toList());
+		}
+	}
+
+	@Test
 	void extractsEveryProgrammaticSurfaceAndPreservesCanonicalObjects() {
 		McpEndpoint endpoint = endpoint(false);
 		McpEndpointRegistry registry = McpEndpointRegistry.fromEndpoints(

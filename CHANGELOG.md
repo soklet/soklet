@@ -4,6 +4,23 @@
 
 ### Breaking Changes
 
+- **HTTP occurrence lists and strict text:** HTTP multi-value collections now
+  use `List`, preserving duplicates, order and empty values. Headers retain
+  physical occurrences rather than splitting comma lists. Malformed text is
+  rejected instead of silently replacing invalid characters. See
+  [HTTP values preserve every occurrence](MIGRATING_TO_4_0.md#http-values-preserve-every-occurrence).
+- **Observer logging:** a custom observer replaces the default stderr logger;
+  `didReceiveLogEvent` defaults to a no-op. Explicitly configure a logging sink.
+  See [Log-event routing](MIGRATING_TO_4_0.md#log-event-routing-with-custom-observers).
+- **Histogram snapshots:** snapshot values are boxed and histogram sums are
+  floating point. See [Histogram sums and snapshot values](MIGRATING_TO_4_0.md#histogram-sums-and-snapshot-values).
+- **Graceful HTTP feeds:** implementations of `ResponseStream` must implement
+  `isGracefulShutdownRequested()`. Indefinite feeds use that advisory signal to
+  complete during graceful shutdown. See
+  [HTTP streaming callbacks and sources](MIGRATING_TO_4_0.md#http-streaming-callbacks-and-sources).
+- **Route ambiguity:** conflicting HTTP and SSE declarations are rejected at
+  compilation or resolver construction instead of selecting a winner. See
+  [HTTP and SSE route precedence](MIGRATING_TO_4_0.md#http-and-sse-route-precedence).
 - **HTTP streaming API:** writers now receive one `ResponseStream` with output,
   request, cancelation-token, and timing access; the separate
   `StreamingResponseContext` is removed. Response builders and copiers add

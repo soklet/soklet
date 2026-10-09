@@ -145,11 +145,24 @@ public class SimulatorSseInitializerTests {
 		Fixture fixture = new Fixture();
 		DefaultSseServer source = (DefaultSseServer) SseServer.withPort(0)
 				.streamingLifecycleCapacity(1).connectionQueueCapacity(3).build();
+		List<Integer> writtenStatuses = new ArrayList<>();
+		List<Integer> finishedStatuses = new ArrayList<>();
+		List<Integer> metricsFinishedStatuses = new ArrayList<>();
 		SokletConfig sourceConfig = SokletConfig.withSseServer(source)
 				.responseMarshaler(ResponseMarshaler.builder().serviceUnavailableHandler((request, resourceMethod) ->
 						MarshaledResponse.withStatusCode(503).headers(Map.of("X-Capacity", List.of("full"))).build()).build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Fixture.class)))
-				.instanceProvider(provider(fixture)).build();
+				.instanceProvider(provider(fixture))
+				.lifecycleObserver(new LifecycleObserver() {
+					@Override public void didWriteResponse(ServerType type, Request request, ResourceMethod method,
+							MarshaledResponse response, Duration duration) { writtenStatuses.add(response.getStatusCode()); }
+					@Override public void didFinishRequestHandling(ServerType type, Request request, ResourceMethod method,
+							MarshaledResponse response, Duration duration, List<Throwable> failures) { finishedStatuses.add(response.getStatusCode()); }
+					@Override public void didReceiveLogEvent(LogEvent event) { }
+				}).metricsCollector(new MetricsCollector() {
+					@Override public void didFinishRequestHandling(ServerType type, Request request, ResourceMethod method,
+							MarshaledResponse response, Duration duration, List<Throwable> failures) { metricsFinishedStatuses.add(response.getStatusCode()); }
+				}).build();
 		SimulatorConfig imported = SimulatorConfig.fromSokletConfig(sourceConfig);
 		Soklet.MockSseServer copied = imported.simulatedSseServer();
 		Assertions.assertEquals(1, copied.streamingLifecycleCapacity);
@@ -162,6 +175,9 @@ public class SimulatorSseInitializerTests {
 			Assertions.assertEquals(List.of("full"), rejected.getHttpRequestResult().getMarshaledResponse().getHeaders().get("X-Capacity"));
 			Assertions.assertTrue(rejected.getHttpRequestResult().getResourceMethod().isPresent());
 			Assertions.assertTrue(rejected.getHttpRequestResult().getSseHandshakeResult().isEmpty());
+			Assertions.assertEquals(List.of(200, 503), writtenStatuses);
+			Assertions.assertEquals(List.of(200, 503), finishedStatuses);
+			Assertions.assertEquals(List.of(200, 503), metricsFinishedStatuses);
 			Assertions.assertEquals(1, fixture.entries.get());
 			Assertions.assertFalse(source.isStarted());
 			first.close();

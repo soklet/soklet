@@ -76,6 +76,92 @@ public class McpHttpServerRuntimeTests {
 	private static final String DISCOVER_METHOD = "server/discover";
 
 	@Test
+	@Timeout(60)
+	public void startupListenerCancellationClosesABindPublishedAfterTheIntent() throws Exception {
+		McpHttpServerRuntime runtime = runtime(configuration(0), defaultPolicy());
+		var generation = McpServerRuntimeBridge.LifecycleAdapter.disabledInstance().currentGeneration();
+		runtime.prepareLifecycleStart(generation);
+		CountDownLatch bound = new CountDownLatch(1), publish = new CountDownLatch(1);
+		CountDownLatch runtimeLockHeld = new CountDownLatch(1), releaseRuntimeLock = new CountDownLatch(1);
+		CountDownLatch runtimeLockHolderExited = new CountDownLatch(1);
+		AtomicReference<EventLoop> candidate = new AtomicReference<>();
+		AtomicReference<InetSocketAddress> address = new AtomicReference<>();
+		ExecutorService worker = Executors.newFixedThreadPool(2);
+		Future<?> publication = worker.submit(() -> {
+			try {
+				EventLoop loop = new EventLoop(Options.builder().withHost(LOOPBACK)
+						.withPort(0).withConcurrency(1).build(), (request, callback) -> {});
+				candidate.set(loop);
+				address.set(loop.getLocalAddress());
+				bound.countDown();
+				Assertions.assertTrue(publish.await(2, TimeUnit.SECONDS));
+				Class<?> stateClass = Class.forName("com.soklet.internal.mcp.protocol.McpHttpServerRuntime$ListenerState");
+				Object starting = Arrays.stream(stateClass.getEnumConstants())
+						.filter(value -> value.toString().equals("STARTING")).findFirst().orElseThrow();
+				Method install = McpHttpServerRuntime.class.getDeclaredMethod("publishStartupListener",
+						EventLoop.class, McpServerRuntimeBridge.LifecycleAdapter.Generation.class,
+						InetSocketAddress.class, AtomicReference.class);
+				install.setAccessible(true);
+				install.invoke(runtime, loop, generation, address.get(), new AtomicReference<>(starting));
+			} catch (Exception failure) { throw new RuntimeException(failure); }
+		});
+		Future<?> lockHolder = null;
+		try {
+			Assertions.assertTrue(bound.await(2, TimeUnit.SECONDS));
+			Field lockField = McpHttpServerRuntime.class.getDeclaredField("lifecycleLock");
+			lockField.setAccessible(true);
+			Object runtimeLock = lockField.get(runtime);
+			lockHolder = worker.submit(() -> {
+				synchronized (runtimeLock) {
+					runtimeLockHeld.countDown();
+					try { Assertions.assertTrue(releaseRuntimeLock.await(2, TimeUnit.SECONDS)); }
+					catch (InterruptedException failure) { Thread.currentThread().interrupt(); throw new RuntimeException(failure); }
+					finally { runtimeLockHolderExited.countDown(); }
+				}
+			});
+			Assertions.assertTrue(runtimeLockHeld.await(2, TimeUnit.SECONDS));
+			// Cancellation wins while the bound candidate has not reached runtime
+			// publication. No application phase runs through this physical hook.
+			runtime.stopStartupListener(generation);
+			Assertions.assertEquals(1L, runtimeLockHolderExited.getCount(),
+					"Physical cancellation must return while application startup retains the runtime lock");
+			releaseRuntimeLock.countDown();
+			lockHolder.get(2, TimeUnit.SECONDS);
+			publish.countDown();
+			publication.get(2, TimeUnit.SECONDS);
+			Field listenerField = EventLoop.class.getDeclaredField("serverSocketChannel");
+			listenerField.setAccessible(true);
+			Assertions.assertFalse(((java.nio.channels.ServerSocketChannel)
+					listenerField.get(candidate.get())).isOpen(),
+					"The exact published listener channel must close before its thread starts");
+			Assertions.assertEquals(address.get(), runtime.boundAddress().orElseThrow());
+			try (ServerSocket rebound = new ServerSocket()) {
+				rebound.setReuseAddress(true);
+				rebound.bind(address.get());
+			}
+			for (String fieldName : List.of("lifecycleQuiesceRequested", "lifecycleForceRequested",
+					"lifecycleQuiesced", "lifecycleForced")) {
+				Field flag = McpHttpServerRuntime.class.getDeclaredField(fieldName);
+				flag.setAccessible(true);
+				Assertions.assertFalse(flag.getBoolean(runtime), fieldName);
+			}
+		} finally {
+			releaseRuntimeLock.countDown();
+			if (lockHolder != null) lockHolder.cancel(true);
+			publish.countDown();
+			publication.cancel(true);
+			if (candidate.get() != null) {
+				candidate.get().stop();
+				candidate.get().join(Duration.ofSeconds(1));
+			}
+			worker.shutdownNow();
+			Assertions.assertTrue(worker.awaitTermination(2, TimeUnit.SECONDS));
+			runtime.forceLifecycle();
+			runtime.awaitLifecycleTermination(System.nanoTime() + TimeUnit.SECONDS.toNanos(2));
+		}
+	}
+
+	@Test
 	@Timeout(120)
 	public void construction_does_not_bind_and_failed_start_is_restartable() throws Exception {
 		try (ServerSocket occupied = new ServerSocket()) {

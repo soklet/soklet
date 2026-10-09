@@ -133,6 +133,44 @@ run('shared request and notification deadlines cannot drift behind reviewed boun
   }
 });
 
+run('delegating constructors retain same-owner exact-arity lifecycle evidence', () => {
+  const path = 'src/test/java/com/soklet/DelegatingFixtureTests.java';
+  const source = `
+    package com.soklet;
+    @Timeout(60) class DelegatingFixtureTests {
+      @Test void delegated() { new Fixture(); }
+      @Test void unrelated() { new Other.Fixture(); }
+      static class Fixture {
+        Fixture() { this(1); }
+        Fixture(int ignored) { this(ignored, true); }
+        Fixture(int ignored, boolean ready) {
+          Soklet soklet = Soklet.fromConfig(SokletConfig.builder().build());
+          soklet.start(); soklet.close();
+        }
+        Fixture(String ignored) { }
+      }
+      static class Other {
+        static class Fixture {
+          Fixture() { this(1); }
+          Fixture(int ignored) { }
+        }
+      }
+    }
+  `;
+  const rows = buildLifecycleScopeObservations(new Map([[path, source]]));
+  const delegated = rows.find(row => row.scopeName === 'delegated');
+  assert.ok(delegated?.hasExecution);
+  assert.equal(delegated.generationSiteCount, 1);
+	assert.ok(!rows.find(row => row.scopeName === 'unrelated')?.hasExecution);
+  assert.ok(delegated.propagatedHelperEvidence.some(row => row.scopeName === 'Fixture'
+    && row.lineSha256));
+  // Removing the exact-arity terminal constructor must not borrow another overload.
+  const mismatched = source.replace('Fixture(int ignored, boolean ready)',
+    'Fixture(int ignored, boolean ready, long extra)');
+  const missing = buildLifecycleScopeObservations(new Map([[path, mismatched]]));
+  assert.ok(!missing.find(row => row.scopeName === 'delegated')?.hasExecution);
+});
+
 run('imported fixture constructors contribute policy and execution to their caller', () => {
   const callerPath = 'src/test/java/com/soklet/ImportedFixtureTests.java';
   const fixturePath = 'src/test/java/com/soklet/SharedLifecycleFixture.java';

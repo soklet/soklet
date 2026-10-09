@@ -97,7 +97,7 @@ final class SokletDirectMcpLifecycleTests {
 	}
 
 	@Test
-	void blockingSubscriptionPublisherTimeoutRetainsListenerUntilLateReturn()
+	void blockingSubscriptionPublisherTimeoutClosesListenerWithoutOverlappingApplicationPhases()
 			throws Exception {
 		BlockingPublisher publisher = new BlockingPublisher();
 		McpFixture fixture = blockingFixture(publisher, timeoutPolicy());
@@ -130,7 +130,7 @@ final class SokletDirectMcpLifecycleTests {
 			Assertions.assertFalse(runtimeLifecycleFlag(fixture.server(),
 					"lifecycleForceRequested"),
 					"The timeout coordinator entered MCP force while subscribe() was live");
-			assertPortInUse(address);
+			assertPortReusable(address);
 
 			InternalShutdownResult result = fixture.soklet().getDirectLifecycle()
 					.result().orElseThrow();
@@ -203,9 +203,9 @@ final class SokletDirectMcpLifecycleTests {
 			Assertions.assertFalse(runtimeLifecycleFlag(fixture.server(),
 					"lifecycleForced"),
 					"Forced cleanup entered while subscribe() was live");
-			Assertions.assertTrue(loop.isAccepting(),
-					"The listener was wound up while subscribe() was live");
-			assertPortInUse(address);
+			Assertions.assertFalse(loop.isAccepting(),
+					"Physical listener admission must close while subscribe() remains live");
+			assertPortReusable(address);
 
 			InternalShutdownResult result = fixture.soklet().getDirectLifecycle()
 					.result().orElseThrow();
@@ -758,11 +758,6 @@ final class SokletDirectMcpLifecycleTests {
 			socket.setReuseAddress(true);
 			socket.bind(address);
 		}
-	}
-
-	private static void assertPortInUse(@NonNull InetSocketAddress address) {
-		Assertions.assertFalse(isPortReusable(address),
-				"A live startup call must retain its bound listener until it returns");
 	}
 
 	private static boolean isPortReusable(@NonNull InetSocketAddress address) {

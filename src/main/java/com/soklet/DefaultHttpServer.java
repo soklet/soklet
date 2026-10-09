@@ -52,9 +52,11 @@ import java.util.Comparator;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.IdentityHashMap;
@@ -241,6 +243,8 @@ final class DefaultHttpServer implements HttpServer {
 	private final Duration streamingResponseIdleTimeout;
 	@Nullable
 	private volatile ExecutorService requestHandlerExecutorService;
+	@Nullable
+	private volatile Supplier<Optional<AdmissionFence.Admission>> outerRequestAdmissionSupplier;
 	@Nullable
 	private volatile ExecutorService streamingExecutorService;
 	@Nullable
@@ -493,6 +497,7 @@ final class DefaultHttpServer implements HttpServer {
 				attachmentContext);
 		initialize(exactContext.getSokletConfig(),
 				exactContext.getAdmissionFencedRequestHandler());
+		this.outerRequestAdmissionSupplier = exactContext.builtInDispatchAdmissionSupplier();
 		return getLifecycleAdapter().delegatedRuntime(
 				exactContext.getTransportTerminationSignal(), DefaultHttpServer.this::start);
 	}
@@ -574,7 +579,13 @@ final class DefaultHttpServer implements HttpServer {
 				}
 			};
 
+			// Each parsed dispatch holds both the built-in and, when decorated,
+			// framework admissions before the application worker is queued.
+			Map<MicrohttpRequest, HttpDispatchAdmission> lifecycleAdmissions =
+					Collections.synchronizedMap(new IdentityHashMap<>());
+			Supplier<Optional<AdmissionFence.Admission>> outerAdmissionSupplier = this.outerRequestAdmissionSupplier;
 			Handler handlerDelegate = ((microhttpRequest, microHttpCallback) -> {
+				HttpDispatchAdmission dispatchAdmission = lifecycleAdmissions.get(microhttpRequest);
 				ExecutorService requestHandlerExecutorServiceReference = this.requestHandlerExecutorService;
 				TimeoutScheduler requestHandlerTimeoutSchedulerReference = this.requestHandlerTimeoutScheduler;
 				InetSocketAddress remoteAddress = microhttpRequest.remoteAddress();
@@ -600,6 +611,7 @@ final class DefaultHttpServer implements HttpServer {
 				}
 
 				AtomicBoolean responseWritten = new AtomicBoolean(false);
+				AtomicReference<MicrohttpResponse> timeoutResponseRef = new AtomicReference<>();
 				AtomicReference<TimeoutScheduler.ScheduledTask> timeoutFutureRef = new AtomicReference<>();
 				AtomicReference<Thread> handlerThreadRef = new AtomicReference<>();
 				AtomicReference<MicrohttpResponse> unparsedFallbackResponseRef = new AtomicReference<>();
@@ -608,6 +620,10 @@ final class DefaultHttpServer implements HttpServer {
 
 				if (requestHandlerTimeoutSchedulerReference != null && !requestHandlerTimeoutSchedulerReference.isShutdown()) {
 					timeoutFutureRef.set(requestHandlerTimeoutSchedulerReference.schedule(() -> {
+						MicrohttpResponse rejectionFallback = unparsedFallbackResponseRef.get();
+						MicrohttpResponse timeoutResponse = rejectionFallback != null ? rejectionFallback : withConnectionClose(
+								provideMicrohttpFailsafeResponse(503, microhttpRequest, new TimeoutException("Request handling timed out")));
+						timeoutResponseRef.set(timeoutResponse);
 						if (!responseWritten.compareAndSet(false, true))
 							return;
 
@@ -621,10 +637,6 @@ final class DefaultHttpServer implements HttpServer {
 							handlerThread.interrupt();
 
 						try {
-							MicrohttpResponse rejectionFallback = unparsedFallbackResponseRef.get();
-							MicrohttpResponse timeoutResponse = rejectionFallback != null ? rejectionFallback : withConnectionClose(
-									provideMicrohttpFailsafeResponse(503, microhttpRequest,
-											new TimeoutException("Request handling timed out")));
 							microHttpCallback.accept(timeoutResponse);
 						} catch (Throwable t2) {
 							safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "An error occurred while writing a timeout response")
@@ -691,7 +703,7 @@ final class DefaultHttpServer implements HttpServer {
 								HttpMethod httpMethod;
 
 								try {
-									String normalizedMethod = trimAggressivelyToEmpty(microhttpRequest.method()).toUpperCase(ENGLISH);
+									String normalizedMethod = microhttpRequest.method();
 
 									if (normalizedMethod.equals("PRI"))
 										throw new IllegalRequestException("HTTP/2.0 Connection Preface specified, but Soklet only supports HTTP/1.1");
@@ -702,6 +714,7 @@ final class DefaultHttpServer implements HttpServer {
 								}
 
 								request = Request.withRawUrl(httpMethod, microhttpRequest.uri())
+										.lifecycleAdmission(dispatchAdmission == null ? null : dispatchAdmission.outer())
 										.multipartParser(getMultipartParser())
 										.idGenerator(getIdGenerator())
 										.microhttpHeaders(requestHeaders)
@@ -716,14 +729,29 @@ final class DefaultHttpServer implements HttpServer {
 								Request requestForResponse = request;
 
 								requestHandler.handleRequest(requestForResponse, requestResult -> {
+									// Elect response ownership before reserving or submitting an HTTP
+									// stream. A late handler observes the timeout's finite response.
+									if (!responseWritten.compareAndSet(false, true)) {
+										MicrohttpResponse timeoutResponse = timeoutResponseRef.get();
+										if (timeoutResponse != null)
+											throw new HttpTransportResponseReplacement(describeFiniteTransportResponse(timeoutResponse), null, null);
+										throw new RejectedExecutionException("Response ownership has already been claimed.");
+									}
+									cancelTimeout(timeoutFutureRef.getAndSet(null));
 									MicrohttpResponse microhttpResponse;
 									StreamLifecycleCoordinator terminationCoordinator = this.streamLifecycleCoordinator;
+									HttpResponseStreamObservation observation = requestResult.getResponseStreamObservation();
+									// Establish the admitted stream before source construction, which
+									// can already elect a terminal outcome before preparation is published.
+									Instant streamEstablishedAt = Instant.now();
+									long streamEstablishedNanos = System.nanoTime();
 									try {
 										microhttpResponse = toMicrohttpResponse(requestForResponse,
 												requestResult.getResourceMethod().orElse(null),
 												requestResult.getMarshaledResponse(),
 												requestResult.getHeadResponseCompressionBody().orElse(null),
-												streamingForcedShutdownStarted::get, requestResult.getResponseStreamObservation());
+												requestResult.getHeadResponseBodyLength().orElse(null),
+												streamingForcedShutdownStarted::get, observation);
 										// Resolve transport-owned protocol replacement synchronously, so
 										// write/finish observation receives the response actually offered.
 										microhttpResponse = StreamingMicrohttpResponses.forRequestVersion(
@@ -731,7 +759,8 @@ final class DefaultHttpServer implements HttpServer {
 									} catch (Throwable preparationFailure) {
 										Runnable reportRejection = () -> {
 											if (requestResult.getMarshaledResponse().isStreaming()) {
-												Runnable notification = () -> notifyDidTerminateResponseStream(requestForResponse,
+												Runnable notification = () -> notifyDidTerminateResponseStream(
+														observation == null ? requestForResponse : observation.getRequest(),
 														requestResult.getResourceMethod().orElse(null), requestResult.getMarshaledResponse(),
 														Instant.now(), Duration.ZERO, streamingForcedShutdownStarted.get()
 																? StreamTerminationReason.SERVER_STOPPING
@@ -739,7 +768,7 @@ final class DefaultHttpServer implements HttpServer {
 																		? StreamTerminationReason.BACKPRESSURE : StreamTerminationReason.PRODUCER_FAILED,
 														preparationFailure);
 												if (terminationCoordinator == null || !terminationCoordinator.dispatchRejectionObserver(notification))
-													safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_TERMINATE_RESPONSE_STREAM_FAILED,
+													safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR,
 															"Unadmitted stream rejection observer capacity was unavailable.")
 															.request(requestForResponse).build());
 											} else
@@ -747,9 +776,6 @@ final class DefaultHttpServer implements HttpServer {
 														.throwable(preparationFailure).build());
 										};
 										try {
-											if (!responseWritten.compareAndSet(false, true))
-												throw propagateResponseWriteFailure(preparationFailure);
-											cancelTimeout(timeoutFutureRef.getAndSet(null));
 											int statusCode = preparationFailure instanceof RejectedExecutionException ? 503 : 500;
 											MicrohttpResponse failsafeResponse = provideMicrohttpFailsafeResponse(statusCode, microhttpRequest, preparationFailure);
 											if (statusCode == 503) failsafeResponse = withConnectionClose(failsafeResponse);
@@ -766,11 +792,10 @@ final class DefaultHttpServer implements HttpServer {
 										}
 									}
 
-									if (!responseWritten.compareAndSet(false, true)) {
-										StreamingMicrohttpResponses.discard(microhttpResponse);
-										throw new RejectedExecutionException("Response ownership has already been claimed.");
-									}
-									cancelTimeout(timeoutFutureRef.getAndSet(null));
+									if (microhttpResponse.streaming() && observation != null)
+										observation.prepare(new DefaultStreamingResponseHandle(ServerType.HTTP, observation.getRequest(),
+												requestResult.getResourceMethod().orElse(null), requestResult.getMarshaledResponse(), streamEstablishedAt),
+												streamEstablishedNanos, this.metricsCollector, getLifecycleObserver(), this::safelyLog);
 									try { microHttpCallback.accept(microhttpResponse); }
 									catch (Throwable throwable) {
 										StreamingMicrohttpResponses.discard(microhttpResponse);
@@ -878,14 +903,14 @@ final class DefaultHttpServer implements HttpServer {
 			});
 			// Distinct pipelined dispatches can be record-equal, especially when the
 			// parser reuses its empty body. Admissions belong to dispatch identity.
-			Map<MicrohttpRequest, AdmissionFence.Admission> lifecycleAdmissions =
-					Collections.synchronizedMap(new IdentityHashMap<>());
 			Handler handler = new Handler() {
 				@Override
 				public void handle(@NonNull MicrohttpRequest request,
 						@NonNull Consumer<MicrohttpResponse> responseConsumer) {
-					AdmissionFence.Admission admission = getLifecycleAdapter()
+					AdmissionFence.Admission builtInAdmission = getLifecycleAdapter()
 							.tryAdmit(lifecycleGeneration).orElse(null);
+					HttpDispatchAdmission admission = builtInAdmission == null ? null
+							: HttpDispatchAdmission.acquire(builtInAdmission, outerAdmissionSupplier);
 					if (admission == null) {
 						RejectedExecutionException exception = new RejectedExecutionException(
 								"HTTP request rejected because the server is shutting down");
@@ -894,7 +919,7 @@ final class DefaultHttpServer implements HttpServer {
 						return;
 					}
 
-					AdmissionFence.Admission existing = lifecycleAdmissions.putIfAbsent(
+					HttpDispatchAdmission existing = lifecycleAdmissions.putIfAbsent(
 							request, admission);
 					if (existing != null) {
 						admission.close();
@@ -972,7 +997,10 @@ final class DefaultHttpServer implements HttpServer {
 										"An exception occurred during streaming lifecycle supervision")
 										.throwable(throwable).build()))
 						: requireNonNull(streamLifecycleCoordinatorFactory.get());
-				this.streamingTimeoutExecutorService = new ScheduledThreadPoolExecutor(1, new NonvirtualThreadFactory("streaming-timeout"));
+				ScheduledThreadPoolExecutor streamingTimeoutExecutor = new ScheduledThreadPoolExecutor(1,
+						new NonvirtualThreadFactory("streaming-timeout"));
+				streamingTimeoutExecutor.setRemoveOnCancelPolicy(true);
+				this.streamingTimeoutExecutorService = streamingTimeoutExecutor;
 				this.requestHandlerTimeoutScheduler = new TimeoutScheduler(new NonvirtualThreadFactory("request-handler-timeout"));
 				EventLoop eventLoop = new EventLoop(options, logger, handler, connectionListener);
 				eventLoop.useCoordinatorOwnedUnexpectedTermination();
@@ -1065,11 +1093,40 @@ final class DefaultHttpServer implements HttpServer {
 	}
 
 	private static void releaseLifecycleAdmission(
-			@NonNull Map<MicrohttpRequest, AdmissionFence.Admission> admissions,
+			@NonNull Map<MicrohttpRequest, HttpDispatchAdmission> admissions,
 			@NonNull MicrohttpRequest request) {
-		AdmissionFence.Admission admission = admissions.remove(requireNonNull(request));
+		HttpDispatchAdmission admission = admissions.remove(requireNonNull(request));
 		if (admission != null)
 			admission.close();
+	}
+
+	private record HttpDispatchAdmission(AdmissionFence.@NonNull Admission builtIn,
+			AdmissionFence.@Nullable Admission outer) implements AutoCloseable {
+		@Nullable
+		static HttpDispatchAdmission acquire(AdmissionFence.@NonNull Admission builtIn,
+				@Nullable Supplier<Optional<AdmissionFence.Admission>> outerSupplier) {
+			if (outerSupplier == null)
+				return new HttpDispatchAdmission(builtIn, null);
+			try {
+				AdmissionFence.Admission outer = outerSupplier.get().orElse(null);
+				if (outer != null)
+					return new HttpDispatchAdmission(builtIn, outer);
+				builtIn.close();
+				return null;
+			} catch (RuntimeException | Error failure) {
+				builtIn.close();
+				throw failure;
+			}
+		}
+
+		@Override public void close() {
+			try {
+				if (this.outer != null)
+					this.outer.close();
+			} finally {
+				this.builtIn.close();
+			}
+		}
 	}
 
 	@NonNull
@@ -1130,6 +1187,7 @@ final class DefaultHttpServer implements HttpServer {
 		requireNonNull(sokletConfig);
 
 		this.requestHandler = requestHandler;
+		this.outerRequestAdmissionSupplier = null;
 		this.lifecycleObserver = sokletConfig.getAggregateLifecycleObserver();
 		this.lifecyclePolicy = sokletConfig.getLifecyclePolicy();
 		this.metricsCollector = sokletConfig.getMetricsCollector();
@@ -1299,14 +1357,14 @@ final class DefaultHttpServer implements HttpServer {
 
 	@NonNull
 	protected MicrohttpResponse toMicrohttpResponse(@NonNull MarshaledResponse marshaledResponse) {
-		return toMicrohttpResponse(null, null, marshaledResponse, null, () -> false, null);
+		return toMicrohttpResponse(null, null, marshaledResponse, null, null, () -> false, null);
 	}
 
 	@NonNull
 	protected MicrohttpResponse toMicrohttpResponse(@Nullable Request request,
 																	@Nullable ResourceMethod resourceMethod,
 																	@NonNull MarshaledResponse marshaledResponse) {
-		return toMicrohttpResponse(request, resourceMethod, marshaledResponse, null,
+		return toMicrohttpResponse(request, resourceMethod, marshaledResponse, null, null,
 				() -> false, null);
 	}
 
@@ -1315,10 +1373,13 @@ final class DefaultHttpServer implements HttpServer {
 																@Nullable ResourceMethod resourceMethod,
 																@NonNull MarshaledResponse marshaledResponse,
 																@Nullable MarshaledResponseBody headResponseCompressionBody,
+			@Nullable Long headResponseBodyLength,
 																@NonNull BooleanSupplier streamingForcedShutdownStarted,
 			@Nullable HttpResponseStreamObservation streamObservation) {
 		requireNonNull(marshaledResponse);
 		requireNonNull(streamingForcedShutdownStarted);
+		if (marshaledResponse.getStatusCode() < 200 || marshaledResponse.getStatusCode() > 599)
+			throw new IllegalStateException("Final HTTP response status code must be between 200 and 599.");
 
 		List<Header> headers = new ArrayList<>();
 
@@ -1352,6 +1413,8 @@ final class DefaultHttpServer implements HttpServer {
 
 		String reasonPhrase = reasonPhraseForStatusCode(marshaledResponse.getStatusCode());
 		StreamingResponseBody streamingResponseBody = marshaledResponse.getStreamingResponseBody().orElse(null);
+		if (streamingResponseBody == null)
+			headers = finiteResponseHeaders(headers);
 
 		if (streamingResponseBody != null) {
 			Request streamingRequest = requireNonNull(request);
@@ -1386,6 +1449,11 @@ final class DefaultHttpServer implements HttpServer {
 				reservation.bindCleanupFailureObserver(throwable -> safelyLog(
 						LogEvent.with(LogEventType.RESPONSE_STREAM_CLOSE_FAILED,
 								"A streaming response cleanup operation failed")
+								.throwable(throwable).request(streamingRequest)
+								.resourceMethod(streamingResourceMethod).marshaledResponse(marshaledResponse).build()));
+				reservation.bindProducerFailureObserver(throwable -> safelyLog(
+						LogEvent.with(LogEventType.RESPONSE_STREAM_FAILED,
+								"A streaming response producer failed after cancelation")
 								.throwable(throwable).request(streamingRequest)
 								.resourceMethod(streamingResourceMethod).marshaledResponse(marshaledResponse).build()));
 				MicrohttpResponse response = StreamingMicrohttpResponses.withStreamingBody(
@@ -1482,7 +1550,10 @@ final class DefaultHttpServer implements HttpServer {
 		}
 
 		if (body == null)
-			return new MicrohttpResponse(marshaledResponse.getStatusCode(), reasonPhrase, headers, emptyByteArray());
+			return new MicrohttpResponse(marshaledResponse.getStatusCode(), reasonPhrase,
+					finiteContentLengthHeaders(headers, request, marshaledResponse.getStatusCode(), 0L, headResponseBodyLength), emptyByteArray());
+
+		headers = finiteContentLengthHeaders(headers, request, marshaledResponse.getStatusCode(), body.getLength(), headResponseBodyLength);
 
 		if (body instanceof MarshaledResponseBody.Bytes bytes)
 			return new MicrohttpResponse(marshaledResponse.getStatusCode(), reasonPhrase, headers, bytes.getBytes());
@@ -1503,6 +1574,42 @@ final class DefaultHttpServer implements HttpServer {
 		throw new IllegalStateException(format("Unsupported marshaled response body type: %s", body.getClass().getName()));
 	}
 
+	@NonNull
+	private static List<Header> finiteResponseHeaders(@NonNull List<Header> headers) {
+		Set<String> connectionNamedHeaders = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+		boolean close = false;
+		for (Header header : headers) {
+			if (!header.name().equalsIgnoreCase("Connection")) continue;
+			for (String token : header.value().split(",", -1)) {
+				String name = token.trim();
+				if (!name.isEmpty()) connectionNamedHeaders.add(name);
+				if (name.equalsIgnoreCase("close")) close = true;
+			}
+		}
+		Set<String> transportOwned = Set.of("connection", "content-length", "keep-alive", "proxy-connection",
+				"te", "trailer", "transfer-encoding", "upgrade");
+		List<Header> result = new ArrayList<>(headers.size());
+		for (Header header : headers)
+			if (!transportOwned.contains(header.name().toLowerCase(Locale.ENGLISH)) && !connectionNamedHeaders.contains(header.name()))
+				result.add(header);
+		if (close) result.add(new Header("Connection", "close"));
+		result.sort(Comparator.comparing(Header::name));
+		return result;
+	}
+
+	@NonNull
+	private static List<Header> finiteContentLengthHeaders(@NonNull List<Header> headers, @Nullable Request request,
+			int statusCode, long bodyLength, @Nullable Long headRepresentationLength) {
+		if (statusCode == 204 || statusCode == 304) return headers;
+		boolean head = request != null && request.getHttpMethod() == HttpMethod.HEAD;
+		Long length = head && bodyLength == 0L ? headRepresentationLength : Long.valueOf(bodyLength);
+		if (length == null) return headers;
+		List<Header> result = new ArrayList<>(headers);
+		result.add(new Header("Content-Length", Long.toString(length)));
+		result.sort(Comparator.comparing(Header::name));
+		return result;
+	}
+
 	private boolean isResponseCompressionCandidate(@Nullable Request request,
 			@NonNull MarshaledResponse marshaledResponse, @NonNull List<@NonNull Header> headers,
 			@Nullable MarshaledResponseBody body) {
@@ -1517,7 +1624,7 @@ final class DefaultHttpServer implements HttpServer {
 		return statusCode >= 200 && statusCode != 204 && statusCode != 206 && statusCode != 304
 				&& !hasHeader(headers, "Content-Encoding")
 				&& !hasHeader(headers, "Content-Range")
-				&& !hasHeader(headers, "Transfer-Encoding");
+				&& !marshaledResponse.getHeaders().containsKey("Transfer-Encoding");
 	}
 
 	private boolean requestAcceptsContentEncoding(@NonNull Request request, @NonNull String contentEncoding) {
@@ -1904,15 +2011,20 @@ final class DefaultHttpServer implements HttpServer {
 			return;
 
 		StreamingResponseHandle streamingResponse = new DefaultStreamingResponseHandle(ServerType.HTTP,
-				request, resourceMethod, marshaledResponse, establishedAt);
+				streamObservation == null ? request : streamObservation.getRequest(), resourceMethod, marshaledResponse, establishedAt);
 		StreamTermination termination = StreamTermination
 				.with(cancelationReason == null ? StreamTerminationReason.COMPLETED : cancelationReason, streamDuration)
 				.cause(throwable)
 				.build();
 
-		if (streamObservation != null)
-			streamObservation.deliver(streamingResponse, termination, terminatedNanos, bodyBytes, this.metricsCollector, this::safelyLog);
-		if (cancelationReason != null) {
+		if (streamObservation != null) {
+			HttpResponseStreamObservation.Delivery delivery = streamObservation.deliver(streamingResponse, termination,
+					terminatedNanos, bodyBytes, this.metricsCollector, this::safelyLog);
+			streamingResponse = delivery.handle();
+			termination = delivery.termination();
+		}
+		if (cancelationReason != null && cancelationReason != StreamTerminationReason.CLIENT_DISCONNECTED
+				&& cancelationReason != StreamTerminationReason.SERVER_STOPPING) {
 			LogEventType logEventType = cancelationReason == StreamTerminationReason.PRODUCER_FAILED
 					? LogEventType.RESPONSE_STREAM_FAILED
 					: LogEventType.RESPONSE_STREAM_CANCELED;

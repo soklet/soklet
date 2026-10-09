@@ -54,7 +54,7 @@ final class McpResourceValueSupport {
 	@NonNull
 	static String requireNonBlank(@NonNull String value,
 			@NonNull String description) {
-		requireNonNull(value);
+		McpContentValueSupport.requireWellFormedString(value);
 		requireNonNull(description);
 		if (value.isBlank())
 			throw new IllegalArgumentException(description + " must not be blank.");

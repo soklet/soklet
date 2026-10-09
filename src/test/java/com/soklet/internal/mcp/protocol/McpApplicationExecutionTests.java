@@ -1020,8 +1020,8 @@ public class McpApplicationExecutionTests {
 
 			now.set(promotedDeadline);
 			executor.takeCommand().run();
-			awaitCondition(() -> executor.command() != null);
-			executor.takeCommand().run();
+			Assertions.assertNull(executor.command(),
+					"Accepted queued work drains on the same physical worker.");
 			activeCaller.join(TimeUnit.SECONDS.toMillis(5));
 			promotedCaller.join(TimeUnit.SECONDS.toMillis(5));
 

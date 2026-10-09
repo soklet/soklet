@@ -396,6 +396,29 @@ class McpLegacySessionGrantStoreTests {
 	}
 
 	@Test
+	void first_page_acknowledgment_preserves_changes_arriving_during_projection_and_write() {
+		Fixture fixture = new Fixture(); Session session = fixture.session("owner");
+		McpResourceNotificationType family = McpResourceNotificationType.TOOLS_LIST_CHANGED;
+		McpLegacySessionStore.Get get = fixture.get(session, Set.of(family), 60 * SECOND);
+		fixture.store.markCatalogDirty("/mcp", REVISION, family);
+		McpLegacySessionStore.DeliveryAttempt hint = onlyDelivery(fixture).forGet(get).orElseThrow();
+		McpLegacySessionStore.NotificationReservation hintBytes = fixture.store.reserveNotificationBytes(hint, 80).reservation().orElseThrow();
+		hintBytes.written(); hintBytes.release();
+		McpLegacySessionStore.Call list = fixture.call(session, 0);
+		McpLegacySessionStore.CatalogReadGeneration read = fixture.store.beginCatalogRead(list, family).orElseThrow();
+		fixture.store.markCatalogDirty("/mcp", REVISION, family);
+		list.logicalComplete();
+		assertFalse(fixture.store.acknowledgeCatalogRead(read));
+		assertEquals(1, fixture.store.pendingDeliveries("/mcp", REVISION).size(),
+				"A change after a delivered hint must remain eligible after the first-page write.");
+		McpLegacySessionStore.Call fresh = fixture.call(session, 0);
+		McpLegacySessionStore.CatalogReadGeneration current = fixture.store.beginCatalogRead(fresh, family).orElseThrow();
+		assertTrue(fixture.store.acknowledgeCatalogRead(current));
+		assertTrue(fixture.store.pendingDeliveries("/mcp", REVISION).isEmpty());
+		list.physicalComplete(); fresh.physicalComplete(); get.physicalComplete(); fixture.store.close(); fixture.assertEmpty();
+	}
+
+	@Test
 	void catalog_dirty_state_coalesces_until_fresh_list_without_replaying_on_reconnect() {
 		Fixture fixture = new Fixture(); Session session = fixture.session("owner");
 		McpLegacySessionStore.Get first = fixture.get(session, Set.of(McpResourceNotificationType.TOOLS_LIST_CHANGED), 60 * SECOND);

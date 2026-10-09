@@ -259,7 +259,6 @@ public class ResponseCompressionTests {
 		List<MarshaledResponse> excluded = List.of(
 				MarshaledResponse.withStatusCode(200).build(),
 				response(new byte[0]),
-				MarshaledResponse.withStatusCode(103).build(),
 				MarshaledResponse.withStatusCode(204).build(),
 				MarshaledResponse.withStatusCode(206).body(body).build(),
 				MarshaledResponse.withStatusCode(304).build(),
@@ -268,6 +267,10 @@ public class ResponseCompressionTests {
 				response(body).copy().headers(Map.of("Transfer-Encoding", List.of("chunked"))).finish());
 		for (MarshaledResponse response : excluded)
 			Assertions.assertDoesNotThrow(() -> server.toMicrohttpResponse(requestAccepting("gzip"), null, response));
+		// Informational statuses cannot be handed off as final responses; rejection
+		// must happen before consulting the application compressor.
+		Assertions.assertThrows(IllegalStateException.class,
+				() -> server.toMicrohttpResponse(requestAccepting("gzip"), null, MarshaledResponse.withStatusCode(103).build()));
 		Assertions.assertDoesNotThrow(() -> server.toMicrohttpResponse(response(body)));
 	}
 

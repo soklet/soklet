@@ -33,7 +33,9 @@ import javax.annotation.concurrent.ThreadSafe;
  * <p>
 	 * Implementations must make shutdown phase methods prompt, nonblocking,
 	 * idempotent, thread-safe, and monotonic. A shutdown method initiates work; it
-	 * does not itself constitute termination proof.
+	 * does not itself constitute termination proof. Shutdown may be requested
+	 * before start is invoked; even an unused runtime must report affirmative
+	 * termination proof after its owned activity has ended.
 	 * <p>
 	 * Soklet defers phase delivery while the configured runtime's start call is
 	 * still running. If that call returns or throws after the forced boundary,
@@ -70,8 +72,10 @@ public interface TransportRuntime {
 
 	/**
 	 * Stops admission and initiates graceful wind-up without waiting for it.
-	 * The transport must signal termination only after all runtime-owned activity
-	 * has ended.
+	 * Shutdown phases can run even when {@link #start(StartupContext)} was never
+	 * invoked, for example after another member failed to attach or start.
+	 * The transport must signal termination once all owned activity has ended,
+	 * including affirmative proof when no resources or activity were started.
 	 *
 	 * @param shutdownContext graceful shutdown timing information
 	 */
@@ -80,8 +84,10 @@ public interface TransportRuntime {
 	/**
 	 * Subsumes graceful shutdown and interrupts or cancels only runtime-owned
 	 * execution.
-	 * The transport must signal termination only after all runtime-owned activity
-	 * has ended.
+	 * Shutdown phases can run even when {@link #start(StartupContext)} was never
+	 * invoked, for example after another member failed to attach or start.
+	 * The transport must signal termination once all owned activity has ended,
+	 * including affirmative proof when no resources or activity were started.
 	 *
 	 * @param shutdownContext forced shutdown timing information
 	 */
