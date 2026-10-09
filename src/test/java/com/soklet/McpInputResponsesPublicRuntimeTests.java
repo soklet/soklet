@@ -433,7 +433,10 @@ public class McpInputResponsesPublicRuntimeTests {
 				Assertions.assertFalse(response.body().contains(
 						"REQUEST-STATE-SECRET"), response.body());
 			}
-			assertAllZero(admissionInvocations, requestLimiterInvocations,
+			// Invalid response shapes fail before admission. The configured request-state
+			// mode is registration-dependent and is checked after authenticating the caller.
+			Assertions.assertEquals(1, admissionInvocations.get());
+			assertAllZero(requestLimiterInvocations,
 					toolLimiterInvocations, handlerInvocations,
 					sanitizerInvocations, observer.starts, observer.finishes,
 					collector.started, collector.finished);

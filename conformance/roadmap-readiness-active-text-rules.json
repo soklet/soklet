@@ -35,18 +35,18 @@
     },
     {
       "id": "PROFILE-003",
-      "classification": "qualified-production-profile",
-      "rationale": "Default-path guidance names the qualified 4.0.0 server target explicitly without implying that development compatibility adapters are qualified.",
+      "classification": "explicit-modern-profile",
+      "rationale": "Default-path guidance names the exact modern revision without implying host compatibility or candidate acceptance.",
       "files": [
         {"path":"MCP.md","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Multi-round-trip input and request state"],"role":"defaultPath"}},
         {"path":"README.md","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Recommended MCP setup"],"role":"defaultPath"}}
       ],
-      "matcher": {"kind":"regex","pattern":"Soklet's qualified 4\\.0\\.0 MCP server target is\\s+`2026-07-28`","caseSensitive":true},
+      "matcher": {"kind":"regex","pattern":"Soklet 4\\.0\\.0 supports MCP\\s+`2026-07-28`","caseSensitive":true},
       "expectation": "nonzero-with-notice",
-      "noticePattern": {"kind":"literal","pattern":"Soklet's qualified 4.0.0 MCP server target is","caseSensitive":true},
+      "noticePattern": {"kind":"literal","pattern":"Soklet 4.0.0 supports MCP","caseSensitive":true},
       "allowedMatches": [
-        {"path":"MCP.md","matchedText":"Soklet's qualified 4.0.0 MCP server target is\n`2026-07-28`","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Multi-round-trip input and request state"],"role":"defaultPath"}},
-        {"path":"README.md","matchedText":"Soklet's qualified 4.0.0 MCP server target is `2026-07-28`","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Recommended MCP setup"],"role":"defaultPath"}}
+        {"path":"MCP.md","matchedText":"Soklet 4.0.0 supports MCP\n`2026-07-28`","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Multi-round-trip input and request state"],"role":"defaultPath"}},
+        {"path":"README.md","matchedText":"Soklet 4.0.0 supports MCP `2026-07-28`","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Model Context Protocol (MCP)","Recommended MCP setup"],"role":"defaultPath"}}
       ]
     },
     {
@@ -95,32 +95,19 @@
     },
     {
       "id": "COUNT-001",
-      "classification": "reviewed-event-instrument-snapshots",
-      "rationale": "Exact 23 and exact 22 claims are limited to the reviewed 23-event and 22-instrument snapshots.",
+      "classification": "obsolete-telemetry-count-prohibition",
+      "rationale": "Public guidance must not repeat obsolete 23-event or 22-instrument totals; current metric families and integration tables are the reference.",
       "files": [
         {"path":"MCP.md","scope":{"kind":"wholeFile","role":"factualSupport"}},
-        {"path":"MCP.md","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Lifecycle and metrics"],"role":"factualSupport"}},
         {"path":"README.md","scope":{"kind":"wholeFile","role":"factualSupport"}},
-        {"path":"README.md","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Metrics Collection"],"role":"factualSupport"}},
         {"path":"SECURITY.md","scope":{"kind":"wholeFile","role":"security"}},
-        {"path":"SECURITY.md","scope":{"kind":"headingSubtree","headingPath":["Security Policy","MCP Deployment Security"],"role":"security"}},
         {"path":"api/mcp/README.md","scope":{"kind":"wholeFile","role":"factualSupport"}},
         {"path":"CHANGELOG.md","scope":{"kind":"wholeFile","role":"migration"}},
-        {"path":"CHANGELOG.md","scope":{"kind":"headingSubtree","headingPath":["Changelog","4.0.0 (2026-09-01)","Detailed Implementation Record"],"role":"migration"}},
         {"path":"release/README.md","scope":{"kind":"wholeFile","role":"factualSupport"}}
       ],
       "matcher": {"kind":"regex","pattern":"(?:exactly\\s+(?:22|23)[\\s\\S]{0,80}(?:OpenTelemetry\\s+instruments?|public\\s+final\\s+(?:event\\s+)?variants?|event\\s+variants?|event-record\\s+schemas?)|(?:event\\s+variants?|event\\s+hierarchy)[\\s\\S]{0,80}exactly\\s+(?:22|23)[\\s\\S]{0,40}(?:downstream|OpenTelemetry\\s+instruments?))","caseSensitive":false},
-      "expectation": "nonzero-with-notice",
-      "noticePattern": {"kind":"regex","pattern":"event variants?|event hierarchy|OpenTelemetry instruments?|event-record schemas?|downstream","caseSensitive":false},
-      "allowedMatches": [
-        {"path":"MCP.md","matchedText":"event\nvariants to exactly 22 OpenTelemetry instruments","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Lifecycle and metrics"],"role":"factualSupport"}},
-        {"path":"MCP.md","matchedText":"exactly 23 public final variants","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Lifecycle and metrics"],"role":"factualSupport"}},
-        {"path":"README.md","matchedText":"exactly 22 OpenTelemetry instruments","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Metrics Collection"],"role":"factualSupport"}},
-        {"path":"README.md","matchedText":"exactly 23 public final event variants","scope":{"kind":"headingSubtree","headingPath":["What Else Does It Do?","Metrics Collection"],"role":"factualSupport"}},
-        {"path":"SECURITY.md","matchedText":"event variants map to exactly 22 downstream","scope":{"kind":"headingSubtree","headingPath":["Security Policy","MCP Deployment Security"],"role":"security"}},
-        {"path":"CHANGELOG.md","matchedText":"exactly 23 event-record schemas","scope":{"kind":"headingSubtree","headingPath":["Changelog","4.0.0 (2026-09-01)","Detailed Implementation Record"],"role":"migration"}},
-        {"path":"CHANGELOG.md","matchedText":"exactly 22\n  OpenTelemetry instruments","scope":{"kind":"headingSubtree","headingPath":["Changelog","4.0.0 (2026-09-01)","Detailed Implementation Record"],"role":"migration"}}
-      ]
+      "expectation": "zero",
+      "allowedMatches": []
     },
     {
       "id": "CACHE-001",
@@ -336,13 +323,13 @@
       "classification": "dynamic-client-registration",
       "rationale": "Dynamic Client Registration remains reviewed N/A because Soklet provides no OAuth/DCR implementation.",
       "files": [
-        {"path":"MCP.md","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Current Phase 6 and release state"],"role":"factualSupport"}}
+        {"path":"MCP.md","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features","Protocol scope and unsupported features"],"role":"compatibility"}}
       ],
       "matcher": {"kind":"literal","pattern":"Dynamic Client Registration is reviewed and not applicable because Soklet has","caseSensitive":true},
       "expectation": "nonzero-with-notice",
       "noticePattern": {"kind":"literal","pattern":"no OAuth/DCR implementation","caseSensitive":true},
       "allowedMatches": [
-        {"path":"MCP.md","matchedText":"Dynamic Client Registration is reviewed and not applicable because Soklet has","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Current Phase 6 and release state"],"role":"factualSupport"}}
+        {"path":"MCP.md","matchedText":"Dynamic Client Registration is reviewed and not applicable because Soklet has","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features","Protocol scope and unsupported features"],"role":"compatibility"}}
       ]
     },
     {

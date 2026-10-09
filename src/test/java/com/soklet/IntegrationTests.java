@@ -244,8 +244,6 @@ public class IntegrationTests {
 	public void multivalueHeadersAreSplitCorrectly() throws Exception {
 		int port = findFreePort();
 		try (Soklet app = startApp(port, Set.of(EchoResource.class))) {
-			URL url = new URL("http://127.0.0.1:" + port + "/multivalued-headers");
-
 			String host = "127.0.0.1";
 			String path = "/multivalued-headers";
 
@@ -273,7 +271,8 @@ public class IntegrationTests {
 					// Now parse/verify
 					String headers = rawHeaders.toString();
 					Assertions.assertTrue(headers.contains("Content-Length: 0"));
-					Assertions.assertTrue(headers.contains("Content-Type: text/plain; charset=UTF-8"));
+					Assertions.assertFalse(headers.toLowerCase(Locale.ROOT).contains("content-type:"),
+							"A response with no representation must not gain a synthetic Content-Type");
 					// Multi-valued headers preserved on the wire:
 					Assertions.assertTrue(headers.contains("Set-Cookie: a=b"));
 					Assertions.assertTrue(headers.contains("Set-Cookie: a=c"));
@@ -2037,24 +2036,27 @@ public class IntegrationTests {
 				Assertions.assertTrue(normalHead.statusLine().startsWith("HTTP/1.1 200"), normalHead.statusLine());
 				Assertions.assertEquals("11", normalHead.headers().get("content-length"), "Expected hypothetical GET length");
 
-				// 2. Failsafe-path HEAD (415 via unsupported Content-Encoding): RFC 9110 §9.3.2 requires
-				// NO content even though the canned failsafe would normally carry a text body
+				// Pipelined GET proves that the normal HEAD did not leak representation bytes.
+				out.write(("GET /hello HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n").getBytes(StandardCharsets.ISO_8859_1));
+				out.flush();
+				RawResponse pipelinedGet = readResponse(in);
+				Assertions.assertTrue(pipelinedGet.statusLine().startsWith("HTTP/1.1 200"), pipelinedGet.statusLine());
+				Assertions.assertEquals("hello world", new String(pipelinedGet.body(), StandardCharsets.UTF_8));
+
+				// 2. Unparsed-request HEAD (415 via unsupported Content-Encoding): the default
+				// marshaler supplies an empty representation and the transport sends no content.
 				out.write(("HEAD /hello HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Encoding: br\r\n\r\n")
 						.getBytes(StandardCharsets.ISO_8859_1));
 				out.flush();
 				HeadersOnlyResponse failsafeHead = readHeadersOnly(in);
 				Assertions.assertTrue(failsafeHead.statusLine().startsWith("HTTP/1.1 415"), failsafeHead.statusLine());
 				String failsafeContentLength = failsafeHead.headers().get("content-length");
-				Assertions.assertNotNull(failsafeContentLength, "Hypothetical Content-Length should be preserved");
-				Assertions.assertTrue(Integer.parseInt(failsafeContentLength) > 0, "Hypothetical Content-Length should be nonzero");
+				Assertions.assertEquals("0", failsafeContentLength,
+						"The default unparsed-request representation is empty");
 
-				// 3. Pipelined GET on the same connection: if either HEAD leaked body bytes, this
-				// response would desync (the leaked bytes would be read as this status line)
-				out.write(("GET /hello HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n").getBytes(StandardCharsets.ISO_8859_1));
-				out.flush();
-				RawResponse pipelinedGet = readResponse(in);
-				Assertions.assertTrue(pipelinedGet.statusLine().startsWith("HTTP/1.1 200"), pipelinedGet.statusLine());
-				Assertions.assertEquals("hello world", new String(pipelinedGet.body(), StandardCharsets.UTF_8));
+				// Parsing rejection closes the connection; no representation bytes may precede EOF.
+				Assertions.assertEquals("close", failsafeHead.headers().get("connection"));
+				Assertions.assertEquals(-1, in.read(), "Unparsed HEAD must close without leaking content");
 			}
 		}
 	}
@@ -2323,7 +2325,12 @@ public class IntegrationTests {
 				).getBytes(StandardCharsets.UTF_8));
 				out.flush();
 
-				Assertions.assertEquals(-1, in.read(), "Connection should close when body read times out");
+				RawResponse response = readResponse(in);
+				Assertions.assertEquals("HTTP/1.1 408 Request Timeout", response.statusLine());
+				Assertions.assertEquals("close", response.headers().get("connection"));
+				Assertions.assertEquals(0, response.body().length,
+						"The default unparsed-request timeout representation is empty");
+				Assertions.assertEquals(-1, in.read(), "Connection should close after the timeout response");
 			}
 		}
 	}

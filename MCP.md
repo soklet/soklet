@@ -14,7 +14,7 @@ the ordinary `HttpServer` or `SseServer`. The API and implementation ship in
 the zero-runtime-dependency `com.soklet:soklet` artifact; there is no separate
 `soklet-mcp` component.
 
-The current source version is `4.0.0`.
+The examples in this guide use Soklet `4.0.0`.
 
 Start with the copy/paste [MCP quickstart](MCP_QUICKSTART.md): it includes the
 dependency and annotation-processor setup, `-parameters`, one annotated tool,
@@ -24,9 +24,7 @@ and an exact Inspector command.
 This reference covers multi-round-trip request state, durable Tasks,
 progress/cancelation, subscriptions, localization, lifecycle and aggregate
 metrics, bounded off-network simulation, downstream OpenTelemetry integration,
-and bounded structured trace-correlation logging. Internal evidence remains
-under `release/` and `conformance/`; local development results are not presented
-as published-release or immutable-candidate claims.
+and bounded structured trace-correlation logging.
 
 The [MCP privacy boundary](release/MCP_PRIVACY_BOUNDARY.md) explains which
 diagnostic, metric, callback, and simulator values core Soklet redacts or
@@ -202,22 +200,10 @@ state remain 2026-only. Apps resource declarations and returned Apps content are
 rejected on the legacy adapter.
 
 The client is configured with the endpoint URL. Soklet does not discover or
-choose a sibling URL on the client's behalf. Only completed adapter tests and
-qualification against the exact candidate artifact can establish a release or
-host compatibility claim. The earlier implementation and qualification
-checkpoints remain in
-[the compatibility plan](release/MCP_LEGACY_COMPATIBILITY_PLAN_2026-09-27.md).
-The owner selected the complete
-[2025 expansion](release/MCP_LEGACY_EXPANSION_PLAN_2026-10-01.md) for 4.0.0:
-completion, POST progress, static catalog pagination, opt-in sessions with
-remembered metadata/cancellation, and GET/DELETE notification delivery. This
-development source implements completion, POST progress, and static catalog
-pagination, plus explicitly enabled 2025 sessions with remembered public client
-metadata and active-request cancellation, leased GET opening, and verified DELETE
-retirement, session-owned URI grants, and resource/catalog invalidations over GET.
-Earlier host evidence retains its original stateless scope; session
-ownership, cancellation, expiry, and reconnect recovery require separate
-qualification against the exact candidate.
+choose a sibling URL on the client's behalf. Client support depends on the
+selected revision and features; the dated
+[client compatibility matrix](release/MCP_CLIENT_COMPATIBILITY.md) records
+tested host versions and the scope of each check.
 
 `McpLocalizationContext` is a Soklet-owned final request value built through
 `withLocale(locale, localizationLookup)`, with an optional revision and a
@@ -303,7 +289,7 @@ and does not cause Soklet to advertise a protocol capability.
 
 ## Skills
 
-The development source implements the `io.modelcontextprotocol/skills`
+Soklet implements the `io.modelcontextprotocol/skills`
 extension: discover manifests through `skills/list` and `skills/get`, then read
 their exact files through `resources/read`. Configure immutable bundles and
 locale groups programmatically; annotation-based Skills authoring is not provided.
@@ -746,7 +732,7 @@ For 4.0.0, `@McpTool` declarations cannot publish tool icons or the
 Those values are intentionally deferred on the annotation surface until 4.1.
 When a client needs them for presentation or approval policy, declare that
 tool with `McpToolRegistration`, which supports `icons(List)` and
-`annotations(...)`, and add the registration to a programmatic endpoint.
+`toolAnnotations(...)`, and add the registration to a programmatic endpoint.
 Annotations on inherited methods are not MCP operations: place each MCP
 operation annotation directly on a method declared by the endpoint class.
 
@@ -1335,7 +1321,7 @@ derived wire method through `getJsonRpcMethod()`, and the complete derived
 capability set through `getCapabilities()`.
 
 This multi-round input path is available on the explicitly selected MCP
-`2026-07-28` revision. Soklet's qualified 4.0.0 MCP server target is
+`2026-07-28` revision. Soklet 4.0.0 supports MCP
 `2026-07-28`. Soklet neither selects an automatic
 "latest" profile nor falls back to another revision. Form and URL elicitation
 are the supported client input operations on that revision.
@@ -2413,8 +2399,11 @@ the event. Soklet subscribes when its server starts, closes only its listener
 registration when the server stops, and never closes the application-owned
 publisher. Shutdown first fences the old generation's callback, then invokes
 application registration close outside lifecycle locks on bounded daemon
-cleanup workers. A failing or still-running close can leave residual activity
-or missing termination proof in the immutable `ShutdownResult`. The one-shot
+cleanup workers. A completed close attempt that threw is retried in the force
+phase; an attempt still running is retained and interrupted, without starting
+a concurrent close on the same registration. Failed or still-running cleanup
+at the deadline can leave residual activity or missing termination proof in
+the immutable `ShutdownResult`; a later exit does not rewrite that result. The one-shot
 Soklet lifecycle uses the shared graceful/forced budgets in `LifecyclePolicy`;
 it retains physical cleanup evidence until termination is proven. Application
 code publishes coarse change events with `publishResourcesListChanged()`,
@@ -3155,19 +3144,41 @@ values through that diagnostic.
 
 ## Lifecycle and metrics
 
-MCP reuses Soklet's existing `LifecycleObserver` and `MetricsCollector` hosts.
-There is no parallel MCP observer or collector, and
-`McpHandlerInterceptor` is not an observability substitute. The current
-runtime emits the admitted-request lifecycle start/finish pair and the
-corresponding `McpMetricsEvent.RequestStarted` and
-`McpMetricsEvent.RequestFinished` events for framework and application
-operations. Callback failures are logged and contained, and user callbacks do
-not run under MCP runtime or dispatcher locks.
+MCP uses Soklet's existing `LifecycleObserver` and `MetricsCollector` hosts.
+Use lifecycle observers for request tracing and audit hooks, and metrics
+collectors for bounded counters, gauges and histograms. `McpHandlerInterceptor`
+is an application-handler hook, not a replacement for either observation API.
 
-The 4.0.0 release pairing is `com.soklet:soklet:4.0.0` with
-`com.soklet:soklet-otel:2.0.0`. Versioned snapshot coordinates in the Phase 6
-checkpoint narrative below record the exact artifacts used at those historical
-checkpoints; they are provenance, not current dependency guidance.
+Pair `com.soklet:soklet:4.0.0` with `com.soklet:soklet-otel:2.0.0` when using
+the official OpenTelemetry integration.
+
+### Request and server lifecycle
+
+Admitted framework and application operations receive
+`didStartMcpRequestHandling` and `didFinishMcpRequestHandling` with the same
+immutable `McpRequestContext`. Start occurs after admission and before request
+limiting, handler-queue admission, interception and handler execution. Finish
+occurs once at the client-visible terminal outcome; an uncooperative handler
+can remain physically active afterward. Callbacks can run on different threads
+and independent requests can overlap. Observer exceptions are contained.
+
+Callback context, error values and exact observed `Throwable` objects are
+application-owned sensitive data. The built-in MCP failure log omits request
+and throwable attachments; this does not redact the objects supplied to an
+application observer or a custom log event.
+
+`Soklet` owns one lifecycle for its configured transports. `ServerStarted`
+requires listener readiness. Coordinated shutdown projects one
+`McpMetricsEvent.ServerStopped` from the configured MCP component's published
+`ShutdownComponentResult`, including `NOT_STARTED` when the listener never
+started. Failed or unfinished registration cleanup at the shared lifecycle
+deadline remains residual or unproven evidence in that immutable result.
+Repeated shutdown calls and eventual residual-work exit do not duplicate the
+terminal outcome. A new lifecycle requires fresh transport instances.
+
+Semantic metric delivery is asynchronous and may follow result publication.
+Tests inspecting counters must await the corresponding observation. A stopped
+owner cannot restart, and separate owners have independent event queues.
 
 ### Tasks observability boundary
 
@@ -3196,1310 +3207,246 @@ fixed failure category. Never use a task ID, task contents, status message,
 principal, origin, or other per-task value as a metric label. See
 [Durable Tasks](#durable-tasks) for the ownership and authorization contract.
 
-Accepted progress emissions and cooperative cancelation signals additionally
-produce `McpMetricsEvent.ProgressEmitted` and
-`McpMetricsEvent.CancelationSignaled`, labeled only with the bounded endpoint
-path and JSON-RPC method. Resource subscriptions additionally produce the
-request-stream open/close, subscription open/close, and keep-alive semantic
-events through the same collector. The frozen shared-host descriptors also
-refer to provisional metric-snapshot, request-outcome, and stream-termination
-types. Server diagnostics, status, and shutdown-outcome types are Phase 6-
-owned. The bounded shutdown vertical publishes one
-`McpMetricsEvent.ServerStopped` for every successfully started listener
-generation that later stops successfully. Managed ordinary stops, startup
-rollback, and unexpected-listener-termination normalization produce lifecycle
-and metric outcomes in parity. A failed start produces neither; failed
-asynchronous subscription-registration cleanup keeps the generation pending
-until a successful retry; and repeated stop or eventual residual-handler exit
-does not duplicate the outcome.
-
-The bounded handler-capacity vertical records server-wide
-`HandlerExecutionStarted`, `HandlerExecutionFinished`, `HandlerQueued`,
-`HandlerDequeued`, and `HandlerCapacityRejected` events. Only a full admitted
-handler queue is a capacity rejection; queued deadline, disconnect,
-cancelation, and forced-shutdown removal produce a matching dequeue instead. Compound
-promotion order is globally `HandlerExecutionFinished`, `HandlerDequeued`, then
-`HandlerExecutionStarted`.
-
-`McpMetricsSnapshot` exposes the three nonnegative values through boxed
-`Long` getters—`getActiveHandlerExecutions()`, `getHandlerQueueDepth()`, and
-`getHandlerCapacityRejections()`—with matching boxed
-`activeHandlerExecutions(Long)`, `handlerQueueDepth(Long)`, and
-`handlerCapacityRejections(Long)` builder methods. The default collector
-renders three exact label-free families:
-
-- `soklet_mcp_handler_executions_active` (gauge);
-- `soklet_mcp_handler_queue_depth` (gauge); and
-- `soklet_mcp_handler_capacity_rejections_total` (counter).
-
-The active-execution and queue-depth gauges describe live dispatcher state.
-`reset()` therefore preserves their current values while clearing the
-cumulative capacity-rejection counter; later finish/dequeue transitions return
-the gauges to zero without underflow. On bounded shutdown, queued work is
-dequeued, but a non-cooperative residual handler remains active until its
-actual late exit, so the active gauge can correctly remain `1` after stop and
-later become `0`. Previously returned snapshots remain immutable.
-
-The tenth bounded Phase 6 production vertical resolved the full `AMB-003`
-aggregate contract and implemented its first new coherent family: the MCP
-transport boundary. At that checkpoint, `McpMetricsSnapshot` exposed five boxed
-nonnegative `Long` values and two immutable fixed-enum maps. The additive
-transport accessors are `getConnectionsAccepted()`,
-`getConnectionsRejected()`, and `getTransportFailures()`; matching builder
-methods are `connectionsAccepted(Long)`, `connectionsRejected(Long)`, and
-`transportFailures(Map<MetricsCollector.TransportFailureReason, Long>)`.
-The transport-failure map is defensive, enum-ordered, sparse in default
-collector snapshots, and rejects null keys/values and negative counts.
-
-`DefaultMetricsCollector` consumes `ConnectionAccepted`,
-`ConnectionRejected`, and `TransportFailure` in addition to the previously
-aggregated five handler variants and `ServerStopped`. At that checkpoint,
-configured MCP collectors had seven rendered aggregate families. They render both
-label-free connection counters even at zero; a direct transport
-event activates the same paired rendering. The exact new families are
-`soklet_mcp_connections_accepted_total` and
-`soklet_mcp_connections_rejected_total`. MCP failures join the existing
-`soklet_transport_failures_total` family with only the fixed labels
-`server_type="MCP"` and `reason="<TransportFailureReason>"`, so mixed HTTP,
-SSE, and MCP samples share one HELP/TYPE block rather than creating a parallel
-MCP family. A filter that rejects every transport-failure sample emits no
-orphaned family metadata. Prometheus and OpenMetrics rendering, all 18 fixed
-reasons, direct and concurrent ingest, reset, and retained immutable snapshots
-are covered by
-`McpTransportMetricsAggregationTests#snapshotContractUsesBoxedConnectionCountsAndImmutableBoundedTransportFailures`,
-`#defaultCollectorAggregatesRendersFiltersAndResetsTransportBoundaryFamilies`,
-`#sharedTransportFamilyCombinesServerTypesWithSingleMetadataBlock`, and
-`#concurrentDirectIngestIsLosslessAndRetainedSnapshotsRemainImmutable`.
-
-Reset clears both cumulative connection counters and the sparse MCP failure
-map while preserving configured zero-family visibility; it cannot mutate a
-previously returned snapshot. The two connection events are fieldless, and a
-transport failure contributes only its fixed enum reason. No remote address,
-request, throwable, header, trace ID, correlation token, key material,
-tracestate, baggage, or application-controlled label enters these aggregate
-or default-rendered values.
-
-The eleventh bounded Phase 6 production vertical implements the contract-fixed
-`ServerStarted` scalar. `McpMetricsSnapshot` adds boxed, nonnegative
-`getServerStarts()` and matching `serverStarts(Long)`, bringing the provisional
-surface to exactly eight getters and nine public builder methods including
-`build()`: six boxed `Long` values and two immutable maps.
-`DefaultMetricsCollector` counts the existing fieldless `ServerStarted` event,
-whose lifecycle authority remains one event for each successfully started
-listener generation. A failed staged start contributes none, an already-started
-no-op contributes no duplicate, a managed rollback retains its successful start
-before the matching stop, and a successful restart contributes a fresh start.
-
-Configured collectors render the label-free counter
-`soklet_mcp_server_starts_total` at zero. Either a direct `ServerStarted` or
-`ServerStopped` event activates the same lifecycle family on an uninitialized
-collector; a stop-only observation therefore renders a zero start counter plus
-its shutdown sample. A rejecting filter suppresses the start sample and its
-HELP/TYPE metadata. Reset clears the cumulative start count but preserves
-configured or event-activated zero-family visibility, and it cannot mutate a
-retained snapshot. Starts and shutdown outcomes are not a conservation or
-complement pair at an arbitrary snapshot: a currently running generation has a
-start but no stop yet. The fieldless source event and label-free aggregate
-retain no request, remote address, endpoint, method, outcome, throwable,
-header, trace ID, token, key material, tracestate, baggage, or application
-label. Exact direct, configured, filter, OpenMetrics, reset, retained-snapshot,
-and concurrent-ingest evidence is
-`McpServerStartMetricsAggregationTests#snapshotContractUsesBoxedNonnegativeServerStarts`,
-`#defaultCollectorAggregatesConfiguredAndDirectServerStartsAcrossRenderFilterAndReset`,
-and
-`#concurrentDirectServerStartIngestIsLosslessAndRetainedSnapshotsRemainImmutable`.
-
-The twelfth bounded Phase 6 production vertical implements independent
-`RequestAccepted` and `RequestRejected` request-boundary scalars.
-`McpMetricsSnapshot` adds boxed, nonnegative `getRequestsAccepted()` and
-`getRequestsRejected()` plus matching `requestsAccepted(Long)` and
-`requestsRejected(Long)` builder methods. At that checkpoint, the provisional
-surface had exactly ten getters and 11 public builder methods including
-`build()`: eight boxed `Long` values and two immutable maps.
-
-`RequestAccepted` is retained only after the bounded protocol processor
-accepts `Executor.execute`; an execute rejection or throw identity-discards
-the provisional accepted entry. `RequestRejected` is recorded exactly once for
-a complete Handler request whose terminal wins before atomic observation-start
-reservation. It can follow accepted on malformed or other terminal
-pre-admission paths, or occur without a retained accepted event after execute
-failure. The counters therefore are neither complements nor a conservation
-equation. They exclude early transport/Microhttp failures, post-admission
-outcomes, and handler-capacity rejection.
-
-Configured MCP collectors render the paired label-free counters
-`soklet_mcp_requests_accepted_total` with HELP text `Total MCP requests accepted
-by the bounded protocol processor` and `soklet_mcp_requests_rejected_total`
-with HELP text `Total MCP requests rejected before admitted semantic handling`,
-including zeros. Either directly ingested event activates both families and
-the unobserved peer remains zero. Per-sample filtering removes a rejected
-family's sample and HELP/TYPE metadata, OpenMetrics terminates normally, and
-reset clears both cumulative values while retaining configured or
-event-activated paired-zero visibility. Previously returned snapshots remain
-immutable, and post-quiescence concurrent direct ingest is lossless.
-
-The source events are fieldless and the rendered counters have no labels. They
-retain no request, remote address, endpoint, method, error code, outcome,
-throwable, header, trace ID, token, key material, tracestate, baggage, or
-application-controlled dimension. Exact aggregate tests are
-`McpRequestAdmissionMetricsAggregationTests#snapshotContractUsesBoxedNonnegativeRequestAdmissionCounts`,
-`#defaultCollectorAggregatesConfiguredAndDirectRequestAdmissionEventsAcrossRenderFilterAndReset`,
-and
-`#concurrentDirectRequestAdmissionIngestIsLosslessAndRetainedSnapshotsRemainImmutable`.
-The exact authority paths remain covered by
-`McpHttpServerApplicationExecutionTests#protocol_processor_submission_records_two_accepted_then_one_rejected_outside_request_control_lock`
-and
-`McpPreAdmissionMetricsEventPublicRuntimeTests#acceptedMalformedRequestEmitsExactProtocolErrorThenRejectionWithoutAdmission`.
-
-The thirteenth bounded Phase 6 production vertical implements admitted-request
-lifecycle aggregation. `McpMetricsSnapshot` adds boxed, nonnegative
-`getActiveRequests()`, immutable
-`Map<RequestOutcomeKey, Long> getRequests()`, and immutable request-duration
-histograms from `getRequestDurations()`, with matching `activeRequests(Long)`,
-`requests(Map)`, and `requestDurations(Map)` builder methods. The public nested,
-thread-safe
-`RequestOutcomeKey.fromDimensions(endpointPath, jsonRpcMethod, outcome)`
-creates the final immutable key. It requires non-null, nonempty routed strings
-and a non-null fixed `McpRequestOutcome`; public construction through the
-factory does not validate registry membership. Its dimensions are available
-through `getEndpointPath()`, `getJsonRpcMethod()`, and `getOutcome()`. The provisional
-snapshot now has 13 getters and 14 public builder methods including `build()`:
-nine boxed `Long` values and four immutable maps. Count and duration maps are
-independent sparse projections and carry no cross-map invariant.
-
-The built-in authority increments `soklet_mcp_requests_active` exactly when an
-admitted `RequestStarted` is delivered and decrements it for the exact terminal
-`RequestFinished`. A finish contributes to `soklet_mcp_requests_total` and
-`soklet_mcp_request_duration_nanos`, keyed only by bounded `endpoint`, `method`,
-and lower-snake `outcome`. There are no standalone start or finish counters.
-The duration histogram reuses the inclusive HTTP latency boundaries of 1, 2,
-5, 10, 25, 50, 100, 200, 400, 800, 1,500, 3,000, 7,000, and 15,000
-milliseconds plus overflow. Configured collectors and either lifecycle event
-activate the live gauge; configured empty state renders gauge zero, while the
-labeled counter and histogram remain sparse and emit no orphan HELP/TYPE
-metadata when empty or fully filtered. Prometheus/OpenMetrics filters operate
-per sample.
-
-`reset()` preserves the live active-request gauge but clears completed counts
-and duration histograms. A request that started before reset and finishes
-afterward records its full original duration, not a reset-relative duration.
-Previously returned snapshots and their maps remain immutable; balanced
-post-quiescence concurrent ingest is lossless. This does not promise an atomic
-cross-field snapshot during mutation, clamp or repair unmatched manually
-ingested lifecycle events, or impose a relationship between independently
-built public maps.
-
-The runtime-produced key contains only a registered endpoint path, a recognized
-method or `<unrecognized>`, and a fixed outcome. No request or remote identity,
-raw unrecognized method, error detail, throwable, header, trace ID, token, key
-material, tracestate, baggage, or application telemetry enters these built-in
-aggregate or rendered dimensions. This is not a constraint on custom
-collectors, generic HTTP metrics callbacks, application-created events/keys,
-logs, or application telemetry. Exact focused evidence is
-`McpRequestLifecycleMetricsAggregationTests#snapshotContractUsesReferenceTypedImmutableRequestLifecycleState`,
-`#defaultCollectorAggregatesRendersAndFiltersRequestLifecycleFamilies`,
-`#resetPreservesActiveRequestsAndLateFinishRecordsFullOriginalDuration`, and
-`#concurrentBalancedRequestLifecycleIngestIsLosslessAndRetainedSnapshotsRemainImmutable`.
-The producer authority and real-listener cardinality boundary remain covered by
-`McpRequestObservationPublicRuntimeTests#admittedDiscoveryPublishesLifecycleAndMetricsWithoutInterception`,
-`#admissionRejectionDoesNotPublishAdmittedRequestObservation`, and
-`#distinctTraceMetadataDoesNotCreateMetricDimensionsOrLeakIntoRendering`.
-
-The fourteenth bounded Phase 6 production vertical implements request-stream
-lifecycle aggregation. `McpMetricsSnapshot` adds boxed, nonnegative
-`getActiveRequestStreams()` and immutable
-`Map<RequestStreamTerminationKey, HistogramSnapshot>
-getRequestStreamDurations()`, with matching `activeRequestStreams(Long)` and
-`requestStreamDurations(Map)` builder methods. The public nested, thread-safe
-`RequestStreamTerminationKey(endpointPath, jsonRpcMethod, reason)` rejects
-null or empty routed strings and a null fixed `McpStreamTerminationReason`;
-public construction does not validate registry membership. The provisional
-snapshot now has 15 getters and 16 public builder methods including `build()`:
-ten boxed `Long` values and five immutable maps.
-
-Exact delivered `RequestStreamOpened` increments
-`soklet_mcp_request_streams_active`; exact terminal `RequestStreamClosed`
-decrements it and records `soklet_mcp_request_stream_duration_nanos`. The
-stream-transition authority records open before accepted progress/keepalive
-observations and records the single close before terminal `RequestFinished`;
-these are enqueue relationships, with delivery ordered among eligible records
-as described below, rather than a cross-thread causal or per-request total order.
-The HELP text is respectively `Currently active MCP request streams` and `MCP
-request-stream duration in nanoseconds`. Histogram samples use only bounded
-`endpoint`, `method`, and lower-snake `reason` labels for the ten fixed
-termination reasons: `completed`, `client_disconnected`, `request_canceled`,
-`deadline_exceeded`, `write_failed`, `backpressure`, `server_stopping`,
-`simulator_capture_item_limit_exceeded`,
-`simulator_capture_byte_limit_exceeded`, and `internal_error`. Inclusive
-boundaries are 1, 5, 10, 30, 60, 120, 300, 600, 1,800, 3,600, 7,200, and
-14,400 seconds plus overflow. There are no standalone stream-open or
-stream-close counters.
-
-Configured collectors and either direct stream event activate the live gauge;
-configured empty state renders gauge zero, while the duration histogram stays
-sparse and emits no orphan HELP/TYPE metadata when empty or fully filtered.
-Prometheus and OpenMetrics filters operate per sample. `reset()` preserves the
-live stream gauge but clears duration histograms; a stream opened before reset
-and closed afterward records its full original duration. Retained snapshots
-and maps are immutable, and balanced post-quiescence concurrent ingest is
-lossless.
-
-Runtime-produced keys contain only a registered endpoint path, a recognized
-method or `<unrecognized>`, and a fixed reason. No request or network identity,
-error detail, throwable, header, trace ID, token, key material, tracestate,
-baggage, or application telemetry enters these built-in aggregate dimensions.
-This does not constrain custom collectors, generic HTTP/SSE metrics, logs,
-application-created events/keys, or application telemetry; promise an atomic
-cross-field snapshot or concurrent-reset semantics; repair unmatched manual
-events; equate the aggregate with diagnostics; break out the subscription
-subset; promise canonical map/text order; add OpenTelemetry or trace emission;
-or prove sustained, simulator, release-readiness, privacy, or Phase 6 freeze.
-Exact focused evidence is
-`McpRequestStreamLifecycleMetricsAggregationTests#snapshotContractUsesReferenceTypedImmutableRequestStreamLifecycleState`,
-`#defaultCollectorAggregatesRendersAndFiltersRequestStreamLifecycleFamilies`,
-`#resetPreservesActiveRequestStreamsAndLateCloseRecordsFullOriginalDuration`,
-and
-`#concurrentBalancedRequestStreamLifecycleIngestIsLosslessAndRetainedSnapshotsRemainImmutable`.
-Bounded live authority remains covered by
-`McpProgressPublicRuntimeTests#disconnectCancelsSameFeatureInstanceAndRunsCallback`
-and
-`McpSubscriptionPublicRuntimeTests#configuredMaximumDurationPublishesExactLifecycleAndMetrics`.
-
-The fifteenth bounded Phase 6 production vertical implements subscription
-lifecycle aggregation. `McpMetricsSnapshot` adds boxed, nonnegative
-`getActiveSubscriptions()` and immutable
-`Map<SubscriptionTerminationKey, MetricsCollector.HistogramSnapshot>
-getSubscriptionDurations()`, with matching `activeSubscriptions(Long)` and
-`subscriptionDurations(Map)` builder methods. The public nested, thread-safe
-`SubscriptionTerminationKey(endpointPath, reason)` rejects a null or empty
-endpoint and a null fixed `McpStreamTerminationReason`; public construction
-does not validate registry membership. The provisional snapshot now has 17
-getters and 18 public builder methods including `build()`: 11 boxed `Long`
-values and six immutable maps.
-
-Exact delivered `SubscriptionOpened` increments
-`soklet_mcp_subscriptions_active`; exact terminal `SubscriptionClosed`
-decrements it and records `soklet_mcp_subscription_duration_nanos`. Their HELP
-text is respectively `Currently active MCP subscriptions` and `MCP
-subscription duration in nanoseconds`. Samples use only bounded `endpoint` and
-lower-snake `reason`: `completed`, `client_disconnected`, `request_canceled`,
-`deadline_exceeded`, `write_failed`, `backpressure`, `server_stopping`,
-`simulator_capture_item_limit_exceeded`,
-`simulator_capture_byte_limit_exceeded`, and `internal_error`. Inclusive
-boundaries are 1, 5, 10, 30, 60, 120, 300, 600, 1,800, 3,600, 7,200, and
-14,400 seconds plus overflow. There are no standalone subscription-open or
-subscription-close counters.
-
-For a produced subscription, `RequestStreamOpened` precedes
-`SubscriptionOpened`; terminal order is `RequestStreamClosed`, then
-`SubscriptionClosed`, then `RequestFinished`. These are enqueue relationships;
-delivery follows eligible-record order as described below. They are not a
-cross-thread causal or per-request total order, or an atomic relationship
-between the separately delivered gauges. Configured collectors and either
-direct subscription event activate the live gauge; configured empty state
-renders zero, while the duration histogram stays sparse and emits no orphan
-HELP/TYPE metadata when empty or fully filtered. Prometheus and OpenMetrics
-filters operate per sample.
-
-`reset()` preserves the live subscription gauge but clears duration
-histograms; a subscription opened before reset and closed afterward records
-its full original duration. Retained snapshots and maps are immutable, and
-balanced post-quiescence concurrent ingest is lossless. Runtime-produced keys
-contain only a registered endpoint and fixed reason—never method, resource URI,
-subscription filter, request/network identity, error detail, throwable,
-header, trace ID, token, key material, tracestate, baggage, or application
-telemetry.
-
-This does not constrain custom collectors, generic HTTP/SSE metrics, logs,
-application-created events/keys, or telemetry; promise atomic cross-field or
-concurrent-reset snapshots; repair unmatched manual events; equate aggregates
-with diagnostics; promise canonical map/text order or conservation with the
-request-stream gauge; add OpenTelemetry or trace emission; or prove sustained,
-simulator, comprehensive privacy, release-readiness, or Phase 6 freeze. Exact
-focused evidence is
-`McpSubscriptionLifecycleMetricsAggregationTests#snapshotContractUsesReferenceTypedImmutableSubscriptionLifecycleState`,
-`#defaultCollectorAggregatesRendersAndFiltersSubscriptionLifecycleFamilies`,
-`#resetPreservesActiveSubscriptionsAndLateCloseRecordsFullOriginalDuration`,
-and
-`#concurrentBalancedSubscriptionLifecycleIngestIsLosslessAndRetainedSnapshotsRemainImmutable`.
-Bounded live authority remains covered by
-`McpSubscriptionPublicRuntimeTests#configuredMaximumDurationPublishesExactLifecycleAndMetrics`
-and
-`#clientDisconnectReleasesStateAndPublishesExactlyOnce`.
-
-The sixteenth bounded Phase 6 production vertical implements independent
-progress and cooperative-cancelation counter aggregation. `McpMetricsSnapshot`
-adds immutable `Map<EndpointMethodKey, Long> getCancelationsSignaled()` and
-`getProgressEmitted()`, with matching `cancelationsSignaled(Map)` and
-`progressEmitted(Map)` builder methods. The public, thread-safe
-`EndpointMethodKey(endpointPath, jsonRpcMethod)` rejects null or empty shape
-but deliberately accepts arbitrary nonempty application-created values. The
-provisional snapshot now has 19 getters and 20 public builder methods including
-`build()`: 11 boxed `Long` values and eight immutable maps.
-
-Exact delivered `CancelationSignaled` increments
-`soklet_mcp_cancelations_signaled_total{endpoint,method}` with HELP `Total
-cooperative MCP request cancelations signaled by endpoint and method`. Exact
-`ProgressEmitted` increments
-`soklet_mcp_progress_emitted_total{endpoint,method}` with HELP `Total MCP
-progress notifications accepted for delivery by endpoint and method`. The two
-maps and families are independent: they are not complements, do not impose a
-per-request conservation equation, and do not establish universal cross-thread
-ordering. Live authority in
-`McpProgressPublicRuntimeTests#disconnectCancelsSameFeatureInstanceAndRunsCallback`
-proves two accepted progress events, one cooperative-cancelation event,
-serialized collector callbacks outside the reporter monitor, and no
-post-cancel progress; it does not require the cancelation event to precede
-cross-thread stream/request terminal events.
-
-Both labeled counter families are strictly sparse. Configuring MCP alone emits
-no sample or HELP/TYPE metadata, and a direct event activates only its populated
-family. Prometheus/OpenMetrics filtering receives exactly the `endpoint` and
-`method` labels; rejecting all samples leaves no orphan metadata. `reset()`
-clears both maps and families. Public snapshots defensively copy maps, preserve
-explicit zero entries, and remain immutable; balanced post-quiescence
-concurrent direct ingest is lossless without claiming an atomic snapshot during
-mutation.
-
-Runtime-produced keys contain only the registered endpoint and bounded
-recognized method—never progress token/value/total/message, cancelation reason,
-request or network identity, throwable, header, trace ID/token/key material,
-tracestate, baggage, or application telemetry. This does not constrain custom
-collectors, generic HTTP/SSE metrics, logs, application-created events/keys, or
-telemetry; promise all live cancelation causes, cross-map atomicity, canonical
-order, OpenTelemetry/trace emission, comprehensive privacy, sustained or
-simulator evidence, release readiness, or Phase 6 freeze. Exact focused tests
-are
-`McpProgressAndCancelationMetricsAggregationTests#snapshotContractUsesSharedImmutableEndpointMethodCounterMaps`,
-`#defaultCollectorAggregatesRendersAndFiltersProgressAndCancelationFamilies`,
-`#resetClearsSparseProgressAndCancelationCountersWithoutLeavingFamilyMetadata`,
-and
-`#concurrentDirectProgressAndCancelationIngestIsLosslessAndRetainedSnapshotsRemainImmutable`.
-
-The seventeenth bounded Phase 6 production vertical implements the fieldless
-`KeepAliveEmitted` scalar. `McpMetricsSnapshot` adds boxed, nonnegative
-`@NonNull Long getKeepAlivesEmitted()` and matching
-`keepAlivesEmitted(Long)`, bringing the provisional snapshot to 20 getters and
-21 public builder methods including `build()`: 12 boxed `Long` values and eight
-immutable maps.
-
-Each exact `KeepAliveEmitted` accepted by the shared semantic-event FIFO
-increments the label-free counter
-`soklet_mcp_keep_alives_emitted_total`, with HELP `Total MCP keep-alive
-comments accepted for delivery`. Configured MCP renders the scalar at zero; a
-direct event also activates the family. Prometheus and OpenMetrics expose no
-labels, an all-rejecting filter leaves no sample or orphan HELP/TYPE metadata,
-and `reset()` clears the cumulative count while preserving zero visibility.
-Snapshots retain immutable boxed values, and post-quiescence concurrent direct
-ingest is lossless without claiming an atomic snapshot during mutation.
-
-Live authority remains bounded by
-`McpSubscriptionPublicRuntimeTests#keepAliveAcceptanceSharesStreamTransitionWithCloseObservation`
-and
-`McpSubscriptionRuntimeBoundaryTests#maximumDurationIsAbsoluteAcrossKeepAlivesAndEvents`.
-The former proves that accepted wire keep-alive observation shares the stream
-transition boundary, is delivered serially, and precedes the later stream-close
-observation in that deterministic fixture. The latter freezes the exact-one
-accepted keep-alive boundary in its absolute-duration scenario. The counter
-does not count timer attempts or prove receipt by a client or intermediary, and
-it has no conservation relationship with subscriptions, streams, or terminal
-events.
-
-The fieldless built-in event and scalar retain no request, endpoint, method,
-remote identity, duration, termination reason, throwable, header, trace ID,
-token, key material, tracestate, baggage, or application label. This does not
-constrain custom collectors, generic HTTP/SSE metrics, logs, or application
-telemetry; promise universal cross-thread ordering, delivery/receipt,
-cross-field or concurrent-reset atomicity, OpenTelemetry/trace emission,
-comprehensive privacy, sustained/simulator evidence, release readiness, or
-Phase 6 freeze. Exact focused tests are
-`McpKeepAliveMetricsAggregationTests#snapshotContractUsesBoxedNonnegativeKeepAliveCount`,
-`#defaultCollectorAggregatesConfiguredAndDirectKeepAlivesAcrossRenderFilterAndReset`,
-and
-`#concurrentDirectKeepAliveIngestIsLosslessAndRetainedSnapshotsRemainImmutable`.
-
-The eighteenth bounded Phase 6 production vertical completes the core default-
-aggregation matrix with independent protocol-error and unknown-mirrored-header
-counter maps. `McpMetricsSnapshot` adds immutable
-`Map<Integer, Long> getProtocolErrors()` and
-`Map<EndpointMethodKey, Long> getUnknownMirroredHeaders()`, with matching
-`protocolErrors(Map)` and `unknownMirroredHeaders(Map)` builder methods. The
-provisional snapshot now has 22 getters and 23 public builder methods including
-`build()`: 12 boxed `Long` values and ten immutable maps. The three fuzz,
-dormant-derivation, and metric-dimensionality checkpoints remain separate and
-unnumbered.
-
-The default collector renders
-`soklet_mcp_protocol_errors_total{code}` with HELP `Total client-visible MCP
-protocol errors by fixed code`, and
-`soklet_mcp_unknown_mirrored_headers_total{endpoint,method}` with HELP `Total
-unknown MCP mirrored-header occurrences by endpoint and method`. The maps and
-families are independent and strictly sparse: configuration alone emits no
-sample or HELP/TYPE metadata, a direct event populates only its own family, an
-all-rejecting filter leaves no orphan metadata, OpenMetrics retains one EOF,
-and `reset()` removes all samples and metadata. Returned maps are defensive and
-immutable, retained snapshots remain unchanged, explicit application zeros are
-preserved, and post-quiescence concurrent direct ingestion is lossless.
-
-Framework-produced `ProtocolError` uses exactly `-32700`, `-32600`, `-32601`,
-`-32602`, `-32603`, `-32020`, `-32021`, `-32022`, `-31999`, and `-31998` after
-successful client-visible encoding or accepted streamed-terminal reservation;
-a failed provisional streamed terminal is discarded. Application error codes,
-tool-result `isError`, and empty-notification HTTP errors do not enter this
-family. A pre-admission error is request-free; an admitted fixed error retains
-the exact admitted context only for the existing bounded delivery/failure-
-attribution path.
-
-`UnknownMirroredHeader` contributes once per occurrence under both IGNORE and
-REJECT policy before the relevant terminal outcome. Its built-in key is only a
-registered endpoint plus a recognized core method or `<unrecognized>`. Header
-name and value, raw unrecognized method, request, throwable, payload, remote
-identity, trace ID/token/key material, tracestate, baggage, and generic labels
-never enter either aggregate. Same-request sequences such as
-`RequestAccepted` -> unknown occurrences -> `ProtocolError` ->
-`RequestRejected`, and admitted `RequestStarted` -> `ProtocolError` ->
-`RequestFinished`, describe enqueue relationships, with delivery ordered among
-eligible records as described below; they are not cross-thread causal or
-per-request total-order guarantees or conservation equations.
-
-The two `DefaultMetricsCollector` maps have independent 8,192-entry retention
-bounds. The provisional public builder maps are deliberately uncapped value
-carriers: they accept arbitrary non-null `Integer` codes and shape-valid,
-nonempty `EndpointMethodKey` values, including explicit zero counts. The public
-protocol map iterates in natural Integer order. The exact ten-code and bounded
-method vocabularies describe framework production, not arbitrary manual public
-events or snapshot construction; no canonical order is promised for
-`EndpointMethodKey` maps.
-
-Exact aggregate coverage is
-`McpProtocolAndUnknownHeaderMetricsAggregationTests#snapshotContractUsesImmutableProtocolAndUnknownHeaderCounterMaps`,
-`#defaultCollectorAggregatesRendersAndFiltersProtocolAndUnknownHeaderFamilies`,
-`#resetClearsSparseProtocolAndUnknownHeaderCountersWithoutLeavingFamilyMetadata`,
-`#manualDimensionRetentionIsIndependentlyBoundedPerFamily`, and
-`#concurrentDirectProtocolAndUnknownHeaderIngestIsLosslessAndRetainedSnapshotsRemainImmutable`.
-Live authority remains covered by
-`McpPreAdmissionMetricsEventPublicRuntimeTests#acceptedMalformedRequestEmitsExactProtocolErrorThenRejectionWithoutAdmission`,
-`#applicationCodesAreExcludedWhileMetricFailureLogsRemainRedacted`,
-`#unknownHeaderOccurrencesAreExactRedactedAndMethodBoundedAcrossPolicies`,
-`#preAdmissionQuartetDeliveryIsReentrantAndSerializedWithoutCrossRequestOrderClaim`,
-`McpHttpServerApplicationExecutionTests#produced_protocol_error_metric_allowlist_is_exact_and_excludes_application_codes`,
-and
-`#failed_stream_terminal_discards_provisional_protocol_error_metric`.
-
-This vertical constrains built-in MCP event, snapshot, and default-renderer
-surfaces only. It does not constrain arbitrary public/manual vocabulary,
-custom collectors, generic HTTP metrics callbacks, `LogEvent`, `Request`,
-`Throwable`, application telemetry, or structured/raw-ID emission; implement
-the snapshot-compatible `soklet-otel` matrix; prove sustained cardinality,
-soak, simulator or release-candidate behavior; or freeze Phase 6.
-
-The nineteenth bounded Phase 6 production vertical implements that frozen
-downstream metric matrix in the then-current unreleased `soklet-otel`, using
-`com.soklet:soklet:3.6.0-SNAPSHOT` by default. Its single
-`didRecordMcpMetricsEvent(McpMetricsEvent)` callback maps all 23 sealed event
-variants to exactly 22 OpenTelemetry instruments: 21 MCP-specific instruments
-plus the existing shared `soklet.server.transport.failures` counter. HTTP and
-SSE instruments remain unchanged, and an HTTP metric naming strategy cannot
-rename an MCP-specific instrument.
-
-The downstream schema uses the seven fixed MCP attributes
-`soklet.mcp.endpoint`, `rpc.method`, `soklet.mcp.request.outcome`,
-`soklet.mcp.stream.termination.reason`,
-`soklet.mcp.subscription.termination.reason`,
-`rpc.jsonrpc.error_code`, and `soklet.mcp.shutdown.outcome`. Shared transport
-failures use only `soklet.server.type="mcp"` and lower-snake
-`soklet.failure.reason`, without `error.type`. Enum values are lower-snake;
-request durations use the exact 14 finite 0.001-through-15-second bucket
-advice, and request-stream/subscription durations use the exact 12 finite
-1-through-14,400-second advice. Terminal attributes and overflow-safe seconds
-are computed before the active-gauge decrement and terminal record, but no
-cross-instrument atomicity or conservation equation is promised.
-
-This version boundary deliberately removes the obsolete pre-3.6 MCP
-request/session/SSE tracing callbacks, session instruments, span-policy knobs,
-and MCP span-naming methods. The removed session instruments are
-`soklet.mcp.sessions.active`, `soklet.mcp.sessions.created`,
-`soklet.mcp.sessions.terminated`, and `soklet.mcp.session.duration`; legacy
-endpoint-class, session termination/identity, and request-ID-presence
-attributes are not emitted. At that V19 boundary, the reviewed downstream
-public-API comparison was exactly 15 removed legacy methods and one added MCP
-metrics callback. Modern MCP lifecycle callbacks then remained inherited
-no-ops: that metric vertical created no replacement MCP spans. HTTP/SSE tracing
-remained supported.
-
-For framework-produced events, the integration adds no dedicated attribute
-for a trace ID, raw ID, progress token/value, header name/value, request
-object, throwable, operation/resource URI, principal, address, tracestate,
-baggage, or generic bag. Framework-produced endpoint/method/code values retain
-the bounded core vocabulary. Direct application-created events may still
-supply arbitrary valid public dimension values, including sensitive text, so
-applications own their confidentiality and cardinality while the
-OpenTelemetry SDK owns series retention. This work does not claim parity
-with default-snapshot configuration-zero rendering, reset, text filtering, or
-OpenMetrics; an SDK retention cap; cross-instrument atomicity; structured-log
-emission; modern MCP spans; sustained cardinality; simulator, release, or
-Phase 6 freeze evidence.
-
-Exact downstream coverage is
-`OpenTelemetryMetricsCollectorTests#allTwentyThreeMcpEventsMapToExactTwentyTwoInstrumentsAndTransitions`,
-`#mcpInstrumentContractUsesExactKindsUnitsAttributesAndBuckets`,
-`#mcpEnumAndManualDimensionsUseExactTypedVocabularyWithoutSensitiveAttributes`,
-`#mcpSchemaIgnoresHttpNamingStrategyRemovesLegacySessionsAndPreservesFailureBoundary`,
-`#handlesConcurrentMcpMetricEventsWithoutLoss`, and
-`OpenTelemetryLifecycleObserverTests#legacyMcpSessionTracingSurfacesRemainAbsentAndModernRequestCallbacksAreImplemented`.
-At that point, the complete module suite passed 28/0/0/0 on both Corretto
-21.0.11 and 26.0.1;
-main, sources, Javadoc, and standalone Javadoc packaging is green. This is the
-nineteenth production vertical plus the same three unnumbered checkpoints; it
-changes no core source, wire behavior, snapshot/sketch signature, canary
-projection, or core API-owner inventory. At that V19 boundary, modern
-`McpRequestContext` span parenting, naming, policy, and terminal semantics were
-the next contract slice.
-
-The twentieth bounded Phase 6 production vertical implements that modern
-admitted-request span contract in the same unreleased
-`com.soklet:soklet-otel:1.4.0-SNAPSHOT` against
-`com.soklet:soklet:3.6.0-SNAPSHOT`. Boxed
-`SpanPolicy.recordMcpRequestSpans()` and its builder method default to `true`.
-The additive default
-`SpanNamingStrategy.mcpRequestSpanName(McpRequestContext)` preserves existing
-three-method implementations and names framework-produced spans `MCP <method>`.
-The exact ten core methods remain unchanged; every other raw context method is
-bounded to `<unrecognized>` in the default name and `rpc.method`, with no
-`rpc.method_original`. A custom naming strategy receives the full context and
-therefore remains application-owned for confidentiality and cardinality.
-
-One SERVER span begins for each admitted semantic request or notification and
-remains open through request-stream or subscription lifetime until the exact
-terminal lifecycle callback. Its parent comes only from validated MCP
-`_meta.traceparent`/`tracestate`; physical HTTP trace headers, ambient
-OpenTelemetry context, and baggage are not fallback parents. Start attributes
-are exactly `soklet.server.type="mcp"`, `rpc.system.name="jsonrpc"`, bounded
-`rpc.method`, and `soklet.mcp.endpoint`. Existing `client.address` and
-`soklet.request.id` controls remain disabled by default; when enabled they use
-the physical server request, never the JSON-RPC ID.
-
-Every normal finish adds lower-snake `soklet.mcp.request.outcome`. A non-null
-client-visible JSON-RPC error sets string `rpc.response.status_code` and
-`error.type` to the same decimal code and marks the span ERROR. Without an
-error, `rejected`, `application_error`, `protocol_error`, `internal_error`,
-`deadline_exceeded`, and `write_failed` are ERROR with that outcome as
-`error.type`; `complete`, `input_required`, `canceled`, and
-`client_disconnected` remain UNSET without `error.type`. Lifecycle throwables
-create no exception event, status, attribute, message, data, or stack material.
-Supplied durations determine the end timestamp, with a plain-end fallback when
-manual duration arithmetic exceeds `Instant` range.
-
-Disabled policy produces no MCP span. Finish without state and finish after
-close are no-ops. Duplicate direct starts plainly end the older span and retain
-the newest; `close()` plainly drains active MCP spans. The close/publication
-boundary rechecks closed state after map publication, conditionally removes
-only the exact new state, and plainly ends it, so a start cannot survive a
-concurrent close. Telemetry API failures are contained, state is released, and
-concurrent contexts remain isolated. These cleanup behaviors do not elevate
-malformed direct callback sequences into framework exactly-once guarantees.
-
-The built-in projection carries no JSON-RPC ID, request metadata, operation,
-path parameter, capability, admission identity, baggage, physical HTTP trace
-header, error message/data, throwable, or exception event. MCP parent trace
-context and the explicitly opted-in physical address/request ID are the narrow
-exceptions. This is not structured logging or raw-ID emission; it does not add
-session, stream, or subscription spans; and it does not prove comprehensive
-privacy, custom-namer safety, sustained cardinality, simulation, release
-readiness, or Phase 6 freeze. HTTP and SSE tracing remain unchanged.
-
-Exact V20 coverage is
-`OpenTelemetryMcpLifecycleObserverTests#mcpMetadataTraceContextIsTheOnlyRemoteParentAndPreservesTraceState`,
-`#mcpSpanUsesExactDefaultAndCustomNamesAttributesAndTerminalSemantics`,
-`#allMcpRequestOutcomesMapToExactStatusAndErrorVocabulary`,
-`#mcpRequestSpanStaysOpenUntilTerminalFinishAcrossStreamAndSubscriptionLifetimes`,
-`#mcpPolicyAndNamingAreModernAdditiveAndLegacySessionControlsRemainAbsent`,
-`#mcpTelemetryFailuresAreContainedAndReleaseStateExactlyOnce`,
-`#concurrentMcpSpansRemainContextIsolatedAndCloseDrainsEveryState`,
-`#mcpSpanProjectionExcludesSensitiveContextAndHttpFallbackCanaries`, and
-`OpenTelemetryLifecycleObserverTests#legacyMcpSessionTracingSurfacesRemainAbsentAndModernRequestCallbacksAreImplemented`.
-Core authority remains
-`McpRequestObservationPublicRuntimeTests#successfulToolSharesOneContextAndFinishesExactlyOnce`,
-`#traceCaptureUsesOnlyValidMcpMetadataWithoutHttpFallback`,
-`#handlerFailurePublishesExactInternalErrorAndImmutableThrowable`,
-`#unsupportedNotificationRetainsRawLifecycleMethodAndBoundsMetrics`,
-`#throwingObservationCallbacksKeepRawCarriersApplicationOwnedAndLogsRedacted`,
-`McpRequestPropagationTests#validatedMetadataReachesAdmissionAndToolHandlersInsteadOfHttpTraceHeaders`,
-`#invalidOrMistypedMetadataIsOmittedWithoutFallingBackToHttpHeaders`,
-`#baggageParsingIsBoundedDecodedAndImmutable`,
-`McpSubscriptionPublicRuntimeTests#configuredMaximumDurationPublishesExactLifecycleAndMetrics`,
-and `#clientDisconnectReleasesStateAndPublishesExactlyOnce`.
-
-At the V20 boundary, this was the twentieth production vertical plus the same
-three unnumbered checkpoints. Core inventories were 23/23 aggregate variants, 22 text
-families, 22 snapshot getters, 23 builder methods including `build()`, 12 boxed
-`Long` values, ten maps, the 31/12 canary projection, 32 provisional owners,
-and the 210-owner reviewed union. The downstream public comparison from
-`1.3.1` to `1.4.0-SNAPSHOT` was exactly 13 removals and four additions; V20
-added five declared downstream methods relative to V19. `MCP-BASE-026` was
-COMPLETE. `AMB-003` was RESOLVED CONTRACT 2026-08-10 / CORE IMPLEMENTATION
-COMPLETE / DOWNSTREAM METRIC IMPLEMENTATION COMPLETE; `SOK-METRIC-001`,
-`SOK-METRIC-004`, metric-only `SOK-TRACE-005`, and `SOK-PRIV-001` remained
-PARTIAL; and `SOK-TRACE-004` remained PLANNED. MCP simulator
-integration was the next bounded slice.
-
-The twenty-first bounded Phase 6 production vertical implements modern MCP
-simulation through Soklet's existing shared `Simulator` host. It adds the two
-abstract `startMcpRequest(Request)` and
-`startMcpRequest(Request, McpSimulationOptions)` methods, seven top-level
-public simulation types, and `McpSimulationOptions.Builder`. The immutable
-options default to 128 pending SSE items and 10,485,760 cumulative captured
-bytes. `McpSimulation` exposes repeatable bounded response and completion
-waits, destructive FIFO stream-item reads, an exact terminal-state check, and
-idempotent cancel/close operations.
-
-Execution is off-network but uses the real MCP processor, application,
-stream/subscription, lifecycle, metrics, and termination paths. No listener or
-socket is created: the public server stays `STOPPED`, has no bound address and
-zero public diagnostics, and produces no server-start/stop,
-connection-accepted/rejected, or transport-failure event. Live start and
-ordinary stop do not interleave with the private simulation generation. The
-supplied `Request` is not rewritten: Host, Origin, headers, and body remain
-caller values. Automatic loopback aliases require the literal configured
-port, including port `0`: `127.0.0.1:0` is the default loopback form.
-Explicitly allowlisted hostname/IP authorities use the same valid-public-port
-or omitted-port behavior as the live listener. No default Host is injected.
-
-The immutable response projection preserves status, case-insensitively
-coalesced insertion-ordered headers with case-insensitive lookups, body mode,
-and a defensive JSON/empty-body copy. SSE projections retain exact canonical
-unchunked frame bytes and their
-mutually exclusive JSON-message or keep-alive-comment value. A terminal JSON
-frame is one ordinary counted queued item and is repeated by immutable
-completion as `terminalMessage` without consuming capacity again. If a bound
-rejects that frame, neither projection contains it. Completion exposes the
-exact `McpStreamTerminationReason` and an immutable ordered Throwable list
-that preserves identities.
-
-Capture checks pending-item capacity first and cumulative encoded bytes
-second. Exact equality is accepted; the offending frame is excluded and prior
-items remain. Dequeue refunds only a pending-item slot, never captured bytes.
-JSON overflow retains the response head and JSON mode but omits the body;
-pre-response SSE overflow publishes the response head before exact terminal
-completion. Item and byte overflow retain their distinct
-`SIMULATOR_CAPTURE_ITEM_LIMIT_EXCEEDED` and
-`SIMULATOR_CAPTURE_BYTE_LIMIT_EXCEEDED` reasons, use the coarser
-`SIMULATOR_LIMIT_EXCEEDED` cancelation-token reason, and finish the admitted
-request as `CANCELED` without a protocol or transport failure.
-
-Cancel, close, and cooperative simulator-scope exit publish
-`CLIENT_DISCONNECTED` only if they win the existing request-control terminal
-reservation. They are idempotent and cannot replace an earlier response or
-terminal winner. For a committed legacy POST SSE, simulated disconnect instead
-detaches delivery without canceling the handler solely because capture closed;
-the request deadline and physical execution reservation remain in force.
-Scope cleanup is bounded; escaped handles remain readable,
-while residual noncooperative work makes the scope fail and blocks new
-simulation and live start until that work exits. A consumer failure retains
-the cleanup failure as suppressed. Null waits fail, negative waits reject,
-zero waits poll, very large waits saturate safely, and interruption does not
-cancel the simulation. Per-request FIFO and isolation are tested; there is no
-global cross-request ordering claim.
-
-The real shared path covers accepted JSON, malformed and rejected requests,
-request streams, resource subscriptions, keep-alives, cancellation, and a
-two-request `input_required` continuation with distinct request IDs and
-protected state. Caller-supplied request material and retained Throwable
-instances may be sensitive and remain application-owned. Public carrier
-rendering is redacted, but accessor availability is not a confidentiality
-guarantee.
-
-Representative exact citations from the full 46-test simulator/API gate are
-`McpSimulationPublicApiTests#simulationSurfaceHasExactReferenceNullabilityAndClosedEnums`,
-`McpPublicApiReflectionContractTests#phaseSixInventoryAndSharedHostDescriptorsAreExact`,
-`McpSimulatorPublicRuntimeTests#startMcpRequestRejectsMissingServerConfiguration`,
-`#defaultLoopbackHostPolicyRequiresLiteralConfiguredPortZero`,
-`#multiRoundTripSimulationContinuesInputRequiredStateToDistinctCompletedRequest`,
-`#subscriptionReplayPreservesAcknowledgmentEventAndCancelationOrder`,
-`#mcpSimulationCompletionRetainsStreamCaptureFailures`,
-`#noncooperativeSimulationCleanupIsBoundedAndPreservesSuppression`,
-`#waitOperationsHandleZeroTimeoutInterruptionAndCompletionIdempotently`, and
-`McpSimulationCaptureRuntimeTests#closeAndTerminalRacePublishesOneCoherentFirstWinner`.
-
-At the V21 boundary, this was the twenty-first production vertical plus the
-same three unnumbered checkpoints. `phase-6.includes` owned 15 types, the
-provisional inventory held 32, and the reviewed union was 219. The canonical comparison contained
-558 incompatibility records with SHA-256
-`d40004fa92cc5d095404de2133cf04fcd2b5574e9326eb680f571a017ef33671`.
-Frozen Phase 4/5 inventories and hashes remain unchanged. Core metric state is
-also unchanged at 23/23 event variants, 22 text families, 22 snapshot getters,
-23 builder methods including `build()`, 12 boxed `Long` values, ten maps, and
-the 31/12 canary projection.
-
-At that boundary, `SOK-SIM-001` was COMPLETE BOUNDED PHASE 6 IMPLEMENTATION
-EVIDENCE. It did not claim every simulator operation, the 39-scenario suite through simulation,
-live-network fidelity, stress/soak or sustained fuzz evidence, release-
-candidate provenance, comprehensive privacy/security, or Phase 6 API freeze.
-Other status rows remained unchanged. The next bounded work was the first complete
-release-workflow dry run plus the remaining sustained, privacy, review, and
-freeze gates.
-
-`McpServer.getDiagnostics()` returns server-wide handler-capacity, live-stream,
-protection, and trace-configuration state without requiring a metrics
-collector. `McpServerDiagnostics` now declares exactly 12 zero-argument
-methods: lifecycle accessors `getStatus()` and `getBoundAddress()`, plus all ten
-implemented diagnostic getters. The six numeric getters are the boxed,
-`@NonNull Integer` methods `getRequestHandlerConcurrency()`,
-`getRequestHandlerQueueCapacity()`, `getActiveHandlerExecutions()`,
-`getRequestHandlerQueueDepth()`, `getActiveRequestStreams()`, and
-`getActiveSubscriptions()`. The other four are `getProtectionMode()`, boxed
-`@NonNull Boolean isApplicationRequestStateProtectorConfigured()`,
-`getProtectionKeyringFingerprint()`, and
-`getTraceCorrelationFingerprint()`; both fingerprint getters
-return non-null `Optional` values with non-null payload types.
-
-The configured numeric bounds are positive. Active and queued values are
-current counts. `getActiveRequestStreams()` counts open request-scoped SSE
-streams, while `getActiveSubscriptions()` counts the subset that are open
-resource subscriptions. A subscription enters both counts once its
-acknowledgment stream opens; neither count implies client receipt.
-
-Lifecycle status, bound address, configured bounds, handler counts, and the
-paired stream/subscription counts are captured by the runtime as one atomic
-tuple across every endpoint. The four security fields are captured as a
-separate atomic tuple by the server-owned security controls. Both tuples are
-placed in one immutable public diagnostics view, but they do not claim one shared global
-linearization point. Configured values remain stable across the one-shot owner
-lifecycle; all current counts are
-nonnegative, handler counts remain within their configured bounds, and
-`0 <= activeSubscriptions <= activeRequestStreams`. A positive physical queue
-implies all configured handler slots are occupied. Retaining a snapshot freezes
-all of its values. An ordinary request SSE stream has pair `1/0`, an isolated
-subscription has `1/1`, and opening both produces the server-wide pair `2/1`.
-
-A completed clean stop reports active `0` and queued `0`. A completed residual
-stop reports queued `0` but keeps a non-cooperative handler active until its
-actual late exit, after which a fresh snapshot reports active `0`. During the
-bounded transient between unexpected listener failure and completed cleanup,
-a `SHUTTING_DOWN` snapshot may still report the actual bounded
-queue depth; cleanup then drains it without promoting work. A queue-full
-rejection does not change either live handler diagnostic count. Disconnecting
-the subscription in a combined `2/1` snapshot leaves `1/0`; disconnecting the
-ordinary stream leaves `0/0`. Completed clean and residual-handler stops both
-report stream pair `0/0`, even while a residual handler remains active until
-late exit. During internal `FAILED` cleanup, the public residual status may
-temporarily retain an open subscription pair `1/1`; completed cleanup reports
-`TERMINATED` with `0/0`.
-
-The protection mode and custom-protector flag are fixed when the server is
-built and remain stable across listener lifecycle transitions. The flag is
-`true` exactly for `CUSTOM_PROTECTOR`; it reports selection of the custom
-application-owned `McpRequestStateProtector` SPI, not whether an operation uses
-`APPLICATION_PROTECTED` state. Application-protected opaque state needs no
-framework protector and bypasses a configured custom protector.
-
-The protection-ring fingerprint is present exactly for
-`PRODUCTION_KEYRING`; it is empty for unconfigured, custom-protector, and
-development-ephemeral modes. The trace-configuration fingerprint is independent
-of protection mode and is present exactly when trace correlation was enabled
-at construction. Successful live protection-ring or trace-key rotation changes
-only subsequently obtained diagnostics. Both values persist through listener
-stop/restart, and retained snapshots never change.
-
-Fingerprints are deterministic operational deployment-comparison metadata,
-not authentication or token-derivation inputs. Diagnostics expose no raw key
-material, key IDs, per-key fingerprint tags, custom-provider identity,
-request-state cursors or epochs, or trace-correlation tokens. Operators must
-still supply high-entropy keys: a fingerprint reveals configuration equality,
-and rotation can create high-cardinality values, so fingerprints should not be
-used as metric labels or emitted per request. The diagnostics vertical adds no
-metric family, event type, wire field, label, or other observation dimension,
-and collector reset cannot alter it.
-
-The production protection-ring fingerprint uses diagnostic encoding `v2`
-and protection profile `soklet-mcp-protection-v1`. It compares the exact raw
-bytes of every active and verification-only key, including trailing zero bytes
-and keys longer than HMAC's block size. For fleet convergence, compare
-`getVersion()`, `getProfile()`, and `getValue()` together. The earlier `v1`
-fingerprint could conflate different raw keys that cannot open each other's
-state; it is not sufficient evidence of convergence. During a software rollout,
-different fingerprint versions are incomparable. Finish updating the fleet
-before relying on a matching `v2` fingerprint for key rotation. This diagnostic
-change requires no secret rotation and changes neither sealed request state
-nor trace-correlation fingerprints or tokens.
-
-The sixth bounded Phase 6 vertical established one context-aware, server-wide
-deferred FIFO for the first 16 semantic event variants produced by the runtime:
-`HandlerExecutionStarted`, `HandlerExecutionFinished`, `HandlerQueued`,
-`HandlerDequeued`, `HandlerCapacityRejected`, `ServerStopped`, the nine
-admitted `RequestStarted`, `RequestFinished`, `RequestStreamOpened`,
-`RequestStreamClosed`, `SubscriptionOpened`, `SubscriptionClosed`,
-`CancelationSignaled`, `ProgressEmitted`, and `KeepAliveEmitted` variants, and
-exactly one `ServerStarted` for each successfully started listener generation.
-A failed start leaves no staged `ServerStarted`, and an already-started no-op
-does not duplicate it. Direct restart orders the old generation's
-`ServerStopped` before the new generation's `ServerStarted`; managed startup
-rollback orders that generation's `ServerStarted` before its `ServerStopped`.
-
-The seventh vertical extended that FIFO to the 20 variants produced at that
-checkpoint with `RequestAccepted`, `RequestRejected`, `ProtocolError`, and
-`UnknownMirroredHeader`. `RequestAccepted` means successful submission to the
-bounded protocol processor. If executor submission rejects, Soklet discards
-the provisional accepted entry and emits only `RequestRejected` before the
-fixed empty HTTP 503 response. A complete malformed request records
-`RequestAccepted`, `ProtocolError(-32700)`, then `RequestRejected`. Strict
-unknown-header and unresolved-method paths record `RequestAccepted`, one
-`UnknownMirroredHeader` per occurrence, their fixed `ProtocolError`, then
-`RequestRejected`. Application-owned rejection codes never become
-`ProtocolError` dimensions.
-
-Produced protocol-error metrics use exactly the fixed codes `-32700`,
-`-32600`, `-32601`, `-32602`, `-32603`, `-32020`, `-32021`, `-32022`,
-`-31999`, and `-31998`. Recording follows successful response encoding. A
-streamed error is provisional until its terminal message is accepted; failed
-terminal reservation discards it. Unknown-header events contain only the
-registered endpoint path and a bounded recognized method or
-`<unrecognized>`. They never contain the header name, value, or a raw
-unrecognized method, and their per-occurrence count is independent of the
-optional name-diagnostic quota.
-
-Collector callbacks are serialized and drain after the relevant dispatcher,
-exchange terminal/execution-boundary, progress-reporter, stream-transition,
-request-control, runtime, MCP-server, and Soklet lifecycle locks or monitors
-are released. Each short request transition withholds only its own provisional
-records; nested transition scopes release their records together. Closing a
-transition signals the dedicated metrics worker, without invoking a collector
-on the closing thread. The four pre-admission variants are request-free.
-Every queued delivery, including a
-fixed `ProtocolError` produced after admitted request observation, retains only
-its immutable, bounded `McpMetricsEvent`; the metric queue does not retain an
-`McpRequestContext`, request, throwable, or application-owned carrier. An
-admitted request's application-lifecycle observation may independently retain
-its exact `McpRequestContext` while lifecycle and handler APIs require it; that
-ownership is separate from metric delivery. Collector-failure logging is
-context-free and redacted, and collector failures are contained without
-stalling the queue. Among records eligible for delivery, callbacks follow
-metric enqueue order. Records within a transition retain their order, but an
-independent operation can deliver its eligible records while that transition
-is still withheld. This is not a cross-thread causal or per-request total-order
-guarantee for independently racing producers.
-
-The built-in server retains at most 4,096 pending semantic metric records.
-When that queue is full, new ordinary records are omitted; `ServerStarted`
-and `ServerStopped` reclaim an ordinary record so owner lifecycle evidence
-remains deliverable. Withheld records count against the same queue bound, and
-retained eligible records keep their enqueue order. Discarding a provisional
-record that was omitted or evicted does not change its request's
-wire outcome. Metrics are observation, and counters or gauges can be incomplete
-after this overflow; custom collectors must remain nonblocking.
-
-The default collector retains delivered subscription-maintenance counts in
-`McpMetricsSnapshot.getSubscriptionMaintenance()`, keyed by configured endpoint
-and the existing fixed work/outcome enums. Its immutable
-`SubscriptionMaintenanceKey` exposes `fromDimensions(endpointPath,
-maintenanceWork, maintenanceOutcome)`, `getEndpointPath()`, `getWork()` and
-`getOutcome()`; diagnostics redact the endpoint. Counts include coalescing and
-stale-result discards, rather than unique subscriptions or started attempts.
-Prometheus and OpenMetrics expose `soklet_mcp_subscription_maintenance_total`
-with `endpoint`, `work` and `outcome` labels, even for maintenance-only records.
-The existing 8,192-key retention bound and semantic-delivery overflow policy
-apply. Counter reset clears these counts while preserving live gauges.
-
-Progress backpressure holds only the invocation's progress-reporter lock. It
-does not open a server-wide metric deferral, and its accepted-progress record
-is enqueued after that lock is released. Subscription-maintenance records
-signal the dedicated metrics worker rather than calling collectors from a
-projection worker. Opening a runtime/lifecycle deferral and attempting a drain
-never wait for an in-flight collector or another deferral. Pending asynchronous
-delivery is signaled again after the owning drain or the last deferral ends.
-Short runtime transitions use independent scopes, including failure observations
-released on another thread. Server and Soklet lifecycle deferral uses a separate
-server-wide gate to preserve start/shutdown ordering; closing a transition cannot
-release that gate.
-
-The eighth bounded Phase 6 vertical adds `ConnectionAccepted`,
-`ConnectionRejected`, and `TransportFailure` to the same FIFO, so the runtime
-now produces and delivers all 23 declared `McpMetricsEvent` variants.
-`ConnectionAccepted` is recorded after the operating system accepts the socket
-and Soklet reserves capacity, but before connection-loop registration or any
-request. A later setup failure may therefore follow it as
-`TransportFailure(CONNECTION_SETUP_ERROR)`. `ConnectionRejected` is reserved
-only for an accepted socket refused because the configured connection limit is
-full; accept-loop and setup faults instead produce their typed transport
-failure and never a capacity rejection.
-
-`TransportFailure` is request-free and carries exactly one of the 18 bounded
-`MetricsCollector.TransportFailureReason` values: `REQUEST_READ_TIMEOUT`,
-`REQUEST_TOO_LARGE`, `MALFORMED_REQUEST`, `READ_ERROR`, `WRITE_ERROR`,
-`RESPONSE_WRITE_IDLE_TIMEOUT`, `RESPONSE_READY_ERROR`,
-`REQUEST_READ_TIMEOUT_ERROR`, `RESPONSE_WRITE_IDLE_TIMEOUT_ERROR`,
-`ACCEPT_LOOP_ERROR`, `CONNECTION_SETUP_ERROR`, `TASK_ERROR`,
-`TIMEOUT_TASK_ERROR`, `SELECTION_KEY_ERROR`, `REGISTER_ERROR`, `WRITE_TIMEOUT`,
-`EVENT_LOOP_TERMINATED`, and `UNKNOWN`. The event and its failure log retain no
-remote address, raw request, request context, throwable, payload, trace token,
-or other unbounded value. Low-level transport authorities select the typed
-reason directly; Soklet does not infer it from exception or log text.
-
-Typed failure scopes stage a reason before a fallible asynchronous transport
-transition, discard it on success, and retain it through synchronous close,
-cancelation, and stream-terminal consequences on failure. A runtime-owned,
-coalescing single-daemon-worker scheduler drains after connection-thread locks
-are released, retries a rejected submission when a signal races it, and never
-runs collector callbacks as a synchronous fallback on the connection thread.
-Blocking lifecycle deferral safely adopts that pending delivery, so fatal
-restart returns only after the old generation records
-`EVENT_LOOP_TERMINATED`, `ServerStopped`, then the new `ServerStarted`.
-
-A byte-free idle connection closes quietly, while a genuinely partial request
-records `REQUEST_READ_TIMEOUT`. Malformed HTTP records `MALFORMED_REQUEST`;
-a complete HTTP request containing malformed JSON instead follows the existing
-`RequestAccepted`, `ProtocolError(-32700)`, `RequestRejected` path. The
-request-SSE write-idle winner records exactly one `WRITE_TIMEOUT` before its
-stream/request terminals; a losing or generic termination records no
-`WRITE_TIMEOUT`, and channel-owned cancelation does not synthesize
-`WRITE_ERROR`. The sole fatal
-event-loop winner records `EVENT_LOOP_TERMINATED` before stop/wake publication
-and retains that scope through runtime terminalization and sibling-loop
-cleanup. These are record/enqueue-order guarantees at the owning authorities,
-not a universal cross-thread causal ordering claim.
-
-Separate from the first eight production observability and diagnostics
-verticals,
-a bounded Phase 6 MCP fuzz-registration and hardening checkpoint adds five new
-Jazzer methods:
-`McpJsonRpcEnvelopeCodecFuzzTest#decodeClassifiesOrRejectsOnlyWithTypedWireFailure`,
-`McpMirroredHeaderCodecFuzzTest#decodeStringOnlyRejectsWithRedactedIllegalArgumentException`,
-`McpToolSchemaProfileFuzzTest#compileAndEvaluateRemainTypedAndBounded`,
-`McpCursorValidatorFuzzTest#cursorValidationIsUtf8ExactAndTotal`, and
-`McpRequestStatePlaintextCodecFuzzTest#decodeOnlyRejectsWithUniformRedactedIllegalArgumentException`.
-This fuzz checkpoint is unnumbered; at that point the completed production-
-vertical count remained eight. Twenty-one checked-in synthetic text seeds cover these
-targets, and the nightly matrix now declares 15 total one-method slots, five of
-them new.
-
-The envelope target uses production JSON limits and either classifies one of
-the four envelope variants or observes only typed `McpWireDecodingException`;
-it deliberately makes no unconditional encode-round-trip claim because
-canonical output can expand. Mirrored-header decoding uses the production
-default bound and permits only its uniform redacted `IllegalArgumentException`.
-The Profile 1 target caps one input at 64 KiB, splits schema and optional
-instance at a literal `---INSTANCE---` line, and requires typed compilation or
-production-bounded evaluation outcomes. Cursor validation caps input at 64
-KiB and cross-checks decoded UTF-8 and raw UTF-16 projections against the JDK
-UTF-8 encoder in `REPORT` mode for a derived 1-to-256-byte limit. Request-state
-plaintext uses a deterministic binding, clock, request ID, 4,096-byte bound,
-15-minute lifetime, and three-round limit; rejection remains uniform and
-redacted, while accepted input must re-encode byte-exactly. Its terminal-LF
-copy is derived only for inputs of at most 4,097 bytes. The cursor helper is an
-internal package-private validation seam shared by incoming and outgoing
-cursors; it adds no public API.
-
-An unnumbered internal trace-correlation derivation checkpoint first implemented the
-frozen token construction. Trace correlation is disabled by default, and
-disabled controls capture no token. Enabled controls
-snapshot one complete active key ID and key-material pair under the shared
-security lock, then perform HMAC-SHA-256 after releasing that lock over UTF-8
-`soklet-mcp-trace-correlation-v1\0` followed by the decoded 16-byte trace ID.
-The first 16 digest bytes are encoded as an unpadded, 22-character Base64URL
-token. Invalid and all-zero trace IDs are rejected by `TraceContext` before
-derivation; equal key/trace inputs agree across controls, changed key or trace
-inputs differ, and concurrent rotation exposes only coherent old or new
-`(keyId, token)` pairs. Copied key material and explicit derivation buffers are
-zeroed, and the internal carrier retains only the nonsecret key ID and token
-while redacting the token from diagnostic rendering.
-
-The ninth bounded production vertical now invokes that derivation exactly once
-for each admitted semantic request, before lifecycle and handler observation.
-Only a valid MCP `_meta.traceparent` is eligible; disabled correlation,
-invalid or all-zero MCP trace context, absent metadata, and a physical HTTP
-trace header without valid MCP metadata all produce no carrier. The lifecycle
-observer, interceptor, handler, and terminal callback share the same immutable
-request context and hidden carrier. A request captured before rotation retains
-its complete old `(keyId, token)` pair through terminal observation, while a
-fresh request after rotation adopts the new pair. The raw-validated-trace-ID
-option neither enables correlation nor changes token derivation. The final
-package-private carrier retains only the nonsecret key ID and pseudonymous
-token, not raw trace context or key material, and redacts the token from
-rendering.
-
-This request integration is the ninth vertical. At that point, the prior fuzz
-and dormant derivation checkpoints remained unnumbered;
-`SOK-TRACE-001`, `SOK-TRACE-002`, and `SOK-TRACE-003` were COMPLETE;
-`SOK-TRACE-004` and `SOK-TRACE-005` were PLANNED; and `SOK-PRIV-001` was
-PARTIAL. No public API or API-sketch source changed. There was no structured-log
-carrier, field, emission point, cadence, or new `LogEventType`; raw trace-ID
-logging was unimplemented at that checkpoint. The vertical
-adds no metric, event, diagnostics/snapshot field, aggregate, label, or wire
-dimension. Tokens remain pseudonymous high-cardinality operational metadata,
-not anonymization, authentication, or authorization inputs. The carrier is not
-cleared at finish, and no GC or application-reference lifetime is promised;
-it naturally remains with an application-retained request context while core
-security controls retain only the current key and expose no history API. This
-is not comprehensive trace/baggage redaction, cardinality, privacy/security,
-aggregate/`AMB-003`, simulator, release-readiness, or Phase 6 freeze evidence.
-
-A third unnumbered Phase 6 checkpoint froze built-in MCP metric
-dimensionality through
-`McpObservabilityPublicApiTests#metricSchemaHasExactFiniteNonTraceDimensions`
-and
-`McpRequestObservationPublicRuntimeTests#distinctTraceMetadataDoesNotCreateMetricDimensionsOrLeakIntoRendering`.
-The sealed event hierarchy remains exactly 23 public final variants, 11
-fieldless; their getters expose only endpoint path, bounded method, fixed
-outcome, reason or protocol code, and nonnegative duration. Applications create
-them through the named `McpMetricsEvent` factories, such as
-`requestFinished(...)` and `protocolError(...)`; variant constructors are
-private. Production supplies a registered endpoint, a recognized method or
-`<unrecognized>`, the fixed ten protocol codes, and fixed enums. Public event
-factories validate shape, nullability, nonempty routed strings, and
-nonnegative duration; they do not enforce production registration, method
-vocabulary, or the protocol-code allowlist for arbitrary application-created
-events. The nested variants remain public so collectors can use typed pattern
-matching and their conventional getters. At that checkpoint,
-`McpMetricsSnapshot` was exactly three boxed `Long` values plus the immutable
-`Map<ShutdownComponentDisposition, Long>`. `DefaultMetricsCollector` aggregated only the
-five handler variants and `ServerStopped`; a fresh collector ignored and
-retained none of the other 17 variants.
-
-The runtime gate sends 16 sequential admitted requests with distinct valid MCP
-and HTTP trace IDs, tracestate, baggage, key/token canaries, correlation, and
-raw-ID opt-in. Built-in MCP events, snapshot values, metric names and labels,
-Prometheus, OpenMetrics, filter-observed samples, and reset rendering contain
-none of those canaries. At that checkpoint, before reset, the exact MCP sample
-set was the three label-free handler samples plus
-`soklet_mcp_shutdowns_total{outcome="graceful_termination"}`; after reset, only the three
-label-free handler samples remained. The production-vertical count remained nine,
-and the fuzz-registration, dormant derivation, and metric-dimensionality
-checkpoints were the three unnumbered checkpoints. `SOK-TRACE-001`,
-`SOK-TRACE-002`, and `SOK-TRACE-003` were COMPLETE; `SOK-TRACE-004` was
-PLANNED; `SOK-TRACE-005` was PARTIAL for metric-dimension inventory and
-default-collector evidence only; and `SOK-PRIV-001` was PARTIAL.
-`SOK-METRIC-001` and `SOK-METRIC-004` remained PARTIAL; `AMB-003` remained
-AMBIGUOUS.
-
-That checkpoint changed no production source, public API, API sketch, owner or
-signature inventory, aggregate family, label, event variant, or wire behavior.
-It does not cover custom collectors; generic HTTP `MetricsCollector` callbacks
-that receive a `Request`, request target, or `Throwable`; `LogEvent`,
-application callbacks, handler telemetry, or arbitrary application-created
-event vocabulary; structured-log fields/emission or raw-ID logging; future
-aggregate families or `AMB-003`; comprehensive trace/baggage redaction; or
-sustained cardinality, coverage-guided fuzz, corpus saturation, soak,
-simulation, migration, release-candidate provenance, review, or Phase 6
-freeze.
-
-Transport aggregation is the tenth production vertical, server-start
-aggregation is the eleventh, request-boundary aggregation is the twelfth,
-admitted-request lifecycle aggregation is the thirteenth, request-stream
-lifecycle aggregation is the fourteenth, subscription lifecycle aggregation
-is the fifteenth, progress/cancelation aggregation is the sixteenth,
-keep-alive aggregation is the seventeenth, and protocol/error-header
-aggregation is the eighteenth; the downstream OpenTelemetry metric migration
-is the nineteenth; modern admitted-request spans are the twentieth; bounded
-off-network MCP simulation is the twenty-first; the three earlier checkpoints
-remain unnumbered. The
-snapshot surface remains at 22 getters and 23 public builder
-methods including `build()`: 12 boxed `Long` values and ten immutable maps.
-The default collector aggregates the full 23/23 event variants across 22 rendered
-families, leaving zero core variants unaggregated. The 16-request cardinality
-gate remains exactly 31 MCP-prefixed samples before reset and 12 after reset
-because both new map families are sparse on that clean path.
-Its transport-failure map remains empty and no trace canary enters the built-in
-MCP or shared transport metric surfaces.
-
-The final contract-fixed aggregate subset now implements its fixed-code
-protocol-error map and endpoint/method unknown-header map without header identity.
-There are no standalone
-start/finish/open/close counters. Configured scalars render zero, maps and
-histograms remain sparse, reset preserves the five live gauges and clears
-cumulative/map/histogram state, and a duration crossing reset retains its
-original start. The downstream OpenTelemetry implementation now maps the same
-23 transitions to 22 instruments without changing this core snapshot or text
-schema.
-
-At the V20-era aggregate checkpoint, `SOK-TRACE-005` remained PARTIAL for
-metric-only evidence, while `SOK-PRIV-001`, `MCP-HTTP-020`, `SOK-METRIC-001`,
-and `SOK-METRIC-004` remained PARTIAL. `SOK-METRIC-002`, `SOK-METRIC-003`, and
-`SOK-SHUT-002` were COMPLETE. `AMB-003` was RESOLVED CONTRACT 2026-08-10 /
-CORE IMPLEMENTATION COMPLETE / DOWNSTREAM METRIC IMPLEMENTATION COMPLETE,
-`MCP-BASE-026` was COMPLETE, and `SOK-TRACE-004` remained PLANNED because
-modern spans did not by themselves implement structured trace-log emission.
-Before the later fourth unnumbered checkpoint, this did not constrain custom collectors or application telemetry, promise an
-atomic cross-field snapshot during active concurrent mutation, add structured-
-log or raw-ID emission, complete trace/privacy/cardinality work, or provide
-every-operation simulation, sustained, release-readiness, review, or Phase 6
-freeze evidence.
-
-The default collector separately exposes shutdown counts as an immutable,
-enum-ordered `Map<ShutdownComponentDisposition, Long>`. It omits zero outcomes
-and resets to an empty map. Prometheus/OpenMetrics renders only the fixed labels
-`not_started`, `graceful_termination`, `forced_termination`, `unexpected_termination`,
-`residual_activity`, or `termination_unknown`. Default aggregation now covers all 23 declared
-variants: `ServerStarted`,
-`ServerStopped`, `RequestAccepted`, `RequestRejected`, `RequestStarted`,
-`RequestFinished`, `RequestStreamOpened`, `RequestStreamClosed`, the five
-handler variants, `SubscriptionOpened`, `SubscriptionClosed`,
-`CancelationSignaled`, `ProgressEmitted`, `KeepAliveEmitted`, `ProtocolError`,
-`UnknownMirroredHeader`, and the transport trio. At that checkpoint,
-structured-log carrier/emission, raw-ID opt-in,
-sustained cardinality, and broader privacy/redaction
-work, scheduled/manual
-coverage-guided and sustained fuzz gates, release-candidate work, and Phase 6
-review/freeze remained open. The
-seventh through ninth verticals added no public API, snapshot field, aggregate
-family, label, event variant, or wire dimension. The tenth added three
-provisional snapshot getters and three matching builder methods; the eleventh
-adds one provisional getter/builder pair, the twelfth adds two, the thirteenth
-adds three plus `RequestOutcomeKey`, and the fourteenth adds two plus
-`RequestStreamTerminationKey`; the fifteenth adds two plus
-`SubscriptionTerminationKey`; and the sixteenth adds two plus
-`EndpointMethodKey`; the seventeenth adds one provisional getter/builder pair;
-and the eighteenth adds two provisional map getter/builder pairs.
-The nineteenth changes only the downstream `soklet-otel` artifact and adds no
-core event variant, snapshot member, owner, label, or wire dimension.
-The twentieth also changes only that downstream artifact; it adds five declared
-methods relative to V19 and no core event, snapshot, owner, label, or wire
-dimension.
-The twenty-first adds seven top-level simulation types,
-`McpSimulationOptions.Builder`, and two abstract methods to the shared
-`Simulator` host; it changes no core metric event, snapshot member, text
-family, or canary projection.
-
-**Fourth unnumbered Phase 6 every-operation simulator, bounded capture-fuzz,
-and off-network soak hardening checkpoint.** It now hardens that V21 simulator without
-changing production source, public API, API sketch, owner/signature inventory,
-metric/event/snapshot schema, wire contract, or the count of 21 production
-verticals. `McpSimulatorEveryOperationTests#recognizedRequestMethodsReplayExactJsonOrSseShapes`
-reports nine dynamic cases for `server/discover`, `tools/list`, `tools/call`,
-`prompts/list`, `prompts/get`, `resources/list`,
-`resources/templates/list`, `resources/read`, and `subscriptions/listen`.
-They freeze exact status, insertion-ordered headers, canonical JSON or exact
-unchunked SSE bytes, completion, same-context lifecycle, FIFO metric
-transitions, stopped diagnostics, and absence of server, connection, and
-transport events. `#cancellationNotificationIsAcceptedAndIgnoredWithoutTerminatingItsTargetSimulation`
-freezes the compatibility notification as `202`/empty/complete without handler
-or interceptor entry and without terminating its matching active request;
-`#concurrentRecognizedOperationReplayIsIsolatedAndExactlyDrained` admits all
-nine requests concurrently, forbids cross-request transcript IDs, and drains
-each request exactly once. Those nine dynamic cases plus the two ordinary
-tests form the 11-case class and the exact six-class operation selector passes
-57/0/0/0.
-
-`McpSimulationCaptureFuzzTest#captureStateMachineRemainsBoundedTerminalAndIdempotent`
-adds an internal capture-state-machine-only Jazzer target: at most 65,536 input
-bytes, 64 actions, 256 bytes per action payload, 16 pending items, and 4,096 cumulative
-captured bytes. `#curatedSeedsReachJsonSseLimitCancelAndCompletionBranches`
-replays the six synthetic ASCII programs `json-complete.actions`,
-`sse-terminal.actions`, `item-limit.actions`, `byte-limit.actions`,
-`cancel.actions`, and `duplicate-terminal.actions`. The focused target reports
-8/0/0/0; the deterministic full fuzz replay reports 135/0/0/0 across 16
-methods in 15 classes and 27 MCP seeds. A five-second coverage-guided launch
-was blocked by the execution host before the target ran, so it supplies no
-coverage-guided result. Its declared `maxDuration=2m` is a registration
-bound, not evidence that a coverage-guided run executed for that duration.
-
-`McpCrossFeatureSoakTests#mcpSimulatorChurnReturnsResourcesToBaselineAfterCancellationAndScopeCleanup`
-adds one fixed smoke scenario with 24 cycles: eight cases repeated three times,
-item capacity 4, captured-byte capacity 4,096, and one noncooperative residual
-cleanup/recovery wave. It balances requests 38/38, streams 24/24,
-subscriptions 4/4, and handlers 34/34; observes one residual wave, zero
-transport failures, zero live-listener lifecycle callbacks, and final
-`STOPPED`. The JDK 26 smoke profile passes 5/0/0/0 across three suites and five
-scenarios; its strict verifier is green with SHA-256
-`eaa1f52aad86dc2765200273a468801e938f5a6be1719845358c9aa57879bcd6`.
-The broadened final JDK 26 authority selector passes 226/0/0/0. Clean
-exact-source full suites on Corretto 21.0.11 and 26.0.1 each pass
-1,539/0/0/4 across 166 suites, compiling 440 main and 176 test Java sources.
-A separate local JDK 26 nightly-shaped execution passes 5/0/0/0 and its
-strict verifier is green with SHA-256
-`a20a70d6adb1fd2cb5909be76b219e38fc112524a12fc06552b26bdd8ec76d99`.
-It runs 200 cycles over the same eight cases 25 times, balances requests
-236/236, streams 156/156, subscriptions 26/26, and handlers 210/210, records
-one residual wave, zero transport failures and zero listener lifecycle
-callbacks, ends `STOPPED`, and observes file-descriptor delta 0, heap delta
-+15,272 bytes, and thread delta -1. This is local nightly-shaped execution,
-not scheduled CI, sustained, fleet, or release-candidate evidence. The V21 static-
-analysis, SpotBugs, packaging/Javadoc, API-verifier, sketch, and schema results
-are carried forward and were not rerun for this checkpoint.
-
-At that fourth checkpoint, the ledger was 21 numbered production verticals
-plus four unnumbered checkpoints: fuzz registration, dormant trace derivation, metric
-dimensionality, and this simulator every-operation/fuzz/smoke hardening
-checkpoint. `SOK-SIM-001` was COMPLETE BOUNDED PHASE 6 IMPLEMENTATION
-EVIDENCE and at that point included deterministic every-operation evidence.
-That checkpoint did not prove the strict local 39-scenario driver, every
-parameter/error variant,
-live-network fidelity, scheduled/manual or sustained coverage-guided fuzz,
-corpus saturation, long or fleet soak, comprehensive privacy/security,
-release-candidate provenance, or Phase 6 review/freeze. `SOK-VALID-002` and
-`SOK-PRIV-001` advance narrowly but remain PARTIAL; all
-other statuses remained unchanged. The next slice was a strict 39-row LOCAL
-off-network driver tied byte-for-row and name-for-name to the pinned
-`CLI/scenarios.json` manifest ordinal order; it was not the official CLI or a
-live-network run. Phase 6 remained provisional and unfrozen at that fourth
-checkpoint.
-
-**Fifth unnumbered Phase 6 candidate-artifact/public-API-only local 39-row
-simulator-driver checkpoint.** `conformance/official/run-local-simulator.mjs`
-validates and follows the pinned `CLI/scenarios.json` manifest ordinal order,
-covering the exact 39 active `RUN` rows at ordinals 1 and 3 through 40. It
-passes each ordinal/name pair to
-`McpLocalSimulatorScenarioDriver#runManifestRowsOffNetwork`, which creates a
-fresh scenario configuration and
-[`SokletSimulator::run`](https://javadoc.soklet.com/com/soklet/SokletSimulator.html)
-scope for every
-row and performs bounded public-API work across stateless-server, tools,
-schema, progress, prompts, resources, DNS, cache, header, and all 14
-multi-round-trip rows. The package-private fixture source helper
-`McpConformanceFixture#simulationConfigForScenario` supplies the same
-scenario-specific registrations without entering production code.
-
-The wrapper runs with only the compiled fixture classes and candidate JAR on
-the class path. It byte-compares exactly one
-`PASS\t<ordinal>\t<name>\n` record per manifest row, in manifest ordinal
-order, while requiring empty standard error and a clean exit. On both
-Corretto 21 and 26, the fixture and driver compile with
-`--release 17 -Xlint:all -Werror`, the fixture contract main passes, `jdeps`
-finds no `com.soklet.internal` dependency, and the driver passes 39/39.
-`conformance/official/local-simulator-self-test.mjs` also rejects reordered,
-duplicate, missing, failed-spawn, nonzero-exit, signaled, standard-error,
-wrong-output, `FAIL`, CRLF, and unterminated-result cases.
-
-This fifth checkpoint changes no production source, public API or sketch,
-owner/signature inventory, metric/event/snapshot surface, wire behavior, or
-numbered vertical. The ledger is 21 numbered production verticals plus five
-unnumbered checkpoints. API evidence was 558 records with the same
-comparison hash and at that checkpoint had 15 Phase 6 owners, 32 provisional
-owners, and a 219-owner
-reviewed union; the 23/23 event, 22-family, 22-getter/23-builder, and 31/12
-canary surfaces were unchanged. `SOK-SIM-001` was COMPLETE BOUNDED PHASE 6
-IMPLEMENTATION EVIDENCE, and all other status rows were unchanged.
-
-This local driver is not the official CLI, does not replay the official
-expected-check multiset, and opens no live network path. It therefore does not
-prove listener/kernel behavior, socket backpressure or write-idle handling,
-release provenance, sustained operation, comprehensive privacy/security, or
-Phase 6 review/freeze. Next are scheduled coverage-guided fuzz and sustained
-soak/stress gates, followed by structured-log, privacy, and API review/freeze
-work. Phase 6 remained provisional and unfrozen at that fifth checkpoint.
-
-MCP lifecycle is owned by the one `Soklet` configured with the server;
-`McpServer` has no independent start, stop, close, or timeout surface. The
-owner's `LifecyclePolicy` supplies the graceful and forced phase boundaries.
-Graceful shutdown fences new admission and closes intentionally indefinite
-subscriptions. A validated modern listen still being admitted returns a finite
-HTTP `503` JSON-RPC error with its request ID and `Connection: close`; a
-session-enabled 2025 GET that has not opened returns a bodyless HTTP `503` with
-`Connection: close`. A GET paused in CORS or queued before shutdown cannot open
-a new SSE stream after quiesce. Established modern subscriptions receive their
-terminal result, and established 2025 GET streams finish with the closing HTTP
-chunk. Shutdown retains every already-admitted finite unary or
-request-scoped progress response path while active and queued work drains.
-Existing request deadlines and client disconnects can still win during that
-phase. At the force boundary, Soklet closes remaining transports, cancels
-queued and active work, and interrupts application dispatch where applicable.
-`LifecycleObserver.didStopMcpServer(...)` receives the exact immutable
-`ShutdownComponentResult` once, including its
-`ShutdownComponentDisposition`, failures, and residual evidence. Diagnostics
-use their separate state vocabulary: `RESIDUAL_ACTIVITY` reports positive work
-at the final boundary and `TERMINATION_UNKNOWN` reports missing proof. A bound
-address remains available as historical evidence in all later snapshots.
-Soklet lifecycle is one-shot; late physical cleanup cannot rewrite or emit a
-second terminal result.
+### Server diagnostics
+
+`McpServer.getDiagnostics()` returns an immutable instantaneous
+`McpServerDiagnostics` snapshot even when metrics are disabled:
+
+| Accessor | Meaning |
+| --- | --- |
+| `getStatus()` | Captured lifecycle status |
+| `getBoundAddress()` | Effective address, including an ephemeral port; empty until binding succeeds and retained after shutdown |
+| `getRequestHandlerConcurrency()` | Configured active-handler limit |
+| `getRequestHandlerQueueCapacity()` | Configured admitted wait-queue limit |
+| `getActiveHandlerExecutions()` | Physically occupied handler slots, including residual work |
+| `getRequestHandlerQueueDepth()` | Admitted requests waiting for a handler slot |
+| `getActiveRequestStreams()` | Open streams, including subscription and configured 2025 GET bodies |
+| `getActiveSubscriptions()` | Open subscription streams, including configured 2025 GET bodies |
+| `getProtectionMode()` | Selected framework request-state protection mode |
+| `isApplicationRequestStateProtectorConfigured()` | Whether the selected mode uses a custom protector |
+| `getProtectionKeyringFingerprint()` | Optional live production-keyring fingerprint |
+| `getTraceCorrelationFingerprint()` | Optional live trace-correlation configuration fingerprint |
+
+Status, address, configured bounds and live counts form one runtime-owned
+atomic tuple. Security configuration forms a separately owned atomic tuple;
+the combined view has no single global linearization point. Handler counts
+stay within their configured limits, and
+`0 <= activeSubscriptions <= activeRequestStreams`. An ordinary request SSE
+stream contributes `1/0` to the stream/subscription pair; a subscription
+contributes `1/1`. Opening a stream does not prove client receipt.
+
+A proof-complete stop reports zero live counts. Residual handlers and streams
+remain counted until their physical exit or cleanup; publishing a shutdown
+result does not itself prove that they have drained. Transient failure-cleanup
+snapshots can retain work that has not yet been fenced or drained. Retaining a
+snapshot freezes its values; collector reset does not change diagnostics.
+
+The custom-protector flag is true exactly for `CUSTOM_PROTECTOR`; it does not
+describe an operation's `APPLICATION_PROTECTED` mode. The protection
+fingerprint is present exactly for `PRODUCTION_KEYRING`. The trace fingerprint
+is present when correlation was enabled at construction. Successful key
+rotation changes subsequent snapshots, not retained snapshots.
+
+Fingerprints expose no raw keys, per-key tags or correlation tokens. They are
+operational comparison values, not authentication or derivation inputs. They
+reveal configuration equality and can change during rotation, so do not use
+them as per-request metric labels. For production-keyring convergence,
+compare `getVersion()`, `getProfile()` and `getValue()` together. Diagnostic
+encoding `v2` compares exact raw key bytes; the earlier `v1` encoding could
+conflate keys that cannot open each other's state. Different versions are
+incomparable during a rollout. This diagnostic change does not change sealed
+state or trace tokens and requires no secret rotation.
+
+### Semantic event delivery
+
+`MetricsCollector.didRecordMcpMetricsEvent(McpMetricsEvent)` receives immutable
+transition-specific events. Implementations must be thread-safe, nonblocking
+and avoid I/O. Soklet serializes eligible semantic metric delivery and contains
+collector failures. Short runtime transitions can withhold their own pending
+records; lifecycle deferral preserves start/shutdown ordering. An unrelated
+request can make progress while another transition is deferred. This is
+enqueue/delivery ordering, not a total causal order across racing requests.
+
+At most 4,096 pending records are retained. When the queue is full, new
+ordinary records are omitted; `ServerStarted` and `ServerStopped` can reclaim
+an ordinary record to preserve lifecycle evidence. Withheld records count
+against that same bound. Omission does not change the wire outcome, and
+observed counters or gauges can be incomplete after overflow. Use diagnostics
+when an instantaneous live-state view is required.
+
+Connection acceptance means a socket was accepted and capacity reserved;
+later setup failure can still produce `TransportFailure`. Connection rejection
+means the configured capacity was full. Accept-loop, setup and event-loop
+faults use a fixed transport-failure reason instead of a capacity rejection.
+These events and built-in MCP failure logs retain no request, remote address
+or throwable. A byte-free idle connection closes quietly; genuinely partial
+requests follow the parser/read-timeout failure path.
+
+`RequestAccepted` means submission to the bounded protocol processor.
+Submission rejection emits `RequestRejected` without a retained accepted
+record. Admitted semantic handling has its separate `RequestStarted` and
+terminal `RequestFinished` pair; the boundary counters are not conservation
+equations for admitted outcomes. A full handler queue emits
+`HandlerCapacityRejected`; queued deadline, disconnect, cancelation and forced
+shutdown removal produce a dequeue instead.
+
+Verified 2025 GET/DELETE requests use generic HTTP lifecycle/metrics callbacks
+with the configured endpoint route and `ServerType.HTTP`; they create no
+fabricated RPC context, RPC method or request-limiter call. GET lifetimes emit
+subscription open/close events, while RPC request-stream open/close events
+remain tied to RPC streams. Physical GETs awaiting cleanup remain included in
+stream/subscription diagnostics. There is no separate session metric family
+or session-ID/owner-key dimension. See [2025 sessions](#explicitly-enabled-2025-sessions).
+
+### Default metric families
+
+`MetricsCollector.Snapshot.getMcpMetrics()` exposes an immutable
+`McpMetricsSnapshot`. Scalar counts use boxed `Long` values; duration maps
+contain `MetricsCollector.HistogramSnapshot` values, with boxed counts,
+boundaries and a `Double` sum. Maps and keys are defensively retained. The
+built-in Prometheus/OpenMetrics renderer uses these families:
+
+| Family | Kind | Labels |
+| --- | --- | --- |
+| `soklet_mcp_server_starts_total` | Counter | None |
+| `soklet_mcp_shutdowns_total` | Counter | `outcome` |
+| `soklet_mcp_connections_accepted_total` | Counter | None |
+| `soklet_mcp_connections_rejected_total` | Counter | None |
+| `soklet_mcp_requests_accepted_total` | Counter | None |
+| `soklet_mcp_requests_rejected_total` | Counter | None |
+| `soklet_mcp_requests_active` | Gauge | None |
+| `soklet_mcp_requests_total` | Counter | `endpoint`, `method`, `outcome` |
+| `soklet_mcp_request_duration_nanos` | Histogram | `endpoint`, `method`, `outcome` |
+| `soklet_mcp_request_streams_active` | Gauge | None |
+| `soklet_mcp_request_stream_duration_nanos` | Histogram | `endpoint`, `method`, `reason` |
+| `soklet_mcp_subscriptions_active` | Gauge | None |
+| `soklet_mcp_subscription_duration_nanos` | Histogram | `endpoint`, `reason` |
+| `soklet_mcp_subscription_maintenance_total` | Counter | `endpoint`, `work`, `outcome` |
+| `soklet_mcp_cancelations_signaled_total` | Counter | `endpoint`, `method` |
+| `soklet_mcp_progress_emitted_total` | Counter | `endpoint`, `method` |
+| `soklet_mcp_keep_alives_emitted_total` | Counter | None |
+| `soklet_mcp_protocol_errors_total` | Counter | `code` |
+| `soklet_mcp_unknown_mirrored_headers_total` | Counter | `endpoint`, `method` |
+| `soklet_mcp_handler_executions_active` | Gauge | None |
+| `soklet_mcp_handler_queue_depth` | Gauge | None |
+| `soklet_mcp_handler_capacity_rejections_total` | Counter | None |
+| `soklet_transport_failures_total` | Shared counter | `server_type="MCP"`, fixed `reason` |
+
+Configured MCP scalar counters and live gauges render at zero. Labeled maps
+and histograms are sparse; an empty or fully filtered family emits no orphan
+HELP/TYPE metadata. HTTP/SSE/MCP transport failures share one family. Filters
+operate on individual samples, and OpenMetrics output ends with one EOF.
+
+Framework-produced dimensions are registered endpoint paths, recognized
+methods or `<unrecognized>`, fixed enum values and fixed protocol-error codes.
+They never contain tool names, resource URIs, principals, session IDs, header
+identity, request IDs, trace data, arguments, results or throwables. Enum
+outcomes and stream reasons use lower-snake spelling; shared transport-failure
+reasons retain their enum spelling.
+
+`ProtocolError` counts only framework errors with codes `-32700`, `-32600`,
+`-32601`, `-32602`, `-32603`, `-32020`, `-32021`, `-32022`, `-31999` and
+`-31998` after successful response encoding or an accepted terminal-stream
+reservation. Failed provisional terminals, application error codes, tool
+`isError` results and empty-notification HTTP errors do not enter that family.
+Unknown mirrored headers count per occurrence under IGNORE and REJECT policy,
+using only endpoint and method; name/value diagnostics are a separate opt-in.
+
+Subscription-maintenance counts use `getSubscriptionMaintenance()` and
+`SubscriptionMaintenanceKey`, with the existing `Work` and `Outcome` enums.
+They include delivered coalescing and stale-result-discard records, not unique
+subscriptions or a count of all started attempts. Progress and keep-alive
+counts describe accepted delivery, not proof of client receipt. Cancelation
+counts describe an accepted cooperative signal, not proof of handler exit.
+
+Dimensioned default-collector maps have an 8,192-key capacity with approximate
+LRU eviction. New dimensions can evict older aggregates. Public event
+factories and snapshot builders allow application-supplied dimensions and are
+not a sensitive-data classifier or the framework method/code allowlist.
+Applications own the confidentiality and cardinality of manual events,
+custom collectors and downstream storage.
+
+### Histograms and reset
+
+MCP request durations have these finite boundaries, expressed here in seconds:
+`0.001`, `0.002`, `0.005`, `0.01`, `0.025`, `0.05`, `0.1`, `0.2`, `0.4`, `0.8`,
+`1.5`, `3`, `7`, `15`, `30`, `60`, `120` and `300`, followed by `+Inf`.
+Snapshots and text exports use nanoseconds. The layout covers the default
+60-second request timeout and longer configured deadlines through five
+minutes; larger samples use overflow. All supported MCP revisions share it.
+
+Request-stream and subscription durations use finite boundaries of `1`, `5`,
+`10`, `30`, `60`, `120`, `300`, `600`, `1800`, `3600`, `7200` and `14400`
+seconds plus overflow, also exported in nanoseconds. These layouts are
+independent of ordinary HTTP request histograms. Recheck queries and filters
+that select exact `le` values when migrating.
+
+`reset()` clears cumulative counters, maps and histograms while preserving
+live request, handler, handler-queue, request-stream and subscription gauges.
+A lifetime crossing reset contributes its full original duration when it
+finishes. Residual physical handlers remain active until exit. Retained
+snapshots never mutate, but independently sampled maps and instruments have
+no shared transaction or conservation invariant.
+
+Histogram count is derived from the captured final cumulative bucket. Sum,
+min, max, buckets and reset observations do not form one atomic sample.
+`Double` sums retain the original unit and can lose integer precision for
+large totals. See [histogram migration](MIGRATING_TO_4_0.md#histogram-sums-and-snapshot-values)
+for the boxed/List API and precision contract.
+
+### OpenTelemetry metrics and request spans
+
+`OpenTelemetryMetricsCollector.didRecordMcpMetricsEvent(...)` maps the same
+semantic events to dedicated `soklet.mcp.*` instruments and the shared
+`soklet.server.transport.failures` counter. Its MCP metric schema is independent
+of the HTTP metric naming strategy. Durations are recorded in seconds with
+the same boundary advice listed above; SDK views can override that advice.
+The SDK and telemetry backend own series retention, export and filtering;
+snapshot zero rendering, reset and cross-instrument atomicity are not SDK
+guarantees. See the [integration metric reference](https://github.com/soklet/soklet-otel#emitted-metrics)
+for instrument names, kinds, units and attributes.
+
+With `OpenTelemetryLifecycleObserver` installed,
+`SpanPolicy.recordMcpRequestSpans()` defaults to true. An admitted semantic
+request or notification creates one SERVER span through its client-visible
+terminal outcome, including stream/subscription lifetime. The default name is
+`MCP <method>` with a recognized method or `<unrecognized>`. Custom naming
+receives the full context and remains application-owned.
+
+Only validated MCP request metadata supplies the remote parent. Physical HTTP
+trace headers, ambient context and baggage are not fallback parents. Terminal
+projection uses the fixed request outcome and, when present, the client-visible
+error code. Error messages/data and exact lifecycle throwables are not exported
+as span attributes, descriptions or exception events. Physical client-address
+and Soklet-request-ID attributes remain separate default-off opt-ins; the MCP
+JSON-RPC request ID is not exported. See the
+[integration tracing reference](https://github.com/soklet/soklet-otel#emitted-spans)
+for exact attributes, terminal status rules and SDK ownership.
+
+### Trace correlation and logging
+
+Trace correlation is default-off and uses only validated MCP trace metadata.
+Configuring `traceCorrelationKey(...)` enables a versioned pseudonymous token;
+`logRawValidatedTraceIds(true)` independently opts into the validated lowercase
+trace ID. At admitted-request finish, Soklet attempts one bounded
+`LogEventType.MCP_TRACE_CORRELATION` record when either value is available.
+
+Token logging carries only format, key ID and token, plus the trace ID if
+separately enabled. Raw-ID-only logging is supported without a correlation key.
+The record carries no complete trace context, parent/span ID, flags,
+`tracestate`, baggage, request, resource method, response or throwable. Neither
+mode adds trace values to metrics. Correlation tokens and raw IDs are sensitive,
+high-cardinality log data; operators own access, retention and export policy.
+
+`McpServer.getTraceCorrelationKeyManager()` exposes enabled state, active
+non-secret key ID, secret-free fingerprint and `rotateActiveKey(...)`.
+Rotation atomically replaces the active key; there is no public history or
+historical-token derivation. Reusing the active ID with different bytes or
+reusing protection-key material is rejected. A request captures its token once;
+later rotation does not rewrite that request. Fingerprints compare deployment
+configuration, not identity or authorization. See the
+[privacy boundary](release/MCP_PRIVACY_BOUNDARY.md) and
+[observability guide](https://www.soklet.com/docs/mcp-observability-and-testing).
 
 ## Compatibility and unsupported features
 
@@ -4556,7 +3503,7 @@ including the per-request client capability map, belongs inside `params._meta`.
 An arbitrary extension field or an unsupported extension capability still does
 not register a method or enable matching server behavior.
 
-Current source supports MCP argument Completion for declared prompt arguments
+Soklet supports MCP argument Completion for declared prompt arguments
 and literal registered resource templates at explicitly selected
 `2025-06-18`, `2025-11-25`, and `2026-07-28` revisions. Completer revisions must
 fit inside the owning prompt/template and endpoint revisions. It advertises
@@ -4570,9 +3517,7 @@ prompt/resource read handler nor makes client-supplied arguments trustworthy.
 Enabling a completer requires a server-wide request limiter, which applies to
 all admitted MCP methods, not just Completion. See
 [Argument completion](README.md#argument-completion) for registrations,
-annotations, limits, and the request-wide policy boundary. The current-source
-API additions remain pending the coordinated API refreeze. Legacy Completion
-host checks and exact-candidate qualification remain outstanding.
+annotations, limits, and the request-wide policy boundary.
 
 Soklet does not provide stdio transport, public arbitrary JSON Schema
 registration, MCP logging capability, or an application result-extension
@@ -4595,582 +3540,7 @@ server configuration, and integrate directly with a model provider when
 needed. Use application logging and Soklet's existing observability and
 OpenTelemetry integrations.
 
-The official MCP conformance suite is pinned and automated as release
-evidence. The earlier frozen Phase 4 candidate passed its then-active reviewed
-profile. The checked-in final-schema corpus now contains 48 production-derived
-messages: the prior five-message progress and subscription exchanges, Phase 3
-unknown-method and Phase 5 missing-capability request/error pairs, a Phase 3
-rate-limited tool request/error pair and rate-limited notification, and a Phase
-4 strict-unknown-header request/error pair. That manifested corpus is bound to
-the live listener by the 11-test focused
-golden suite. Final-tag Ajv validation of the expanded corpus was not rerun
-locally because the pinned official-suite checkout was unavailable; it remains
-with candidate conformance. This local wire evidence is separate from the
-official suite. A controlled
-observation-only run of the current packaged fixture exercised all 39
-applicable pinned scenarios and recorded 147 `SUCCESS`, two exact reviewed
-`server-stateless` `SKIPPED`, and one reviewed
-`server-sse-streams-functional` `INFO` occurrence, with no warning, failure,
-or harness error. Thirty-six automatic wire successes covered 103 messages.
-That acquisition was not itself a frozen profile set, Phase 5 verify pass, API
-freeze, or release-candidate result. The bounded Phase 5 cross-feature
-soak/resource-delta gate is separately green: complete four-test Maven smoke
-runs pass on JDK 21 and JDK 26, and the four-test JDK 21 nightly run passes;
-the strict verifier accepts exactly four scenarios and three suites for each
-profile. Requests, streams, subscriptions, generations, and publisher
-registrations balance, each MCP run ends `STOPPED`, and no active publisher
-registration or client socket remains. Sustained/fleet/release-candidate
-calibration remains later work. The later atomic closeout activates all 39 exact
-profiles, preserves the 23 historical IDs, freezes the Phase 5 API, and advances
-the harness to phase 5. A fresh 39-scenario development-candidate verify passes
-all profiles, validates all 39 then-current goldens, and records no bad outcome,
-standard-error output, or non-clean fixture exit.
-
-The preceding 2026-08-20 protocol/capability golden reconciliation passed the
-focused live golden suite 9/9 on local Corretto 17 and the pinned Corretto 21,
-the broader protocol/capability gate 86/86 on Corretto 17, and the runner and
-local-simulator self-tests. Full Corretto 17 clean verify passed 1,671/0/0/72
-over 462 main and 196 test sources and built the main, sources, and Javadoc
-JARs. These are local snapshot checks, not immutable-candidate evidence.
-
-At the V21 boundary, the focused five-class simulator/API gate passed
-46/0/0/0, and the broadened adjacent authority selector passed 215/0/0/0.
-Clean exact-source full suites on
-Corretto 21.0.11 and 26.0.1 each pass 1,528/0/0/4 across 165 suites, compiling
-440 main and 175 test Java sources. Enforced static analysis is green with
-existing advisory diagnostics; SpotBugs reports 0/0. Candidate main, sources,
-and Javadoc JARs plus standalone Javadoc are green using offline-link
-resolution. The API verifier is green for 558 incompatibility records, 15
-Phase 6 owners, 32 provisional owners, and a 219-owner reviewed union. The
-frozen 1,049 Phase 4 and 195 Phase 5 inventories and prior hashes remain
-unchanged. All 167 API-sketch sources compile for Java 17 and pass Javadoc
-doclint on JDK 26. All 104 files from pinned JSON Schema commit
-`0c7b65dc16dd8eaa7bd83e21099c76610c3b246a` validate.
-
-The V20 downstream focus at 23/0/0/0 and full `soklet-otel` module suite at
-36/0/0/0 on each JDK were carried forward and not rerun for V21. The prior
-focused five-target fuzz run remained 28/0/0/0 and the deterministic full fuzz
-corpus replay remained 127/0/0/0 on both JDKs; neither was rerun. No scheduled
-or manual coverage-guided nightly fuzz run occurred. Deterministic seed replay
-was not sustained, coverage, corpus-saturation, privacy, security, release-
-readiness, or Phase 6 freeze proof. At that V21 boundary, structured-log
-carrier/emission, raw-ID opt-in, broader privacy, sustained cardinality and
-redaction work, coverage-guided and sustained fuzz gates, broader CI/
-provenance and release-candidate work, and Phase 6 API review/freeze remained
-open. Core default aggregation was complete, but Phase 6 was provisional and
-unfrozen.
-
-## Current Phase 6 and release state
-
-The current result-envelope and error-mapping fixture manifests retain 25 and
-twelve fixtures, respectively, using elicitation for client-input examples.
-Their SHA-256 values are
-`d30af23ceff1d32f03fc89c4aa77d69111cbc82ec0b9abf943dcf03ba0002e53`
-and `68fb32f4aaeb11616c62eebde7609f227cbbc2abc0d86f282292f5d48e73b5f8`.
-The dated development checkpoints below retain their original hashes.
-
-The last reviewed pre-P1b MCP 4.0.0 signature snapshot covers 250 owners: 136 Phase
-4, 36 Phase 5, 64 Phase 6, and 14 provisional Tasks owners. Current-source
-ownership has advanced to 270 MCP owners plus 61 non-MCP owners; the newer
-includes do not refreeze signatures. See the
-[API inventory](api/mcp/README.md#reviewed-ownership) for the exact current
-partition and the coordinated-refreeze boundary. The
-bounded `MCP_TRACE_CORRELATION` log contract and its independent raw validated
-trace-ID opt-in are implemented and API-frozen. The current cancellation
-contract is likewise closed: every framework MCP token exposes only a fixed
-`StreamTerminationReason`, carries no framework cause, and retains the same
-bounded category in `StreamingResponseCanceledException`. No reason-valued
-cancellation metric is planned under this contract.
-
-### Historical release-status checkpoint — September 13, 2026
-
-The format-v2 manifest has 26 ordered gates: nineteen are `READY`, six remain
-`BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, and `candidate-conformance` is
-`BLOCKED_TOOLCHAIN_SECURITY_REVIEW`. No gate remains `BLOCKED_HARNESS_MISSING`.
-`READY` means an executable validation path is configured, not that the gate
-has passed for an immutable candidate. The external conformance toolchain's
-[security-risk disposition](conformance/official/UPSTREAM_DEPENDENCY_REVIEW_2026-09-13.md)
-remains open; local conformance success does not waive that blocker.
-
-The current pinned `0.2.0-alpha.11-descriptive` official suite covers 49 reviewed
-profiles (39 existing plus ten Tasks profiles). Its September 13 local
-development run produced 192 `SUCCESS`, three `SKIPPED`, and one `INFO`
-outcome. Only one of those three skips is Tasks-specific. Eight independent
-Soklet candidate-JAR socket notification checks also passed; these supplement
-the upstream Tasks notification skip and are not counted as upstream passes.
-Both servlet adapters are on the 2.0.0 line requiring Soklet 4.0.0. Their
-default-property and explicit-override validation legs both resolve the same
-exact 4.0.0 candidate, not a separate 3.x compatibility artifact.
-
-These are local development results and configured release requirements, not
-immutable-candidate acceptance or permission to publish. All required gates
-must produce candidate-bound PASS receipts before release. See
-[release/README.md](release/README.md) for the current fail-closed contract.
-
-### Historical development checkpoints
-
-The following results describe earlier source trees and harness configurations;
-their counts and then-current statuses are preserved, not claims about today's
-candidate or supported adapter versions.
-
-The explicit-dispatch release-validation workflow, candidate script,
-downstream/toolchain manifest, release soak profile, and fail-closed evidence
-assembler are checked in. They do not constitute release evidence. The last
-full pre-typed-state local checks passed core clean verify at 1,671/0/0/4 over
-464 main and 193 test sources, JDK 21 static-analysis `BUILD SUCCESS`,
-SpotBugs 0, Javadocs, fuzz replay 139/139, and smoke soak 6/6 plus verifier.
-After the no-alias greenfield typed-state amendment, fresh Corretto 26 clean
-verify passes 1,673/0/0/4 over 462 main and 193 test sources and builds the
-main, sources, and Javadoc artifacts. Focused request-state/runtime tests pass
-50/50; reflection/inventory contracts pass 24/24; and the aggregate API gate
-verifies 565 incompatibilities, 234 owners, and 1,048/179/422 records. The
-maintained 179-source API sketch passes Java 17 compilation,
-Javadoc doclint, and its localization smoke contract. That 1,673 result remains
-the typed-request-state amendment checkpoint. The 1,676/0/0/4 result over 462
-main and 194 test sources remains the rate-limit identity/trusted-proxy
-checkpoint. The independent-request direction-boundary result remains
-1,678/0/0/4 over 462 main and 195 test sources, with its focused protocol gate
-at 35/35. At the localization-fleet checkpoint, Corretto 26 clean verify
-passed 1,681/0/0/4 over 462 main and 196 test sources and built the main,
-sources, and Javadoc artifacts; the fixture passes 3/3 and its related
-localization regression set passes 24/24. The preceding Corretto 17 clean-test
-run passed 1,659/0/0/72 before the rate-limit identity, independent-request,
-and localization-fleet runtime test sources were added, so it remains prior
-supported-JDK evidence rather than a current 196-source result. The exact six-
-scenario smoke soak passes 6/6 with its strict
-verifier. Local evidence carried forward at that checkpoint was green for
-candidate localization,
-artifact-backed simulator 39/39, pinned live official CLI 39/39, the website's
-offline clean-install, lint, and 33-route SSG build, and OpenTelemetry 36/36.
-TypeScript and Go were checksum-pinned, `READY`, and green against that local
-snapshot. The six reviewed downstream change sets were uncommitted local
-work and therefore unpublished and unpinned, so the manifest carried its old
-public commits. All four then-configured servlet legs passed 158/158 locally:
-the default 3.1.1 and 4.0.0 legs for both javax and Jakarta. This is historical
-3.x evidence, not the current adapter contract. ToyStore's completed local
-migration passed 14/14, including six MCP tests. Its per-request credential
-proof accepts a valid request, then returns 401 for malformed, missing, expired, and
-wrong-audience credentials and 403 for an insufficient-scope credential; no
-prior request identity or authorization is inherited. Its old manifest pin
-remains blocked until its reviewed local changes are committed and published,
-the resulting commit is pinned, and the immutable-candidate/JDK-25 validation
-passes.
-Barebones compiles and its exact live probes pass locally on a reserved
-ephemeral IPv4 loopback port supplied through
-`SOKLET_BAREBONES_LOOPBACK_PORT` without disturbing the unrelated Docker
-listener on port 8080. Its source and validator changes remain uncommitted and
-unpinned, so its old public pin stays blocked.
-A same-version macOS arm64 Corretto 21.0.12.9.1 run passed the full core
-`clean test` at 1,681/0/0/4 at the initial JDK 21 gate checkpoint. Static
-analysis reports `BUILD SUCCESS` with the
-existing advisory inventory after the `SelfAssignment` fix, and SpotBugs
-reports zero bugs and errors. The exact checksum-pinned Corretto 21.0.12.9.1
-toolchain now drives `core-jdk-21`, `static-analysis`, and `spotbugs`.
-The bounded two-listener localization fixture now covers failed reload,
-rolling revision drift without within-response mixing, node loss,
-subscription reconnect, node-local delivery, and final runtime cleanup.
-At that earlier release-harness checkpoint, the format-v2 contract enumerated
-exactly 26 ordered gates. Twenty were dispatch-configured, none remained
-`BLOCKED_HARNESS_MISSING`, and the six downstreams were
-`BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`. That historical configuration predates
-the additional toolchain-security blocker recorded in the current status above.
-`READY` means configured, never passed. The matrix-closure hook is `READY`, and
-the candidate-contained registry and residual evidence produce a canonical
-`PASSED` report at 113 `CORE_COMPLETE`, 119 `RELEASE_GATED`, 12
-`APPLICATION_OWNED`, 19 `NOT_APPLICABLE`, and zero `UNRESOLVED`. Only the exact
-candidate workflow can record its typed PASS receipt. A `RELEASE_GATED` row has
-candidate-contained implementation or evidence anchors and names the exact
-immutable-candidate, sustained-run, or downstream gate that still owes proof; it
-does not excuse a local implementation, test, documentation, golden, or
-fixture gap. Scheduled fuzz, nightly soak, and operational history are
-advisory post-release monitoring rather than release gates. Release-soak
-results, release scans, benchmarks, published downstream pins, and an
-immutable checksum-matched candidate conformance/provenance run remain open
-candidate evidence even though their executable harnesses are checked in.
-Candidate Javadoc generation/completeness is configured; public deployment is
-post-validation publication work. Production multi-host
-localization coordination remains application/deployment-owned, while the
-bounded two-listener fixture is the configured Soklet fleet gate. See
-[release/README.md](release/README.md) for the exact fail-closed contract.
-
-Those 1,681-test results remain the localization-fleet and initial JDK 21 gate
-checkpoints. Current post-fix Corretto 21 validation passes core `clean test`
-at 1,682/0/0/4 over the unchanged 462 main and 196 test sources. The focused
-terminal/subscription regression set passes 32/32, a clean smoke soak passes
-6/6 with its strict verifier and verifier self-test, and the cross-feature
-smoke method passes 10/10 repeated stress runs. The runtime now preserves
-transport-callback terminal ownership when a fast inline application stream
-reserves its terminal response before the protocol task returns, preventing
-premature terminal cleanup without relaxing a timeout or expected count. The
-subscription activation regression checks acknowledgment-then-notification
-wire order directly rather than using asynchronous metric delivery as a
-barrier. The internal order remains: acknowledgment queued, subscription
-activated, then response handed to the transport callback.
-Current supported-JDK revalidation on local Amazon Corretto
-17.0.20.1+10-LTS passes `mvn -B -ntp clean test` at 1,667/0/0/72 over the
-same 462 main and 196 test sources. The two corrected methods pass 2/2 once
-and 20/20 across ten combined repetitions. Both corrections are test-only
-synchronization: live transport smoke waits for the complete idle snapshot,
-and observation containment waits for actual typed failure-log publication
-before exact inspection. The original exact counts and timeout assertions
-remain; production behavior, public API, and frozen inventories are unchanged.
-
-A subsequent containment revalidation on the pinned Amazon Corretto
-21.0.12.9.1 toolchain (`java 21.0.12.1`) passes the exact
-`mvn -B -ntp clean test` at 1,682/0/0/4 over 462 main and 196 test sources.
-The focused platform-plus-virtual-thread containment matrix passes 30/30, and
-20/20 complete repetitions cover 600 dynamic cases; the affected JDK 17
-platform-thread matrix also passes 15/15. This is test-only synchronization:
-containment waits now include the exact expected cleanup count before returning.
-Expected cleanup counts, timeout bounds, and assertions are unchanged;
-production behavior, public API, and frozen inventories are unchanged. These
-local snapshot checks are not immutable-candidate release evidence.
-
-A later subscription observer-scope revalidation on the same pinned Amazon
-Corretto 21.0.12.9.1 toolchain (`java 21.0.12.1`) passes the exact full
-`mvn -B -ntp clean test` at 1,682/0/0/4 over the unchanged 462 main and 196
-test sources. The affected method passes 1/1 focused and 20/20 repeated runs;
-`McpSubscriptionPublicRuntimeTests` plus
-`McpSubscriptionRuntimeBoundaryTests` pass 26/26. The test-only correction
-sets the per-authorization-partition subscription cap to one and holds the recovery
-subscription open while the original disconnect observer's exact-once count
-is asserted, preventing that recovery request's legitimate finish from
-entering the first request's observation phase. No production behavior,
-public API, Phase 4/5/6 freeze inventory, timeout, or asserted count changed.
-This is local snapshot evidence, not an immutable release-candidate PASS
-receipt.
-
-Current JDK 17 application-execution revalidation on local Amazon Corretto
-17.0.20.1+10-LTS passes the exact `mvn -B -ntp clean test` at 1,667/0/0/72
-over the unchanged 462 main and 196 test sources. The affected method passes
-1/1 focused and 20/20 repeated runs, and the full
-`McpApplicationExecutionTests` class passes 10/10. The same affected method
-also passes 1/1 on the pinned Corretto 21.0.12.9.1 toolchain. The test-only
-correction uses an exact post-observer stable fence requiring both
-`retainedExchanges == 1` and `queuedCleanups == 1` before inspecting the
-dequeued snapshot. Existing timeout bounds and expected counts are unchanged;
-production behavior, public API, and the Phase 4/5/6 freeze inventories are
-unchanged. This is local snapshot evidence, not immutable release-candidate
-evidence.
-
-The previous policy/error reconciliation checkpoint was test- and golden-only.
-Its exact slice passes 27/27 on the pinned local Corretto 17 and Corretto 21
-toolchains, and the adjacent policy regression set passes 59/59 on each.
-`McpFinalTagGoldenWireProductionTests` passes 11/11 on each JDK, and the
-manifest now binds 48 production-derived messages. An unsigned Corretto 17
-`clean verify` passes 1,677/0/0/72 over 462 main and 197 test sources and
-builds the main, sources, and Javadoc JARs. No production behavior, public API,
-or Phase 4/5/6 freeze inventory changed. At that checkpoint, the canonical
-matrix was deliberately `FAILED`: 95 rows were `CORE_COMPLETE`, 116 were
-`RELEASE_GATED`, four were `APPLICATION_OWNED`, 18 were `NOT_APPLICABLE`, and
-29 remained `UNRESOLVED`. Final-tag Ajv validation of the expanded 48-message
-corpus had not been rerun locally and remained owned by candidate conformance.
-These are local snapshot checks, not immutable-candidate evidence.
-
-The preceding five-row compatibility reconciliation closed the core rows for
-admitted identity versus client self-report, unknown client-extension
-fallback, Bearer challenge transport, authorization/CORS response-head
-behavior, and legacy session/replay-header containment. A real listener keeps
-credential-selected identity authoritative despite forged client metadata.
-Valid unknown extension settings remain opaque admission input without
-inventing or advertising core support; malformed settings fail before
-admission. A safe Bearer challenge can carry an absolute `resource_metadata`
-URI and operation scopes, but the application owns their meaning and standards
-compliance. The independent CORS goldens cover `Authorization`, modern and
-registered MCP headers, `WWW-Authenticate` exposure, exact order and
-multiplicity, and fail-closed legacy-header rejection.
-
-The focused compatibility slice passed 33/33 on the pinned local Corretto 17
-and Corretto 21 toolchains. The separate authorization/CORS HTTP-head manifest
-at `conformance/golden-http-head/authorization-cors/manifest.sha256` binds
-three raw production response-head fixtures.
-`McpAuthorizationIntegrationTests` contains two test methods: one reads and
-verifies those goldens, while the other asserts request and notification
-challenge semantics. This separate corpus does not alter the final-schema
-corpus, which remains 48 JSON messages with 11 focused
-golden tests. An unsigned Corretto 17 `clean verify` passed 1,685/0/0/72 over
-462 main and 201 test sources and built the main, sources, and Javadoc JARs.
-The only production change was an internal policy-response denylist for legacy
-MCP session/replay headers; a negative
-production-source inventory confines those names to that denylist. Public API,
-signatures, and the Phase 4/5/6 freeze inventories were unchanged. At that
-checkpoint, the canonical matrix remained deliberately `FAILED`: 100 rows
-were `CORE_COMPLETE`, 116 were `RELEASE_GATED`, four were
-`APPLICATION_OWNED`, 18 were `NOT_APPLICABLE`, and 24 were `UNRESOLVED`.
-Final-tag Ajv validation of the
-expanded 48-message corpus was not rerun locally and remains owned by candidate
-conformance. These are local snapshot checks, not immutable-candidate evidence.
-
-The preceding four-row HTTP-contract reconciliation closed readable
-`initialize` and validated-unsupported-selector rejection diagnostics,
-unsupported classified-notification handling, universal MCP HTTP `no-store`,
-and the exact request/notification validation order. The separate
-`conformance/golden-http-contract/precedence-no-store/manifest.sha256` binds 23
-canonical complete-response fixtures and has SHA-256
-`ccec7ec13ac245bbc4a1820b1c387b188347a3ef868d4128e3af5c3a6e331e92`.
-Five contract tests comprise three production-listener golden tests, one exhaustive response-authority inventory, and one six-document manifest-digest
-parity gate; four diagnostic tests include 23
-readable-`initialize` rejection cases and the negative pre-JSON/method
-boundary. Those two classes pass 9/9 in the current focused execution.
-
-Full clean test passes 1,693/0/0/72 on Corretto 17 and 1,708/0/0/4 on Corretto
-21 over 462 main and 203 test sources; the latter includes 15 additional
-virtual-thread containment cases. A subsequent local Corretto 17 package
-validation built the main, sources, and Javadoc JARs after allowing configured
-external Javadoc links. The new HTTP corpus is separate from the unchanged
-48-message/11-test official final-schema corpus and three-head/two-test auth/
-CORS corpus. The narrow internal change preserves a readable `initialize`
-method through valid-JSON envelope/ID failures and adds a bounded diagnostic
-after validated unsupported-selector membership; it adds no initialization or
-session. Public API, signatures, and freeze inventories are unchanged. At that
-checkpoint, the matrix was
-deliberately `FAILED`: 104 rows were `CORE_COMPLETE`, 116 were `RELEASE_GATED`,
-four were `APPLICATION_OWNED`, 18 were `NOT_APPLICABLE`, and 20 remained
-`UNRESOLVED`.
-These are local snapshot results, not immutable-candidate evidence or results
-from the release-pinned Corretto 21.0.12.9.1 toolchain.
-
-The subsequent 2026-08-21 core-result/error closure adds two independent
-corpora. The checksum-bound
-`conformance/golden-result-envelope/live/manifest.sha256` binds 25 production
-JSON/SSE fixtures at SHA-256
-`00e38b4c5345b6c786d278919d7df2ade8d7d10ad9625455812bf172b203dce6`.
-Four live tests plus the source/authority inventory exhaust Soklet 3.6's core
-`complete` and `input_required` result-envelope authorities; extension result
-types remain separately bounded by `MCP-BASE-006`. The separate
-`conformance/golden-error-mapping/live/manifest.sha256` binds twelve canonical
-complete HTTP responses across the eight frozen ordinary error families at
-SHA-256
-`24060f946d47cf47e549f2c59030a3ee12fed601c9fad229a5d69ac21c67be45`.
-Two live-listener tests cover every fixture. Existing readable-`initialize`
-and path-specific `-32602`, input-response, and request-state evidence remain
-explicit supplements; the ordinary corpus does not claim every data-bearing
-error pathway. Five deterministic tests freeze both progress/error enqueue
-orders and the error/cancellation ownership boundaries: a nonstream mapped
-response owns its terminal before a late pre-body cancellation, written
-streamed-error bytes beat a concurrent cancellation, and cancellation before
-streamed-error reservation discards both the error terminal and its
-provisional metric.
-
-The combined focused suite passes 21/21 and the adjacent group passes 195/195
-on pinned Corretto 17.0.20.1 and local Corretto 21.0.11. Full clean test passes
-1,704/0/0/72 and 1,719/0/0/4, respectively, over 462 main and 205 test sources;
-Corretto 17 package validation builds the main, sources, and Javadoc JARs. API
-diff/parser/freezes remain green at 565 reviewed incompatibilities and
-unchanged Phase 4/5/6 signature counts 1,048/179/422. No production behavior,
-public API, freeze, or version changes; the sole production-source diff is a
-package-private no-op test hook at the existing-stream enqueue boundary. At
-that checkpoint, the matrix remained deliberately `FAILED`: 106 rows were
-`CORE_COMPLETE`, 116 were `RELEASE_GATED`, four were `APPLICATION_OWNED`, 18
-were `NOT_APPLICABLE`, and 18 remained `UNRESOLVED`. These are local snapshot
-results, not immutable-candidate evidence or results from the release-pinned
-Corretto 21.0.12.9.1 toolchain.
-
-The subsequent application-semantic closure adds the public-API-only
-[durable-handle and secured-prompt patterns](src/test/java/examples/mcp/McpDurableHandlePromptApplicationPatternsTests.java)
-and [resource, URI, filesystem, and cursor patterns](src/test/java/examples/mcp/McpResourceCursorApplicationPatternsTests.java).
-The eight executable tests distinguish application ownership from framework
-validation: Soklet provides none of the example's durable repository, prompt
-business policy, canonical filesystem mapper, delivery-intent URI policy,
-cursor signing key, or retained snapshot storage. The evidence moves
-`MCP-BASE-015`, `MCP-PROMPT-006`, `MCP-RESOURCE-006/007`, and
-`MCP-PAGE-004/007` to `APPLICATION_OWNED`; distributed portable-cursor evidence
-remains open. No production behavior or public signature/freeze inventory
-changed; public Javadocs now document the existing application-owned
-boundaries. Focused owner evidence on Amazon Corretto 17.0.20.1+10-LTS is two
-separate 4/4 class runs (eight tests total); the direct combined suite is 8/8
-on local Amazon Corretto 21.0.11.10.1 (OpenJDK 21.0.11+10-LTS). The adjacent
-12-class suite passes 66/66 on each JDK. Full `mvn -B -ntp clean test` passes
-1,712 tests with zero failures, zero errors, and 72 skips on Corretto 17, and
-1,727 tests with zero failures, zero errors, and four skips on local Corretto
-21; both compile 462 main and 207 test sources. At that application-pattern
-checkpoint, the matrix remained deliberately `FAILED`: 106 rows were
-`CORE_COMPLETE`, 116 were `RELEASE_GATED`, 10 were `APPLICATION_OWNED`, 18
-were `NOT_APPLICABLE`, and 12 remained `UNRESOLVED`.
-
-The subsequent conditional-capability proxy closure adds the
-[real loopback intermediary fixture](src/test/java/com/soklet/internal/mcp/protocol/McpConditionalCapabilityProxyRuntimeTests.java).
-Its single test drives a two-leg socket proxy with a manual monotonic idle
-clock. With conditional support absent, the proxy observes zero backend and
-client-visible response bytes before expiring at its exact configured boundary;
-the reset produces one exact client-disconnect outcome and one cooperative
-cancelation. The handler remains accounted until explicitly released, and its
-late result emits no bytes. With support present, the same proxy forwards the
-SSE head, progress notification, and terminal result byte-for-byte. The
-focused/adjacent gate passes 33/33 on local Amazon Corretto
-17.0.20.1+10-LTS and local Amazon Corretto 21.0.11.10.1 (OpenJDK
-21.0.11+10-LTS). Full `mvn -B -ntp clean test` passes 1,713 tests with zero
-failures, zero errors, and 72 skips on Corretto 17, and 1,728 tests with zero
-failures, zero errors, and four skips on local Corretto 21; both compile 462
-main and 208 test sources. A narrow internal production
-fix preserves an outer cancel transition's exact observation reason and cause
-instead of publishing a generic cancelation fallback. Public API, signatures,
-freeze inventories, and the version are unchanged. This evidence models one
-configured loopback intermediary; it does not establish a wall-clock
-production timeout, universal proxy behavior, or prompt non-cooperative
-application-code exit. At that checkpoint, `MCP-MRTR-011` became
-`CORE_COMPLETE`; the matrix remained deliberately `FAILED` at 107
-`CORE_COMPLETE`, 116
-`RELEASE_GATED`, 10 `APPLICATION_OWNED`, 18 `NOT_APPLICABLE`, and 11
-`UNRESOLVED`. These are local snapshot results, not immutable-candidate
-evidence; the Corretto 21 run is not release-pinned.
-
-The subsequent queued-execution winner-election closure adds
-[deterministic queue ownership evidence](src/test/java/com/soklet/internal/mcp/protocol/McpQueuedExecutionWinnerElectionTests.java).
-One method stages promotion, exact-boundary deadline, and client disconnect,
-then enumerates all six total orders with a monotonic manual clock and FIFO
-manual executor. Deadline before promotion while the request remains writable
-returns the exact queued HTTP 503/JSON-RPC `-32603` response; disconnect writes
-nothing; promotion first ends the queued state and follows the separately
-provisional active-deadline path. A second cross-layer case holds the exact
-observer-deferral gap after the application layer reserves a queued deadline,
-then makes the outer request control unwritable by disconnect before response
-handoff. It observes zero callback bytes, exactly one `CLIENT_DISCONNECTED`
-finish and one dequeue/gauge removal. One deadline-expiration occurrence and
-one abandoned response account for the reserved-but-unwritable attempt, not a
-second terminal outcome. No queued interceptor or handler runs, cleanup occurs
-once per request, and all framework state returns to baseline. The focused
-class passes 2/2 on pinned Amazon Corretto 17.0.20.1+10-LTS and local Amazon
-Corretto 21.0.11.10.1; the adjacent Corretto 17 execution bundle passes 53/53.
-Full `mvn -B -ntp clean test` passes 1,715/0/0/72 on Corretto 17 and
-1,730/0/0/4 on local Corretto 21 over 462 main and 209 test sources. This
-slice changes no production behavior, public API, signature/freeze inventory,
-or version. It closes `SOK-EXEC-005`; the current matrix remains deliberately
-`FAILED` at 108 `CORE_COMPLETE`, 116 `RELEASE_GATED`, 10
-`APPLICATION_OWNED`, 18 `NOT_APPLICABLE`, and 10 `UNRESOLVED`. These are
-bounded local ordering results, not proof of every scheduler/network
-interleaving or immutable-candidate evidence; the Corretto 21 run is not
-release-pinned.
-
-The subsequent off-network simulation boundary closure adds
-`McpSimulatorPublicRuntimeTests#nonDrainingCaptureLimitDoesNotBlockUnrelatedSimulationOrCreateTransportFailure`
-and
-`McpSimulationCaptureRuntimeTests#offNetworkCaptureNeverArmsWriteIdleAndCaptureLimitsRemainFirstWinner`.
-Their source SHA-256 values are
-`b666ad1bcb6a3bca6e3af46505fe46b7365042b06189cc8daf41d5fb51e05350`
-and `7ab30148451fbef7e8a8131486cb67989ac133271797502920ef4aa2f1db6bd5`.
-The internal test proves that off-network capture never arms live write idle
-and that non-drained item/byte limits preserve retained frames, omit the
-offender, and remain immutable once-only simulator outcomes. The public test
-lets an unrelated simulation complete while the limited handler still owns
-its slot, with balanced request/handler accounting and no transport event.
-Separate real-listener tests remain the authorities for bounded slow-reader
-TCP backpressure and actual response-write-idle closure/interruption. The two
-selectors pass 2/0/0/0, both affected classes pass 25/0/0/0, and the adjacent
-loopback/simulator bundle passes 26/0/0/0 on pinned Corretto 17 and local
-Corretto 21. Full `mvn -B -ntp clean test` passes 1,717/0/0/72 and
-1,732/0/0/4, respectively, over 462 main and 209 test sources. This test-only
-slice changes no production behavior, public API, freeze inventory, manifest,
-or version. It moves `SOK-SIM-001` to `RELEASE_GATED` with the exact seven
-named gates; the current matrix remains `FAILED` at 108 `CORE_COMPLETE`, 117
-`RELEASE_GATED`, 10 `APPLICATION_OWNED`, 18 `NOT_APPLICABLE`, and 9
-`UNRESOLVED`, while the synthetic all-resolved report is 117/117/10/18/0.
-This is deliberate simulator/live separation, not kernel, TCP, or live write-
-idle equivalence.
-
-The subsequent localized-cursor fleet application-pattern closure adds
-`McpLocalizedCursorFleetApplicationPatternsTests` at final source SHA-256
-`10d872127f2a25632137899986ea75cfdfe838eb2d6fbfa395283285b678d567`.
-Its two public-API-only methods transfer only the exact opaque cursor between
-independently configured simulator nodes; preserve bounded, stable, unique
-traversal of a retained snapshot after another node activates a replacement
-catalog; bind snapshot/catalog and locale/localization revisions plus expiry,
-offset, and authorization; and preserve the same bytes from provider
-preselection through full handler authentication. Every exercised invalid
-classification produces one fixed no-data application `-32602`/400 error with
-zero lifecycle throwables. The selector passes 2/0/0/0, the adjacent six-class
-set passes 30/0/0/0, and full clean test passes 1,719/0/0/72 and
-1,734/0/0/4 on pinned Corretto 17 and local Corretto 21 over 462 main and 210
-test sources. No production behavior, API, freeze inventory, manifest, or
-version changes. `MCP-PAGE-006` and `SOK-L10N-007` are now
-`APPLICATION_OWNED`; the matrix is 108/117/12/18/7 and the synthetic report
-is 115/117/12/18/0. The two-node fixture models application replication; it is
-not Soklet-provided storage, key management, replication, affinity, or a
-positive cache-TTL claim.
-
-The subsequent `MCP-BASE-011` notification-identifier boundary closure adds
-`src/test/java/com/soklet/McpNotificationPublicRuntimeTests.java` at final
-source SHA-256
-`ce10724e565470bdcd6f005ad3d332ea473698f7c7754c765c3bfc73a8c3a3f5`.
-Its two public-API-only methods prove that classified inbound notifications
-always have an empty HTTP transport body and bypass application request-
-handler and handler-interceptor stages. Malformed JSON that fails before
-notification classification is outside this claim. Outbound progress,
-subscription-acknowledgment, and list-changed notification frames carry a
-method and omit top-level `id`; nested `progressToken`,
-`io.modelcontextprotocol/subscriptionId`, and cancellation `requestId`
-parameter members remain legitimate. Only the method-free terminal result
-retains the initiating request's top-level `id`. Soklet 3.6 registers no
-extension-notification handler and exposes no arbitrary extension-notification
-handler API. The exact selector passes 2/0/0/0, the adjacent set passes
-83/0/0/0 on both JDKs, and full clean test passes 1,721/0/0/72 and
-1,736/0/0/4 on pinned Corretto 17 and local Corretto 21 over 462 main and 211
-test sources. No production behavior, API, freeze inventory, manifest,
-version, or official 48-message/11-test corpus changes. `MCP-BASE-011` is now
-`CORE_COMPLETE`; the current report remains `FAILED` at 109 `CORE_COMPLETE`,
-117 `RELEASE_GATED`, 12 `APPLICATION_OWNED`, 18 `NOT_APPLICABLE`, and 6
-`UNRESOLVED`, while the synthetic all-resolved report is 115/117/12/18/0.
-The remaining IDs are `MCP-HTTP-020`, `SOK-VALID-002`, `SOK-STATE-002`,
-`SOK-STATE-007`, `SOK-PRIV-001`, and `AMB-002`.
-
-The subsequent 2026-08-22 `MCP-HTTP-020` closure strengthens
-`McpMirroredHeaderPublicRuntimeTests` at final source SHA-256
-`2c3b912484bd96d0f2f73fc4c3b85fdf9760e22d895acf4145b962bd8fc0b303`.
-An unannotated `privilege` body property carries `reader` while unknown
-`Mcp-Param-Privilege` carries `administrator-canary`; converted and raw
-arguments remain exactly body-authoritative, and the successful response
-excludes the canary. Existing exact fixtures prove name diagnostics are off by
-default; opt-in emits sanitized names only, permits at most ten attempted
-events per server in any monotonic 60-second window, truncates at 128 ASCII
-bytes, and attaches neither values nor requests. Each occurrence independently
-aggregates only by registered endpoint and bounded method, never header
-identity, with an 8,192-dimension default-map cap and the same downstream
-OpenTelemetry shape. Public/manual metric inputs remain application-controlled.
-
-The focused class passes 6/0/0/0 and the adjacent five-class set passes
-29/0/0/0 on both JDKs. Full clean test passes 1,721/0/0/72 and 1,736/0/0/4 on
-pinned Corretto 17 and local Corretto 21 over 462 main and 211 test sources.
-No production behavior, public API, freeze inventory, manifest, version,
-official result, or official 48-message/11-test corpus changed. The pinned
-40-scenario official inventory has no exact unknown-header diagnostic,
-redaction, quota, or cardinality scenario, so this adds no official-suite
-claim. `MCP-HTTP-020` is now `CORE_COMPLETE`; the current report remains
-`FAILED` at 110/117/12/19/5, while the synthetic report remains
-115/117/12/19/0. The remaining IDs are `SOK-VALID-002`, `SOK-STATE-002`,
-`SOK-STATE-007`, `SOK-PRIV-001`, and `AMB-002`. Generic `Request`,
-`Throwable`, custom-collector, and application-telemetry privacy remain owned
-by `SOK-PRIV-001`.
-
 Dynamic Client Registration is reviewed and not applicable because Soklet has
 no OAuth/DCR implementation. The deprecated standalone legacy HTTP+SSE
-transport is likewise not applicable: the current server has no legacy
-transport path, and current SSE response streaming is not that transport.
-
-For `subscriptions/listen`, admission receives the validated, deduplicated
-resource-subscription URIs through
-`McpAdmissionContext.getRequestedResourceSubscriptionUris()`. The immutable
-list preserves first-encounter order and is empty for non-subscription methods
-and requests without resource URIs. Applications can authorize the requested
-resource set without reparsing raw JSON; rejection occurs before activation.
-
-The handler interceptor receives the exact `McpInvocationFeatures` instance
-supplied to the downstream handler as a separate argument. Interceptor chains
-must forward that instance unchanged with the request context and one-shot
-continuation.
-
-`McpHandlerContinuation.proceed()` exposes an intentional handler
-`McpJsonRpcException` as the original exception instance. An interceptor can
-catch it to inspect its `getError()`, rethrow that same object to preserve the
-client-visible error, or return a method-compatible recovery result. Recovery
-still traverses result validation and, for completed tool results, sanitization
-and output-schema validation. This applies on every supported protocol revision
-and to custom resource/Skills lists and prompt/resource completion as well as
-tool, prompt and resource-read handlers.
-
-An interceptor-created exception, a new exception carrying the same error,
-a wrapper, or an exception retained from an earlier invocation receives the
-fixed internal-error response without its code, message or data. Keeping the
-same handler exception preserves revision-specific resource-not-found intent.
-The continuation's thread, one-shot and call-lifetime restrictions still apply.
-
-Do not treat this snapshot guide as a release-conformance statement.
+transport is unsupported. Soklet's MCP SSE response streams belong to its
+Streamable HTTP transport and do not enable that deprecated transport.

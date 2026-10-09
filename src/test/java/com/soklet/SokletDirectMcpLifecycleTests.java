@@ -369,12 +369,9 @@ final class SokletDirectMcpLifecycleTests {
 			Assertions.assertTrue(runtimeLifecycleFlag(server,
 					"lifecycleQuiesced"),
 					"Late startup did not unwind its owned resources");
-			Assertions.assertFalse(runtimeLifecycleFlag(server,
-					"lifecycleForceRequested"),
-					"A frozen phase cannot be queued after result publication");
-			Assertions.assertFalse(runtimeLifecycleFlag(server,
-					"lifecycleForced"),
-					"A late startup return cannot replay force after result freeze");
+			awaitCondition(() -> runtimeLifecycleFlag(server, "lifecycleForceRequested")
+					&& runtimeLifecycleFlag(server, "lifecycleForced"),
+					"Late startup cleanup must deliver the original frozen forced compensation");
 
 			assertSameThrowableArray(frozenSuppressed,
 					exactPrimary.getSuppressed());
@@ -600,12 +597,9 @@ final class SokletDirectMcpLifecycleTests {
 		Assertions.assertTrue(runtimeLifecycleFlag(fixture.server(),
 				"lifecycleQuiesced"),
 				"The returning startup worker did not unwind its owned resources");
-		Assertions.assertFalse(runtimeLifecycleFlag(fixture.server(),
-				"lifecycleForceRequested"),
-				"A phase frozen while start was live cannot be queued into MCP");
-		Assertions.assertFalse(runtimeLifecycleFlag(fixture.server(),
-				"lifecycleForced"),
-				"A return after result freeze cannot replay the forced phase");
+		awaitCondition(() -> runtimeLifecycleFlag(fixture.server(), "lifecycleForceRequested")
+				&& runtimeLifecycleFlag(fixture.server(), "lifecycleForced"),
+				"Late startup cleanup must deliver the original frozen forced compensation");
 		awaitCondition(() -> isPortReusable(address),
 				"Late MCP startup unwind did not release the listener");
 		Assertions.assertSame(result, fixture.soklet().getDirectLifecycle()

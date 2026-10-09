@@ -55,6 +55,11 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	private static final long[] HTTP_LATENCY_BUCKETS_NANOS = nanosFromMillis(
 			1, 2, 5, 10, 25, 50, 100, 200, 400, 800, 1500, 3000, 7000, 15000);
 
+	// Cover the default 60-second MCP request timeout and longer configured deadlines.
+	private static final long[] MCP_REQUEST_DURATION_BUCKETS_NANOS = nanosFromMillis(
+			1, 2, 5, 10, 25, 50, 100, 200, 400, 800, 1500, 3000, 7000, 15000,
+			30000, 60000, 120000, 300000);
+
 	private static final long[] HTTP_BODY_BYTES_BUCKETS = new long[]{
 			0, 128, 256, 512, 1024, 2048, 4096, 8192,
 			16384, 32768, 65536, 131072, 262144, 524288,
@@ -861,7 +866,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 							requestFinished.getOutcome());
 			counterFor(this.mcpRequestsByOutcome, key).increment();
 			histogramFor(this.mcpRequestDurationsByOutcome, key,
-					HTTP_LATENCY_BUCKETS_NANOS)
+					MCP_REQUEST_DURATION_BUCKETS_NANOS)
 					.record(nonNegativeNanos(requestFinished.getDuration()));
 		} else if (event instanceof McpMetricsEvent.RequestStreamOpened) {
 			this.includeMcpRequestStreamLifecycleMetrics.set(true);

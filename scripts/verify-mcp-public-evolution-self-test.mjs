@@ -442,10 +442,16 @@ try {
     }, /PROFILE-002 expected zero matches/u);
 
   expectActiveTextRejected(
-    'plain exact event-variant count must remain reviewed', () => {
+    'obsolete exact event-variant count must fail', () => {
       writeFileSync(activeTextFixturePath('MCP.md'),
         '\nSoklet exposes exactly 23 event variants.\n', { flag: 'a' });
-    }, /COUNT-001 fingerprint mismatch/u);
+    }, /COUNT-001 expected zero matches/u);
+
+  expectActiveTextRejected(
+    'obsolete exact instrument count must fail', () => {
+      writeFileSync(activeTextFixturePath('README.md'),
+        '\nThe events map to exactly 22 OpenTelemetry instruments.\n', { flag: 'a' });
+    }, /COUNT-001 expected zero matches/u);
 
   expectActiveTextRejected(
     'noun-first server-extension support claim must fail', () => {

@@ -89,12 +89,14 @@ merely because they are private or short-lived.
 
 ## Built-in metrics
 
-Core defines 23 sealed `McpMetricsEvent` variants and the default collector
-aggregates all of them into 22 families. Framework-produced events use only
-fieldless counts, registered endpoint paths, recognized methods (or the fixed
-`<unrecognized>` value), fixed outcomes and termination reasons, fixed
-protocol-error codes, fixed transport-failure reasons, and nonnegative
-durations. The resulting dimension set is finite for one server configuration.
+The default collector aggregates the sealed `McpMetricsEvent` hierarchy.
+Framework-produced events use only fieldless counts, registered endpoint
+paths, recognized methods (or the fixed `<unrecognized>` value), fixed outcomes,
+termination reasons and subscription-maintenance work, fixed protocol-error
+codes, fixed transport-failure reasons, and nonnegative durations. The
+resulting dimension set is finite for one server configuration. The current
+[metric reference](../MCP.md#default-metric-families) lists the exact families,
+kinds and labels, including the shared HTTP/SSE/MCP transport-failure family.
 
 Built-in metrics do not carry a `Request`, `Throwable`, raw request ID, progress
 token or value, mirrored-header name or value, trace ID or token, `tracestate`,
@@ -106,6 +108,13 @@ validate value shape, but they do not turn an application-supplied string into
 a core-controlled privacy or cardinality vocabulary. Applications that create
 events manually, install a custom `MetricsCollector`, or forward events to
 another telemetry system own the values they create and retain.
+
+Semantic delivery has a 4,096-record pending bound and can omit ordinary
+records on overflow. Dimensioned default-collector maps have an 8,192-key
+capacity with approximate LRU eviction; new dimensions can evict older
+aggregates. These bounds do not constrain custom collectors or telemetry
+backends, and observed aggregates are not an authoritative instantaneous
+live-state view. The immutable server diagnostics remain available separately.
 
 The pre-existing generic `MetricsCollector` API is separate from
 `McpMetricsEvent`. Its ordinary HTTP/SSE callbacks deliberately receive exact
@@ -121,6 +130,16 @@ rate limiting, lifecycle observation, interceptors, handlers, output
 sanitizers, localization hooks, request-state protection, and related MCP
 callbacks. Terminal lifecycle observation may also receive the exact ordered
 `Throwable` instances produced while handling the request.
+
+Intentional resource-not-found responses can include the requested resource
+URI in `data.uri`, whether the handler returns a resource-not-found result or
+throws the corresponding typed JSON-RPC error. Soklet selects the error code
+for the configured protocol revision. That URI is deliberate client-visible
+protocol output; the built-in log and metric projections do not render it.
+Interceptor-authored errors, copies, wrappers and stale handler exceptions
+still fail closed. Only the unchanged intentional handler exception from the
+current invocation retains its client-visible error; normal result validation
+also applies when an interceptor recovers.
 
 The complete-tool-result sanitizer is a deliberate exception to retaining an
 application failure object: Soklet discards a sanitizer's thrown exception,
@@ -169,36 +188,17 @@ release gate. Sustained default-collector/cardinality proof remains owned by
 post-release monitoring, not a release prerequisite. This document does not
 substitute for either candidate-bound gate result.
 
-## Checked boundary and release status
+## Verification and release boundaries
 
-### 2026-09-29 source-inventory repin
-
-The 2025 MCP compatibility implementation changed production declarations after
-the privacy inventory was last sealed. At core commit `98092d27`, the source
-matcher derives 7,384 privacy paths: 84 new paths and 21 superseded signature
-paths relative to the prior inventory. This repin classifies them under the
-existing reviewed boundaries without changing their classifications or the
-delegated release gates:
-
-| Matcher | Added | Superseded | Existing boundary |
-| --- | ---: | ---: | --- |
-| Request and Throwable exposure (`PRIV-MATCH-005`) | 8 | 3 | `PRIV-BOUND-006`, exact application values |
-| Diagnostic surfaces (`PRIV-MATCH-008`) | 25 | 9 | `PRIV-BOUND-010`, exact diagnostic values |
-| JSON-RPC error publication (`PRIV-MATCH-009`) | 4 | 4 | `PRIV-BOUND-013`, redacted framework errors |
-| Throwable construction (`PRIV-MATCH-011`) | 47 | 5 | `PRIV-BOUND-022`, conservatively exact exception surfaces |
-
-The new internal 2025 initialization record holds exact client information and
-capabilities. Its implicit accessors and renderer are classified as exact; the
-adapter uses its accessors to route the request and does not send its renderer
-to Soklet's built-in log channel. The changed framework JSON-RPC error sites
-use fixed messages and, where applicable, a list of configured supported
-versions rather than the client's raw request values. The new explicit
-Throwable sites remain conservatively classified as exact application
-boundaries even where their current messages are fixed. The source inventory's
-semantic seal is now
-`ac4e289ba12273456553e2ff75bf4322924e3b0a166fcd70d55ed3f7e86db2e5`.
-This inventory refresh does not supply the candidate-bound `release-soak` or
-`soklet-otel` evidence.
+The source verifier derives the current production and tracked fixture paths,
+requires exactly one reviewed classification or precise exclusion for every
+match, resolves each referenced Java test and optional method, and checks the
+reviewed semantic-attribution seal. A removed or renamed declaration must be
+reconciled explicitly. Conservative exception-construction and exact-carrier
+classifications remain intentional even where an individual current message
+is fixed. Broad scanner vocabulary also finds unrelated operations such as
+byte-buffer reset and response copying; exact receiver-specific exclusions
+do not weaken the scanner for future sites.
 
 [`McpPrivacyBoundaryTests`](../src/test/java/com/soklet/McpPrivacyBoundaryTests.java)
 places secret canaries in public request, request-ID, propagation, and bridge
@@ -212,9 +212,13 @@ per-boundary evidence named in the machine-checked inventory.
 and
 [`McpInMemoryTaskManagerTests`](../src/test/java/com/soklet/McpInMemoryTaskManagerTests.java)
 provide the task-value redaction and non-disclosing authorization canaries.
+Strict decoding, intentional resource errors, subscription maintenance,
+writer-stall classification and bounded simulator capture have their own
+current-source tests referenced in the same inventory. A source classification
+and a passing local canary establish their checked boundary; they do not prove
+every deployment or application telemetry policy.
 
-`SOK-PRIV-001` is `RELEASE_GATED` in the final MCP-C conformance-matrix
-closure. The complete residual evidence and matrix were regenerated as one
-atomic unit. Exactly `release-soak` and `soklet-otel` remain required, in
-release-manifest order; this local closure does not claim their future
-candidate-bound PASS evidence.
+`SOK-PRIV-001` remains `RELEASE_GATED`. Final `release-soak` and `soklet-otel`
+qualification must use the exact final candidate commits and artifacts. A
+current-source inventory check does not supply either gate's candidate-bound
+PASS evidence or authorize publication.

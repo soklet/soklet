@@ -50,7 +50,7 @@ const ACTIVE_TEXT_REQUIRED_RULE_EXPECTATIONS = new Map([
   ['AUTH-001', 'zero'],
   ['AUTH-002', 'nonzero-with-notice'],
   ['AUTH-003', 'nonzero-with-notice'],
-  ['COUNT-001', 'nonzero-with-notice'],
+  ['COUNT-001', 'zero'],
   ['CACHE-001', 'zero'],
   ['CACHE-002', 'nonzero-with-notice'],
   ['TRANSPORT-001', 'zero'],

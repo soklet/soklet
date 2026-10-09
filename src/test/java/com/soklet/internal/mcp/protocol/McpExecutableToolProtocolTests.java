@@ -157,9 +157,11 @@ public class McpExecutableToolProtocolTests {
 							",\"name\":\"absent\",\"arguments\":{}"),
 					headers("tools/call", "absent"));
 			assertError(unknown, 400, -32602, "unknown-1");
-			Assertions.assertTrue(stages.isEmpty());
+			Assertions.assertEquals(List.of("admission:absent"), stages,
+					"Target existence must not be disclosed before caller admission");
 			Assertions.assertEquals(1, typedHandlerInvocations.get());
 
+			stages.clear();
 			FixedResponse malformedArguments = send(port,
 					request("arguments-1", "tools/call",
 							",\"name\":\"echo\",\"arguments\":42"),

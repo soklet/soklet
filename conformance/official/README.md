@@ -81,7 +81,7 @@ not a clean release-candidate receipt.
 
 The current elicitation-based development fixtures are production-tested and
 bound by the error-mapping manifest SHA-256
-`68fb32f4aaeb11616c62eebde7609f227cbbc2abc0d86f282292f5d48e73b5f8`
+`13cb8b1158958bc553d8d9b65cd454c2d3e1bcebdd054267e55d9dbb0336706c`
 and result-envelope manifest SHA-256
 `d30af23ceff1d32f03fc89c4aa77d69111cbc82ec0b9abf943dcf03ba0002e53`.
 Historical dated checkpoints below retain their original hashes and results.

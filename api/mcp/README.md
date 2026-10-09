@@ -166,22 +166,22 @@ scope has exactly one owner:
 | --- | ---: | --- |
 | `phase-4.includes` | 169 | current-source Phase 4 types and shared hosts |
 | `phase-5.includes` | 45 | current-source Phase 5 types |
-| `phase-6.includes` | 67 | current-source Phase 6 types |
+| `phase-6.includes` | 68 | current-source Phase 6 types |
 | `provisional.includes` | 22 | MCP Tasks and 2025 session/HTTP transport types, tracked as provisional protocol/API maturity; N0 naming differences are accepted in the bounded review |
-| `non-mcp-public-api.allowlist` | 86 | reviewed Bearer challenge, lifecycle, HTTP streaming ownership, SSE initialization, runner, transport-SPI, CORS, metrics, server-type, response-compression, and value-converter owners |
+| `non-mcp-public-api.allowlist` | 94 | reviewed Bearer challenge, lifecycle, HTTP streaming ownership, SSE initialization, runner, transport-SPI, CORS, metrics, server-type, response-compression, and value-converter owners |
 
-The 303-entry current-source MCP union plus the 86-entry non-MCP allowlist owns
-exactly 389 current types. All 303 MCP owners have reviewed phase or
-provisional signature snapshots: 1,374/240/456/143 records respectively, or
-2,213 MCP signatures. Ownership and signature coverage are checked separately;
+The 304-entry current-source MCP union plus the 94-entry non-MCP allowlist owns
+exactly 398 current types. All 304 MCP owners have reviewed phase or
+provisional signature snapshots: 1,378/240/466/143 records respectively, or
+2,227 MCP signatures. Ownership and signature coverage are checked separately;
 the two reviewed cross-cutting signatures bring the complete frozen set to
-2,215 entries.
+2,229 entries.
 The current Phase 4, Phase 5, and Phase 6 include inventories have respective
 SHA-256 values
 `db7577ffe05d7ccf0cf559668e95d2af32ec925b609972f7518213cabef8da71`,
 `17290b61f22da9a6c419fed8b7e411c77342e353a2043ee9a437add05daf407f`,
 and
-`b6b0cb25187e3651b1160981fe3b90fc7e7787daf7330fa387e6ff9cbf117da1`.
+`5e421fa96bb285f703cb9ae284ae8763803e2dc8679d82f707dd995f6b87fafb`.
 The provisional MCP include inventory has SHA-256
 `0a2e5329fe916b092271b0471ec24b88a59f52ce16e4608877de77ed3ee428fe`.
 `McpPublicApiInventoryTests` is a fast, independent source/class-tree guard
@@ -190,6 +190,38 @@ It complements the baseline comparison; it is not the authoritative
 compatibility inventory.
 
 ## Current local evidence
+
+### 2026-10-08 approved remediation API reconciliation
+
+The current comparison against released 3.5.1 has **776 incompatibility
+records**, SHA-256
+`f61df0f8427eb77226258f36e0bb9ab383b533cb1d77692290895cc200b5aee1`.
+Exactly ten records are added to the prior 766-record ledger: the nine
+approved histogram constructor/accessor changes and the required boxed
+`ResponseStream.isGracefulShutdownRequested()` method. Every prior record is
+preserved unchanged. The histogram exposes a List constructor and boxed
+scalars with a floating-point duration sum; the stream method exposes the
+approved state-only graceful signal.
+
+The MCP snapshots accept only the already implemented, approved additions:
+
+- Phase 4 adds `McpJsonRpcError.fromResourceNotFound(URI)`, the HTTP stream
+  terminal metrics callback, and its aggregate getter/builder setter. There
+  are **1,378 signatures**, SHA-256
+  `8584e227804b1219e5b9e8f924ed53ed99fa6468800349c7b47b2032d9f59c30`.
+- Phase 6 adds the subscription-maintenance key type, its seven methods, and
+  the aggregate getter/builder setter. There are **466 signatures**, SHA-256
+  `cebe7a8848c79ac8b311c856735df32158fb127ee24c6b6b3203b1da1016e35a`.
+- Phase 5 and provisional snapshots are byte-for-byte unchanged. No existing
+  Phase 4 or Phase 6 signature is removed or altered. The immutable Phase 0
+  historical ledger is unchanged.
+
+The [remediation plan](../../release/SOKLET_4_0_REMEDIATION_PLAN_2026-10-04.md)
+records the approvals and implementation contracts in S3e, S8q/S8r and
+S9c/S9e/S9f. Owner inventories and the already reviewed current nullability
+contracts are unchanged by this reconciliation. No new public surface is
+introduced here. This is current-source API evidence; final candidate and
+host/conformance qualification remain separate.
 
 ### 2026-09-29 current MCP-G2 refreeze
 
@@ -578,7 +610,7 @@ not a captured release candidate or publication approval.
 
 The current development fixtures exercise retained Elicitation rather than
 the removed input methods. Their current manifest SHA-256 values are
-`68fb32f4aaeb11616c62eebde7609f227cbbc2abc0d86f282292f5d48e73b5f8`
+`13cb8b1158958bc553d8d9b65cd454c2d3e1bcebdd054267e55d9dbb0336706c`
 for `conformance/golden-error-mapping/live/manifest.sha256`,
 `d30af23ceff1d32f03fc89c4aa77d69111cbc82ec0b9abf943dcf03ba0002e53`
 for `conformance/golden-result-envelope/live/manifest.sha256`, and
@@ -3379,10 +3411,10 @@ occurrence, including identical values. See [the migration guide](../../MIGRATIN
 
 The released comparison adds exactly 48 reviewed collection incompatibilities,
 for 766 records. No existing incompatibility record is removed or changed.
-The current ledger SHA-256 is `f7326a2e8a009980dfce72c9f6e3cabc49e8323890720d9e85a6459120e8bf67`.
+At that checkpoint the ledger SHA-256 was `f7326a2e8a009980dfce72c9f6e3cabc49e8323890720d9e85a6459120e8bf67`.
 
 The only MCP signature change is `McpSimulationResponse.getHeaders()`:
-`Map<String, Set<String>>` becomes `Map<String, List<String>>`. Phase 6 retains
+`Map<String, Set<String>>` becomes `Map<String, List<String>>`. At that checkpoint Phase 6 retained
 456 signatures, SHA-256 `8f26beb8e68243983c12ebd1275771ecbc22cd3ff8de4b691c243db65bfbad25`.
 Its reviewed nested nullability digest is
 `50925b7abaf348e197d4ea42ec10ba798b1ef4ad5923c2d2ccd8324bc11a54c6`.

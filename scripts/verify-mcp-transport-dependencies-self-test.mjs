@@ -36,7 +36,7 @@ const verifierPath = resolve(projectRoot,
 const temporaryRoot = mkdtempSync(join(tmpdir(),
   'soklet-mcp-transport-dependencies-self-test-'));
 const goldenRoot = resolve(temporaryRoot, 'golden');
-const EXPECTED_CASE_COUNT = 112;
+const EXPECTED_CASE_COUNT = 117;
 let passedCases = 0;
 
 const FIXTURE_SOURCES = Object.freeze([
@@ -175,7 +175,10 @@ function mutateBaseline(root, mutator) {
 
 function mutateSource(root, path, mutator) {
   const absolute = resolve(root, path);
-  write(root, path, mutator(readFileSync(absolute, 'utf8')));
+  const original = readFileSync(absolute, 'utf8');
+  const mutated = mutator(original);
+  assert.notEqual(mutated, original, `source mutation did not change ${path}`);
+  write(root, path, mutated);
 }
 
 function addImport(source, type, spelling = `import ${type};`) {
@@ -814,9 +817,48 @@ try {
   expectRejected('subscription events must use the installed response stream',
     (root) => {
       mutateSource(root, RUNTIME, (source) => replaceAfter(source,
+        'private void projectResourceNotification(',
+        'stream = requireNonNull(responseStream);', 'stream = newResponseStream();'));
+    }, /projectResourceNotification must use the installed responseStream/u);
+
+  expectRejected('resource events must retain accepted URI filtering',
+    (root) => {
+      mutateSource(root, RUNTIME, (source) => replaceAfter(source,
         'private void offerSubscriptionEvent(',
-        'stream = responseStream;', 'stream = newResponseStream();'));
-    }, /offerSubscriptionEvent must use the installed responseStream/u);
+        'if (!filter.contains(updated.resourceUri())) return;',
+        'if (false) return;'));
+    }, /must retain only accepted resource identities/u);
+
+  expectRejected('resource projection must retain its captured authorization guard',
+    (root) => {
+      mutateSource(root, RUNTIME, (source) => replaceAfter(source,
+        'private void projectResourceNotification(',
+        '() -> resourceNotificationWriteAllowed(stream, authorizationGeneration)',
+        '() -> true'));
+    }, /must offer on its installed stream with the captured authorization guard/u);
+
+  expectRejected('resource write authority cannot ignore its authorization generation',
+    (root) => {
+      mutateSource(root, RUNTIME, (source) => replaceAfter(source,
+        'private boolean resourceNotificationWriteAllowed(',
+        'authority.generation() == generation', 'true'));
+    }, /must require the captured stream, generation and unexpired deadline/u);
+
+  expectRejected('resource write authority cannot ignore its expiry',
+    (root) => {
+      mutateSource(root, RUNTIME, (source) => replaceAfter(source,
+        'private boolean resourceNotificationWriteAllowed(',
+        'applicationClock.nanoTime() - authority.deadlineNanos() < 0L', 'true'));
+    }, /must require the captured stream, generation and unexpired deadline/u);
+
+  expectRejected('guarded notifications cannot bypass their installed channel guard',
+    (root) => {
+      mutateSource(root, REQUEST_STREAM, (source) => source.replace(
+        'return channel.offerGuardedCoalescing(frame, coalescingKey,\n'
+        + '\t\t\t\t\twriteAllowed, payloadWritten, payloadReleased);',
+        'return channel.offerGuardedCoalescing(frame, coalescingKey,\n'
+        + '\t\t\t\t\t() -> true, payloadWritten, payloadReleased);'));
+    }, /must retain their guard and callbacks on the installed channel/u);
 
   expectRejected('runtime notification writer must retain RequestControl routing',
     (root) => {
@@ -992,9 +1034,10 @@ try {
 
   expectRejected('legacy policy-header sentinel must remain in enforcement',
     (root) => {
-      mutateSource(root, RUNTIME, (source) => source.replace(
-        '\t\t\t\t\t|| FORBIDDEN_LEGACY_MCP_POLICY_HEADERS.contains(lowerName)\n',
-        ''));
+      mutateSource(root, RUNTIME, (source) => replaceAfter(source,
+        'private static List<@NonNull Header> validatedPolicyHeaders(',
+        'FORBIDDEN_LEGACY_MCP_POLICY_HEADERS.contains(lowerName)',
+        'false /* FORBIDDEN_LEGACY_MCP_POLICY_HEADERS.contains(lowerName) */'));
     }, /validated admission-policy headers must reject/u);
 
   expectRejected('noncanonical baseline bytes', (root) => {

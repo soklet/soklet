@@ -99,6 +99,18 @@ const REVIEWED_EXISTING_DOMAIN_TYPES = Object.freeze([
 
 const REVIEWED_2025_SESSION_DOMAIN_FIELDS = Object.freeze([
   {
+    "field": "endpointSessions",
+    "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+    "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore",
+    "rationale": "Endpoint/revision index over already bounded live 2025 session records; logical retirement removes entries and empty index keys, with no replay history."
+  },
+  {
+    "field": "MAXIMUM_CONTROL_CALLS_PER_SESSION",
+    "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+    "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore",
+    "rationale": "Exact four cleanup-control reservations per enabled 2025 session; owner/global counts and request-byte caps also apply, with no replay history."
+  },
+  {
     "field": "MAXIMUM_URI_GRANTS_PER_SESSION",
     "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
     "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore",
@@ -333,12 +345,6 @@ const REVIEWED_2025_SESSION_DOMAIN_FIELDS = Object.freeze([
     "rationale": "Exact 2025 opt-in wiring; framework-only initialization ID publication and fresh owner/revision binding."
   },
   {
-    "field": "legacySessionSelected",
-    "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
-    "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl",
-    "rationale": "Per-request selected-session and exactly-once termination ownership; no resumable delivery state."
-  },
-  {
     "field": "legacySessionTerminationCause",
     "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
     "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl",
@@ -355,24 +361,6 @@ const REVIEWED_2025_SESSION_DOMAIN_FIELDS = Object.freeze([
     file: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java',
     owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl',
     rationale: 'Existing response-write timeout bounds physical terminal delivery after session cancellation; no deadline extension or replay.',
-  },
-  {
-    field: 'sessionCancellationCallbacksFinished',
-    file: 'src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java',
-    owner: 'com.soklet.internal.mcp.protocol.McpApplicationExecution.Exchange',
-    rationale: 'Exact bounded cancellation sidecar completion fence; the handler retains its slot until public callbacks physically exit.',
-  },
-  {
-    field: 'sessionCancellationEffectsReady',
-    file: 'src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java',
-    owner: 'com.soklet.internal.mcp.protocol.McpApplicationExecution.Exchange',
-    rationale: 'Exact sidecar publication fence ensuring cancellation callbacks wait until HTTP effects are offered.',
-  },
-  {
-    field: 'sessionCancellationCallbacksOutstanding',
-    file: 'src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java',
-    owner: 'com.soklet.internal.mcp.protocol.McpApplicationExecution.Exchange',
-    rationale: 'Physical callback ownership flag bounded by the existing handler concurrency; not a session registry.',
   },
   {
     field: 'MAXIMUM_SESSION_OWNER_POLICY_CONCURRENCY',
@@ -456,6 +444,10 @@ const CHARACTERIZATIONS = Object.freeze([
       { owner: 'com.soklet.internal.mcp.protocol.McpServerRuntimeBridge#progressEmitterFor', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpServerRuntimeBridge.java' },
       { owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#writeApplicationNotification', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java' },
       { owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#offerSubscriptionEvent', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java' },
+      { owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#scheduleResourceNotification', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java' },
+      { owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#projectResourceNotification', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java' },
+      { owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#refreshResourceNotificationAuthorityWhileLocked', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java' },
+      { owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#resourceNotificationWriteAllowed', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java' },
       { owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime#processRequestSafely::<anonymous McpApplicationResponseWriter>#writeNotification', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java' },
       { owner: 'com.soklet.internal.mcp.protocol.McpApplicationExecution.Exchange#writeNotification', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java' },
       { owner: 'com.soklet.internal.mcp.protocol.McpApplicationExecution.Exchange#runHandler::<anonymous McpApplicationNotificationWriter>#isActive', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java' },
@@ -471,7 +463,7 @@ const CHARACTERIZATIONS = Object.freeze([
       { owner: 'com.soklet.internal.mcp.protocol.McpRequestSseStream.TransportChannel#delegate', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpRequestSseStream.java' },
     ],
     id: 'MCP-TRANSPORT-001',
-    statement: 'Progress and subscription notifications use the request-scoped SSE stream and its single bounded McpOutboundChannel delegate. Selected legacy POST streams share the finite legacy terminal projection with their immutable simulation JSON snapshots; the default modern encoder is preserved and message frames contain no event IDs or priming fields. Guarded legacy GET invalidations recheck source/GET/grant authority before every socket write; revoked unwritten chunks are purged, partially written chunks fail, and encoded-byte releases run outside the channel lock.',
+    statement: 'Progress and subscription notifications use the request-scoped SSE stream and its single bounded McpOutboundChannel delegate. Modern resource invalidations retain accepted identities, use the bounded projection scheduler, and guard delivery with the installed stream, authorization generation and expiry. Selected legacy POST streams share the finite legacy terminal projection with their immutable simulation JSON snapshots; the default modern encoder is preserved and message frames contain no event IDs or priming fields. Guarded legacy GET invalidations recheck source/GET/grant authority before every socket write; revoked unwritten chunks are purged, partially written chunks fail, and encoded-byte releases run outside the channel lock.',
   },
   {
     evidence: [
@@ -1336,9 +1328,48 @@ function verifyCharacterizationSources(root, sourceFiles) {
   requireExactSimpleAssignments(writeNotification, 'responseStream', ['stream'],
     'writeApplicationNotification must install its only newly created stream as responseStream');
   const offerEvent = oneMethod(runtime.lexed, runtimePath, 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl', 'offerSubscriptionEvent');
-  requireStructural(offerEvent, /stream\s*\.\s*offerCoalescingMessage\s*\(\s*notification\s*,\s*coalescingKey\s*\)/u, 'offerSubscriptionEvent must offer on its request stream');
-  requireExactSimpleAssignments(offerEvent, 'stream', ['responseStream'],
-    'offerSubscriptionEvent must use the installed responseStream');
+  requireStructural(offerEvent,
+    /if\s*\(\s*!\s*filter\s*\.\s*contains\s*\(\s*updated\s*\.\s*resourceUri\s*\(\s*\)\s*\)\s*\)\s*return\s*;/u,
+    'offerSubscriptionEvent must retain only accepted resource identities');
+  requireStructural(offerEvent,
+    /resourceNotifications\s*\.\s*computeIfAbsent\s*\(\s*key\s*,[\s\S]*state\s*\.\s*dirty\s*=\s*new\s+Object\s*\(\s*\)\s*;[\s\S]*scheduleResourceNotification\s*\(\s*\)\s*;/u,
+    'offerSubscriptionEvent must coalesce identities and schedule projection');
+  const scheduleResource = oneMethod(runtime.lexed, runtimePath,
+    'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl',
+    'scheduleResourceNotification');
+  requireStructural(scheduleResource,
+    /if\s*\(\s*!\s*taskNotificationProjectionOwnerActiveWhileLocked\s*\(\s*\)\s*\|\|\s*!\s*subscriptionAuthorizationAllowsDeliveryWhileLocked\s*\(\s*\)\s*\|\|\s*resourceNotificationJobOutstanding[\s\S]*?\)\s*return\s*;/u,
+    'resource notification scheduling must fence inactive, unauthorized and outstanding work');
+  requireStructural(scheduleResource,
+    /processor\s*\.\s*executeTaskNotificationProjection\s*\(\s*new\s+TaskNotificationProjectionJob\s*\(\s*resourceProjectionSchedulerOwner\s*,\s*this\s*::\s*projectResourceNotification/u,
+    'resource notifications must use the bounded projection scheduler');
+  const projectResource = oneMethod(runtime.lexed, runtimePath,
+    'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl',
+    'projectResourceNotification');
+  requireExactSimpleAssignments(projectResource, 'stream',
+    ['requireNonNull(responseStream)'],
+    'projectResourceNotification must use the installed responseStream');
+  requireStructural(projectResource,
+    /if\s*\(\s*!\s*taskNotificationProjectionOwnerActiveWhileLocked\s*\(\s*\)\s*\|\|\s*!\s*subscriptionAuthorizationAllowsDeliveryWhileLocked\s*\(\s*\)\s*\)\s*\{[\s\S]*?return\s*;/u,
+    'resource projection must recheck active ownership and authorization');
+  requireStructural(projectResource,
+    /stream\s*\.\s*offerGuardedCoalescingMessage\s*\(\s*notification\s*,\s*key\s*,\s*\(\s*\)\s*->\s*resourceNotificationWriteAllowed\s*\(\s*stream\s*,\s*authorizationGeneration\s*\)/u,
+    'resource projection must offer on its installed stream with the captured authorization guard');
+  const refreshResourceAuthority = oneMethod(runtime.lexed, runtimePath,
+    'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl',
+    'refreshResourceNotificationAuthorityWhileLocked');
+  requireStructural(refreshResourceAuthority,
+    /authorizer\s*\(\s*\)\s*\.\s*isEmpty\s*\(\s*\)\s*\?\s*deadlineNanos\s*:\s*minimumDeadline\s*\(\s*now\s*,\s*deadlineNanos\s*,\s*subscriptionAuthorizationExpiryNanos\s*\)/u,
+    'resource write authority must expire at the request or authorization deadline');
+  requireStructural(refreshResourceAuthority,
+    /new\s+ResourceNotificationAuthority\s*\(\s*requireNonNull\s*\(\s*responseStream\s*\)\s*,\s*subscriptionAuthorizationGeneration\s*,\s*expiry\s*\)/u,
+    'resource write authority must capture its installed stream and generation');
+  const resourceWriteAllowed = oneMethod(runtime.lexed, runtimePath,
+    'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl',
+    'resourceNotificationWriteAllowed');
+  requireStructural(resourceWriteAllowed,
+    /^\s*ResourceNotificationAuthority\s+authority\s*=\s*resourceNotificationAuthority\s*;\s*return\s+authority\s*!=\s*null\s*&&\s*sameInstance\s*\(\s*authority\s*\.\s*stream\s*\(\s*\)\s*,\s*requireNonNull\s*\(\s*stream\s*\)\s*\)\s*&&\s*authority\s*\.\s*generation\s*\(\s*\)\s*==\s*generation\s*&&\s*applicationClock\s*\.\s*nanoTime\s*\(\s*\)\s*-\s*authority\s*\.\s*deadlineNanos\s*\(\s*\)\s*<\s*0L\s*;\s*$/u,
+    'resource write guard must require the captured stream, generation and unexpired deadline');
   const productionStreamConstructor = oneMethodMatching(request.lexed,
     requestPath, 'com.soklet.internal.mcp.protocol.McpRequestSseStream',
     'McpRequestSseStream', (candidate) =>
@@ -1439,6 +1470,14 @@ function verifyCharacterizationSources(root, sourceFiles) {
     fail('Transport characterization structural assertion failed: McpRequestSseStream.offerCoalescingMessage must use its installed channel');
   }
   const requestTypes = namedTypes(request.lexed, requestPath);
+  const requestGuardedOffer = oneMethodMatching(request.lexed, requestPath,
+    'com.soklet.internal.mcp.protocol.McpRequestSseStream',
+    'offerGuardedCoalescingMessage', (candidate) =>
+      /\bRunnable\s+payloadWritten\b/u.test(candidate.signatureCode),
+    'guarded notification offer with write acknowledgement');
+  requireStructural(requestGuardedOffer,
+    /return\s+channel\s*\.\s*offerGuardedCoalescing\s*\(\s*frame\s*,\s*coalescingKey\s*,\s*writeAllowed\s*,\s*payloadWritten\s*,\s*payloadReleased\s*\)\s*;/u,
+    'guarded notifications must retain their guard and callbacks on the installed channel');
   const transportType = requestTypes.find((type) =>
     type.owner === 'com.soklet.internal.mcp.protocol.McpRequestSseStream.TransportChannel');
   if (transportType === undefined) fail('Transport characterization structural assertion failed: TransportChannel type is missing');
@@ -1484,6 +1523,14 @@ function verifyCharacterizationSources(root, sourceFiles) {
     'TransportChannel.offerCoalescing must use the shared delegate');
 
   const writableFloor = oneMethod(writable.lexed, writablePath, 'com.soklet.internal.microhttp.WritableSource', 'writeTo', ';');
+  const transportGuardedOffer = oneMethodMatching(request.lexed, requestPath,
+    'com.soklet.internal.mcp.protocol.McpRequestSseStream.TransportChannel',
+    'offerGuardedCoalescing', (candidate) =>
+      /\bRunnable\s+payloadWritten\b/u.test(candidate.signatureCode),
+    'guarded channel offer with write acknowledgement');
+  requireStructural(transportGuardedOffer,
+    /return\s+this\s*\.\s*delegate\s*\.\s*offerGuardedCoalescing\s*\(\s*encodedBytes\s*,\s*coalescingKey\s*,\s*writeAllowed\s*,\s*payloadWritten\s*,\s*payloadReleased\s*\)\s*;/u,
+    'guarded channel offers must retain their guard and callbacks on the shared delegate');
   writableFloorParameterNames(writableFloor,
     'WritableSource.writeTo must retain the SocketChannel/long socket floor');
   const outboundWrite = oneMethod(outbound.lexed, outboundPath, 'com.soklet.internal.mcp.transport.McpOutboundChannel.WritableSourceFacade', 'writeTo');
@@ -1528,8 +1575,11 @@ function verifyCharacterizationSources(root, sourceFiles) {
     ['nextStreamingInputPolicy'],
     'prepareToWriteResponse must install the streaming-input policy exactly once without resetting it');
   requireStructural(prepare,
-    /streamingResponseInputPolicy\s*=\s*nextStreamingInputPolicy\s*;\s*streamingResponseBytesDiscarded\s*=\s*0\s*;\s*if\s*\(\s*nextStreamingInputPolicy\s*!=\s*Handler\s*\.\s*StreamingResponseInputPolicy\s*\.\s*NONE\s*\)\s*\{\s*enableReadInterestForDisconnectMonitoring\s*\(\s*\)\s*;/u,
+    /streamingResponseInputPolicy\s*=\s*nextStreamingInputPolicy\s*;\s*streamingResponseClosesOnInputEnd\s*=\s*dispatch\s*\.\s*closeConnectionOnInputEnd\s*;\s*streamingResponseBytesDiscarded\s*=\s*0\s*;\s*if\s*\(\s*nextStreamingInputPolicy\s*!=\s*Handler\s*\.\s*StreamingResponseInputPolicy\s*\.\s*NONE\s*\)\s*\{\s*enableReadInterestForDisconnectMonitoring\s*\(\s*\)\s*;/u,
     'prepareToWriteResponse must arm reads only for the installed streaming-input policy');
+  requireExactSimpleAssignments(prepare, 'streamingResponseClosesOnInputEnd',
+    ['dispatch.closeConnectionOnInputEnd'],
+    'prepareToWriteResponse must retain the dispatch input-end policy');
   const readable = oneMethod(eventLoop.lexed, eventLoopPath,
     'com.soklet.internal.microhttp.ConnectionEventLoop.Connection',
     'doOnReadable');
@@ -1622,7 +1672,9 @@ function verifyCharacterizationSources(root, sourceFiles) {
   for (const methodName of ['publish', 'acquire']) {
     const storeEntry = oneMethodMatching(sessionStore.lexed, sessionStorePath,
       'com.soklet.internal.mcp.protocol.McpLegacySessionStore', methodName,
-      (candidate) => /\blong\s+retainedRequestEvidenceBytes\b/u.test(candidate.signatureCode),
+      (candidate) => /\blong\s+retainedRequestEvidenceBytes\b/u.test(candidate.signatureCode)
+        && (methodName !== 'acquire'
+          || /\bboolean\s+control\b/u.test(candidate.signatureCode)),
       `bounded session ${methodName}`);
     requireStructural(storeEntry, /\brequireLegacy\s*\(\s*revision\s*\)\s*;/u,
       `every bounded store ${methodName} must validate its exact legacy revision`);

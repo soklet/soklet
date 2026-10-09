@@ -177,6 +177,8 @@ public class McpResultEnvelopeGoldenProductionTests {
 					McpWireResult.supportsInputRequired(method), method);
 		Assertions.assertEquals(Set.of(
 				McpRuntimeCatalogLocalizer.ResponseKind.DISCOVERY,
+				McpRuntimeCatalogLocalizer.ResponseKind.INITIALIZE_2025_06_18,
+				McpRuntimeCatalogLocalizer.ResponseKind.INITIALIZE_2025_11_25,
 				McpRuntimeCatalogLocalizer.ResponseKind.TOOLS_LIST,
 				McpRuntimeCatalogLocalizer.ResponseKind.PROMPTS_LIST,
 				McpRuntimeCatalogLocalizer.ResponseKind.RESOURCES_LIST,
@@ -187,7 +189,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 		String runtimeSource = Files.readString(Path.of("src", "main", "java",
 				"com", "soklet", "internal", "mcp", "protocol",
 				"McpHttpServerRuntime.java"), StandardCharsets.UTF_8);
-		Assertions.assertEquals(6, occurrences(runtimeSource,
+		Assertions.assertEquals(7, occurrences(runtimeSource,
 				"return catalogResponse("));
 		Assertions.assertEquals(2, occurrences(runtimeSource,
 				"McpWireResult.withPrecomputedJsonObject("));

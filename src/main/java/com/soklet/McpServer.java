@@ -32,7 +32,7 @@ import java.util.function.Supplier;
 import static java.util.Objects.requireNonNull;
 
 /**
- * A dedicated modern MCP server managed by a core {@link Soklet} instance.
+ * A dedicated MCP server managed by a core {@link Soklet} instance.
  * <p>
  * MCP always binds its own listener. It is never mounted inside Soklet's
  * ordinary {@link HttpServer} or {@link SseServer}.
@@ -677,6 +677,9 @@ public sealed interface McpServer permits DefaultMcpServer {
 
 		/**
 		 * Sets the maximum accepted HTTP header-section size. The default is 64 KiB.
+		 * At {@link #build()}, the body, header-section and request-target limits,
+		 * plus 1024 bytes of framing allowance, must fit within
+		 * {@link Integer#MAX_VALUE}.
 		 *
 		 * @param maximumHeadersSizeInBytes positive byte limit, or null to restore
 		 *                                  the default
@@ -695,6 +698,9 @@ public sealed interface McpServer permits DefaultMcpServer {
 		/**
 		 * Sets the maximum accepted HTTP request-target length. The default is
 		 * 8192 bytes.
+		 * At {@link #build()}, the body, header-section and request-target limits,
+		 * plus 1024 bytes of framing allowance, must fit within
+		 * {@link Integer#MAX_VALUE}.
 		 *
 		 * @param maximumRequestTargetLengthInBytes positive byte limit, or null to
 		 *                                          restore the default
@@ -1537,7 +1543,7 @@ public sealed interface McpServer permits DefaultMcpServer {
 		}
 
 		/**
-		 * Builds a stopped MCP server.
+		 * Builds an unstarted MCP server for one Soklet lifecycle.
 		 *
 		 * @return configured server
 		 * @throws IllegalStateException if default endpoint discovery finds no
@@ -1546,7 +1552,11 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 *                               keep-alive interval is not shorter than the write
 		 *                               timeout; a configured limiter name is unknown;
 		 *                               tools exist without a fallback tool limiter; a
-		 *                               task-required tool exists without a task manager;
+		 *                               task-required tool or an endpoint enabling Tasks
+		 *                               exists without a task manager;
+		 *                               Completion is enabled without a request limiter;
+		 *                               framework-protected request state is declared
+		 *                               without protection configuration;
 		 *                               subscription support is enabled without an
 		 *                               explicitly selected subscription authorizer;
 		 *                               sessions are enabled without session configuration,
@@ -1557,7 +1567,10 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 *                               provider-lookup limit
 		 * @throws IllegalArgumentException if a configured allowed host is invalid or
 		 *                                  a non-loopback bind host has no explicit
-		 *                                  allowed host
+		 *                                  allowed host; or the combined body,
+		 *                                  header-section and request-target byte limits,
+		 *                                  plus 1024 bytes of framing allowance, exceed
+		 *                                  {@link Integer#MAX_VALUE}
 		 */
 		@NonNull
 		public McpServer build() {

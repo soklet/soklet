@@ -206,7 +206,8 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 			terminalFailure = captureManagedCloseFailure(soklet);
 			assertManagedTerminalFailure(terminalFailure,
 					"com.soklet.SokletShutdownIncompleteException",
-					"Soklet shutdown could not prove complete termination");
+					"Soklet shutdown could not prove complete termination: "
+							+ terminalFailure.getShutdownResult());
 			Assertions.assertNull(terminalFailure.getCause());
 			Assertions.assertTrue(handlerInterrupted.await(5, TimeUnit.SECONDS));
 			McpServerDiagnostics residual = server.getDiagnostics();

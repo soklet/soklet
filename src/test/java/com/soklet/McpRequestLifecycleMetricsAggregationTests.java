@@ -71,8 +71,61 @@ public class McpRequestLifecycleMetricsAggregationTests {
 			25_000_000L, 50_000_000L, 100_000_000L, 200_000_000L,
 			400_000_000L, 800_000_000L, 1_500_000_000L,
 			3_000_000_000L, 7_000_000_000L, 15_000_000_000L,
+			30_000_000_000L, 60_000_000_000L, 120_000_000_000L,
+			300_000_000_000L,
 			Long.MAX_VALUE
 	};
+
+	@Test
+	public void slowRequestsRetainFiniteBucketsThroughFiveMinutesInBothFormats() {
+		DefaultMetricsCollector collector = configuredCollector();
+		List<Duration> durations = List.of(
+				Duration.ofSeconds(15), Duration.ofSeconds(15).plusNanos(1),
+				Duration.ofSeconds(20), Duration.ofSeconds(30),
+				Duration.ofSeconds(30).plusNanos(1), Duration.ofSeconds(60),
+				Duration.ofSeconds(60).plusNanos(1), Duration.ofSeconds(120),
+				Duration.ofSeconds(120).plusNanos(1), Duration.ofSeconds(300),
+				Duration.ofSeconds(300).plusNanos(1));
+		List<McpRequestOutcome> outcomes = List.of(
+				McpRequestOutcome.COMPLETE, McpRequestOutcome.DEADLINE_EXCEEDED);
+		for (McpRequestOutcome outcome : outcomes)
+			for (Duration duration : durations)
+				recordLifecycle(collector, outcome, duration);
+
+		McpMetricsSnapshot snapshot = collector.snapshot().orElseThrow().getMcpMetrics();
+		Assertions.assertEquals(0L, snapshot.getActiveRequests());
+		long[] cumulativeCounts = {1, 4, 6, 8, 10, 11};
+		for (McpRequestOutcome outcome : outcomes) {
+			MetricsCollector.HistogramSnapshot histogram = snapshot.getRequestDurations().get(key(outcome));
+			assertHistogramBoundaries(histogram);
+			Assertions.assertEquals(11L, snapshot.getRequests().get(key(outcome)));
+			Assertions.assertEquals(11L, histogram.getCount());
+			Assertions.assertEquals(1_070_000_000_005D, histogram.getSum());
+			Assertions.assertEquals(15_000_000_000L, histogram.getMin());
+			Assertions.assertEquals(300_000_000_001L, histogram.getMax());
+			for (int index = 0; index < 13; ++index)
+				Assertions.assertEquals(0L, histogram.getBucketCumulativeCount(index));
+			for (int index = 0; index < cumulativeCounts.length; ++index)
+				Assertions.assertEquals(cumulativeCounts[index], histogram.getBucketCumulativeCount(index + 13));
+		}
+
+		for (MetricsCollector.MetricsFormat format : MetricsCollector.MetricsFormat.values()) {
+			String text = collector.snapshotText(MetricsCollector.SnapshotTextOptions.fromMetricsFormat(format))
+					.orElseThrow();
+			String[] boundaries = format == MetricsCollector.MetricsFormat.PROMETHEUS
+					? new String[]{"15000000000", "30000000000", "60000000000", "120000000000", "300000000000", "+Inf"}
+					: new String[]{"1.5e+10", "3e+10", "6e+10", "1.2e+11", "3e+11", "+Inf"};
+			for (McpRequestOutcome outcome : outcomes) {
+				String labels = encodedLabels(outcome);
+				for (int index = 0; index < boundaries.length; ++index)
+					assertSample(text, REQUEST_DURATIONS_METRIC_NAME + "_bucket",
+							labels.substring(0, labels.length() - 1) + ",le=\"" + boundaries[index] + "\"}",
+							cumulativeCounts[index]);
+				assertSample(text, REQUEST_DURATIONS_METRIC_NAME + "_count", labels, 11L);
+				assertSample(text, REQUEST_DURATIONS_METRIC_NAME + "_sum", labels, 1_070_000_000_005L);
+			}
+		}
+	}
 
 	@Test
 	public void snapshotContractUsesReferenceTypedImmutableRequestLifecycleState()
@@ -272,7 +325,7 @@ public class McpRequestLifecycleMetricsAggregationTests {
 		Assertions.assertEquals(500_000L, completedHistogram.getMin());
 		Assertions.assertEquals(20_000_000_000L, completedHistogram.getMax());
 		for (int index = 0; index < completedHistogram.getBucketCount(); ++index)
-			Assertions.assertEquals(index == REQUEST_DURATION_BUCKETS_NANOS.length - 1
+			Assertions.assertEquals(REQUEST_DURATION_BUCKETS_NANOS[index] >= 20_000_000_000L
 					? 3L : 2L,
 					completedHistogram.getBucketCumulativeCount(index));
 

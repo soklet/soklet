@@ -15,6 +15,22 @@
           "path": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java"
         },
         {
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#scheduleResourceNotification",
+          "path": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java"
+        },
+        {
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#projectResourceNotification",
+          "path": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java"
+        },
+        {
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#refreshResourceNotificationAuthorityWhileLocked",
+          "path": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java"
+        },
+        {
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#resourceNotificationWriteAllowed",
+          "path": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java"
+        },
+        {
           "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime#processRequestSafely::<anonymous McpApplicationResponseWriter>#writeNotification",
           "path": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java"
         },
@@ -68,7 +84,7 @@
         }
       ],
       "id": "MCP-TRANSPORT-001",
-      "statement": "Progress and subscription notifications use the request-scoped SSE stream and its single bounded McpOutboundChannel delegate. Selected legacy POST streams share the finite legacy terminal projection with their immutable simulation JSON snapshots; the default modern encoder is preserved and message frames contain no event IDs or priming fields. Guarded legacy GET invalidations recheck source/GET/grant authority before every socket write; revoked unwritten chunks are purged, partially written chunks fail, and encoded-byte releases run outside the channel lock."
+      "statement": "Progress and subscription notifications use the request-scoped SSE stream and its single bounded McpOutboundChannel delegate. Modern resource invalidations retain accepted identities, use the bounded projection scheduler, and guard delivery with the installed stream, authorization generation and expiry. Selected legacy POST streams share the finite legacy terminal projection with their immutable simulation JSON snapshots; the default modern encoder is preserved and message frames contain no event IDs or priming fields. Guarded legacy GET invalidations recheck source/GET/grant authority before every socket write; revoked unwritten chunks are purged, partially written chunks fail, and encoded-byte releases run outside the channel lock."
     },
     {
       "evidence": [
@@ -253,6 +269,18 @@
         "stdio"
       ],
       "reviewed2025SessionDomainFields": [
+        {
+          "field": "endpointSessions",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore",
+          "rationale": "Endpoint/revision index over already bounded live 2025 session records; logical retirement removes entries and empty index keys, with no replay history."
+        },
+        {
+          "field": "MAXIMUM_CONTROL_CALLS_PER_SESSION",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpLegacySessionStore",
+          "rationale": "Exact four cleanup-control reservations per enabled 2025 session; owner/global counts and request-byte caps also apply, with no replay history."
+        },
         {
           "field": "MAXIMUM_URI_GRANTS_PER_SESSION",
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpLegacySessionStore.java",
@@ -488,12 +516,6 @@
           "rationale": "Exact 2025 opt-in wiring; framework-only initialization ID publication and fresh owner/revision binding."
         },
         {
-          "field": "legacySessionSelected",
-          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
-          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl",
-          "rationale": "Per-request selected-session and exactly-once termination ownership; no resumable delivery state."
-        },
-        {
           "field": "legacySessionTerminationCause",
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
           "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl",
@@ -510,24 +532,6 @@
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
           "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl",
           "rationale": "Existing response-write timeout bounds physical terminal delivery after session cancellation; no deadline extension or replay."
-        },
-        {
-          "field": "sessionCancellationCallbacksFinished",
-          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
-          "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecution.Exchange",
-          "rationale": "Exact bounded cancellation sidecar completion fence; the handler retains its slot until public callbacks physically exit."
-        },
-        {
-          "field": "sessionCancellationEffectsReady",
-          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
-          "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecution.Exchange",
-          "rationale": "Exact sidecar publication fence ensuring cancellation callbacks wait until HTTP effects are offered."
-        },
-        {
-          "field": "sessionCancellationCallbacksOutstanding",
-          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
-          "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecution.Exchange",
-          "rationale": "Physical callback ownership flag bounded by the existing handler concurrency; not a session registry."
         },
         {
           "field": "MAXIMUM_SESSION_OWNER_POLICY_CONCURRENCY",

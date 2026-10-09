@@ -926,6 +926,9 @@ public class SseTests {
 		DefaultMetricsCollector metricsCollector =
 				DefaultMetricsCollector.defaultInstance();
 		CopyOnWriteArrayList<LogEvent> logEvents = new CopyOnWriteArrayList<>();
+		CopyOnWriteArrayList<String> streamEvents = new CopyOnWriteArrayList<>();
+		AtomicReference<StreamTermination> termination = new AtomicReference<>();
+		CountDownLatch terminated = new CountDownLatch(1);
 		SseServer sseServer = SseServer.withPort(ssePort)
 				.host("127.0.0.1")
 				.connectionQueueCapacity(5)
@@ -937,6 +940,25 @@ public class SseTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(
 						Set.of(LargeCatchupSseResource.class)))
 				.lifecycleObserver(new QuietLifecycle() {
+					@Override
+					public void didEstablishSseConnection(@NonNull SseConnection connection) {
+						streamEvents.add("established");
+					}
+
+					@Override
+					public void willTerminateSseConnection(@NonNull SseConnection connection,
+							@NonNull StreamTermination streamTermination) {
+						streamEvents.add("will:" + streamTermination.getReason());
+					}
+
+					@Override
+					public void didTerminateSseConnection(@NonNull SseConnection connection,
+							@NonNull StreamTermination streamTermination) {
+						streamEvents.add("did:" + streamTermination.getReason());
+						termination.set(streamTermination);
+						terminated.countDown();
+					}
+
 					@Override
 					public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
 						logEvents.add(logEvent);
@@ -957,27 +979,30 @@ public class SseTests {
 				Assertions.assertTrue(waitForEof(socket, 3_000),
 						"Initializer overflow must close the accepted connection");
 			}
+			Assertions.assertTrue(terminated.await(5, SECONDS),
+					"Accepted initializer overflow must publish stream termination");
 		}
 
-		LogEvent overflowEvent = logEvents.stream()
-				.filter(logEvent -> logEvent.getLogEventType()
-						== LogEventType.SSE_SERVER_CONNECTION_REJECTED)
-				.filter(logEvent -> logEvent.getMessage()
-						.contains("client initializer exceeded"))
-				.findFirst()
-				.orElseThrow(() -> new AssertionError(
-						"Missing initializer-overflow SSE log: " + logEvents));
+		Assertions.assertEquals(List.of("established", "will:BACKPRESSURE", "did:BACKPRESSURE"),
+				streamEvents);
 		IllegalStateException overflow = Assertions.assertInstanceOf(
 				IllegalStateException.class,
-				overflowEvent.getThrowable().orElseThrow());
+				termination.get().getCause().orElseThrow());
 		Assertions.assertEquals("SSE connection write queue is at capacity",
 				overflow.getMessage());
-		Assertions.assertEquals(1L, transportFailureCount(metricsCollector,
+		Assertions.assertEquals(0L, transportFailureCount(metricsCollector,
 				ServerType.SSE,
 				MetricsCollector.TransportFailureReason.REGISTER_ERROR));
-		Assertions.assertTrue(logEvents.stream().anyMatch(logEvent ->
-				logEvent.getLogEventType()
-						== LogEventType.SERVER_TRANSPORT_FAILURE), logEvents.toString());
+		MetricsCollector.Snapshot snapshot = metricsCollector.snapshot().orElseThrow();
+		Assertions.assertEquals(1, snapshot.getSseStreamDurations().size());
+		var histogram = snapshot.getSseStreamDurations().entrySet().iterator().next();
+		Assertions.assertEquals(StreamTerminationReason.BACKPRESSURE, histogram.getKey().getTerminationReason());
+		Assertions.assertEquals(1L, histogram.getValue().getCount());
+		Assertions.assertTrue(snapshot.getSseHandshakesRejected().isEmpty());
+		Assertions.assertFalse(logEvents.stream().anyMatch(logEvent ->
+				logEvent.getLogEventType() == LogEventType.SERVER_TRANSPORT_FAILURE
+						|| logEvent.getLogEventType() == LogEventType.SSE_SERVER_CONNECTION_REJECTED),
+				logEvents.toString());
 	}
 
 	@Test

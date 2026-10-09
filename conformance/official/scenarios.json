@@ -444,7 +444,7 @@
       ],
       "localSupplements": [
         "McpHttpServerCustomHeaderTests#custom_mirrors_decode_all_types_compare_numerically_and_strip_ows",
-        "McpHttpServerCustomHeaderTests#custom_mirror_failures_are_header_mismatches_before_admission",
+        "McpHttpServerCustomHeaderTests#custom_mirror_failures_are_header_mismatches_after_admission",
         "McpHttpServerCustomHeaderTests#custom_mirror_registration_is_scoped_to_the_selected_tool"
       ],
       "rationale": "Requires the Phase 4 custom-header tool registration and tools/list discovery."

@@ -1197,7 +1197,7 @@ public class AdvancedTests {
 		Map<String, String> pathPatterns = new HashMap<>();
 		pathPatterns.put("/users/{id}", "/users/123");
 		pathPatterns.put("/users/{id}/posts/{postId}", "/users/123/posts/456");
-		pathPatterns.put("/files/{path:.*}", "/files/docs/report.pdf"); // Wildcard
+		pathPatterns.put("/files/{path*}", "/files/docs/report.pdf"); // Varargs placeholder
 		pathPatterns.put("/{lang}/docs/{page}", "/en/docs/index");
 
 		for (Map.Entry<String, String> entry : pathPatterns.entrySet()) {
@@ -1211,21 +1211,14 @@ public class AdvancedTests {
 		}
 
 		// Test non-matching cases
-		Map<String, String> nonMatchingPaths = new HashMap<>();
-		nonMatchingPaths.put("/users/{id}", "/users/");
-		nonMatchingPaths.put("/users/{id}", "/users/123/extra");
-		nonMatchingPaths.put("/api/v{version}/users", "/api/users");
+		ResourcePathDeclaration declaration = ResourcePathDeclaration.fromPath("/users/{id}");
+		for (String testPath : List.of("/users/", "/users/123/extra"))
+			Assertions.assertFalse(declaration.matches(ResourcePath.fromPath(testPath)),
+					"Should not match a single placeholder with path: " + testPath);
 
-		for (Map.Entry<String, String> entry : nonMatchingPaths.entrySet()) {
-			String pattern = entry.getKey();
-			String testPath = entry.getValue();
-
-			ResourcePathDeclaration declaration = ResourcePathDeclaration.fromPath(pattern);
-			boolean matched = declaration.matches(ResourcePath.fromPath(testPath));
-
-			Assertions.assertFalse(matched, "Should not match pattern: " + pattern +
-					" with path: " + testPath);
-		}
+		// A placeholder must span its entire component; malformed declarations fail at construction.
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> ResourcePathDeclaration.fromPath("/api/v{version}/users"));
 	}
 
 	@Test

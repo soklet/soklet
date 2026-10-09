@@ -716,11 +716,12 @@ public class McpRequestObservationPublicRuntimeTests {
 					"5000000", "10000000", "25000000", "50000000",
 					"100000000", "200000000", "400000000",
 					"800000000", "1500000000", "3000000000",
-					"7000000000", "15000000000", "+Inf"))
+					"7000000000", "15000000000", "30000000000",
+					"60000000000", "120000000000", "300000000000", "+Inf"))
 				expectedMcpSamples.add(
 						"soklet_mcp_request_duration_nanos_bucket{endpoint=/mcp, method=tools/call, outcome=complete, le="
 								+ upperBound + "}");
-			Assertions.assertEquals(31, expectedMcpSamples.size());
+			Assertions.assertEquals(35, expectedMcpSamples.size());
 			Assertions.assertEquals(expectedMcpSamples.size(),
 					filteredSamples.size(), filteredSamples.toString());
 			Assertions.assertEquals(expectedMcpSamples,

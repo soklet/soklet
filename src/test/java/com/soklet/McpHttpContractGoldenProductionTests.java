@@ -76,9 +76,6 @@ public class McpHttpContractGoldenProductionTests {
 	private static final String SUPERSEDED_HTTP_CONTRACT_MANIFEST_DIGEST =
 			"ec1bd3f13c70bec100b18e774bfbdf2d9e574c1d8df99f2acc4b36e85f51702c";
 	private static final List<Path> CANDIDATE_DOCUMENTATION = List.of(
-			Path.of("MCP.md"),
-			Path.of("README.md"),
-			Path.of("SECURITY.md"),
 			Path.of("api", "mcp", "README.md"),
 			Path.of("conformance", "official", "README.md"),
 			Path.of("release", "README.md"));
@@ -683,6 +680,8 @@ public class McpHttpContractGoldenProductionTests {
 	@Test
 	public void candidateDocumentationPinsCurrentGoldenManifestDigests()
 			throws Exception {
+		// Corpus provenance belongs in the conformance/release references. Public usage guides
+		// describe current contracts without duplicating candidate hashes or transient test totals.
 		String errorMappingDigest = sha256(Files.readAllBytes(Path.of(
 				"conformance", "golden-error-mapping", "live", "manifest.sha256")));
 		String httpContractDigest = sha256(Files.readAllBytes(

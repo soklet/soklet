@@ -13,7 +13,9 @@ export const acceptedP0CStatus = 'PASSED_WITH_REVIEWED_EXCEPTION';
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const decisionPath = resolve(projectRoot,
   'conformance/official/P0C_CHECK_DISPOSITION_2026-09-22.md');
-const decisionSha256 = 'cb132c45219f0bd905a96940a66f23bfd30104e7389f4b0bc0e5b8be2eb791b8';
+// The cleanup moved only the proposal link to its immutable Git blob. Restoring
+// that one link reproduces the original owner record; its conditions are unchanged.
+const decisionSha256 = 'fb010e885413fa19549a5ceab78775c0f7f34d169b8e6fb983248a9d8902c340';
 const scenarioName = 'server-stateless';
 const scenarioDirectoryName = '001-server-stateless';
 const expectedProfile = 'server-stateless.phase5.v1';
@@ -35,8 +37,8 @@ function boundedJson(path, label) {
       || stat.size > 64 * 1024) fail(`${label} must be a bounded regular file`);
   return JSON.parse(readFileSync(path, 'utf8'));
 }
-function verifyOwnerDecision() {
-  if (sha256(readFileSync(decisionPath)) !== decisionSha256)
+export function verifyOwnerDecision(documentBytes = readFileSync(decisionPath)) {
+  if (sha256(documentBytes) !== decisionSha256)
     fail('owner decision document changed');
 }
 function capturePaths(directory) {

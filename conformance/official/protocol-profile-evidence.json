@@ -20,12 +20,12 @@
       },
       "scenarios": {
         "path": "conformance/official/scenarios.json",
-        "sha256": "ad63828e790bf50e91da99aba642d9277a273a7a676c7a553b11a2a4eb35a6be"
+        "sha256": "b2c190e43fafbd3055131b7da570fa9b6526435bb715c8fc301c74c65f9e1067"
       },
       "goldens": [
         {
           "path": "conformance/golden-error-mapping/live/manifest.sha256",
-          "sha256": "68fb32f4aaeb11616c62eebde7609f227cbbc2abc0d86f282292f5d48e73b5f8"
+          "sha256": "13cb8b1158958bc553d8d9b65cd454c2d3e1bcebdd054267e55d9dbb0336706c"
         },
         {
           "path": "conformance/golden-http-contract/precedence-no-store/manifest.sha256",

@@ -4,6 +4,22 @@ This launch-facing matrix records what was actually exercised, with exact tool
 versions and a manual-smoke date. It is not a candidate release gate and does
 not create a release-validation PASS receipt.
 
+## October 8 current-source protocol verification
+
+The remediation build passes **45 strict modern scenarios**, the unchanged
+reviewed `server-stateless` exception with independent Elicitation controls,
+48 final-schema goldens and eight task-notification socket checks. Both 2025
+revisions pass all **41 selected official combinations** and **15 native HTTP
+contracts each**. The pinned TypeScript client **2.0.0** also negotiates modern
+MCP, lists/calls the fixture tool and shuts down cleanly.
+
+Established URI grant loss now retires the whole legacy session. The HTTP
+supplement verifies neutral `404`, fresh initialization/resubscription and
+restored delivery; refreshing a GET does not replace historical URI credentials.
+Earlier dated observations below describe their original builds. This new run
+does not qualify automatic recovery or OAuth UI behavior in a named host, or an
+immutable release candidate. Raw output remains outside Git.
+
 ## October 2 expanded release-conformance integration
 
 Candidate validation now requires the existing modern checks plus all **41

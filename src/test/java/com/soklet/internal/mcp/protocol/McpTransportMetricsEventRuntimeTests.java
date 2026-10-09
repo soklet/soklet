@@ -228,8 +228,7 @@ public class McpTransportMetricsEventRuntimeTests {
 				observer.awaitValues(List.of(Marker.CONNECTION_ACCEPTED,
 						Marker.CONNECTION_ACCEPTED,
 						MetricsCollector.TransportFailureReason.REQUEST_READ_TIMEOUT));
-				Assertions.assertEquals(-1, partial.getInputStream().read(),
-						"The stalled partial request did not close.");
+				assertTimeoutResponseAndClosure(partial);
 			}
 
 			Assertions.assertEquals(List.of(Marker.CONNECTION_ACCEPTED,
@@ -262,8 +261,7 @@ public class McpTransportMetricsEventRuntimeTests {
 
 				observer.awaitValues(List.of(Marker.CONNECTION_ACCEPTED,
 						MetricsCollector.TransportFailureReason.REQUEST_READ_TIMEOUT));
-				Assertions.assertEquals(-1, partial.getInputStream().read(),
-						"The stalled partial request body did not close.");
+				assertTimeoutResponseAndClosure(partial);
 			}
 
 			Assertions.assertEquals(List.of(Marker.CONNECTION_ACCEPTED,
@@ -272,6 +270,13 @@ public class McpTransportMetricsEventRuntimeTests {
 		} finally {
 			runtime.close();
 		}
+	}
+
+	private static void assertTimeoutResponseAndClosure(Socket socket) throws Exception {
+		// readAllBytes returns only after EOF, so this checks both the offered 408 and closure.
+		String response = new String(socket.getInputStream().readAllBytes(), StandardCharsets.US_ASCII);
+		Assertions.assertTrue(response.startsWith("HTTP/1.1 408 Request Timeout\r\n"), response);
+		Assertions.assertTrue(response.contains("\r\nConnection: close\r\n"), response);
 	}
 
 	@Test

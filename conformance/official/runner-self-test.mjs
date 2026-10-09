@@ -33,6 +33,7 @@ import {
   verifyTaskNotificationSupplementResult,
 } from './run.mjs';
 import { sha256 } from './verify.mjs';
+import { verifyOwnerDecision } from './p0c-policy.mjs';
 
 class ReadinessAwaitingChildSupervisor extends ChildSupervisor {
   #readinessPath;
@@ -65,6 +66,7 @@ releaseCandidateProvenanceIsFailClosed();
 resultTreeTraversalIsBounded();
 observationDraftPreservesCompleteMultisetsAndSkipReasons();
 taskNotificationSupplementIsFailClosed();
+ownerDecisionRetainsItsExactApprovedConditions();
 await supervisorCancelsEveryChildAndRejectsLaterSpawns();
 if (process.platform !== 'win32') await supervisorCancelsOrdinaryDescendants();
 await failedSpawnDoesNotWaitForTerminationTimeouts();
@@ -73,6 +75,29 @@ await earlyFailureWritesDurableEvidence();
 await incompleteReleaseEvidenceStaysFalse();
 
 console.log('Official MCP conformance runner self-test passed.');
+
+function ownerDecisionRetainsItsExactApprovedConditions() {
+  const bytes = readFileSync(new URL('./P0C_CHECK_DISPOSITION_2026-09-22.md', import.meta.url));
+  verifyOwnerDecision();
+  verifyOwnerDecision(bytes);
+  const text = bytes.toString('utf8');
+  const currentLink = 'https://github.com/soklet/soklet/blob/070e37ba40107ae68563cbb0a9f9cff7a9f5ce89/docs/streaming-api-milestone-6d.md#conditions-for-a-reviewable-disposition';
+  const originalLink = '../../docs/streaming-api-milestone-6d.md#conditions-for-a-reviewable-disposition';
+  assert.equal(text.split(currentLink).length, 2);
+  const originalBytes = Buffer.from(text.replace(currentLink, originalLink));
+  assert.equal(sha256(originalBytes), 'cb132c45219f0bd905a96940a66f23bfd30104e7389f4b0bc0e5b8be2eb791b8',
+    'the proposal link must be the only change to the original owner decision');
+  for (const mutation of [
+    originalBytes,
+    Buffer.from(text.replace('only** these two', 'all** these')),
+    Buffer.from(text.replace('`details.untestable: true`', '`details.untestable: false`')),
+    Buffer.from(text.replace('HTTP 200', 'HTTP 201')),
+    Buffer.concat([bytes, Buffer.from('\nAdditional exception.\n')]),
+  ]) {
+    assert.notDeepEqual(mutation, bytes, 'negative control must change the owner record');
+    assert.throws(() => verifyOwnerDecision(mutation), /owner decision document changed/);
+  }
+}
 
 function taskNotificationSupplementIsFailClosed() {
   const valid = { status: 0, signal: null, timedOut: false, outputFailure: null,

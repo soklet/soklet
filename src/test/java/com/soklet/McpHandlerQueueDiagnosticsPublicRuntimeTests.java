@@ -140,7 +140,7 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 		assertDocumented(source, "getRequestHandlerQueueDepth",
 				"completed server stop transition");
 		assertDocumented(source, "getActiveRequestStreams",
-				"open request-scoped SSE streams");
+				"configured 2025 session GET bodies");
 		assertDocumented(source, "getActiveSubscriptions",
 				"never");
 		assertDocumented(source, "getProtectionMode",

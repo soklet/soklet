@@ -57,6 +57,8 @@ import static java.util.Objects.requireNonNull;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -345,13 +347,14 @@ public class SokletTests {
 			assertEquals(Integer.valueOf(200), requestResult.getMarshaledResponse().getStatusCode());
 			assertEquals("123-js/some/file/example.js", requestResult.getResponse().get().getBody().get());
 
-			requestResult = simulator.performHttpRequest(
-					Request.withPath(HttpMethod.GET, "/static2/js/some/file/example.js")
-							.build()
-			);
-
-			assertEquals(Integer.valueOf(500), requestResult.getMarshaledResponse().getStatusCode());
 		});
+		SokletStartupException failure = assertThrows(SokletStartupException.class,
+				() -> SokletSimulator.run(configurationForResourceClasses(SimulatorConfig.builder(),
+						Set.of(InvalidVarargsResource.class)), simulator -> {
+					throw new AssertionError("Invalid bindings must fail before request processing");
+				}));
+		assertInstanceOf(IllegalArgumentException.class, failure.getCause());
+		assertTrue(failure.getCause().getMessage().contains("Varargs path parameters must use String"));
 	}
 
 	@ThreadSafe
@@ -367,6 +370,9 @@ public class SokletTests {
 			return something + "-" + path;
 		}
 
+	}
+
+	public static class InvalidVarargsResource {
 		@GET("/static2/{anotherPath*}")
 		public Integer illegalVarargsType(@PathParameter Integer anotherPath /* only String is supported */) {
 			return anotherPath;

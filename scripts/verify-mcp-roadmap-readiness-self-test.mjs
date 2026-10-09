@@ -686,7 +686,7 @@ try {
     'active-text plain exact event-variant count must fail', () => {
       writeFileSync(fixturePath('MCP.md'),
         '\nSoklet exposes exactly 23 event variants.\n', { flag: 'a' });
-    }, /COUNT-001 fingerprint mismatch/u);
+    }, /COUNT-001 expected zero matches/u);
 
   expectRejected(
     'active-text noun-first server-extension support must fail', () => {

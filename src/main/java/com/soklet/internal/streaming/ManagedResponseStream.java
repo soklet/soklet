@@ -665,8 +665,7 @@ public final class ManagedResponseStream implements ResponseStream {
 				T claimedResource = null;
 				while (true) {
 					try {
-						this.stateChangeWaiters.awaitWhile(() ->
-								(this.abortClaimed && !this.abortFinished) || (this.closeClaimed && !this.closeFinished));
+						this.stateChangeWaiters.awaitWhile(this::cleanupInProgress);
 					} catch (InterruptedException ignored) {
 						restoreInterrupt = true;
 					}
@@ -692,7 +691,7 @@ public final class ManagedResponseStream implements ResponseStream {
 				}
 				while (true) {
 					try {
-						this.stateChangeWaiters.awaitWhile(() -> this.abortClaimed && !this.abortFinished);
+						this.stateChangeWaiters.awaitWhile(this::abortInProgress);
 					} catch (InterruptedException ignored) {
 						restoreInterrupt = true;
 					}
@@ -710,6 +709,16 @@ public final class ManagedResponseStream implements ResponseStream {
 				if (restoreInterrupt)
 					Thread.currentThread().interrupt();
 			}
+		}
+
+		// StateChangeWaiters already evaluates these predicates under this same monitor.
+		// Explicitly synchronize the helpers so every state read carries its lock contract.
+		private synchronized boolean cleanupInProgress() {
+			return (this.abortClaimed && !this.abortFinished) || (this.closeClaimed && !this.closeFinished);
+		}
+
+		private synchronized boolean abortInProgress() {
+			return this.abortClaimed && !this.abortFinished;
 		}
 
 		private void closeResource(T claimedResource) {

@@ -1455,13 +1455,13 @@ public class McpSubscriptionRuntimeBoundaryTests {
 		Method method = McpHttpServerRuntime.class.getDeclaredMethod(
 				"connectionListener", AtomicReference.class,
 				McpServerRuntimeBridge.LifecycleAdapter.Generation.class,
-				AtomicReference.class, AtomicBoolean.class, AtomicBoolean.class,
+				AtomicReference.class, AtomicBoolean.class, AtomicBoolean.class, AtomicBoolean.class,
 				Object.class);
 		method.setAccessible(true);
 		return (ConnectionListener) invoke(method, runtime, readiness,
 				McpServerRuntimeBridge.LifecycleAdapter.disabledInstance()
 						.currentGeneration(),
-				startupFailure, startupFailureSignaled,
+				startupFailure, new AtomicBoolean(), startupFailureSignaled,
 				startupFailureDiagnosticRetained, startupFailureSignalLock);
 	}
 

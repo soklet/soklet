@@ -10,11 +10,11 @@ export const runtimeSupplementChecks = Object.freeze([
   'same-session-get-credential-refresh',
   'get-does-not-refresh-historical-uri-evidence',
   'duplicate-subscribe-replaces-uri-credentials',
-  'fresh-resubscribe-restores-uri-delivery',
+  'retired-session-404-and-fresh-resubscribe-restores-uri-delivery',
   'quiet-renewal-retains-context-without-uri-replay',
   'get-gap-delivers-fresh-dirty-uri-hint',
   'unsubscribe-stops-uri-delivery',
-  'revocation-denies-uri-and-closes-own-get',
+  'uri-revocation-retires-session-and-closes-its-gets',
   'revoked-reconnect-returns-bearer-invalid-token',
   'same-owner-authorized-delete-returns-204',
   'notification-wire-has-no-modern-or-replay-fields',
@@ -91,12 +91,18 @@ export async function runRuntimeSupplement(options, supervisor) {
         const message = await response.json(); assert.equal(message.id, id); assert.equal(message.jsonrpc, '2.0');
         assert.ok(!message.error, JSON.stringify(message.error)); return message.result;
       };
-      const initialize = await request('POST', 'A', { jsonrpc: '2.0', id: ++rpcId, method: 'initialize',
-        params: { protocolVersion: revision, capabilities: {}, clientInfo: { name: 'soklet-legacy-release-supplement', version: '1' } } });
-      assert.equal(initialize.status, 200); assert.equal((await initialize.json()).result.protocolVersion, revision);
-      sessionId = initialize.headers.get('mcp-session-id'); assert.match(sessionId, /^[\x21-\x7e]+$/);
-      const initialized = await request('POST', 'A', { jsonrpc: '2.0', method: 'notifications/initialized' });
-      assert.equal(initialized.status, 202); await initialized.arrayBuffer();
+      const initializeSession = async label => {
+        const previousId = sessionId;
+        sessionId = undefined;
+        const initialize = await request('POST', label, { jsonrpc: '2.0', id: ++rpcId, method: 'initialize',
+          params: { protocolVersion: revision, capabilities: {}, clientInfo: { name: 'soklet-legacy-release-supplement', version: '1' } } });
+        assert.equal(initialize.status, 200); assert.equal((await initialize.json()).result.protocolVersion, revision);
+        sessionId = initialize.headers.get('mcp-session-id'); assert.match(sessionId, /^[\x21-\x7e]+$/);
+        if (previousId) assert.notEqual(sessionId, previousId, 'Reinitialization must allocate a fresh session');
+        const initialized = await request('POST', label, { jsonrpc: '2.0', method: 'notifications/initialized' });
+        assert.equal(initialized.status, 202); await initialized.arrayBuffer();
+      };
+      await initializeSession('A');
       const openGet = async label => {
         const abort = new AbortController();
         let response;
@@ -147,18 +153,30 @@ export async function runRuntimeSupplement(options, supervisor) {
       assert.ok((await rpc('tools/list', {}, 'A')).tools.some(tool => tool.name === 'catalog_after'));
       assert.ok((await rpc('prompts/list', {}, 'A')).prompts.some(prompt => prompt.name === 'prompt_after'));
       assert.equal((await rpc('resources/list', {}, 'A')).resources[0].name, 'resource_after');
-      const getB = await openGet('B');
+      let getB = await openGet('B');
       await rpc('resources/subscribe', { uri: template });
+      await command(revision, 'reconcile');
+      await waitFor(() => events().some(e => e.revision === revision && e.event === 'get-renewal' && e.detail === 'B:allowed')
+        && events().some(e => e.revision === revision && e.event === 'uri-renewal' && e.uri === exact && e.detail === 'A:allowed:context:credential-A')
+        && events().some(e => e.revision === revision && e.event === 'uri-renewal' && e.uri === template && e.detail === 'B:allowed:context:credential-B'),
+      'GET B retains historical URI A while duplicate subscribe replaces template credentials');
       await command(revision, 'revoke-a');
-      await waitFor(() => getA.ended && events().some(e => e.revision === revision && e.event === 'get-renewal' && e.detail === 'B:allowed')
+      await waitFor(() => getA.ended && getB.ended
         && events().some(e => e.revision === revision && e.event === 'uri-renewal' && e.uri === exact && e.detail.startsWith('A:denied')),
-      'Historical A permission revoked, GET B renewed');
+      'Historical URI A revocation retires its entire session');
       const exactBefore = updates(exact), templateBefore = updates(template);
       await command(revision, 'resource'); await command(revision, 'template');
-      await waitFor(() => updates(template) > templateBefore, 'Refreshed template hint'); await sleep(200);
-      assert.equal(updates(exact), exactBefore, 'GET B does not refresh URI A');
-      await rpc('resources/subscribe', { uri: exact }); await command(revision, 'resource');
-      await waitFor(() => updates(exact) > exactBefore, 'Fresh exact subscribe B');
+      await sleep(200);
+      assert.equal(updates(exact), exactBefore, 'No exact URI delivery after session retirement');
+      assert.equal(updates(template), templateBefore, 'No template URI delivery after session retirement');
+      const retired = await request('POST', 'B', { jsonrpc: '2.0', id: ++rpcId, method: 'ping', params: {} });
+      assert.equal(retired.status, 404, 'Freshly authorized B must observe the retired session'); await retired.arrayBuffer();
+      await initializeSession('B');
+      getB = await openGet('B');
+      await rpc('resources/subscribe', { uri: exact }); await rpc('resources/subscribe', { uri: template });
+      await command(revision, 'resource'); await command(revision, 'template');
+      await waitFor(() => updates(exact) > exactBefore && updates(template) > templateBefore,
+        'Fresh B session and subscriptions restore both URI deliveries');
       const renewalCount = uri => events().filter(e => e.revision === revision && e.event === 'uri-renewal'
         && e.uri === uri && e.detail === 'B:allowed:context:credential-B').length;
       const beforeRenewal = new Map([exact, template].map(uri => [uri, renewalCount(uri)]));
@@ -175,12 +193,15 @@ export async function runRuntimeSupplement(options, supervisor) {
       assert.equal(updates(template), beforeUnsubscribe, 'No hint after unsubscribe');
       await command(revision, 'revoke-b');
       await waitFor(() => reconnect.ended && events().some(e => e.revision === revision && e.event === 'uri-renewal' && e.uri === exact && e.detail.startsWith('B:denied')),
-        'B revocation closes own GET and denies URI');
+        'B URI revocation retires its session and closes GET');
       const revokedCount = received.length; await command(revision, 'resource'); await command(revision, 'tools'); await sleep(200);
       assert.equal(received.length, revokedCount, 'No delivery after revocation');
       const rejected = await request('GET', 'B'); assert.equal(rejected.status, 401);
       assert.ok(rejected.headers.get('www-authenticate').includes('invalid_token')); await rejected.arrayBuffer();
+      const retiredGet = await request('GET', 'C'); assert.equal(retiredGet.status, 404); await retiredGet.arrayBuffer();
+      await initializeSession('C');
       const deleted = await request('DELETE', 'C'); assert.equal(deleted.status, 204); await deleted.arrayBuffer();
+      const deletedGet = await request('GET', 'C'); assert.equal(deletedGet.status, 404); await deletedGet.arrayBuffer();
       assert.equal((await command(revision, 'state')).activeGets, 0);
       for (const stream of streams) assert.equal(stream.failure, null);
       results.push({ revision, passed: true, checks: [...runtimeSupplementChecks] });

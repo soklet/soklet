@@ -367,12 +367,16 @@ public final class StaticFiles {
 				Path matched = null;
 				try (DirectoryStream<Path> entries = Files.newDirectoryStream(current)) {
 					for (Path entry : entries) {
-						if (entry.getFileName().toString().equals(segment.toString())) {
+						Path fileName = entry.getFileName();
+						if (fileName == null)
+							continue;
+						String entryName = fileName.toString();
+						if (entryName.equals(segment.toString())) {
 							matched = entry;
 							break;
 						}
 						// Other hard-link names are distinct policy paths, not spelling aliases.
-						if (!Normalizer.normalize(entry.getFileName().toString(), Normalizer.Form.NFC)
+						if (!Normalizer.normalize(entryName, Normalizer.Form.NFC)
 								.equalsIgnoreCase(Normalizer.normalize(segment.toString(), Normalizer.Form.NFC)))
 							continue;
 						BasicFileAttributes entryAttributes = Files.readAttributes(entry, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);

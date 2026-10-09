@@ -107,12 +107,15 @@ public interface McpServerDiagnostics {
 	Integer getRequestHandlerQueueDepth();
 
 	/**
-	 * The number of open request-scoped SSE streams in this snapshot.
+	 * The number of active SSE streams in this snapshot.
 	 * <p>
-	 * This count includes an MCP subscription once its acknowledgment stream
-	 * has opened; it does not imply client receipt. The value is nonnegative and
-	 * is zero after a completed server stop transition. A transient snapshot
-	 * captured while failure cleanup is closing streams may remain nonzero.
+	 * This count includes request-scoped streams, an MCP subscription once its
+	 * acknowledgment stream has opened, and configured 2025 session GET bodies,
+	 * including those awaiting physical cleanup. Opening a stream does not imply
+	 * client receipt. The value is nonnegative and is zero when
+	 * {@link #getStatus()} is {@link McpServerStatus#NOT_STARTED} or
+	 * {@link McpServerStatus#TERMINATED}. Residual cleanup can keep this count
+	 * nonzero after publication of the owner's immutable shutdown result.
 	 *
 	 * @return the active request-stream count
 	 */
@@ -120,14 +123,16 @@ public interface McpServerDiagnostics {
 	Integer getActiveRequestStreams();
 
 	/**
-	 * The number of open MCP subscriptions whose request-scoped SSE streams remain
-	 * open in this snapshot.
+	 * The number of active subscription streams in this snapshot.
 	 * <p>
-	 * The count includes a subscription once its acknowledgment stream has
-	 * opened; it does not imply client receipt. This value is nonnegative, never
-	 * exceeds {@link #getActiveRequestStreams()}, and is zero after a completed
-	 * server stop transition. A transient snapshot captured while failure cleanup
-	 * is closing subscriptions may remain nonzero.
+	 * The count includes an MCP subscription once its acknowledgment stream has
+	 * opened and configured 2025 session GET bodies, including those awaiting
+	 * physical cleanup. Opening a stream does not imply client receipt. This
+	 * value is nonnegative, never exceeds {@link #getActiveRequestStreams()},
+	 * and is zero when {@link #getStatus()} is
+	 * {@link McpServerStatus#NOT_STARTED} or {@link McpServerStatus#TERMINATED}.
+	 * Residual cleanup can keep this count nonzero after publication of the
+	 * owner's immutable shutdown result.
 	 *
 	 * @return the active subscription count
 	 */

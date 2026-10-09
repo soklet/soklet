@@ -1232,6 +1232,46 @@ or `withMcpServer(...)` entry points. Reusing a transport object across
 lifecycle generations is not a replacement for copying: each generation needs
 fresh one-shot transports.
 
+## MCP listener binding and construction
+
+The MCP listener's default bind host changes from `0.0.0.0` in 3.5.1 to
+`127.0.0.1` in 4.0.0. Default HTTP and SSE listeners still bind to `0.0.0.0`.
+An MCP listener left at its new default is reachable only through loopback;
+container and remote deployments must select their bind address explicitly.
+Any non-loopback bind also requires a nonempty `allowedHosts` set.
+
+For example, supply the application's endpoint registry and tool limiter:
+
+```java
+McpServer mcpServer = McpServer.withPort(8082)
+    .endpointRegistry(endpointRegistry)
+    .host("0.0.0.0")
+    .allowedHosts(Set.of("mcp.example.com"))
+    .toolRateLimiter(toolRateLimiter)
+    .build();
+```
+
+`allowedHosts` contains hostnames or IP literals, without a scheme, path or
+port. An explicitly allowed hostname accepts any syntactically valid public
+port, or no port, so `mcp.example.com:443` may be forwarded to this listener
+on `8082`. Automatic loopback aliases require the effective listener port.
+Soklet does not derive an allowed hostname from `Forwarded` or
+`X-Forwarded-Host`. Bind/Host validation, Origin policy and application
+admission remain independent; remote binding does not add TLS.
+
+Construction validates the combined configuration. A tool-bearing server
+requires its fallback `toolRateLimiter`, even when tools or endpoints name
+overrides. Completion requires `requestRateLimiter`. An endpoint enabling
+Tasks, or a task-required tool, requires `taskManager`. Any operation using
+`FRAMEWORK_PROTECTED` request state requires `protectionConfig`. Missing
+required collaborators fail with `IllegalStateException` at `build()`.
+Invalid allowed hosts and non-loopback binding without an allowlist fail
+with `IllegalArgumentException`. The body, header-section and request-target
+byte limits, plus 1,024 bytes of HTTP framing allowance, must also fit within
+`Integer.MAX_VALUE`; an oversized combined limit fails with
+`IllegalArgumentException` at `build()` even if each individual setter accepts
+its value.
+
 ## Simulator migration
 
 [`Soklet::runSimulator`](<https://javadoc.soklet.com/com/soklet/Soklet.html>)
@@ -1615,6 +1655,21 @@ coalescing and stale-result discards; they are not unique subscriptions,
 started attempts, durations or active work. Retention uses the existing
 8,192-key limit; eviction or semantic-delivery overflow can omit observations.
 Concurrent snapshots and resets retain the existing weak observation semantics.
+
+## MCP request-duration histogram buckets
+
+The default collector adds 30-, 60-, 120-, and 300-second finite boundaries
+to `soklet_mcp_request_duration_nanos`. The previous finite boundaries through
+15 seconds remain. These new boundaries cover the default 60-second MCP
+request timeout and longer configured deadlines; values above five minutes
+still use the `+Inf` bucket. Boundaries and samples remain nanoseconds, with
+the same endpoint, method and outcome labels, across supported MCP revisions.
+
+`soklet-otel` advises the same additional boundaries, expressed in seconds,
+for `soklet.mcp.request.duration`. OpenTelemetry SDK views can override that
+advice. Recheck dashboards, alerts and metric filters that assume the old
+bucket vector or choose an exact `le` value. HTTP request, request-stream and
+subscription duration layouts are unchanged by this MCP request change.
 
 ## Histogram sums and snapshot values
 

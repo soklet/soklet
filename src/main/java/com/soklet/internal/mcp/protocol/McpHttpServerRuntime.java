@@ -3432,6 +3432,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 	}
 
+	void setLegacyNotificationReservationTestHook(@Nullable Runnable legacyNotificationReservationTestHook) {
+		this.legacyNotificationReservationTestHook = legacyNotificationReservationTestHook;
+	}
+
 	@NonNull
 	McpRequestExecutionSnapshot requestExecutionSnapshot() {
 		synchronized (lifecycleLock) {

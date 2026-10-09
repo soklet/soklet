@@ -206,9 +206,10 @@ public class McpHttpServerConnectionContractTests {
 			Assertions.assertEquals(4, handlers.get());
 			Assertions.assertEquals(List.of(
 					Optional.of("Bearer first"), Optional.of("Bearer second"),
-					Optional.empty(), Optional.empty()), authorizations);
+					Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty()), authorizations);
 			Assertions.assertEquals(List.of(
 					"127.0.0.1:" + port, "localhost:" + port,
+					"127.0.0.1:" + port, "127.0.0.1:" + port,
 					"127.0.0.1:" + port, "127.0.0.1:" + port), hosts);
 			Assertions.assertEquals(0,
 					runtime.requestExecutionSnapshot()

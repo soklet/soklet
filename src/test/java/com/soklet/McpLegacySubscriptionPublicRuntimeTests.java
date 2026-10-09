@@ -249,7 +249,8 @@ class McpLegacySubscriptionPublicRuntimeTests {
 					var offer = java.util.Arrays.stream(runtime.getClass().getDeclaredMethods())
 							.filter(method -> method.getName().equals("offerLegacyDelivery")).findFirst().orElseThrow();
 					offer.setAccessible(true);
-					Field hook = runtime.getClass().getDeclaredField("legacyNotificationReservationTestHook"); hook.setAccessible(true);
+					var hook = runtime.getClass().getDeclaredMethod("setLegacyNotificationReservationTestHook", Runnable.class);
+					hook.setAccessible(true);
 					AtomicInteger selections = new AtomicInteger();
 					// Keep the winning frame wholly unwritten, and exclude timer flushes while
 					// recursively interleaving a second flush after the first has selected its attempt.
@@ -266,7 +267,7 @@ class McpLegacySubscriptionPublicRuntimeTests {
 								mark.setAccessible(true); mark.invoke(store, "/mcp", version.getWireValue(), family);
 							}
 							Object delivery = ((List<?>) pending.invoke(store, "/mcp", version.getWireValue())).get(0);
-							hook.set(runtime, (Runnable) () -> {
+							hook.invoke(runtime, (Runnable) () -> {
 								if (selections.incrementAndGet() == 1) {
 									try { offer.invoke(runtime, store, delivery, version.getWireValue()); }
 									catch (ReflectiveOperationException failure) { throw new AssertionError(failure); }
@@ -277,7 +278,7 @@ class McpLegacySubscriptionPublicRuntimeTests {
 								assertEquals(2, selections.get(), "Both flushes must select before the winning reservation.");
 								assertEquals(1, fixture.server.getDiagnostics().getActiveSubscriptions(),
 										"A duplicate claim is not buffer pressure and must not close the winning GET.");
-							} finally { hook.set(runtime, null); }
+							} finally { hook.invoke(runtime, (Runnable) null); }
 						}
 					}
 					assertTrue(nextWireNotification(get).contains(resourceUpdate

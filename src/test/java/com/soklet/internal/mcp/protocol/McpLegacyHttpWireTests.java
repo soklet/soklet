@@ -886,8 +886,9 @@ public class McpLegacyHttpWireTests {
 					.DELETE().build(), HttpResponse.BodyHandlers.ofString());
 			Assertions.assertEquals(405, get.statusCode());
 			Assertions.assertEquals(405, delete.statusCode());
-			Assertions.assertEquals(admissions.get(), rateChecks.get());
-			Assertions.assertTrue(admissions.get() >= 9);
+			Assertions.assertEquals(15, admissions.get());
+			Assertions.assertEquals(14, rateChecks.get(),
+					"A registration-dependent mirror failure is admitted but never rate-limited or invoked");
 		}
 	}
 

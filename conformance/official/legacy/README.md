@@ -40,7 +40,8 @@ not observe updates or prove that unsubscribe stops delivery. The integrated
 HTTP supplement checks exact/template URI delivery, freshly listed catalogs,
 GET credential refresh, independent historical URI credentials, duplicate and
 fresh resubscribe, quiet renewal without replay, dirty-gap reconnect, unsubscribe,
-revocation, a Bearer `invalid_token` challenge, authorized DELETE, legacy wire
+URI grant revocation retiring the whole session, neutral `404` followed by fresh
+initialization/resubscription, a Bearer `invalid_token` challenge, authorized DELETE, legacy wire
 fields, and clean shutdown. It uses native HTTP against a public-API-only
 fixture; it does not qualify a named SDK or host. Static paging, cooperative
 cancellation, physical ownership under blocked callbacks, and memory/maintenance

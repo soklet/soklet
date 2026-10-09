@@ -566,7 +566,7 @@ public class McpErrorMappingGoldenProductionTests {
 				new FixtureContract(MappingFamily.HEADER_MISMATCH, 400, -32020,
 						false, false));
 		fixtures.put("unsupported-selector-strict-unknown-integer-400.http.hex",
-				new FixtureContract(MappingFamily.STRICT_UNKNOWN, 400, -31998,
+				new FixtureContract(MappingFamily.UNSUPPORTED_VERSION, 400, -32022,
 						false, false));
 		fixtures.put("unsupported-version-string-400.http.hex",
 				new FixtureContract(MappingFamily.UNSUPPORTED_VERSION, 400, -32022,

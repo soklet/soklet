@@ -318,6 +318,7 @@ public final class McpConformanceFixture {
 		McpServer.Builder configured = mcpServerBuilder
 				.host(LOOPBACK)
 				// This loopback-only fixture grants bounded access to its public test data.
+				.admissionController(McpAdmissionController.acceptAllInstance())
 				.subscriptionAuthorizer((context, features) ->
 						McpSubscriptionAuthorization.Allowed.fromValidUntil(
 								Instant.now().plusSeconds(30)))

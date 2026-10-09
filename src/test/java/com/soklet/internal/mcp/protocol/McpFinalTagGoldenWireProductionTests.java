@@ -449,7 +449,8 @@ public class McpFinalTagGoldenWireProductionTests {
 			Assertions.assertFalse(response.contains(unknownHeaderName), response);
 			Assertions.assertFalse(response.contains("Super-Secret-Name"), response);
 			Assertions.assertFalse(response.contains(unknownHeaderValue), response);
-			Assertions.assertEquals(0, admissionInvocations.get());
+			Assertions.assertEquals(1, admissionInvocations.get(),
+					"Registered mirrors are checked after caller admission");
 			Assertions.assertEquals(0, requestLimiterInvocations.get());
 			Assertions.assertEquals(0, toolLimiterInvocations.get());
 			Assertions.assertEquals(0, interceptorInvocations.get());
@@ -616,7 +617,8 @@ public class McpFinalTagGoldenWireProductionTests {
 					400, McpJsonRpcError.MISSING_REQUIRED_CLIENT_CAPABILITY,
 					"phase-5-missing-capability",
 					fixture("phase-5/missing-capability-error.json"));
-			Assertions.assertEquals(0, admissionInvocations.get());
+			Assertions.assertEquals(1, admissionInvocations.get(),
+					"Registered capability requirements are checked after caller admission");
 			Assertions.assertEquals(0, requestLimiterInvocations.get());
 			Assertions.assertEquals(0, toolLimiterInvocations.get());
 			Assertions.assertEquals(0, handlerInvocations.get());
