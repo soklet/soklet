@@ -391,11 +391,21 @@ function verifyLocalizationScenario(section, profileValues) {
   if (Number(invalidations[1]) !== Number(profileValues.get('mcp.cyclesPerClient')))
     fail('Catalog invalidation count does not match the selected soak profile');
 
-  if (contexts !== localizedResponses + subscriptionTerminals + Number(invalidations[1]) + 1)
+  const expectedLocalizedResponses = Number(profileValues.get('mcp.concurrentClients'))
+    * Number(profileValues.get('mcp.cyclesPerClient'));
+
+  if (localizedResponses !== expectedLocalizedResponses)
+    fail('Localized catalog response count does not match the selected soak profile');
+
+  const catalogProjections = localizedResponses + Number(invalidations[1]) + 1;
+
+  if (contexts !== catalogProjections + subscriptionTerminals)
     fail('Localization context cardinality does not match rendered responses, subscription projections, and terminal');
 
-  if (lookups !== contexts)
-    fail('Localization lookup cardinality does not match context cardinality');
+  // Catalog projections localize the tool title and server-information title;
+  // the pre-rendered subscription terminal carries only server information.
+  if (lookups !== 2 * catalogProjections + subscriptionTerminals)
+    fail('Localization lookup cardinality does not match catalog and terminal title fields');
 
   if (preferenceMatches !== contexts)
     fail('Bounded locale-preference evidence does not match context cardinality');

@@ -4045,7 +4045,7 @@
     }
   ],
   "currentStage": {
-    "censusSha256": "ff5cc6860d18e72296513d6182c41ef4a7e7f1167cd6340a39949f24a59ade4d",
+    "censusSha256": "951f02e869eff417c08d26f518857a3b0766f46778bdf244446d4c58828634ad",
     "d2RemovalAnchors": [
       "api/mcp/phase-4.signatures.jsonl\t54\t0\tapi/mcp/phase-4.signatures.jsonl\te25d18ed313c708589e0341e693b32dbabe6d0a29764d090c3516494bfd20ac3",
       "src/main/java/com/soklet/McpLogLevel.java\t30\t0\tsrc/main/java/com/soklet/McpLogLevel.java\t3a02c08e1250412e2bb783de3cf21423e3ae065d6cd69d592a5887a6977aeec5",
@@ -4158,7 +4158,7 @@
       "soak/MANUAL_SOAKS.md\t4b24811f79ea851f9d31533b8b2fc911a46f8d722e3353549f5f937c4f5bc933",
       "soak/pom.xml\t21085688e53fe607dd81c9ec0f0547daca9bb28bc5d36483663dfde094021203",
       "soak/src/test/java/com/soklet/McpCrossFeatureSoakTests.java\t060d16c834f7b47f8175f2b0903c5e93032862c539545fc1d93ea9d8802cc93e",
-      "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java\t0903a1d1505e33fb82989f0e7f6b2760e38951b60f612f2ad91f5e9ba1d3d819",
+      "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java\t86132af26e8226f149c6f46d68c48bcea64ab48ef6166e633f295b0d57cbeb6a",
       "src/main/java/com/soklet/McpAdmissionContext.java\t57ce7a677bb70e86dd1ff7f26fd373cc336ab97c1acac0f44b91cfc31e1818d3",
       "src/main/java/com/soklet/McpAppResourceMetadata.java\tee866958358cde18a37e392b1d7169fe0471fd97b4bb72b83db5f7aaa6a0349d",
       "src/main/java/com/soklet/McpAppToolMetadata.java\tb5bf45dc5c7d938437902cc449ef82411c59b9bf6ca6ff18f933ff7b8a5ae497",
@@ -4916,7 +4916,7 @@
       "EXTERNAL_DEPENDENCY\tsoak/pom.xml\t81\t25\t0\t3.6\t3.6\tsoak/pom.xml\t81\t0",
       "EXTERNAL_DEPENDENCY\tsoak/pom.xml\t117\t25\t0\t3.6.0\t3.6.0\t-\t-\t-",
       "REPLACED\tsoak/src/test/java/com/soklet/McpCrossFeatureSoakTests.java\t624\t26\t0\t4.0.0-SNAPSHOT\t4.0.0\tsoak/src/test/java/com/soklet/McpCrossFeatureSoakTests.java\t571\t0",
-      "REPLACED\tsoak/src/test/java/com/soklet/McpLocalizationSoakTests.java\t281\t39\t0\t4.0.0-SNAPSHOT\t4.0.0\tsoak/src/test/java/com/soklet/McpLocalizationSoakTests.java\t273\t0",
+      "REPLACED\tsoak/src/test/java/com/soklet/McpLocalizationSoakTests.java\t295\t39\t0\t4.0.0-SNAPSHOT\t4.0.0\tsoak/src/test/java/com/soklet/McpLocalizationSoakTests.java\t273\t0",
       "TARGET_ONLY\tsrc/main/java/com/soklet/McpAdmissionContext.java\t42\t40\t0\t4.0\t4.0\t-\t-\t-",
       "TARGET_ONLY\tsrc/main/java/com/soklet/McpAppResourceMetadata.java\t133\t33\t0\t4.0\t4.0\t-\t-\t-",
       "TARGET_ONLY\tsrc/main/java/com/soklet/McpAppToolMetadata.java\t115\t43\t0\t4.0\t4.0\t-\t-\t-",

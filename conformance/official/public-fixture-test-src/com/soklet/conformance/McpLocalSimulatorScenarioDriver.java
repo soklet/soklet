@@ -202,8 +202,7 @@ public final class McpLocalSimulatorScenarioDriver {
 		return switch (scenario) {
 			case "server-stateless" -> 5;
 			case "completion-complete" -> 2;
-			case "json-schema-2020-12",
-					"server-sse-multiple-streams",
+			case "server-sse-multiple-streams",
 					"http-header-validation",
 					"http-custom-header-server-validation",
 					"input-required-result-basic-elicitation",
@@ -211,7 +210,8 @@ public final class McpLocalSimulatorScenarioDriver {
 					"input-required-result-non-tool-request",
 					"input-required-result-unsupported-methods",
 					"input-required-result-tampered-state" -> 2;
-			case "input-required-result-multi-round",
+			case "json-schema-2020-12",
+					"input-required-result-multi-round",
 					"input-required-result-validate-input" -> 3;
 			case "dns-rebinding-protection", "caching" -> 4;
 			default -> 1;
@@ -474,7 +474,21 @@ public final class McpLocalSimulatorScenarioDriver {
 				"\"resultType\":\"complete\"");
 		JsonExchange invalid = json(simulator, toolRequest(id + "-invalid",
 				"json_schema_2020_12_tool", "{}", EMPTY_CAPABILITIES, "", Map.of()));
-		assertError(invalid, 400, -32602, id + "-invalid");
+		// An object that fails the tool's inputSchema remains a valid
+		// CallToolRequest: report actionable feedback as a tool execution error.
+		assertComplete(invalid, id + "-invalid", "\"isError\":true",
+				"\"content\":[{\"type\":\"text\",\"text\":\""
+						+ "Arguments do not match the tool's inputSchema.\"}]");
+		assertNotContains(invalid.body(), "\"error\":{");
+		assertNotContains(invalid.body(), "Schema input accepted.");
+		assertNotContains(invalid.body(), "\"structuredContent\"");
+
+		// A non-object arguments member fails the protocol request structure
+		// and must still use the JSON-RPC invalid-params response.
+		JsonExchange malformed = json(simulator, toolRequest(id + "-malformed",
+				"json_schema_2020_12_tool", "[]", EMPTY_CAPABILITIES, "", Map.of()));
+		assertError(malformed, 400, -32602, id + "-malformed");
+		assertNotContains(malformed.body(), "\"isError\"");
 	}
 
 	private static void multipleProgressStreams(Simulator simulator, String id) {

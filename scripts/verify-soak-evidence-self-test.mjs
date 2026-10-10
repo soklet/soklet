@@ -28,6 +28,13 @@ const profileConfiguration = readFileSync(
   resolve(projectRoot, 'soak/src/test/resources/com/soklet/soak-profiles/release.properties'),
   'utf8',
 );
+const profileValues = verifySoakProfile(profileName, projectRoot).values;
+const localizedCatalogResponses = Number(profileValues.get('mcp.concurrentClients'))
+  * Number(profileValues.get('mcp.cyclesPerClient'));
+const invalidationWaves = Number(profileValues.get('mcp.cyclesPerClient'));
+const catalogProjections = localizedCatalogResponses + invalidationWaves + 1;
+const localizationContexts = catalogProjections + 1;
+const localizationLookups = 2 * catalogProjections + 1;
 
 const scenarios = [
   'concurrent SSE churn',
@@ -77,12 +84,12 @@ function reportText() {
   const sha256 = createHash('sha256').update(profileConfiguration).digest('hex');
   const scenarioSections = scenarios.map((scenario) => {
     const localizationEvidence = scenario === 'MCP localization render and invalidation churn'
-      ? '- Localized catalog responses: 8\n'
+      ? `- Localized catalog responses: ${localizedCatalogResponses}\n`
         + '- Subscription terminals pre-rendered: 1\n'
-        + '- Localization contexts created: 110\n'
-        + '- Localization lookups completed: 110\n'
-        + '- Bounded locale preferences matched: 110\n'
-        + '- Catalog invalidations requested/delivered: 100/100\n'
+        + `- Localization contexts created: ${localizationContexts}\n`
+        + `- Localization lookups completed: ${localizationLookups}\n`
+        + `- Bounded locale preferences matched: ${localizationContexts}\n`
+        + `- Catalog invalidations requested/delivered: ${invalidationWaves}/${invalidationWaves}\n`
         + '- Final active handlers/queued/streams/subscriptions: 0/0/0/0\n'
         + '- Final MCP status: TERMINATED\n'
         + '- Lifecycle core shutdown bound: PT11S\n'
@@ -234,9 +241,45 @@ try {
 
   restore = overwrite(
     reportPath,
-    (report) => report.replace('- Localization contexts created: 110', '- Localization contexts created: 109'),
+    (report) => report.replace(
+      `- Localization contexts created: ${localizationContexts}`,
+      `- Localization contexts created: ${localizationContexts - 1}`,
+    ),
   );
   assert.throws(() => verifySoakEvidence(profileName, fixtureRoot), /context cardinality/);
+  restore();
+
+  // A complete response/context census cannot substitute for both title lookups.
+  for (const incorrectLookups of [localizationContexts,
+    localizationLookups - 1, localizationLookups + 1]) {
+    restore = overwrite(
+      reportPath,
+      (report) => report.replace(
+        `- Localization lookups completed: ${localizationLookups}`,
+        `- Localization lookups completed: ${incorrectLookups}`,
+      ),
+    );
+    assert.throws(() => verifySoakEvidence(profileName, fixtureRoot),
+      /lookup cardinality/);
+    restore();
+  }
+
+  // Internally balanced counts still fail if the selected workload was shortened.
+  const shortenedCatalogProjections = catalogProjections - 1;
+  restore = overwrite(
+    reportPath,
+    (report) => report
+      .replace(`- Localized catalog responses: ${localizedCatalogResponses}`,
+        `- Localized catalog responses: ${localizedCatalogResponses - 1}`)
+      .replace(`- Localization contexts created: ${localizationContexts}`,
+        `- Localization contexts created: ${shortenedCatalogProjections + 1}`)
+      .replace(`- Localization lookups completed: ${localizationLookups}`,
+        `- Localization lookups completed: ${2 * shortenedCatalogProjections + 1}`)
+      .replace(`- Bounded locale preferences matched: ${localizationContexts}`,
+        `- Bounded locale preferences matched: ${shortenedCatalogProjections + 1}`),
+  );
+  assert.throws(() => verifySoakEvidence(profileName, fixtureRoot),
+    /catalog response count does not match/);
   restore();
 
   restore = overwrite(

@@ -1680,7 +1680,7 @@
   ],
   "discoveryCensus": {
     "candidateCount": 10468,
-    "candidateSha256": "89f0640a78b9807365d9753a74d6ed60485124a1ab59fb57ffc5f0b74f61adb2",
+    "candidateSha256": "08d712a203d0d2286094f86b8b6bfb2cda2c6aad3dc401bc9997abc8043465d9",
     "candidates": [
       {
         "kinds": [
@@ -4981,7 +4981,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 930,
+        "line": 944,
         "lineSha256": "d6513162ce29b3c8d4f7a2a0f57eed3cc03811f58d878c3d7a8680db88941d99",
         "path": "conformance/official/public-fixture-test-src/com/soklet/conformance/McpLocalSimulatorScenarioDriver.java"
       },
@@ -4989,7 +4989,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 937,
+        "line": 951,
         "lineSha256": "04e5576d147290f3eb69c26765afe377e8879e12dffff8b27f139e109ad3f362",
         "path": "conformance/official/public-fixture-test-src/com/soklet/conformance/McpLocalSimulatorScenarioDriver.java"
       },
@@ -4997,7 +4997,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1000,
+        "line": 1014,
         "lineSha256": "c95ee6b741b5fe33e2b51920601a2cc97d3895905975990925a9b0cd70f2cc3c",
         "path": "conformance/official/public-fixture-test-src/com/soklet/conformance/McpLocalSimulatorScenarioDriver.java"
       },
@@ -5005,7 +5005,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1005,
+        "line": 1019,
         "lineSha256": "2fd89d2fee5b27754a12d01b3cb6b51ddb8404aa5f598453f2e8a7e7970b5f3c",
         "path": "conformance/official/public-fixture-test-src/com/soklet/conformance/McpLocalSimulatorScenarioDriver.java"
       },
@@ -5013,7 +5013,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1010,
+        "line": 1024,
         "lineSha256": "2a6e8ea84a5d4ec376e3f996ea8960bc3149cb0e3f50812be22f1eadbe0295ed",
         "path": "conformance/official/public-fixture-test-src/com/soklet/conformance/McpLocalSimulatorScenarioDriver.java"
       },
@@ -5021,7 +5021,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1015,
+        "line": 1029,
         "lineSha256": "a7137c2017fa543753f9760fb4415dd45f2690c75c0fefb431ca659d5e4b5ae5",
         "path": "conformance/official/public-fixture-test-src/com/soklet/conformance/McpLocalSimulatorScenarioDriver.java"
       },
@@ -5029,7 +5029,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1049,
+        "line": 1063,
         "lineSha256": "2a4cbe787d1d0fb3ccb7568b317f23e3304a9c1833f317402bc323959bbe0658",
         "path": "conformance/official/public-fixture-test-src/com/soklet/conformance/McpLocalSimulatorScenarioDriver.java"
       },
@@ -7253,7 +7253,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 94,
+        "line": 101,
         "lineSha256": "891e0641cf3b0d861c88c65f78eff1dae136097c1ecff38a383420b449446952",
         "path": "scripts/verify-soak-evidence-self-test.mjs"
       },
@@ -7261,7 +7261,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 155,
+        "line": 162,
         "lineSha256": "a398585a256f3153289acf1ca0a5f45b576e4879c73e6f18402bbe7dc3bb471b",
         "path": "scripts/verify-soak-evidence-self-test.mjs"
       },
@@ -7269,7 +7269,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 163,
+        "line": 170,
         "lineSha256": "9c1ef6a5e2c65a82b64bc63069973b383d6004f5c75195be8aef43b2aa111026",
         "path": "scripts/verify-soak-evidence-self-test.mjs"
       },
@@ -7277,7 +7277,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 164,
+        "line": 171,
         "lineSha256": "2962448c51cf9aa097b939057d9b31fd6eb8033f15d001243170b9f929e80ef7",
         "path": "scripts/verify-soak-evidence-self-test.mjs"
       },
@@ -7285,7 +7285,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 173,
+        "line": 180,
         "lineSha256": "e04ad8fc24c443aa79f2109406b679e4e2fdd3dc99c28f1dde23007c277de02f",
         "path": "scripts/verify-soak-evidence-self-test.mjs"
       },
@@ -7293,7 +7293,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 174,
+        "line": 181,
         "lineSha256": "043dd61d3714b039f1f309eaff5047fd9fb91cb53ff311102054d8cf13cd2672",
         "path": "scripts/verify-soak-evidence-self-test.mjs"
       },
@@ -7301,7 +7301,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 183,
+        "line": 190,
         "lineSha256": "c3766024c9b41542805a54cd36820b65f2d023e4d42b3b0a3bd52a9f868a890d",
         "path": "scripts/verify-soak-evidence-self-test.mjs"
       },
@@ -7309,7 +7309,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 184,
+        "line": 191,
         "lineSha256": "4a7f41f117ca56b78efcc0680aafc64fb05f8e958adab2edd2cb01ff145e86ab",
         "path": "scripts/verify-soak-evidence-self-test.mjs"
       },
@@ -7317,7 +7317,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 203,
+        "line": 210,
         "lineSha256": "9c1ef6a5e2c65a82b64bc63069973b383d6004f5c75195be8aef43b2aa111026",
         "path": "scripts/verify-soak-evidence-self-test.mjs"
       },
@@ -7325,7 +7325,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 204,
+        "line": 211,
         "lineSha256": "a9ac578db19b545bb6b8c8aa1c37a21e46390206b7e0be7c8a1ce6abfe85d8f5",
         "path": "scripts/verify-soak-evidence-self-test.mjs"
       },
@@ -9169,7 +9169,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 109,
+        "line": 120,
         "lineSha256": "e5ac55da3073fc3f66559ffaa050fae971dd63d9635234c0467ddb7a55482b83",
         "path": "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java"
       },
@@ -9178,7 +9178,7 @@
           "LIFECYCLE_SIGNAL",
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 135,
+        "line": 146,
         "lineSha256": "a4dfbb6514d805c027165c22212f7d441d763ae33c33fe39d3fd3e72f394cfbb",
         "path": "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java"
       },
@@ -9187,7 +9187,7 @@
           "LIFECYCLE_SIGNAL",
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 136,
+        "line": 147,
         "lineSha256": "eb73a4f0ea8b78cf3b01ef39e82df9dffadc428c163a8674aa7cef862a053c41",
         "path": "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java"
       },
@@ -9195,7 +9195,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 138,
+        "line": 149,
         "lineSha256": "8ed773456699cf566fd6a7e7a1b5e466ec735eb9a2bfcd503b634cc340f532f9",
         "path": "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java"
       },
@@ -9203,7 +9203,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 143,
+        "line": 154,
         "lineSha256": "af64f911518abc24572d27b8eab04d1537b31d20b25a4cae196df2eaac91cb38",
         "path": "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java"
       },
@@ -9211,7 +9211,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 150,
+        "line": 161,
         "lineSha256": "de5efc33b6eb350736afff4cdbf8027655c78ece6f565d4b54becbb2a1634a22",
         "path": "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java"
       },
@@ -9219,7 +9219,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 152,
+        "line": 163,
         "lineSha256": "cbde77b76db0711b74c5450c072f9d03816d85b858a12126cde1967f5cb75787",
         "path": "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java"
       },
@@ -9227,7 +9227,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 167,
+        "line": 178,
         "lineSha256": "ed426be4e45b9ee04e78b56581d974adca079bc97f20bbf94f27611992258ade",
         "path": "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java"
       },
@@ -9236,7 +9236,7 @@
           "FIXED_WAIT_CANDIDATE",
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 171,
+        "line": 182,
         "lineSha256": "cb358e2a3df357b3546363249d674a9c99783f391c43d3d4d47893b4f078f0f7",
         "path": "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java"
       },
@@ -9244,7 +9244,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 209,
+        "line": 220,
         "lineSha256": "b8c41d637286797e37a8b5239e394947323810b84b0196e00c61ef287ca02e66",
         "path": "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java"
       },
@@ -9252,7 +9252,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 234,
+        "line": 245,
         "lineSha256": "b8296ce26fad57a13f794325bc3231eb4b8c61039bb9750b26c511c456a33b4f",
         "path": "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java"
       },
@@ -9260,7 +9260,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 297,
+        "line": 311,
         "lineSha256": "f2e44dfa1c8b88d4d61d5a70a100d34a401469b33f6acb489f2f6d1548184fb8",
         "path": "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java"
       },
@@ -9268,7 +9268,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 308,
+        "line": 322,
         "lineSha256": "fd5a88825a85b0f4fb2fcde8d3ae845c5892c4a8438f6f379717282da1b66814",
         "path": "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java"
       },
@@ -9276,7 +9276,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 309,
+        "line": 323,
         "lineSha256": "8f5ce629ba71a540db0750d817b7cf2d64161e27a02f32fbcf26b03132d60655",
         "path": "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java"
       },
@@ -9284,7 +9284,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 337,
+        "line": 351,
         "lineSha256": "0bc8d73826e397eaabdd8b3347dceb879776d8ebeadb9a1b3fb705cbbdf42fb6",
         "path": "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java"
       },
@@ -9293,7 +9293,7 @@
           "LIFECYCLE_SIGNAL",
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 338,
+        "line": 352,
         "lineSha256": "01380989b23579449813161dcd2bc017d5546c01b39998897772e05cb51f38be",
         "path": "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java"
       },
@@ -9302,7 +9302,7 @@
           "LIFECYCLE_SIGNAL",
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 339,
+        "line": 353,
         "lineSha256": "0685fee98e75f01f5bc4bb94ae588777aef956b773fd5b12bc51432042c282a6",
         "path": "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java"
       },
@@ -9311,7 +9311,7 @@
           "LIFECYCLE_SIGNAL",
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 340,
+        "line": 354,
         "lineSha256": "9f79648cf8eec462964d045294b2a4afa0cb4367f7a6b598841bda196cfec1a7",
         "path": "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java"
       },
@@ -9320,7 +9320,7 @@
           "LIFECYCLE_SIGNAL",
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 341,
+        "line": 355,
         "lineSha256": "6d6a1122b5162a2db1e416ea8f01dbffca711e9c44b2bbc6a12ce5309e731be4",
         "path": "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java"
       },
@@ -9329,7 +9329,7 @@
           "LIFECYCLE_SIGNAL",
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 342,
+        "line": 356,
         "lineSha256": "3346faeb0d40600b9dac4e5d77b87381ab474be142bcaaa53350a79e04fe52b7",
         "path": "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java"
       },
@@ -9338,7 +9338,7 @@
           "LIFECYCLE_SIGNAL",
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 343,
+        "line": 357,
         "lineSha256": "c35636fef597773a87b9dfd6396045d09482cdd5411e5d673c0cfd9b7e5ca530",
         "path": "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java"
       },
@@ -9346,7 +9346,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 374,
+        "line": 388,
         "lineSha256": "df34e61e80fa21e86a226e7268b741c23c1e931dfb7b0d0fa674fbcde2683adc",
         "path": "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java"
       },
@@ -9354,7 +9354,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 382,
+        "line": 396,
         "lineSha256": "b0362e255ed18136d0f1141c8cf5f18687066adc3e4db63839348cfb806686d0",
         "path": "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java"
       },
@@ -9362,7 +9362,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 391,
+        "line": 405,
         "lineSha256": "9f42e046a8278bb86cf3e6d01b6e38240548df67e2babd2cab037be8033e6224",
         "path": "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java"
       },
@@ -9370,7 +9370,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 396,
+        "line": 410,
         "lineSha256": "a379a557d965bb99303ee310097fd1ba60db04f611f4cf3e9075a695469e7d58",
         "path": "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java"
       },
@@ -9378,7 +9378,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 428,
+        "line": 442,
         "lineSha256": "f8c98c87b415e3836f5415eb3abaaf6411c1dddbfbc89893047fc42532303c5e",
         "path": "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java"
       },
@@ -9386,7 +9386,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 430,
+        "line": 444,
         "lineSha256": "b20acec6d97142d4f4ef51b7d45aa54560710980a6b191c2c7ffede3f82f1ff7",
         "path": "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java"
       },
@@ -9394,7 +9394,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 431,
+        "line": 445,
         "lineSha256": "decf12732a189f2833e1672b7aef35f913f2f889fe66e52506654ddec5ca1a67",
         "path": "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java"
       },
@@ -9402,7 +9402,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 432,
+        "line": 446,
         "lineSha256": "082ed948ad3a1a727cdbfcdb6a94066849387f25c4742020af5cb954a383348c",
         "path": "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java"
       },
@@ -9410,7 +9410,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 433,
+        "line": 447,
         "lineSha256": "09f33efd2e95dafec928c8f992759efa3a6e193ced95c5f79ac3473ef7620653",
         "path": "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java"
       },
@@ -9418,7 +9418,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 435,
+        "line": 449,
         "lineSha256": "54ace3e383d66fb442eb48e92bb23f07935966f7e000716f1643484990ef332f",
         "path": "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java"
       },
@@ -9426,7 +9426,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 448,
+        "line": 462,
         "lineSha256": "b9a53508714004a92354b9557dfc42375d96c14b32c5ffc3b0c4bb63b56e7f39",
         "path": "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java"
       },
@@ -9434,7 +9434,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 456,
+        "line": 470,
         "lineSha256": "c7a64ea2af0abcabb6bc10a3b2604b0518cc7de029e21b0fd393d246fc774cab",
         "path": "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java"
       },
@@ -9442,7 +9442,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 457,
+        "line": 471,
         "lineSha256": "cd763d4a70eae518a757f2008e37695f163ec1a917800ee47f42480310bb2c0c",
         "path": "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java"
       },
@@ -9450,7 +9450,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 461,
+        "line": 475,
         "lineSha256": "8bb427150c4f848c55aab540b9e1693d09d0ec5385340ba46a3eb4205677b9a3",
         "path": "soak/src/test/java/com/soklet/McpLocalizationSoakTests.java"
       },

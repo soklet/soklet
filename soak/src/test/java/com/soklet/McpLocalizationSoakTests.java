@@ -84,8 +84,9 @@ class McpLocalizationSoakTests {
 		LocalizationCounts measured = state.snapshot().minus(warmCounts);
 		int localizedCatalogResponses = PROFILE.concurrentClients()
 				* PROFILE.cyclesPerClient();
-		int localizationCapableResponses = localizedCatalogResponses
-				+ PROFILE.cyclesPerClient() + 2;
+		int localizedCatalogProjections = localizedCatalogResponses
+				+ PROFILE.cyclesPerClient() + 1;
+		int localizationCapableResponses = localizedCatalogProjections + 1;
 
 		Assertions.assertEquals(localizedCatalogResponses,
 				measured.localizedCatalogResponses());
@@ -93,9 +94,19 @@ class McpLocalizationSoakTests {
 				measured.contextsCreated(),
 				"Every tools/list response, initial subscription projection, "
 						+ "invalidation projection, and subscription terminal must create one context.");
+		Assertions.assertEquals(localizedCatalogProjections,
+				measured.toolTitleLookups(),
+				"Every tools/list response, initial subscription projection, "
+						+ "and invalidation projection must localize the tool title once.");
 		Assertions.assertEquals(localizationCapableResponses,
+				measured.serverTitleLookups(),
+				"Every catalog projection and subscription terminal must "
+						+ "localize server-information metadata once.");
+		Assertions.assertEquals(localizedCatalogProjections
+						+ localizationCapableResponses,
 				measured.localizationLookups(),
-				"The fixture exposes exactly one localizable field per response.");
+				"Catalog projections expose tool and server titles; "
+						+ "the subscription terminal exposes only the server title.");
 		Assertions.assertEquals(localizationCapableResponses,
 				measured.boundedPreferenceMatches(),
 				"Every context must receive the bounded fr-CA preference.");
@@ -250,6 +261,9 @@ class McpLocalizationSoakTests {
 			assertContains(body,
 					"\"title\":\"FR[" + revision + "]:" + TOOL_TITLE + "\"",
 					"localized tools/list title");
+			assertContains(body,
+					"\"title\":\"FR[" + revision + "]:" + SERVER_TITLE + "\"",
+					"localized tools/list server-information title");
 			Assertions.assertEquals(McpStreamTerminationReason.COMPLETED,
 					awaitCompletion(simulation).getReason());
 			Assertions.assertTrue(simulation.awaitStreamItem(Duration.ZERO).isEmpty());
@@ -463,7 +477,8 @@ class McpLocalizationSoakTests {
 	}
 
 	private record LocalizationCounts(int contextsCreated,
-			int localizationLookups, int boundedPreferenceMatches,
+			int localizationLookups, int toolTitleLookups, int serverTitleLookups,
+			int boundedPreferenceMatches,
 			int localizedCatalogResponses, int invalidationsRequested,
 			int invalidationsDelivered) {
 		@NonNull
@@ -472,6 +487,8 @@ class McpLocalizationSoakTests {
 			return new LocalizationCounts(
 					this.contextsCreated - baseline.contextsCreated,
 					this.localizationLookups - baseline.localizationLookups,
+					this.toolTitleLookups - baseline.toolTitleLookups,
+					this.serverTitleLookups - baseline.serverTitleLookups,
 					this.boundedPreferenceMatches
 							- baseline.boundedPreferenceMatches,
 					this.localizedCatalogResponses
@@ -490,6 +507,10 @@ class McpLocalizationSoakTests {
 		private final AtomicInteger contextsCreated = new AtomicInteger();
 		@NonNull
 		private final AtomicInteger localizationLookups = new AtomicInteger();
+		@NonNull
+		private final AtomicInteger toolTitleLookups = new AtomicInteger();
+		@NonNull
+		private final AtomicInteger serverTitleLookups = new AtomicInteger();
 		@NonNull
 		private final AtomicInteger boundedPreferenceMatches =
 				new AtomicInteger();
@@ -516,6 +537,22 @@ class McpLocalizationSoakTests {
 						return McpLocalizationContext
 								.withLocale(LOCALIZED_LOCALE, text -> {
 									localizationLookups.incrementAndGet();
+									Assertions.assertEquals("/title",
+											text.getCoordinate().getMemberPath());
+									switch (text.getCoordinate().getOwnerType()) {
+										case TOOL -> {
+											Assertions.assertEquals(TOOL_TITLE,
+													text.getDefaultText());
+											toolTitleLookups.incrementAndGet();
+										}
+										case SERVER_INFORMATION -> {
+											Assertions.assertEquals(SERVER_TITLE,
+													text.getDefaultText());
+											serverTitleLookups.incrementAndGet();
+										}
+										default -> Assertions.fail(
+												"Unexpected localizable fixture field.");
+									}
 									return McpLocalizationResult.localized(
 											"FR[" + captured.getValue() + "]:"
 													+ text.getDefaultText());
@@ -530,6 +567,8 @@ class McpLocalizationSoakTests {
 		private LocalizationCounts snapshot() {
 			return new LocalizationCounts(this.contextsCreated.get(),
 					this.localizationLookups.get(),
+					this.toolTitleLookups.get(),
+					this.serverTitleLookups.get(),
 					this.boundedPreferenceMatches.get(),
 					this.localizedCatalogResponses.get(),
 					this.invalidationsRequested.get(),
