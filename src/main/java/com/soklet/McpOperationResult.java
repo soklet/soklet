@@ -26,7 +26,7 @@ import javax.annotation.concurrent.ThreadSafe;
  * {@link McpResourcePage}, {@link McpSkillPage}, and {@link McpArgumentCompletionResult}.
  * Applications cannot implement this interface directly. Each MCP method
  * accepts only its corresponding result implementation; sealing does not make
- * every permitted result valid for every operation. Reviewed future operations
+ * every permitted result valid for every operation. Future operations
  * may add framework-owned result types, so callers should retain a default
  * branch when switching on the result family.
  *

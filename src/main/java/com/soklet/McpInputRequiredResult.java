@@ -302,6 +302,7 @@ public final class McpInputRequiredResult implements McpOperationResult {
 		 * Builds an immutable input-required result.
 		 *
 		 * @return immutable input-required result
+		 * @throws IllegalArgumentException if application metadata uses a reserved framework key
 		 */
 		@NonNull
 		public McpInputRequiredResult build() {

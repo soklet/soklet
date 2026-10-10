@@ -306,10 +306,16 @@ public interface ResponseMarshaler {
 	/**
 	 * Prepares a response for an HTTP {@code HEAD} request.
 	 * <p>
+	 * For an implicit {@code HEAD} match, the input is the equivalent {@code GET} method's marshaled response.
+	 * For an explicit {@link com.soklet.annotation.HEAD} method, the input is that method's own marshaled response.
+	 * The default implementation removes the body and computes {@code Content-Length} from its length,
+	 * or omits it for a streaming body. A custom {@link Builder.HeadHandler} can preserve a valid application
+	 * representation length for an empty body; a {@link Builder.PostProcessor} can also set the final header.
+	 * <p>
 	 * Detailed documentation is available at <a href="https://www.soklet.com/docs/response-writing#http-head">https://www.soklet.com/docs/response-writing#http-head</a>.
 	 *
 	 * @param request                    the HTTP request
-	 * @param getMethodMarshaledResponse the marshaled response that would have been sent over the wire for an equivalent {@code GET} request (necessary in order to write the {@code Content-Length} header for a {@code HEAD} response)
+	 * @param getMethodMarshaledResponse the equivalent {@code GET} response, or the explicit {@code HEAD} method's own marshaled response
 	 * @return the response to be sent over the wire
 	 */
 	@NonNull
@@ -622,10 +628,16 @@ public interface ResponseMarshaler {
 			/**
 			 * Prepares a response for an HTTP {@code HEAD} request.
 			 * <p>
+			 * The input is the equivalent {@code GET} response for an implicit {@code HEAD} match,
+			 * or the explicit {@link com.soklet.annotation.HEAD} method's own marshaled response.
+			 * Return a response without either a finite or streaming body. To advertise an application-supplied
+			 * representation length for an empty finite body, preserve its valid {@code Content-Length}
+			 * instead of replacing it with zero. Omit that header when the representation length is unknown.
+			 * <p>
 			 * Detailed documentation is available at <a href="https://www.soklet.com/docs/response-writing#http-head">https://www.soklet.com/docs/response-writing#http-head</a>.
 			 *
 			 * @param request                    the HTTP request
-			 * @param getMethodMarshaledResponse the marshaled response that would have been sent over the wire for an equivalent {@code GET} request (necessary in order to write the {@code Content-Length} header for a {@code HEAD} response)
+			 * @param getMethodMarshaledResponse the equivalent {@code GET} response, or the explicit {@code HEAD} method's own marshaled response
 			 * @return the response to be sent over the wire
 			 */
 			@NonNull

@@ -34,7 +34,7 @@ import static java.util.Objects.requireNonNull;
  * Immutable optional annotations for an MCP content block.
  *
  * <p>The annotation vocabulary follows the selected MCP revision and may gain
- * reviewed fields in a future supported profile. Applications should ignore
+ * fields in a future supported profile. Applications should ignore
  * annotation data they do not use rather than treating today's fields as a
  * permanent closed set.
  *

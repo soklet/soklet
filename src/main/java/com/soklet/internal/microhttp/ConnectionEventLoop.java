@@ -9,6 +9,7 @@ import org.jspecify.annotations.Nullable;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.net.StandardSocketOptions;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedSelectorException;
 import java.nio.channels.SelectionKey;
@@ -445,7 +446,9 @@ class ConnectionEventLoop {
                     try (TransportFailureObserver.Observation ignored =
                                  beginTransportFailure(TransportFailureReason.READ_ERROR)) {
                         if (logger.failureEnabled()) {
-                            logger.logFailure(e,
+                            Throwable readFailure = e instanceof SocketChannelIo.SocketIoException
+                                    && e.getCause() instanceof IOException socketFailure ? socketFailure : e;
+                            logger.logFailure(readFailure,
                                     new LogEntry("event", "read_error"),
                                     new LogEntry("id", id));
                         }
@@ -2031,7 +2034,7 @@ class ConnectionEventLoop {
         @Nullable Connection connection = null;
 
         try {
-            socketChannel.configureBlocking(false);
+            configureAcceptedSocket(socketChannel);
             selectionKey = socketChannel.register(selector, SelectionKey.OP_READ);
             SocketAddress socketAddress = socketChannel.getRemoteAddress();
             InetSocketAddress remoteAddress = socketAddress instanceof InetSocketAddress
@@ -2076,6 +2079,18 @@ class ConnectionEventLoop {
                 throw error;
             }
             throw new IOException("Unexpected connection registration failure", throwable);
+        }
+    }
+
+    static void configureAcceptedSocket(SocketChannel socketChannel) throws IOException {
+        socketChannel.configureBlocking(false);
+        try {
+            // Response headers and bodies may use separate writes. Avoid holding a small
+            // body behind Nagle while a keep-alive peer delays acknowledging the headers.
+            socketChannel.setOption(StandardSocketOptions.TCP_NODELAY, true);
+        } catch (IOException ignored) {
+            // This optional tuning can fail if the peer has already reset the socket.
+            // Registration and the first read/write retain their own failure diagnostics.
         }
     }
 

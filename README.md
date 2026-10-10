@@ -601,9 +601,9 @@ SokletConfig config = SokletConfig.withHttpServer(
 ).build();
 ```
 
-##### Zero-Copy Responses
+##### File and Buffer Responses
 
-Already know exactly what you want to send over the wire? Use [`MarshaledResponse`](https://javadoc.soklet.com/com/soklet/MarshaledResponse.html) to skip additional processing.
+Already know exactly what you want to send over the wire? Use [`MarshaledResponse`](https://javadoc.soklet.com/com/soklet/MarshaledResponse.html) to skip additional processing. File-backed responses using the JDK's standard file channels pass the real socket target to `FileChannel.transferTo`, allowing native transfer when supported. Custom and other provider file channels use a typed socket adapter to distinguish source and target failures. Native zero-copy is not guaranteed across platforms or file/channel implementations.
 
 ```java
 @GET("/example-image.png")
@@ -703,7 +703,7 @@ Ordinary HTTP simulation runs streaming producers on the caller thread, material
 
 Exhausted HTTP streaming admission in simulation returns the same built-in finite `503` as HTTP: `Content-Type: text/plain; charset=UTF-8`, `Connection: close`, and body `HTTP 503: Service Unavailable`. The result clears the rejected logical response and retains the resource method. `didWriteResponse` and `didFinishRequestHandling` observers and metrics describe that finite response. `willWriteResponse` sees the original stream before admission, as it does in HTTP. The producer or source factory is never acquired; a bounded asynchronous rejection notification retains the original streaming descriptor and reports `BACKPRESSURE`, without delaying the finite result. An admitted simulator call still waits for its own termination observer.
 
-In built-in HTTP streaming and simulation, owned-resource close/abort and publisher cancel failures are reported as `RESPONSE_STREAM_CLOSE_FAILED` log events with the original exception, request, optional resource method and original streaming response. Framework supervision failures and cleanup-deadline expiry use `SERVER_INTERNAL_ERROR`. Diagnostic delivery is asynchronous and bounded to the first diagnostic claimed for an admitted lifetime; it does not replace a previously elected stream termination. A failed finalizer can also cause a `PRODUCER_FAILED` termination. An ambiguous producer `IOException` observed after cancelation can use the same bounded diagnostic allowance once cleanup and physical owners exit. Actual cleanup failures take priority; evidence arriving after that diagnostic has returned is not dispatched as a second event. Blocked log observers retain physical work and admission capacity through shutdown. Applications choose which event fields to log; context and exceptions can contain application data.
+In built-in HTTP streaming and simulation, owned-resource close/abort and publisher cancel failures are reported as `RESPONSE_STREAM_CLOSE_FAILED` log events with the original exception, request, optional resource method and original streaming response. Framework supervision failures and cleanup-deadline expiry use `SERVER_INTERNAL_ERROR`. Diagnostic delivery is asynchronous and bounded to the first diagnostic claimed for an admitted lifetime; it does not replace a previously elected stream termination. A failed finalizer can also cause a `PRODUCER_FAILED` termination. An ambiguous producer `IOException` observed after cancelation can produce `RESPONSE_STREAM_FAILED` through the same bounded diagnostic allowance once cleanup and physical owners exit. Actual cleanup failures take priority; evidence arriving after that diagnostic has returned is not dispatched as a second event. Blocked log observers retain physical work and admission capacity through shutdown. Applications choose which event fields to log; context and exceptions can contain application data.
 
 Admitted termination notifications and diagnostics use separate executors, each allowing at most one observation per admitted lifetime and at most `streamingLifecycleCapacity` workers. Workers grow with outstanding work, are reused and expire when idle. A blocked observation retains its own slot while other admitted streams can deliver their observations and retire. These observers can run more concurrently than `streamingCallbackConcurrency`, which bounds cancelation batches and unadmitted rejection observers. Blocking that pool can still queue later cancelation batches and retain their slots. If every lifecycle slot contains blocked application work, admission still returns 503. Keep application hooks short; Soklet cannot forcibly stop them.
 
@@ -860,11 +860,6 @@ remaining connections with `SERVER_STOPPING`, including connections with no
 registered consumers. The first termination reason wins. Closing rejects later
 writes and consumer registration while cleanup remains supervised.
 
-The [streaming documentation fixture](src/test/java/com/soklet/StreamingDocumentationExamplesTests.java)
-compiles the HTTP, ZIP, SSE, and settings snippets directly from these docs and
-exercises them through the simulator, including ZIP finalization and SSE
-initializer delivery.
-
 #### Model Context Protocol (MCP)
 
 For a complete buildable endpoint, compiler configuration, application start,
@@ -956,8 +951,8 @@ completer return empty suggestions.
 Unknown or hidden targets and undeclared arguments fail with invalid params.
 The 2025 implementation defaults to stateless operation. Explicit session
 selection requires both endpoint revisions and server ownership/bounds; see
-[2025 sessions](MCP.md#explicitly-enabled-2025-sessions). Named legacy host checks
-and exact-candidate qualification remain pending.
+[2025 sessions](MCP.md#explicitly-enabled-2025-sessions). Verify Completion with
+the client and protocol revision you intend to deploy.
 
 For a programmatic registration, attach the callback to the prompt or template
 builder and install a server-wide request limiter:
@@ -1107,7 +1102,8 @@ wakes blocked reporters, and discards later output without itself canceling the 
 and physical worker reservation remain; finite/uncommitted or queued legacy
 requests and modern requests retain disconnect cancellation. Legacy streams
 have no event IDs, priming event, polling, replay, or lost-result recovery.
-Named-host and exact-candidate progress qualification remain pending. See
+Progress display and retry behavior depend on the client. Test the client
+and protocol revision you intend to deploy. See
 [Progress and cooperative cancelation](MCP.md#progress-and-cooperative-cancelation).
 Soklet validates the open `inputResponses` wire union, but
 applications still own response-key correlation, action handling, accepted
@@ -1206,9 +1202,9 @@ MCP Roots, Sampling, or Logging. Pass file or directory information through
 explicit tool parameters, resource URIs, or server configuration, and integrate
 directly with a model provider when needed. Use application logging and
 Soklet's existing observability and OpenTelemetry integrations.
-Dynamic Client Registration and
-deprecated standalone legacy HTTP+SSE transport are reviewed N/A; current SSE response
-streaming is not that legacy transport.
+Soklet does not implement Dynamic Client Registration or the deprecated
+standalone legacy HTTP+SSE transport. MCP SSE response streaming uses
+Streamable HTTP.
 
 ##### Trace correlation
 

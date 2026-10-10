@@ -10,6 +10,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   rmSync,
   symlinkSync,
@@ -17,7 +18,7 @@ import {
 } from 'node:fs';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
-import { basename, dirname, resolve } from 'node:path';
+import { basename, dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   activeScenarios,
@@ -238,6 +239,19 @@ function copyInventoryClosure(relativeInventoryPath) {
       references.add(reference);
   };
   visit(inventory);
+  // Source discovery uses the complete production tree, including transitive
+  // Throwable declarations that do not themselves have an inventory site. Keep
+  // that discovery context intact instead of maintaining a subtype allowlist.
+  const visitProductionSources = (directory) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const source = resolve(directory, entry.name);
+      assert.equal(entry.isSymbolicLink(), false, `Production source is a symlink: ${source}`);
+      if (entry.isDirectory()) visitProductionSources(source);
+      else if (entry.isFile() && entry.name.endsWith('.java'))
+        references.add(relative(projectRoot, source));
+    }
+  };
+  visitProductionSources(resolve(projectRoot, 'src/main/java'));
   for (const reference of [...references].sort()) {
     const destination = fixturePath(reference);
     mkdirSync(dirname(destination), { recursive: true });

@@ -78,6 +78,9 @@ public sealed interface StreamingResponseBody permits StreamingResponseBody.Publ
 	 * <p>
 	 * Soklet requests one item at a time and writes each item through its bounded streaming queue. If the queue is
 	 * full, the subscriber's {@code onNext} path may block until space is available.
+	 * Each slow client can therefore block its delivering thread. Prefer a dedicated
+	 * delivery executor over the common ForkJoin pool: managed blocking has finite
+	 * compensation capacity and falls back to ordinary blocking when that capacity is exhausted.
 	 * <p>
 	 * If the response is canceled before the publisher terminates, Soklet cancels the publisher subscription.
 	 * A publisher may deliver its first subscription asynchronously after {@code subscribe} returns normally.
@@ -114,6 +117,12 @@ public sealed interface StreamingResponseBody permits StreamingResponseBody.Publ
 	 * may throw a checked exception. Each invocation must open an independently owned input stream.
 	 * If the response is canceled while a read is blocked, Soklet closes the input stream. The source must support
 	 * close racing a read, including unblocking the read; {@code InputStream} alone does not guarantee this behavior.
+	 * For a classic socket input stream, that close can race producer interruption and raise
+	 * {@link java.net.SocketException}; a {@link LogEventType#RESPONSE_STREAM_FAILED} diagnostic can result
+	 * without changing the elected cancelation outcome. On platform threads, interruption alone does not unblock
+	 * a classic socket read. This includes the default JDK 17 producer and a custom streaming executor that uses
+	 * platform threads on a newer JDK. If cancelation must close the input stream to unblock that read,
+	 * its close-induced exception remains diagnostic when it escapes the producer.
 	 *
 	 * @param inputStreamFactory opens the input stream to copy
 	 * @return a streaming response body

@@ -125,7 +125,7 @@ array when you need a mutable working copy.
 
 ### Public API naming pass
 
-The 4.0.0 release candidate uses the following names without deprecated aliases.
+Soklet 4.0.0 uses the following names without deprecated aliases.
 Applications built against an earlier 4.0.0 preview must update these calls; the
 `CorsPreflight` factory rename also applies directly to 3.5.1 applications.
 
@@ -260,7 +260,11 @@ The built-in HTTP transport owns finite-response framing. It recomputes
 `Content-Length`, removes application `Transfer-Encoding`, `Keep-Alive`,
 `Proxy-Connection`, `TE`, `Trailer` and headers nominated by `Connection`, and
 controls `Connection` itself. A valid single decimal `Content-Length` on a
-bodyless HEAD response is preserved as representation metadata. `Upgrade` and
+bodyless HEAD response supplied by final HEAD marshaling is preserved as
+representation metadata when the status allows it. The default HEAD marshaler
+computes that length from the response body, even for an explicit `@HEAD`
+method. A bodyless explicit `@HEAD` method can use a custom `HeadHandler` or
+final `PostProcessor` to advertise a nonzero representation length. `Upgrade` and
 `Connection: Upgrade` are retained only for a validated `426 Upgrade Required`
 advertisement; other ordinary responses cannot initiate protocol switching.
 Final ordinary responses require a status from `200` through `599`; returning
@@ -268,7 +272,18 @@ a `1xx` or out-of-range status fails processing with HTTP `500`. Put a streaming
 body in `MarshaledResponse.streamingResponseBody(...)` or `.stream(...)`:
 the default response marshaler rejects `StreamingResponseBody` in `Response.body(...)`.
 Expected typed cancellation during streaming cleanup is quiet; independent
-producer, cleanup and transport failures remain observable.
+producer, cleanup and transport failures remain observable. Client disconnect
+and server shutdown no longer produce routine `RESPONSE_STREAM_CANCELED` log
+events; termination callbacks and metrics still describe the elected outcome.
+
+File-backed HTTP responses using the JDK's standard file-channel implementation
+retain the real-socket `FileChannel.transferTo` path, allowing native transfer
+when the platform supports it. A failed transfer on that implementation can use
+a bounded, one-byte source/socket probe to establish peer loss; a readable source
+alone does not suppress the original failure. Custom and other provider file
+channels use a typed socket adapter instead, without a probe write or retry after
+uncertain partial progress. Closed/truncated source and ambiguous failures remain
+observable. Delivery ends after a failed transfer.
 
 SSE handshakes reject bare carriage returns, folded or whitespace-only header
 lines, signed content lengths, repeated content-length fields, and transfer
@@ -429,7 +444,7 @@ observation retains its own slot without queuing another admitted stream's
 observation behind it. Blocked cancelation workers can still queue later cancel
 batches; all admitted application work remains counted until it exits.
 
-Precommit HTTP streaming rejection now reports the finite failsafe status to request write/finish observers and metrics, with bounded termination observation retaining the original rejected stream. The finite response and request finish do not wait for termination observers. These observers use a separate bounded allowance on the managed callback executor; accepted work remains tracked through shutdown. If that allowance is exhausted or infrastructure has stopped, Soklet logs the omitted unadmitted-stream notification. Admitted streams retain their reserved callback jobs. Transport handoff exceptions reach `didFailToWriteResponse` instead of being reported as successful writes.
+Precommit HTTP streaming rejection now reports the finite failsafe status to request write/finish observers and metrics, with bounded termination observation retaining the original rejected stream. The finite response and request finish do not wait for termination observers. These observers use a separate bounded allowance on the managed callback executor; accepted work remains tracked through shutdown. Capacity exhaustion while accepting omits that notification and logs `RESPONSE_STREAM_CANCELED`; omissions during graceful drain or forced shutdown are not logged. Admitted streams retain their reserved callback jobs. Transport handoff exceptions reach `didFailToWriteResponse` instead of being reported as successful writes.
 
 The default HTTP streaming executor uses one virtual thread per admitted producer
 on JDK 21+. Lifecycle admission bounds these tasks and retained cleanup. On JDK
@@ -457,11 +472,14 @@ SSE `requestHandlerTimeout` now covers queue wait and application handshake
 handling with one budget. Request-line/header reading and parsing pause that
 budget; successful parsing resumes its remaining duration, preserving time
 already spent in the queue. `requestHeaderTimeout` independently bounds reading
-once the worker begins. Partial-header read expiry uses `forUnparsedRequest(...)`
+once header reading begins. Partial-header read expiry uses `forUnparsedRequest(...)`
 with a default 408; rejection observation and marshaling use the remaining
 handler budget. Expiry while handling a rejection uses its bodyless fallback,
 while idle read expiry and EOF before complete headers close quietly without
 internal-error diagnostics. Queue or parsed application expiry still receives 503.
+A custom SSE handshake executor controls its worker and queue sizing, but
+`requestHandlerConcurrency + requestHandlerQueueCapacity` still bounds pending
+header-reading and application-handshake admission.
 
 HTTP and MCP output backpressure parks outside state monitors, including on JDK
 21. Synchronous publishers receive iterative one-item demand, without recursive
@@ -1329,7 +1347,7 @@ worker later does not change the published result.
 
 `ShutdownResult`, `ShutdownComponentResult` and `ResidualActivityEvidence` now
 have compact, bounded `toString()` diagnostics. They render enum categories,
-failure counts/presence and retained-activity counts when available, without
+failure counts/presence and residual-component counts when available, without
 invoking application Throwables or traversing retained objects. Free-text
 residual summaries and failure details remain available through typed accessors;
 these diagnostic strings are not a serialization format.
@@ -1581,7 +1599,8 @@ not restore the Soklet 3.5.1 session/GET transport API. Opt-in 2025 sessions now
 use the package described below; leased GET opening and verified DELETE are
 available with optional HTTP admission, along with separately authorized
 session-owned URI grants and resource/catalog invalidations.
-Verify the actual client's progress display and retry behavior against the exact candidate before relying on them. See
+Test progress display and retry behavior with the client and protocol revision
+you intend to deploy. See
 [Progress and cooperative cancelation](MCP.md#progress-and-cooperative-cancelation).
 
 ## Legacy MCP session migration
@@ -1814,7 +1833,8 @@ failure into a client error.
   still require `2026-07-28`. Opt-in 2025 sessions/cancellation require stable
   ownership and learned node affinity. GET/DELETE also need explicit HTTP
   admission and effective notification families; URI subscriptions need independent
-  authorization. Named-host delivery and exact-candidate qualification remain pending.
+  authorization. Verify delivery and reconnect behavior with the client and
+  protocol revision you intend to deploy.
 - Authentication and authorization failures reveal no token or protected
   resource value.
 - A real localhost listener passes discovery, list, call/read/get as applicable,
@@ -1828,6 +1848,14 @@ failure into a client error.
 Missing or invalid nearest origin metadata cannot fall back to an earlier,
 client-controlled entry. `TRUST_ALL` retains leftmost selection. Configure the
 trusted edge to overwrite all forwarded families it accepts.
+
+For effective client IP resolution, a present unusable `Forwarded: for=` value
+(hostname, obfuscated identifier, `unknown`, malformed value or invalid port)
+stops the trusted-chain walk and falls back to the socket peer under
+`TRUST_PROXY_ALLOWLIST`. Trusted proxies must emit IP literals. `TRUST_ALL`
+continues to skip unusable entries. A `Forwarded` header with no `for=` parameter
+allows `X-Forwarded-For` fallback. This changes the fallback for unusable values
+from 3.5.1; check proxy output before upgrading.
 
 Both servlet adapters use `EffectiveClientIpResolver` for client address
 selection. A forwarded client port comes from that same selected entry, or is

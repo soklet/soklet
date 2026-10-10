@@ -1351,7 +1351,8 @@ public class SseTests {
 					else {
 						InvocationTargetException failure = Assertions.assertThrows(InvocationTargetException.class,
 								() -> writer.invoke(server, channel, response));
-						Assertions.assertInstanceOf(IOException.class, failure.getCause());
+						SocketTimeoutException timeoutFailure = Assertions.assertInstanceOf(SocketTimeoutException.class, failure.getCause());
+						Assertions.assertInstanceOf(ClosedChannelException.class, timeoutFailure.getCause());
 					}
 					Assertions.assertTrue(channel.awaitClosed(1, SECONDS));
 					Assertions.assertTrue(Duration.ofNanos(System.nanoTime() - started).compareTo(Duration.ofSeconds(2)) < 0);
@@ -1604,17 +1605,52 @@ public class SseTests {
 
 		BlockingHandshakeResource.prepare(1);
 		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
-		AcceptFailureLifecycle lifecycle = new AcceptFailureLifecycle();
+		CountDownLatch handshakeSettled = new CountDownLatch(1);
+		AtomicReference<SseConnection.HandshakeFailureReason> handshakeFailureReason = new AtomicReference<>();
+		AtomicReference<Throwable> handshakeFailureCause = new AtomicReference<>();
+		AtomicInteger establishedConnections = new AtomicInteger();
+		AtomicReference<StreamTerminationReason> terminationReason = new AtomicReference<>();
+		AtomicInteger acceptanceFailures = new AtomicInteger();
+		List<LogEvent> logEvents = new CopyOnWriteArrayList<>();
+		LifecycleObserver lifecycle = new QuietLifecycle() {
+			@Override
+			public void didReceiveLogEvent(@NonNull LogEvent logEvent) { logEvents.add(logEvent); }
+			@Override
+			public void didFailToEstablishSseConnection(@NonNull Request request, @Nullable ResourceMethod resourceMethod,
+					SseConnection.@NonNull HandshakeFailureReason reason, @Nullable Throwable cause) {
+				handshakeFailureReason.set(reason);
+				handshakeFailureCause.set(cause);
+				handshakeSettled.countDown();
+			}
+			@Override
+			public void didEstablishSseConnection(@NonNull SseConnection connection) {
+				establishedConnections.incrementAndGet();
+			}
+			@Override
+			public void didTerminateSseConnection(@NonNull SseConnection connection, @NonNull StreamTermination termination) {
+				terminationReason.set(termination.getReason());
+				handshakeSettled.countDown();
+			}
+			@Override
+			public void didFailToAcceptConnection(@NonNull ServerType serverType, @Nullable InetSocketAddress remoteAddress,
+					@NonNull ConnectionRejectionReason reason, @Nullable Throwable cause) {
+				if (serverType == ServerType.SSE) acceptanceFailures.incrementAndGet();
+			}
+		};
 
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(httpPort).build())
 				.sseServer(SseServer.withPort(ssePort)
 						.host("127.0.0.1")
+						.heartbeatInterval(Duration.ofMillis(200))
 						.requestHeaderTimeout(Duration.ofSeconds(5))
 						.requestHandlerTimeout(Duration.ofSeconds(5))
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(BlockingHandshakeResource.class)))
 				.lifecycleObserver(lifecycle)
 				.metricsCollector(metricsCollector)
+				.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(5))
+						.startupCancelationTimeout(Duration.ofSeconds(1)).gracefulShutdownTimeout(Duration.ofSeconds(3))
+						.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
 				.build();
 
 		try (Soklet app = Soklet.fromConfig(cfg)) {
@@ -1630,10 +1666,26 @@ public class SseTests {
 				socket.close();
 				BlockingHandshakeResource.release();
 
-				Assertions.assertTrue(lifecycle.awaitFailure(5, SECONDS), "didFailToAcceptConnection not invoked");
-				Assertions.assertEquals(ConnectionRejectionReason.INTERNAL_ERROR, lifecycle.getReason());
+				Assertions.assertTrue(handshakeSettled.await(5, SECONDS), "The reset handshake did not finish");
+				// The handshake write and TCP reset race legitimately. Either the
+				// original write fails, or it establishes and the next write sees
+				// the disconnect. Both paths must finish without server errors.
+				if (handshakeFailureReason.get() != null) {
+					Assertions.assertEquals(0, establishedConnections.get());
+					Assertions.assertNull(terminationReason.get());
+					Assertions.assertEquals(SseConnection.HandshakeFailureReason.INTERNAL_ERROR, handshakeFailureReason.get());
+					Throwable cause = Assertions.assertInstanceOf(IOException.class, handshakeFailureCause.get());
+					Assertions.assertTrue(cause.getClass().getName().startsWith("java."),
+							"The handshake outcome must expose the original JDK socket exception, not a private wrapper");
+				} else {
+					Assertions.assertEquals(1, establishedConnections.get());
+					Assertions.assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED, terminationReason.get());
+				}
+				Assertions.assertEquals(0, acceptanceFailures.get(), "A peer closing an admitted handshake is not an acceptance failure");
 				Assertions.assertTrue(metricsCollector.snapshot().orElseThrow().getTransportFailures().values().stream()
 						.allMatch(value -> value == 0L));
+				Assertions.assertTrue(logEvents.stream().noneMatch(event -> event.getLogEventType() == LogEventType.SSE_SERVER_WRITING_HANDSHAKE_RESPONSE_FAILED
+						|| event.getLogEventType() == LogEventType.SERVER_TRANSPORT_FAILURE), logEvents.toString());
 			}
 		} finally {
 			BlockingHandshakeResource.release();
@@ -3162,6 +3214,172 @@ public class SseTests {
 	}
 
 	@Test
+	public void socketOptionFailureWithProvenPeerEofClosesWithoutInternalDiagnostics() throws Exception {
+		assertSocketOptionFailureAfterPeerClose(false);
+	}
+
+	@Test
+	public void socketOptionFailureWithProvenPeerReadFailureClosesWithoutInternalDiagnostics() throws Exception {
+		assertSocketOptionFailureAfterPeerClose(true);
+	}
+
+	@Test
+	@Timeout(value = 60, unit = SECONDS)
+	public void socketOptionFailureAfterBufferedRequestAndResetClosesWithoutInternalDiagnostics() throws Exception {
+		assertSocketOptionFailureAfterPeerClose(true, 3841);
+	}
+
+	@Test
+	public void socketSetupFailureProbeDoesNotWaitForOrDrainUnlimitedLiveInput() throws Exception {
+		Method probe = DefaultSseServer.class.getDeclaredMethod("peerClosedAfterSocketSetupFailure", SocketChannel.class);
+		probe.setAccessible(true);
+		AtomicInteger reads = new AtomicInteger();
+		AtomicInteger discardedBytes = new AtomicInteger();
+		try (PartialWriteSocketChannel channel = new PartialWriteSocketChannel(1) {
+			@Override public int read(ByteBuffer destination) {
+				reads.incrementAndGet();
+				int count = destination.remaining();
+				discardedBytes.addAndGet(count);
+				while (destination.hasRemaining()) destination.put((byte) 'x');
+				return count;
+			}
+		}) {
+			Assertions.assertEquals(Boolean.FALSE, probe.invoke(null, channel));
+			Assertions.assertEquals(16, reads.get(), "The failed-setup probe must use a fixed read budget");
+			Assertions.assertEquals(64 * 1024, discardedBytes.get(), "The failed-setup probe must have a fixed byte budget");
+			Assertions.assertFalse(channel.isBlocking());
+		}
+		for (int bufferedBytes : new int[]{3841, 8192, 16384, 15 * 4096}) {
+			for (boolean reset : new boolean[]{false, true}) {
+				try (SetupFailingSocketChannel channel = new SetupFailingSocketChannel(
+						reset ? new IOException("arbitrary peer read failure") : null, -1, bufferedBytes)) {
+					Assertions.assertEquals(Boolean.TRUE, probe.invoke(null, channel),
+							"Buffered bytes within the budget must not hide EOF or reset: " + bufferedBytes);
+					Assertions.assertEquals((bufferedBytes + 4095) / 4096 + 1, channel.readCalls.get(),
+							"The terminal EOF/reset read must consume an attempt");
+					Assertions.assertEquals(0, channel.bufferedBytes);
+					Assertions.assertFalse(channel.isBlocking());
+				}
+			}
+		}
+		for (int bufferedBytes : new int[]{15 * 4096 + 1, 16 * 4096, 16 * 4096 + 1}) {
+			try (SetupFailingSocketChannel channel = new SetupFailingSocketChannel(new IOException("reset beyond budget"), -1, bufferedBytes)) {
+				Assertions.assertEquals(Boolean.FALSE, probe.invoke(null, channel),
+						"Reading buffered bytes is insufficient evidence of peer loss: " + bufferedBytes);
+				Assertions.assertEquals(16, channel.readCalls.get(), "An exhausted budget must not make a seventeenth read");
+				Assertions.assertEquals(Math.max(0, bufferedBytes - 16 * 4096), channel.bufferedBytes);
+				Assertions.assertFalse(channel.isBlocking());
+			}
+		}
+		try (SetupFailingSocketChannel channel = new SetupFailingSocketChannel(null, 0, 512)) {
+			Assertions.assertEquals(Boolean.FALSE, probe.invoke(null, channel));
+			Assertions.assertEquals(2, channel.readCalls.get(), "Zero bytes available must stop the probe immediately");
+		}
+		AtomicInteger partialReads = new AtomicInteger();
+		try (PartialWriteSocketChannel channel = new PartialWriteSocketChannel(1) {
+			@Override public int read(ByteBuffer destination) {
+				partialReads.incrementAndGet();
+				destination.put((byte) 'x');
+				return 1;
+			}
+		}) {
+			Assertions.assertEquals(Boolean.FALSE, probe.invoke(null, channel));
+			Assertions.assertEquals(16, partialReads.get(), "Partial reads must consume the same fixed attempt budget");
+		}
+		try (PartialWriteSocketChannel channel = new PartialWriteSocketChannel(1) {
+			@Override public int read(ByteBuffer destination) { throw new IllegalStateException("independent probe failure"); }
+		}) {
+			Assertions.assertEquals(Boolean.FALSE, probe.invoke(null, channel),
+					"An untyped probe failure is not evidence of peer loss");
+		}
+	}
+
+	@Test
+	public void socketSetupFailureProbeDoesNotReadWhenNonblockingConfigurationFails() throws Exception {
+		Method probe = DefaultSseServer.class.getDeclaredMethod("peerClosedAfterSocketSetupFailure", SocketChannel.class);
+		probe.setAccessible(true);
+		try (PartialWriteSocketChannel channel = new PartialWriteSocketChannel(1) {
+			@Override protected void implConfigureBlocking(boolean block) { throw new IllegalStateException("configuration failed"); }
+			@Override public int read(ByteBuffer destination) { throw new AssertionError("A blocking read must not be attempted"); }
+		}) {
+			Assertions.assertEquals(Boolean.FALSE, probe.invoke(null, channel));
+		}
+	}
+
+	private static void assertSocketOptionFailureAfterPeerClose(boolean reset) throws Exception {
+		assertSocketOptionFailureAfterPeerClose(reset, 0);
+	}
+
+	private static void assertSocketOptionFailureAfterPeerClose(boolean reset, int bufferedBytes) throws Exception {
+		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0).build();
+		DefaultMetricsCollector metrics = DefaultMetricsCollector.defaultInstance();
+		List<LogEvent> logs = new ArrayList<>();
+		AtomicInteger acceptanceFailures = new AtomicInteger();
+		server.initialize(SokletConfig.forSimulatorTesting().metricsCollector(metrics)
+				.lifecycleObserver(new QuietLifecycle() {
+					@Override public void didReceiveLogEvent(@NonNull LogEvent event) { logs.add(event); }
+					@Override public void didFailToAcceptRequest(@NonNull ServerType serverType,
+							@Nullable InetSocketAddress remote, @Nullable String target,
+							@NonNull RequestRejectionReason reason, @Nullable Throwable failure) { acceptanceFailures.incrementAndGet(); }
+					@Override public void didFailToAcceptConnection(@NonNull ServerType serverType,
+							@Nullable InetSocketAddress remote, @NonNull ConnectionRejectionReason reason,
+							@Nullable Throwable failure) { acceptanceFailures.incrementAndGet(); }
+				}).build(), (request, requestResultConsumer) -> {});
+		SetupFailingSocketChannel channel = new SetupFailingSocketChannel(reset ? new IOException("arbitrary peer read failure") : null, -1, bufferedBytes);
+		ExecutorService executor = Executors.newSingleThreadExecutor();
+		BuiltInTransportLifecycleAdapter.Generation generation = server.getLifecycleAdapter().beginStart();
+		server.getLifecycleAdapter().markReady(generation);
+		try {
+			Method accepted = DefaultSseServer.class.getDeclaredMethod("handleAcceptedSocketChannel", SocketChannel.class,
+					ExecutorService.class, BuiltInTransportLifecycleAdapter.Generation.class);
+			accepted.setAccessible(true);
+			accepted.invoke(server, channel, executor, generation);
+			Assertions.assertTrue(channel.isClosed());
+			Assertions.assertFalse(channel.isBlocking(), "Failure probe must not block the accept loop");
+			Assertions.assertEquals(0, acceptanceFailures.get());
+			Assertions.assertTrue(logs.isEmpty(), logs.toString());
+			Assertions.assertTrue(metrics.snapshot().orElseThrow().getTransportFailures().isEmpty());
+		} finally {
+			server.stop();
+			executor.shutdownNow();
+		}
+	}
+
+	@Test
+	public void stoppedHandshakeWriterDoesNotRecordATransportFailureButIndependentWriteFailureStillDoes() throws Exception {
+		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0).build();
+		DefaultMetricsCollector metrics = DefaultMetricsCollector.defaultInstance();
+		List<LogEvent> logs = new ArrayList<>();
+		server.initialize(SokletConfig.forSimulatorTesting().metricsCollector(metrics)
+				.lifecycleObserver(new QuietLifecycle() {
+					@Override public void didReceiveLogEvent(@NonNull LogEvent event) { logs.add(event); }
+				}).build(), (request, requestResultConsumer) -> {});
+		Method writer = DefaultSseServer.class.getDeclaredMethod("writeHandshakeFully", SocketChannel.class, byte[].class);
+		writer.setAccessible(true);
+		Method record = DefaultSseServer.class.getDeclaredMethod("recordWriteTransportFailure", Throwable.class);
+		record.setAccessible(true);
+		Field stopping = DefaultSseServer.class.getDeclaredField("stopping");
+		stopping.setAccessible(true);
+		stopping.set(server, true);
+		try (PartialWriteSocketChannel channel = new PartialWriteSocketChannel(1)) {
+			InvocationTargetException refusal = Assertions.assertThrows(InvocationTargetException.class,
+					() -> writer.invoke(server, channel, new byte[]{1}));
+			Assertions.assertEquals("HandshakeWriterStoppedException", refusal.getCause().getClass().getSimpleName());
+			record.invoke(server, refusal.getCause());
+			Assertions.assertFalse(channel.isOpen());
+			Assertions.assertTrue(logs.isEmpty());
+			Assertions.assertTrue(metrics.snapshot().orElseThrow().getTransportFailures().isEmpty());
+			IOException independentFailure = new IOException("independent writer failure");
+			record.invoke(server, independentFailure);
+			Assertions.assertEquals(Long.valueOf(1), metrics.snapshot().orElseThrow().getTransportFailures().get(
+					new MetricsCollector.TransportFailureKey(ServerType.SSE, MetricsCollector.TransportFailureReason.WRITE_ERROR)));
+			Assertions.assertSame(independentFailure, logs.get(0).getThrowable().orElseThrow());
+		} finally {
+			stopping.set(server, false);
+		}
+	}
+
+	@Test
 	public void sseHandshakeTaskClearsHandlerThreadReferenceAfterTaskReturns() throws Exception {
 		ExecutorService requestReaderExecutorService = Executors.newSingleThreadExecutor();
 		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0).build();
@@ -4072,9 +4290,24 @@ public class SseTests {
 	private static final class SetupFailingSocketChannel extends PartialWriteSocketChannel {
 		private final AtomicBoolean closed;
 		private final Socket socket;
+		private final IOException readFailure;
+		private final int readResult;
+		private final AtomicInteger readCalls = new AtomicInteger();
+		private int bufferedBytes;
 
 		private SetupFailingSocketChannel() {
+			this(null, 0);
+		}
+
+		private SetupFailingSocketChannel(IOException readFailure, int readResult) {
+			this(readFailure, readResult, 0);
+		}
+
+		private SetupFailingSocketChannel(IOException readFailure, int readResult, int bufferedBytes) {
 			super(1);
+			this.readFailure = readFailure;
+			this.readResult = readResult;
+			this.bufferedBytes = bufferedBytes;
 			this.closed = new AtomicBoolean(false);
 			this.socket = new Socket() {
 				@Override
@@ -4091,6 +4324,20 @@ public class SseTests {
 		@Override
 		public Socket socket() {
 			return this.socket;
+		}
+
+		@Override
+		public int read(ByteBuffer destination) throws IOException {
+			this.readCalls.incrementAndGet();
+			if (this.bufferedBytes > 0) {
+				int count = Math.min(this.bufferedBytes, destination.remaining());
+				for (int index = 0; index < count; index++) destination.put((byte) 'x');
+				this.bufferedBytes -= count;
+				return count;
+			}
+			if (this.readFailure != null)
+				throw this.readFailure;
+			return this.readResult;
 		}
 
 		@Override

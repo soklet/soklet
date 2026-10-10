@@ -193,6 +193,7 @@ public final class McpSkillPage implements McpOperationResult {
 		 *
 		 * @return immutable Skills page
 		 * @throws IllegalStateException if the page contains more than 32 registrations
+		 * @throws IllegalArgumentException if application metadata uses a reserved framework key
 		 */
 		@NonNull
 		public McpSkillPage build() {

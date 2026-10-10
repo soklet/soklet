@@ -291,7 +291,7 @@
       ],
       "matcher": {"kind":"regex","pattern":"\\b(?:Roots|Sampling|Logging)\\b","caseSensitive":true},
       "expectation": "nonzero-with-notice",
-      "noticePattern": {"kind":"literal","pattern":"Soklet does not implement","caseSensitive":true},
+      "noticePattern": {"kind":"regex","pattern":"Soklet does not implement(?:\\s+MCP Roots, Sampling, or Logging\\.| these features or expose Java APIs for requesting\\s+them\\.)","caseSensitive":true},
       "allowedMatches": [
         {"path":"MCP.md","matchedText":"Roots","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features","Protocol scope and unsupported features"],"role":"compatibility"}},
         {"path":"MCP.md","matchedText":"Sampling","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features","Protocol scope and unsupported features"],"role":"compatibility"}},
@@ -321,15 +321,15 @@
     {
       "id": "DCR-001",
       "classification": "dynamic-client-registration",
-      "rationale": "Dynamic Client Registration remains reviewed N/A because Soklet provides no OAuth/DCR implementation.",
+      "rationale": "Soklet does not implement an OAuth authorization server or Dynamic Client Registration.",
       "files": [
         {"path":"MCP.md","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features","Protocol scope and unsupported features"],"role":"compatibility"}}
       ],
-      "matcher": {"kind":"literal","pattern":"Dynamic Client Registration is reviewed and not applicable because Soklet has","caseSensitive":true},
+      "matcher": {"kind":"regex","pattern":"Soklet does not implement an OAuth authorization server or Dynamic\\s+Client\\s+Registration\\.","caseSensitive":true},
       "expectation": "nonzero-with-notice",
-      "noticePattern": {"kind":"literal","pattern":"no OAuth/DCR implementation","caseSensitive":true},
+      "noticePattern": {"kind":"regex","pattern":"does not implement an OAuth authorization server or Dynamic\\s+Client\\s+Registration\\.","caseSensitive":true},
       "allowedMatches": [
-        {"path":"MCP.md","matchedText":"Dynamic Client Registration is reviewed and not applicable because Soklet has","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features","Protocol scope and unsupported features"],"role":"compatibility"}}
+        {"path":"MCP.md","matchedText":"Soklet does not implement an OAuth authorization server or Dynamic Client\nRegistration.","scope":{"kind":"headingSubtree","headingPath":["Model Context Protocol (MCP)","Compatibility and unsupported features","Protocol scope and unsupported features"],"role":"compatibility"}}
       ]
     },
     {

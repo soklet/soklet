@@ -93,6 +93,11 @@ public interface McpRateLimitContext {
 	/**
 	 * Returns the resolved operation name, such as a tool name or task ID, when
 	 * present.
+	 * <p>
+	 * On session-enabled 2025 views, a request with malformed operation parameters
+	 * can reach the request limiter with an empty operation name. Its parameter
+	 * error is returned after admission, applicable request limiting and session
+	 * binding. Branch on operation type without requiring this optional value.
 	 *
 	 * @return operation name, or the empty optional
 	 */

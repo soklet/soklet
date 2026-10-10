@@ -24,6 +24,67 @@ import static org.junit.jupiter.api.Assertions.*;
 @Timeout(60)
 @EnabledForJreRange(min = JRE.JAVA_21)
 class Round2SseRuntimeTests {
+	@Test void bytesBeforeResetDoNotReportServerAcceptanceOrTransportErrors() throws Exception {
+		try (ReaderFixture fixture = new ReaderFixture(Duration.ofSeconds(2), Duration.ofSeconds(3), 64)) {
+			String prefix = "GET /events HTTP/1.1\r\nHost: localhost\r\nCookie: session=";
+			int[] requestSizes = {3841, 8192, 16384};
+			for (int attempt = 0; attempt < 16; attempt++) {
+				try (Socket client = fixture.openSocket()) {
+					client.setSoLinger(true, 0);
+					int requestSize = requestSizes[attempt % requestSizes.length];
+					client.getOutputStream().write((prefix + "x".repeat(requestSize - prefix.length()))
+							.getBytes(StandardCharsets.ISO_8859_1));
+				}
+			}
+			try (Socket complete = fixture.completeRequest()) { assertTrue(readHeaders(complete).startsWith("HTTP/1.1 200")); }
+			assertTrue(fixture.soklet.shutdown().toCompletableFuture().get(3, TimeUnit.SECONDS).isComplete());
+			assertEquals(1, fixture.resource.calls.get());
+			assertTrue(fixture.logs.isEmpty(), fixture.logs.toString());
+			assertTrue(fixture.connectionRejections.isEmpty(), fixture.connectionRejections.toString());
+			assertEquals(0, fixture.rejectedRequests.get());
+			assertTrue(fixture.readFailures.isEmpty(), fixture.readFailures.toString());
+			assertTrue(fixture.transportFailures.isEmpty(), fixture.transportFailures.toString());
+		}
+	}
+
+	@Test void immediateResetHealthChecksDoNotReportServerAcceptanceOrTransportErrors() throws Exception {
+		try (ReaderFixture fixture = new ReaderFixture(Duration.ofSeconds(2), Duration.ofSeconds(3), 64)) {
+			for (int attempt = 0; attempt < 16; attempt++) {
+				try (Socket client = fixture.openSocket()) { client.setSoLinger(true, 0); }
+			}
+			// A succeeding later handshake proves the accept loop progressed past
+			// the reset sockets; shutdown then joins any remaining header readers.
+			try (Socket complete = fixture.completeRequest()) { assertTrue(readHeaders(complete).startsWith("HTTP/1.1 200")); }
+			assertTrue(fixture.soklet.shutdown().toCompletableFuture().get(3, TimeUnit.SECONDS).isComplete());
+			assertEquals(1, fixture.resource.calls.get());
+			assertTrue(fixture.logs.isEmpty(), fixture.logs.toString());
+			assertTrue(fixture.connectionRejections.isEmpty(), fixture.connectionRejections.toString());
+			assertEquals(0, fixture.rejectedRequests.get());
+			assertTrue(fixture.readFailures.isEmpty(), fixture.readFailures.toString());
+			assertTrue(fixture.transportFailures.isEmpty(), fixture.transportFailures.toString());
+		}
+	}
+
+	@Test void noncooperativeHandshakeReturningAfterForceDoesNotRecordAWriteTransportFailure() throws Exception {
+		try (ReaderFixture fixture = new ReaderFixture(Duration.ofSeconds(2), Duration.ZERO, 1);
+				Socket client = fixture.request("GET /slow HTTP/1.1\r\nHost: localhost\r\n\r\n")) {
+			fixture.resource.ignoreInterrupts = true;
+			assertTrue(fixture.resource.entered.await(2, TimeUnit.SECONDS));
+			var scheduler = fixture.server.getRequestHandlerTimeoutScheduler().orElseThrow();
+			var shutdown = fixture.soklet.shutdown().toCompletableFuture();
+			assertTrue(fixture.resource.interrupted.await(2, TimeUnit.SECONDS));
+			await(scheduler::isShutdown);
+			fixture.resource.release.countDown();
+			assertEquals("", read(client));
+			ShutdownResult result = shutdown.get(3, TimeUnit.SECONDS);
+			assertTrue(result.isComplete());
+			assertEquals(ShutdownDisposition.FORCED, result.getShutdownDisposition());
+			assertTrue(fixture.transportFailures.isEmpty(), fixture.transportFailures.toString());
+			assertTrue(fixture.logs.stream().noneMatch(event -> event.getLogEventType() == LogEventType.SERVER_TRANSPORT_FAILURE
+					|| event.getLogEventType() == LogEventType.SSE_SERVER_WRITING_HANDSHAKE_RESPONSE_FAILED), fixture.logs.toString());
+		}
+	}
+
 	@Test void partialHeaderReadersLeaveTheApplicationHandshakeWorkerAvailable() throws Exception {
 		try (ReaderFixture fixture = new ReaderFixture(Duration.ofSeconds(2), Duration.ofSeconds(3), 3);
 				Socket first = fixture.partialRequest(); Socket second = fixture.partialRequest()) {
@@ -403,6 +464,7 @@ class Round2SseRuntimeTests {
 		final IllegalStateException failure = new IllegalStateException("initializer failed");
 		volatile String initializerMode = "normal";
 		volatile boolean invalidHeader;
+		volatile boolean ignoreInterrupts;
 		@SseEventSource("/events") public SseHandshakeResult events() {
 			calls.incrementAndGet();
 			return SseHandshakeResult.Accepted.builder().headers(invalidHeader ? Map.of("Content-Length", List.of("0")) : Map.of())
@@ -417,8 +479,16 @@ class Round2SseRuntimeTests {
 		}
 		@SseEventSource("/slow") public SseHandshakeResult slow() {
 			entered.countDown();
-			try { release.await(); }
-			catch (InterruptedException ignored) { interrupted.countDown(); Thread.currentThread().interrupt(); }
+			boolean wasInterrupted = false;
+			while (true) {
+				try { release.await(); break; }
+				catch (InterruptedException ignored) {
+					interrupted.countDown();
+					wasInterrupted = true;
+					if (!ignoreInterrupts) break;
+				}
+			}
+			if (wasInterrupted) Thread.currentThread().interrupt();
 			return SseHandshakeResult.accept();
 		}
 	}

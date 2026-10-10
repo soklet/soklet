@@ -75,6 +75,23 @@ class Round2HttpStreamingRuntimeTests {
 		}
 	}
 
+	@Test
+	@org.junit.jupiter.api.condition.EnabledForJreRange(min = org.junit.jupiter.api.condition.JRE.JAVA_21)
+	void classicSocketUpstreamInterruptRemainsQuietAfterLiveDisconnect() throws Exception {
+		Fixture fixture = new Fixture(false, Duration.ofSeconds(3));
+		try (fixture; Socket client = fixture.request("/socket", "HTTP/1.1")) {
+			assertTrue(readHeaders(client).startsWith("HTTP/1.1 200"));
+			assertTrue(fixture.resource.producerEntered.await(2, TimeUnit.SECONDS));
+			client.setSoLinger(true, 0);
+			client.close();
+			await(() -> !fixture.terminals.isEmpty());
+			assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED, fixture.terminals.get(0).getReason());
+		}
+		assertTrue(fixture.logs.stream().noneMatch(event -> event.getLogEventType() == LogEventType.RESPONSE_STREAM_FAILED
+				|| event.getLogEventType() == LogEventType.RESPONSE_STREAM_CLOSE_FAILED
+				|| event.getLogEventType() == LogEventType.SERVER_INTERNAL_ERROR), fixture.logs.toString());
+	}
+
 	@Test void throwingWillWriteObserverStillWritesBeforeFinishForNormalAndProtocolReplacedStreams() throws Exception {
 		for (String version : List.of("HTTP/1.1", "HTTP/1.0")) {
 			try (Fixture fixture = new Fixture(true, Duration.ofSeconds(3)); Socket client = fixture.request("/stream", version)) {
@@ -195,6 +212,20 @@ class Round2HttpStreamingRuntimeTests {
 		}
 		@GET("/stream") public MarshaledResponse stream() {
 			return MarshaledResponse.withStatusCode(200).stream(writer -> producerCalls.incrementAndGet()).build();
+		}
+		@GET("/socket") public MarshaledResponse socket() {
+			return MarshaledResponse.withStatusCode(200).stream(writer -> {
+				try (java.net.ServerSocket listener = new java.net.ServerSocket()) {
+					listener.bind(new java.net.InetSocketAddress("127.0.0.1", 0));
+					listener.setSoTimeout(2000);
+					try (Socket upstream = connectWithRetry("127.0.0.1", listener.getLocalPort(), 2000);
+							 Socket peer = listener.accept()) {
+						upstream.setSoTimeout(5000);
+						writer.write(new byte[]{1}); writer.flush(); producerEntered.countDown();
+						upstream.getInputStream().read();
+					}
+				}
+			}).build();
 		}
 		@GET("/held") public MarshaledResponse held() {
 			return MarshaledResponse.withStatusCode(200).stream(writer -> {

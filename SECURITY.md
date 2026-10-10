@@ -87,9 +87,6 @@ claim to secure an application or deployment end to end. In particular:
   penetration test, a proof of absence of vulnerabilities, or protection
   against every scheduler, network, proxy, or hostile-input behavior.
 
-The dated [security-claims audit](release/SECURITY_CLAIMS_AUDIT.md) records the
-release wording that was deliberately accepted, rejected, or narrowed.
-
 ## MCP Deployment Security
 
 See the [MCP privacy boundary](release/MCP_PRIVACY_BOUNDARY.md) for the exact
@@ -168,7 +165,10 @@ authorization partition only scopes registration, quota accounting, and stream i
 Admission receives the validated, deduplicated resource-subscription URIs via
 `McpAdmissionContext.getRequestedResourceSubscriptionUris()`; it need not
 reparse the bounded request body.
-Authorize confidential or capability-bearing subscription URIs during admission, and do not treat an unguessable URI as a secrecy boundary.
+Authorize confidential or capability-bearing subscription URIs in
+`McpSubscriptionAuthorizer`, initially and on continuing checks. Admission can
+provide an additional early filter, but cannot replace continuing authorization.
+Do not treat an unguessable URI as a secrecy boundary.
 A rejected admission activates no subscription even though the generation's shared publisher listener may already exist.
 Accept-all anonymous callers on one endpoint share one empty authorization/quota partition,
 so one caller can exhaust their common bucket.
@@ -464,10 +464,7 @@ session-disabled views after admission and request limiting. Within a verified
 2025 session it may target matching active client work if its terminal
 reservation wins, using only the neutral `CLIENT_CANCELED` token reason.
 Deadline, shutdown, and response-stream failure also drive cooperative
-cancellation. Unknown/completed targets remain indistinguishable. The exact
-`McpProgressAndCancelationRuntimeTests#every_cancelation_category_is_bounded_observable_and_carries_no_framework_cause`
-gate iterates every non-`COMPLETED` category and proves the fixed reason, empty
-cause, and bounded exception message.
+cancellation. Unknown/completed targets remain indistinguishable.
 
 On explicitly selected 2025 revisions, progress uses the originating POST's
 bounded SSE stream and one complete sanitized terminal result. After commitment,
@@ -507,11 +504,12 @@ retention policy; built-in metric labels contain neither session nor owner IDs.
 Applications must retain idempotency controls when retrying after
 delivery loss; disconnect does not prove that side effects did not occur.
 
-Trace correlation is default-off. With a configured trace-correlation key,
-Soklet attempts one bounded `MCP_TRACE_CORRELATION` log record at the admitted
-request's exactly-once finish authority; a separate
-`logRawValidatedTraceIds(true)` opt-in may add only the validated lowercase MCP
-trace ID. The event never carries the full `traceparent`, parent/span ID, trace
+Trace correlation is default-off. A configured trace-correlation key enables a
+pseudonymous token; `logRawValidatedTraceIds(true)` independently enables only
+the validated lowercase MCP trace ID, without requiring a correlation key.
+When either is enabled and available, Soklet attempts one bounded
+`MCP_TRACE_CORRELATION` log record at the admitted request's exactly-once finish
+authority. The event never carries the full `traceparent`, parent/span ID, trace
 flags, `tracestate`, baggage, request, throwable, method, or marshaled response,
 and trace values never become built-in metric dimensions. The pseudonymous
 token and any opted-in raw ID are still sensitive, high-cardinality correlation

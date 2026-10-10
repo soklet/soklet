@@ -20,7 +20,7 @@ package com.soklet;
  * Owner type of a localizable MCP presentation field.
  * <p>
  * The owner-type vocabulary follows the selected MCP revision and may gain
- * reviewed values in a future supported profile. Applications should retain a
+ * values in a future supported profile. Applications should retain a
  * forward-compatible default when switching on these values.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>

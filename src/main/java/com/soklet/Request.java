@@ -93,9 +93,6 @@ public final class Request {
 		return admission != null && admission.claimForHandling(fence) ? admission : null;
 	}
 
-	boolean hasLifecycleAdmission() {
-		return this.lifecycleAdmission != null;
-	}
 	@NonNull
 	private final HttpMethod httpMethod;
 	@NonNull

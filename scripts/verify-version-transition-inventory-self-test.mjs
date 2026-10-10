@@ -15,11 +15,14 @@ import { fileURLToPath } from 'node:url';
 
 import {
   ORDERED_PATTERNS,
+  REVIEWED_HISTORICAL_PROSE_RETIREMENTS,
   baselineGovernanceSha256,
   currentStageCensusSha256,
   derivePostU7CurrentStage,
   externalMavenVersionOwner,
   externalReviewedNpmLockOwner,
+  isReviewedCurrentFixture,
+  isReviewedHistoricalProseRetirement,
   maskedVersionFileSha256,
   scanCurrentVersionText,
   scanText,
@@ -777,4 +780,43 @@ for (const text of [
     assert.equal(externalMavenVersionOwner('pom.xml', text, token), null);
 }
 
-console.log('version-transition inventory self-test PASS (46 fixture cases plus 5 external-boundary negatives)');
+const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
+const repositoryInventory = readInventory(repositoryRoot);
+for (const tuple of REVIEWED_HISTORICAL_PROSE_RETIREMENTS) {
+  const [path, line, occurrenceIndex] = tuple.split('\t');
+  const row = repositoryInventory.occurrences.find((candidate) =>
+    candidate.path === path && candidate.line === Number(line)
+      && candidate.occurrenceIndex === Number(occurrenceIndex));
+  assert.equal(isReviewedHistoricalProseRetirement(repositoryInventory, row), true);
+  assert.equal(isReviewedHistoricalProseRetirement(repositoryInventory,
+    { ...row, path: 'other.md' }), false);
+  assert.equal(isReviewedHistoricalProseRetirement(repositoryInventory,
+    { ...row, exactLineSha256: '0'.repeat(64) }), false);
+  assert.equal(isReviewedHistoricalProseRetirement(repositoryInventory,
+    { ...row, classification: 'RETARGET_NOW' }), false);
+  assert.equal(isReviewedHistoricalProseRetirement({ ...repositoryInventory,
+    baselineCommit: '0'.repeat(40) }, row), false);
+}
+assert.equal(isReviewedHistoricalProseRetirement(repositoryInventory,
+  repositoryInventory.occurrences.find((row) => row.classification === 'HISTORICAL_PRESERVE'
+    && !REVIEWED_HISTORICAL_PROSE_RETIREMENTS.some((tuple) => tuple.startsWith(
+      `${row.path}\t${row.line}\t${row.occurrenceIndex}\t`)))), false);
+
+const numericFixturePath = 'src/test/java/com/soklet/OpenMetricsBucketLabelTests.java';
+const numericFixture = readFileSync(join(repositoryRoot, numericFixturePath), 'utf8');
+const numericToken = scanCurrentVersionText(numericFixturePath, numericFixture)
+  .find(({ literal }) => literal === '3.6');
+assert.equal(isReviewedCurrentFixture(numericFixturePath, numericFixture, numericToken), true);
+assert.equal(isReviewedCurrentFixture('other.java', numericFixture, numericToken), false);
+assert.equal(isReviewedCurrentFixture(numericFixturePath, numericFixture,
+  { ...numericToken, line: 69 }), false);
+assert.equal(isReviewedCurrentFixture(numericFixturePath, numericFixture,
+  { ...numericToken, literal: '3.6.0' }), false);
+assert.equal(isReviewedCurrentFixture(numericFixturePath,
+  numericFixture.replace('3.6e+12', '3.6e+13'), numericToken), false);
+assert.equal(isReviewedCurrentFixture(numericFixturePath,
+  numericFixture.replace('3.6e+12', '3.6.0'), numericToken), false);
+assert.equal(isReviewedCurrentFixture(numericFixturePath,
+  `${numericFixture}\n// version 3.6`, numericToken), false);
+
+console.log('version-transition inventory self-test PASS (46 fixture cases, external boundaries, and exact documentation/numeric controls)');

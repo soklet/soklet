@@ -830,6 +830,16 @@ try {
   assert.match(`${siblingBlind.stdout}${siblingBlind.stderr}`,
     /rejects --external-root and never reads sibling bytes/u);
 
+  expectRejected(
+    'active-text Dynamic Client Registration support claim must fail', () => {
+      const path = fixturePath('MCP.md');
+      const text = readFileSync(path, 'utf8');
+      const statement = /Soklet does not implement an OAuth authorization server or Dynamic\s+Client\s+Registration\./u;
+      assert.ok(statement.test(text));
+      writeFileSync(path, text.replace(statement,
+        'Soklet implements an OAuth authorization server and Dynamic Client Registration.'));
+    }, /DCR-001 requires at least one allowed match/u);
+
   restore();
   const finalSnapshot = snapshotTree(fixture);
   verifyCandidateRoot(fixture);

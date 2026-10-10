@@ -50,9 +50,13 @@ import static java.util.Objects.requireNonNull;
  * Header and cookie collections are immutable snapshots, including the lists of header values.
  * <p>
  * The built-in HTTP transport requires final ordinary response statuses from {@code 200} through
- * {@code 599} and owns wire framing. It controls {@code Connection}, {@code Content-Length} and
+ * {@code 599} and owns finite-response wire framing. For finite responses it controls {@code Connection}, {@code Content-Length} and
  * {@code Transfer-Encoding}, removes other hop-by-hop and Connection-nominated fields, and preserves
- * a valid explicit representation length on a bodyless HEAD response when its status allows it.
+ * a valid explicit representation length supplied by final HEAD marshaling when its status allows it.
+ * The default HEAD marshaler computes that length from the body, including for an explicit HEAD
+ * resource method. A bodyless explicit HEAD method can use a custom
+ * {@link ResponseMarshaler.Builder.HeadHandler} or final {@link ResponseMarshaler.Builder.PostProcessor}
+ * to advertise a nonzero representation length.
  * A validated {@code 426} response may advertise {@code Upgrade}. The default response marshaler
  * rejects {@link StreamingResponseBody} as this response's body; return a {@link MarshaledResponse}
  * with its streaming body configured instead.

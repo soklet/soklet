@@ -279,8 +279,46 @@ class SseHandshakeOutcomeRuntimeTests {
 			try (Socket socket = f.request(HttpMethod.GET, "ok")) { assertEquals(-1, socket.getInputStream().read()); }
 			await(() -> f.handshakeFailures.size() == 1);
 			assertEquals("INTERNAL_ERROR", f.handshakeFailures.get(0).reason());
-			assertInstanceOf(IOException.class, f.handshakeFailures.get(0).cause());
+			assertInstanceOf(java.nio.channels.ClosedChannelException.class, f.handshakeFailures.get(0).cause());
 			assertTrue(f.streamEvents.isEmpty());
+			assertTrue(f.connectionRejections.isEmpty(), f.connectionRejections.toString());
+			assertTrue(f.logs.stream().noneMatch(event -> event.getLogEventType() == LogEventType.SSE_SERVER_WRITING_HANDSHAKE_RESPONSE_FAILED
+					|| event.getLogEventType() == LogEventType.SERVER_TRANSPORT_FAILURE), f.logs.toString());
+		}
+	}
+
+	@Test
+	@EnabledForJreRange(min = JRE.JAVA_21)
+	void handshakeWriteDeadlineRemainsATimeoutWithOriginalSocketCause() throws Exception {
+		byte[] responseBody = new byte[8 * 1024 * 1024];
+		RequestInterceptor interceptor = new RequestInterceptor() {
+			@Override public void interceptRequest(ServerType type, Request request, ResourceMethod method,
+					java.util.function.Function<Request, MarshaledResponse> generator,
+					java.util.function.Consumer<MarshaledResponse> writer) {
+				writer.accept(generator.apply(request).copy().body(responseBody).finish());
+			}
+		};
+		try (Fixture fixture = new Fixture(8, 0, ResponseMarshaler.defaultInstance(), Duration.ofSeconds(10),
+				interceptor, Duration.ofMillis(50))) {
+			fixture.app.start();
+			try (Socket socket = fixture.request(HttpMethod.GET, "reject")) {
+				socket.setReceiveBufferSize(1024);
+				// Keep the socket open without reading. The response exceeds the
+				// loopback send window, so the server's own deadline closes it.
+				await(() -> fixture.handshakeFailures.size() == 1 && fixture.transportFailures.size() == 1);
+				Failure failure = fixture.handshakeFailures.get(0);
+				assertEquals("INTERNAL_ERROR", failure.reason());
+				java.net.SocketTimeoutException timeout = assertInstanceOf(java.net.SocketTimeoutException.class, failure.cause());
+				assertInstanceOf(java.nio.channels.ClosedChannelException.class, timeout.getCause());
+				assertEquals(List.of(MetricsCollector.TransportFailureReason.WRITE_TIMEOUT), fixture.transportFailures);
+				assertSame(timeout, fixture.transportFailureCauses.get(0));
+				assertEquals(List.of("INTERNAL_ERROR"), fixture.connectionRejections);
+				assertTrue(fixture.streamEvents.isEmpty());
+				List<LogEvent> writeErrors = fixture.logs.stream().filter(event -> event.getLogEventType()
+						== LogEventType.SSE_SERVER_WRITING_HANDSHAKE_RESPONSE_FAILED).toList();
+				assertEquals(1, writeErrors.size(), fixture.logs.toString());
+				assertSame(timeout, writeErrors.get(0).getThrowable().orElseThrow());
+			}
 		}
 	}
 
@@ -329,6 +367,8 @@ class SseHandshakeOutcomeRuntimeTests {
 		final List<StreamTermination> terminations = new CopyOnWriteArrayList<>();
 		final AtomicReference<SseConnection> establishedConnection = new AtomicReference<>();
 		final List<LogEvent> logs = new CopyOnWriteArrayList<>();
+		final List<MetricsCollector.TransportFailureReason> transportFailures = new CopyOnWriteArrayList<>();
+		final List<Throwable> transportFailureCauses = new CopyOnWriteArrayList<>();
 		boolean failHeadWrite;
 
 		Fixture(int capacity, int connections, ResponseMarshaler marshaler) throws Exception {
@@ -339,9 +379,14 @@ class SseHandshakeOutcomeRuntimeTests {
 			this(capacity, connections, marshaler, timeout, RequestInterceptor.defaultInstance());
 		}
 		Fixture(int capacity, int connections, ResponseMarshaler marshaler, Duration timeout, RequestInterceptor interceptor) throws Exception {
+			this(capacity, connections, marshaler, timeout, interceptor, Duration.ofSeconds(30));
+		}
+		Fixture(int capacity, int connections, ResponseMarshaler marshaler, Duration timeout,
+				RequestInterceptor interceptor, Duration writeTimeout) throws Exception {
 			server = (DefaultSseServer) SseServer.withPort(port).host("127.0.0.1")
 					.streamingLifecycleCapacity(capacity).concurrentConnectionLimit(connections)
 					.connectionQueueCapacity(1).requestHandlerTimeout(timeout)
+					.writeTimeout(writeTimeout)
 					.verifyConnectionOnceEstablished(false).build();
 			config = SokletConfig.withSseServer(server)
 					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Resource.class)))
@@ -391,6 +436,10 @@ class SseHandshakeOutcomeRuntimeTests {
 						}
 					})
 					.metricsCollector(new MetricsCollector() {
+						@Override public void didRecordTransportFailure(ServerType type, TransportFailureReason reason, Throwable failure) {
+							transportFailureCauses.add(failure);
+							transportFailures.add(reason);
+						}
 						@Override public void didEstablishSseConnection(SseConnection connection) { metricEvents.add("established"); }
 						@Override public void willTerminateSseConnection(SseConnection connection, StreamTermination termination) {
 							metricEvents.add("will:" + termination.getReason());

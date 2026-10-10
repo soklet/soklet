@@ -602,6 +602,25 @@ try {
     'candidate root symlink must fail closed');
   rmSync(activeTextFixtureLink);
 
+  expectActiveTextRejected(
+    'unsupported Dynamic Client Registration notice must remain active', () => {
+      const path = activeTextFixturePath('MCP.md');
+      const text = readFileSync(path, 'utf8');
+      const statement = /Soklet does not implement an OAuth authorization server or Dynamic\s+Client\s+Registration\./u;
+      assert.ok(statement.test(text));
+      writeFileSync(path, text.replace(statement, ''));
+    }, /DCR-001 requires at least one allowed match/u);
+
+  expectActiveTextRejected(
+    'Dynamic Client Registration support claims must fail', () => {
+      const path = activeTextFixturePath('MCP.md');
+      const text = readFileSync(path, 'utf8');
+      const statement = /Soklet does not implement an OAuth authorization server or Dynamic\s+Client\s+Registration\./u;
+      assert.ok(statement.test(text));
+      writeFileSync(path, text.replace(statement,
+        'Soklet implements an OAuth authorization server and Dynamic Client Registration.'));
+    }, /DCR-001 requires at least one allowed match/u);
+
   restoreActiveTextFixture();
   assert.equal(verifyActiveText(activeTextFixture).ruleCount, 22);
 } finally {

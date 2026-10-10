@@ -211,6 +211,144 @@ public class StreamingCleanupDiagnosticsTests {
 	}
 
 	@Test
+	void applicationSocketFailureAfterCancelationRemainsDiagnosticEvidence() throws Exception {
+		CountDownLatch upstreamClosed = new CountDownLatch(1);
+		IOException failure = new java.net.SocketException("Closed by interrupt");
+		Observation observation = new Observation(false);
+		TestResource resource = new TestResource(StreamingResponseBody.fromWriter(stream -> {
+			stream.open(() -> (AutoCloseable) upstreamClosed::countDown);
+			awaitUninterruptibly(upstreamClosed);
+			throw failure;
+		}));
+		HttpFixture fixture = new HttpFixture(resource, observation, Duration.ofMillis(150));
+		try (fixture) {
+			fixture.start();
+			Assertions.assertTrue(fixture.request("/stream").startsWith("HTTP/1.1 200 OK"));
+			Assertions.assertTrue(observation.terminated.await(3, TimeUnit.SECONDS));
+			fixture.coordinator().requestGracefulShutdown();
+			fixture.awaitPhysicalExit();
+			Assertions.assertEquals(StreamTerminationReason.RESPONSE_TIMEOUT, observation.termination.get().getReason());
+			List<LogEvent> producerFailures = observation.logs(LogEventType.RESPONSE_STREAM_FAILED);
+			Assertions.assertEquals(1, producerFailures.size());
+			Assertions.assertSame(failure, producerFailures.get(0).getThrowable().orElseThrow());
+			Assertions.assertTrue(observation.logs(LogEventType.RESPONSE_STREAM_CLOSE_FAILED).isEmpty());
+		}
+	}
+
+	@Test
+	void jdkTranslatedConnectInterruptionAfterCancelationRemainsQuiet() throws Exception {
+		assertCanceledConnectDiagnostic(true);
+	}
+
+	@Test
+	void realNioSocketConnectInterruptionAfterCancelationRemainsQuiet() throws Exception {
+		org.junit.jupiter.api.Assumptions.assumeTrue(Runtime.version().feature() >= 25,
+				"NioSocketImpl translates connect interruption on JDK 25 and later");
+		CountDownLatch upstreamClosed = new CountDownLatch(1);
+		AtomicReference<IOException> failure = new AtomicReference<>();
+		Observation observation = new Observation(false);
+		try (java.net.ServerSocket listener = new java.net.ServerSocket(0, 1,
+				java.net.InetAddress.getLoopbackAddress())) {
+			TestResource resource = new TestResource(StreamingResponseBody.fromWriter(stream -> {
+				try (Socket socket = new Socket(java.net.Proxy.NO_PROXY)) {
+					stream.open(() -> (AutoCloseable) upstreamClosed::countDown);
+					awaitUninterruptibly(upstreamClosed);
+					Assertions.assertTrue(Thread.currentThread().isInterrupted());
+					try {
+						// Untimed virtual-thread connect enters the JDK poll even on loopback,
+						// where the elected cancelation's interrupt is already present.
+						socket.connect(new java.net.InetSocketAddress(listener.getInetAddress(), listener.getLocalPort()));
+					} catch (IOException exception) {
+						failure.set(exception);
+						throw exception;
+					}
+				}
+			}));
+			try (HttpFixture fixture = new HttpFixture(resource, observation, Duration.ofMillis(150))) {
+				fixture.start();
+				Assertions.assertTrue(fixture.request("/stream").startsWith("HTTP/1.1 200 OK"));
+				Assertions.assertTrue(observation.terminated.await(3, TimeUnit.SECONDS));
+				fixture.coordinator().requestGracefulShutdown();
+				fixture.awaitPhysicalExit();
+				IOException connectFailure = failure.get();
+				Assertions.assertInstanceOf(java.net.SocketException.class, connectFailure);
+				Assertions.assertEquals("Closed by interrupt", connectFailure.getMessage());
+				StackTraceElement origin = connectFailure.getStackTrace()[0];
+				Assertions.assertEquals("java.base", origin.getModuleName());
+				Assertions.assertEquals("sun.nio.ch.NioSocketImpl", origin.getClassName());
+				Assertions.assertEquals("connect", origin.getMethodName());
+				Assertions.assertEquals(StreamTerminationReason.RESPONSE_TIMEOUT, observation.termination.get().getReason());
+				Assertions.assertTrue(observation.logs(LogEventType.RESPONSE_STREAM_FAILED).isEmpty());
+				Assertions.assertTrue(observation.logs(LogEventType.RESPONSE_STREAM_CLOSE_FAILED).isEmpty());
+			}
+		}
+	}
+
+	@Test
+	void independentlyClosedSocketConnectAfterCancelationRemainsDiagnosticEvidence() throws Exception {
+		assertCanceledConnectDiagnostic(false);
+	}
+
+	private static void assertCanceledConnectDiagnostic(boolean interruptedConnect) throws Exception {
+		CountDownLatch upstreamClosed = new CountDownLatch(1);
+		AtomicReference<IOException> failure = new AtomicReference<>();
+		Observation observation = new Observation(false);
+		TestResource resource = new TestResource(StreamingResponseBody.fromWriter(stream -> {
+			try (Socket socket = interruptedConnect ? new InterruptedConnectingSocket() : new Socket()) {
+				if (!interruptedConnect) socket.close();
+				stream.open(() -> (AutoCloseable) upstreamClosed::countDown);
+				awaitUninterruptibly(upstreamClosed);
+				Assertions.assertTrue(Thread.currentThread().isInterrupted());
+				try {
+					socket.connect(new java.net.InetSocketAddress("127.0.0.1", 1), 100);
+				} catch (IOException exception) {
+					failure.set(exception);
+					throw exception;
+				}
+			}
+		}));
+		HttpFixture fixture = new HttpFixture(resource, observation, Duration.ofMillis(150));
+		try (fixture) {
+			fixture.start();
+			Assertions.assertTrue(fixture.request("/stream").startsWith("HTTP/1.1 200 OK"));
+			Assertions.assertTrue(observation.terminated.await(3, TimeUnit.SECONDS));
+			fixture.coordinator().requestGracefulShutdown();
+			fixture.awaitPhysicalExit();
+			Assertions.assertNotNull(failure.get());
+			Assertions.assertEquals(StreamTerminationReason.RESPONSE_TIMEOUT, observation.termination.get().getReason());
+			List<LogEvent> producerFailures = observation.logs(LogEventType.RESPONSE_STREAM_FAILED);
+			Assertions.assertEquals(interruptedConnect ? 0 : 1, producerFailures.size());
+			if (!interruptedConnect)
+				Assertions.assertSame(failure.get(), producerFailures.get(0).getThrowable().orElseThrow());
+			Assertions.assertTrue(observation.logs(LogEventType.RESPONSE_STREAM_CLOSE_FAILED).isEmpty());
+		}
+	}
+
+	/** Exercises JDK 21 Socket.connect translation; newer JDKs retain the typed fixture cause. */
+	private static final class InterruptedConnectingSocket extends Socket {
+		private InterruptedConnectingSocket() throws java.net.SocketException { super(new InterruptedConnectImpl()); }
+	}
+
+	private static final class InterruptedConnectImpl extends java.net.SocketImpl {
+		@Override protected void create(boolean stream) {}
+		@Override protected void connect(java.net.SocketAddress address, int timeout) throws IOException {
+			throw new java.io.InterruptedIOException("Fixture connect interrupted");
+		}
+		@Override protected void connect(String host, int port) throws IOException { connect((java.net.SocketAddress) null, 100); }
+		@Override protected void connect(java.net.InetAddress address, int port) throws IOException { connect((java.net.SocketAddress) null, 100); }
+		@Override protected void bind(java.net.InetAddress host, int port) { throw new UnsupportedOperationException(); }
+		@Override protected void listen(int backlog) { throw new UnsupportedOperationException(); }
+		@Override protected void accept(java.net.SocketImpl socketImpl) { throw new UnsupportedOperationException(); }
+		@Override protected java.io.InputStream getInputStream() { throw new UnsupportedOperationException(); }
+		@Override protected java.io.OutputStream getOutputStream() { throw new UnsupportedOperationException(); }
+		@Override protected int available() { return 0; }
+		@Override protected void close() {}
+		@Override protected void sendUrgentData(int data) { throw new UnsupportedOperationException(); }
+		@Override public Object getOption(int option) { return null; }
+		@Override public void setOption(int option, Object value) {}
+	}
+
+	@Test
 	void blockedCleanupLogObserverRetainsItsSlotAndShutdownEvidenceWithoutHoldingTheTransport() throws Exception {
 		IOException failure = new IOException("close failed while logger blocks");
 		Observation observation = new Observation(true);

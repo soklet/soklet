@@ -428,8 +428,9 @@ public interface LifecycleObserver {
 	 * the original streaming response that was rejected. Admission and producer-executor rejection likewise
 	 * offer one notification retaining the original stream. The finite failsafe response and synchronous
 	 * request-handling finish do not wait for it. Unadmitted-stream observation uses a separate bounded
-	 * allowance on the managed callback executor; exhaustion or stopped infrastructure omits that
-	 * observation and logs the omission. Admitted streams retain their reserved callback jobs.
+	 * allowance on the managed callback executor. Capacity exhaustion while accepting omits that
+	 * observation and logs {@link LogEventType#RESPONSE_STREAM_CANCELED}; omissions during graceful
+	 * drain or forced shutdown are not logged. Admitted streams retain their reserved callback jobs.
 	 * <p>
 	 * Admitted HTTP streaming notifications have independent worker capacity, bounded by
 	 * {@link HttpServer.Builder#streamingLifecycleCapacity(Integer)}. They can run more concurrently than

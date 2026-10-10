@@ -674,10 +674,35 @@ public final class StreamingMicrohttpResponses {
 					return true; // Beyond the evidence budget, independence cannot be established.
 				if (cause instanceof InterruptedException || cause instanceof java.io.InterruptedIOException
 						|| cause instanceof java.nio.channels.ClosedByInterruptException
+						|| isInterruptedClassicSocketOperation(cause)
 						|| cause instanceof StreamingResponseCanceledException)
 					return true;
 			}
 			return false;
+		}
+
+		private static boolean isInterruptedClassicSocketOperation(Throwable cause) {
+			if (!(cause instanceof java.net.SocketException) || !Thread.currentThread().isInterrupted())
+				return false;
+			// On virtual threads the JDK Socket facade translates its interrupted IO
+			// into a SocketException without preserving the InterruptedIOException.
+			// Recognize that throwing boundary, not OS text or arbitrary socket failures.
+			StackTraceElement[] frames = cause.getStackTrace();
+			if (frames.length == 0)
+				return false;
+			StackTraceElement origin = frames[0];
+			// Unlike the stream facades, connect also throws unrelated socket errors
+			// from these methods. Require the JDK's own interruption translation, not
+			// arbitrary OS error text, before treating that connect failure as routine.
+			if ("java.base".equals(origin.getModuleName()) && origin.getMethodName().equals("connect")
+					&& "Closed by interrupt".equals(cause.getMessage())
+					&& (origin.getClassName().equals("java.net.Socket")
+							|| origin.getClassName().equals("sun.nio.ch.NioSocketImpl")))
+				return true;
+			return (origin.getClassName().equals("java.net.Socket$SocketInputStream")
+					&& (origin.getMethodName().equals("read") || origin.getMethodName().equals("implRead")))
+					|| (origin.getClassName().equals("java.net.Socket$SocketOutputStream")
+						&& (origin.getMethodName().equals("write") || origin.getMethodName().equals("implWrite")));
 		}
 
 		private void reportCleanupFailure(@NonNull Throwable throwable) {

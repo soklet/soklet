@@ -1179,6 +1179,13 @@ final class DefaultSseServer implements SseServer {
 		private SseSocketIoException(IOException cause) { super("The SSE connection could not complete socket IO", cause); }
 	}
 
+	private static final class HandshakeWriterStoppedException extends IOException {
+		private static final long serialVersionUID = 1L;
+		private HandshakeWriterStoppedException(@NonNull IOException cause) {
+			super("The SSE handshake writer stopped before response delivery", cause);
+		}
+	}
+
 	private static int readSocket(SocketChannel channel, ByteBuffer buffer) throws IOException {
 		try { return channel.read(buffer); }
 		catch (IOException failure) { throw new SseSocketIoException(failure); }
@@ -1190,7 +1197,37 @@ final class DefaultSseServer implements SseServer {
 	}
 
 	private static @Nullable Throwable socketFailureCause(@Nullable Throwable failure) {
-		return failure instanceof SseSocketIoException ? requireNonNull(failure.getCause()) : failure;
+		return failure instanceof SseSocketIoException || failure instanceof HandshakeWriterStoppedException
+				? requireNonNull(failure.getCause()) : failure;
+	}
+
+	private static boolean peerClosedAfterSocketSetupFailure(SocketChannel channel) {
+		try {
+			// An option failure alone is not evidence of a peer disconnect. Probe
+			// only that failure path, without blocking the sole accept-loop thread.
+			channel.configureBlocking(false);
+		} catch (IOException | RuntimeException failure) {
+			return false;
+		}
+		try {
+			// BSD may report buffered request bytes before exposing a reset. The
+			// failed setup already owns closure. At most sixteen nonblocking reads
+			// discard at most 64 KiB; the EOF/reset read also consumes an attempt.
+			// A zero read or exhausted attempt budget leaves the original setup
+			// failure diagnostic, without waiting for data or draining indefinitely.
+			ByteBuffer discard = ByteBuffer.allocate(4096);
+			for (int attempt = 0; attempt < 16; attempt++) {
+				discard.clear();
+				int read = readSocket(channel, discard);
+				if (read < 0) return true;
+				if (read == 0) return false;
+			}
+			return false;
+		} catch (SseSocketIoException peerFailure) {
+			return true;
+		} catch (IOException | RuntimeException failure) {
+			return false;
+		}
 	}
 
 	@NonNull
@@ -1421,8 +1458,16 @@ final class DefaultSseServer implements SseServer {
 			if (handshakeContext.handshakeResponseOwner.get() == HandshakeResponseOwner.QUIESCE)
 				return;
 			Socket socket = clientSocketChannel.socket();
-			socket.setKeepAlive(true);
-			socket.setTcpNoDelay(true);
+			try {
+				socket.setKeepAlive(true);
+				socket.setTcpNoDelay(true);
+			} catch (IOException setupFailure) {
+				if (peerClosedAfterSocketSetupFailure(clientSocketChannel)) {
+					handshakeContext.acceptanceFinalized.compareAndSet(false, true);
+					return;
+				}
+				throw setupFailure;
+			}
 
 			remoteAddress = remoteAddress(clientSocketChannel);
 			handshakeContext.remoteAddressRef.set(remoteAddress);
@@ -1761,9 +1806,10 @@ final class DefaultSseServer implements SseServer {
 				writeHandshakeFully(clientSocketChannel, responseBytes);
 			}
 		} catch (Throwable t) {
-			safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unable to write SSE handshake timeout response")
-					.throwable(t)
-					.build());
+			if (!isRemoteClose(t) && !(t instanceof HandshakeWriterStoppedException))
+				safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unable to write SSE handshake timeout response")
+						.throwable(socketFailureCause(t))
+						.build());
 			recordWriteTransportFailure(t);
 		} finally {
 			try {
@@ -2219,23 +2265,26 @@ final class DefaultSseServer implements SseServer {
 						}
 						acceptedResponseWritten.set(handshakeAcceptedReference.get() != null);
 					} catch (Throwable t) {
-						responseWriteFailure = t;
+						Throwable failureCause = socketFailureCause(t);
+						boolean routineClose = isRemoteClose(t) || t instanceof HandshakeWriterStoppedException;
+						responseWriteFailure = failureCause;
 						handshakeFailureReason.set(SseConnection.HandshakeFailureReason.INTERNAL_ERROR);
-						handshakeFailureCause.set(t);
+						handshakeFailureCause.set(failureCause);
 						if (pendingConnection.get() != null)
 							terminateAfterWriteFailure(pendingConnection.get(), t);
 						// We couldn't write a response to the client (maybe they disconnected).
 						// Go through the rejected flow and close out the connection
-						safelyLog(LogEvent.with(LogEventType.SSE_SERVER_WRITING_HANDSHAKE_RESPONSE_FAILED, "Unable to write SSE handshake response")
-								.throwable(t)
-								.build());
+						if (!routineClose)
+							safelyLog(LogEvent.with(LogEventType.SSE_SERVER_WRITING_HANDSHAKE_RESPONSE_FAILED, "Unable to write SSE handshake response")
+									.throwable(failureCause)
+									.build());
 						recordWriteTransportFailure(t);
 
 						// Clear the accepted handshake reference in case it was set
 						handshakeAcceptedReference.set(null);
 						releaseReservedSlot(connectionSlotReserved);
-						if (acceptanceFinalized.compareAndSet(false, true))
-							notifyDidFailToAcceptConnection(remoteAddressSnapshotForHandler, ConnectionRejectionReason.INTERNAL_ERROR, t);
+						if (acceptanceFinalized.compareAndSet(false, true) && !routineClose)
+							notifyDidFailToAcceptConnection(remoteAddressSnapshotForHandler, ConnectionRejectionReason.INTERNAL_ERROR, failureCause);
 					}
 					if (!sameInstance(effectiveRequestResult, requestResult) || responseWriteFailure != null)
 						throw new HttpTransportResponseReplacement(effectiveRequestResult.getMarshaledResponse(),
@@ -3187,17 +3236,40 @@ final class DefaultSseServer implements SseServer {
 		TimeoutScheduler scheduler = getRequestHandlerTimeoutScheduler().orElse(null);
 		if (scheduler == null || scheduler.isShutdown()) {
 			closeAcceptedSocketChannel(channel);
-			throw new java.nio.channels.ClosedChannelException();
+			ClosedChannelException refusal = new ClosedChannelException();
+			if (this.stopping)
+				throw new HandshakeWriterStoppedException(refusal);
+			throw refusal;
 		}
 		TimeoutScheduler.ScheduledTask timeout;
+		// The writer and deadline atomically elect completion. A timer that
+		// loses cannot close a successfully handed-off connection.
+		AtomicInteger writeOutcome = new AtomicInteger(0); // active, finished, timed out
 		try {
-			timeout = scheduler.schedule(() -> closeAcceptedSocketChannel(channel), getWriteTimeout());
+			timeout = scheduler.schedule(() -> {
+				if (writeOutcome.compareAndSet(0, 2)) closeAcceptedSocketChannel(channel);
+			}, getWriteTimeout());
 		} catch (RejectedExecutionException shutdownRace) {
 			closeAcceptedSocketChannel(channel);
-			throw new IOException("The SSE handshake writer stopped before response delivery", shutdownRace);
+			IOException refusal = new IOException("The SSE handshake writer stopped before response delivery", shutdownRace);
+			if (this.stopping)
+				throw new HandshakeWriterStoppedException(refusal);
+			throw refusal;
 		}
+		IOException writeFailure = null;
 		try { writeFully(channel, bytes); }
-		finally { cancelTimeout(timeout); }
+		catch (IOException failure) { writeFailure = failure; }
+		finally {
+			writeOutcome.compareAndSet(0, 1);
+			cancelTimeout(timeout);
+		}
+		Throwable failureCause = socketFailureCause(writeFailure);
+		if (writeOutcome.get() == 2 && (writeFailure == null || failureCause instanceof ClosedChannelException)) {
+			SocketTimeoutException timeoutFailure = new SocketTimeoutException("SSE handshake response write timed out");
+			if (failureCause != null) timeoutFailure.initCause(failureCause);
+			throw timeoutFailure;
+		}
+		if (writeFailure != null) throw writeFailure;
 	}
 
 	private static boolean isLineBreakChar(char c) {
@@ -4987,7 +5059,8 @@ final class DefaultSseServer implements SseServer {
 	private void recordWriteTransportFailure(@NonNull Throwable throwable) {
 		requireNonNull(throwable);
 
-		if (isRemoteClose(throwable) && !(throwable instanceof SocketTimeoutException))
+		if (throwable instanceof HandshakeWriterStoppedException
+				|| isRemoteClose(throwable) && !(throwable instanceof SocketTimeoutException))
 			return;
 
 		recordTransportFailure(

@@ -33,7 +33,7 @@ import static java.util.Objects.requireNonNull;
  *
  * <p>The cache vocabulary is revision-sensitive rather than a permanent
  * closed enum contract. Code switching on cache scope should retain a
- * forward-compatible default for a future reviewed protocol revision.
+ * forward-compatible default for a future protocol revision.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

@@ -152,9 +152,34 @@ const CURRENT_STAGE_FIELDS = Object.freeze([
 ]);
 const CURRENT_STAGE_NAME = 'post-u7';
 export const EXPECTED_CURRENT_STAGE_CENSUS_SHA256 =
-  '6a9273da6afd42f8efef3cfef1c5b0d7d94b3c3e06751088a1b84f3c377ec16c';
+  'ff5cc6860d18e72296513d6182c41ef4a7e7f1167cd6340a39949f24a59ade4d';
 export const EXPECTED_BASELINE_GOVERNANCE_SHA256 =
   '862417a75ee2b8aa4c04eff14713b47eedc22060319ef4f369e4ad6beff10afb';
+// These historical checkpoint paragraphs were removed from reader guides.
+// Their original rows remain in the immutable baseline; only these exact keys
+// and original line hashes may be retired from the current documentation census.
+export const REVIEWED_HISTORICAL_PROSE_RETIREMENTS = Object.freeze([
+  'MCP.md\t1358\t0\t0bd73054ef6fe5646575cb4f6b56fbd9fb65aeea61de6b980ef4fd9d1853083e',
+  'MCP.md\t1378\t0\t54f801514d249f2bbf36d5e69b3fe3b7d746a3a3b14bca8e1a2a55e9e62e1355',
+  'MCP.md\t1422\t0\t873dde27313ba235e507c166a4ea4a40439c623cd5cab29839d73e7df49e8b34',
+  'MCP.md\t2418\t0\t7e604f512e83e85e5e5109d402cfdadd89249b822677e89bf40e1dd7082b8647',
+  'MCP.md\t2583\t0\tb73159bd53e55a34b12da2ae76bd9a9561dbb06970b0b16343b8f0f23d7bf69e',
+  'README.md\t1909\t0\t1ba49620ba86aed61894847a221a6066dbf457a8db0ec7a4e45517c8725a65e8',
+  'README.md\t1918\t0\t04564cc022e45bd804f19f36edcf55b797623ba891c4e6b247857a26db909dfa',
+  'README.md\t1959\t0\t873dde27313ba235e507c166a4ea4a40439c623cd5cab29839d73e7df49e8b34',
+  'README.md\t2588\t0\t7e604f512e83e85e5e5109d402cfdadd89249b822677e89bf40e1dd7082b8647',
+  'README.md\t2748\t0\tb73159bd53e55a34b12da2ae76bd9a9561dbb06970b0b16343b8f0f23d7bf69e',
+  'SECURITY.md\t680\t0\t305fa92b47b8f6499b2399e20c71053fc9dcd6a220688b33168b6176fcb176c3',
+  'SECURITY.md\t729\t0\tce786d031fedbc81bf602c41d55ce27df4de23f3e4baaefb06083cb7cd937505',
+  'SECURITY.md\t1542\t0\t61761cf13f2ab664df8f3b1676419ca42d0e2a4ccf8cb92fa2a4a9828d7bd77f',
+  'SECURITY.md\t1704\t0\t8fccfb55db3a6c115d14b96a328418bec74f5c4fa91038aa0d27ef4d21a9b229',
+]);
+const HISTORICAL_PROSE_RETIREMENT_HASHES = new Map(
+  REVIEWED_HISTORICAL_PROSE_RETIREMENTS.map((tuple) => {
+    const fields = tuple.split('\t');
+    return [fields.slice(0, 3).join('\t'), fields[3]];
+  }),
+);
 const REVIEWED_ALPHA11_REPIN_LOCK_PATH =
   'conformance/official/proposals/alpha11-dependency-repin-2026-09-23/package-lock.json';
 const REVIEWED_ALPHA11_REPIN_LOCK_SHA256 =
@@ -166,6 +191,7 @@ const REVIEWED_ALPHA11_REPIN_EXTERNAL_ANCHORS = new Set([
   '5716:58:3.6',
 ]);
 const CURRENT_STAGE_OCCURRENCE_CLASSES = new Set([
+  'CURRENT_FIXTURE_PRESERVE',
   'EXTERNAL_DEPENDENCY',
   'PRESERVED',
   'REPLACED',
@@ -601,10 +627,10 @@ function parseCurrentOccurrenceTuple(tuple, label) {
   const baselineIsNull = baselinePath === '-'
     && baselineLine === '-'
     && baselineOccurrenceIndex === '-';
-  if (classification === 'TARGET_ONLY' && !baselineIsNull) {
-    fail(`${label} TARGET_ONLY anchor must have a null baseline key.`);
+  if (['TARGET_ONLY', 'CURRENT_FIXTURE_PRESERVE'].includes(classification) && !baselineIsNull) {
+    fail(`${label} ${classification} anchor must have a null baseline key.`);
   }
-  if (!['TARGET_ONLY', 'EXTERNAL_DEPENDENCY'].includes(classification) && baselineIsNull) {
+  if (!['TARGET_ONLY', 'EXTERNAL_DEPENDENCY', 'CURRENT_FIXTURE_PRESERVE'].includes(classification) && baselineIsNull) {
     fail(`${label} ${classification} anchor requires a baseline key.`);
   }
   if (!baselineIsNull
@@ -737,6 +763,13 @@ export function baselineGovernanceSha256(inventory) {
   }));
 }
 
+export function isReviewedHistoricalProseRetirement(inventory, row) {
+  return baselineGovernanceSha256(inventory) === EXPECTED_BASELINE_GOVERNANCE_SHA256
+    && row.classification === 'HISTORICAL_PRESERVE'
+    && HISTORICAL_PROSE_RETIREMENT_HASHES.get(printableOccurrenceKey(row))
+      === row.exactLineSha256;
+}
+
 function validateCurrentStage(inventory, expectedCurrentStageCensusSha256) {
   const currentStage = inventory.currentStage;
   requireExactFields(currentStage, CURRENT_STAGE_FIELDS, 'currentStage');
@@ -838,6 +871,13 @@ function validateCurrentStage(inventory, expectedCurrentStageCensusSha256) {
       }
       continue;
     }
+    if (occurrence.classification === 'CURRENT_FIXTURE_PRESERVE') {
+      if (!isOldVersionLiteral(occurrence.literal)
+          || occurrence.literal !== occurrence.finalLiteral) {
+        fail(`CURRENT_FIXTURE_PRESERVE must preserve an exact non-product fixture token at ${occurrence.path}:${occurrence.line}.`);
+      }
+      continue;
+    }
     if (occurrence.classification === 'EXTERNAL_DEPENDENCY') {
       if (!isOldVersionLiteral(occurrence.literal)
           || occurrence.literal !== occurrence.finalLiteral)
@@ -887,7 +927,8 @@ function validateCurrentStage(inventory, expectedCurrentStageCensusSha256) {
     if (baseline === undefined) {
       fail(`currentStage removed key ${key} does not identify a baseline occurrence.`);
     }
-    if (!CURRENT_STAGE_REMOVAL_CLASSIFICATIONS.has(baseline.classification)) {
+    if (!CURRENT_STAGE_REMOVAL_CLASSIFICATIONS.has(baseline.classification)
+        && !isReviewedHistoricalProseRetirement(inventory, baseline)) {
       fail(`currentStage removed key ${key} does not have an approved removal classification.`);
     }
     if (mappedBaselineKeys.has(key)) {
@@ -895,6 +936,19 @@ function validateCurrentStage(inventory, expectedCurrentStageCensusSha256) {
     }
   }
   const removedKeySet = new Set(removedKeys);
+  if (baselineGovernanceSha256(inventory) === EXPECTED_BASELINE_GOVERNANCE_SHA256) {
+    for (const key of HISTORICAL_PROSE_RETIREMENT_HASHES.keys()) {
+      if (!removedKeySet.has(key)) {
+        fail(`reviewed historical prose retirement must remain removed: ${key}.`);
+      }
+      const baseline = baselineByKey.get(key);
+      if (!isReviewedHistoricalProseRetirement(inventory, baseline)
+          || deletedPaths.has(baseline.path)
+          || !filePathSet.has(baseline.path)) {
+        fail(`reviewed historical prose retirement must retain its containing file: ${key}.`);
+      }
+    }
+  }
   for (const path of deletedPaths) {
     const rows = inventory.occurrences.filter((row) => row.path === path);
     if (rows.some((row) =>
@@ -1383,6 +1437,21 @@ export function externalReviewedNpmLockOwner(path, text, occurrence) {
   return 'npm-lock:alpha11-dependency-repin';
 }
 
+// The scanner also sees the 3.6 prefix in the scientific-notation bucket label
+// "3.6e+12". Preserve only this existing numeric fixture, bound to its complete
+// source and exact location; arbitrary old product text remains an error.
+export function isReviewedCurrentFixture(path, text, occurrence) {
+  return path === 'src/test/java/com/soklet/OpenMetricsBucketLabelTests.java'
+    && sha256(text) === 'b6603bf96223b7735ac83227f3a01cf1916cade1c6bb0035af212772d8bc0e35'
+    && occurrence.path === path
+    && occurrence.line === 68
+    && occurrence.column === 34
+    && occurrence.occurrenceIndex === 0
+    && occurrence.literal === '3.6'
+    && lineSha256(splitLines(text)[67])
+      === '4144d95216ed982ab979907c2102de1ddfa182a589d87b50a75177850b5bd671';
+}
+
 function externalVersionOwner(path, text, occurrence) {
   return externalMavenVersionOwner(path, text, occurrence)
     ?? externalReviewedNpmLockOwner(path, text, occurrence);
@@ -1397,6 +1466,13 @@ function verifyReviewedStage(inventory, currentTexts, stage, baselineTexts) {
   }
   const expected = expectedReviewedOccurrences(inventory, stage);
   for (const occurrence of expected) {
+    if (occurrence.classification === 'CURRENT_FIXTURE_PRESERVE') {
+      if (!isReviewedCurrentFixture(occurrence.path,
+        currentTexts.get(occurrence.path) ?? '', occurrence)) {
+        fail(`CURRENT_FIXTURE_PRESERVE is not an exact reviewed numeric fixture at ${occurrence.path}:${occurrence.line}.`);
+      }
+      continue;
+    }
     if (occurrence.classification !== 'EXTERNAL_DEPENDENCY') continue;
     const owner = externalVersionOwner(occurrence.path,
       currentTexts.get(occurrence.path) ?? '', occurrence);
@@ -1436,7 +1512,7 @@ function verifyReviewedStage(inventory, currentTexts, stage, baselineTexts) {
   }
 
   const expectedOld = expected
-    .filter(({ classification }) => ['PRESERVED', 'EXTERNAL_DEPENDENCY'].includes(classification))
+    .filter(({ classification }) => ['PRESERVED', 'EXTERNAL_DEPENDENCY', 'CURRENT_FIXTURE_PRESERVE'].includes(classification))
     .map(({ column, line, literal, path }) => ({ column, line, literal, path }));
   const actualOld = scanTexts(currentTexts)
     .map(({ column, line, literal, path }) => ({ column, line, literal, path }));

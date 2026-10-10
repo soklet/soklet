@@ -45,7 +45,14 @@ import java.util.Optional;
  */
 @ThreadSafe
 public interface McpRequestContext {
-	/** @return originating immutable Soklet request */
+	/**
+	 * Returns the immutable Soklet request for this context. Subscription catalog
+	 * and localization projections use a derived request without headers, body,
+	 * trace identifiers or baggage. The subscription authorizer separately retains
+	 * its original initial request context, including its headers.
+	 *
+	 * @return immutable request
+	 */
 	@NonNull
 	Request getRequest();
 

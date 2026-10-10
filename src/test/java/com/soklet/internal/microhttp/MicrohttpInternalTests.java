@@ -873,6 +873,260 @@ public class MicrohttpInternalTests {
 	}
 
 	@Test
+	public void customFileTransferKeepsTheTypedSocketTargetAndRequestedBytes(@TempDir Path directory) throws Exception {
+		byte[] bytes = new byte[16_419];
+		for (int index = 0; index < bytes.length; index++)
+			bytes[index] = (byte) (index * 31);
+		Path file = directory.resolve("source");
+		Files.write(file, bytes);
+		try (TransferProbeFileChannel channel = new TransferProbeFileChannel(FileChannel.open(file, READ), null)) {
+			FileChannelWritableSource source = new FileChannelWritableSource(channel, 7, 16_401, false);
+			PartialWriteSocketChannel socket = new PartialWriteSocketChannel(97);
+			long transferred = 0;
+			while (source.hasRemaining()) {
+				long written = source.writeTo(socket, 1_441);
+				Assertions.assertTrue(written > 0 && written <= 1_441);
+				transferred += written;
+			}
+			Assertions.assertNotSame(socket, channel.transferTarget,
+					"A custom file channel must write through the typed socket boundary.");
+			Assertions.assertEquals(0, channel.probeReads, "Successful delivery must not probe or copy a byte.");
+			Assertions.assertEquals(16_401, transferred);
+			Assertions.assertArrayEquals(java.util.Arrays.copyOfRange(bytes, 7, 16_408), socket.getWrittenBytes());
+		}
+	}
+
+	@Test
+	public void readableFileDoesNotHideAnAmbiguousNativeTransferFailure(@TempDir Path directory) throws Exception {
+		Path file = directory.resolve("source");
+		Files.writeString(file, "abc");
+		for (int socketWriteLimit : List.of(0, 1)) {
+			IOException nativeFailure = new IOException("A native file transfer failed for an unknown reason");
+			try (FileChannel channel = FileChannel.open(file, READ)) {
+				FileChannelWritableSource source = new FileChannelWritableSource(channel, 0, 3, false);
+				java.util.concurrent.atomic.AtomicInteger writes = new java.util.concurrent.atomic.AtomicInteger();
+				PartialWriteSocketChannel socket = new PartialWriteSocketChannel(socketWriteLimit) {
+					@Override public int write(ByteBuffer bytes) throws IOException {
+						if (writes.getAndIncrement() == 0)
+							throw nativeFailure;
+						return super.write(bytes);
+					}
+				};
+				ResponseBodySourceException failure = Assertions.assertThrows(ResponseBodySourceException.class,
+						() -> source.writeTo(socket, 3));
+				Assertions.assertSame(nativeFailure, failure.getCause());
+				Assertions.assertEquals(2, writes.get(), "Native delivery uses the raw socket before the failure-only probe.");
+				Assertions.assertEquals(socketWriteLimit, socket.getWrittenBytes().length,
+						"A failed native delivery probes at most one byte and always stops afterwards.");
+				Assertions.assertTrue(source.hasRemaining(), "No successful transfer count was returned.");
+			}
+		}
+	}
+
+	@Test
+	public void customFileTransferFailureDoesNotProbeAReadableSourceOrSocket(@TempDir Path directory) throws Exception {
+		Path file = directory.resolve("source");
+		Files.writeString(file, "abc");
+		IOException sourceFailure = new IOException("The custom transfer could not read the source");
+		try (TransferProbeFileChannel channel = new TransferProbeFileChannel(FileChannel.open(file, READ), sourceFailure)) {
+			FileChannelWritableSource source = new FileChannelWritableSource(channel, 0, 3, false);
+			PartialWriteSocketChannel socket = new PartialWriteSocketChannel(3);
+			ResponseBodySourceException failure = Assertions.assertThrows(ResponseBodySourceException.class,
+					() -> source.writeTo(socket, 3));
+			Assertions.assertSame(sourceFailure, failure.getCause());
+			Assertions.assertEquals(0, failure.getSuppressed().length);
+			Assertions.assertEquals(0, channel.probeReads);
+			Assertions.assertEquals(0, socket.getWrittenBytes().length);
+			Assertions.assertEquals(0, sourceFailure.getSuppressed().length,
+					"Classification must not mutate an application-supplied failure.");
+		}
+	}
+
+	@Test
+	public void customFileTransferFailureAfterPartialProgressCannotCompleteACorruptBody(@TempDir Path directory) throws Exception {
+		byte[] bytes = new byte[4_110];
+		for (int index = 0; index < bytes.length; index++)
+			bytes[index] = (byte) (index * 31);
+		bytes[7] = 'A';
+		bytes[4_102] = '!';
+		Path file = directory.resolve("source");
+		Files.write(file, bytes);
+		for (int partialCount : List.of(1, 2_048, 4_095)) {
+			IOException originalFailure = new IOException("A custom source failed after writing part of its slice");
+			try (TransferProbeFileChannel channel = new TransferProbeFileChannel(FileChannel.open(file, READ), originalFailure)) {
+				channel.bytesBeforeFailure = partialCount;
+				FileChannelWritableSource source = new FileChannelWritableSource(channel, 7, 4_096, false);
+				PartialWriteSocketChannel socket = new PartialWriteSocketChannel(97);
+				ResponseBodySourceException failure = Assertions.assertThrows(ResponseBodySourceException.class,
+						() -> source.writeTo(socket, 4_096));
+				Assertions.assertSame(originalFailure, failure.getCause());
+				Assertions.assertEquals(0, channel.probeReads, "Partial native progress on a custom channel is unknowable.");
+				Assertions.assertEquals(partialCount, socket.getWrittenBytes().length,
+						"A last-byte source failure must remain detectably truncated, not be filled with a wrong probe byte.");
+				Assertions.assertArrayEquals(java.util.Arrays.copyOfRange(bytes, 7, 7 + partialCount), socket.getWrittenBytes());
+				Assertions.assertTrue(source.hasRemaining());
+			}
+		}
+	}
+
+	@Test
+	public void customFileTransferRetainsTheOriginalTypedSocketFailure(@TempDir Path directory) throws Exception {
+		Path file = directory.resolve("source");
+		Files.writeString(file, "abc");
+		IOException originalFailure = new IOException("A socket write failed at the custom transfer's sink");
+		try (TransferProbeFileChannel channel = new TransferProbeFileChannel(FileChannel.open(file, READ), null)) {
+			FileChannelWritableSource source = new FileChannelWritableSource(channel, 0, 3, false);
+			SocketChannel socket = new PartialWriteSocketChannel(1) {
+				@Override public int write(ByteBuffer bytes) throws IOException { throw originalFailure; }
+			};
+			SocketChannelIo.SocketIoException failure = Assertions.assertThrows(SocketChannelIo.SocketIoException.class,
+					() -> source.writeTo(socket, 3));
+			Assertions.assertSame(originalFailure, failure.getCause());
+			Assertions.assertEquals(0, failure.getSuppressed().length);
+			Assertions.assertEquals(0, channel.probeReads);
+			Assertions.assertTrue(channel.isOpen());
+		}
+	}
+
+	@Test
+	public void customFileTransferUnwrapsDecoratedTypedSocketFailureWithoutProbing(@TempDir Path directory) throws Exception {
+		Path file = directory.resolve("source");
+		Files.writeString(file, "abc");
+		IOException originalFailure = new IOException("A socket write failed inside a decorating channel");
+		try (TransferProbeFileChannel channel = new TransferProbeFileChannel(FileChannel.open(file, READ), null)) {
+			channel.wrapSinkFailures = true;
+			FileChannelWritableSource source = new FileChannelWritableSource(channel, 0, 3, false);
+			java.util.concurrent.atomic.AtomicInteger writes = new java.util.concurrent.atomic.AtomicInteger();
+			SocketChannel socket = new PartialWriteSocketChannel(1) {
+				@Override public int write(ByteBuffer bytes) throws IOException {
+					writes.incrementAndGet();
+					throw originalFailure;
+				}
+			};
+			SocketChannelIo.SocketIoException failure = Assertions.assertThrows(SocketChannelIo.SocketIoException.class,
+					() -> source.writeTo(socket, 3));
+			Assertions.assertSame(originalFailure, failure.getCause(),
+					"Terminal observations must receive the original socket cause, not the channel's decorating wrapper.");
+			Assertions.assertNotNull(channel.decoratedSinkFailure);
+			Assertions.assertNotSame(failure, channel.decoratedSinkFailure);
+			Assertions.assertSame(failure, channel.decoratedSinkFailure.getCause());
+			Assertions.assertEquals(0, failure.getSuppressed().length);
+			Assertions.assertEquals(0, channel.probeReads);
+			Assertions.assertEquals(1, writes.get(), "A failed transfer must not write a later probe byte.");
+			Assertions.assertTrue(source.hasRemaining());
+			source.close();
+			Assertions.assertTrue(channel.isOpen(), "The response borrows this application-owned file channel.");
+		}
+	}
+
+	@Test
+	public void customFileTransferKeepsSourceFailuresAndBoundedCauseChainsDiagnostic(@TempDir Path directory) throws Exception {
+		Path file = directory.resolve("source");
+		Files.writeString(file, "abc");
+		SocketChannelIo.SocketIoException socketFailure = new SocketChannelIo.SocketIoException(
+				new IOException("A separately recorded socket failure"));
+		IOException independentSourceFailure = new ResponseBodySourceException("The file source failed", socketFailure);
+		IOException decoratedSourceFailure = new IOException("A channel decorated a source failure", independentSourceFailure);
+		IOException untypedFailure = new IOException("An untyped failure does not prove socket provenance",
+				new java.net.SocketException("Broken pipe"));
+		IOException cycleFirst = new IOException("First cyclic cause");
+		IOException cycleSecond = new IOException("Second cyclic cause");
+		cycleFirst.initCause(cycleSecond);
+		cycleSecond.initCause(cycleFirst);
+		IOException deepFailure = socketFailure;
+		for (int depth = 0; depth < 16; depth++)
+			deepFailure = new IOException("Cause wrapper " + depth, deepFailure);
+		for (IOException originalFailure : List.of(independentSourceFailure, decoratedSourceFailure,
+				untypedFailure, cycleFirst, deepFailure)) {
+			try (TransferProbeFileChannel channel = new TransferProbeFileChannel(FileChannel.open(file, READ), originalFailure)) {
+				FileChannelWritableSource source = new FileChannelWritableSource(channel, 0, 3, false);
+				PartialWriteSocketChannel socket = new PartialWriteSocketChannel(3);
+				ResponseBodySourceException failure = Assertions.assertThrows(ResponseBodySourceException.class,
+						() -> source.writeTo(socket, 3));
+				Assertions.assertSame(originalFailure, failure.getCause());
+				Assertions.assertEquals(0, failure.getSuppressed().length);
+				Assertions.assertEquals(0, originalFailure.getSuppressed().length);
+				Assertions.assertEquals(0, channel.probeReads);
+				Assertions.assertEquals(0, socket.getWrittenBytes().length);
+				Assertions.assertTrue(source.hasRemaining());
+			}
+		}
+		IOException withinBound = socketFailure;
+		for (int depth = 0; depth < 15; depth++)
+			withinBound = new IOException("Cause wrapper " + depth, withinBound);
+		try (TransferProbeFileChannel channel = new TransferProbeFileChannel(FileChannel.open(file, READ), withinBound)) {
+			FileChannelWritableSource source = new FileChannelWritableSource(channel, 0, 3, false);
+			PartialWriteSocketChannel socket = new PartialWriteSocketChannel(3);
+			SocketChannelIo.SocketIoException failure = Assertions.assertThrows(SocketChannelIo.SocketIoException.class,
+					() -> source.writeTo(socket, 3));
+			Assertions.assertSame(socketFailure, failure, "The sixteenth cause remains within the bounded inspection.");
+			Assertions.assertEquals(0, channel.probeReads);
+			Assertions.assertEquals(0, socket.getWrittenBytes().length);
+		}
+	}
+
+	@Test
+	public void nativeFileProbeReadFailurePreservesBothCausesAndDoesNotWriteAgain(@TempDir Path directory) throws Exception {
+		Path file = directory.resolve("source");
+		Files.writeString(file, "abc");
+		IOException nativeFailure = new IOException("The native transfer failed before reporting progress");
+		boolean previouslyInterrupted = Thread.interrupted();
+		try (FileChannel channel = FileChannel.open(file, READ)) {
+			Assertions.assertEquals("sun.nio.ch.FileChannelImpl", channel.getClass().getName(),
+					"This test must cover the actual JDK transfer path.");
+			FileChannelWritableSource source = new FileChannelWritableSource(channel, 0, 3, false);
+			java.util.concurrent.atomic.AtomicInteger writes = new java.util.concurrent.atomic.AtomicInteger();
+			PartialWriteSocketChannel socket = new PartialWriteSocketChannel(1) {
+				@Override public int write(ByteBuffer bytes) throws IOException {
+					writes.incrementAndGet();
+					Thread.currentThread().interrupt();
+					throw nativeFailure;
+				}
+			};
+			ResponseBodySourceException failure = Assertions.assertThrows(ResponseBodySourceException.class,
+					() -> source.writeTo(socket, 3));
+			Assertions.assertSame(nativeFailure, failure.getCause());
+			Assertions.assertEquals(1, failure.getSuppressed().length);
+			Assertions.assertInstanceOf(java.nio.channels.ClosedByInterruptException.class, failure.getSuppressed()[0]);
+			Assertions.assertEquals(0, nativeFailure.getSuppressed().length,
+					"Secondary evidence belongs to Soklet's wrapper, not the original failure.");
+			Assertions.assertEquals(1, writes.get(), "A failing source probe must not attempt a second socket write.");
+			Assertions.assertEquals(0, socket.getWrittenBytes().length);
+			Assertions.assertTrue(source.hasRemaining());
+			Assertions.assertFalse(channel.isOpen(), "The JDK closes the file channel on its interrupted read.");
+			source.close();
+		} finally {
+			Thread.interrupted();
+			if (previouslyInterrupted)
+				Thread.currentThread().interrupt();
+		}
+	}
+
+	@Test
+	public void failedSocketProbePreservesNativeCauseAndIndependentSinkEvidence(@TempDir Path directory) throws Exception {
+		Path file = directory.resolve("source");
+		Files.writeString(file, "abc");
+		IOException nativeFailure = new IOException("The native transfer failed without identifying its boundary");
+		IOException socketFailure = new IOException("A direct socket write independently failed");
+		try (FileChannel channel = FileChannel.open(file, READ)) {
+			FileChannelWritableSource source = new FileChannelWritableSource(channel, 0, 3, false);
+			java.util.concurrent.atomic.AtomicInteger writes = new java.util.concurrent.atomic.AtomicInteger();
+			SocketChannel socket = new PartialWriteSocketChannel(1) {
+				@Override public int write(ByteBuffer bytes) throws IOException {
+					throw writes.getAndIncrement() == 0 ? nativeFailure : socketFailure;
+				}
+			};
+			SocketChannelIo.SocketIoException failure = Assertions.assertThrows(SocketChannelIo.SocketIoException.class,
+					() -> source.writeTo(socket, 3));
+			Assertions.assertSame(nativeFailure, failure.getCause());
+			Assertions.assertEquals(1, failure.getSuppressed().length);
+			Assertions.assertInstanceOf(SocketChannelIo.SocketIoException.class, failure.getSuppressed()[0]);
+			Assertions.assertSame(socketFailure, failure.getSuppressed()[0].getCause());
+			Assertions.assertEquals(2, writes.get());
+		}
+	}
+
+	@Test
 	public void microhttpResponseWritableSourceWritesFileBody(@TempDir Path tempDir) throws IOException {
 		Path file = tempDir.resolve("example.txt");
 		Files.writeString(file, "abcdef", StandardCharsets.US_ASCII);
@@ -1159,6 +1413,9 @@ public class MicrohttpInternalTests {
 			socket.close();
 
 			Assertions.assertTrue(logger.awaitFailureEvent("read_error"), logger.events().toString());
+			Assertions.assertFalse(logger.failureCauses.isEmpty());
+			Assertions.assertTrue(logger.failureCauses.stream().anyMatch(IOException.class::isInstance));
+			Assertions.assertTrue(logger.failureCauses.stream().noneMatch(SocketChannelIo.SocketIoException.class::isInstance));
 		} finally {
 			eventLoop.stop();
 			eventLoop.join();
@@ -1544,6 +1801,7 @@ public class MicrohttpInternalTests {
 		private final boolean traceEnabled;
 		private final List<String> traceEvents;
 		private final List<String> failureEvents;
+		private final List<Throwable> failureCauses = Collections.synchronizedList(new ArrayList<>());
 
 		private RecordingLogger() {
 			this(false);
@@ -1582,11 +1840,13 @@ public class MicrohttpInternalTests {
 
 		@Override
 		public void logFailure(Exception e, LogEntry... entries) {
+			failureCauses.add(e);
 			record(failureEvents, entries);
 		}
 
 		@Override
 		public void logFailure(Throwable throwable, LogEntry... entries) {
+			failureCauses.add(throwable);
 			record(failureEvents, entries);
 		}
 
@@ -1646,6 +1906,64 @@ public class MicrohttpInternalTests {
 				}
 			}
 		}
+	}
+
+	private static final class TransferProbeFileChannel extends FileChannel {
+		private final FileChannel delegate;
+		private final IOException transferFailure;
+		private boolean wrapSinkFailures;
+		private IOException decoratedSinkFailure;
+		private int bytesBeforeFailure;
+		private java.nio.channels.WritableByteChannel transferTarget;
+		private int probeReads;
+
+		private TransferProbeFileChannel(FileChannel delegate, IOException transferFailure) {
+			this.delegate = delegate;
+			this.transferFailure = transferFailure;
+		}
+
+		@Override public long transferTo(long position, long count, java.nio.channels.WritableByteChannel target) throws IOException {
+			transferTarget = target;
+			if (transferFailure != null) {
+				if (bytesBeforeFailure > 0) {
+					ByteBuffer bytes = ByteBuffer.allocate((int) Math.min(count, bytesBeforeFailure));
+					while (bytes.hasRemaining())
+						Assertions.assertTrue(delegate.read(bytes, position + bytes.position()) > 0);
+					bytes.flip();
+					while (bytes.hasRemaining())
+						Assertions.assertTrue(target.write(bytes) > 0);
+				}
+				throw transferFailure;
+			}
+			try {
+				return delegate.transferTo(position, count, target);
+			} catch (IOException failure) {
+				if (!wrapSinkFailures)
+					throw failure;
+				decoratedSinkFailure = new IOException("The decorating file channel could not complete its transfer", failure);
+				throw decoratedSinkFailure;
+			}
+		}
+		@Override public int read(ByteBuffer buffer, long position) throws IOException {
+			probeReads++;
+			Assertions.assertEquals(1, buffer.remaining());
+			return delegate.read(buffer, position);
+		}
+		@Override public long size() throws IOException { return delegate.size(); }
+		@Override protected void implCloseChannel() throws IOException { delegate.close(); }
+		@Override public int read(ByteBuffer buffer) throws IOException { return delegate.read(buffer); }
+		@Override public long read(ByteBuffer[] buffers, int offset, int length) throws IOException { return delegate.read(buffers, offset, length); }
+		@Override public int write(ByteBuffer buffer) throws IOException { return delegate.write(buffer); }
+		@Override public long write(ByteBuffer[] buffers, int offset, int length) throws IOException { return delegate.write(buffers, offset, length); }
+		@Override public int write(ByteBuffer buffer, long position) throws IOException { return delegate.write(buffer, position); }
+		@Override public long position() throws IOException { return delegate.position(); }
+		@Override public FileChannel position(long position) throws IOException { delegate.position(position); return this; }
+		@Override public FileChannel truncate(long size) throws IOException { delegate.truncate(size); return this; }
+		@Override public void force(boolean metadata) throws IOException { delegate.force(metadata); }
+		@Override public long transferFrom(java.nio.channels.ReadableByteChannel source, long position, long count) throws IOException { return delegate.transferFrom(source, position, count); }
+		@Override public java.nio.MappedByteBuffer map(MapMode mode, long position, long size) throws IOException { return delegate.map(mode, position, size); }
+		@Override public java.nio.channels.FileLock lock(long position, long size, boolean shared) throws IOException { return delegate.lock(position, size, shared); }
+		@Override public java.nio.channels.FileLock tryLock(long position, long size, boolean shared) throws IOException { return delegate.tryLock(position, size, shared); }
 	}
 
 	private static class PartialWriteSocketChannel extends SocketChannel {

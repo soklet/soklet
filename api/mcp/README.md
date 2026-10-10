@@ -49,11 +49,8 @@ checkpoint's ledger contained 702 records and had SHA-256
 The [2026-09-24 bounded MCP-G2 review](mcp-g2-bounded-refreeze-2026-09-24.md)
 reconciled the then-current incompatibility set to 707 records, SHA-256
 `24bbed473a6c4d9807cfce776a7353ffc3c99fd052d342fec5914355e1220808`.
-That review accepted the N0, P1b, and P2 differences. The subsequent
-[Skills review](https://github.com/soklet/soklet/blob/070e37ba40107ae68563cbb0a9f9cff7a9f5ce89/release/mcp-qualification-2026-09-25/REVIEW.md) and
-[Apps signature review](mcp-g2-apps-refreeze-2026-09-27.md) accept the remaining
-signatures. The aggregate API-freeze now verifies exactly; full Apps host
-qualification remains open.
+That review accepted the N0, P1b, and P2 differences. Subsequent Skills and
+Apps API updates are recorded by the current signature snapshots.
 The API-diff gate regenerates the incompatibility set and compares it in both
 directions, so an unexpected addition, removal, or changed record fails.
 
@@ -228,12 +225,8 @@ The MCP snapshots accept only the already implemented, approved additions:
   Phase 4 or Phase 6 signature is removed or altered. The immutable Phase 0
   historical ledger is unchanged.
 
-The [remediation plan](../../release/SOKLET_4_0_REMEDIATION_PLAN_2026-10-04.md)
-records the approvals and implementation contracts in S3e, S8q/S8r and
-S9c/S9e/S9f. Owner inventories and the already reviewed current nullability
-contracts are unchanged by this reconciliation. No new public surface is
-introduced here. This is current-source API evidence; final candidate and
-host/conformance qualification remain separate.
+Owner inventories and current nullability contracts are unchanged by this
+reconciliation. No new public surface is introduced here.
 
 ### 2026-09-29 current MCP-G2 refreeze
 

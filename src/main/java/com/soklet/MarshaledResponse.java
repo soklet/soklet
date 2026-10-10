@@ -63,11 +63,19 @@ import static java.util.Objects.requireNonNull;
  * and {@link StreamingResponseBody}.
  * <p>
  * The built-in HTTP transport requires final ordinary response statuses from {@code 200} through
- * {@code 599} and owns {@code Connection}, {@code Content-Length} and {@code Transfer-Encoding}
- * framing. Other hop-by-hop and Connection-nominated fields are removed. A valid explicit length
- * on a bodyless HEAD response is preserved when its status allows it; a validated {@code 426}
- * response may advertise {@code Upgrade}. File-backed delivery uses bounded transfer buffers;
- * native zero-copy socket delivery is not promised.
+ * {@code 599}. For finite responses it owns {@code Connection}, {@code Content-Length} and
+ * {@code Transfer-Encoding} framing and removes other hop-by-hop and Connection-nominated fields.
+ * A valid explicit length supplied by final HEAD marshaling is preserved when its status allows it.
+ * The default HEAD marshaler computes that length from the body, including for explicit HEAD
+ * resource methods; a bodyless explicit HEAD method can use a custom
+ * {@link ResponseMarshaler.Builder.HeadHandler} or final {@link ResponseMarshaler.Builder.PostProcessor}
+ * to advertise a nonzero length. A validated {@code 426}
+ * response may advertise {@code Upgrade}. For the JDK's standard file-channel implementation,
+ * file-backed delivery passes the real socket to
+ * {@link FileChannel#transferTo(long, long, java.nio.channels.WritableByteChannel)}, allowing
+ * native transfer when supported. Custom and other provider file channels instead write through
+ * a socket adapter that distinguishes target failures without a retry or probe write after uncertain progress.
+ * Zero-copy is not a cross-platform guarantee.
  * <p>
  * Full documentation is available at <a href="https://www.soklet.com/docs/response-writing">https://www.soklet.com/docs/response-writing</a>.
  *

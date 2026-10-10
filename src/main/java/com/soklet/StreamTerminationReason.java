@@ -32,8 +32,10 @@ public enum StreamTerminationReason {
 	CLIENT_DISCONNECTED,
 	/**
 	 * The client explicitly canceled the operation before it completed. Legacy MCP
-	 * URI grants also use this neutral token reason when their total lifetime expires
-	 * and the session is retired; the MCP session outcome remains SESSION_CLOSED.
+	 * session retirement other than idle/absolute session expiry or server stop also
+	 * signals in-flight cancelation tokens with this neutral reason, including grant
+	 * lifetime or lease expiry, authorization loss and capacity eviction. It does not
+	 * establish an explicit client action; the MCP session outcome remains SESSION_CLOSED.
 	 */
 	CLIENT_CANCELED,
 	/**

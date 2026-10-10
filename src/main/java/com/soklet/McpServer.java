@@ -630,10 +630,10 @@ public sealed interface McpServer permits DefaultMcpServer {
 		}
 
 		/**
-		 * Sets the maximum accepted MCP request-body size. The default is 10 MiB;
-		 * the reviewed JSON implementation supports values through 16 MiB. This
-		 * aggregate byte limit does not change the independent limit of 1,048,576
-		 * characters for any single JSON string or token.
+		 * Sets the maximum accepted MCP request-body size. The default is 10 MiB
+		 * and the maximum supported value is 16 MiB. This aggregate byte limit does
+		 * not change the independent limit of 1,048,576 characters for any single
+		 * JSON string or token.
 		 *
 		 * @param maximumRequestSizeInBytes positive byte limit no greater than
 		 *                                  16 MiB, or null to restore the default
@@ -999,10 +999,13 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 * The executor must execute accepted work or throw on rejection; silent
 		 * discard policies are unsupported. Soklet rejects inline execution on the
 		 * submitting thread before application entry. Initial submission rejection
-		 * produces the fixed capacity response. If a queued ticket's handoff rejects
-		 * while an accepted worker is exiting, that worker may execute the ticket
-		 * before returning to the executor. This retains the configured bounds and
-		 * avoids discarding already-admitted work. Executor task boundaries therefore
+		 * produces the fixed capacity response. An exiting worker drains accepted queued
+		 * tickets directly before returning to the executor, without resubmission. A
+		 * fresh handoff can still reject during a direct-handoff executor's worker-return
+		 * gap. If no worker remains, queued tickets fail immediately with the same fixed
+		 * capacity response. Use a queueing executor or size a direct-handoff pool above
+		 * the configured handler concurrency. This retains the configured bounds.
+		 * Executor task boundaries therefore
 		 * need not correspond one-to-one with application invocations. Soklet clears
 		 * interrupt status between tickets and applies each ticket's own requested
 		 * interruption; application-owned thread-local cleanup remains the application's

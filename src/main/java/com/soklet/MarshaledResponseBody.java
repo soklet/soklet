@@ -83,6 +83,10 @@ public sealed interface MarshaledResponseBody permits MarshaledResponseBody.Byte
 	 * A finalized response body backed by a file path.
 	 * <p>
 	 * The referenced file region remains caller-owned and must not be modified while a response is using it.
+	 * <p>
+	 * The standard HTTP server allows native transfer for the JDK's standard file channels when the platform supports it.
+	 * Channels from other filesystem providers, including ZIP and JAR filesystems, use a socket adapter. This can lose
+	 * zero-copy transfer, reduce throughput, and use more CPU.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
@@ -144,6 +148,16 @@ public sealed interface MarshaledResponseBody permits MarshaledResponseBody.Byte
 	 * <p>
 	 * The channel remains caller-owned while a response is using it. Callers must not close it or modify the referenced
 	 * region concurrently. Soklet closes the channel after use only when {@link #getCloseOnComplete()} is {@code true}.
+	 * <p>
+	 * The standard HTTP server allows native transfer for the JDK's standard file channels when the platform supports it.
+	 * Custom channels, including delegating wrappers and channels from other filesystem providers, use a socket adapter
+	 * to identify target failures without risking another write after uncertain partial progress. This can lose zero-copy
+	 * transfer, reduce throughput, and use more CPU. Supplying a wrapper's underlying JDK channel can retain native transfer
+	 * only when bypassing the wrapper preserves the intended bytes, behavior, and ownership.
+	 * <p>
+	 * A custom channel's {@link java.nio.channels.FileChannel#transferTo(long, long, java.nio.channels.WritableByteChannel)}
+	 * runs on the socket event loop. It must honor partial and zero-byte target writes and return the completed byte count;
+	 * it must not spin or block waiting for socket capacity to finish the requested transfer.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */

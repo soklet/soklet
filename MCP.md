@@ -308,11 +308,9 @@ Knowing a file URI does not make it available through that legacy view.
 
 The [runnable Skills example](examples/skills/README.md) publishes authored
 Markdown, a UTF-8 CSV reference and a binary asset using only the public API.
-Its separate Inspector CLI check exercises real-client retrieval and digest/
-frontmatter verification; it does not activate or execute a Skill. The scoped
-authorization, localization, pagination, parser, and client checks are recorded
-in [Skills verification](verification/skills/README.md). Agent activation and
-general YAML compatibility are separate from Soklet's server-side Skills claim.
+Skill activation is a client responsibility. Soklet serves bundles and validates
+the supported frontmatter format; it does not execute Skills or provide general
+YAML compatibility.
 
 Supply complete file bytes under logical bundle-relative paths, including
 `SKILL.md`. The application loads or generates those bytes; Soklet does not open
@@ -575,7 +573,7 @@ is fixed, `McpRequestContext.getEndpointPathParameters()` and
 Configure the built-in listener's transport bounds through
 `McpServer.Builder`. Request-header and request-body read timeouts each default
 to 60 seconds; the request-body limit defaults to 10 MiB and may be configured
-only from 1 byte through the reviewed 16 MiB production-JSON ceiling. That
+only from 1 byte through the 16 MiB production-JSON ceiling. That
 aggregate body limit does not widen the independent 1,048,576-character limit
 on decoded UTF-16 units and on the escaped token spelling of any single JSON
 string or member name. See [JSON and schema limits](#json-and-schema-limits)
@@ -883,9 +881,8 @@ object-valued structured content when they include it.
 
 Runtime schema evaluation deliberately exposes only the generic
 invalid-arguments result; its internal, bounded instance-free diagnostics are
-not projected into the public exception or JSON-RPC error. A reviewed
-diagnostic carrier that preserves the privacy and byte-limit contract is
-deferred to 4.1.
+not projected into the public exception or JSON-RPC error. Soklet does not
+expose those internal diagnostics through a public API.
 
 ### Tool Schema Profile 1
 
@@ -1215,7 +1212,7 @@ between absent and present-empty cursor values and enforces a positive UTF-8
 size limit (4,096 bytes by default) on incoming and outgoing cursors. The
 largest configurable limit is 174,762 bytes: one sixth of the production JSON
 token-character limit, so even a cursor made entirely of control characters
-fits after worst-case six-character JSON escaping. Values above that reviewed
+fits after worst-case six-character JSON escaping. Values above that
 wire ceiling fail server construction. The application owns cursor encoding,
 validation, expiry, integrity,
 authorization binding, backing-snapshot behavior, and cross-instance
@@ -1250,8 +1247,8 @@ or locale, corrupt, unknown, or caller-hidden anchors produce the same neutral
 JSON-RPC `-32602` error. The cursor is unsigned navigation data, not an
 authorization grant: it has no MAC, server-side session, retained translation
 snapshot, or promise of consistent permissions and translations across pages.
-Restart enumeration when the catalog or negotiated locale changes. Named-host
-pagination and exact-candidate release qualification remain pending.
+Restart enumeration when the catalog or negotiated locale changes. Verify
+pagination with the client and protocol revision you intend to deploy.
 
 Soklet ships no `file://` mapper. A handler that maps resource URIs to a
 filesystem owns root containment, traversal rejection, canonicalization,
@@ -1949,8 +1946,11 @@ protocol/method/header-shape checks still fail before admission. Modern and
 stateless legacy requests also validate cheap operation parameters before
 admission. Session-enabled 2025 non-initialize requests defer operation-parameter
 errors through admission, applicable request limiting and session binding, so
-a retired or wrong-owner session receives neutral HTTP `404` before -32602. With a
-caller-aware catalog access policy, `tools/call` defers `Mcp-Name` agreement until
+a retired or wrong-owner session receives neutral HTTP `404` before -32602.
+Admission and the request limiter can therefore see an empty `getOperationName()`
+for a normally named operation whose parameters are malformed. Branch on
+operation type and handle that optional value without requiring its presence.
+With a caller-aware catalog access policy, `tools/call` defers `Mcp-Name` agreement until
 after admission, catalog access policy and the tool rate limiter; other standard
 name comparisons remain earlier. Caller-aware catalog access policy continues
 to protect direct tool and prompt access after admission.
@@ -2092,14 +2092,17 @@ bounded request-policy callbacks as well as operation handlers. An application
 callback that itself throws `RejectedExecutionException` retains ordinary
 application-failure handling.
 
-When a slot releases, Soklet first attempts the normal executor handoff for
-the next queued ticket. If that handoff rejects, the already-accepted worker
-continues with that ticket before returning to the executor. This lets a
-direct-handoff pool drain the admitted queue without rejecting every queued
-request. It also preserves admitted work during graceful drain if the executor
-has stopped accepting new submissions. Forced cancelation and the original
-request deadlines still apply. Worker reuse is iterative, retains the handler
-and queue bounds, and adds no retry jobs or replacement workers. Soklet clears
+An exiting worker drains accepted queued tickets directly before returning to
+the executor, without resubmission. This preserves admitted work during graceful
+drain if the executor has stopped accepting new submissions. A fresh handoff can
+still reject during a direct-handoff pool's worker-return gap, even when that
+pool has as many threads as Soklet's handler concurrency. If no worker remains,
+all queued tickets fail immediately with the fixed capacity response. Use a
+queueing executor or size a direct-handoff pool above the handler concurrency;
+extra threads reduce that return-gap risk without increasing Soklet's handler
+bound. Forced cancelation and the original request deadlines still apply. Worker
+reuse is iterative, retains the handler and queue bounds, and adds no retry jobs
+or replacement workers. Soklet clears
 interrupt status between tickets and reapplies each ticket's own requested
 interruption. Executor task boundaries may cover multiple application
 invocations; application-owned thread-local cleanup remains the application's
@@ -2295,10 +2298,7 @@ For framework-supplied MCP tokens, `getCancelationReason()` exposes one fixed
 `StreamingResponseCanceledException` and does not attach an underlying
 throwable. Applications may log the fixed reason under their own retention
 policy, but must not replace it with untrusted free-form text or turn a
-cancellation detail into a metric dimension. Exact runtime coverage iterates
-every non-`COMPLETED` termination category and proves the reason, empty cause,
-and bounded exception message in
-`McpProgressAndCancelationRuntimeTests#every_cancelation_category_is_bounded_observable_and_carries_no_framework_cause`.
+cancellation detail into a metric dimension.
 
 A progress reporter is present only when the initiating request supplied a
 valid string or integer at `params._meta.progressToken` and Soklet can safely
@@ -2337,8 +2337,9 @@ recommends an initial empty event with an event ID to prime reconnect/polling.
 Soklet intentionally omits that SHOULD behavior for its persistent,
 nonresumable legacy POST streams: there is no empty priming event, `id:` or
 `retry:` field, intentional polling, event history, or `Last-Event-ID` recovery.
-This disposition does not establish client interoperability; named-host and
-official progress/priming qualification remain pending for the exact candidate.
+Clients that depend on priming events or event IDs may not interoperate with
+these streams. Verify progress and retry behavior with the client you intend
+to deploy.
 
 If an operation has a missing `CONDITIONAL` input-request capability, Soklet
 must keep the response uncommitted until the handler chooses a complete or
@@ -2470,10 +2471,16 @@ has one coalesced pending slot. The deadline timer scans admitted subscriptions
 periodically, so idle maintenance cost grows with their count. This bound does not guarantee that arbitrary
 callback durations or short leases can be sustained; measure authorization,
 task lookup and catalog refresh work together when sizing a deployment.
-For example, 3,000 owners with 50-millisecond checks need about 9.4 seconds of
-idealized work at concurrency 16, before queueing and other projection work.
-At 400 milliseconds the same wave needs 75 seconds and cannot fit a 60-second
-lease. A renewal rejected by application-handler capacity ends the modern
+Renewals start at half the effective authorization lease, plus a per-subscription
+stagger of up to `min(1 second, lease / 20)`. For a simultaneous renewal wave,
+size conservatively so `ownerCount × callbackDuration / maintenanceConcurrency`
+fits within `lease / 2 - min(1 second, lease / 20)`, leaving additional room for
+queueing and competing task, catalog and resource projection work. With a
+60-second lease, the conservative window is about 29 seconds. At concurrency 16,
+3,000 owners with 50-millisecond checks need about 9.4 seconds of idealized work.
+At 200 milliseconds they need 37.5 seconds, and at 400 milliseconds they need
+75 seconds; neither wave fits the renewal window, although 37.5 seconds is less
+than the full lease. A renewal rejected by application-handler capacity ends the modern
 listen as `SUBSCRIPTION_AUTHORIZATION_CHECK_FAILED`, even if its earlier lease
 still has time remaining; clients must reconnect and reconcile.
 
@@ -2510,7 +2517,11 @@ and reconcile current catalogs, resources or task snapshots.
 
 Admission receives the immutable validated, deduplicated requested-resource URI list when authorizing a listen request.
 `McpAdmissionContext.getRequestedResourceSubscriptionUris()` preserves first-encounter order and is empty outside applicable subscription requests.
-Applications must authorize confidential or capability-bearing subscription URIs during admission and must not infer secrecy merely because a URI is difficult to guess.
+Applications must authorize confidential or capability-bearing subscription URIs in
+`McpSubscriptionAuthorizer`, initially and on continuing checks. Admission can
+provide an additional early filter using the validated requested URI set; it
+cannot replace continuing authorization. Do not infer secrecy merely because
+a URI is difficult to guess.
 A rejected or failed admission never activates a subscription, even though the server generation's single shared publisher listener may already be registered.
 With `McpAdmissionController.acceptAllInstance()`, all anonymous callers on one endpoint share its empty authorization/quota partition; one caller can exhaust the configured per-partition subscription bucket for the rest.
 
@@ -2817,8 +2828,9 @@ and Soklet keeps no lifetime ID history.
 Sessions are node-local. Route initialization and subsequent requests to the same
 node using affinity learned from the initial response or an equivalent routing
 policy; hashing a newly minted ID cannot route that first request. Restart/node
-loss yields neutral `404`. Transparent recovery and operational defaults remain
-pending real-host qualification; document manual reconnection until verified.
+loss yields neutral `404`. Automatic recovery depends on whether the client
+reinitializes after `404`; provide a manual reconnect path and test recovery
+with the clients you intend to deploy.
 No shared store, event history, `Last-Event-ID` recovery, GET result recovery, or
 restoration of the 3.5.1 session-store/context/ID-generator APIs is provided.
 
@@ -2872,7 +2884,9 @@ GET lifetime observation capacity follows twice the configured global session
 capacity (512 with the defaults), with a separate transient-control allowance
 (132 with the defaults). Retained callbacks or rapid turnover can still exhaust
 observation capacity; the start/finish pair is omitted together with a fixed
-configuration diagnostic at most once per minute. No callback runs on a selector
+non-error configuration diagnostic at most once per minute. GET can use
+transient headroom after its lifetime bucket fills; DELETE uses only transient
+capacity. No callback runs on a selector
 as a saturation fallback.
 
 If a client disconnects while GET/DELETE admission is pending, generic HTTP
@@ -3002,45 +3016,43 @@ cleanup controls can receive capacity rejections even across distinct owners.
 Short leases also consume a bounded aggregate maintenance-demand reservation.
 Physical callbacks and historical evidence stay charged until actual exit.
 Framework byte accounting does not measure arbitrary application principal or
-context graphs: keep those retained objects small and safe. Named-host refresh
-and reconnect development observations are recorded in the
-[compatibility record](release/MCP_CLIENT_COMPATIBILITY.md). Released-SDK
-development checks also exercised actual Bearer refresh and revocation;
-named-host OAuth recovery and exact-candidate qualification remain pending.
+context graphs: keep those retained objects small and safe. Client credential
+refresh and reconnect policies must be tested with your deployment; see
+[client compatibility](https://soklet.com/docs/mcp-compatibility).
 
 GET/DELETE use the existing generic HTTP lifecycle/metrics boundary with
 `ServerType.HTTP` and no `ResourceMethod`; they do not create MCP RPC request or
 limiter events. Generic finish callbacks run on dedicated bounded workers,
 never on the connection selector. Their worker count is the smaller of four
-and `requestHandlerConcurrency`; pending capacity is `requestHandlerQueueCapacity`.
-One slot is reserved before the start callback and held through physical finish,
-including the whole GET lifetime. A full or quiesced observation budget skips
-both callbacks and emits a fixed diagnostic; it does not deliver an unpaired
-start or delay protocol traffic. Slow callbacks still consume their reserved
+and `requestHandlerConcurrency`. One slot is reserved before the start callback
+and held through physical finish,
+including the whole GET lifetime. GET lifetimes have a separate reservation
+bucket of twice the global session capacity (512 with the defaults), subject to
+the implementation's aggregate integer cap. DELETE and other transient controls
+use worker-plus-queue capacity (132 with the defaults); a GET can use transient
+headroom after its lifetime bucket fills. A full or quiesced observation budget
+skips both callbacks. Capacity saturation while accepting emits a fixed non-error
+configuration diagnostic at most once per minute; quiescing skips silently.
+Neither case delivers an unpaired start or delays protocol traffic. Slow callbacks still consume their reserved
 slots and can make shutdown incomplete. Transport end during a blocked start
 is remembered and delivers finish once that start returns. GET lifetimes use `SubscriptionOpened`/`SubscriptionClosed`, not
 RPC `RequestStreamOpened`/`RequestStreamClosed`. Sensitive original requests and
 Throwables at application observer boundaries require application retention
 policy. No public session lifecycle callback or session/owner metric dimension
-is added. Real-host GET/DELETE behavior, renewal, and recovery still require
-qualification against the exact candidate.
+is added. Verify GET/DELETE behavior, renewal, and recovery with the client
+and protocol revision you intend to deploy.
 
 The existing simulator supports GET/DELETE through the same session and lease
 path. DELETE ends a simulated GET with `SESSION_CLOSED` and no JSON-RPC
 message; disconnect uses `CLIENT_DISCONNECTED` and leaves ordinary POST usable.
-Real-socket tests supplement simulation for physical writes and cleanup.
-Bounded released TypeScript Client/Core `2.2.0` development checks exercised
-both exact 2025 revisions, including URI/catalog hint delivery, automatic GET
-recovery, policy-generation reconciliation, quiet lease renewal, and verified
-DELETE. Separate Inspector and VS Code observations cover their exercised
-revisions and specific display/refresh limits. A separate released-SDK HTTP
-check exercised real disposable Bearer credentials: a refreshed GET did not
-refresh historical URI evidence, fresh/duplicate subscribe replaced that
-evidence, and revocation closed GET and denied URI renewal. Revoked reconnect
-received `401` with an `invalid_token` challenge; a valid same-owner credential
-could still DELETE with `204`. These checks do not establish OAuth token
-issuance, named-host credential recovery or immutable release qualification. See the
-[development compatibility record](release/MCP_CLIENT_COMPATIBILITY.md).
+Simulation does not establish a client's network, display, or recovery behavior.
+In particular, reconnecting GET with refreshed credentials does not refresh
+existing URI authorization grants: issue a fresh or duplicate subscribe to
+replace them. Revocation closes GET and denies URI renewal. A revoked
+reconnect receives `401` with an `invalid_token` challenge; a valid same-owner
+credential can still DELETE with `204`. Soklet does not issue OAuth tokens.
+See [client compatibility](https://soklet.com/docs/mcp-compatibility) for
+version-specific client limitations.
 
 ## HTTP and error policy
 
@@ -3558,8 +3570,8 @@ server-initiated requests are not exposed through either 2025 profile.
 Notification delivery is best effort without event history, replay, or
 lost-POST-result recovery. `2025-03-26` is unsupported. There is no implicit
 latest revision; see [exact protocol revisions](#exact-protocol-revisions) for
-initialization negotiation and header selection. Named-client and release
-claims require qualification of that particular supported profile and artifact.
+initialization negotiation and header selection. Verify the selected protocol
+revision and features with the clients you intend to deploy.
 
 Client extension settings are open but do not implicitly enable server
 behavior. Keys in `clientCapabilities.extensions` must use a valid namespaced
@@ -3631,7 +3643,7 @@ server configuration, and integrate directly with a model provider when
 needed. Use application logging and Soklet's existing observability and
 OpenTelemetry integrations.
 
-Dynamic Client Registration is reviewed and not applicable because Soklet has
-no OAuth/DCR implementation. The deprecated standalone legacy HTTP+SSE
+Soklet does not implement an OAuth authorization server or Dynamic Client
+Registration. The deprecated standalone legacy HTTP+SSE
 transport is unsupported. Soklet's MCP SSE response streams belong to its
 Streamable HTTP transport and do not enable that deprecated transport.

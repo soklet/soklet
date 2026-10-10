@@ -646,7 +646,9 @@ public interface HttpServer {
 		 * These workers are separate from response producers and transport event loops. Normal resource finalization
 		 * still runs on the producer thread. Precommit rejection observers are offered to these same workers after the finite response is offered,
 		 * using a separately bounded allowance that does not consume admitted streams' reserved jobs.
-		 * That observation is omitted and logged if its allowance is exhausted or infrastructure has stopped.
+		 * Capacity exhaustion while accepting omits that observation and logs
+		 * {@link LogEventType#RESPONSE_STREAM_CANCELED}; omissions during graceful drain or forced shutdown
+		 * are not logged.
 		 * Accepted observer work remains retained through shutdown; request handling never waits for it.
 		 * Admitted termination observers and diagnostics use separate executors, each with at most
 		 * {@link #streamingLifecycleCapacity(Integer) lifecycle capacity} workers and one prepaid observation per

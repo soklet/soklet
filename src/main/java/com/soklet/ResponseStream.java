@@ -189,6 +189,13 @@ public interface ResponseStream {
 	 * The provider must support close racing use and unblocking that use; {@link AutoCloseable} alone does not
 	 * establish this contract. Acquisition does not start if cancelation has already won. A resource returned
 	 * after cancelation is disposed before it can be used.
+	 * <p>
+	 * A classic socket read can throw {@link java.net.SocketException} when cancelation closes its
+	 * owned socket or input stream before producer interruption takes effect. This can produce a
+	 * {@link LogEventType#RESPONSE_STREAM_FAILED} diagnostic while preserving the elected cancelation outcome.
+	 * On platform threads, interruption alone does not unblock a classic socket read. This includes the default
+	 * JDK 17 producer and a custom streaming executor that uses platform threads on a newer JDK. If cancelation must
+	 * close the socket to unblock that read, its close-induced exception remains diagnostic when it escapes the producer.
 	 *
 	 * @param streamResourceFactory the checked resource factory
 	 * @param <T> the resource type

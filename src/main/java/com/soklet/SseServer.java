@@ -287,7 +287,7 @@ public interface SseServer {
 
 		/**
 		 * Sets the maximum duration for reading the SSE handshake request line and headers.
-		 * This independent budget begins when a handshake worker starts reading;
+		 * This independent budget begins when header reading starts;
 		 * header reading and parsing do not consume the request-handler budget.
 		 * A read timeout after receiving bytes routes through
 		 * {@link ResponseMarshaler#forUnparsedRequest(UnparsedRequest)}, whose default
@@ -332,6 +332,10 @@ public interface SseServer {
 		 * processor-derived default of 16 times
 		 * {@link Runtime#availableProcessors() available processors}, with a minimum
 		 * of one.
+		 * <p>
+		 * Pending header-reading and parsed/queued handshake phases share an aggregate
+		 * bound of this value plus {@link #requestHandlerQueueCapacity(Integer)}. Moving
+		 * header reading to a separate executor does not add handshake admission capacity.
 		 *
 		 * @param requestHandlerConcurrency request-handler concurrency, or
 		 * {@code null} for the default
@@ -476,6 +480,8 @@ public interface SseServer {
 		 * request-handler concurrency and queue capacity.
 		 * The executor must dispatch handshake work asynchronously; direct executors
 		 * and caller-runs rejection policies can block connection admission.
+		 * A custom executor controls its own worker and queue sizing. The configured request-handler
+		 * concurrency plus queue capacity still bounds pending header-reading and application-handshake admission.
 		 *
 		 * @param requestHandlerExecutorServiceSupplier executor supplier, or
 		 * {@code null} for the default

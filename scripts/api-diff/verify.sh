@@ -23,8 +23,8 @@ REVIEWED_SET="$PROJECT_ROOT/api/mcp/current-incompatibilities.jsonl"
     -Dmaven.javadoc.skip=true \
     -DskipTests \
     clean package \
-    com.github.siom79.japicmp:japicmp-maven-plugin:0.26.1:cmp@mcp-api-diff \
-    com.github.siom79.japicmp:japicmp-maven-plugin:0.26.1:cmp@mcp-api-freeze
+    com.github.siom79.japicmp:japicmp-maven-plugin:0.26.2:cmp@mcp-api-diff \
+    com.github.siom79.japicmp:japicmp-maven-plugin:0.26.2:cmp@mcp-api-freeze
 )
 
 RAW_REPORT="$PROJECT_ROOT/target/japicmp/mcp-api-diff.xml"

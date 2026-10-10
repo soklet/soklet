@@ -14,11 +14,28 @@
   See [Log-event routing](MIGRATING_TO_4_0.md#log-event-routing-with-custom-observers).
 - **Finite response framing:** the built-in HTTP transport owns framing and
   removes application hop-by-hop headers. Valid bodyless HEAD representation
-  lengths and validated `426` Upgrade advertisements are preserved. Ordinary
+  lengths supplied by final HEAD marshaling and validated `426` Upgrade
+  advertisements are preserved. The default HEAD marshaler computes length
+  from the body; bodyless explicit HEAD methods can use a custom `HeadHandler`
+  or final `PostProcessor` to advertise nonzero lengths. Ordinary
   final statuses must be `200`–`599`, and the default marshaler rejects a
   `StreamingResponseBody` in `Response.body(...)`. Use a marshaled streaming
   response. Expected typed streaming cancelation is quiet; independent failures
-  remain observable. See [HTTP and SSE framing](MIGRATING_TO_4_0.md#http-and-sse-framing).
+  remain observable. Client disconnect and shutdown no longer produce routine
+  `RESPONSE_STREAM_CANCELED` events. See [HTTP and SSE framing](MIGRATING_TO_4_0.md#http-and-sse-framing).
+- **Forwarded client IP:** under `TRUST_PROXY_ALLOWLIST`, an unusable
+  `Forwarded: for=` value stops the trusted-chain walk and falls back to the
+  socket peer. Trusted proxies must emit IP literals; `Forwarded` without
+  `for=` still permits `X-Forwarded-For` fallback. See
+  [Forwarded origin and servlet client addresses](MIGRATING_TO_4_0.md#forwarded-origin-and-servlet-client-addresses).
+- **File delivery:** the standard HTTP transport retains the real-socket
+  `FileChannel.transferTo` path for the JDK's standard file channels, allowing
+  native transfer when supported. Custom/provider channels use a typed socket
+  adapter without retrying or probe-writing after uncertain partial progress.
+  This can disable zero-copy for delegating and provider channels, reducing
+  throughput and increasing CPU use; standard JDK channels retain native transfer.
+  Failed native transfers use bounded file/socket probes to identify peer loss;
+  ambiguous errors remain observable, and delivery ends after failure.
 - **Histogram snapshots:** snapshot values are boxed and histogram sums are
   floating point. See [Histogram sums and snapshot values](MIGRATING_TO_4_0.md#histogram-sums-and-snapshot-values).
 - **Graceful HTTP feeds:** implementations of `ResponseStream` must implement
@@ -126,7 +143,7 @@
   Existing defaults remain 10 MiB per request body, 60 seconds per header/body
   read phase, 100 headers, 64 KiB aggregate headers, an 8,192-byte request
   target, a 64 KiB read buffer, 8,192 concurrent connections, and a 128-item
-  stream queue. Configured request bodies are bounded by the reviewed 16 MiB
+  stream queue. Configured request bodies are bounded by the 16 MiB
   production-JSON ceiling, while any single JSON string or token remains
   capped at 1,048,576 characters; `connectionQueueCapacity` is an alias of
   `streamQueueCapacity`. A loopback bind literal or `localhost` seeds its
@@ -159,8 +176,8 @@
   opening, verified DELETE, and authorized resource/catalog invalidations. Applications declare exact revisions
   on endpoints and tools; there is no implicit profile fallback. See
   [current MCP compatibility](MCP.md#compatibility-and-unsupported-features).
-  Named-host and exact-candidate qualification remain pending; development
-  observations do not establish publication approval.
+  Client feature support varies; verify the features and protocol revision
+  you intend to deploy.
 - **2025 argument completion:** prompt and URI-template completers now select
   `2025-06-18`, `2025-11-25`, and `2026-07-28` independently within their
   owning operation's revisions. Annotation and programmatic declarations use
@@ -227,8 +244,8 @@
   credentials; each URI needs a fresh or duplicate subscribe. No Tasks,
   event history, replay, or POST result recovery is added. `McpOperationType`
   adds `RESOURCES_SUBSCRIBE`/`RESOURCES_UNSUBSCRIBE`; update exhaustive switches.
-  Named-host development refresh observations and their limits are recorded in
-  [the compatibility matrix](release/MCP_CLIENT_COMPATIBILITY.md).
+  Client refresh behavior and limitations are described in
+  [client compatibility](https://soklet.com/docs/mcp-compatibility).
 - **MCP Java API:** the old sessions, initialization contexts, handlers,
   schemas, request results, and value carriers are removed. Applications use
   immutable `McpJson*` values, operation-specific contexts and registrations,
@@ -304,18 +321,17 @@ maintenance or security fixes afterward. See the explicit
 - Added one lifecycle coordinator and immutable result model across HTTP, SSE,
   MCP, direct embedders, the standalone runner, and the off-network simulator.
 - Added a copy/paste [MCP quickstart](MCP_QUICKSTART.md), prose
-  [3.5.1 migration guide](MIGRATING_TO_4_0.md), dated
-  [client compatibility matrix](release/MCP_CLIENT_COMPATIBILITY.md), and
+  [3.5.1 migration guide](MIGRATING_TO_4_0.md),
+  [client compatibility guide](https://soklet.com/docs/mcp-compatibility), and
   worked [application-owned OAuth resource-server pattern](release/MCP_OAUTH_RESOURCE_SERVER.md).
-- Added production/listener goldens, pinned official conformance integration,
-  finite resource bounds, privacy/incompatibility inventories, API freeze, and
-  release tooling. Development evidence remains distinct from immutable-
-  candidate and published-release claims.
 - Added explicit license/NOTICE packaging and a tracked
   [third-party audit](release/THIRD_PARTY_AUDIT.md).
 
 ### Correctness Fixes
 
+- The standard HTTP listener now enables `TCP_NODELAY` on accepted connections,
+  avoiding Linux delayed-ACK stalls for small keep-alive HTTP and MCP responses.
+  Failure to apply this optional tuning leaves normal socket I/O handling intact.
 - Protocol numbers no longer depend on the JVM's default formatting locale:
   file Content-Range values, default weak ETags, cookie Max-Age, SSE error
   status/length fields, and servlet request/redirect ports use ASCII decimal
@@ -339,14 +355,10 @@ maintenance or security fixes afterward. See the explicit
   continues to follow the malformed-request response path. These changes
   harden HTTP framing; no request-smuggling exploit chain is claimed.
 
-### Reviewed Non-Blocking Deferrals
+### Known Limitations
 
-The 4.0.0 release review also recorded the following deliberate post-release
-work; it is not claimed as fixed by 4.0.0:
-
-- **S7-1 / R12-2:** persisted output schemas are still compiled eagerly during
-  task lookup, including subscription authorization. This is bounded extra CPU
-  work, not a correctness or isolation failure.
+- Persisted output schemas are compiled eagerly during task lookup, including
+  subscription authorization. This introduces bounded additional CPU work.
 
 ## 3.5.1 (2026-07-13)
 

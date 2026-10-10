@@ -69,11 +69,15 @@ public interface McpAdmissionContext {
 	@NonNull McpProtocolVersion getProtocolVersion();
 
 	/**
-	 * Operation spelling is validated, but tool, prompt and resource membership
-	 * and descriptor requirements are checked only after admission succeeds.
+	 * A present operation name is syntactically validated, but tool, prompt and
+	 * resource membership and descriptor requirements are checked only after
+	 * admission succeeds. On session-enabled 2025 views, malformed operation
+	 * parameters may reach admission with an empty operation name. Parameter
+	 * errors are returned only after admission, applicable request limiting and
+	 * session binding; applications must not require this optional value.
 	 *
 	 * @return the requested tool, prompt, resource URI, or task ID, when applicable;
-	 *         both legacy resource subscription operations expose their URI
+	 *         both legacy resource subscription operations expose their validated URI
 	 */
 	@NonNull Optional<@NonNull String> getOperationName();
 
