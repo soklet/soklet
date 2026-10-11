@@ -16,7 +16,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 
 /** Identifies connection IO failures at the socket boundary, independently of OS message text. */
-final class SocketChannelIo {
+public final class SocketChannelIo {
     private SocketChannelIo() { }
 
     static int read(SocketChannel channel, ByteBuffer buffer) throws IOException {
@@ -27,9 +27,17 @@ final class SocketChannelIo {
         }
     }
 
-    static int write(SocketChannel channel, ByteBuffer buffer) throws IOException {
+    public static int write(SocketChannel channel, ByteBuffer buffer) throws IOException {
         try {
             return channel.write(buffer);
+        } catch (IOException failure) {
+            throw new SocketIoException(failure);
+        }
+    }
+
+    static long write(SocketChannel channel, ByteBuffer[] buffers, int offset, int length) throws IOException {
+        try {
+            return channel.write(buffers, offset, length);
         } catch (IOException failure) {
             throw new SocketIoException(failure);
         }

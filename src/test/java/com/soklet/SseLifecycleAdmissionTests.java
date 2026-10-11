@@ -102,9 +102,11 @@ public class SseLifecycleAdmissionTests {
 		private final Map<String, SseClientInitializer> initializers = new ConcurrentHashMap<>();
 		private Fixture(Duration shutdownTimeout) throws Exception {
 			// Lifecycle capacity is deliberately omitted: this test qualifies its default.
+			// Keep probing established peers throughout the disconnect wait: the
+			// one broadcast can race a reset while a connection is still establishing.
 			this.server = (DefaultSseServer) SseServer.withPort(this.port).host("127.0.0.1")
 					.connectionQueueCapacity(8).verifyConnectionOnceEstablished(false)
-					.heartbeatInterval(Duration.ofSeconds(30)).build();
+					.heartbeatInterval(Duration.ofMillis(200)).build();
 			Resource resource = new Resource(this.initializers);
 			this.soklet = Soklet.fromConfig(SokletConfig.withHttpServer(HttpServer.withPort(findFreePort()).build())
 					.sseServer(this.server).resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Resource.class)))

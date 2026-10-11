@@ -259,6 +259,10 @@ public class MarshaledResponseTests {
 
 		Assertions.assertThrows(IllegalStateException.class, () -> MarshaledResponse.withStatusCode(204)
 				.stream(streamingResponseWriter).build());
+		Assertions.assertThrows(IllegalStateException.class, () -> MarshaledResponse.withStatusCode(205)
+				.stream(streamingResponseWriter).build());
+		Assertions.assertThrows(IllegalStateException.class, () -> MarshaledResponse.withStatusCode(200)
+				.stream(streamingResponseWriter).build().copy().statusCode(205).finish());
 		Assertions.assertThrows(IllegalStateException.class, () -> MarshaledResponse.withStatusCode(200)
 				.headers(Map.of("Content-Length", List.of("10"))).stream(streamingResponseWriter).build());
 		Assertions.assertThrows(IllegalStateException.class, () -> MarshaledResponse.fromStatusCode(200).copy()

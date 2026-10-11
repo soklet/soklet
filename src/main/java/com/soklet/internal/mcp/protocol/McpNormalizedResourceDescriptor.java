@@ -610,6 +610,12 @@ final class McpLevelOneUriTemplate {
 		}
 		if (!parsed.normalize().equals(parsed))
 			throw new IllegalArgumentException(description + " must be normalized.");
+		// Java URI also accepts scoped IPv6 literals. Zone identifiers are not
+		// part of RFC 3986 URI syntax and are local to an operating system; treating
+		// them as case-insensitive host text would change captured template values.
+		String host = parsed.getHost();
+		if (host != null && host.startsWith("[") && host.indexOf('%') >= 0)
+			throw new IllegalArgumentException(description + " must not contain an IPv6 zone identifier.");
 		return uri;
 	}
 

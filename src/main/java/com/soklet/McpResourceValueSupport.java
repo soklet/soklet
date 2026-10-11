@@ -42,6 +42,10 @@ final class McpResourceValueSupport {
 		if (!uri.normalize().equals(uri))
 			throw new IllegalArgumentException(
 					"MCP resource URIs must be normalized.");
+		String host = uri.getHost();
+		if (host != null && host.startsWith("[") && host.indexOf('%') >= 0)
+			throw new IllegalArgumentException(
+					"MCP resource URIs must not contain an IPv6 zone identifier.");
 		String wireValue = uri.toString();
 		for (int index = 0; index < wireValue.length(); ++index) {
 			if (wireValue.charAt(index) > 0x7F)

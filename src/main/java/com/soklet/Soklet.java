@@ -1081,7 +1081,7 @@ public final class Soklet implements AutoCloseable {
 
 	private static boolean isBodylessStatusCode(@NonNull Integer statusCode) {
 		requireNonNull(statusCode);
-		return (statusCode >= 100 && statusCode < 200) || statusCode == 204 || statusCode == 304;
+		return (statusCode >= 100 && statusCode < 200) || statusCode == 204 || statusCode == 205 || statusCode == 304;
 	}
 
 	@NonNull
@@ -1110,7 +1110,8 @@ public final class Soklet implements AutoCloseable {
 		requireNonNull(request);
 		requireNonNull(marshaledResponse);
 		requireNonNull(suppressContentLength);
-		enforceFinalResponseStatusCode(marshaledResponse.getStatusCode());
+		enforceBodylessStatusCode(marshaledResponse.getStatusCode(),
+				marshaledResponse.getBody().isPresent() || marshaledResponse.isStreaming());
 
 		// Don't write Content-Length for an accepted SSE Handshake, for example
 		if (!suppressContentLength)
@@ -1165,7 +1166,7 @@ public final class Soklet implements AutoCloseable {
 		if ((statusCode >= 100 && statusCode < 200) || statusCode == 204 || statusCode == 304)
 			return true;
 
-		return request.getHttpMethod() == HttpMethod.HEAD && marshaledResponse.getBodyLength() == 0L;
+		return statusCode != 205 && request.getHttpMethod() == HttpMethod.HEAD && marshaledResponse.getBodyLength() == 0L;
 	}
 
 	@NonNull

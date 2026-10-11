@@ -802,13 +802,13 @@ class RequestParser {
         if (trimmed.isEmpty()) {
             return null;
         }
-        int semicolon = trimmed.indexOf(';');
-        String token = semicolon == -1 ? trimmed : trimmed.substring(0, semicolon);
-        token = token.trim();
-        if (token.isEmpty()) {
-            return null;
+        // The only supported transfer coding is chunked, which defines no
+        // parameters (RFC 9112 section 7.1). Do not discard a suffix that can
+        // make malformed or unsupported coding syntax look like chunked.
+        if (trimmed.indexOf(';') >= 0) {
+            throw new MalformedRequestException("transfer coding parameters are not supported");
         }
-        return token.toLowerCase(Locale.ROOT);
+        return trimmed.toLowerCase(Locale.ROOT);
     }
 
     private boolean hasOnlyChunkedEncoding(@Nullable List<String> transferEncodings) {

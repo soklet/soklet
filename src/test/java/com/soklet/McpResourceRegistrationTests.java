@@ -24,6 +24,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -220,6 +221,12 @@ class McpResourceRegistrationTests {
 
 		assertThrows(IllegalArgumentException.class, () -> McpResourceRegistration
 				.withUriAndName(URI.create("relative"), "resource", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)));
+		for (String scoped : List.of("http://[fe80::1%25ETH0]/resource", "http://[fe80::1%251]/resource")) {
+			assertThrows(IllegalArgumentException.class, () -> McpResourceRegistration
+					.withUriAndName(URI.create(scoped), "resource", Set.of(McpProtocolVersion.V2026_07_28)));
+			assertThrows(IllegalArgumentException.class, () -> McpResourceDescriptor
+					.withUriAndName(URI.create(scoped), "resource"));
+		}
 		assertThrows(IllegalArgumentException.class, () -> McpResourceRegistration
 				.withUriAndName(URI.create("catalog://item"), " ", java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)));
 		assertThrows(IllegalArgumentException.class, () -> McpResourceRegistration

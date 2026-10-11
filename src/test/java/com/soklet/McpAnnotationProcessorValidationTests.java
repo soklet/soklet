@@ -1341,6 +1341,30 @@ public class McpAnnotationProcessorValidationTests {
 	}
 
 	@Test
+	void scopedIpv6ResourceUrisAndTemplatesAreRejectedAtCompileTime() {
+		JavaFileObject source = JavaFileObjects.forSourceString("example.ScopedIpv6Resources", """
+				package example;
+				import com.soklet.*;
+				import com.soklet.annotation.*;
+				@McpServerEndpoint(path = "/mcp", name = "test", version = "1", protocolVersions = McpProtocolVersion.V2026_07_28)
+				public final class ScopedIpv6Resources {
+				  @McpResource(uri = "http://[fe80::1%25ETH0]/resource", name = "scoped-exact", protocolVersions = McpProtocolVersion.V2026_07_28)
+				  public McpResourceOutput exact() { return null; }
+				  @McpResource(uri = "http://[fe80::1%25ETH0]/{name}", name = "scoped-literal", protocolVersions = McpProtocolVersion.V2026_07_28)
+				  public McpResourceOutput literal(@McpResourceUriParameter("name") String name) { return null; }
+				  @McpResource(uri = "http://[fe80::1%25{scope}]/resource", name = "scoped-variable", protocolVersions = McpProtocolVersion.V2026_07_28)
+				  public McpResourceOutput variable(@McpResourceUriParameter("scope") String scope) { return null; }
+				}
+				""");
+		Compilation compilation = Compiler.javac().withProcessors(new SokletProcessor()).compile(source);
+		assertThat(compilation).failed();
+		assertThat(compilation).hadErrorContaining("absolute normalized URI in ASCII RFC 3986 wire form").inFile(source);
+		Assertions.assertEquals(2, compilation.errors().stream()
+				.filter(diagnostic -> diagnostic.getMessage(Locale.ROOT)
+						.contains("valid absolute RFC 6570 Level 1 URI template")).count());
+	}
+
+	@Test
 	void rejectsSyntaxEquivalentExactResourceUrisWithoutConflatingTemplates() {
 		JavaFileObject duplicateExact = JavaFileObjects.forSourceString(
 				"example.EquivalentExactResourceUriEndpoint", """

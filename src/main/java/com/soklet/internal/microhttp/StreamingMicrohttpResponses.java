@@ -1080,7 +1080,7 @@ public final class StreamingMicrohttpResponses {
 
 	@NotThreadSafe
 	private static final class QueuedChunk {
-		private final List<ByteBuffer> buffers;
+		private final ByteBuffer[] buffers;
 		private final int payloadBytes;
 		private final boolean terminal;
 		private int bufferIndex;
@@ -1089,18 +1089,16 @@ public final class StreamingMicrohttpResponses {
 			requireNonNull(payload);
 
 			byte[] header = format("%x\r\n", payload.length).getBytes(StandardCharsets.US_ASCII);
-			List<ByteBuffer> buffers = new ArrayList<>(3);
-			buffers.add(ByteBuffer.wrap(header));
-			buffers.add(ByteBuffer.wrap(payload));
-			buffers.add(ByteBuffer.wrap(StreamingWritableSource.CRLF));
+			ByteBuffer[] buffers = {ByteBuffer.wrap(header), ByteBuffer.wrap(payload),
+					ByteBuffer.wrap(StreamingWritableSource.CRLF)};
 			return new QueuedChunk(buffers, payload.length, false);
 		}
 
 		private static QueuedChunk terminal() {
-			return new QueuedChunk(List.of(ByteBuffer.wrap(StreamingWritableSource.TERMINAL_CHUNK)), 0, true);
+			return new QueuedChunk(new ByteBuffer[] {ByteBuffer.wrap(StreamingWritableSource.TERMINAL_CHUNK)}, 0, true);
 		}
 
-		private QueuedChunk(@NonNull List<@NonNull ByteBuffer> buffers,
+		private QueuedChunk(@NonNull ByteBuffer @NonNull [] buffers,
 												int payloadBytes,
 												boolean terminal) {
 			this.buffers = requireNonNull(buffers);
@@ -1114,23 +1112,32 @@ public final class StreamingMicrohttpResponses {
 
 			long totalWritten = 0L;
 
-			while (totalWritten < maxBytes && this.bufferIndex < this.buffers.size()) {
-				ByteBuffer buffer = this.buffers.get(this.bufferIndex);
+			while (totalWritten < maxBytes && this.bufferIndex < this.buffers.length) {
+				ByteBuffer buffer = this.buffers[this.bufferIndex];
 
 				if (!buffer.hasRemaining()) {
 					this.bufferIndex++;
 					continue;
 				}
 
-				int originalLimit = buffer.limit();
-				int maxBytesThisWrite = (int) Math.min(maxBytes - totalWritten, (long) buffer.remaining());
-				buffer.limit(buffer.position() + maxBytesThisWrite);
+				// Send framing and payload together without exceeding the event-loop byte budget.
+				int lastBufferIndex = this.bufferIndex;
+				long remainingBudget = maxBytes - totalWritten;
+				while (lastBufferIndex < this.buffers.length - 1
+						&& this.buffers[lastBufferIndex].remaining() < remainingBudget) {
+					remainingBudget -= this.buffers[lastBufferIndex].remaining();
+					lastBufferIndex++;
+				}
+				ByteBuffer lastBuffer = this.buffers[lastBufferIndex];
+				int originalLimit = lastBuffer.limit();
+				lastBuffer.limit(lastBuffer.position() + (int) Math.min(remainingBudget, (long) lastBuffer.remaining()));
 
 				long written;
 				try {
-					written = SocketChannelIo.write(socketChannel, buffer);
+					written = SocketChannelIo.write(socketChannel, this.buffers, this.bufferIndex,
+							lastBufferIndex - this.bufferIndex + 1);
 				} finally {
-					buffer.limit(originalLimit);
+					lastBuffer.limit(originalLimit);
 				}
 
 				totalWritten += written;
@@ -1143,14 +1150,14 @@ public final class StreamingMicrohttpResponses {
 		}
 
 		private int payloadWritten() {
-			return this.terminal ? 0 : this.buffers.get(1).position();
+			return this.terminal ? 0 : this.buffers[1].position();
 		}
 
 		private boolean isComplete() {
-			while (this.bufferIndex < this.buffers.size() && !this.buffers.get(this.bufferIndex).hasRemaining())
+			while (this.bufferIndex < this.buffers.length && !this.buffers[this.bufferIndex].hasRemaining())
 				this.bufferIndex++;
 
-			return this.bufferIndex >= this.buffers.size();
+			return this.bufferIndex >= this.buffers.length;
 		}
 	}
 

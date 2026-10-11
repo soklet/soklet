@@ -97,13 +97,14 @@ public final class McpResourceRegistration {
 	 * <p>This method validates the URI's shape. Construction of the enclosing
 	 * {@link McpServer} later applies the 1,048,576-byte ASCII wire limit and
 	 * complete endpoint route validation.
+	 * IPv6 zone identifiers are excluded from the RFC 3986 URI contract.
 	 *
 	 * @param uri absolute normalized resource URI in ASCII wire form
 	 * @param name nonblank resource name
 	 * @param protocolVersions nonempty exact revisions serving this resource
 	 * @return required-handler stage
 	 * @throws IllegalArgumentException if the URI is relative, not normalized,
-	 * not in ASCII wire form, or the name is blank
+	 * not in ASCII wire form, contains an IPv6 zone identifier, or the name is blank
 	 */
 	@NonNull
 	public static ExactHandlerStage withUriAndName(@NonNull URI uri,
@@ -121,7 +122,8 @@ public final class McpResourceRegistration {
 	 * route validation, including the template-size, variable-name,
 	 * variable-count, and overlap-work limits documented in the MCP guide. It
 	 * also enforces the limit of 256 URI templates per endpoint at server
-	 * construction.
+	 * construction. IPv6 zone identifiers are excluded from the RFC 3986 URI
+	 * contract, including identifiers containing template variables.
 	 *
 	 * <p>Level 1 simple variables do not consume a raw slash. For example,
 	 * {@code file:///{path}} matches {@code file:///src%2Fmain.rs} with variable

@@ -82,6 +82,7 @@ class FileChannelWritableSource implements WritableSource {
             } else {
                 if (socketSink == null || !sameInstance(socketSink.channel, socketChannel))
                     socketSink = new SocketSink(socketChannel);
+                socketSink.failure = null;
                 // Custom channels may throw after partial progress. Keep their
                 // sink failures typed at the original write boundary, without
                 // any later write whose response offset would be uncertain.
@@ -89,7 +90,8 @@ class FileChannelWritableSource implements WritableSource {
             }
         } catch (IOException failure) {
             if (!nativeTransfer) {
-                SocketChannelIo.@Nullable SocketIoException socketFailure = socketIoCause(failure);
+                SocketChannelIo.@Nullable SocketIoException socketFailure = socketIoCause(failure,
+                        socketSink == null ? null : socketSink.failure);
                 if (socketFailure != null)
                     throw socketFailure;
                 throw new ResponseBodySourceException(fileChannel.isOpen()
@@ -129,7 +131,10 @@ class FileChannelWritableSource implements WritableSource {
         }
     }
 
-    private static SocketChannelIo.@Nullable SocketIoException socketIoCause(Throwable failure) {
+    private static SocketChannelIo.@Nullable SocketIoException socketIoCause(Throwable failure,
+            SocketChannelIo.@Nullable SocketIoException sinkFailure) {
+        if (sinkFailure == null)
+            return null;
         IdentityHashMap<Throwable, Boolean> visited = new IdentityHashMap<>();
         Throwable current = failure;
         for (int depth = 0; current != null && depth < MAX_SOCKET_CAUSE_DEPTH; depth++) {
@@ -139,8 +144,10 @@ class FileChannelWritableSource implements WritableSource {
             // even if its application-supplied cause mentions a socket failure.
             if (current instanceof ResponseBodySourceException)
                 return null;
-            if (current instanceof SocketChannelIo.SocketIoException)
-                return (SocketChannelIo.SocketIoException) current;
+            // Only the failure witnessed by this transfer's sink proves peer
+            // failure. A channel may attach a stale exception to a source error.
+            if (sameInstance(current, sinkFailure))
+                return sinkFailure;
             current = current.getCause();
         }
         return null;
@@ -187,9 +194,15 @@ class FileChannelWritableSource implements WritableSource {
 
     private static final class SocketSink implements WritableByteChannel {
         private final SocketChannel channel;
+        private SocketChannelIo.@Nullable SocketIoException failure;
         private SocketSink(SocketChannel channel) { this.channel = channel; }
         @Override public int write(ByteBuffer buffer) throws IOException {
-            return SocketChannelIo.write(channel, buffer);
+            try {
+                return SocketChannelIo.write(channel, buffer);
+            } catch (SocketChannelIo.SocketIoException failure) {
+                this.failure = failure;
+                throw failure;
+            }
         }
         // The adapter borrows the socket. Checking its state here could bypass
         // the typed write boundary; ownership remains with the connection.

@@ -10,7 +10,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -100,6 +102,51 @@ public class DefaultHttpServerTests {
 					.gracefulShutdownTimeout(Duration.ofSeconds(2))
 					.forcedShutdownTimeout(Duration.ofSeconds(1))
 					.build();
+
+	@Test
+	@Timeout(60)
+	public void resetContentCannotLeakBypassedBodyIntoNextPipelinedResponse() throws Exception {
+		int port = findFreePort();
+		DefaultHttpServer server = (DefaultHttpServer) HttpServer.withPort(port).host("127.0.0.1").build();
+		server.initialize(SokletConfig.forSimulatorTesting()
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(new LifecycleObserver() {})
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY).build(), (request, response) -> {
+			boolean reset = request.getResourcePath().getPath().equals("/reset");
+			response.accept(HttpRequestResult.withMarshaledResponse(MarshaledResponse.withStatusCode(reset ? 205 : 200)
+					.headers(reset ? Map.of("Content-Length", List.of("999")) : Map.of())
+					.body((reset ? "unexpected" : "clean").getBytes(StandardCharsets.US_ASCII)).build()).build());
+		});
+		try {
+			server.start();
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 5_000)) {
+				socket.getOutputStream().write(("GET /reset HTTP/1.1\r\nHost: localhost\r\n\r\n"
+						+ "GET /clean HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
+				long readDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+				ByteArrayOutputStream wireBytes = new ByteArrayOutputStream();
+				InputStream input = socket.getInputStream();
+				byte[] buffer = new byte[1_024];
+				while (true) {
+					long remaining = readDeadline - System.nanoTime();
+					Assertions.assertTrue(remaining > 0, "Pipelined response read exceeded five seconds");
+					socket.setSoTimeout((int) Math.max(1, TimeUnit.NANOSECONDS.toMillis(remaining)));
+					int count = input.read(buffer);
+					if (count == -1)
+						break;
+					Assertions.assertTrue(wireBytes.size() + count <= 8_192,
+							"Pipelined response exceeded the 8 KiB wire bound");
+					wireBytes.write(buffer, 0, count);
+				}
+				String wire = wireBytes.toString(StandardCharsets.ISO_8859_1);
+				Assertions.assertTrue(wire.startsWith("HTTP/1.1 205"), wire);
+				int headEnd = wire.indexOf("\r\n\r\n");
+				Assertions.assertTrue(wire.substring(0, headEnd).contains("Content-Length: 0"), wire);
+				Assertions.assertTrue(wire.substring(headEnd + 4).startsWith("HTTP/1.1 200"), wire);
+				Assertions.assertTrue(wire.endsWith("clean"), wire);
+				Assertions.assertFalse(wire.contains("unexpected"), wire);
+			}
+		} finally { server.stop(); }
+	}
 
 	@Test
 	public void defaultConcurrentConnectionLimitIsBoundedAndCanBeDisabled() {

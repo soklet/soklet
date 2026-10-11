@@ -1146,6 +1146,9 @@ static `resources/list` fallback. A URI-template registration uses bounded RFC
 6570 Level 1 variables, is advertised by `resources/templates/list`, and is
 selected for reads only after exact-resource matching. Exact URI identity uses
 RFC 3986 syntax equivalence; declared descriptor spelling is preserved.
+Resource URIs and URI templates exclude IPv6 zone identifiers, such as
+`http://[fe80::1%25eth0]/resource`, because these scoped literals are outside
+the RFC 3986 URI grammar. Unscoped IPv6 literals remain supported.
 
 The same Level 1 routing subset applies to all three supported revisions.
 Simple `{variable}` expansion encodes a slash inside a variable as `%2F`;
@@ -3048,9 +3051,14 @@ message; disconnect uses `CLIENT_DISCONNECTED` and leaves ordinary POST usable.
 Simulation does not establish a client's network, display, or recovery behavior.
 In particular, reconnecting GET with refreshed credentials does not refresh
 existing URI authorization grants: issue a fresh or duplicate subscribe to
-replace them. Revocation closes GET and denies URI renewal. A revoked
-reconnect receives `401` with an `invalid_token` challenge; a valid same-owner
-credential can still DELETE with `204`. Soklet does not issue OAuth tokens.
+replace them. Your URI authorizer must check current authority during renewal;
+an explicit denial retires the session and closes its GET streams. To reject
+a revoked credential on reconnect with `401` and an `invalid_token` challenge,
+configure your HTTP transport admission controller to return that rejection.
+DELETE also passes through application admission and session verification:
+it returns `204` only when the session remains active and the admitted
+credential resolves to its owner. Soklet does not detect token revocation or
+issue OAuth tokens.
 See [client compatibility](https://soklet.com/docs/mcp-compatibility) for
 version-specific client limitations.
 

@@ -2645,7 +2645,11 @@ public final class SokletProcessor extends AbstractProcessor {
 		}
 		try {
 			URI uri = URI.create(address);
-			return uri.isAbsolute() && uri.equals(uri.normalize());
+			String host = uri.getHost();
+			// Keep annotation validation aligned with resource routing's RFC 3986
+			// contract, rather than Java URI's additional scoped IPv6 syntax.
+			boolean scopedIpv6 = host != null && host.startsWith("[") && host.indexOf('%') >= 0;
+			return uri.isAbsolute() && uri.equals(uri.normalize()) && !scopedIpv6;
 		} catch (IllegalArgumentException exception) {
 			return false;
 		}

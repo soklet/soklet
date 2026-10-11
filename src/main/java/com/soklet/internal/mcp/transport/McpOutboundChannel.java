@@ -18,6 +18,7 @@ package com.soklet.internal.mcp.transport;
 
 import com.soklet.StreamTerminationReason;
 import com.soklet.StreamingResponseCanceledException;
+import com.soklet.internal.microhttp.SocketChannelIo;
 import com.soklet.internal.microhttp.WritableSource;
 import com.soklet.internal.streaming.StateChangeWaiters;
 import org.jspecify.annotations.NonNull;
@@ -1056,7 +1057,7 @@ public final class McpOutboundChannel {
 
 				long currentWrite;
 				try {
-					currentWrite = socketChannel.write(buffer);
+					currentWrite = SocketChannelIo.write(socketChannel, buffer);
 				} finally {
 					buffer.limit(originalLimit);
 				}

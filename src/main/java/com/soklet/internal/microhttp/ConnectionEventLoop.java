@@ -1009,10 +1009,16 @@ class ConnectionEventLoop {
                     responseInDelivery = microhttpResponse;
                     closeAfterResponse = true;
                 }
-                if (mustNotSendBody(microhttpResponse.status())) {
+                if (mustNotSendBody(microhttpResponse.status()) || microhttpResponse.status() == 205) {
                     bodyOwnershipAttempted = true;
                     microhttpResponse.closeBody(StreamTerminationReason.PROTOCOL_UNSUPPORTED, null);
                     microhttpResponse = microhttpResponse.withoutBodyOrFramingHeaders();
+                    // 205 forbids content but still needs a zero-length delimiter on persistent HTTP/1.1.
+                    if (microhttpResponse.status() == 205) {
+                        List<Header> resetHeaders = new ArrayList<>(microhttpResponse.headers());
+                        resetHeaders.add(new Header(HEADER_CONTENT_LENGTH, "0"));
+                        microhttpResponse = microhttpResponse.withHeaders(resetHeaders);
+                    }
                 }
                 // RFC 9110 §9.3.2: HEAD responses carry no content. The normal marshaling path strips
                 // HEAD bodies before reaching this layer; this guards responses that bypass it (e.g.

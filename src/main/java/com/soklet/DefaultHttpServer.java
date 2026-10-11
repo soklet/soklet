@@ -1592,7 +1592,7 @@ final class DefaultHttpServer implements HttpServer {
 		Set<String> transportOwned = Set.of("connection", "content-length", "keep-alive", "proxy-connection",
 				"te", "trailer", "transfer-encoding", "upgrade");
 		List<Header> lengths = headers.stream().filter(header -> header.name().equalsIgnoreCase("Content-Length")).toList();
-		boolean preserveHeadLength = head && statusCode != 204 && lengths.size() == 1 && !lengths.get(0).value().isEmpty()
+		boolean preserveHeadLength = head && statusCode != 204 && statusCode != 205 && lengths.size() == 1 && !lengths.get(0).value().isEmpty()
 				&& lengths.get(0).value().chars().allMatch(character -> character >= '0' && character <= '9');
 		List<Header> upgrades = statusCode == 426 ? headers.stream()
 				.filter(header -> header.name().equalsIgnoreCase("Upgrade")).toList() : List.of();
@@ -1615,6 +1615,12 @@ final class DefaultHttpServer implements HttpServer {
 	private static List<Header> finiteContentLengthHeaders(@NonNull List<Header> headers, @Nullable Request request,
 			int statusCode, long bodyLength, @Nullable Long headRepresentationLength) {
 		if (statusCode == 204 || statusCode == 304) return headers;
+		if (statusCode == 205) {
+			List<Header> result = new ArrayList<>(headers);
+			result.add(new Header("Content-Length", "0"));
+			result.sort(Comparator.comparing(Header::name));
+			return result;
+		}
 		boolean head = request != null && request.getHttpMethod() == HttpMethod.HEAD;
 		if (head && headers.stream().anyMatch(header -> header.name().equalsIgnoreCase("Content-Length"))) return headers;
 		Long length = head && bodyLength == 0L ? headRepresentationLength : Long.valueOf(bodyLength);
@@ -1652,7 +1658,7 @@ final class DefaultHttpServer implements HttpServer {
 			return false;
 
 		int statusCode = marshaledResponse.getStatusCode();
-		return statusCode >= 200 && statusCode != 204 && statusCode != 206 && statusCode != 304
+		return statusCode >= 200 && statusCode != 204 && statusCode != 205 && statusCode != 206 && statusCode != 304
 				&& !hasHeader(headers, "Content-Encoding")
 				&& !hasHeader(headers, "Content-Range")
 				&& !marshaledResponse.getHeaders().containsKey("Transfer-Encoding");

@@ -1051,17 +1051,105 @@ public class MicrohttpInternalTests {
 				Assertions.assertTrue(source.hasRemaining());
 			}
 		}
-		IOException withinBound = socketFailure;
-		for (int depth = 0; depth < 15; depth++)
-			withinBound = new IOException("Cause wrapper " + depth, withinBound);
-		try (TransferProbeFileChannel channel = new TransferProbeFileChannel(FileChannel.open(file, READ), withinBound)) {
+	}
+
+	@Test
+	public void customFileTransferBoundsInspectionOfCurrentSinkFailure(@TempDir Path directory) throws Exception {
+		Path file = directory.resolve("source");
+		Files.writeString(file, "abc");
+		for (int wrapperDepth : List.of(15, 16)) {
+			IOException originalFailure = new IOException("A socket write failed during this transfer");
+			try (TransferProbeFileChannel channel = new TransferProbeFileChannel(FileChannel.open(file, READ), null)) {
+				channel.wrapSinkFailures = true;
+				channel.sinkFailureWrapperDepth = wrapperDepth;
+				FileChannelWritableSource source = new FileChannelWritableSource(channel, 0, 3, false);
+				java.util.concurrent.atomic.AtomicInteger writes = new java.util.concurrent.atomic.AtomicInteger();
+				SocketChannel socket = new PartialWriteSocketChannel(3) {
+					@Override public int write(ByteBuffer bytes) throws IOException {
+						writes.incrementAndGet();
+						throw originalFailure;
+					}
+				};
+				if (wrapperDepth == 15) {
+					SocketChannelIo.SocketIoException failure = Assertions.assertThrows(SocketChannelIo.SocketIoException.class,
+							() -> source.writeTo(socket, 3));
+					Assertions.assertSame(originalFailure, failure.getCause(),
+							"The sixteenth cause remains within the bounded inspection.");
+				} else {
+					ResponseBodySourceException failure = Assertions.assertThrows(ResponseBodySourceException.class,
+							() -> source.writeTo(socket, 3));
+					Assertions.assertSame(channel.decoratedSinkFailure, failure.getCause(),
+							"Cause inspection must stop before the seventeenth cause.");
+				}
+				Assertions.assertEquals(1, writes.get(), "An uncertain transfer must not attempt another socket write.");
+				Assertions.assertEquals(0, channel.probeReads);
+				Assertions.assertEquals(0, originalFailure.getSuppressed().length);
+				Assertions.assertTrue(source.hasRemaining());
+			}
+		}
+	}
+
+	@Test
+	public void customFileTransferKeepsStaleSinkFailuresDiagnostic(@TempDir Path directory) throws Exception {
+		Path file = directory.resolve("source");
+		Files.writeString(file, "abc");
+		for (boolean reuseSource : List.of(false, true)) {
+			IOException originalSocketFailure = new IOException("An earlier transfer failed at its socket");
+			java.util.concurrent.atomic.AtomicReference<IOException> socketFailure =
+					new java.util.concurrent.atomic.AtomicReference<>(originalSocketFailure);
+			java.util.concurrent.atomic.AtomicInteger writes = new java.util.concurrent.atomic.AtomicInteger();
+			try (TransferProbeFileChannel channel = new TransferProbeFileChannel(FileChannel.open(file, READ), null)) {
+				FileChannelWritableSource earlierSource = new FileChannelWritableSource(channel, 0, 3, false);
+				PartialWriteSocketChannel socket = new PartialWriteSocketChannel(3) {
+					@Override public int write(ByteBuffer bytes) throws IOException {
+						writes.incrementAndGet();
+						IOException failure = socketFailure.get();
+						if (failure != null)
+							throw failure;
+						return super.write(bytes);
+					}
+				};
+				SocketChannelIo.SocketIoException staleFailure = Assertions.assertThrows(SocketChannelIo.SocketIoException.class,
+						() -> earlierSource.writeTo(socket, 3));
+				Assertions.assertSame(originalSocketFailure, staleFailure.getCause());
+				socketFailure.set(null);
+				IOException originalSourceFailure = new IOException("A later transfer failed while reading its source", staleFailure);
+				channel.transferFailure = originalSourceFailure;
+				FileChannelWritableSource source = reuseSource ? earlierSource
+						: new FileChannelWritableSource(channel, 0, 3, false);
+				ResponseBodySourceException failure = Assertions.assertThrows(ResponseBodySourceException.class,
+						() -> source.writeTo(socket, 3));
+				Assertions.assertSame(originalSourceFailure, failure.getCause(),
+						"A stale sink exception must not silence a later source failure.");
+				Assertions.assertEquals(1, writes.get(), "Source classification must not write a probe byte.");
+				Assertions.assertEquals(0, channel.probeReads);
+				Assertions.assertEquals(0, socket.getWrittenBytes().length);
+				Assertions.assertEquals(0, originalSourceFailure.getSuppressed().length);
+				Assertions.assertEquals(0, staleFailure.getSuppressed().length);
+				Assertions.assertTrue(source.hasRemaining());
+			}
+		}
+	}
+
+	@Test
+	public void customFileTransferDoesNotSilenceAnExplicitSourceFailureAfterSinkFailure(@TempDir Path directory) throws Exception {
+		Path file = directory.resolve("source");
+		Files.writeString(file, "abc");
+		try (TransferProbeFileChannel channel = new TransferProbeFileChannel(FileChannel.open(file, READ), null)) {
+			channel.wrapSinkFailures = true;
+			channel.markSinkFailureAsSourceFailure = true;
 			FileChannelWritableSource source = new FileChannelWritableSource(channel, 0, 3, false);
-			PartialWriteSocketChannel socket = new PartialWriteSocketChannel(3);
-			SocketChannelIo.SocketIoException failure = Assertions.assertThrows(SocketChannelIo.SocketIoException.class,
+			SocketChannel socket = new PartialWriteSocketChannel(3) {
+				@Override public int write(ByteBuffer bytes) throws IOException {
+					throw new IOException("A sink write failed before the channel identified a source failure");
+				}
+			};
+			ResponseBodySourceException failure = Assertions.assertThrows(ResponseBodySourceException.class,
 					() -> source.writeTo(socket, 3));
-			Assertions.assertSame(socketFailure, failure, "The sixteenth cause remains within the bounded inspection.");
+			Assertions.assertSame(channel.decoratedSinkFailure, failure.getCause());
+			Assertions.assertInstanceOf(ResponseBodySourceException.class, failure.getCause().getCause());
 			Assertions.assertEquals(0, channel.probeReads);
-			Assertions.assertEquals(0, socket.getWrittenBytes().length);
+			Assertions.assertTrue(source.hasRemaining());
 		}
 	}
 
@@ -1910,8 +1998,10 @@ public class MicrohttpInternalTests {
 
 	private static final class TransferProbeFileChannel extends FileChannel {
 		private final FileChannel delegate;
-		private final IOException transferFailure;
+		private IOException transferFailure;
 		private boolean wrapSinkFailures;
+		private int sinkFailureWrapperDepth = 1;
+		private boolean markSinkFailureAsSourceFailure;
 		private IOException decoratedSinkFailure;
 		private int bytesBeforeFailure;
 		private java.nio.channels.WritableByteChannel transferTarget;
@@ -1940,7 +2030,10 @@ public class MicrohttpInternalTests {
 			} catch (IOException failure) {
 				if (!wrapSinkFailures)
 					throw failure;
-				decoratedSinkFailure = new IOException("The decorating file channel could not complete its transfer", failure);
+				decoratedSinkFailure = markSinkFailureAsSourceFailure
+						? new ResponseBodySourceException("The channel identified an independent source failure", failure) : failure;
+				for (int depth = 0; depth < sinkFailureWrapperDepth; depth++)
+					decoratedSinkFailure = new IOException("The decorating file channel could not complete its transfer", decoratedSinkFailure);
 				throw decoratedSinkFailure;
 			}
 		}

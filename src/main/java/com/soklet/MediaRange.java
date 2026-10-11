@@ -85,7 +85,7 @@ public final class MediaRange {
 	 * Parsing is lenient: a malformed representation yields {@link Optional#empty()} rather than an exception.
 	 * A representation is considered malformed if it lacks a {@code type/subtype} structure, uses invalid
 	 * HTTP tokens for the type, subtype, or parameter names, pairs a wildcard type with a concrete subtype
-	 * (e.g. {@code *&#47;html}), or carries an unparseable {@code q} value.
+	 * (e.g. <code>*&#47;html</code>), or carries an unparseable {@code q} value.
 	 * Quality values outside {@code [0, 1]} are clamped. The {@code q} weight parameter is recognized at any
 	 * position; if multiple {@code q} parameters are present, all but the first are ignored. All other
 	 * parameters are retained as media-type parameters. Quoted parameter values have their surrounding

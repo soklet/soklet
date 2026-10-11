@@ -750,7 +750,7 @@ public final class StaticFiles {
 		 * Returns a strong content-hash ETag resolver.
 		 * <p>
 		 * This resolver streams the served file through SHA-256 on the request-handling thread and
-		 * emits strong ETags with values of the form {@code sha256-&lt;lowercase-hex&gt;}. It does not
+		 * emits strong ETags with values of the form {@code sha256-<lowercase-hex>}. It does not
 		 * cache digests and it fully reads the file for {@link HttpMethod#HEAD} requests as well as
 		 * {@link HttpMethod#GET} requests. Applications serving large files or HEAD-heavy traffic should
 		 * prefer a manifest-backed resolver.

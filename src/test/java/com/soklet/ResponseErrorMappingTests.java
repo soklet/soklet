@@ -67,12 +67,23 @@ public class ResponseErrorMappingTests {
 					public void didReceiveLogEvent(@NonNull LogEvent logEvent) { /* quiet */ }
 				})
 				.build(), simulator -> {
-			HttpRequestResult result = simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/bodyless").build());
-			Assertions.assertEquals(500, result.getMarshaledResponse().getStatusCode());
+			for (String path : Set.of("/bodyless", "/reset-with-body", "/reset-marshaled-with-body")) {
+				HttpRequestResult result = simulator.performHttpRequest(Request.withPath(HttpMethod.GET, path).build());
+				Assertions.assertEquals(500, result.getMarshaledResponse().getStatusCode(), path);
+			}
 		});
 	}
 
 	public static class ExplodeResource {
+		@GET("/reset-with-body")
+		public Response resetWithBody() {
+			return Response.withStatusCode(205).body("nope").build();
+		}
+
+		@GET("/reset-marshaled-with-body")
+		public MarshaledResponse resetMarshaledWithBody() {
+			return MarshaledResponse.withStatusCode(205).body(new byte[]{1}).build();
+		}
 		@GET("/explode")
 		public String explode() {
 			throw new RuntimeException("boom");

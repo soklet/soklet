@@ -375,7 +375,9 @@ const REVIEWED_SCOPE_TOPOLOGY_OVERRIDES = checkedReviewMap([
     ["completedResultIsPublishedOnlyAfterCoordinatorRoleRelease","4a728c54f345a68a3ac1c2ead8e2a6def0076690bbb748cfe60e1d36446ec933",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1},"controlledLifecycleCoreMillis":0}],
     ["exactGenerationOperationsRejectForeignTokensWithoutMutation","ff1b277adb13768eb39a9e28b2a43a292e48b75af80cf0ca8439c542f6a8535c",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1},"controlledLifecycleCoreMillis":0}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/DefaultHttpServerTests.java", "f73850c424e890383f5e9912ee48e6aa83b1eb2fd816fabd202331f492578f3e", [
+  // The added 205 wire regression changes the owning file only; both existing
+  // restart callables retain their independently checked exact source hashes.
+  ...reviewedScopeFile("src/test/java/com/soklet/DefaultHttpServerTests.java", "7d530d5ade2424bdf30b40dffea22645193217cfe9746df3a5b2c3f694a1cada", [
     ["earlySetupErrorRetainsIdentityCleansGenerationAndAllowsHttpRestart","8686b0fce8b5bb5579eee51892ce418c6ee7c03b1a3a013b4e7bb885e368b843",{"generation":{"count":2,"mode":"MIXED_MAX_PLUS_SEQUENTIAL","complete":2,"prior":1,"incomplete":1},"controlJoinMillis":5000}],
     ["staleHttpEventLoopFailureDoesNotClobberRestartedServer","cec3c46b78a87dd61c5fc5fe49b5ea59e9c13f4e2250a7948428bffa8c12ba4e",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1}}],
   ]),
@@ -821,10 +823,27 @@ const REVIEWED_CONTROL_OVERRIDES = checkedReviewMap([
     ["exactGenerationOperationsRejectForeignTokensWithoutMutation","ff1b277adb13768eb39a9e28b2a43a292e48b75af80cf0ca8439c542f6a8535c",{"controlJoinMillis":0,"controlComposition":"REVIEWED_NONBLOCKING_PRECONDITION"}],
     ["launchedThenThrowingCoordinatorCannotRepublishOrReleaseEvidence","b03f92588538cd5cf7ce738deb0df255146cbe88d855fa64e643e0bc50965ef4",{"controlJoinMillis":2000,"controlComposition":"REVIEWED_FOREGROUND_RELEASE"}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/DefaultHttpServerTests.java", "f73850c424e890383f5e9912ee48e6aa83b1eb2fd816fabd202331f492578f3e", [
+  // The three existing concurrency callables are unchanged. The new 205
+  // regression has one owner with the source-bound 5/2/2/1-second policy,
+  // a five-second connection retry and an independent absolute five-second
+  // response read deadline with an 8-KiB cap. Its 20-second composed maximum
+  // leaves 40 seconds under its explicit 60-second method guard.
+  ...reviewedScopeFile("src/test/java/com/soklet/DefaultHttpServerTests.java", "7d530d5ade2424bdf30b40dffea22645193217cfe9746df3a5b2c3f694a1cada", [
     ["httpServerCleansUpAfterUnexpectedEventLoopTermination","c0b3c2429b828d7d6b97cc5d324abf4e1bb75c12ec4b6473a7ff080dab147086",{"controlJoinMillis":4000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
     ["stopCannotPublishAnEmptyGenerationWhileStartInstallsHttpResources","daa38ff9c7f3f1effcc52664813c709b9eb9b4ad38458546dff9dd23de556bd0",{"controlJoinMillis":7100,"controlComposition":"REVIEWED_FOREGROUND_RELEASE"}],
     ["startRejectsRunningHttpGenerationWhileItsStopIsInProgress","468e5c2b4365d5a53148b8525487911d065bcd75075ffac281f4cd6b149d25be",{"controlJoinMillis":6000,"controlComposition":"REVIEWED_FOREGROUND_RELEASE"}],
+    ["resetContentCannotLeakBypassedBodyIntoNextPipelinedResponse","1c83f3f0c2bf657f5f495ff69a7dc3a48d3d1848f1aa24d20b73017728efe3bb",{"controlJoinMillis":10000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
+  ]),
+  // One fixture owner with the propagated 10/1/1/1-second policy performs two
+  // sequential boundedPipeline calls (GET and HEAD). Each explicitly bounds
+  // connection acquisition to five seconds, the entire wire read to five
+  // seconds and 8 KiB, and completion observation to five seconds. The local
+  // scanner does not propagate this non-lifecycle helper; this exact callable
+  // and whole-file review supplies all thirty seconds of controls. Together
+  // with the thirteen-second lifecycle maximum, the 60-second guard retains
+  // seventeen seconds of reserve. Existing pipeline users are unchanged.
+  ...reviewedScopeFile("src/test/java/com/soklet/FiniteHttpResponseSafetyTests.java", "959a2acc86f7e87d8d576a6c5f621cad19d11163789093430dc4e92361b93c0c", [
+    ["resetContentHasZeroLengthEvenWithCustomHeadRepresentationMetadata","5a79b592a3f0eb1ca78dfb9b7cce55a3646ccce63e105deca623c7d90205aab6",{"controlJoinMillis":30000}],
   ]),
   // The three invalid-length exchanges are sequential: each has a 2-second
   // connection retry and a 4-second socket read timeout. Retain the conservative
@@ -1135,7 +1154,7 @@ const REVIEWED_STREAMING_SCOPE_OVERRIDES = checkedReviewMap([
     ["inherited_capacity_and_cleanup_timeout_keep_the_slot_until_owned_close_exits","97fb0afb9abfb09bd02a50d07d11b4f2743d395722f5f63b1f6108376e20c26e",{"controlJoinMillis":21000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
     ["inherited_capacity_isolates_all_observers_from_callback_concurrency","69aa310c2b3f3006e8f71f8eddf457e9e34d1462dfc8f8608de31fc93ff1dc11",{"controlJoinMillis":27000,"controlComposition":"REVIEWED_FOREGROUND_RELEASE"}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/SseLifecycleAdmissionTests.java", "763768af0d54d1f20ab164bda6d35afe3eb3962d75bea4de03a8b1391bc32695", [
+  ...reviewedScopeFile("src/test/java/com/soklet/SseLifecycleAdmissionTests.java", "35a45527d51a01bec95daaaad91f41c1a75419331c13e90a540ca7397b5b2c8e", [
     ["defaultConnectionAdmissionSaturatesAt256AndRecoversAfterDisconnect","9bf2fcb1e4a99f02261b182a7e82ef1e8869a23c4282356d36d1b3ead4fb3902",{"controlJoinMillis":20000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND","phasePolicy":{"startupMillis":30000,"startupCancellationMillis":2000,"gracefulShutdownMillis":2000,"forcedShutdownMillis":2000}}],
   ]),
   ...reviewedScopeFile("src/test/java/com/soklet/SseInitializerRuntimeTests.java", "1c5ce8703c1e630012e4105dce00f5af6fff0200b7470eed9067592600a798be", [
@@ -1474,8 +1493,15 @@ const REVIEWED_VERIFICATION_FOLLOWUP_SCOPE_OVERRIDES = checkedReviewMap([
     ["everyFrameworkListLocalizesServerMetadataIncludingEmptyCatalogs","3946de2e78fa35868a30faea558eb7e7dcb32331c5b7bb8b12c902809173ef10",{"generation":{"count":8,"mode":"SEQUENTIAL","complete":8,"prior":7,"incomplete":1},"controlJoinMillis":80000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
     ["serverMetadataFailureUsesTheWholeCatalogFailurePolicy","ba7dbcc5fcec3cf2b7ae6fcd4ff1103402cd9aa228d026e14d381aaacaf9c31e",{"generation":{"count":8,"mode":"SEQUENTIAL","complete":8,"prior":7,"incomplete":1},"controlJoinMillis":80000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/McpResourcePublicRuntimeTests.java", "394cb802f742f6a5110093230816f5e288930afe959a1e4b7ec765cc3ed9514e", [
+  // The existing file-template callable hash is unchanged. The IPv6 test owns
+  // one simulator scope, never starts another lifecycle owner in its three-
+  // element literal URI loop, and performs three sequential five-second
+  // response waits. Its literal 5/2/2/1-second lifecycle policy plus fifteen
+  // seconds of control waits totals 25 seconds, leaving 35 seconds under the
+  // unchanged explicit 60-second type guard.
+  ...reviewedScopeFile("src/test/java/com/soklet/McpResourcePublicRuntimeTests.java", "0588a0bd4481ea2814536be4a0f33ab1a37b6afeede6593e507a17208656e2c4", [
     ["fileTemplateVariablesEncodeSlashesAndDecodeExactlyOnceOnEveryRevision","58799552f4eda07d290352d91e7ae01d17605fa8e8654d467b4862b59e4c0b8a",{"generation":{"count":1,"mode":"SINGLE","complete":1,"prior":0,"incomplete":1}}],
+    ["scopedIpv6ReadsAreRejectedWhileOrdinaryIpv6CapturesKeepCase","be15ada00ec09aa5b3151c9c9597d95a69e62df38fe7607aa2fa13c84c0d9fa6",{"controlJoinMillis":15000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
   ]),
   ...reviewedScopeFile("src/test/java/com/soklet/McpSimulatorPublicRuntimeTests.java", "0e2be1c351c0bb667d0a419fe9c3f3d921215361e9c01b696499355d58c6ac6a", [
     ["simulatorStartsRequestAgainstConfiguredMcpServer","2c0d86afd7ceb1c42c9efae81fe0e636bea552de9e90d8bb39ba40894f411efa",{"generation":{"count":1,"mode":"SINGLE","complete":1,"prior":0,"incomplete":1},"controlJoinMillis":45000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
@@ -1838,8 +1864,10 @@ const REVIEWED_ORPHAN_HELPERS = checkedReviewMap([
   ...reviewedOrphanFile("src/test/java/com/soklet/external/SseTransportHandshakeAccessTests.java", "c674f3e5dbb03f26e28a763b72d2c13b7938810f402334079931eed4a512dd46", [
     ["close",195,"496f77a84a3a14de422c047cda06988c45dcb9d376331caa02ca74a02cf9a001",{"path":"src/test/java/com/soklet/external/SseTransportHandshakeAccessTests.java","line":64,"lineSha256":"9d167d0ef74dc5cb7191410f92e76465eef59d154451a17a38d70657bd67b0cf","rationale":"The source-bound calling JUnit fixture owns this exact helper through its explicit start/shutdown invocation or try-with-resources cleanup. The helper operates on the same transport/Soklet owner already represented by the caller closure; it introduces no independent generation or synthetic JUnit outer guard. The callable and whole-file hashes bind the ownership and bounded control evidence."}],
   ]),
-  ...reviewedOrphanFile("src/test/java/com/soklet/FiniteHttpResponseSafetyTests.java", "db7ed149701d41f501b98f0b19dd6a4f4f51a61cd709c451eb5ae1bec8cdab18", [
-    ["close",232,"496f77a84a3a14de422c047cda06988c45dcb9d376331caa02ca74a02cf9a001",{"path":"src/test/java/com/soklet/FiniteHttpResponseSafetyTests.java","line":34,"lineSha256":"d1e064401db8d8c05bb1b5e28dd5c4d8527428c8be134d9678218ca99294b170","rationale":"The source-bound calling JUnit fixture owns this exact helper through its explicit start/shutdown invocation or try-with-resources cleanup. The helper operates on the same transport/Soklet owner already represented by the caller closure; it introduces no independent generation or synthetic JUnit outer guard. The callable and whole-file hashes bind the ownership and bounded control evidence."}],
+  // The new 205 test and bounded helper shift close without changing its
+  // callable body or the existing source-bound try-with-resources invocation.
+  ...reviewedOrphanFile("src/test/java/com/soklet/FiniteHttpResponseSafetyTests.java", "959a2acc86f7e87d8d576a6c5f621cad19d11163789093430dc4e92361b93c0c", [
+    ["close",283,"496f77a84a3a14de422c047cda06988c45dcb9d376331caa02ca74a02cf9a001",{"path":"src/test/java/com/soklet/FiniteHttpResponseSafetyTests.java","line":36,"lineSha256":"d1e064401db8d8c05bb1b5e28dd5c4d8527428c8be134d9678218ca99294b170","rationale":"The source-bound calling JUnit fixture owns this exact helper through its explicit start/shutdown invocation or try-with-resources cleanup. The helper operates on the same transport/Soklet owner already represented by the caller closure; it introduces no independent generation or synthetic JUnit outer guard. The callable and whole-file hashes bind the ownership and bounded control evidence."}],
   ]),
   ...reviewedOrphanFile("src/test/java/com/soklet/HeaderLocaleTests.java", "82129d6038b9552d3e954bfe9de5702fb1dba51360363ae1ebdf0a42cc7dc7db", [
     ["main",92,"aad2a39b20e15b5ca5ee07ce3b777f965fd195860007f7f586b2cc157b645cb5",{"path":"src/test/java/com/soklet/HeaderLocaleTests.java","line":74,"lineSha256":"4fb90ede31f41e09dafeb6b6ac48ed005e8f618ae0cc68a82e34ed3102312eb0","rationale":"The isolated-locale JUnit driver starts this exact main class for tr, az, ar_EG, fa_IR and en with matching FORMAT locale pins. Each child has a 25-second wait and finally forced destruction with a two-second termination wait. The method-level 150-second guard covers five sequential 27-second process/cleanup budgets plus 15 seconds of reserve. The child main invokes bounded HTTP and Java-21-plus SSE wire probes; it remains externally bounded helper evidence, not a synthetic JUnit lifecycle scope."}],
@@ -1954,9 +1982,9 @@ const REVIEWED_ORPHAN_HELPERS = checkedReviewMap([
     ["start",245,"0c3ee687393877456d2e2fd47677d64daab07587e4bb91e5c2431b55f4bd7b3b",{"path":"src/test/java/com/soklet/SseInitializerRuntimeTests.java","line":62,"lineSha256":"8d7e8eb67bdc2bd8120bf0ef36821961a66d992f7a1142afbef0f2d4f8e3313e","rationale":"Each initializer test directly starts this fixture; its constructor supplies the reviewed 100-millisecond graceful and forced policy."}],
     ["close",253,"9b013bb1b47807fcd626406f533d5a1ed7d93b4e9fb7664c4d7111700b7ca232",{"path":"src/test/java/com/soklet/SseInitializerRuntimeTests.java","line":57,"lineSha256":"d4a48d539834456f20aabbe41059b2c633b2efd9c633b6105335ca17e77091e2","rationale":"The initializer test owns this AutoCloseable fixture in a try-with-resources scope; fixture shutdown belongs to its already-counted test generation."}],
   ]),
-  ...reviewedOrphanFile("src/test/java/com/soklet/SseLifecycleAdmissionTests.java", "763768af0d54d1f20ab164bda6d35afe3eb3962d75bea4de03a8b1391bc32695", [
-    ["start",123,"0c3ee687393877456d2e2fd47677d64daab07587e4bb91e5c2431b55f4bd7b3b",{"path":"src/test/java/com/soklet/SseLifecycleAdmissionTests.java","line":63,"lineSha256":"8d7e8eb67bdc2bd8120bf0ef36821961a66d992f7a1142afbef0f2d4f8e3313e","rationale":"The default-capacity admission test directly starts this fixture; its two-second graceful and forced policy and socket-poll controls are composed under its 90-second method guard."}],
-    ["close",138,"03fad5df7fe6ec56dc55b8cddfe36f4f976a8f087b46b2e143d86bf0172cd992",{"path":"src/test/java/com/soklet/SseLifecycleAdmissionTests.java","line":94,"lineSha256":"b153608a966dca6571b544635e46ccab9aca8126e95a5e6384e21db8425ca463","rationale":"The admission test invokes fixture shutdown in its finally block; this closes the same owned generation counted in the test row."}],
+  ...reviewedOrphanFile("src/test/java/com/soklet/SseLifecycleAdmissionTests.java", "35a45527d51a01bec95daaaad91f41c1a75419331c13e90a540ca7397b5b2c8e", [
+    ["start",125,"0c3ee687393877456d2e2fd47677d64daab07587e4bb91e5c2431b55f4bd7b3b",{"path":"src/test/java/com/soklet/SseLifecycleAdmissionTests.java","line":63,"lineSha256":"8d7e8eb67bdc2bd8120bf0ef36821961a66d992f7a1142afbef0f2d4f8e3313e","rationale":"The default-capacity admission test directly starts this fixture; its two-second graceful and forced policy and socket-poll controls are composed under its 90-second method guard."}],
+    ["close",140,"03fad5df7fe6ec56dc55b8cddfe36f4f976a8f087b46b2e143d86bf0172cd992",{"path":"src/test/java/com/soklet/SseLifecycleAdmissionTests.java","line":94,"lineSha256":"b153608a966dca6571b544635e46ccab9aca8126e95a5e6384e21db8425ca463","rationale":"The admission test invokes fixture shutdown in its finally block; this closes the same owned generation counted in the test row."}],
   ]),
   ...reviewedOrphanFile("src/test/java/com/soklet/SseMemoizedBroadcastTests.java", "b5d0874db907e36dcef95d07f8ff8614a4267b6a3279bb12e193142d500dd6ad", [
     ["close",343,"1e52871625411bf73db1c5dd440b6f9a94c45d96b65faf36d91dfbd213d05200",{"path":"src/test/java/com/soklet/SseMemoizedBroadcastTests.java","line":88,"lineSha256":"1928e085150186485537e213cb184b8afce11ab3838d0dd9619f8c9d8816067d","rationale":"The source-bound calling JUnit fixture owns this exact helper through its explicit start/shutdown invocation or try-with-resources cleanup. The helper operates on the same transport/Soklet owner already represented by the caller closure; it introduces no independent generation or synthetic JUnit outer guard. The callable and whole-file hashes bind the ownership and bounded control evidence."}],

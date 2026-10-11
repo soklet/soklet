@@ -1002,7 +1002,7 @@ public final class MarshaledResponse {
 
 	private static boolean isBodylessStatusCode(@NonNull Integer statusCode) {
 		requireNonNull(statusCode);
-		return (statusCode >= 100 && statusCode < 200) || statusCode == 204 || statusCode == 304;
+		return (statusCode >= 100 && statusCode < 200) || statusCode == 204 || statusCode == 205 || statusCode == 304;
 	}
 
 	private static byte @NonNull [] materializeFile(@NonNull Path path, @NonNull Long offset, @NonNull Long count) {

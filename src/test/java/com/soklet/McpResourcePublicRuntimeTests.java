@@ -57,6 +57,64 @@ public class McpResourcePublicRuntimeTests {
 	private static final String TEMPLATE_URI = "test://template/{id}/data";
 
 	@Test
+	public void scopedIpv6TemplatesAreRejectedBeforeServing() {
+		for (String template : List.of("http://[fe80::1%25{scope}]/resource",
+				"http://[fe80::1%25ETH0]/{name}")) {
+			McpEndpoint endpoint = endpointBuilder()
+					.resourceRegistrations(List.of(templateRegistration(template))).build();
+			Assertions.assertThrows(IllegalArgumentException.class, () -> serverBuilder(endpoint).build(), template);
+		}
+	}
+
+	@Test
+	public void scopedIpv6ReadsAreRejectedWhileOrdinaryIpv6CapturesKeepCase() throws Exception {
+		AtomicInteger reads = new AtomicInteger();
+		AtomicReference<Map<String, String>> captured = new AtomicReference<>();
+		McpResourceRegistration registration = McpResourceRegistration
+				.withUriTemplateAndName("http://[FE80::1]/{name}", "IPv6 resource", Set.of(McpProtocolVersion.V2026_07_28))
+				.handler((request, resource, features) -> {
+					reads.incrementAndGet();
+					captured.set(resource.getUriTemplateVariables());
+					return completeText(resource.getUri(), "value", "text/plain");
+				}).build();
+		McpEndpoint endpoint = endpointBuilder().resourceRegistrations(List.of(registration)).build();
+		SokletConfig config = SokletConfig.withMcpServer(serverBuilder(endpoint)
+				.toolRateLimiter(context -> McpRateLimitDecision.allowed()).build())
+				.lifecyclePolicy(LifecyclePolicy.builder()
+						.startupTimeout(Duration.ofSeconds(5))
+						.startupCancelationTimeout(Duration.ofSeconds(2))
+						.gracefulShutdownTimeout(Duration.ofSeconds(2))
+						.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).build();
+		SokletSimulator.run(config, simulator -> {
+			for (String uri : List.of("http://[fe80::1%25ETH0]/resource", "http://[fe80::1%25eth0]/resource",
+					"HTTP://[fe80::1]/Report%20ABC")) {
+				Request request = Request.withPath(HttpMethod.POST, MCP_PATH).headers(Map.of(
+						"Host", List.of(LOOPBACK + ":0"), "Content-Type", List.of(JSON_MEDIA_TYPE),
+						"Accept", List.of(JSON_MEDIA_TYPE + ", text/event-stream"),
+						"MCP-Protocol-Version", List.of(PROTOCOL_VERSION), "Mcp-Method", List.of("resources/read"),
+						"Mcp-Name", List.of(uri)))
+						.body(request("read", "resources/read", ",\"uri\":\"" + uri + "\"")
+								.getBytes(StandardCharsets.UTF_8)).build();
+				try (McpSimulation simulation = simulator.startMcpRequest(request)) {
+					McpSimulationResponse response = simulation.awaitResponse(Duration.ofSeconds(5)).orElseThrow();
+					String body = new String(response.getBody().orElseThrow(), StandardCharsets.UTF_8);
+					if (uri.contains("%25")) {
+						Assertions.assertEquals(400, response.getStatusCode(), body);
+						assertContains(body, "\"code\":-32602");
+						Assertions.assertEquals(0, reads.get());
+					} else {
+						Assertions.assertEquals(200, response.getStatusCode(), body);
+						Assertions.assertEquals(Map.of("name", "Report ABC"), captured.get());
+						Assertions.assertEquals(1, reads.get());
+						assertContains(body, uri);
+					}
+				}
+			}
+		});
+	}
+
+	@Test
 	public void staticCatalogsAndReadsUseThePublicPipeline() throws Exception {
 		List<String> stages = Collections.synchronizedList(new ArrayList<>());
 		AtomicInteger handlerInvocations = new AtomicInteger();

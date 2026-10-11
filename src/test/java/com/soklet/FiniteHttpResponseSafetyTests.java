@@ -6,8 +6,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
@@ -37,6 +39,21 @@ class FiniteHttpResponseSafetyTests {
 			WireResponse noContent = fixture.pipeline("HEAD", "/status/204", "/clean").get(0);
 			assertEquals(204, noContent.status());
 			assertFalse(noContent.headers().containsKey("content-length"));
+		}
+	}
+
+	@Test
+	void resetContentHasZeroLengthEvenWithCustomHeadRepresentationMetadata() throws Exception {
+		ResponseMarshaler marshaler = ResponseMarshaler.builder().headHandler((request, response) ->
+				response.copy().body((MarshaledResponseBody) null).headers(Map.of("Content-Length", List.of("4242"))).finish()).build();
+		try (Fixture fixture = new Fixture(null, RequestInterceptor.defaultInstance(), marshaler)) {
+			for (String method : List.of("GET", "HEAD")) {
+				List<WireResponse> responses = fixture.boundedPipeline(method, "/status/205", "/clean");
+				assertEquals(205, responses.get(0).status());
+				assertEquals(List.of("0"), responses.get(0).headers().get("content-length"));
+				assertEquals("", responses.get(0).body());
+				assertEquals("def", responses.get(1).body());
+			}
 		}
 	}
 
@@ -212,6 +229,40 @@ class FiniteHttpResponseSafetyTests {
 			this.soklet = Soklet.fromConfig(config); this.soklet.start();
 		}
 		private Socket socket() throws Exception { Socket socket = new Socket("127.0.0.1", this.port); socket.setSoTimeout(5000); return socket; }
+		private List<WireResponse> boundedPipeline(String method, String firstPath, String secondPath) throws Exception {
+			this.expectedFinishes += 2;
+			try (Socket socket = new Socket()) {
+				socket.connect(new InetSocketAddress("127.0.0.1", this.port), 5_000);
+				socket.getOutputStream().write((request(method, firstPath, false) + request("GET", secondPath, true)).getBytes(StandardCharsets.US_ASCII));
+				long readDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+				ByteArrayOutputStream wireBytes = new ByteArrayOutputStream();
+				InputStream input = socket.getInputStream();
+				byte[] buffer = new byte[1_024];
+				while (true) {
+					long remaining = readDeadline - System.nanoTime();
+					assertTrue(remaining > 0, "Pipelined response read exceeded five seconds");
+					socket.setSoTimeout((int) Math.max(1, TimeUnit.NANOSECONDS.toMillis(remaining)));
+					int count = input.read(buffer);
+					if (count == -1)
+						break;
+					assertTrue(wireBytes.size() + count <= 8_192, "Pipelined response exceeded the 8 KiB wire bound");
+					wireBytes.write(buffer, 0, count);
+				}
+				ByteArrayInputStream completedInput = new ByteArrayInputStream(wireBytes.toByteArray());
+				WireResponse first = readResponse(completedInput, method.equals("HEAD"));
+				WireResponse second = readResponse(completedInput, false);
+				assertEquals(-1, completedInput.read());
+				long finishDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+				synchronized (this.finishes) {
+					while (this.finishes.get() < this.expectedFinishes) {
+						long remaining = finishDeadline - System.nanoTime();
+						assertTrue(remaining > 0, "Handling finish did not arrive");
+						TimeUnit.NANOSECONDS.timedWait(this.finishes, remaining);
+					}
+				}
+				return List.of(first, second);
+			}
+		}
 		private List<WireResponse> pipeline(String method, String firstPath, String secondPath) throws Exception {
 			this.expectedFinishes += 2;
 			try (Socket socket = socket()) {

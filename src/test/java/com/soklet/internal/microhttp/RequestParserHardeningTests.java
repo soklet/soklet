@@ -52,6 +52,39 @@ class RequestParserHardeningTests {
     }
 
     @Test
+    void transferEncodingRejectsParametersWithoutDiscardingMalformedSuffixes() {
+        for (String coding : List.of("chunked;foo=bar", "chunked;", "chunked;foo=\"unterminated",
+                "chunked;garbage @", "CHUNKED \t; foo=bar", "chunked;foo=\"a,b\"")) {
+            String request = "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: " + coding
+                    + "\r\n\r\n1\r\na\r\n0\r\n\r\n";
+            for (int split = 0; split <= request.length(); split++) {
+                int readSplit = split;
+                ByteTokenizer tokenizer = new ByteTokenizer();
+                RequestParser parser = new RequestParser(tokenizer);
+                add(tokenizer, request.substring(0, readSplit));
+                assertThrows(MalformedRequestException.class, () -> {
+                    if (!parser.parse()) {
+                        add(tokenizer, request.substring(readSplit));
+                        parser.parse();
+                    }
+                }, "coding=" + coding + ", read split=" + split);
+            }
+        }
+    }
+
+    @Test
+    void transferEncodingStillAcceptsCaseAndWhitespaceWithChunkExtensions() {
+        for (String coding : List.of("chunked", "CHUNKED", " \tChunked\t ")) {
+            ByteTokenizer tokenizer = new ByteTokenizer();
+            add(tokenizer, "POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: " + coding
+                    + "\r\n\r\n1;foo=bar\r\na\r\n0;last=\"\"\r\n\r\n");
+            RequestParser parser = new RequestParser(tokenizer);
+            assertTrue(parser.parse(), coding);
+            assertArrayEquals(new byte[]{'a'}, parser.request().body());
+        }
+    }
+
+    @Test
     void chunkSizeAndExtensionGrammarRejectsInvalidBytesAndIncompleteSyntax() {
         for (String line : List.of(" 1", "1 ", "\t1", "+1", "-1", "1g", "1;", "1;=value", "1;name=",
                 "1;name=two words", "1;name=\"unclosed", "1;name=\"closed\"tail", "1;name=\"escape\\\"",
