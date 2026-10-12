@@ -108,8 +108,8 @@ public class SseLifecycleAdmissionTests {
 					.connectionQueueCapacity(8).verifyConnectionOnceEstablished(false)
 					.heartbeatInterval(Duration.ofMillis(200)).build();
 			Resource resource = new Resource(this.initializers);
-			this.soklet = Soklet.fromConfig(SokletConfig.withHttpServer(HttpServer.withPort(findFreePort()).build())
-					.sseServer(this.server).resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Resource.class)))
+			this.soklet = Soklet.fromConfig(SokletConfig.withSseServer(this.server)
+					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Resource.class)))
 					.instanceProvider(new InstanceProvider() {
 						@Override public <T> T provide(Class<T> type) {
 							return type == Resource.class ? type.cast(resource) : InstanceProvider.defaultInstance().provide(type);

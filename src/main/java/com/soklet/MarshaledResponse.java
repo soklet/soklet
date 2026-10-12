@@ -27,6 +27,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.channels.SeekableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
@@ -336,6 +337,9 @@ public final class MarshaledResponse {
 
 		if (body instanceof MarshaledResponseBody.FileChannel fileChannel)
 			return materializeFileChannel(fileChannel.getChannel(), fileChannel.getOffset(), fileChannel.getCount(), fileChannel.getCloseOnComplete());
+
+		if (body instanceof MarshaledResponseBody.SecureFile secureFile)
+			return materializeSecureFile(secureFile);
 
 		if (body instanceof MarshaledResponseBody.ByteBuffer byteBuffer)
 			return materializeByteBuffer(byteBuffer.getBuffer());
@@ -1010,6 +1014,24 @@ public final class MarshaledResponse {
 			return materializeFileChannel(fileChannel, offset, count, false);
 		} catch (IOException e) {
 			throw new UncheckedIOException(format("Unable to read file response body: %s", path), e);
+		}
+	}
+
+	private static byte @NonNull [] materializeSecureFile(MarshaledResponseBody.SecureFile file) {
+		if (file.getCount() > Integer.MAX_VALUE)
+			throw new IllegalStateException("Response body is too large to materialize as a byte array.");
+		byte[] bytes = new byte[Math.toIntExact(file.getCount())];
+		try (SeekableByteChannel channel = file.openChannel()) {
+			channel.position(file.getOffset());
+			ByteBuffer buffer = ByteBuffer.wrap(bytes);
+			while (buffer.hasRemaining()) {
+				int read = channel.read(buffer);
+				if (read <= 0)
+					throw new EOFException("File ended before the expected response body length was read.");
+			}
+			return bytes;
+		} catch (IOException e) {
+			throw new UncheckedIOException("Unable to materialize secure static-file response body.", e);
 		}
 	}
 

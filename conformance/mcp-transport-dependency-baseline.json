@@ -690,6 +690,10 @@
     },
     {
       "file": "src/main/java/com/soklet/internal/mcp/transport/McpOutboundChannel.java",
+      "type": "com.soklet.internal.microhttp.SocketChannelIo"
+    },
+    {
+      "file": "src/main/java/com/soklet/internal/mcp/transport/McpOutboundChannel.java",
       "type": "com.soklet.internal.microhttp.WritableSource"
     },
     {
@@ -759,8 +763,8 @@
   "summary": {
     "directMicrohttp": {
       "fileCount": 9,
-      "pairCount": 27,
-      "typeCount": 13
+      "pairCount": 28,
+      "typeCount": 14
     },
     "directSocketEventLoop": {
       "fileCount": 6,

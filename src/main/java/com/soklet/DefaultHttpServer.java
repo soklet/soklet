@@ -1571,6 +1571,10 @@ final class DefaultHttpServer implements HttpServer {
 					marshaledResponse.getStatusCode(), reasonPhrase, headers,
 					fileChannel.getChannel(), fileChannel.getOffset(), fileChannel.getCount(), fileChannel.getCloseOnComplete());
 
+		if (body instanceof MarshaledResponseBody.SecureFile secureFile)
+			return MicrohttpResponse.withSecureFileBody(
+					marshaledResponse.getStatusCode(), reasonPhrase, headers, secureFile);
+
 		if (body instanceof MarshaledResponseBody.ByteBuffer byteBuffer)
 			return MicrohttpResponse.withByteBufferBody(marshaledResponse.getStatusCode(), reasonPhrase, headers, byteBuffer.getBuffer());
 

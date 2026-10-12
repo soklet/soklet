@@ -64,7 +64,6 @@ const EXPECTED_GATE_IDS = Object.freeze([
   'soklet-servlet-jakarta',
   'toystore-app',
   'soklet-otel',
-  'soklet-website',
   'typescript-interop',
   'go-interop',
 ]);
@@ -280,13 +279,6 @@ const GATE_ARTIFACT_CONTRACTS = Object.freeze({
       evidenceRole('candidate-surefire-reports', 'DIRECTORY', SUREFIRE_MEDIA_TYPE, 'surefire-reports'),
     ]),
   }),
-  'soklet-website': Object.freeze({
-    toolchain: 'nodePin',
-    roles: Object.freeze([
-      evidenceRole('build-log', 'FILE', 'text/plain', 'soklet-website.log'),
-      evidenceRole('distribution', 'DIRECTORY', 'application/vnd.soklet.site-distribution', 'dist'),
-    ]),
-  }),
   'typescript-interop': Object.freeze({
     toolchain: 'nodePin',
     roles: Object.freeze([
@@ -422,11 +414,6 @@ const GATE_RECEIPT_IDENTITIES = Object.freeze({
     'mvn -B -ntp -Dsoklet.version=4.0.0 clean verify',
     'candidate',
     'CANDIDATE_LEG_PASSES_WITH_EXACT_ARTIFACT',
-  ),
-  'soklet-website': receiptIdentity(
-    'npm ci --ignore-scripts; npm run lint; npm run ssg-build',
-    'candidate-documentation',
-    'CLEAN_INSTALL_LINT_AND_STATIC_BUILD_PASS',
   ),
   'typescript-interop': receiptIdentity(
     'verification/interoperability/typescript/verify.sh',

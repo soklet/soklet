@@ -551,85 +551,48 @@ public class McpTransportPrimitiveTests {
 	}
 
 	@Test
-	public void conditional_coalesced_offer_revalidates_after_lock_contention()
-			throws Exception {
-		CountDownLatch backpressureEntered = new CountDownLatch(1);
-		CountDownLatch releaseBackpressure = new CountDownLatch(1);
-		AtomicReference<Throwable> failure = new AtomicReference<>();
-		McpOutboundChannel.Listener listener = new McpOutboundChannel.Listener() {
-			@Override
-			public void didWrite(long byteCount, long timestampNanos) {
-				// The test does not drain the channel.
-			}
-
-			@Override
-			public void didApplyBackpressure() {
-				backpressureEntered.countDown();
-				try {
-					if (!releaseBackpressure.await(3, TimeUnit.SECONDS))
-						throw new AssertionError(
-								"The channel-lock holder was not released.");
-				} catch (InterruptedException exception) {
-					Thread.currentThread().interrupt();
-					throw new AssertionError(exception);
-				}
-			}
-
-			@Override
-			public void didTerminate(StreamTerminationReason reason,
-					@Nullable Throwable cause) {
-				// No-op
-			}
-		};
+	public void conditional_coalesced_offer_revalidates_after_lock_contention() throws Exception {
 		McpOutboundChannel channel = new McpOutboundChannel(
-				1, 64, 64, System::nanoTime, listener);
-		Assertions.assertEquals(McpOutboundChannel.OfferResult.ACCEPTED,
-				channel.offer(ascii("occupied")));
-
-		Thread lockHolder = new Thread(() -> {
-			try {
-				channel.enqueue(ascii("waiting"));
-			} catch (Throwable throwable) {
-				failure.compareAndSet(null, throwable);
-			}
-		}, "mcp-conditional-offer-lock-holder");
-		AtomicReference<Optional<McpOutboundChannel.OfferResult>> result =
-				new AtomicReference<>();
-		CountDownLatch offerStarted = new CountDownLatch(1);
+				1, 64, 64, System::nanoTime, new RecordingChannelListener());
+		Assertions.assertEquals(McpOutboundChannel.OfferResult.ACCEPTED, channel.offer(ascii("occupied")));
+		java.lang.reflect.Field lockField = McpOutboundChannel.class.getDeclaredField("lock");
+		lockField.setAccessible(true);
+		Object channelLock = lockField.get(channel);
+		AtomicReference<Throwable> failure = new AtomicReference<>();
+		AtomicReference<Optional<McpOutboundChannel.OfferResult>> result = new AtomicReference<>();
 		AtomicLong boundary = new AtomicLong(1L);
+		AtomicInteger boundaryChecks = new AtomicInteger();
 		Thread offer = new Thread(() -> {
-			offerStarted.countDown();
 			try {
-				result.set(channel.offerCoalescingIf(ascii("catalog"), "catalog",
-						() -> boundary.get() > 0L));
+				result.set(channel.offerCoalescingIf(ascii("catalog"), "catalog", () -> {
+					boundaryChecks.incrementAndGet();
+					return boundary.get() > 0L;
+				}));
 			} catch (Throwable throwable) {
-				failure.compareAndSet(null, throwable);
+				failure.set(throwable);
 			}
 		}, "mcp-conditional-offer-contender");
-
 		try {
-			lockHolder.start();
-			Assertions.assertTrue(backpressureEntered.await(3, TimeUnit.SECONDS));
-			offer.start();
-			Assertions.assertTrue(offerStarted.await(3, TimeUnit.SECONDS));
-			boundary.set(0L);
-			releaseBackpressure.countDown();
+			// The backpressure listener runs outside this monitor. Hold the actual
+			// linearization lock until the contender is blocked acquiring it.
+			synchronized (channelLock) {
+				offer.start();
+				awaitCondition(() -> offer.getState() == Thread.State.BLOCKED || !offer.isAlive());
+				Assertions.assertEquals(Thread.State.BLOCKED, offer.getState());
+				Assertions.assertEquals(0, boundaryChecks.get(), "The boundary must not be read before acquiring the lock.");
+				boundary.set(0L);
+			}
 			offer.join(TimeUnit.SECONDS.toMillis(3));
-			Assertions.assertFalse(offer.isAlive(),
-					"The conditional offer remained blocked on the channel lock.");
+			Assertions.assertFalse(offer.isAlive());
 			Assertions.assertNull(failure.get());
-			Assertions.assertEquals(Optional.empty(), result.get(),
-					"The offer used a boundary decision made before lock acquisition.");
-			Assertions.assertEquals(1, channel.snapshot().bufferedFrames(),
-					"A deadline-suppressed offer mutated channel capacity.");
+			Assertions.assertEquals(1, boundaryChecks.get());
+			Assertions.assertEquals(Optional.empty(), result.get());
+			Assertions.assertEquals(1, channel.snapshot().bufferedFrames());
 		} finally {
-			releaseBackpressure.countDown();
 			channel.close(StreamTerminationReason.SERVER_STOPPING, null);
-			lockHolder.join(TimeUnit.SECONDS.toMillis(3));
 			offer.join(TimeUnit.SECONDS.toMillis(3));
 		}
-		Assertions.assertFalse(lockHolder.isAlive());
-		Assertions.assertNull(failure.get());
+		Assertions.assertFalse(offer.isAlive());
 	}
 
 	private static void awaitCondition(Condition condition) throws Exception {

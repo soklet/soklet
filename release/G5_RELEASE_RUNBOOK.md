@@ -9,6 +9,12 @@ It performs no candidate repair. If any source, documentation, version, pin,
 artifact, or required receipt is wrong, stop and return to U8, approve a new G4
 identity, and repeat U9.
 
+The owner's October 12 policy keeps the main `soklet.com` website outside
+this release process. The owner may deploy it at any time, without a candidate
+gate, release pin or frozen hash, release tag, deployment order, or G4/U9/G5
+dependency. Main-website changes do not invalidate library acceptance. The
+four packaged Javadoc sites remain governed by section 9's artifact contracts.
+
 The commands below are operational instructions, not a claim that promotion
 has happened. No signing, tag creation, GitHub release, Central upload,
 publication, downstream publication, or deployment was performed while this
@@ -33,7 +39,6 @@ downstream commits. G5 does not change them.
 | `soklet-otel` | Maven `com.soklet:soklet-otel:2.0.0`; Git tag `v2.0.0` | Major version: public removals and the six-value shutdown-outcome vocabulary are breaking changes; publishing them as 1.4.0 would violate the project policy. |
 | `barebones-app` | Git tag `soklet-4.0.0`; vendored `soklet-4.0.0.jar` | Example application, not a Central artifact. The tag names the exact core compatibility release without inventing an application package version. |
 | `toystore-app` | Git tag `soklet-4.0.0`; existing application version remains 1.0.0 | Example application/deployment, not a Central library. The compatibility tag binds its exact Soklet migration. |
-| `soklet.com` | Deployment label and Git tag `soklet-4.0.0`; private package version remains 0.1.0 | Website deployment identity follows the core release; it is not an npm package publication. |
 
 Central was confirmed on 2026-09-01 to contain adapter 1.2.0 releases and
 `soklet-otel` 1.3.1. The adapter 2.0.0 decision above supersedes the earlier
@@ -54,15 +59,15 @@ containing:
 - release-validation evidence SHA-256 and reviewed release-manifest SHA-256;
 - main, sources, Javadoc, and POM filenames, sizes, and SHA-256 values;
 - the literal build-output timestamp and pinned build recipe/toolchain identity;
-- all six downstream repository commit/tree IDs and receipt SHA-256 values;
+- all five downstream repository commit/tree IDs and receipt SHA-256 values;
 - the SHA-256 and durable reference of the owner's
   [historical-source disposition record](PLANNING_AUTHORITY_DRIFT_2026-09-13.md#required-owner-disposition-record),
   separately resolving the V10 and matrix archive-or-retention-gap decisions
   and acknowledging the sealed D1p scope and existing contract discrepancy;
 - the version/tag table above;
 - the full signing-key fingerprint approved for Maven artifacts and Git tags;
-- GitHub organization/repositories, Central namespace, deployment accounts,
-  website target, and four Javadoc deployment targets; and
+- GitHub organization/repositories, Central namespace, approved example
+  deployment accounts, and four Javadoc deployment targets; and
 - operator names for the reversible preparation steps and each irreversible
   publication action.
 
@@ -274,8 +279,8 @@ path, the G5 operator records the exact approved Maven command and its behavior
 in that downstream's receipt before execution.
 
 An adapter failure does not authorize skipping to the next public library.
-Stop the downstream wave, because the website and Javadocs describe the set as
-one release.
+Stop the approved downstream publication wave and resolve the failed library
+before continuing its dependent release steps.
 
 ## 8. Tag and verify the example applications
 
@@ -349,66 +354,22 @@ and JSON receipt (including file count and imported-tree hash), full payload-
 parity report, offline and public link-check reports, local backup path,
 preview and production deployment IDs, and rollback target for each site.
 An import or successful preview is preparation, not release acceptance or
-publication authority. Publish all four Javadoc sites before `soklet.com`;
-their deployment does not add candidate gates or change the established order.
+publication authority. Their deployment does not add candidate gates. Preserve
+their accepted-artifact and publication order within this runbook; the main
+website is deployed independently.
 
-## 10. Deploy soklet.com
+## 10. Main website: independent owner workflow
 
-Website deployment is last so it never advertises unavailable coordinates or
-docs. Its reviewed commit must already exist before downstream pinning and
-candidate acceptance; "last" does not mean the last preparation commit.
-Before any push, confirm the branch's actual hosting/deployment triggers as
-described in the [owner checklist](OWNER_COMMIT_CHECKLIST.md). Do not infer that
-a local commit deploys the site, or push a deployment-triggering branch early.
-At its exact G4-pinned commit:
+`soklet.com` may be edited and owner-deployed before, during, or after library
+publication. It is not a frozen release artifact and requires no release tag,
+pin, hash receipt, G5 approval record, or particular deployment order. Website
+builds, link-check results, and hosting records do not enter candidate evidence
+or the final G5 receipt index.
 
-```sh
-npm ci --ignore-scripts
-npm run lint
-npm run test:core-links
-npm run test:mcp-api-reference
-npm run check:mcp-api-reference -- --core /absolute/soklet
-npm run ssg-build
-node scripts/verify-site-presentation.mjs /absolute/soklet.com/dist
-npm run check:core-links -- --core /absolute/soklet --core-ref FULL_40_CHARACTER_COMMIT_SHA --built-site /absolute/soklet.com/dist
-git diff --exit-code
-```
-
-Require a clean generated tree under the repository's documented generated-
-artifact policy. Check that installation, direct-download, quickstart,
-migration, MCP, support/EOL, servlet, OTel, Javadocs, release notes, sitemap,
-and `llms.txt`/`llms-full.txt` references all name the exact public versions.
-Use the exact intended core candidate commit for `--core-ref`, not a moving
-branch name. The offline checker discovers core blob links from all sources,
-including navigation, and requires generated prose/HTML link-set parity. It
-checks regular targets in that committed tree without fetching or changing refs.
-The presentation verifier checks all 32 internal pages for metadata, pager
-links, icons, and the dark 404 presentation; retain its successful output too.
-
-Before promotion, check every exact GitHub source link used by the site,
-including its branch/tag/commit and target path. A local file or feature-branch
-commit does not establish that a `/blob/master/` URL resolves publicly. Under
-this separate G5 authorization, run the bounded public check from the website:
-
-```sh
-npm run check:core-links -- --core /absolute/soklet --core-ref FULL_40_CHARACTER_COMMIT_SHA --built-site /absolute/soklet.com/dist --live
-```
-
-Retain stdout JSON with the G5 evidence. Every dynamically discovered core
-blob URL must return HTTP 200 HTML without redirects, and its public raw master
-file must match the intended commit's SHA-256. No fixed list of five documents
-or fixed link count substitutes for discovery. Requests send no credentials;
-timeouts, rate limits, redirects, missing files and content mismatches fail
-closed. This is a point-in-time link/content check, not publication authority.
-Also check other exact source URLs, public artifacts and Javadoc links under
-the existing broader public-link review. A failed link check stops deployment; any
-tracked link correction requires renewed candidate preparation and acceptance.
-
-Deploy to the approved preview target, run its link/download/metadata smoke,
-then atomically promote it to `https://www.soklet.com`. Create and verify signed
-tag `soklet-4.0.0` only at the exact deployed commit. Retain build/generator
-hashes, preview and production deployment IDs, DNS/CDN purge result if used,
-tag object, and rollback target.
+Use the site's README and the [independent content checks](OWNER_COMMIT_CHECKLIST.md#independent-website-content-checks)
+for ordinary documentation quality, builds, API-reference review, and optional
+live source-link checking. Those checks do not gate library publication or
+require candidate reacceptance when the website changes.
 
 ## 11. Post-publish smoke
 
@@ -423,8 +384,6 @@ its local dependency cache:
   2.3.0 `tools/list` and `tools/call`, shut down, and prove port release;
 - compile/run the README raw-`javac` HTTP example with only the public core JAR;
 - run the barebones and ToyStore documented public-dependency smoke;
-- verify the soklet.com homepage, installation, migration, MCP, security,
-  servlet, OTel, license, release, sitemap, and LLM-text URLs;
 - verify the four Javadoc roots and representative deep links;
 - check every GitHub tag/release and anonymous attachment download; and
 - record DNS resolver, HTTP status, redirect chain, content length, SHA-256,
@@ -442,7 +401,7 @@ Do not declare completion while only one CDN/resolver sees the release.
 | Signed tag pushed, Central still unpublished | Stop. Do not delete or retarget the public tag. Resolve the cause and use an explicitly approved correction strategy. |
 | Central artifact published | Maven coordinates are immutable. Never overwrite or attempt deletion. Publish a correctly versioned follow-up release and advisory if correction is required. |
 | GitHub release published | Preserve the tag and original release record. Correct prose transparently or issue a follow-up release; never replace an attachment with different bytes under the same name. |
-| Website/Javadocs deployed | Roll the alias back to the exact recorded prior deployment if necessary, without changing published Maven/tag bytes. Retain both deployment receipts and publish a status note when user impact warrants it. |
+| Javadocs deployed | Roll the alias back to the exact recorded prior deployment if necessary, without changing published Maven/tag bytes. Retain both deployment receipts and publish a status note when user impact warrants it. |
 | Downstream wave partly published | Do not hide the partial state. Stop later dependent deployments, record exactly what is public, correct with new semantic versions where needed, then update site/release notes honestly. |
 
 ## Final retained receipt set
@@ -456,7 +415,6 @@ G5 is complete only when one immutable index binds:
 - equivalent tag/publication/public-resolution records for three downstream
   libraries;
 - exact tag/smoke/deployment records for barebones and ToyStore;
-- website tag, build, preview, production, and link/download records;
 - all four Javadoc source/artifact/importer-receipt/payload-parity/deployment/link records;
 - every public URL/coordinate hash and observation time;
 - any stop, partial-publication, rollback, correction, or advisory decision;

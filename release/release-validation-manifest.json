@@ -9,7 +9,7 @@
   "promotion": {
     "helper": {
       "path": "scripts/release-promotion.mjs",
-      "sha256": "c80941f094b95fbbb2b99343091701a0a5dc444042392835d7f458b327cc8279"
+      "sha256": "1f237856902166a043d2f53c38aae5dd89cc05859fe5c8c60dc4c336f9deb79a"
     },
     "wrapper": {
       "path": "scripts/promote-release-candidate.sh",
@@ -440,22 +440,6 @@
       "status": "BLOCKED_UNCOMMITTED_LOCAL_MIGRATION",
       "toolchain": "java",
       "versionProperty": "soklet.version"
-    },
-    {
-      "access": "PRIVATE_READ_ONLY",
-      "artifactChecksum": null,
-      "artifactIdentity": "revetware/soklet.com-source",
-      "commit": "7717cea81776a1f6567f428cb0518702159fd5bc",
-      "defaultArtifactIdentity": null,
-      "defaultArtifactSha256": null,
-      "evidenceContract": "soklet.release.soklet-website.v1",
-      "id": "soklet-website",
-      "kind": "DOWNSTREAM",
-      "reason": "The earlier MCP documentation migration is committed, but final documentation, dependency, and generated-artifact changes require an owner-created retrievable commit and a fresh pin; the existing pin is not the final candidate.",
-      "repository": "https://github.com/revetware/soklet.com.git",
-      "status": "BLOCKED_UNCOMMITTED_LOCAL_MIGRATION",
-      "toolchain": "nodePin",
-      "versionProperty": null
     },
     {
       "access": "PUBLIC_READ_ONLY",

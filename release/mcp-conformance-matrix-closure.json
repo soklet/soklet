@@ -29,7 +29,6 @@
     "soklet-servlet-jakarta",
     "toystore-app",
     "soklet-otel",
-    "soklet-website",
     "typescript-interop",
     "go-interop"
   ],

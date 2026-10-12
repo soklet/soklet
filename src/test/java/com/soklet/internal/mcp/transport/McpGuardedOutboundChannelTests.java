@@ -412,11 +412,19 @@ public class McpGuardedOutboundChannelTests {
 
 		@Override
 		public long write(ByteBuffer[] sources, int offset, int length) throws IOException {
-			long written = 0L;
-
-			for (int index = offset; index < offset + length; index++)
-				written += write(sources[index]);
-
+			int written = 0;
+			int remaining = maximumBytesPerWrite;
+			// One gathering call has one total write budget and consumes an
+			// ordered prefix; it cannot skip an unfinished buffer for a later one.
+			for (int index = offset; index < offset + length && remaining > 0; index++) {
+				int byteCount = Math.min(sources[index].remaining(), remaining);
+				byte[] bytes = new byte[byteCount];
+				sources[index].get(bytes);
+				output.write(bytes);
+				written += byteCount;
+				remaining -= byteCount;
+			}
+			afterWrite.run();
 			return written;
 		}
 

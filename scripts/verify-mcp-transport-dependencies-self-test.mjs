@@ -36,7 +36,7 @@ const verifierPath = resolve(projectRoot,
 const temporaryRoot = mkdtempSync(join(tmpdir(),
   'soklet-mcp-transport-dependencies-self-test-'));
 const goldenRoot = resolve(temporaryRoot, 'golden');
-const EXPECTED_CASE_COUNT = 123;
+const EXPECTED_CASE_COUNT = 126;
 let passedCases = 0;
 
 const FIXTURE_SOURCES = Object.freeze([
@@ -231,7 +231,7 @@ try {
     assert.deepEqual(result.directSocketEventLoop,
       baseline.summary.directSocketEventLoop);
     assert.deepEqual(result.directMicrohttp,
-      { fileCount: 9, pairCount: 27, typeCount: 13 });
+      { fileCount: 9, pairCount: 28, typeCount: 14 });
     assert.deepEqual(result.directSocketEventLoop,
       { fileCount: 6, pairCount: 7, typeCount: 3 });
     assert.equal(result.characterizationCount, 5);
@@ -981,6 +981,24 @@ try {
       mutateSource(root, SOCKET_IO, (source) => replaceAfter(source,
         'static int write(', 'throw new SocketIoException(failure);', 'throw failure;'));
     }, /SocketChannelIo.write must return the actual socket write result/u);
+
+  expectRejected('typed gathering helper must perform real socket IO',
+    (root) => {
+      mutateSource(root, SOCKET_IO, (source) => source.replace(
+        'return channel.write(buffers, offset, length);', 'return 0; /* channel.write(buffers, offset, length) */'));
+    }, /SocketChannelIo.writeGathering must return the actual gathering socket write result/u);
+
+  expectRejected('typed gathering helper must retain the socket failure boundary',
+    (root) => {
+      mutateSource(root, SOCKET_IO, (source) => replaceAfter(source,
+        'static long writeGathering(', 'throw new SocketIoException(failure);', 'throw failure;'));
+    }, /SocketChannelIo.writeGathering must return the actual gathering socket write result/u);
+
+  expectRejected('typed gathering helper must retain the buffer range',
+    (root) => {
+      mutateSource(root, SOCKET_IO, (source) => source.replace(
+        'return channel.write(buffers, offset, length);', 'return channel.write(buffers, 0, length);'));
+    }, /SocketChannelIo.writeGathering must return the actual gathering socket write result/u);
 
   expectRejected('discard accounting cannot be restored by a comment decoy',
     (root) => {

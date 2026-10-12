@@ -28,6 +28,34 @@
   socket peer. Trusted proxies must emit IP literals; `Forwarded` without
   `for=` still permits `X-Forwarded-For` fallback. See
   [Forwarded origin and servlet client addresses](MIGRATING_TO_4_0.md#forwarded-origin-and-servlet-client-addresses).
+- **Transfer coding and bodyless responses:** a request such as
+  `Transfer-Encoding: chunked;foo=bar` now receives HTTP 400 before its resource
+  method runs; valid chunk-size extensions remain supported. The built-in
+  transport always emits an empty `205 Reset Content` with `Content-Length: 0`,
+  including for HEAD. Resource methods may return an absent or zero-length
+  finite body for 205; a nonempty body or stream fails with HTTP 500. The
+  existing resource-method rule requiring absent bodies for 204 and 304 is
+  unchanged. Custom framework-response marshaler hooks retain their body
+  omission behavior for these statuses. See
+  [HTTP and SSE framing](MIGRATING_TO_4_0.md#http-and-sse-framing).
+- **HTTP dates and cookie expiry:** obsolete two-digit HTTP years use the
+  moving fifty-year window before calendar and weekday validation. Invalid
+  HTTP dates, including `24:00:00`, are rejected. Imported cookie `Expires`
+  values use the fixed cookie-year rule instead: 00–69 means 2000–2069 and
+  70–99 means 1970–1999, with weekday text ignored. Only an explicitly supplied
+  `Max-Age` is retained; nonpositive values normalize to zero. See
+  [HTTP dates and cookie expiry](MIGRATING_TO_4_0.md#http-dates-and-cookie-expiry).
+- **MCP resource addresses:** scoped IPv6 literals containing a zone identifier
+  are rejected in exact URIs, templates, annotations, and client resource
+  requests. Ordinary IPv6 resources remain supported, and template captures
+  retain their spelling before once-only UTF-8 decoding. See
+  [MCP resource addresses](MIGRATING_TO_4_0.md#mcp-resource-addresses).
+- **Servlet form decoding and binding listeners:** both 2.0.0 adapters reject
+  malformed query/form bytes in the selected charset instead of replacing
+  them. Concurrent setters of an identical session attribute share one binding
+  callback; a waiting setter returns after at most 200 milliseconds or on
+  interruption, without invoking another callback. See
+  [Servlet adapters](MIGRATING_TO_4_0.md#servlet-adapters).
 - **File delivery:** the standard HTTP transport retains the real-socket
   `FileChannel.transferTo` path for the JDK's standard file channels, allowing
   native transfer when supported. Custom/provider channels use a typed socket
@@ -329,9 +357,22 @@ maintenance or security fixes afterward. See the explicit
 
 ### Correctness Fixes
 
+- Rejected response statuses now release owned file channels, including invalid
+  bodyless resource responses and invalid final statuses from marshaler hooks or
+  interceptors. Borrowed channels stay open, and cleanup failures preserve the
+  original validation error. Internal file-response factories validate ranges
+  before opening files.
 - The standard HTTP listener now enables `TCP_NODELAY` on accepted connections,
   avoiding Linux delayed-ACK stalls for small keep-alive HTTP and MCP responses.
   Failure to apply this optional tuning leaves normal socket I/O handling intact.
+  HTTP streaming chunks and MCP SSE chunks use gathering writes to reduce
+  framing packet overhead while retaining partial-write accounting.
+- Peer disconnects during MCP output retain their original causes without
+  becoming application write errors. Custom file channels that defer or retry
+  a failed socket write retain the first typed failure for the same
+  classification. File metadata failures remain source errors even when a
+  provider wraps a prior socket exception. OTel stream errors without a cause
+  now receive a bounded `error.type`; routine client disconnects remain non-errors.
 - Protocol numbers no longer depend on the JVM's default formatting locale:
   file Content-Range values, default weak ETags, cookie Max-Age, SSE error
   status/length fields, and servlet request/redirect ports use ASCII decimal
@@ -455,6 +496,11 @@ maintenance or security fixes afterward. See the explicit
 
 ### Fixes
 
+- Static-file delivery uses pinned directory descriptors and validates the opened
+  file's identity, preserving containment on supported Linux and macOS runtimes,
+  including macOS Java 17 and 21 without public `SecureDirectoryStream` support.
+  Raced-in FIFOs cannot block file acquisition. Unsupported runtime access fails
+  closed; see [Static-file identity and cache metadata](MIGRATING_TO_4_0.md#static-file-identity-and-cache-metadata).
 - Fixed `HttpDate.toHeaderValue(Instant)` so it rejects instants outside the four-digit IMF-fixdate year range instead of rendering invalid header values or leaking formatter exceptions.
 - Hardened the low-level HTTP event loop so unchecked task failures are contained to the affected connection instead of terminating the event loop thread.
 - Fixed multipart parsing for unnamed parts and made multipart header decoding explicitly UTF-8.

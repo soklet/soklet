@@ -980,7 +980,7 @@ public final class McpOutboundChannel {
 
 	private static final class Chunk {
 		@NonNull
-		private final List<@NonNull ByteBuffer> buffers;
+		private final ByteBuffer @NonNull [] buffers;
 		private final int regularPayloadBytes;
 		private final boolean terminal;
 		private final @Nullable Object coalescingKey;
@@ -995,7 +995,7 @@ public final class McpOutboundChannel {
 				int regularPayloadBytes, boolean terminal,
 				@Nullable Object coalescingKey, @Nullable BooleanSupplier writeAllowed,
 				@Nullable Runnable payloadWritten, @Nullable Runnable payloadReleased) {
-			this.buffers = requireNonNull(buffers);
+			this.buffers = requireNonNull(buffers).toArray(ByteBuffer[]::new);
 			this.regularPayloadBytes = regularPayloadBytes;
 			this.terminal = terminal;
 			this.coalescingKey = coalescingKey;
@@ -1039,8 +1039,8 @@ public final class McpOutboundChannel {
 				long maximumBytes) throws IOException {
 			long written = 0L;
 
-			while (written < maximumBytes && bufferIndex < buffers.size()) {
-				ByteBuffer buffer = buffers.get(bufferIndex);
+			while (written < maximumBytes && bufferIndex < buffers.length) {
+				ByteBuffer buffer = buffers[bufferIndex];
 
 				if (!buffer.hasRemaining()) {
 					bufferIndex++;
@@ -1051,15 +1051,25 @@ public final class McpOutboundChannel {
 					guardRevoked = true;
 					break;
 				}
-				int originalLimit = buffer.limit();
-				int writeSize = (int) Math.min(maximumBytes - written, (long) buffer.remaining());
-				buffer.limit(buffer.position() + writeSize);
+				// Keep one guard decision and socket boundary for this gathered write,
+				// while limiting framing and payload to the event-loop byte budget.
+				int lastBufferIndex = bufferIndex;
+				long remainingBudget = maximumBytes - written;
+				while (lastBufferIndex < buffers.length - 1
+						&& buffers[lastBufferIndex].remaining() < remainingBudget) {
+					remainingBudget -= buffers[lastBufferIndex].remaining();
+					lastBufferIndex++;
+				}
+				ByteBuffer lastBuffer = buffers[lastBufferIndex];
+				int originalLimit = lastBuffer.limit();
+				lastBuffer.limit(lastBuffer.position() + (int) Math.min(remainingBudget, (long) lastBuffer.remaining()));
 
 				long currentWrite;
 				try {
-					currentWrite = SocketChannelIo.write(socketChannel, buffer);
+					currentWrite = SocketChannelIo.writeGathering(socketChannel, buffers, bufferIndex,
+							lastBufferIndex - bufferIndex + 1);
 				} finally {
-					buffer.limit(originalLimit);
+					lastBuffer.limit(originalLimit);
 				}
 
 				written += currentWrite;
@@ -1093,10 +1103,10 @@ public final class McpOutboundChannel {
 		}
 
 		private boolean isComplete() {
-			while (bufferIndex < buffers.size() && !buffers.get(bufferIndex).hasRemaining())
+			while (bufferIndex < buffers.length && !buffers[bufferIndex].hasRemaining())
 				bufferIndex++;
 
-			return bufferIndex >= buffers.size();
+			return bufferIndex >= buffers.length;
 		}
 	}
 }

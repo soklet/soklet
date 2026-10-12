@@ -523,7 +523,7 @@ public final class Soklet implements AutoCloseable {
 						}
 					}, (interceptorMarshaledResponse) -> {
 						requireNonNull(interceptorMarshaledResponse);
-						enforceFinalResponseStatusCode(interceptorMarshaledResponse.getStatusCode());
+						enforceMarshaledResponseStatusCode(interceptorMarshaledResponse, false);
 						didInvokeMarshaledResponseConsumer.set(true);
 						HttpRequestResult requestResult = requestResultHolder.get();
 						if (serverType == ServerType.SSE && requestResult != null
@@ -983,8 +983,8 @@ public final class Soklet implements AutoCloseable {
 		if (responseObject == null) {
 			response = Response.withStatusCode(204).build();
 		} else if (responseObject instanceof MarshaledResponse) {
-			MarshaledResponse marshaledResponse = (MarshaledResponse) responseObject;
-			enforceBodylessStatusCode(marshaledResponse.getStatusCode(), marshaledResponse.getBody().isPresent() || marshaledResponse.getStreamingResponseBody().isPresent());
+			MarshaledResponse marshaledResponse = normalizeEmptyResetContent((MarshaledResponse) responseObject);
+			enforceMarshaledResponseStatusCode(marshaledResponse, true);
 
 			return HttpRequestResult.withMarshaledResponse(marshaledResponse)
 					.resourceMethod(resourceMethod)
@@ -1003,11 +1003,16 @@ public final class Soklet implements AutoCloseable {
 			response = Response.withStatusCode(200).body(responseObject).build();
 		}
 
+		if (response.getStatusCode() == 205) {
+			Object body = response.getBody().orElse(null);
+			if ((body instanceof String text && text.isEmpty()) || (body instanceof byte[] bytes && bytes.length == 0))
+				response = response.copy().body(null).finish();
+		}
 		enforceBodylessStatusCode(response.getStatusCode(), response.getBody().isPresent());
 
-		MarshaledResponse marshaledResponse = responseMarshaler.forResourceMethod(request, response, resourceMethod);
+		MarshaledResponse marshaledResponse = normalizeEmptyResetContent(responseMarshaler.forResourceMethod(request, response, resourceMethod));
 
-		enforceBodylessStatusCode(marshaledResponse.getStatusCode(), marshaledResponse.getBody().isPresent() || marshaledResponse.getStreamingResponseBody().isPresent());
+		enforceMarshaledResponseStatusCode(marshaledResponse, true);
 
 		return HttpRequestResult.withMarshaledResponse(marshaledResponse)
 				.response(response)
@@ -1063,6 +1068,14 @@ public final class Soklet implements AutoCloseable {
 		return compatible;
 	}
 
+	@NonNull
+	private static MarshaledResponse normalizeEmptyResetContent(@NonNull MarshaledResponse response) {
+		if (response.getStatusCode() == 205 && !response.isStreaming() && response.getBody().isPresent()
+				&& response.getBodyLength() == 0L)
+			return response.copy().body((MarshaledResponseBody) null).finish();
+		return response;
+	}
+
 	private static void enforceBodylessStatusCode(@NonNull Integer statusCode,
 																								@NonNull Boolean hasBody) {
 		requireNonNull(statusCode);
@@ -1071,6 +1084,27 @@ public final class Soklet implements AutoCloseable {
 
 		if (hasBody && isBodylessStatusCode(statusCode))
 			throw new IllegalStateException(format("HTTP status code %d must not include a response body", statusCode));
+	}
+
+	private static void enforceMarshaledResponseStatusCode(@NonNull MarshaledResponse response,
+			boolean resourceMethodResponse) {
+		try {
+			if (resourceMethodResponse)
+				enforceBodylessStatusCode(response.getStatusCode(),
+						response.getBody().isPresent() || response.getStreamingResponseBody().isPresent());
+			else
+				enforceFinalResponseStatusCode(response.getStatusCode());
+		} catch (RuntimeException | Error failure) {
+			// This response will never reach transport cleanup. Release only an
+			// explicitly owned finite body and keep validation as the primary failure.
+			try {
+				response.copy().withoutBody();
+			} catch (RuntimeException | Error cleanupFailure) {
+				if (!sameInstance(cleanupFailure, failure))
+					failure.addSuppressed(cleanupFailure);
+			}
+			throw failure;
+		}
 	}
 
 	private static void enforceFinalResponseStatusCode(@NonNull Integer statusCode) {
@@ -1110,8 +1144,9 @@ public final class Soklet implements AutoCloseable {
 		requireNonNull(request);
 		requireNonNull(marshaledResponse);
 		requireNonNull(suppressContentLength);
-		enforceBodylessStatusCode(marshaledResponse.getStatusCode(),
-				marshaledResponse.getBody().isPresent() || marshaledResponse.isStreaming());
+		// Custom marshaler hooks retain their status; transport discards forbidden content.
+		enforceMarshaledResponseStatusCode(marshaledResponse, false);
+		marshaledResponse = normalizeEmptyResetContent(marshaledResponse);
 
 		// Don't write Content-Length for an accepted SSE Handshake, for example
 		if (!suppressContentLength)

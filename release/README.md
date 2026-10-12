@@ -27,9 +27,9 @@ Release-facing material is kept separate from the internal evidence ledger:
 - [owner commit and publication-preparation checklist](OWNER_COMMIT_CHECKLIST.md)
 - [historical-source dispositions and reviewed semantic anchors](PLANNING_AUTHORITY_DRIFT_2026-09-13.md)
 
-The format-v2 manifest defines an exact ordered universe of 26 release gates.
+The format-v2 manifest defines an exact ordered universe of 25 release gates.
 Twenty gates are currently `READY`; none remain `BLOCKED_HARNESS_MISSING`.
-Six downstream gates remain `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`.
+Five downstream gates remain `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`.
 `candidate-conformance` is `READY` for the exact dependency repin under the
 [September 27 toolchain disposition](../conformance/official/DEPENDENCY_REPIN_DISPOSITION_2026-09-27.md).
 The candidate is still not release-runnable end to end. `READY` means only that a gate has an executable,
@@ -37,45 +37,19 @@ pinned validation path. It never means that the gate passed for a candidate;
 only a typed PASS receipt from the exact candidate workflow can establish
 that.
 
-## Private website source for the candidate gate
+## Main website policy
 
-`soklet-website` is `PRIVATE_READ_ONLY`: its canonical repository URL and full
-commit SHA stay in the candidate manifest, but an anonymous Git fetch cannot
-read `revetware/soklet.com`. The `validate` job fetches that exact SHA into a
-bare mirror under the runner's temporary directory before running the
-four-hour candidate validator. The validator accepts the mirror only for this
-gate and checks its path, bare layout, canonical origin, credential-free
-configuration, and pinned commit before making an isolated checkout. Missing,
-incorrect, or symlinked mirrors fail the gate; no branch fallback is used.
+The owner's October 12 policy keeps `soklet.com` independent of the library
+release. The owner may deploy it at any time. It has no candidate gate,
+release-manifest pin, frozen source or output hash, required release tag,
+deployment order, or G4/U9/G5 dependency. Website edits and deployments do not
+invalidate a library candidate or its receipts. Earlier website-gate records
+remain historical provenance, not current requirements.
 
-The owner must create a GitHub App installed on **only**
-`revetware/soklet.com` with repository **Contents: read-only**. In the
-`soklet/soklet` repository, create the `release-candidate-private-source`
-Actions environment with variable `SOKLET_WEBSITE_SOURCE_APP_CLIENT_ID` and
-secret `SOKLET_WEBSITE_SOURCE_APP_PRIVATE_KEY`. Restrict that environment to
-the intended protected release branch and trusted reviewers before dispatch.
-The token action requests only `revetware/soklet.com` and `contents: read`.
-Its installation token lasts one hour and is used only for the immediate
-prefetch; the subsequent long validation runs without that credential. The
-token is never placed in a Git remote URL, local Git configuration, candidate
-manifest, or release evidence. No owner credential is checked into the repo.
-
-The website `dist` remains on the runner only long enough for the gate to
-compute its typed directory digest and record its candidate receipt. The
-validator then removes its website checkout, source mirror, and copied `dist`.
-The public core workflow artifact also excludes
-`raw/soklet-website/dist/**` so prepublication built pages are not distributed
-through that artifact. The typed directory digest and website build log remain
-in the uploaded evidence. This permits verification of the candidate receipt
-and its exact site-output identity, but post-run reviewers cannot inspect the
-page bytes from the public artifact. The build log may expose route names; the
-owner should review that output before accepting the candidate.
-
-All validation gates run in one trusted runner. Exact pinned candidate and
-downstream code that executes before the website gate can read the temporary
-mirror, and code executing during the website gate can read its checkout. The
-private-source boundary here protects the credential and the public artifact;
-it does not isolate the source from code executing in that runner.
+The site's own documentation, build, and source-link checks remain useful
+content-quality checks. The four packaged Javadoc sites retain their accepted
+artifact provenance, payload-parity, and publication contracts in the
+[G5 runbook](G5_RELEASE_RUNBOOK.md#9-import-and-deploy-all-four-packaged-javadoc-sites).
 
 After the owner-approved Roots/Sampling removal, current development fixtures
 use elicitation. Production tests verify error-mapping manifest SHA-256
@@ -641,7 +615,7 @@ adds no official claim or release gate. `MCP-HTTP-020` is now
 `AMB-002`. Generic `Request`, `Throwable`, custom-collector, and
 application-telemetry privacy remain owned by `SOK-PRIV-001`.
 
-Six downstream gates remain `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`. The manifest
+Five downstream gates remain `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`. The manifest
 records their exact public commit pins without treating uncommitted sibling
 work as evidence. The following is historical migration evidence, not the
 acceptance result for the current working tree or a frozen candidate:
@@ -651,9 +625,10 @@ acceptance result for the current working tree or a frozen candidate:
   uncommitted and is not represented by the manifest's pre-migration pin;
 - the current `soklet-otel` migration passes 36/36, but it remains uncommitted
   and is not represented by its pinned commit;
-- the `soklet.com` migration passes its offline clean install, lint, and
-  33-route static-generation build, but it remains uncommitted and is not
-  represented by its pinned commit;
+- at that historical checkpoint, the `soklet.com` migration passed its offline
+  clean install, lint, and 33-route static-generation build while uncommitted.
+  The former website pin requirement was superseded by the independent website
+  policy above;
 - both servlet integrations pass 158/158 at their 3.1.1 default and at the
   local 4.0.0 snapshot, but each required `soklet.version` POM edit is
   uncommitted and absent from the pinned 1.2.0 release commit; and
@@ -729,13 +704,13 @@ Once every gate is ready, the validator:
    fixture teardown, then compiles and runs a library-neutral
    localization provider against the candidate JAR alone;
 8. checks out every downstream at its exact manifest commit and invokes its
-   candidate hook, including same-candidate default/override servlet matrices, candidate-only
-   ToyStore and OpenTelemetry 4.0 migrations, Barebones startup/probe/termination,
-   website generated-artifact cleanliness, and the interoperability entry
-   points; ToyStore alone runs under the separately pinned Corretto 25
+   candidate hook, including same-candidate default/override servlet matrices,
+   candidate-only ToyStore and OpenTelemetry 4.0 migrations, Barebones
+   startup/probe/termination, and the interoperability entry points; ToyStore
+   alone runs under the separately pinned Corretto 25
    compiler/runtime because its POM requires release 25; and
 9. rehashes the candidate and assembles a canonical evidence manifest only
-   after the exact ordered 26-gate set has typed PASS evidence.
+   after the exact ordered 25-gate set has typed PASS evidence.
 
 The version-3 candidate-conformance contract pins the Tasks-capable
 `0.2.0-alpha.11-descriptive` suite and all 49 reviewed Phase 5 scenario
@@ -754,7 +729,7 @@ and their HTTP runtime supplement under `legacy/evidence.json` in the same
 conformance evidence directory. The modern selection and exception policy are
 unchanged. Missing legacy profiles, altered check vectors, incomplete runtime
 contracts, mismatched artifact/source/class identities, development receipts,
-or unclean fixture teardown fail closed. The gate universe remains 26.
+or unclean fixture teardown fail closed. The gate universe remains 25.
 
 Each gate has one immutable evidence-contract ID and one manifest-selected
 toolchain. `record-gate` requires the artifact descriptor plus an exact ordered
@@ -859,7 +834,7 @@ bash -n release/scripts/install-pinned-corretto-linux-x64.sh
 
 The first command validates the currently recorded pins, exact gate order,
 evidence contracts, toolchain references, and statuses. Adding
-`--require-ready` is expected to fail until the six downstream blockers above
+`--require-ready` is expected to fail until the five downstream blockers above
 are resolved.
 
 After the final candidate commit exists, dispatch

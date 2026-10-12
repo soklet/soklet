@@ -35,7 +35,7 @@ public final class SocketChannelIo {
         }
     }
 
-    static long write(SocketChannel channel, ByteBuffer[] buffers, int offset, int length) throws IOException {
+    public static long writeGathering(SocketChannel channel, ByteBuffer[] buffers, int offset, int length) throws IOException {
         try {
             return channel.write(buffers, offset, length);
         } catch (IOException failure) {

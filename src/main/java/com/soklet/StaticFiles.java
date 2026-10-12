@@ -24,6 +24,8 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.nio.channels.Channels;
+import java.nio.channels.SeekableByteChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
@@ -46,7 +48,20 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Safe helper for serving files from a configured root directory.
+ * Helper for serving files from a configured root directory. Both symlink policies pin the
+ * root and open each path component relative to an open directory descriptor. File identity is
+ * checked on the opened response file, so changing a pathname cannot redirect its delivery.
+ * <p>
+ * Supported environments use the default OpenJDK filesystem providers on Linux or macOS, on
+ * x86-64 or AArch64, with stable file identities. This includes macOS Java 17 and 21, whose public
+ * provider does not expose {@link java.nio.file.SecureDirectoryStream}. The descriptor bridge
+ * adds no external dependency and needs no JVM flags on ordinary classpath installations.
+ * Custom or modular runtimes must make {@code jdk.unsupported} available and resolved and permit
+ * the bridge's access. Unsupported providers, platforms, architectures, unavailable JDK internals,
+ * denied access, installed SecurityManagers, or missing stable identities fail closed.
+ * <p>
+ * Keep served file contents immutable while responses are in flight. Open file descriptors do
+ * not provide a snapshot of concurrent in-place writes.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -74,6 +89,8 @@ public final class StaticFiles {
 	private final Path noFollowRoot;
 	@NonNull
 	private final Path followRoot;
+	@NonNull
+	private final SecureStaticFileRoot secureRoot;
 	@NonNull
 	private final List<@NonNull String> indexFileNames;
 	@NonNull
@@ -131,8 +148,8 @@ public final class StaticFiles {
 
 		try {
 			this.followRoot = this.root.toRealPath();
-			// Preserve the configured ancestor spelling and resolve trusted ancestor links
-			// on each request, so resolver policies and atomic deployment swaps keep working.
+			// Preserve the configured spelling for no-follow resolver paths. The
+			// delivery root is pinned below, so replacing this path cannot redirect it.
 			this.noFollowRoot = this.root;
 		} catch (IOException e) {
 			throw new UncheckedIOException(format("Unable to resolve static file root '%s'.", this.root), e);
@@ -146,6 +163,7 @@ public final class StaticFiles {
 		} else if (!Files.isDirectory(this.noFollowRoot, LinkOption.NOFOLLOW_LINKS)) {
 			throw new IllegalArgumentException(format("Static file root '%s' is not a directory.", this.root));
 		}
+		this.secureRoot = new SecureStaticFileRoot(getResolutionRoot());
 	}
 
 	/**
@@ -180,6 +198,17 @@ public final class StaticFiles {
 
 		Path file = resolvedFile.path();
 		BasicFileAttributes attributes = resolvedFile.attributes();
+		// Path resolution can race a rename of an ancestor. Check the selected
+		// object through the pinned root before any application resolver sees its
+		// metadata. Delivery repeats this check immediately before writing.
+		if (attributes.fileKey() == null)
+			return Optional.empty();
+		try (SeekableByteChannel ignored = secureRoot.open(file,
+					attributes.fileKey(), attributes.size(), attributes.lastModifiedTime())) {
+			// Identity and containment were verified by the secure opener.
+		} catch (IOException | UnsupportedOperationException failure) {
+			return Optional.empty();
+		}
 		Access access = requireNonNull(getAccessResolver().accessFor(file, attributes), "accessResolver returned null; return Access.ALLOW, Access.DENY, or Access.HIDE.");
 
 		if (access == Access.HIDE)
@@ -189,7 +218,20 @@ public final class StaticFiles {
 			// Access denial is not a file representation, so validators and file headers do not apply.
 			return Optional.of(MarshaledResponse.fromStatusCode(StatusCode.HTTP_403.getStatusCode()));
 
-		EntityTag entityTag = requireNonNull(getEntityTagResolver().entityTagFor(file, attributes), "entityTagResolver returned null; use Optional.empty() to omit the header.").orElse(null);
+		EntityTag entityTag;
+		if (getEntityTagResolver() == ContentHashEntityTagResolver.defaultInstance()) {
+			// The built-in content hash must read the same approved object class as
+			// delivery. In particular, do not follow a link swapped in by a resolver.
+			try (SeekableByteChannel channel = secureRoot.open(file,
+					attributes.fileKey(), attributes.size(), attributes.lastModifiedTime())) {
+				entityTag = ContentHashEntityTagResolver.entityTagFor(channel);
+			} catch (IOException | UnsupportedOperationException failure) {
+				return Optional.empty();
+			}
+		} else {
+			entityTag = requireNonNull(getEntityTagResolver().entityTagFor(file, attributes),
+					"entityTagResolver returned null; use Optional.empty() to omit the header.").orElse(null);
+		}
 		Instant lastModified = requireNonNull(getLastModifiedResolver().lastModifiedFor(file, attributes), "lastModifiedResolver returned null; use Optional.empty() to omit the header.").orElse(null);
 		String cacheControl = requireNonNull(getCacheControlResolver().cacheControlFor(file, attributes), "cacheControlResolver returned null; use Optional.empty() to omit the header.").orElse(null);
 		Map<String, List<String>> headers = requireNonNull(getHeadersResolver().headersFor(file, attributes), "headersResolver returned null; return an empty map to omit extra headers.");
@@ -197,13 +239,19 @@ public final class StaticFiles {
 		Boolean rangeRequests = requireNonNull(getRangeRequestsResolver().rangeRequestsFor(file, attributes), "rangeRequestsResolver returned null; return false to disable range requests.");
 		String contentType = requireNonNull(getMimeTypeResolver().contentTypeFor(file), "mimeTypeResolver returned null; use Optional.empty() to omit Content-Type.").orElse(null);
 
-		// Resolvers can execute application code. Fail closed if it replaced an accepted
-		// no-follow path with a link or changed the file identity before response creation.
-		if (!getFollowSymlinks()) {
-			ResolvedFile current = noFollowResolvedFileForCandidate(file).orElse(null);
-			if (current == null || !current.path().equals(file)
-					|| !sameFileIdentity(attributes, current.attributes()))
-				return Optional.empty();
+		// Resolvers can execute application code. Recheck the selected path and identity
+		// before response creation; delivery checks again through the pinned root.
+		ResolvedFile current = getFollowSymlinks()
+				? followedRegularFile(file).orElse(null)
+				: noFollowResolvedFileForCandidate(file).orElse(null);
+		if (current == null || !current.path().equals(file)
+				|| !sameFileIdentity(attributes, current.attributes()))
+			return Optional.empty();
+		try (SeekableByteChannel ignored = secureRoot.open(file,
+				attributes.fileKey(), attributes.size(), attributes.lastModifiedTime())) {
+			// Bodyless responses need the same post-resolver validation as body responses.
+		} catch (IOException | UnsupportedOperationException failure) {
+			return Optional.empty();
 		}
 
 		MarshaledResponse response = MarshaledResponse.withFile(file, request, attributes)
@@ -214,6 +262,11 @@ public final class StaticFiles {
 				.headers(headers)
 				.rangeRequests(rangeRequests)
 				.build();
+		if (response.getBody().orElse(null) instanceof MarshaledResponseBody.File fileBody) {
+			response = response.copy().body(new MarshaledResponseBody.SecureFile(
+					secureRoot, fileBody.getPath(),
+					fileBody.getOffset(), fileBody.getCount(), attributes)).finish();
+		}
 
 		return Optional.of(response);
 	}
@@ -684,7 +737,10 @@ public final class StaticFiles {
 		 * Sets whether symbolic links are followed while resolving static-file paths.
 		 * <p>
 		 * Passing {@code null} restores the default of {@code false}. When disabled, any symbolic-link
-		 * component under the static root causes the candidate path to be hidden.
+		 * component under the static root causes the candidate path to be hidden. Enabling this option
+		 * resolves links inside the configured root, then securely opens the resolved target through
+		 * a pinned root. Links that resolve outside the root are hidden. A replacement link introduced
+		 * after resolution is never followed during delivery.
 		 *
 		 * @param followSymlinks {@code true} to follow symlinks, {@code false} to reject them, or
 		 * {@code null} for the default
@@ -701,8 +757,12 @@ public final class StaticFiles {
 		 * <p>
 		 * The configured root is validated as a directory when this method is called.
 		 * With {@code followSymlinks} enabled it is resolved to a real path; otherwise
-		 * a symbolic-link root is rejected. Pass the root's {@link Path#toRealPath}
-		 * value explicitly to use its resolved directory without enabling symlink traversal.
+		 * a symbolic-link root is rejected. The resolved directory handle is pinned for the lifetime
+		 * of this helper in either mode. Rebuild the helper when intentionally switching deployment roots.
+		 * Both modes require the descriptor access and runtime support described by {@link StaticFiles};
+		 * construction fails closed when those or stable file identities are unavailable.
+		 * Pass the root's {@link Path#toRealPath} value explicitly to use its
+		 * resolved directory without enabling symlink traversal.
 		 *
 		 * @return the configured static-file helper
 		 */
@@ -750,7 +810,8 @@ public final class StaticFiles {
 		 * Returns a strong content-hash ETag resolver.
 		 * <p>
 		 * This resolver streams the served file through SHA-256 on the request-handling thread and
-		 * emits strong ETags with values of the form {@code sha256-<lowercase-hex>}. It does not
+		 * emits strong ETags with values of the form {@code sha256-<lowercase-hex>}. When used by
+		 * {@link StaticFiles}, it hashes a securely opened file rather than reopening its path. It does not
 		 * cache digests and it fully reads the file for {@link HttpMethod#HEAD} requests as well as
 		 * {@link HttpMethod#GET} requests. Applications serving large files or HEAD-heavy traffic should
 		 * prefer a manifest-backed resolver.
@@ -1073,7 +1134,20 @@ public final class StaticFiles {
 																						@NonNull BasicFileAttributes attributes) {
 			requireNonNull(path);
 			requireNonNull(attributes);
+			try (InputStream inputStream = Files.newInputStream(path)) {
+				return Optional.of(hash(inputStream));
+			} catch (IOException e) {
+				throw new UncheckedIOException(format("Unable to hash static file '%s'.", path), e);
+			}
+		}
 
+		@NonNull
+		static EntityTag entityTagFor(@NonNull SeekableByteChannel channel) throws IOException {
+			return hash(Channels.newInputStream(channel));
+		}
+
+		@NonNull
+		private static EntityTag hash(@NonNull InputStream inputStream) throws IOException {
 			MessageDigest messageDigest;
 
 			try {
@@ -1084,15 +1158,11 @@ public final class StaticFiles {
 
 			byte[] buffer = new byte[CONTENT_HASH_BUFFER_SIZE];
 
-			try (InputStream inputStream = Files.newInputStream(path)) {
-				for (int bytesRead = inputStream.read(buffer); bytesRead >= 0; bytesRead = inputStream.read(buffer))
-					if (bytesRead > 0)
-						messageDigest.update(buffer, 0, bytesRead);
-			} catch (IOException e) {
-				throw new UncheckedIOException(format("Unable to hash static file '%s'.", path), e);
-			}
+			for (int bytesRead = inputStream.read(buffer); bytesRead >= 0; bytesRead = inputStream.read(buffer))
+				if (bytesRead > 0)
+					messageDigest.update(buffer, 0, bytesRead);
 
-			return Optional.of(EntityTag.fromStrongValue(format("sha256-%s", HEX_FORMAT.formatHex(messageDigest.digest()))));
+			return EntityTag.fromStrongValue(format("sha256-%s", HEX_FORMAT.formatHex(messageDigest.digest())));
 		}
 	}
 

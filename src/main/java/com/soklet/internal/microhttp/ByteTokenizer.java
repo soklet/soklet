@@ -14,6 +14,7 @@ import java.util.List;
  * Bytes are added at the tail and tokenization occurs at the head.
  */
 class ByteTokenizer {
+    private static final int MAX_IDLE_CAPACITY = 8 * 1024;
     private byte[] array = new byte[0];
     private int base;
     private int position;
@@ -51,9 +52,24 @@ class ByteTokenizer {
     void compact() {
         delimiterSearches.clear();
         if (position == size) {
+            // A large request must not pin its peak buffer for the lifetime of a
+            // keep-alive connection. Only discard storage when no pipelined bytes remain.
+            if (array.length > MAX_IDLE_CAPACITY)
+                array = new byte[0];
             base = 0;
             position = 0;
             size = 0;
+            return;
+        }
+
+        int unread = size - position;
+        if (array.length > MAX_IDLE_CAPACITY && unread < array.length / 2) {
+            byte[] reduced = new byte[Math.max(MAX_IDLE_CAPACITY, unread)];
+            System.arraycopy(array, position, reduced, 0, unread);
+            array = reduced;
+            base = 0;
+            position = 0;
+            size = unread;
             return;
         }
 

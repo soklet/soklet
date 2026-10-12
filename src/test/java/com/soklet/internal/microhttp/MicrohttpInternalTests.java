@@ -31,23 +31,71 @@ import static java.nio.file.StandardOpenOption.READ;
 
 public class MicrohttpInternalTests {
 	@Test
-	public void compactRetainsCapacityWhenRequestFullyConsumed() {
+	public void compactReleasesOversizedCapacityWhenRequestFullyConsumed() {
 		ByteTokenizer tokenizer = new ByteTokenizer();
 		byte[] request = ascii("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n");
 
 		add(tokenizer, request);
+		// Model a near-limit request whose byte array grew beyond the reuse cap.
+		add(tokenizer, new byte[10 * 1024 * 1024]);
 		int capacity = tokenizer.capacity();
 		RequestParser parser = new RequestParser(tokenizer, remoteAddress(), 1024);
 
 		Assertions.assertTrue(parser.parse());
 		Assertions.assertEquals(request.length, tokenizer.position());
+		// The parser consumed only the headers; consume the body before compaction.
+		Assertions.assertNotNull(tokenizer.next(10 * 1024 * 1024));
 
 		tokenizer.compact();
 
-		Assertions.assertEquals(capacity, tokenizer.capacity());
+		Assertions.assertTrue(capacity > 8 * 1024);
+		Assertions.assertTrue(tokenizer.capacity() <= 8 * 1024);
 		Assertions.assertEquals(0, tokenizer.position());
 		Assertions.assertEquals(0, tokenizer.size());
 		Assertions.assertEquals(0, tokenizer.remaining());
+		long totalBytes = tokenizer.totalBytesAdded();
+		add(tokenizer, request);
+		Assertions.assertEquals(totalBytes + request.length, tokenizer.totalBytesAdded());
+		parser.reset();
+		Assertions.assertTrue(parser.parse());
+	}
+
+	@Test
+	public void compactReleasesLargeBufferAroundPartialPipelinedRequest() {
+		ByteTokenizer tokenizer = new ByteTokenizer();
+		byte[] first = ascii("GET /one HTTP/1.1\r\nHost: localhost\r\n\r\n");
+		byte[] second = ascii("GET /two HTTP/1.1\r\nHost: localhost\r\n\r\n");
+		byte[] large = new byte[1024 * 1024 + first.length + 1];
+		System.arraycopy(first, 0, large, 0, first.length);
+		large[large.length - 1] = second[0];
+		add(tokenizer, large);
+		Assertions.assertNotNull(tokenizer.next(first.length + 1024 * 1024));
+		int peak = tokenizer.capacity();
+		tokenizer.compact();
+		Assertions.assertTrue(peak > 8 * 1024);
+		Assertions.assertTrue(tokenizer.capacity() <= 8 * 1024);
+		Assertions.assertEquals(1, tokenizer.remaining());
+		add(tokenizer, java.util.Arrays.copyOfRange(second, 1, second.length));
+		RequestParser parser = new RequestParser(tokenizer, remoteAddress(), 64);
+		Assertions.assertTrue(parser.parse());
+		Assertions.assertEquals("/two", parser.request().uri());
+	}
+
+	@Test
+	public void completedLargeRequestsDoNotAccumulateCapacityAcrossConnections() {
+		byte[] body = new byte[4 * 1024 * 1024];
+		List<ByteTokenizer> connections = new ArrayList<>();
+		long totalBytes = 0;
+		for (int index = 0; index < 64; index++) {
+			ByteTokenizer tokenizer = new ByteTokenizer();
+			add(tokenizer, body);
+			Assertions.assertNotNull(tokenizer.next(body.length));
+			tokenizer.compact();
+			connections.add(tokenizer);
+			totalBytes += tokenizer.capacity();
+		}
+		Assertions.assertTrue(totalBytes <= 64L * 8 * 1024);
+		Assertions.assertEquals(64, connections.size());
 	}
 
 	@Test
@@ -1016,6 +1064,107 @@ public class MicrohttpInternalTests {
 			Assertions.assertTrue(source.hasRemaining());
 			source.close();
 			Assertions.assertTrue(channel.isOpen(), "The response borrows this application-owned file channel.");
+		}
+	}
+
+	@Test
+	public void customFileTransferRetainsDeferredAndRetriedFailuresFromTheSameResponse(@TempDir Path directory) throws Exception {
+		Path file = directory.resolve("deferred-source");
+		Files.writeString(file, "abc");
+		for (boolean deferred : List.of(false, true)) {
+			for (int wrapper : List.of(0, 1, 2)) {
+				java.util.concurrent.atomic.AtomicInteger writes = new java.util.concurrent.atomic.AtomicInteger();
+				IOException socketCause = new IOException("The response's socket failed");
+				java.util.concurrent.atomic.AtomicReference<IOException> firstFailure = new java.util.concurrent.atomic.AtomicReference<>();
+				try (TransferProbeFileChannel channel = new TransferProbeFileChannel(FileChannel.open(file, READ), null) {
+					@Override public long transferTo(long position, long count, java.nio.channels.WritableByteChannel target) throws IOException {
+						if (firstFailure.get() == null) {
+							if (deferred)
+								Assertions.assertEquals(1, target.write(ByteBuffer.wrap(new byte[] {'a'})));
+							try { target.write(ByteBuffer.wrap(new byte[] {'b'})); }
+							catch (IOException failure) { firstFailure.set(failure); }
+							Assertions.assertNotNull(firstFailure.get());
+							if (deferred)
+								return 1L;
+							try { target.write(ByteBuffer.wrap(new byte[] {'b'})); }
+							catch (IOException ignored) { /* Retry must not replace first-failure provenance. */ }
+						}
+						if (wrapper == 2)
+							throw new java.io.UncheckedIOException("The channel deferred or retried its socket failure", firstFailure.get());
+						if (wrapper == 1)
+							throw new IOException("The channel deferred or retried its socket failure", firstFailure.get());
+						throw firstFailure.get();
+					}
+				}) {
+					FileChannelWritableSource source = new FileChannelWritableSource(channel, 0, 3, false);
+					PartialWriteSocketChannel socket = new PartialWriteSocketChannel(3) {
+						@Override public int write(ByteBuffer buffer) throws IOException {
+							int call = writes.incrementAndGet();
+							if (deferred && call == 1)
+								return super.write(buffer);
+							throw socketCause;
+						}
+					};
+					if (deferred)
+						Assertions.assertEquals(1L, source.writeTo(socket, 3));
+					SocketChannelIo.SocketIoException failure = Assertions.assertThrows(SocketChannelIo.SocketIoException.class,
+							() -> source.writeTo(socket, 3));
+					Assertions.assertSame(firstFailure.get(), failure);
+					Assertions.assertSame(socketCause, failure.getCause());
+					Assertions.assertEquals(2, writes.get(), "Failure classification must not write any probe bytes.");
+					Assertions.assertEquals(0, channel.probeReads);
+					Assertions.assertEquals(deferred ? "a" : "", new String(socket.getWrittenBytes(), StandardCharsets.US_ASCII));
+					Assertions.assertTrue(source.hasRemaining());
+				}
+			}
+		}
+	}
+
+	@Test
+	public void customFileTransferBoundsLifetimeSocketWitnessesAndRejectsUncheckedForeignCauses(@TempDir Path directory) throws Exception {
+		Path file = directory.resolve("bounded-witness-source");
+		Files.writeString(file, "abc");
+		for (int reportedIndex : List.of(0, 7, 8)) {
+			List<IOException> witnessed = new ArrayList<>();
+			try (TransferProbeFileChannel channel = new TransferProbeFileChannel(FileChannel.open(file, READ), null) {
+				@Override public long transferTo(long position, long count, java.nio.channels.WritableByteChannel target) throws IOException {
+					for (int attempt = 0; attempt < 9; attempt++) {
+						try { target.write(ByteBuffer.wrap(new byte[] {'a'})); }
+						catch (IOException failure) { witnessed.add(failure); }
+					}
+					throw new java.io.UncheckedIOException("The custom channel exhausted its retries", witnessed.get(reportedIndex));
+				}
+			}) {
+				FileChannelWritableSource source = new FileChannelWritableSource(channel, 0, 3, false);
+				SocketChannel socket = new PartialWriteSocketChannel(3) {
+					@Override public int write(ByteBuffer buffer) throws IOException { throw new IOException("Controlled sink failure"); }
+				};
+				if (reportedIndex < 8) {
+					SocketChannelIo.SocketIoException failure = Assertions.assertThrows(SocketChannelIo.SocketIoException.class,
+							() -> source.writeTo(socket, 3));
+					Assertions.assertSame(witnessed.get(reportedIndex), failure);
+				} else {
+					ResponseBodySourceException failure = Assertions.assertThrows(ResponseBodySourceException.class,
+							() -> source.writeTo(socket, 3));
+					Assertions.assertInstanceOf(java.io.UncheckedIOException.class, failure.getCause());
+					Assertions.assertSame(witnessed.get(reportedIndex), failure.getCause().getCause());
+				}
+				Assertions.assertEquals(9, witnessed.size());
+				Assertions.assertEquals(0, channel.probeReads);
+			}
+		}
+		IOException foreign = new SocketChannelIo.SocketIoException(new IOException("A different response's socket failed"));
+		java.io.UncheckedIOException unchecked = new java.io.UncheckedIOException("A source reused a foreign cause", foreign);
+		try (TransferProbeFileChannel channel = new TransferProbeFileChannel(FileChannel.open(file, READ), null) {
+			@Override public long transferTo(long position, long count, java.nio.channels.WritableByteChannel target) { throw unchecked; }
+		}) {
+			FileChannelWritableSource source = new FileChannelWritableSource(channel, 0, 3, false);
+			PartialWriteSocketChannel socket = new PartialWriteSocketChannel(3);
+			ResponseBodySourceException failure = Assertions.assertThrows(ResponseBodySourceException.class,
+					() -> source.writeTo(socket, 3));
+			Assertions.assertSame(unchecked, failure.getCause());
+			Assertions.assertEquals(0, socket.getWrittenBytes().length);
+			Assertions.assertEquals(0, channel.probeReads);
 		}
 	}
 
@@ -1996,7 +2145,7 @@ public class MicrohttpInternalTests {
 		}
 	}
 
-	private static final class TransferProbeFileChannel extends FileChannel {
+	private static class TransferProbeFileChannel extends FileChannel {
 		private final FileChannel delegate;
 		private IOException transferFailure;
 		private boolean wrapSinkFailures;

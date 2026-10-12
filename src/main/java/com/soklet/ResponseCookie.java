@@ -140,14 +140,10 @@ public final class ResponseCookie {
 		// unusual, and we don't support it here.  Pick the first cookie and use it.
 		HttpCookie httpCookie = cookies.get(0);
 
-		// Handle session cookies (maxAge = -1) by passing null instead of negative Duration
-		long maxAge = httpCookie.getMaxAge();
-		Duration maxAgeDuration = (maxAge >= 0) ? Duration.ofSeconds(maxAge) : null;
-
 		ParsedSetCookieAttributes attributes = parseSetCookieAttributes(normalizedSetCookieHeaderRepresentation);
 
 		return Optional.of(ResponseCookie.with(httpCookie.getName(), httpCookie.getValue())
-				.maxAge(maxAgeDuration)
+				.maxAge(attributes.maxAge)
 				.expires(attributes.getExpires().orElse(null))
 				.domain(httpCookie.getDomain())
 				.httpOnly(httpCookie.isHttpOnly())
@@ -200,6 +196,15 @@ public final class ResponseCookie {
 
 			String attributeValue = equalsIndex == -1 ? null : trimAggressivelyToNull(component.substring(equalsIndex + 1));
 
+			// Preserve explicit Max-Age only: HttpCookie also synthesizes it from
+			// Expires using different date rules. That can incorrectly override a
+			// valid cookie expiry. Nonpositive Max-Age means immediate expiry.
+			if ("max-age".equalsIgnoreCase(attributeName)) {
+				if (attributes.maxAge == null && attributeValue != null)
+					attributes.maxAge = Duration.ofSeconds(Math.max(0, Long.parseLong(stripOptionalQuotes(attributeValue))));
+				continue;
+			}
+
 			if ("samesite".equalsIgnoreCase(attributeName)) {
 				if (attributes.sameSite == null && attributeValue != null) {
 					attributeValue = stripOptionalQuotes(attributeValue);
@@ -211,7 +216,7 @@ public final class ResponseCookie {
 			if ("expires".equalsIgnoreCase(attributeName)) {
 				if (attributes.expires == null && attributeValue != null) {
 					attributeValue = stripOptionalQuotes(attributeValue);
-					attributes.expires = HttpDate.fromHeaderValue(attributeValue).orElse(null);
+					attributes.expires = CookieDate.parse(attributeValue).orElse(null);
 				}
 				continue;
 			}
@@ -987,6 +992,8 @@ public final class ResponseCookie {
 
 	@ThreadSafe
 	private static final class ParsedSetCookieAttributes {
+		@Nullable
+		private Duration maxAge;
 		@Nullable
 		private Instant expires;
 		@Nullable

@@ -1289,19 +1289,8 @@ class ConnectionEventLoop {
 
             if (requestParser.consumeContinueExpectation()) {
                 continueResponseBuffer = ByteBuffer.wrap(CONTINUE_RESPONSE);
-                try {
-                    doOnWritableContinueResponse();
-                } catch (IOException e) {
-                    try (TransportFailureObserver.Observation ignored =
-                                 beginTransportFailure(TransportFailureReason.WRITE_ERROR)) {
-                        if (logger.failureEnabled()) {
-                            logger.logFailure(e,
-                                    new LogEntry("event", "write_error"),
-                                    new LogEntry("id", id));
-                        }
-                        failSafeClose();
-                    }
-                }
+                // Inline and selector-driven writes share disconnect classification.
+                onWritable();
                 return;
             }
 

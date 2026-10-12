@@ -22,11 +22,18 @@ import com.soklet.annotation.PathParameter;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.io.ByteArrayOutputStream;
+import java.net.HttpURLConnection;
+import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.net.SocketTimeoutException;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -554,7 +561,7 @@ public class StaticFilesTests {
 	}
 
 	@Test
-	public void staticFilesUsesOneAttributeSnapshotForResolversAndResponseLength(@TempDir Path tempDir) throws IOException {
+	public void staticFilesRejectsAFileMutatedByAResolver(@TempDir Path tempDir) throws IOException {
 		Path file = tempDir.resolve("example.txt");
 		Files.writeString(file, "abcdef", StandardCharsets.UTF_8);
 		StaticFiles staticFiles = StaticFiles.withRoot(tempDir)
@@ -571,8 +578,11 @@ public class StaticFilesTests {
 				})
 				.build();
 
-		MarshaledResponse response = staticFiles.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.GET, "/example.txt")).orElseThrow();
-		Assertions.assertEquals(Long.valueOf(6), response.getBodyLength());
+		Assertions.assertTrue(staticFiles.marshaledResponseFor("example.txt",
+				Request.fromPath(HttpMethod.GET, "/example.txt")).isEmpty());
+		Files.writeString(file, "abcdef", StandardCharsets.UTF_8);
+		Assertions.assertTrue(staticFiles.marshaledResponseFor("example.txt",
+				Request.fromPath(HttpMethod.HEAD, "/example.txt")).isEmpty());
 	}
 
 	@Test
@@ -948,6 +958,183 @@ public class StaticFilesTests {
 	}
 
 	@Test
+	public void followingSymlinksPinsTheResolvedTargetForDelivery(@TempDir Path tempDir) throws IOException {
+		Path root = Files.createDirectory(tempDir.resolve("public"));
+		Path target = root.resolve("target.txt");
+		Path link = root.resolve("link.txt");
+		Path secret = tempDir.resolve("secret.txt");
+		Files.writeString(target, "public", StandardCharsets.UTF_8);
+		Files.writeString(secret, "secret", StandardCharsets.UTF_8);
+		try {
+			Files.createSymbolicLink(link, target.getFileName());
+		} catch (UnsupportedOperationException | IOException unavailable) {
+			return;
+		}
+		StaticFiles staticFiles = StaticFiles.withRoot(root).followSymlinks(true).build();
+		MarshaledResponse response = staticFiles.marshaledResponseFor("link.txt",
+				Request.fromPath(HttpMethod.GET, "/link.txt")).orElseThrow();
+		Files.delete(link);
+		Files.createSymbolicLink(link, secret);
+		Assertions.assertEquals("public", new String(response.bodyBytesOrEmpty(), StandardCharsets.UTF_8));
+
+		Files.delete(target);
+		Files.createSymbolicLink(target, secret);
+		Assertions.assertThrows(UncheckedIOException.class, response::bodyBytesOrEmpty);
+	}
+
+	@Test
+	public void followingSymlinksPinsASymlinkedRoot(@TempDir Path tempDir) throws IOException {
+		Path actualRoot = Files.createDirectory(tempDir.resolve("release-one"));
+		Path otherRoot = Files.createDirectory(tempDir.resolve("release-two"));
+		Files.writeString(actualRoot.resolve("asset.txt"), "public", StandardCharsets.UTF_8);
+		Files.writeString(otherRoot.resolve("asset.txt"), "secret", StandardCharsets.UTF_8);
+		Path rootLink = tempDir.resolve("current");
+		try {
+			Files.createSymbolicLink(rootLink, actualRoot);
+		} catch (UnsupportedOperationException | IOException unavailable) {
+			return;
+		}
+		StaticFiles staticFiles = StaticFiles.withRoot(rootLink).followSymlinks(true).build();
+		MarshaledResponse response = staticFiles.marshaledResponseFor("asset.txt",
+				Request.fromPath(HttpMethod.GET, "/asset.txt")).orElseThrow();
+		Files.delete(rootLink);
+		Files.createSymbolicLink(rootLink, otherRoot);
+		Assertions.assertEquals("public", new String(response.bodyBytesOrEmpty(), StandardCharsets.UTF_8));
+		Assertions.assertEquals("public", new String(staticFiles.marshaledResponseFor("asset.txt",
+				Request.fromPath(HttpMethod.GET, "/asset.txt")).orElseThrow()
+				.bodyBytesOrEmpty(), StandardCharsets.UTF_8));
+	}
+
+	@Test
+	public void contentHashDoesNotReadAReplacementSymlink(@TempDir Path tempDir) throws IOException {
+		Path root = Files.createDirectory(tempDir.resolve("public"));
+		Path target = root.resolve("asset.txt");
+		Path secret = tempDir.resolve("secret.txt");
+		Files.writeString(target, "public", StandardCharsets.UTF_8);
+		Files.writeString(secret, "secret", StandardCharsets.UTF_8);
+		Path probe = root.resolve("probe.txt");
+		try {
+			Files.createSymbolicLink(probe, secret);
+			Files.delete(probe);
+		} catch (UnsupportedOperationException | IOException unavailable) {
+			return;
+		}
+		org.junit.jupiter.api.Assumptions.assumeTrue(
+				Files.getFileStore(secret).supportsFileAttributeView("posix"));
+		Set<java.nio.file.attribute.PosixFilePermission> originalPermissions = Files.getPosixFilePermissions(secret);
+		try {
+			Files.setPosixFilePermissions(secret,
+					java.nio.file.attribute.PosixFilePermissions.fromString("---------"));
+			org.junit.jupiter.api.Assumptions.assumeFalse(Files.isReadable(secret));
+			StaticFiles staticFiles = StaticFiles.withRoot(root)
+					.accessResolver((path, attributes) -> {
+						try {
+							Files.delete(target);
+							Files.createSymbolicLink(target, secret);
+						} catch (IOException failure) {
+							throw new UncheckedIOException(failure);
+						}
+						return StaticFiles.Access.ALLOW;
+					})
+					.entityTagResolver(StaticFiles.EntityTagResolver.fromContentHash())
+					.build();
+			Assertions.assertTrue(staticFiles.marshaledResponseFor("asset.txt",
+					Request.fromPath(HttpMethod.GET, "/asset.txt")).isEmpty());
+		} finally {
+			Files.setPosixFilePermissions(secret, originalPermissions);
+		}
+	}
+
+	@Test
+	public void staticFilesDoesNotFollowAReplacementAfterResponseConstruction(@TempDir Path tempDir) throws IOException {
+		Path root = Files.createDirectory(tempDir.resolve("public"));
+		Path publicFile = root.resolve("asset.txt");
+		Path secret = tempDir.resolve("secret.txt");
+		Files.writeString(publicFile, "public", StandardCharsets.UTF_8);
+		Files.writeString(secret, "secret", StandardCharsets.UTF_8);
+		StaticFiles staticFiles = StaticFiles.withRoot(root).build();
+		MarshaledResponse response = staticFiles.marshaledResponseFor("asset.txt",
+				Request.fromPath(HttpMethod.GET, "/asset.txt")).orElseThrow();
+		Assertions.assertEquals("public", new String(response.bodyBytesOrEmpty(), StandardCharsets.UTF_8));
+
+		Files.delete(publicFile);
+		try {
+			Files.createSymbolicLink(publicFile, secret);
+		} catch (UnsupportedOperationException | IOException unavailable) {
+			return;
+		}
+		Assertions.assertThrows(UncheckedIOException.class, response::bodyBytesOrEmpty);
+	}
+
+	@Test
+	public void staticFilesRejectsARegularReplacementWithTheSameLength(@TempDir Path tempDir) throws IOException {
+		Path root = Files.createDirectory(tempDir.resolve("public"));
+		Path file = root.resolve("asset.txt");
+		Files.writeString(file, "public", StandardCharsets.UTF_8);
+		StaticFiles staticFiles = StaticFiles.withRoot(root).build();
+		MarshaledResponse response = staticFiles.marshaledResponseFor("asset.txt",
+				Request.fromPath(HttpMethod.GET, "/asset.txt")).orElseThrow();
+		Path replacement = root.resolve("replacement.txt");
+		Files.writeString(replacement, "secret", StandardCharsets.UTF_8);
+		Files.move(replacement, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+		Assertions.assertThrows(UncheckedIOException.class, response::bodyBytesOrEmpty);
+	}
+
+	@Test
+	public void staticFilesIndexAndRangeBodiesRejectLateSymlinkSwap(@TempDir Path tempDir) throws IOException {
+		Path root = Files.createDirectory(tempDir.resolve("public"));
+		Path index = root.resolve("index.html");
+		Path secret = tempDir.resolve("secret.txt");
+		Files.writeString(index, "public", StandardCharsets.UTF_8);
+		Files.writeString(secret, "secret", StandardCharsets.UTF_8);
+		StaticFiles staticFiles = StaticFiles.withRoot(root)
+				.indexFileNames(List.of("index.html")).build();
+		MarshaledResponse indexResponse = staticFiles.marshaledResponseFor("",
+				Request.fromPath(HttpMethod.GET, "/")).orElseThrow();
+		MarshaledResponse rangeResponse = staticFiles.marshaledResponseFor("index.html",
+				Request.withPath(HttpMethod.GET, "/index.html")
+						.headers(Map.of("Range", List.of("bytes=1-3"))).build()).orElseThrow();
+		Assertions.assertEquals(206, rangeResponse.getStatusCode());
+		Files.delete(index);
+		try {
+			Files.createSymbolicLink(index, secret);
+		} catch (UnsupportedOperationException | IOException unavailable) {
+			return;
+		}
+		Assertions.assertThrows(UncheckedIOException.class, indexResponse::bodyBytesOrEmpty);
+		Assertions.assertThrows(UncheckedIOException.class, rangeResponse::bodyBytesOrEmpty);
+	}
+
+	@Test
+	public void staticFilesDoesNotFollowAReplacedAncestorOrRoot(@TempDir Path tempDir) throws IOException {
+		Path root = Files.createDirectory(tempDir.resolve("public"));
+		Path child = Files.createDirectory(root.resolve("child"));
+		Path publicFile = child.resolve("asset.txt");
+		Path outside = Files.createDirectory(tempDir.resolve("outside"));
+		Files.writeString(publicFile, "public", StandardCharsets.UTF_8);
+		Files.writeString(outside.resolve("asset.txt"), "secret", StandardCharsets.UTF_8);
+		StaticFiles staticFiles = StaticFiles.withRoot(root).build();
+		MarshaledResponse response = staticFiles.marshaledResponseFor("child/asset.txt",
+				Request.fromPath(HttpMethod.GET, "/child/asset.txt")).orElseThrow();
+
+		Path oldChild = root.resolve("old-child");
+		Files.move(child, oldChild);
+		try {
+			Files.createSymbolicLink(child, outside);
+		} catch (UnsupportedOperationException | IOException unavailable) {
+			return;
+		}
+		Assertions.assertThrows(UncheckedIOException.class, response::bodyBytesOrEmpty);
+
+		Files.delete(child);
+		Files.move(oldChild, child);
+		Path oldRoot = tempDir.resolve("old-public");
+		Files.move(root, oldRoot);
+		Files.createSymbolicLink(root, outside);
+		Assertions.assertEquals("public", new String(response.bodyBytesOrEmpty(), StandardCharsets.UTF_8));
+	}
+
+	@Test
 	public void staticFilesRejectsSymlinkChainsThatEscapeRoot(@TempDir Path tempDir) throws IOException {
 		Path root = tempDir.resolve("root");
 		Path outside = tempDir.resolve("outside");
@@ -1048,6 +1235,97 @@ public class StaticFilesTests {
 	}
 
 	@Test
+	// Allow both bounded wire exchanges in addition to the default lifecycle limits.
+	@Timeout(75)
+	public void staticFilesSecureBodyReachesBuiltInHttpTransport(@TempDir Path tempDir) throws Exception {
+		Files.writeString(tempDir.resolve("asset.txt"), "public", StandardCharsets.UTF_8);
+		StaticAssetResource resource = new StaticAssetResource(StaticFiles.withRoot(tempDir).build());
+		InstanceProvider defaultProvider = InstanceProvider.defaultInstance();
+		int port = TestSupport.findFreePort();
+		SokletConfig configuration = SokletConfig.withHttpServer(HttpServer.withPort(port)
+				.host("127.0.0.1").build())
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StaticAssetResource.class)))
+				.instanceProvider(new InstanceProvider() {
+					@Override
+					@NonNull
+					public <T> T provide(@NonNull Class<T> instanceClass) {
+						return instanceClass == StaticAssetResource.class
+								? instanceClass.cast(resource) : defaultProvider.provide(instanceClass);
+					}
+				}).build();
+		try (Soklet soklet = Soklet.fromConfig(configuration)) {
+			soklet.start();
+			String full = staticFileWireResponse(port, "GET /assets/asset.txt HTTP/1.1\r\n"
+					+ "Host: localhost\r\nConnection: close\r\n\r\n");
+			Assertions.assertTrue(full.startsWith("HTTP/1.1 200 "));
+			Assertions.assertEquals("public", full.split("\r\n\r\n", 2)[1]);
+			String range = staticFileWireResponse(port, "GET /assets/asset.txt HTTP/1.1\r\n"
+					+ "Host: localhost\r\nRange: bytes=1-3\r\nConnection: close\r\n\r\n");
+			Assertions.assertTrue(range.startsWith("HTTP/1.1 206 "));
+			Assertions.assertEquals("ubl", range.split("\r\n\r\n", 2)[1]);
+		}
+	}
+
+	@Test
+	public void staticFilesLiveTransportNeverServesPostValidationSymlink(@TempDir Path tempDir) throws Exception {
+		Path root = Files.createDirectory(tempDir.resolve("public"));
+		Path asset = root.resolve("asset.txt");
+		Path secret = tempDir.resolve("secret.txt");
+		Files.writeString(asset, "public", StandardCharsets.UTF_8);
+		Files.writeString(secret, "secret", StandardCharsets.UTF_8);
+		Path probe = root.resolve("probe.txt");
+		try {
+			Files.createSymbolicLink(probe, secret);
+			Files.delete(probe);
+		} catch (UnsupportedOperationException | IOException unavailable) {
+			return;
+		}
+		SwappingStaticAssetResource resource = new SwappingStaticAssetResource(
+				StaticFiles.withRoot(root).build(), asset, secret);
+		InstanceProvider defaultProvider = InstanceProvider.defaultInstance();
+		int port = TestSupport.findFreePort();
+		SokletConfig configuration = SokletConfig.withHttpServer(HttpServer.withPort(port)
+				.host("127.0.0.1").build())
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SwappingStaticAssetResource.class)))
+				.instanceProvider(new InstanceProvider() {
+					@Override
+					@NonNull
+					public <T> T provide(@NonNull Class<T> instanceClass) {
+						return instanceClass == SwappingStaticAssetResource.class
+								? instanceClass.cast(resource) : defaultProvider.provide(instanceClass);
+					}
+				}).build();
+		try (Soklet soklet = Soklet.fromConfig(configuration)) {
+			soklet.start();
+			String wire = staticFileWireResponse(port, "GET /swapped HTTP/1.1\r\nHost: localhost\r\n"
+					+ "Connection: close\r\n\r\n");
+			Assertions.assertFalse(wire.contains("secret"));
+		}
+	}
+
+	private static String staticFileWireResponse(int port, String request) throws IOException {
+		try (Socket socket = new Socket()) {
+			socket.connect(new InetSocketAddress("127.0.0.1", port), 2000);
+			long responseDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(4);
+			socket.getOutputStream().write(request.getBytes(StandardCharsets.ISO_8859_1));
+			ByteArrayOutputStream wire = new ByteArrayOutputStream();
+			byte[] buffer = new byte[1024];
+			while (true) {
+				long remainingNanos = responseDeadline - System.nanoTime();
+				if (remainingNanos <= 0)
+					throw new SocketTimeoutException("Static-file response exceeded its four-second deadline.");
+				socket.setSoTimeout((int) Math.max(1, TimeUnit.NANOSECONDS.toMillis(remainingNanos)));
+				int read = socket.getInputStream().read(buffer);
+				if (read == -1)
+					return wire.toString(StandardCharsets.ISO_8859_1);
+				if (wire.size() > 8192 - read)
+					throw new IOException("Static-file response exceeded the eight-KiB fixture limit.");
+				wire.write(buffer, 0, read);
+			}
+		}
+	}
+
+	@Test
 	public void simulatorStillEmitsDateHeaderAfterHttpDateMigration() {
 		SokletSimulator.run(SimulatorConfig.builder().httpServer().sseServer()
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(DateResource.class)))
@@ -1092,6 +1370,30 @@ public class StaticFilesTests {
 		public MarshaledResponse asset(@NonNull Request request,
 																		@PathParameter @NonNull String assetPath) {
 			return this.staticFiles.marshaledResponseFor(assetPath, request).orElseGet(() -> MarshaledResponse.fromStatusCode(404));
+		}
+	}
+
+	public static class SwappingStaticAssetResource {
+		private final StaticFiles staticFiles;
+		private final Path asset;
+		private final Path secret;
+
+		public SwappingStaticAssetResource(StaticFiles staticFiles, Path asset, Path secret) {
+			this.staticFiles = staticFiles;
+			this.asset = asset;
+			this.secret = secret;
+		}
+
+		@GET("/swapped")
+		public MarshaledResponse asset(Request request) {
+			MarshaledResponse response = staticFiles.marshaledResponseFor("asset.txt", request).orElseThrow();
+			try {
+				Files.delete(asset);
+				Files.createSymbolicLink(asset, secret);
+			} catch (IOException failure) {
+				throw new UncheckedIOException(failure);
+			}
+			return response;
 		}
 	}
 }

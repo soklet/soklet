@@ -152,11 +152,10 @@ public class App {
       .build();
   }
 
-  // Start the server and listen on :8080
+  // Start a local-only demo server on port 8080
   public static void main(String[] args) throws Exception {
-    // Use out-of-the-box defaults
     SokletConfig config = SokletConfig.withHttpServer(
-      HttpServer.fromPort(8080)
+      HttpServer.withPort(8080).host("127.0.0.1").build()
     ).build();
 
     System.out.println("Starting Soklet; press [enter] to stop once ready");
@@ -164,6 +163,13 @@ public class App {
   }
 }
 ```
+
+`HttpServer.fromPort(...)` and an HTTP builder without `.host(...)` bind all
+interfaces. Before exposing a service, set a deliberate bind address, enforce
+TLS at a trusted edge, and add application authentication and route authorization.
+Size request and concurrent-connection limits against the available heap and
+apply corresponding limits at the edge. Soklet does not supply these deployment
+policies automatically.
 
 The static [`run(SokletConfig)`](<https://javadoc.soklet.com/com/soklet/SokletApplication.html#run(com.soklet.SokletConfig)>) and
 [`run(SokletConfig, ShutdownTrigger...)`](<https://javadoc.soklet.com/com/soklet/SokletApplication.html#run(com.soklet.SokletConfig,com.soklet.ShutdownTrigger...)>) methods on
@@ -622,6 +628,33 @@ public MarshaledResponse exampleImage() {
 ```
 
 [`MarshaledResponse`](https://javadoc.soklet.com/com/soklet/MarshaledResponse.html) supports known-length byte-array, file, file-channel, and [`ByteBuffer`](https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/nio/ByteBuffer.html) bodies. The standard HTTP server can write file-backed responses without first loading the whole file into heap memory. If you already selected a trusted file and want file-response semantics like validators and byte ranges, use [`MarshaledResponse::withFile`](<https://javadoc.soklet.com/com/soklet/MarshaledResponse.html#withFile(java.nio.file.Path,com.soklet.Request)>); its builder can set `Content-Type`, `Content-Encoding`, cache headers, validators, and range behavior. For safe static roots, use [`StaticFiles`](https://javadoc.soklet.com/com/soklet/StaticFiles.html) instead of hand-rolled path joins; it handles root containment, validators, optional content-hash ETags, access policy, single byte ranges, MIME defaults, and `GET`/`HEAD` behavior.
+
+`StaticFiles` defaults to no-follow delivery through a pinned root directory.
+It opens each path component relative to an open directory descriptor and checks
+the identity of the opened file before delivery. Both symlink policies support
+the default OpenJDK filesystem providers on Linux and macOS, on x86-64 and
+AArch64, including macOS Java 17 and 21 where `SecureDirectoryStream` is absent.
+This adds no external dependency. Ordinary classpath installations need no JVM
+flags; custom or modular runtimes must make `jdk.unsupported` available and
+resolved and permit the JDK bridge's access. Unsupported providers, platforms,
+architectures, inaccessible or changed JDK internals, SecurityManager-enabled
+runtimes, and missing stable file identities fail closed at construction.
+
+Replace the `StaticFiles` instance when deploying a new root. Keep the root
+limited to publishable assets: readable files inside it are allowed by default.
+`followSymlinks(true)` permits links that resolve inside the root, then opens the
+resolved target through the pinned root; a later replacement link is not followed
+during delivery. `MarshaledResponse.withFile(Path, Request)` assumes the caller
+owns and controls the selected path until delivery completes.
+Both modes also need read and traverse permissions on each directory
+inside the root; a traverse-only directory is treated as unresolved.
+Keep roots immutable while a response is in flight when using custom resolvers
+that read a path or base access policy on file contents or mutable attributes.
+Those callbacks run before delivery and cannot atomically bind their own path
+reads to the later response body.
+Do not rewrite files in place while serving them: Java's portable file-channel API
+does not provide a snapshot of changing file contents, so a concurrent write can
+make body bytes differ from response validators or range metadata.
 
 ##### Response Compression
 

@@ -64,7 +64,6 @@ const GATE_IDS = [
   'soklet-servlet-jakarta',
   'toystore-app',
   'soklet-otel',
-  'soklet-website',
   'typescript-interop',
   'go-interop',
 ];
@@ -77,6 +76,9 @@ function verifyGateContractParity() {
   assert.match(verifyPromotionHarnessRegistryParity(), /^[0-9a-f]{64}$/);
   assert.deepEqual(Object.keys(GATE_EVIDENCE_CONTRACTS), GATE_IDS);
   assert.deepEqual(Object.keys(EXPECTED_GATE_EVIDENCE_CONTRACTS), GATE_IDS);
+  assert.equal(GATE_IDS.length, 25);
+  assert.ok(!Object.hasOwn(GATE_EVIDENCE_CONTRACTS, 'soklet-website'));
+  assert.ok(!Object.hasOwn(EXPECTED_GATE_EVIDENCE_CONTRACTS, 'soklet-website'));
   assert.equal(
     GATE_EVIDENCE_CONTRACTS['matrix-closure'].contractId,
     'soklet.release.matrix-closure.v2',
@@ -809,7 +811,6 @@ async function run() {
       'soklet-servlet-jakarta',
       'toystore-app',
       'soklet-otel',
-      'soklet-website',
       'typescript-interop',
       'go-interop',
     ]);
@@ -820,7 +821,7 @@ async function run() {
       temporary,
       inputs,
       fakeGpg,
-      'legacy-13-gate-evidence',
+      'legacy-12-gate-evidence',
       legacyGateSetEvidence,
       /exact ordered set/,
     );
@@ -844,6 +845,19 @@ async function run() {
       fakeGpg,
       'extra-gate-evidence',
       extraGateEvidence,
+      /exact ordered set/,
+    );
+
+    const websiteGateEvidence = structuredClone(inputs.evidence);
+    const removedWebsiteEvidence = structuredClone(websiteGateEvidence.gates.at(-1));
+    removedWebsiteEvidence.gate.id = 'soklet-website';
+    websiteGateEvidence.gates.splice(23, 0, removedWebsiteEvidence);
+    expectEvidenceFailure(
+      temporary,
+      inputs,
+      fakeGpg,
+      'removed-website-gate-evidence',
+      websiteGateEvidence,
       /exact ordered set/,
     );
 
@@ -877,7 +891,7 @@ async function run() {
       temporary,
       inputs,
       fakeGpg,
-      'legacy-13-gate-manifest',
+      'legacy-12-gate-manifest',
       legacyGateSetManifest,
       /gates must be exactly/,
     );
@@ -915,6 +929,19 @@ async function run() {
       fakeGpg,
       'extra-gate-manifest',
       extraGateManifest,
+      /gates must be exactly/,
+    );
+
+    const websiteGateManifest = structuredClone(inputs.releaseManifest);
+    const removedWebsiteGate = structuredClone(websiteGateManifest.gates.at(-1));
+    removedWebsiteGate.id = 'soklet-website';
+    websiteGateManifest.gates.splice(23, 0, removedWebsiteGate);
+    expectManifestFailure(
+      temporary,
+      inputs,
+      fakeGpg,
+      'removed-website-gate-manifest',
+      websiteGateManifest,
       /gates must be exactly/,
     );
 

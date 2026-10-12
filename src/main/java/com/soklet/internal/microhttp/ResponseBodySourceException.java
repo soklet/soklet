@@ -15,5 +15,5 @@ import java.io.IOException;
 
 /** A response source failed before completing its declared body; this is not a peer close. */
 final class ResponseBodySourceException extends IOException {
-    ResponseBodySourceException(String message, IOException cause) { super(message, cause); }
+    ResponseBodySourceException(String message, Throwable cause) { super(message, cause); }
 }

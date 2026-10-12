@@ -4,16 +4,35 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
+import java.nio.file.FileSystems;
 import java.nio.file.Path;
+import java.net.URI;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class StaticFileIdentityTests {
+    @Test
+    void bothSymlinkModesFailClosedOnProviderWithoutSecureTraversal(@TempDir Path directory) throws Exception {
+        Path archive = directory.resolve("assets.zip");
+        try (var fileSystem = FileSystems.newFileSystem(URI.create("jar:" + archive.toUri()),
+                Map.of("create", "true"))) {
+            Path root = Files.createDirectory(fileSystem.getPath("/public"));
+            Files.writeString(root.resolve("asset.txt"), "public");
+            for (boolean followSymlinks : List.of(false, true)) {
+                RuntimeException failure = assertThrows(RuntimeException.class,
+                        () -> StaticFiles.withRoot(root).followSymlinks(followSymlinks).build());
+                assertTrue(failure.getMessage().contains("stable directory identity")
+                        || failure.getMessage().contains("securely open static file root"));
+            }
+        }
+    }
+
     @Test
     void fixtureFilesystemIsCaseInsensitiveWhenRequired(@TempDir Path root) throws Exception {
         if (!Boolean.getBoolean("soklet.test.requireCaseInsensitiveFilesystem"))
@@ -25,7 +44,7 @@ class StaticFileIdentityTests {
     }
 
     @Test
-    void configuredAncestorSpellingAndDeploymentSwapsArePreserved(@TempDir Path directory) throws Exception {
+    void configuredAncestorSpellingIsPreservedAndDeploymentSwapRequiresRebuild(@TempDir Path directory) throws Exception {
         Path firstRelease = Files.createDirectories(directory.resolve("release-one/public/private"));
         Path secondRelease = Files.createDirectories(directory.resolve("release-two/public/private"));
         Files.writeString(firstRelease.resolve("secret.txt"), "secret one");
@@ -48,12 +67,18 @@ class StaticFileIdentityTests {
         Files.delete(current);
         Files.createSymbolicLink(current, secondRelease.getParent().getParent());
         Files.delete(firstRelease.getParent().resolve("asset.txt"));
+        // The old helper remains pinned to release one. A trusted deployment
+        // explicitly constructs a new helper when changing the root.
+        files = StaticFiles.withRoot(configuredRoot).accessResolver((path, attributes) -> {
+            seen.set(path);
+            return path.startsWith(configuredRoot.resolve("private")) ? StaticFiles.Access.DENY : StaticFiles.Access.ALLOW;
+        }).build();
         assertEquals("release two", new String(files.marshaledResponseFor("asset.txt", request("asset.txt")).orElseThrow().bodyBytesOrNull(), StandardCharsets.UTF_8));
         assertEquals(403, files.marshaledResponseFor("private/secret.txt", request("private/secret.txt")).orElseThrow().getStatusCode());
     }
 
     @Test
-    void readableFilesInTraverseOnlyDirectoriesCanBeServed(@TempDir Path root) throws Exception {
+    void traverseOnlyDirectoriesFailClosedWithoutSecureDirectoryHandles(@TempDir Path root) throws Exception {
         org.junit.jupiter.api.Assumptions.assumeTrue(Files.getFileStore(root).supportsFileAttributeView("posix"));
         Path nested = Files.createDirectory(root.resolve("traverse"));
         Files.writeString(nested.resolve("asset.txt"), "public asset");
@@ -61,7 +86,8 @@ class StaticFileIdentityTests {
         try {
             Files.setPosixFilePermissions(nested, PosixFilePermissions.fromString("--x--x--x"));
             StaticFiles files = StaticFiles.withRoot(root).build();
-            assertEquals("public asset", new String(files.marshaledResponseFor("traverse/asset.txt", request("traverse/asset.txt")).orElseThrow().bodyBytesOrNull(), StandardCharsets.UTF_8));
+            assertTrue(files.marshaledResponseFor("traverse/asset.txt",
+                    request("traverse/asset.txt")).isEmpty());
         } finally {
             Files.setPosixFilePermissions(nested, originalPermissions);
         }

@@ -12,13 +12,20 @@ or create a release-gate `PASS` receipt.
 
 The accountable owner throughout is the project owner. The implementation
 owners are MCP-7 and lifecycle F1 for reconciliation and exact-version core
-preparation, lifecycle F2 for the six clean downstream migrations, and U8 for
+preparation, lifecycle F2 for the five clean downstream migrations, and U8 for
 the pin, parity, and freeze integration. G4 is the decision owner for the
 proposed immutable candidate. U9, not U8, owns immutable-candidate execution
-and the ordered 26-gate `PASS` bundle. The project owner's 2026-09-01 policy
+and the ordered 25-gate `PASS` bundle. The project owner's 2026-09-01 policy
 override supersedes the completion plan's earlier gate-count language:
 `fuzz-nightly-history`, `soak-nightly-history`, and `operational-history`
 remain executable advisory/post-release monitors but do not block 4.0.
+
+The owner's October 12 policy also removes the main `soklet.com` website from
+this route. It may be owner-deployed at any time, without a candidate gate,
+release pin or frozen hash, release tag, deployment order, or G4/U9/G5
+dependency. Website changes do not invalidate these receipts. The five
+downstreams below remain the library and example consumers; the four packaged
+Javadoc sites retain their accepted-artifact publication contracts.
 
 The project owner is the sole creator of every core or downstream commit in
 this route, including pre-downstream, post-pin, and recovery commits. MCP-7,
@@ -85,7 +92,7 @@ root `pom.xml`, `-DgeneratePom=false`, and `-DlocalRepositoryPath` bound to a
 new empty private Maven repository. Installation must compare the installed
 POM and main JAR byte-for-byte with their inputs.
 
-The six protected paths remain read-only. Only the corresponding reserved
+The five protected paths remain read-only. Only the corresponding reserved
 clean paths may be used in step 4:
 
 | Gate | Recorded clean base | Protected path (never read for migration bytes) | Reserved clean U8 path |
@@ -95,7 +102,6 @@ clean paths may be used in step 4:
 | `soklet-servlet-jakarta` | `5fadb19dbbbf11a8b74164eb9c9980d7c16b4f13` | `/Users/Shared/ai-shared/soklet/soklet-servlet-jakarta` | `/Users/Shared/ai-shared/soklet/.worktrees/soklet-4.0/soklet-servlet-jakarta` |
 | `toystore-app` | `209781472b2d308cbc5538f2a7f956bc97b399b7` | `/Users/Shared/ai-shared/soklet/toystore-app` | `/Users/Shared/ai-shared/soklet/.worktrees/soklet-4.0/toystore-app` |
 | `soklet-otel` | `d4a55b486c4b35a4d1b972ec9c5b4aa9d8d56020` | `/Users/Shared/ai-shared/soklet/soklet-otel` | `/Users/Shared/ai-shared/soklet/.worktrees/soklet-4.0/soklet-otel` |
-| `soklet-website` (`soklet.com`) | `7717cea81776a1f6567f428cb0518702159fd5bc` | `/Users/Shared/ai-shared/soklet/soklet.com` | `/Users/Shared/ai-shared/soklet/.worktrees/soklet-4.0/soklet.com` |
 
 A reserved path must either be absent before creation or already be an
 owner-approved clean worktree at its recorded base. An unexplained existing
@@ -111,8 +117,8 @@ reconciled tracked core inputs
   -> one pre-downstream core commit/tree
   -> clean build A + clean build B + identical three-JAR hashes
   -> byte-identical isolated rehearsal install
-  -> six clean, tested, owner-approved downstream commits
-  -> one core pin/READY commit with all 26 configurations READY
+  -> five clean, tested, owner-approved downstream commits
+  -> one core pin/READY commit with all 25 configurations READY
   -> clean post-pin build with the same timestamp/toolchain/recipe
   -> equality with both earlier three-JAR hash sets
   -> exact G4-frozen core commit/tree
@@ -120,7 +126,7 @@ reconciled tracked core inputs
 
 The downstream commits do not depend on the future core pin commit. They
 depend on the exact-version rehearsal artifact whose bytes were established by
-the two pre-downstream builds. The core pin commit then depends on those six
+the two pre-downstream builds. The core pin commit then depends on those five
 downstream commits. Step 6 closes the construction loop without creating an
 evidence cycle: it proves that the post-pin core tree emits the same three
 artifact byte streams. If it does not, the route has failed and no G4 node is
@@ -287,8 +293,7 @@ identity are intentionally unresolved until U8.
 
 **Consumer.** Step 4 consumes only the checksum-matched installed
 `com.soklet:soklet:4.0.0` POM/main JAR, except `barebones-app`, which consumes
-the same main JAR as its exact vendored file, and `soklet-website`, which
-consumes the exact documented source identity rather than a Maven coordinate.
+the same main JAR as its exact vendored file.
 Step 6 consumes both three-hash tuples as its required equality target. G4
 consumes both build receipts and the install rehearsal receipt.
 
@@ -315,7 +320,7 @@ coordinate, POM/main-JAR input and installed hashes, byte comparisons, and the
 same three-JAR tuple for provenance. All values are intentionally unresolved
 until U8. None is a U9 `candidate-build` or `isolated-install` `PASS` receipt.
 
-## Step 4 — reconstruct and commit all six clean downstream migrations
+## Step 4 — reconstruct and commit all five clean downstream migrations
 
 **Owner.** Lifecycle F2 owns reconstruction and validation. The project owner
 alone creates and approves every clean downstream commit. Each repository's
@@ -335,7 +340,6 @@ checked-in release-validator command family:
 | `soklet-servlet-jakarta` | The same default-property/explicit-override command family and identical-candidate coordinate/hash proof as the `javax` repository, for adapter 2.0.0. |
 | `toystore-app` | Run `mvn -B -ntp -Dgpg.skip=true clean verify`, then `mvn -B -ntp -Dgpg.skip=true -Dsoklet.version=4.0.0 clean verify`, both against the isolated repository. On the final F2 tree, prove both legs resolve the exact candidate coordinate/hash because the tracked property default is exact `4.0.0`. Retain the separate Milestone-R pinned-base receipt that proved the former default `3.5.1` and candidate override; do not misstate that historical default as the final F2 default. |
 | `soklet-otel` | `mvn -B -ntp -Dgpg.skip=true -Dsoklet.version=4.0.0 clean verify` against the isolated repository, including the exact six-value shutdown-outcome vocabulary and effective coordinate/hash proof. |
-| `soklet-website` | `npm ci --ignore-scripts`, `npm run lint`, `npm run ssg-build`, and `git diff --exit-code`; record the exact documented core identity plus source, generated-distribution, lockfile/workflow, and generator hashes. No Maven coordinate is fabricated. |
 
 For every Maven consumer, the rehearsal additionally uses
 `-Dmaven.repo.local` bound to step 3's isolated repository and the checked-in
@@ -344,53 +348,52 @@ the migration and its evidence are reviewed, the project owner creates its
 commit in that clean downstream repository and requires the worktree to be
 clean at the new commit.
 
-**Tracked inputs.** The six recorded bases and repositories; owner-approved
-migration specification; each downstream's tracked source, POM or lockfile,
+**Tracked inputs.** The five recorded bases and repositories; owner-approved
+migration specification; each downstream's tracked source and POM,
 validator hook, generated-content rules, and exact core 4.0.0 default
-dependency where required; step 3's exact POM/main-JAR or documented-source
-identity; and the candidate-tracked downstream evidence contract in
+dependency where required; step 3's exact POM/main-JAR identity; and the
+candidate-tracked downstream evidence contract in
 `scripts/release-validation-evidence.mjs`.
 
-**Outputs and identities.** Six clean owner-approved commits and root trees,
-six clean-status proofs, six dispatchable validation hooks, and six rehearsal
+**Outputs and identities.** Five clean owner-approved commits and root trees,
+five clean-status proofs, five dispatchable validation hooks, and five rehearsal
 input/result records. Artifact consumers record the effective exact
 `com.soklet:soklet:4.0.0` coordinate and step 3 main-JAR SHA-256 (or the exact
-vendored JAR for `barebones-app`); the website records its source/generated
-identity. All six future commit/tree and generated checksum values are
-intentionally unresolved until U8.
+vendored JAR for `barebones-app`). All five future commit/tree and generated
+checksum values are intentionally unresolved until U8.
 
-**Consumer.** Step 5 writes these six exact commits, checksums, and evidence-
+**Consumer.** Step 5 writes these five exact commits, checksums, and evidence-
 contract bindings into `release/release-validation-manifest.json`. Step 6 uses
 their consumed main-JAR checksum to decide whether any downstream must be
-rerun. G4 consumes the six owner approvals and clean commit/tree receipts.
+rerun. G4 consumes the five owner approvals and clean commit/tree receipts.
 
 **Invalidation edge.** Reading migration bytes from a protected path; a wrong
 base; unexplained or dirty reserved path; missing owner approval; dirty result;
-no-op version override; wrong effective coordinate/JAR; generated website
-drift; failed validator hook; or changed rehearsal input invalidates that
-downstream receipt. A change to any downstream commit after pinning invalidates
+no-op version override; wrong effective coordinate/JAR; failed validator hook;
+or changed rehearsal input invalidates that downstream receipt. A change to
+any downstream commit after pinning invalidates
 steps 5–7 and returns to U8.
 
 **Receipt.** Retain one preparation receipt per downstream with repository,
 recorded base, reserved path, creation command, new commit/tree, clean status,
 review approval, exact commands/toolchains, input core identity, effective
-coordinate and JAR SHA-256 or website/vendored equivalent, validator outputs,
+coordinate and JAR SHA-256 or vendored equivalent, validator outputs,
 and evidence-contract identity. Future values are intentionally unresolved
-until U8. These are U8 readiness receipts, not the six U9 downstream `PASS`
+until U8. These are U8 readiness receipts, not the five U9 downstream `PASS`
 receipts.
 
-## Step 5 — pin downstreams and make all 26 configurations READY
+## Step 5 — pin downstreams and make all 25 configurations READY
 
-**Owner.** U8 prepares one reviewed core change. Lifecycle F2 supplies the six
+**Owner.** U8 prepares one reviewed core change. Lifecycle F2 supplies the five
 downstream records; MCP-7/U7 supplies and revalidates the five harness
 contracts; the project owner reviews the complete pin/readiness change and
 alone creates the post-pin core commit.
 
 **Command family.** Update `release/release-validation-manifest.json` to pin
-the six step 4 commits and required checksums and change their six rows to
+the five step 4 commits and required checksums and change their five rows to
 `READY`. Preserve `release-scans` and `mcp-benchmarks` as the two imported
 release-harness gates. Keep the three advisory histories in the harness
-registry and CI monitoring, outside the ordered 26-gate universe. Run:
+registry and CI monitoring, outside the ordered 25-gate universe. Run:
 
 ```text
 node scripts/import-release-harness-evidence.mjs --verify-config
@@ -399,21 +402,21 @@ node scripts/release-validation-self-test.mjs
 node scripts/release-validation-evidence.mjs validate-config release/release-validation-manifest.json --require-ready
 ```
 
-The self-tests must still reject 25- or 27-row manifests, blocked status,
+The self-tests must still reject 24- or 26-row manifests, blocked status,
 nonblank reasons, missing pins/checksums, and registry/dispatch mismatch. The
 five harness contracts remain registered, but only `release-scans` and
 `mcp-benchmarks` are manifest rows; no new gate ID is introduced.
 
-**Tracked inputs.** Step 4's six exact commit/tree and validation records;
+**Tracked inputs.** Step 4's five exact commit/tree and validation records;
 `release/release-validation-manifest.json`;
 `release/release-harness-contracts.json`; the importer, evidence helper,
 candidate validator, promotion consumer, workflow dispatches, and their self-
-tests; the ordered 26 release evidence-contract identities; and the exact step 3
+tests; the ordered 25 release evidence-contract identities; and the exact step 3
 main-JAR checksum used by downstream artifact consumers.
 
 **Outputs and identities.** One reviewed post-pin core commit/tree; one
-candidate-tracked manifest with exactly 26 `READY`, zero blocked rows, and an
-empty reason wherever the schema requires it; six immutable downstream pins
+candidate-tracked manifest with exactly 25 `READY`, zero blocked rows, and an
+empty reason wherever the schema requires it; five immutable downstream pins
 and checksums; two executable imported release-harness dispatches; and a raw
 manifest SHA-256. The three advisory monitor dispatches remain outside this
 release receipt.
@@ -422,7 +425,7 @@ unresolved until U8.
 
 **Consumer.** Step 6 checks out this post-pin commit/tree and rebuilds it. Step
 7 and G4 consume the exact manifest bytes, readiness report, two blocking
-imported-harness dispatch proofs, and all six pins.
+imported-harness dispatch proofs, and all five pins.
 
 **Invalidation edge.** Any missing/changed pin or checksum, non-READY row,
 nonblank reason, gate count/order drift, absent blocking harness dispatch, registry/
@@ -433,7 +436,7 @@ change still requires the post-pin build; parity is proved, never assumed.
 **Receipt.** Retain the exact post-pin commit/tree, manifest path/raw SHA-256,
 canonical ordered readiness report, `--require-ready` log, all negative self-
 test results, five harness registry identities, two blocking release-dispatch
-identities, and six downstream pin/checksum bindings. Future values are
+identities, and five downstream pin/checksum bindings. Future values are
 intentionally unresolved until U8.
 `READY` means configured and dispatchable; this receipt contains no `PASS`.
 
@@ -500,29 +503,29 @@ Re-run the fail-closed final readiness checks whose tracked inputs could have
 changed, including final version inventory, API/freeze aggregate, matrix,
 harness/importer, release-tooling, downstream-dispatch, and
 `release-validation-evidence.mjs validate-config ... --require-ready`. Do not
-invoke `scripts/validate-release-candidate.sh` as a 26-gate candidate run in
+invoke `scripts/validate-release-candidate.sh` as a 25-gate candidate run in
 U8; that belongs to U9 after G4.
 
 **Tracked inputs.** The exact post-pin core commit/tree; step 1's planning
 snapshot, release-readiness documents, audits, narrowed security claims, and
 unexecuted G5 runbook; step 2's literal timestamp and final-version receipt;
-step 3's two clean-build and install rehearsal receipts; step 4's six clean
+step 3's two clean-build and install rehearsal receipts; step 4's five clean
 downstream approvals; step 5's manifest/readiness/harness receipt; and step
 6's post-pin three-JAR parity receipt.
 
 **Outputs and identities.** The output is one G4 decision binding the exact U8
-core commit/tree, manifest SHA-256, six downstream commits/checksums, planning
+core commit/tree, manifest SHA-256, five downstream commits/checksums, planning
 snapshot, literal timestamp, exact build recipe/toolchains, two-clean-build
 and post-pin main/sources/Javadoc parity receipts, release-readiness artifacts,
-two blocking imported-harness dispatches, and exact 26-row readiness report.
+two blocking imported-harness dispatches, and exact 25-row readiness report.
 The three advisory histories are not G4 inputs. Every future
 identity and the approval time are intentionally unresolved until U8/G4.
 
 **Consumer.** U9 consumes only this frozen decision. Its first candidate build
 must use the approved tree/timestamp/toolchain/recipe and reproduce the
-approved three-JAR tuple before it runs/imports the ordered 26 candidate-bound
+approved three-JAR tuple before it runs/imports the ordered 25 candidate-bound
 gates. The separately authorized G5 runbook may consume only the later U9-
-accepted candidate and 26 `PASS` receipts.
+accepted candidate and 25 `PASS` receipts.
 
 **Invalidation edge.** A dirty checkout; changed commit/tree, source,
 generated artifact, timestamp, planning snapshot, manifest, harness,
@@ -551,16 +554,16 @@ regeneration of its D1p tracked-blob binding, or if review discovers an
 unowned producer, missing consumer, untracked live gate input, impossible
 build/install/downstream command, or circular parity requirement. G4 remains
 blocked until the future values intentionally left unresolved here are
-produced by actual clean U8 execution and all 26 manifest rows are `READY`.
+produced by actual clean U8 execution and all 25 manifest rows are `READY`.
 
 U8 readiness is deliberately weaker than U9 acceptance:
 
 - U8 may retain clean-build, install, downstream-preparation, readiness, and
   parity receipts, but none has release-gate `PASS` status.
-- `READY` means all 26 configurations are pinned and dispatchable with blank
+- `READY` means all 25 configurations are pinned and dispatchable with blank
   blocking reasons; it does not mean they ran against the immutable candidate.
 - U9 alone rebuilds from the G4-frozen source, verifies the approved artifact
-  tuple, and collects 26 typed candidate-bound `PASS` receipts.
+  tuple, and collects 25 typed candidate-bound `PASS` receipts.
 - G5 remains a separate explicit owner authorization even after U9 succeeds.
 
 Therefore this rehearsal establishes that U8 can be executed without

@@ -774,6 +774,7 @@
       "id": "CLASS-JUNIT-LIFECYCLE",
       "paths": [
         "src/test/java/com/soklet/AdvancedTests.java",
+        "src/test/java/com/soklet/BodylessResourceOwnershipTests.java",
         "src/test/java/com/soklet/BuiltInTransportLifecycleAdapterTests.java",
         "src/test/java/com/soklet/CacheResponseMetadataTests.java",
         "src/test/java/com/soklet/CombinedTransportShutdownTests.java",
@@ -1500,6 +1501,26 @@
       ],
       "rationale": "The raw microhttp accepted-socket probe directly starts one EventLoop and stops it in finally, outside Soklet lifecycle generations and LifecyclePolicy phase budgets. The class-level 30-second JUnit guard contains its loopback connect and response read (three seconds each) and final three-second EventLoop join; the listener, client socket, and accepted channel are closed by try-with-resources. Its four other tests exercise channel configuration without starting an EventLoop. Discovery retains these exact guards and I/O controls without assigning a synthetic Soklet generation or borrowing the standard lifecycle guard.",
       "requiredAction": "NONE"
+    },
+    {
+      "classification": "REVIEWED_DISCOVERY_ONLY",
+      "closureStatus": "NOT_APPLICABLE",
+      "id": "CLASS-CONTINUE-SOCKET-BOUNDARY",
+      "paths": [
+        "src/test/java/com/soklet/internal/microhttp/ContinueResponseDisconnectTests.java"
+      ],
+      "rationale": "These four deterministic socket-boundary tests construct a ConnectionEventLoop and fake connection/key without starting an event-loop thread or TCP listener. The fixture invokes inline/selector write turns synchronously, explicitly closes its connection and closes the loop before start, and verifies released admission and closed resources. Three-second parser deadlines are configured but the scheduler is never run. The standard JUnit deadlock guard remains applicable; no full-server generation, lifecycle phase budget, or settled harness receipt is invented.",
+      "requiredAction": "NONE"
+    },
+    {
+      "classification": "REVIEWED_DISCOVERY_ONLY",
+      "closureStatus": "CLOSED",
+      "id": "CLASS-NATIVE-STATIC-FILE-DESCRIPTORS",
+      "paths": [
+        "src/test/java/com/soklet/NativeStaticFileAccessTests.java"
+      ],
+      "rationale": "These eleven descriptor component tests verify the distinct SecureFile custom-transport contract and exercise actual opened-file metadata, equal-size ABA replacement, root/child rename, no-follow component refusal, foreign filesystem rejection, descriptor transfer and idempotent close. They execute no Soklet, simulator, transport owner or lifecycle generation. The FIFO test is isolated in an owned child: mkfifo has a three-second wait plus two-second forced reap, then its Java probe has a four-second wait plus two-second forced reap under a fifteen-second JUnit guard. Missing-jdk.unsupported and installed legacy SecurityManager probes each use a four-second child wait plus two-second forced reap under a ten-second guard; the SecurityManager branch executes on supported legacy JDKs. Child output is redirected to owned regular files, capped at eight KiB, and all process streams close in finally even when forced-reap assertions fail. Remaining synchronous component tests retain the standard sixty-second deadlock guard. These are source-visible native compatibility/security controls, with no invented framework phase budget or release PASS receipt.",
+      "requiredAction": "NONE"
     }
   ],
   "currentLegacyExclusions": [
@@ -1680,8 +1701,8 @@
     }
   ],
   "discoveryCensus": {
-    "candidateCount": 10498,
-    "candidateSha256": "374b9f0ed92a72002cbf23f03bbc758976bde05636a3376f139b0427c5611b77",
+    "candidateCount": 10522,
+    "candidateSha256": "53d0646ba12216fa6f3f189976c212f1c64b7dda5fa2baf4aba5d86be5e8c293",
     "candidates": [
       {
         "kinds": [
@@ -3790,7 +3811,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 738,
+        "line": 742,
         "lineSha256": "05d7d3fd1ee5e5360c43e3aee2c2153c21dc7dd0bceab9446dd83590b77fc9e8",
         "path": "conformance/mcp-transport-dependency-baseline.json"
       },
@@ -3798,7 +3819,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 742,
+        "line": 746,
         "lineSha256": "05d7d3fd1ee5e5360c43e3aee2c2153c21dc7dd0bceab9446dd83590b77fc9e8",
         "path": "conformance/mcp-transport-dependency-baseline.json"
       },
@@ -6214,7 +6235,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1172,
+        "line": 1199,
         "lineSha256": "ab1ba27f08de29e9af813f21f1847513f55ad6fa948c4d6495ac400b222e7078",
         "path": "scripts/release-promotion-self-test.mjs"
       },
@@ -6222,7 +6243,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 846,
+        "line": 833,
         "lineSha256": "01ffd5810bde74527b9193ab2b79c6373e8cb3e3542ef5a54331eb0ae3b550e1",
         "path": "scripts/release-promotion.mjs"
       },
@@ -6230,7 +6251,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 922,
+        "line": 909,
         "lineSha256": "e49ecd19cf4ac3589eb917582c34da41eeba6bbc387dbb7eb4cdfaca86f9b011",
         "path": "scripts/release-promotion.mjs"
       },
@@ -6238,7 +6259,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 2155,
+        "line": 2142,
         "lineSha256": "806d3cee7ac16e29fb0421f0b6056ff342518348b000e816de942299fb35af26",
         "path": "scripts/release-promotion.mjs"
       },
@@ -6246,7 +6267,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 2320,
+        "line": 2307,
         "lineSha256": "806d3cee7ac16e29fb0421f0b6056ff342518348b000e816de942299fb35af26",
         "path": "scripts/release-promotion.mjs"
       },
@@ -6254,7 +6275,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 2469,
+        "line": 2456,
         "lineSha256": "806d3cee7ac16e29fb0421f0b6056ff342518348b000e816de942299fb35af26",
         "path": "scripts/release-promotion.mjs"
       },
@@ -6262,7 +6283,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1022,
+        "line": 1002,
         "lineSha256": "c449d4d0cf9267047d1f04b2c9559afb012bbd83a3126c0c2ce7e70b9408a1f9",
         "path": "scripts/release-validation-evidence.mjs"
       },
@@ -6270,7 +6291,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 608,
+        "line": 607,
         "lineSha256": "8a2fbd9938b8a08a4e50042728c5c89bd17030fb03032d1a184403be7dbdec48",
         "path": "scripts/release-validation-self-test.mjs"
       },
@@ -6278,7 +6299,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1513,
+        "line": 1477,
         "lineSha256": "cd7715e2e0a59edcd34e5556b58b14e0e0095219e9ed11f2f6f27239f955c691",
         "path": "scripts/release-validation-self-test.mjs"
       },
@@ -6286,7 +6307,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1529,
+        "line": 1493,
         "lineSha256": "e2d544f68f963881e02de637cf21adc302951808a438427a1a7f85ef1a46113c",
         "path": "scripts/release-validation-self-test.mjs"
       },
@@ -6302,7 +6323,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 437,
+        "line": 433,
         "lineSha256": "942ad7f3a9bf02c3ba386971a9a498b21b08df7a6259d7b0a62e125e8ec37f20",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -6310,7 +6331,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 494,
+        "line": 490,
         "lineSha256": "4d15f05ce5758c979e51784114806866257976c622e641fb4b532ccfefd700c2",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -6318,7 +6339,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1113,
+        "line": 1100,
         "lineSha256": "20948df8b4be9b60753136a013a14bd3b2af47bcb130555dac9589aef803cf47",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -6326,7 +6347,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1165,
+        "line": 1152,
         "lineSha256": "55bdb3912d9f088e9cce70ea2c30716ad7575f8b12e1fed607a6c5dc643b04e1",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -6334,7 +6355,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1167,
+        "line": 1154,
         "lineSha256": "4ec0f5f0a448e182873e264ca4f5ba9a9d0e716560008c89a98d5333d49b1f68",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -6342,7 +6363,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1190,
+        "line": 1177,
         "lineSha256": "4ee7ada100214d53e6eecc23b8dacfe84de2ef8a889395212f2743f90a79b26f",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -6350,7 +6371,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1226,
+        "line": 1213,
         "lineSha256": "04d78014d7feac77e70c557b99e18339e384f5ec8ff0f87f3d5c6a26451d34fa",
         "path": "scripts/validate-release-candidate.sh"
       },
@@ -6998,7 +7019,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1238,
+        "line": 1250,
         "lineSha256": "f8a3751e312611ced61962384281010be073ca21587f8c67aff98ed96526d578",
         "path": "scripts/verify-mcp-transport-dependencies.mjs"
       },
@@ -7006,7 +7027,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1250,
+        "line": 1262,
         "lineSha256": "a2e44cfd11220ab68038f56610ca8e570382c2aa067bd7aa9e0b1ccfaa7fe8b8",
         "path": "scripts/verify-mcp-transport-dependencies.mjs"
       },
@@ -7014,7 +7035,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1266,
+        "line": 1278,
         "lineSha256": "3297e1f764c579b26665c04c0cc53f09eed8c77d1283adbed09f9e11b754050c",
         "path": "scripts/verify-mcp-transport-dependencies.mjs"
       },
@@ -7022,7 +7043,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1269,
+        "line": 1281,
         "lineSha256": "3297e1f764c579b26665c04c0cc53f09eed8c77d1283adbed09f9e11b754050c",
         "path": "scripts/verify-mcp-transport-dependencies.mjs"
       },
@@ -7030,7 +7051,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1275,
+        "line": 1287,
         "lineSha256": "c4bb1755db483c05d549ec69ecb8ea0f01980dc554d47025a17d24b75a01b456",
         "path": "scripts/verify-mcp-transport-dependencies.mjs"
       },
@@ -7038,7 +7059,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1282,
+        "line": 1294,
         "lineSha256": "c4bb1755db483c05d549ec69ecb8ea0f01980dc554d47025a17d24b75a01b456",
         "path": "scripts/verify-mcp-transport-dependencies.mjs"
       },
@@ -7046,7 +7067,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1334,
+        "line": 1346,
         "lineSha256": "9be239d4ed082283b319d4247733b458d17a5ab9ac53e5f7fc997fe4b0c03945",
         "path": "scripts/verify-mcp-transport-dependencies.mjs"
       },
@@ -7054,7 +7075,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1341,
+        "line": 1353,
         "lineSha256": "624fb4ae724b61b6930567cc3b9a03749dd6031cc94de116ba90e96844928926",
         "path": "scripts/verify-mcp-transport-dependencies.mjs"
       },
@@ -7062,7 +7083,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1348,
+        "line": 1360,
         "lineSha256": "b082f478638317e506ef1eb877ed9d56f29ab53c34f29db91fdc90281a23ee97",
         "path": "scripts/verify-mcp-transport-dependencies.mjs"
       },
@@ -7070,15 +7091,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1356,
-        "lineSha256": "29ba40df6db3e6575f2f51d226463d646494ea3c077d21da8af9b9664e6fa10c",
-        "path": "scripts/verify-mcp-transport-dependencies.mjs"
-      },
-      {
-        "kinds": [
-          "LIFECYCLE_SIGNAL"
-        ],
-        "line": 1365,
+        "line": 1368,
         "lineSha256": "29ba40df6db3e6575f2f51d226463d646494ea3c077d21da8af9b9664e6fa10c",
         "path": "scripts/verify-mcp-transport-dependencies.mjs"
       },
@@ -7094,7 +7107,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1386,
+        "line": 1389,
         "lineSha256": "29ba40df6db3e6575f2f51d226463d646494ea3c077d21da8af9b9664e6fa10c",
         "path": "scripts/verify-mcp-transport-dependencies.mjs"
       },
@@ -7102,7 +7115,15 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1565,
+        "line": 1398,
+        "lineSha256": "29ba40df6db3e6575f2f51d226463d646494ea3c077d21da8af9b9664e6fa10c",
+        "path": "scripts/verify-mcp-transport-dependencies.mjs"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 1577,
         "lineSha256": "3297e1f764c579b26665c04c0cc53f09eed8c77d1283adbed09f9e11b754050c",
         "path": "scripts/verify-mcp-transport-dependencies.mjs"
       },
@@ -7110,7 +7131,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1670,
+        "line": 1684,
         "lineSha256": "7c69e0b9cbdf398cbf3f822638d349fdad0668d44ec7252fbc10e66efb28e55f",
         "path": "scripts/verify-mcp-transport-dependencies.mjs"
       },
@@ -7118,7 +7139,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1673,
+        "line": 1687,
         "lineSha256": "52e48cd5e0ff8d48b194a257c1bae9ba55b4b9ed8329069a8778b96e535975d3",
         "path": "scripts/verify-mcp-transport-dependencies.mjs"
       },
@@ -7126,7 +7147,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1688,
+        "line": 1702,
         "lineSha256": "aa2f06a843ad2c2758d2a30ecbc105bc5d6d4fdaed8a265ebe08c7700566eb5c",
         "path": "scripts/verify-mcp-transport-dependencies.mjs"
       },
@@ -7134,7 +7155,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1694,
+        "line": 1708,
         "lineSha256": "3297e1f764c579b26665c04c0cc53f09eed8c77d1283adbed09f9e11b754050c",
         "path": "scripts/verify-mcp-transport-dependencies.mjs"
       },
@@ -7142,7 +7163,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1723,
+        "line": 1737,
         "lineSha256": "7dc9fdba48d07d0d9c6938b85d25e4df9b4852294d56caf1371bc41e67fdbd6e",
         "path": "scripts/verify-mcp-transport-dependencies.mjs"
       },
@@ -7150,7 +7171,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1728,
+        "line": 1742,
         "lineSha256": "802094ad5d551ce6645049fcc8da690efaea77474efda74bff4eb92e10058c52",
         "path": "scripts/verify-mcp-transport-dependencies.mjs"
       },
@@ -7158,7 +7179,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1733,
+        "line": 1747,
         "lineSha256": "b6fff13984631b5fc87f7ae2ff14ef9a2269cb654a48713408b5a089c1af8a68",
         "path": "scripts/verify-mcp-transport-dependencies.mjs"
       },
@@ -7166,7 +7187,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1738,
+        "line": 1752,
         "lineSha256": "fb7545301a038ef5d6e6ef9d50a4435304b857bacb85163574197db183e32161",
         "path": "scripts/verify-mcp-transport-dependencies.mjs"
       },
@@ -7174,7 +7195,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1752,
+        "line": 1766,
         "lineSha256": "45c7ca33a520dfdfc9d19a89586f45e0e55883d6c44c79b87283930d28af7280",
         "path": "scripts/verify-mcp-transport-dependencies.mjs"
       },
@@ -7182,7 +7203,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1760,
+        "line": 1774,
         "lineSha256": "82d5c212e9cca03210b0c0351a5a1c07336f079669c6878a18d175ddb4089ac9",
         "path": "scripts/verify-mcp-transport-dependencies.mjs"
       },
@@ -7190,7 +7211,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1767,
+        "line": 1781,
         "lineSha256": "843414ffe0911e2518b08a1440207fdd783632a3711a1f2813ac32823b186f04",
         "path": "scripts/verify-mcp-transport-dependencies.mjs"
       },
@@ -7198,7 +7219,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1777,
+        "line": 1791,
         "lineSha256": "29ba40df6db3e6575f2f51d226463d646494ea3c077d21da8af9b9664e6fa10c",
         "path": "scripts/verify-mcp-transport-dependencies.mjs"
       },
@@ -7222,7 +7243,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 328,
+        "line": 327,
         "lineSha256": "d50a16722faa75396a2155a418bbbb0ad7cc3d35fd103a9b99bf7ba53f937553",
         "path": "scripts/verify-release-matrix-closure.mjs"
       },
@@ -7230,7 +7251,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 353,
+        "line": 352,
         "lineSha256": "f68d3be62931191912e290fa631f5e5faa7253fb47a820b2f689455ec1f5215f",
         "path": "scripts/verify-release-matrix-closure.mjs"
       },
@@ -7238,7 +7259,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 373,
+        "line": 372,
         "lineSha256": "b9fb3d5912f095c7100db7ff62832d822a09b29d9b9b225123fa23a1cb79d3a7",
         "path": "scripts/verify-release-matrix-closure.mjs"
       },
@@ -7246,7 +7267,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 2633,
+        "line": 2632,
         "lineSha256": "b2cff82197c10261bdf45f22ba0c2f9c21a435226d9aa126cf7c2227aa9820f6",
         "path": "scripts/verify-release-matrix-closure.mjs"
       },
@@ -10874,6 +10895,90 @@
         "kinds": [
           "JUNIT_OUTER_GUARD"
         ],
+        "line": 44,
+        "lineSha256": "158ed2016068067b761a9e2650a699bbf36d5301284e226bc3965e571e96e6ef",
+        "path": "src/test/java/com/soklet/BodylessResourceOwnershipTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 51,
+        "lineSha256": "188dd4a8b6d641f2a03461d64e209a6c21fd403a571649cf364ccc1038129708",
+        "path": "src/test/java/com/soklet/BodylessResourceOwnershipTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 71,
+        "lineSha256": "188dd4a8b6d641f2a03461d64e209a6c21fd403a571649cf364ccc1038129708",
+        "path": "src/test/java/com/soklet/BodylessResourceOwnershipTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 93,
+        "lineSha256": "188dd4a8b6d641f2a03461d64e209a6c21fd403a571649cf364ccc1038129708",
+        "path": "src/test/java/com/soklet/BodylessResourceOwnershipTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 112,
+        "lineSha256": "188dd4a8b6d641f2a03461d64e209a6c21fd403a571649cf364ccc1038129708",
+        "path": "src/test/java/com/soklet/BodylessResourceOwnershipTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 133,
+        "lineSha256": "188dd4a8b6d641f2a03461d64e209a6c21fd403a571649cf364ccc1038129708",
+        "path": "src/test/java/com/soklet/BodylessResourceOwnershipTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL",
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 145,
+        "lineSha256": "452c4cb41cc700a91a1929759f04cd18b7a7098b376645e7267e7543050bb8be",
+        "path": "src/test/java/com/soklet/BodylessResourceOwnershipTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL",
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 146,
+        "lineSha256": "f2fa5035b1279485f5b30483659bb0b3baa8632e7d6d82d252ed07b3f5e5c34f",
+        "path": "src/test/java/com/soklet/BodylessResourceOwnershipTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL",
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 147,
+        "lineSha256": "1acf9f626a5e47d0d5f5cdfef3e5d79f4eac7d8a579c870248de82e71f2babd8",
+        "path": "src/test/java/com/soklet/BodylessResourceOwnershipTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL",
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 148,
+        "lineSha256": "e8bfa5c33c719497eaa4fb6aa1d4ea23a8e4cde855aac744d34253f9772abec0",
+        "path": "src/test/java/com/soklet/BodylessResourceOwnershipTests.java"
+      },
+      {
+        "kinds": [
+          "JUNIT_OUTER_GUARD"
+        ],
         "line": 35,
         "lineSha256": "3b1bf774b68e9dc5a60e779179502c92e68bb2c341b5c2573cf9dc0ec0a3d4a1",
         "path": "src/test/java/com/soklet/BuiltInTransportLifecycleAdapterTests.java"
@@ -12835,9 +12940,17 @@
       },
       {
         "kinds": [
+          "JUNIT_OUTER_GUARD"
+        ],
+        "line": 61,
+        "lineSha256": "ffffeb6bb1dedf25f1180773442c5ffd9c105bd208304d56fe1b26828c6f192a",
+        "path": "src/test/java/com/soklet/FiniteHttpResponseSafetyTests.java"
+      },
+      {
+        "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 208,
+        "line": 228,
         "lineSha256": "6b8a85248c6d365d7ee2df19278f92dcc3983a4fad8f881373b39289d3de9a17",
         "path": "src/test/java/com/soklet/FiniteHttpResponseSafetyTests.java"
       },
@@ -12845,7 +12958,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 215,
+        "line": 235,
         "lineSha256": "5645c33b838d5c2e19d7fe9a2f95c5d171807d2ad21a7e5bca0ecf20e3fe818f",
         "path": "src/test/java/com/soklet/FiniteHttpResponseSafetyTests.java"
       },
@@ -12854,7 +12967,7 @@
           "LIFECYCLE_SIGNAL",
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 216,
+        "line": 236,
         "lineSha256": "9f815f1e57a991dacfe70bc0095ae240ae9611b6d92ec0327ea018876708a534",
         "path": "src/test/java/com/soklet/FiniteHttpResponseSafetyTests.java"
       },
@@ -12863,7 +12976,7 @@
           "LIFECYCLE_SIGNAL",
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 217,
+        "line": 237,
         "lineSha256": "3c11a8e3044357312b13ed50e9339f911d5184026e76c93c54bbea9c51da5cae",
         "path": "src/test/java/com/soklet/FiniteHttpResponseSafetyTests.java"
       },
@@ -12872,7 +12985,7 @@
           "LIFECYCLE_SIGNAL",
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 218,
+        "line": 238,
         "lineSha256": "3854504742c158fa04499672a4b244fb016aac41695a224b3db9a847820bddbe",
         "path": "src/test/java/com/soklet/FiniteHttpResponseSafetyTests.java"
       },
@@ -12880,7 +12993,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 229,
+        "line": 249,
         "lineSha256": "2261fbb787c82f38a3664eb17ea0693177858cf4d028584f9da17882fa2e167e",
         "path": "src/test/java/com/soklet/FiniteHttpResponseSafetyTests.java"
       },
@@ -12888,7 +13001,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 231,
+        "line": 251,
         "lineSha256": "b422ec23b7e261ab0429dd73cba53d3e823c598ee94ec593e2679cf48df3837a",
         "path": "src/test/java/com/soklet/FiniteHttpResponseSafetyTests.java"
       },
@@ -12896,7 +13009,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 244,
+        "line": 264,
         "lineSha256": "402b80c20c17fa823ada7c4e136475a896986d30af3fb4d5af1190acbd5c9bc4",
         "path": "src/test/java/com/soklet/FiniteHttpResponseSafetyTests.java"
       },
@@ -12904,7 +13017,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 273,
+        "line": 293,
         "lineSha256": "6a8f9d2a1b93d815b2a6434fe8b9caccb546f45a1ff186051f603c848526cf06",
         "path": "src/test/java/com/soklet/FiniteHttpResponseSafetyTests.java"
       },
@@ -12912,7 +13025,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 276,
+        "line": 296,
         "lineSha256": "60bf9d010701a53859e4d697204f913e5fd3f9ed9facbad51107ca71ba3cd272",
         "path": "src/test/java/com/soklet/FiniteHttpResponseSafetyTests.java"
       },
@@ -39432,6 +39545,62 @@
       },
       {
         "kinds": [
+          "JUNIT_OUTER_GUARD"
+        ],
+        "line": 197,
+        "lineSha256": "6db98654c664eeabbe4fac4fbe75daff129e00e6afbd2548e13c90c10465854e",
+        "path": "src/test/java/com/soklet/NativeStaticFileAccessTests.java"
+      },
+      {
+        "kinds": [
+          "FIXED_WAIT_CANDIDATE"
+        ],
+        "line": 205,
+        "lineSha256": "8a645a5e665dfcbecb513c7b770a709ffc744cde3ca35a3ba019214364fe5a06",
+        "path": "src/test/java/com/soklet/NativeStaticFileAccessTests.java"
+      },
+      {
+        "kinds": [
+          "FIXED_WAIT_CANDIDATE"
+        ],
+        "line": 210,
+        "lineSha256": "fb33cffbca373d90a1ff1d866fe9b60c85e6406dfed22f79fe2ec6c870507014",
+        "path": "src/test/java/com/soklet/NativeStaticFileAccessTests.java"
+      },
+      {
+        "kinds": [
+          "JUNIT_OUTER_GUARD"
+        ],
+        "line": 219,
+        "lineSha256": "269d39aa44bea41595692c2d0024aa2f7ab61ceff27a18c1e2ad6754cf9e4f27",
+        "path": "src/test/java/com/soklet/NativeStaticFileAccessTests.java"
+      },
+      {
+        "kinds": [
+          "JUNIT_OUTER_GUARD"
+        ],
+        "line": 226,
+        "lineSha256": "269d39aa44bea41595692c2d0024aa2f7ab61ceff27a18c1e2ad6754cf9e4f27",
+        "path": "src/test/java/com/soklet/NativeStaticFileAccessTests.java"
+      },
+      {
+        "kinds": [
+          "FIXED_WAIT_CANDIDATE"
+        ],
+        "line": 248,
+        "lineSha256": "aa51456f4806db00564b81747828092153e9dd7c5abf120c470ad0a67f6646cd",
+        "path": "src/test/java/com/soklet/NativeStaticFileAccessTests.java"
+      },
+      {
+        "kinds": [
+          "FIXED_WAIT_CANDIDATE"
+        ],
+        "line": 255,
+        "lineSha256": "bbb7183db45deebcc8c01ba9b212ce6ba06a8de81771f00b24fffdb3d11e271f",
+        "path": "src/test/java/com/soklet/NativeStaticFileAccessTests.java"
+      },
+      {
+        "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
         "line": 136,
@@ -40560,6 +40729,22 @@
         ],
         "line": 63,
         "lineSha256": "88630f564f706c55f40cdb2d45039e1041cde72d846c4860c8ddfc7f0a9a56aa",
+        "path": "src/test/java/com/soklet/ResponseErrorMappingTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 79,
+        "lineSha256": "84fcfe7f4237d52ff523bfe389375b14586c1bdbde1a0e193cde2d55649b78ef",
+        "path": "src/test/java/com/soklet/ResponseErrorMappingTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 103,
+        "lineSha256": "a0cff3646d49d11a3a25f9e72242779054a4afc5c990ca97829ba17ab8f8ad5d",
         "path": "src/test/java/com/soklet/ResponseErrorMappingTests.java"
       },
       {
@@ -53354,7 +53539,7 @@
           "LIFECYCLE_SIGNAL"
         ],
         "line": 111,
-        "lineSha256": "24209846f7450272986c7c451f2c37ec40bf69b302d02704a4a3a52d16191467",
+        "lineSha256": "391c3010ef2c358c2486166d7ee30fce2b25f2fa1f914e934e9abf21665ceb35",
         "path": "src/test/java/com/soklet/SseLifecycleAdmissionTests.java"
       },
       {
@@ -57289,7 +57474,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 803,
+        "line": 813,
         "lineSha256": "b1e21db6e1c8fa9d6940eab0c8d899d2a4330a346d836f440bb7d326d826da3e",
         "path": "src/test/java/com/soklet/StaticFilesTests.java"
       },
@@ -57297,7 +57482,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 811,
+        "line": 821,
         "lineSha256": "bb2d155472c8524c2ef28aed71b2f69efffaba9f80e79d789b1be9320874b2f8",
         "path": "src/test/java/com/soklet/StaticFilesTests.java"
       },
@@ -57305,15 +57490,71 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1036,
+        "line": 1223,
         "lineSha256": "fc1d8a1033af2fff3c3f17d0fb18381a050474eef70e3d9bfc73c34b2b613935",
+        "path": "src/test/java/com/soklet/StaticFilesTests.java"
+      },
+      {
+        "kinds": [
+          "JUNIT_OUTER_GUARD"
+        ],
+        "line": 1239,
+        "lineSha256": "ffffeb6bb1dedf25f1180773442c5ffd9c105bd208304d56fe1b26828c6f192a",
         "path": "src/test/java/com/soklet/StaticFilesTests.java"
       },
       {
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1052,
+        "line": 1245,
+        "lineSha256": "06a1c58df242cd26abe49d6bf39c6c82637ed1b0a4fe82ac5e11a47dc2e39b1f",
+        "path": "src/test/java/com/soklet/StaticFilesTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 1256,
+        "lineSha256": "f9262f8f469027c407e02f0b9e3b9dfea0816128fd1758de2b8f7b1f955be0fd",
+        "path": "src/test/java/com/soklet/StaticFilesTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 1287,
+        "lineSha256": "06a1c58df242cd26abe49d6bf39c6c82637ed1b0a4fe82ac5e11a47dc2e39b1f",
+        "path": "src/test/java/com/soklet/StaticFilesTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 1298,
+        "lineSha256": "f9262f8f469027c407e02f0b9e3b9dfea0816128fd1758de2b8f7b1f955be0fd",
+        "path": "src/test/java/com/soklet/StaticFilesTests.java"
+      },
+      {
+        "kinds": [
+          "FIXED_WAIT_CANDIDATE"
+        ],
+        "line": 1316,
+        "lineSha256": "d98e7f3284716ef109038e7ce7e7bb08fa4af2e8901e49d36a745276abbabd81",
+        "path": "src/test/java/com/soklet/StaticFilesTests.java"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 1317,
+        "lineSha256": "ea90c7680cab2f23252dd4766eb5fe676e9041df166e5647811c8899e4108ade",
+        "path": "src/test/java/com/soklet/StaticFilesTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 1330,
         "lineSha256": "88630f564f706c55f40cdb2d45039e1041cde72d846c4860c8ddfc7f0a9a56aa",
         "path": "src/test/java/com/soklet/StaticFilesTests.java"
       },
@@ -80201,31 +80442,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 569,
-        "lineSha256": "2d6572161cbb6e5446993d6ffc5012c16f323331331fc1ef89ecf0e32ab12317",
-        "path": "src/test/java/com/soklet/internal/mcp/transport/McpTransportPrimitiveTests.java"
-      },
-      {
-        "kinds": [
-          "FIXED_WAIT_CANDIDATE"
-        ],
-        "line": 612,
-        "lineSha256": "cc5f9f6916f5a81422f08bc6f58e12534e04cd91fec655875bd72db585aec929",
-        "path": "src/test/java/com/soklet/internal/mcp/transport/McpTransportPrimitiveTests.java"
-      },
-      {
-        "kinds": [
-          "FIXED_WAIT_CANDIDATE"
-        ],
-        "line": 614,
-        "lineSha256": "ccafcd62ebe73711d54cacb3f223450d4d5525fbb227c6ee321e15db83e82e77",
-        "path": "src/test/java/com/soklet/internal/mcp/transport/McpTransportPrimitiveTests.java"
-      },
-      {
-        "kinds": [
-          "FIXED_WAIT_CANDIDATE"
-        ],
-        "line": 617,
+        "line": 585,
         "lineSha256": "b05bf6014996194a601025a12ff97747cdc578f864432a4758a0bb8b5d7d24c7",
         "path": "src/test/java/com/soklet/internal/mcp/transport/McpTransportPrimitiveTests.java"
       },
@@ -80233,23 +80450,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 624,
-        "lineSha256": "2d2f10bdfd1605ce195e1d4678068efc723b37bc264fd6496e55e1c48ac349b8",
-        "path": "src/test/java/com/soklet/internal/mcp/transport/McpTransportPrimitiveTests.java"
-      },
-      {
-        "kinds": [
-          "FIXED_WAIT_CANDIDATE"
-        ],
-        "line": 628,
-        "lineSha256": "392847ca24acf7bcff130cd4d001fe1159ee93f7136b8ff66d95741ba7e20f74",
-        "path": "src/test/java/com/soklet/internal/mcp/transport/McpTransportPrimitiveTests.java"
-      },
-      {
-        "kinds": [
-          "FIXED_WAIT_CANDIDATE"
-        ],
-        "line": 629,
+        "line": 593,
         "lineSha256": "b05bf6014996194a601025a12ff97747cdc578f864432a4758a0bb8b5d7d24c7",
         "path": "src/test/java/com/soklet/internal/mcp/transport/McpTransportPrimitiveTests.java"
       },
@@ -80257,7 +80458,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 636,
+        "line": 599,
         "lineSha256": "3fde97c7486c570c25478ce5ba44e41ae972489ef961e49453e3fe1656ac4175",
         "path": "src/test/java/com/soklet/internal/mcp/transport/McpTransportPrimitiveTests.java"
       },
@@ -80265,7 +80466,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 639,
+        "line": 602,
         "lineSha256": "47db5e37b4e5cbdb34d022fea00417ebbde7a718e6d91f586db8c5ebce032cdc",
         "path": "src/test/java/com/soklet/internal/mcp/transport/McpTransportPrimitiveTests.java"
       },
@@ -80967,6 +81168,22 @@
       },
       {
         "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 119,
+        "lineSha256": "a500d0770f2513be8c40e152dbdf12224cad97e29c8f13375c54c7697bc19e35",
+        "path": "src/test/java/com/soklet/internal/microhttp/ContinueResponseDisconnectTests.java"
+      },
+      {
+        "kinds": [
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 120,
+        "lineSha256": "f751683cd4df9f0574c4ac953ab19d48a32ff60e4d8c39dfccc5cab61a74bd9e",
+        "path": "src/test/java/com/soklet/internal/microhttp/ContinueResponseDisconnectTests.java"
+      },
+      {
+        "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
         "line": 60,
@@ -81177,7 +81394,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 248,
+        "line": 296,
         "lineSha256": "0b63c7d15e2d5ad83b176b2b13703cc934a169b15909f206273554b7ecf33beb",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81185,7 +81402,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 345,
+        "line": 393,
         "lineSha256": "0b63c7d15e2d5ad83b176b2b13703cc934a169b15909f206273554b7ecf33beb",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81193,7 +81410,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 454,
+        "line": 502,
         "lineSha256": "0b63c7d15e2d5ad83b176b2b13703cc934a169b15909f206273554b7ecf33beb",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81201,7 +81418,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 477,
+        "line": 525,
         "lineSha256": "d1ec2e9fefeca945c274971f4e9dc530ac7c5a2a3409da17f4409e438feff15e",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81209,7 +81426,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 483,
+        "line": 531,
         "lineSha256": "e6098d3184106a5a67916a4b869bfb78a9e96ef9773d33d41f0ecb5376ef993f",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81217,7 +81434,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 491,
+        "line": 539,
         "lineSha256": "0b63c7d15e2d5ad83b176b2b13703cc934a169b15909f206273554b7ecf33beb",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81225,7 +81442,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 1180,
+        "line": 1329,
         "lineSha256": "c97f1e405981d59ec59376cb8919e129af8556bb035c416e542eb75a404c1542",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81233,7 +81450,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1322,
+        "line": 1471,
         "lineSha256": "bf37fcb0afcf16c4e58bebc1fde75777c8774e6ac6b270d7da3484bc2e0c5765",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81241,7 +81458,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1323,
+        "line": 1472,
         "lineSha256": "5d988cb80f9446c60c5f753ea8fa45fe7a9e578303cd18d77259945f0faf8dae",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81249,7 +81466,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1367,
+        "line": 1516,
         "lineSha256": "0b63c7d15e2d5ad83b176b2b13703cc934a169b15909f206273554b7ecf33beb",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81257,7 +81474,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1376,
+        "line": 1525,
         "lineSha256": "fdb31ec25a7f6941c87ddfc83e3b38b6e41a381fb7b0c4adaf4901a7261a06a2",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81265,7 +81482,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1377,
+        "line": 1526,
         "lineSha256": "a220f206dc703dd9b98f954dc82854f08106f1b004c099e447b262cb968bd685",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81273,7 +81490,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1387,
+        "line": 1536,
         "lineSha256": "09542b21df154e59e9d1f4d7881b811a56430fa7d1e3d88beb584cb684e37477",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81281,7 +81498,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1395,
+        "line": 1544,
         "lineSha256": "0b63c7d15e2d5ad83b176b2b13703cc934a169b15909f206273554b7ecf33beb",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81289,7 +81506,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1404,
+        "line": 1553,
         "lineSha256": "fdb31ec25a7f6941c87ddfc83e3b38b6e41a381fb7b0c4adaf4901a7261a06a2",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81297,7 +81514,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1405,
+        "line": 1554,
         "lineSha256": "a220f206dc703dd9b98f954dc82854f08106f1b004c099e447b262cb968bd685",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81305,7 +81522,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1415,
+        "line": 1564,
         "lineSha256": "09542b21df154e59e9d1f4d7881b811a56430fa7d1e3d88beb584cb684e37477",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81313,7 +81530,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1431,
+        "line": 1580,
         "lineSha256": "0b63c7d15e2d5ad83b176b2b13703cc934a169b15909f206273554b7ecf33beb",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81321,7 +81538,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1440,
+        "line": 1589,
         "lineSha256": "bf37fcb0afcf16c4e58bebc1fde75777c8774e6ac6b270d7da3484bc2e0c5765",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81329,7 +81546,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1441,
+        "line": 1590,
         "lineSha256": "5d988cb80f9446c60c5f753ea8fa45fe7a9e578303cd18d77259945f0faf8dae",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81337,7 +81554,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1453,
+        "line": 1602,
         "lineSha256": "25c2c6f5103707ea79a222b91f4220680b5cdf830bc5fa692c987e3b573352eb",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81345,7 +81562,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1473,
+        "line": 1622,
         "lineSha256": "0b63c7d15e2d5ad83b176b2b13703cc934a169b15909f206273554b7ecf33beb",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81353,7 +81570,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1482,
+        "line": 1631,
         "lineSha256": "bf37fcb0afcf16c4e58bebc1fde75777c8774e6ac6b270d7da3484bc2e0c5765",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81361,7 +81578,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1483,
+        "line": 1632,
         "lineSha256": "5d988cb80f9446c60c5f753ea8fa45fe7a9e578303cd18d77259945f0faf8dae",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81369,7 +81586,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1493,
+        "line": 1642,
         "lineSha256": "09542b21df154e59e9d1f4d7881b811a56430fa7d1e3d88beb584cb684e37477",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81377,7 +81594,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1509,
+        "line": 1658,
         "lineSha256": "0b63c7d15e2d5ad83b176b2b13703cc934a169b15909f206273554b7ecf33beb",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81385,7 +81602,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1518,
+        "line": 1667,
         "lineSha256": "fdb31ec25a7f6941c87ddfc83e3b38b6e41a381fb7b0c4adaf4901a7261a06a2",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81393,7 +81610,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1519,
+        "line": 1668,
         "lineSha256": "a220f206dc703dd9b98f954dc82854f08106f1b004c099e447b262cb968bd685",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81401,7 +81618,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1529,
+        "line": 1678,
         "lineSha256": "09542b21df154e59e9d1f4d7881b811a56430fa7d1e3d88beb584cb684e37477",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81409,7 +81626,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1548,
+        "line": 1697,
         "lineSha256": "0b63c7d15e2d5ad83b176b2b13703cc934a169b15909f206273554b7ecf33beb",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81417,7 +81634,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1582,
+        "line": 1731,
         "lineSha256": "0b63c7d15e2d5ad83b176b2b13703cc934a169b15909f206273554b7ecf33beb",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81425,7 +81642,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1591,
+        "line": 1740,
         "lineSha256": "bf37fcb0afcf16c4e58bebc1fde75777c8774e6ac6b270d7da3484bc2e0c5765",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81433,7 +81650,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1592,
+        "line": 1741,
         "lineSha256": "5d988cb80f9446c60c5f753ea8fa45fe7a9e578303cd18d77259945f0faf8dae",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81441,7 +81658,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1627,
+        "line": 1776,
         "lineSha256": "0b63c7d15e2d5ad83b176b2b13703cc934a169b15909f206273554b7ecf33beb",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81449,7 +81666,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1636,
+        "line": 1785,
         "lineSha256": "bf37fcb0afcf16c4e58bebc1fde75777c8774e6ac6b270d7da3484bc2e0c5765",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81457,7 +81674,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1637,
+        "line": 1786,
         "lineSha256": "5d988cb80f9446c60c5f753ea8fa45fe7a9e578303cd18d77259945f0faf8dae",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81465,7 +81682,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1674,
+        "line": 1823,
         "lineSha256": "0b63c7d15e2d5ad83b176b2b13703cc934a169b15909f206273554b7ecf33beb",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81473,7 +81690,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1683,
+        "line": 1832,
         "lineSha256": "fdb31ec25a7f6941c87ddfc83e3b38b6e41a381fb7b0c4adaf4901a7261a06a2",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81481,7 +81698,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1684,
+        "line": 1833,
         "lineSha256": "a220f206dc703dd9b98f954dc82854f08106f1b004c099e447b262cb968bd685",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81489,7 +81706,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1694,
+        "line": 1843,
         "lineSha256": "09542b21df154e59e9d1f4d7881b811a56430fa7d1e3d88beb584cb684e37477",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81497,7 +81714,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1704,
+        "line": 1853,
         "lineSha256": "0b63c7d15e2d5ad83b176b2b13703cc934a169b15909f206273554b7ecf33beb",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81505,7 +81722,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1713,
+        "line": 1862,
         "lineSha256": "fdb31ec25a7f6941c87ddfc83e3b38b6e41a381fb7b0c4adaf4901a7261a06a2",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81513,7 +81730,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1714,
+        "line": 1863,
         "lineSha256": "a220f206dc703dd9b98f954dc82854f08106f1b004c099e447b262cb968bd685",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81521,7 +81738,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1724,
+        "line": 1873,
         "lineSha256": "09542b21df154e59e9d1f4d7881b811a56430fa7d1e3d88beb584cb684e37477",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81529,7 +81746,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1734,
+        "line": 1883,
         "lineSha256": "0b63c7d15e2d5ad83b176b2b13703cc934a169b15909f206273554b7ecf33beb",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81537,7 +81754,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1744,
+        "line": 1893,
         "lineSha256": "bf37fcb0afcf16c4e58bebc1fde75777c8774e6ac6b270d7da3484bc2e0c5765",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81545,7 +81762,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1745,
+        "line": 1894,
         "lineSha256": "5d988cb80f9446c60c5f753ea8fa45fe7a9e578303cd18d77259945f0faf8dae",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81553,7 +81770,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1746,
+        "line": 1895,
         "lineSha256": "39e7c486c44b08ebc5863d2f70e4b5812fedc4cd2de5df6649f70f58704037cf",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81561,7 +81778,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1786,
+        "line": 1935,
         "lineSha256": "d764f121de7f11a3b53bbbec285288be61a9932eb226aab8db864bb23bcf4036",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81569,7 +81786,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1796,
+        "line": 1945,
         "lineSha256": "0b63c7d15e2d5ad83b176b2b13703cc934a169b15909f206273554b7ecf33beb",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81577,7 +81794,7 @@
         "kinds": [
           "NAMED_TIMEOUT_CANDIDATE"
         ],
-        "line": 1806,
+        "line": 1955,
         "lineSha256": "09542b21df154e59e9d1f4d7881b811a56430fa7d1e3d88beb584cb684e37477",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81585,7 +81802,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1825,
+        "line": 1974,
         "lineSha256": "3fde97c7486c570c25478ce5ba44e41ae972489ef961e49453e3fe1656ac4175",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81593,7 +81810,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1827,
+        "line": 1976,
         "lineSha256": "207e44e2368644697982b3770decebe8f2f85779d46e57b9b07d44ddc45a62b2",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81601,7 +81818,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1962,
+        "line": 2111,
         "lineSha256": "dc15bb3efc2b20d9e17f831b171b5520437bf4efb3157e9d03161ceeabd79951",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -81609,7 +81826,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 1964,
+        "line": 2113,
         "lineSha256": "a990fb841279ed7d831dfa77132559079b4c396bbdb4b09686eb0c1eeef521e7",
         "path": "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java"
       },
@@ -86303,13 +86520,13 @@
     ],
     "countsByKind": {
       "FIXED_WAIT_CANDIDATE": 2841,
-      "JUNIT_OUTER_GUARD": 575,
-      "LIFECYCLE_SIGNAL": 5705,
-      "NAMED_TIMEOUT_CANDIDATE": 1971,
+      "JUNIT_OUTER_GUARD": 581,
+      "LIFECYCLE_SIGNAL": 5720,
+      "NAMED_TIMEOUT_CANDIDATE": 1978,
       "PROCESS_OUTER_GUARD": 24,
       "WORKFLOW_OUTER_GUARD": 15
     },
-    "pathCount": 558
+    "pathCount": 561
   },
   "formatVersion": 2,
   "javascriptGuards": [
@@ -86362,8 +86579,8 @@
     }
   ],
   "junitGuardSummary": {
-    "count": 532,
-    "sha256": "16c46ec46bc789cfd1726a006c62aa7202d4759cc4d662f5fada2268a0949d97"
+    "count": 535,
+    "sha256": "769b2232634f9aa64cfe7b6b7e82d7d41aa5e19c63e8d64690cf2aed22c2f1b5"
   },
   "lifecycleScopes": [
     {
@@ -87822,6 +88039,536 @@
         "scopeKind": "TEST",
         "scopeName": "testSSEConcurrentConnectionLimitWithCustomResponse",
         "scopeSha256": "b1d2dcc602ebcfbd538278080b2b7bf5f3cb6130ceae388ff4d071c28d566d2a",
+        "terminalReportExpected": false,
+        "testFactory": false,
+        "unresolvedFixedControlWaitCount": 0,
+        "unresolvedLifecycleRepetitionCount": 0,
+        "unresolvedLifecycleReceiverCount": 0,
+        "unresolvedPolicyBuilderCount": 0,
+        "unresolvedPolicyInstallationCount": 0,
+        "unwrappedDynamicNodeCount": 0
+      }
+    },
+    {
+      "review": {
+        "applicablePathBoundsMillis": {
+          "NORMAL_STARTUP": 5000,
+          "RUNNING_STOP": 2000,
+          "NORMAL_START_THEN_RUNNING_STOP": 7000,
+          "SHUTDOWN_DURING_STARTUP_FROM_OUTER_START": 8000,
+          "STARTUP_TIMEOUT_PLUS_ROLLBACK": 8000
+        },
+        "applicationCleanupCount": 0,
+        "applicationCleanupMillis": 0,
+        "branchBoundsMillis": {
+          "COMPLETE_CORE": 7000,
+          "INCOMPLETE_CORE": 8000
+        },
+        "classification": "LOCAL_POLICY_STRICT_FIT",
+        "cleanupProof": null,
+        "closureStatus": "CLOSED",
+        "completeGenerationMultiplier": 1,
+        "controlJoinMillis": 0,
+        "controlProof": null,
+        "controlTopology": "NONE",
+        "controlledCompletionProof": null,
+        "controlledLifecycleCoreMillis": null,
+        "generationCount": 1,
+        "generationMode": "SINGLE",
+        "generationProof": null,
+        "incompleteBranchCleanupCount": 0,
+        "incompleteGenerationMultiplier": 1,
+        "lifecycleCoreBranchBoundsMillis": {
+          "COMPLETE_CORE": 7000,
+          "INCOMPLETE_CORE": 8000
+        },
+        "outerGuard": {
+          "kind": "EXPLICIT_TYPE_TIMEOUT",
+          "millis": 60000,
+          "path": "src/test/java/com/soklet/BodylessResourceOwnershipTests.java"
+        },
+        "phasePolicy": {
+          "controlledStartupMillis": null,
+          "forcedShutdownMillis": 1000,
+          "gracefulShutdownMillis": 1000,
+          "startupCancellationMillis": 1000,
+          "startupMillis": 5000,
+          "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
+        },
+        "policyProof": {
+          "line": 48,
+          "lineSha256": "eea98ef5bb843a8087c78630cbe74f7bf0add705f64e920851168db56ea60dee",
+          "path": "src/test/java/com/soklet/BodylessResourceOwnershipTests.java",
+          "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
+        },
+        "priorCompleteGenerationMultiplier": 0,
+        "rationale": "Every applicable lifecycle branch, repeated generation, cleanup/report phase, and control join is composed under the effective outer guard.",
+        "requiredAction": "MIGRATE_POLICY",
+        "requiredReserveMillis": 1,
+        "reserveMillis": 52000,
+        "terminalReportCount": 0,
+        "terminalReportMillis": 0,
+        "totalComposedBoundMillis": 8000
+      },
+      "source": {
+        "applicationRunSiteCount": 0,
+        "cleanupConfigured": false,
+        "disabled": false,
+        "dynamicNodeCount": 0,
+        "dynamicNodeGuardMillis": null,
+        "effectiveOuterTimeoutMillis": 60000,
+        "fileSha256": "2356282d00a105c6d97abca0b75da86919a2dc14356536a973bc6263e1314991",
+        "fixedControlWaitCount": 0,
+        "fixedControlWaitMillis": 0,
+        "factoryGenerationHasExecution": false,
+        "factoryGenerationFixedControlWaitMillis": 0,
+        "factoryGenerationOuterTimeoutMillis": null,
+        "factoryGenerationOuterTimeoutScope": null,
+        "factoryGenerationUnresolvedFixedControlWaitCount": 0,
+        "generationSiteCount": 1,
+        "hasExecution": true,
+        "hasInlineCleanup": false,
+        "hasInlineNoStartupTimeout": false,
+        "hasInlinePolicy": false,
+        "hasLocalPolicy": true,
+        "hasNoStartupTimeout": false,
+        "id": "SCOPE-7c47dbe0c1b5ebd8",
+        "inlineCleanupMillis": null,
+        "line": 48,
+        "lineSha256": "eea98ef5bb843a8087c78630cbe74f7bf0add705f64e920851168db56ea60dee",
+        "observedOperations": [
+          "CONFIGURE_POLICY",
+          "RUN_SIMULATOR"
+        ],
+        "outerTimeoutScope": "TYPE",
+        "path": "src/test/java/com/soklet/BodylessResourceOwnershipTests.java",
+        "scopeKind": "TEST",
+        "scopeName": "rejectedResourceAndMarshalerBodiesReleaseOwnedChannels",
+        "scopeSha256": "58adf4067cb07ae759160a6d4a504df80c382016f5416e685e37acc8a5e0e9ec",
+        "terminalReportExpected": false,
+        "testFactory": false,
+        "unresolvedFixedControlWaitCount": 0,
+        "unresolvedLifecycleRepetitionCount": 0,
+        "unresolvedLifecycleReceiverCount": 0,
+        "unresolvedPolicyBuilderCount": 0,
+        "unresolvedPolicyInstallationCount": 0,
+        "unwrappedDynamicNodeCount": 0
+      }
+    },
+    {
+      "review": {
+        "applicablePathBoundsMillis": {
+          "NORMAL_STARTUP": 5000,
+          "RUNNING_STOP": 2000,
+          "NORMAL_START_THEN_RUNNING_STOP": 7000,
+          "SHUTDOWN_DURING_STARTUP_FROM_OUTER_START": 8000,
+          "STARTUP_TIMEOUT_PLUS_ROLLBACK": 8000
+        },
+        "applicationCleanupCount": 0,
+        "applicationCleanupMillis": 0,
+        "branchBoundsMillis": {
+          "COMPLETE_CORE": 7000,
+          "INCOMPLETE_CORE": 8000
+        },
+        "classification": "LOCAL_POLICY_STRICT_FIT",
+        "cleanupProof": null,
+        "closureStatus": "CLOSED",
+        "completeGenerationMultiplier": 1,
+        "controlJoinMillis": 0,
+        "controlProof": null,
+        "controlTopology": "NONE",
+        "controlledCompletionProof": null,
+        "controlledLifecycleCoreMillis": null,
+        "generationCount": 1,
+        "generationMode": "SINGLE",
+        "generationProof": null,
+        "incompleteBranchCleanupCount": 0,
+        "incompleteGenerationMultiplier": 1,
+        "lifecycleCoreBranchBoundsMillis": {
+          "COMPLETE_CORE": 7000,
+          "INCOMPLETE_CORE": 8000
+        },
+        "outerGuard": {
+          "kind": "EXPLICIT_TYPE_TIMEOUT",
+          "millis": 60000,
+          "path": "src/test/java/com/soklet/BodylessResourceOwnershipTests.java"
+        },
+        "phasePolicy": {
+          "controlledStartupMillis": null,
+          "forcedShutdownMillis": 1000,
+          "gracefulShutdownMillis": 1000,
+          "startupCancellationMillis": 1000,
+          "startupMillis": 5000,
+          "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
+        },
+        "policyProof": {
+          "line": 68,
+          "lineSha256": "c3be7fa6bab11e081249e15d97490129b32f43e8cb0fdc120e3264eaa6780627",
+          "path": "src/test/java/com/soklet/BodylessResourceOwnershipTests.java",
+          "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
+        },
+        "priorCompleteGenerationMultiplier": 0,
+        "rationale": "Every applicable lifecycle branch, repeated generation, cleanup/report phase, and control join is composed under the effective outer guard.",
+        "requiredAction": "MIGRATE_POLICY",
+        "requiredReserveMillis": 1,
+        "reserveMillis": 52000,
+        "terminalReportCount": 0,
+        "terminalReportMillis": 0,
+        "totalComposedBoundMillis": 8000
+      },
+      "source": {
+        "applicationRunSiteCount": 0,
+        "cleanupConfigured": false,
+        "disabled": false,
+        "dynamicNodeCount": 0,
+        "dynamicNodeGuardMillis": null,
+        "effectiveOuterTimeoutMillis": 60000,
+        "fileSha256": "2356282d00a105c6d97abca0b75da86919a2dc14356536a973bc6263e1314991",
+        "fixedControlWaitCount": 0,
+        "fixedControlWaitMillis": 0,
+        "factoryGenerationHasExecution": false,
+        "factoryGenerationFixedControlWaitMillis": 0,
+        "factoryGenerationOuterTimeoutMillis": null,
+        "factoryGenerationOuterTimeoutScope": null,
+        "factoryGenerationUnresolvedFixedControlWaitCount": 0,
+        "generationSiteCount": 1,
+        "hasExecution": true,
+        "hasInlineCleanup": false,
+        "hasInlineNoStartupTimeout": false,
+        "hasInlinePolicy": false,
+        "hasLocalPolicy": true,
+        "hasNoStartupTimeout": false,
+        "id": "SCOPE-c5bb683b37808262",
+        "inlineCleanupMillis": null,
+        "line": 68,
+        "lineSha256": "c3be7fa6bab11e081249e15d97490129b32f43e8cb0fdc120e3264eaa6780627",
+        "observedOperations": [
+          "CONFIGURE_POLICY",
+          "RUN_SIMULATOR"
+        ],
+        "outerTimeoutScope": "TYPE",
+        "path": "src/test/java/com/soklet/BodylessResourceOwnershipTests.java",
+        "scopeKind": "TEST",
+        "scopeName": "emptyResetContentStillReleasesOnlyOwnedChannels",
+        "scopeSha256": "967bfefdf2fbb8d17214a43fd0b4f6ae296c06bb9ff6dbe90825ae750a1e8a06",
+        "terminalReportExpected": false,
+        "testFactory": false,
+        "unresolvedFixedControlWaitCount": 0,
+        "unresolvedLifecycleRepetitionCount": 0,
+        "unresolvedLifecycleReceiverCount": 0,
+        "unresolvedPolicyBuilderCount": 0,
+        "unresolvedPolicyInstallationCount": 0,
+        "unwrappedDynamicNodeCount": 0
+      }
+    },
+    {
+      "review": {
+        "applicablePathBoundsMillis": {
+          "NORMAL_STARTUP": 5000,
+          "RUNNING_STOP": 2000,
+          "NORMAL_START_THEN_RUNNING_STOP": 7000,
+          "SHUTDOWN_DURING_STARTUP_FROM_OUTER_START": 8000,
+          "STARTUP_TIMEOUT_PLUS_ROLLBACK": 8000
+        },
+        "applicationCleanupCount": 0,
+        "applicationCleanupMillis": 0,
+        "branchBoundsMillis": {
+          "COMPLETE_CORE": 7000,
+          "INCOMPLETE_CORE": 8000
+        },
+        "classification": "LOCAL_POLICY_STRICT_FIT",
+        "cleanupProof": null,
+        "closureStatus": "CLOSED",
+        "completeGenerationMultiplier": 1,
+        "controlJoinMillis": 0,
+        "controlProof": null,
+        "controlTopology": "NONE",
+        "controlledCompletionProof": null,
+        "controlledLifecycleCoreMillis": null,
+        "generationCount": 1,
+        "generationMode": "SINGLE",
+        "generationProof": null,
+        "incompleteBranchCleanupCount": 0,
+        "incompleteGenerationMultiplier": 1,
+        "lifecycleCoreBranchBoundsMillis": {
+          "COMPLETE_CORE": 7000,
+          "INCOMPLETE_CORE": 8000
+        },
+        "outerGuard": {
+          "kind": "EXPLICIT_TYPE_TIMEOUT",
+          "millis": 60000,
+          "path": "src/test/java/com/soklet/BodylessResourceOwnershipTests.java"
+        },
+        "phasePolicy": {
+          "controlledStartupMillis": null,
+          "forcedShutdownMillis": 1000,
+          "gracefulShutdownMillis": 1000,
+          "startupCancellationMillis": 1000,
+          "startupMillis": 5000,
+          "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
+        },
+        "policyProof": {
+          "line": 90,
+          "lineSha256": "1e0fd5b91422f28230310260edc40f19c8e1dc45413640dee9491d05c6b8a4e3",
+          "path": "src/test/java/com/soklet/BodylessResourceOwnershipTests.java",
+          "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
+        },
+        "priorCompleteGenerationMultiplier": 0,
+        "rationale": "Every applicable lifecycle branch, repeated generation, cleanup/report phase, and control join is composed under the effective outer guard.",
+        "requiredAction": "MIGRATE_POLICY",
+        "requiredReserveMillis": 1,
+        "reserveMillis": 52000,
+        "terminalReportCount": 0,
+        "terminalReportMillis": 0,
+        "totalComposedBoundMillis": 8000
+      },
+      "source": {
+        "applicationRunSiteCount": 0,
+        "cleanupConfigured": false,
+        "disabled": false,
+        "dynamicNodeCount": 0,
+        "dynamicNodeGuardMillis": null,
+        "effectiveOuterTimeoutMillis": 60000,
+        "fileSha256": "2356282d00a105c6d97abca0b75da86919a2dc14356536a973bc6263e1314991",
+        "fixedControlWaitCount": 0,
+        "fixedControlWaitMillis": 0,
+        "factoryGenerationHasExecution": false,
+        "factoryGenerationFixedControlWaitMillis": 0,
+        "factoryGenerationOuterTimeoutMillis": null,
+        "factoryGenerationOuterTimeoutScope": null,
+        "factoryGenerationUnresolvedFixedControlWaitCount": 0,
+        "generationSiteCount": 1,
+        "hasExecution": true,
+        "hasInlineCleanup": false,
+        "hasInlineNoStartupTimeout": false,
+        "hasInlinePolicy": false,
+        "hasLocalPolicy": true,
+        "hasNoStartupTimeout": false,
+        "id": "SCOPE-09dd0d5d63695dbd",
+        "inlineCleanupMillis": null,
+        "line": 90,
+        "lineSha256": "1e0fd5b91422f28230310260edc40f19c8e1dc45413640dee9491d05c6b8a4e3",
+        "observedOperations": [
+          "CONFIGURE_POLICY",
+          "RUN_SIMULATOR"
+        ],
+        "outerTimeoutScope": "TYPE",
+        "path": "src/test/java/com/soklet/BodylessResourceOwnershipTests.java",
+        "scopeKind": "TEST",
+        "scopeName": "invalidFrameworkAndInterceptorStatusesReleaseOwnedChannels",
+        "scopeSha256": "15f50e7f0a32cea66171065b772e85cf245ff6cc8ac6aa9b239ab812450520c8",
+        "terminalReportExpected": false,
+        "testFactory": false,
+        "unresolvedFixedControlWaitCount": 0,
+        "unresolvedLifecycleRepetitionCount": 0,
+        "unresolvedLifecycleReceiverCount": 0,
+        "unresolvedPolicyBuilderCount": 0,
+        "unresolvedPolicyInstallationCount": 0,
+        "unwrappedDynamicNodeCount": 0
+      }
+    },
+    {
+      "review": {
+        "applicablePathBoundsMillis": {
+          "NORMAL_STARTUP": 5000,
+          "RUNNING_STOP": 2000,
+          "NORMAL_START_THEN_RUNNING_STOP": 7000,
+          "SHUTDOWN_DURING_STARTUP_FROM_OUTER_START": 8000,
+          "STARTUP_TIMEOUT_PLUS_ROLLBACK": 8000
+        },
+        "applicationCleanupCount": 0,
+        "applicationCleanupMillis": 0,
+        "branchBoundsMillis": {
+          "COMPLETE_CORE": 7000,
+          "INCOMPLETE_CORE": 8000
+        },
+        "classification": "LOCAL_POLICY_STRICT_FIT",
+        "cleanupProof": null,
+        "closureStatus": "CLOSED",
+        "completeGenerationMultiplier": 1,
+        "controlJoinMillis": 0,
+        "controlProof": null,
+        "controlTopology": "NONE",
+        "controlledCompletionProof": null,
+        "controlledLifecycleCoreMillis": null,
+        "generationCount": 1,
+        "generationMode": "SINGLE",
+        "generationProof": null,
+        "incompleteBranchCleanupCount": 0,
+        "incompleteGenerationMultiplier": 1,
+        "lifecycleCoreBranchBoundsMillis": {
+          "COMPLETE_CORE": 7000,
+          "INCOMPLETE_CORE": 8000
+        },
+        "outerGuard": {
+          "kind": "EXPLICIT_TYPE_TIMEOUT",
+          "millis": 60000,
+          "path": "src/test/java/com/soklet/BodylessResourceOwnershipTests.java"
+        },
+        "phasePolicy": {
+          "controlledStartupMillis": null,
+          "forcedShutdownMillis": 1000,
+          "gracefulShutdownMillis": 1000,
+          "startupCancellationMillis": 1000,
+          "startupMillis": 5000,
+          "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
+        },
+        "policyProof": {
+          "line": 110,
+          "lineSha256": "7fe007aacb37f9ae360a4671bba43d1e571ddd16ff2d3a9c3e839b6469510f17",
+          "path": "src/test/java/com/soklet/BodylessResourceOwnershipTests.java",
+          "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
+        },
+        "priorCompleteGenerationMultiplier": 0,
+        "rationale": "Every applicable lifecycle branch, repeated generation, cleanup/report phase, and control join is composed under the effective outer guard.",
+        "requiredAction": "MIGRATE_POLICY",
+        "requiredReserveMillis": 1,
+        "reserveMillis": 52000,
+        "terminalReportCount": 0,
+        "terminalReportMillis": 0,
+        "totalComposedBoundMillis": 8000
+      },
+      "source": {
+        "applicationRunSiteCount": 0,
+        "cleanupConfigured": false,
+        "disabled": false,
+        "dynamicNodeCount": 0,
+        "dynamicNodeGuardMillis": null,
+        "effectiveOuterTimeoutMillis": 60000,
+        "fileSha256": "2356282d00a105c6d97abca0b75da86919a2dc14356536a973bc6263e1314991",
+        "fixedControlWaitCount": 0,
+        "fixedControlWaitMillis": 0,
+        "factoryGenerationHasExecution": false,
+        "factoryGenerationFixedControlWaitMillis": 0,
+        "factoryGenerationOuterTimeoutMillis": null,
+        "factoryGenerationOuterTimeoutScope": null,
+        "factoryGenerationUnresolvedFixedControlWaitCount": 0,
+        "generationSiteCount": 1,
+        "hasExecution": true,
+        "hasInlineCleanup": false,
+        "hasInlineNoStartupTimeout": false,
+        "hasInlinePolicy": false,
+        "hasLocalPolicy": true,
+        "hasNoStartupTimeout": false,
+        "id": "SCOPE-fb759547e5e53327",
+        "inlineCleanupMillis": null,
+        "line": 110,
+        "lineSha256": "7fe007aacb37f9ae360a4671bba43d1e571ddd16ff2d3a9c3e839b6469510f17",
+        "observedOperations": [
+          "CONFIGURE_POLICY",
+          "RUN_SIMULATOR"
+        ],
+        "outerTimeoutScope": "TYPE",
+        "path": "src/test/java/com/soklet/BodylessResourceOwnershipTests.java",
+        "scopeKind": "TEST",
+        "scopeName": "cleanupFailureDoesNotReplaceInvalidResponseFailure",
+        "scopeSha256": "11fc5036d04d340b5c662c804680e1f6c39d9b6877ee8c293a7ca655247e326c",
+        "terminalReportExpected": false,
+        "testFactory": false,
+        "unresolvedFixedControlWaitCount": 0,
+        "unresolvedLifecycleRepetitionCount": 0,
+        "unresolvedLifecycleReceiverCount": 0,
+        "unresolvedPolicyBuilderCount": 0,
+        "unresolvedPolicyInstallationCount": 0,
+        "unwrappedDynamicNodeCount": 0
+      }
+    },
+    {
+      "review": {
+        "applicablePathBoundsMillis": {
+          "NORMAL_STARTUP": 5000,
+          "RUNNING_STOP": 2000,
+          "NORMAL_START_THEN_RUNNING_STOP": 7000,
+          "SHUTDOWN_DURING_STARTUP_FROM_OUTER_START": 8000,
+          "STARTUP_TIMEOUT_PLUS_ROLLBACK": 8000
+        },
+        "applicationCleanupCount": 0,
+        "applicationCleanupMillis": 0,
+        "branchBoundsMillis": {
+          "COMPLETE_CORE": 7000,
+          "INCOMPLETE_CORE": 8000
+        },
+        "classification": "LOCAL_POLICY_STRICT_FIT",
+        "cleanupProof": null,
+        "closureStatus": "CLOSED",
+        "completeGenerationMultiplier": 1,
+        "controlJoinMillis": 0,
+        "controlProof": null,
+        "controlTopology": "NONE",
+        "controlledCompletionProof": null,
+        "controlledLifecycleCoreMillis": null,
+        "generationCount": 1,
+        "generationMode": "SINGLE",
+        "generationProof": null,
+        "incompleteBranchCleanupCount": 0,
+        "incompleteGenerationMultiplier": 1,
+        "lifecycleCoreBranchBoundsMillis": {
+          "COMPLETE_CORE": 7000,
+          "INCOMPLETE_CORE": 8000
+        },
+        "outerGuard": {
+          "kind": "EXPLICIT_TYPE_TIMEOUT",
+          "millis": 60000,
+          "path": "src/test/java/com/soklet/BodylessResourceOwnershipTests.java"
+        },
+        "phasePolicy": {
+          "controlledStartupMillis": null,
+          "forcedShutdownMillis": 1000,
+          "gracefulShutdownMillis": 1000,
+          "startupCancellationMillis": 1000,
+          "startupMillis": 5000,
+          "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
+        },
+        "policyProof": {
+          "line": 131,
+          "lineSha256": "dde84b687f1bb4ce7c03d931c42b28891ebf09a205e7de9ec848e19bef6035d3",
+          "path": "src/test/java/com/soklet/BodylessResourceOwnershipTests.java",
+          "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
+        },
+        "priorCompleteGenerationMultiplier": 0,
+        "rationale": "Every applicable lifecycle branch, repeated generation, cleanup/report phase, and control join is composed under the effective outer guard.",
+        "requiredAction": "MIGRATE_POLICY",
+        "requiredReserveMillis": 1,
+        "reserveMillis": 52000,
+        "terminalReportCount": 0,
+        "terminalReportMillis": 0,
+        "totalComposedBoundMillis": 8000
+      },
+      "source": {
+        "applicationRunSiteCount": 0,
+        "cleanupConfigured": false,
+        "disabled": false,
+        "dynamicNodeCount": 0,
+        "dynamicNodeGuardMillis": null,
+        "effectiveOuterTimeoutMillis": 60000,
+        "fileSha256": "2356282d00a105c6d97abca0b75da86919a2dc14356536a973bc6263e1314991",
+        "fixedControlWaitCount": 0,
+        "fixedControlWaitMillis": 0,
+        "factoryGenerationHasExecution": false,
+        "factoryGenerationFixedControlWaitMillis": 0,
+        "factoryGenerationOuterTimeoutMillis": null,
+        "factoryGenerationOuterTimeoutScope": null,
+        "factoryGenerationUnresolvedFixedControlWaitCount": 0,
+        "generationSiteCount": 1,
+        "hasExecution": true,
+        "hasInlineCleanup": false,
+        "hasInlineNoStartupTimeout": false,
+        "hasInlinePolicy": false,
+        "hasLocalPolicy": true,
+        "hasNoStartupTimeout": false,
+        "id": "SCOPE-ce2bb74ccbccaa2c",
+        "inlineCleanupMillis": null,
+        "line": 131,
+        "lineSha256": "dde84b687f1bb4ce7c03d931c42b28891ebf09a205e7de9ec848e19bef6035d3",
+        "observedOperations": [
+          "CONFIGURE_POLICY",
+          "RUN_SIMULATOR"
+        ],
+        "outerTimeoutScope": "TYPE",
+        "path": "src/test/java/com/soklet/BodylessResourceOwnershipTests.java",
+        "scopeKind": "TEST",
+        "scopeName": "rejectedStreamingDescriptorNeverAcquiresItsSource",
+        "scopeSha256": "6bba7e2ae4fcba286b0176fb2010b2a3df6875aa3a1a61fdf12800876967e6ea",
         "terminalReportExpected": false,
         "testFactory": false,
         "unresolvedFixedControlWaitCount": 0,
@@ -96270,7 +97017,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "959a2acc86f7e87d8d576a6c5f621cad19d11163789093430dc4e92361b93c0c",
+        "fileSha256": "e25f25c3af7f08fc6d1a029c0c93ad02f268e82dd1dde11375ad45152ae3a2be",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -96383,7 +97130,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "959a2acc86f7e87d8d576a6c5f621cad19d11163789093430dc4e92361b93c0c",
+        "fileSha256": "e25f25c3af7f08fc6d1a029c0c93ad02f268e82dd1dde11375ad45152ae3a2be",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -96413,6 +97160,119 @@
         "scopeKind": "TEST",
         "scopeName": "resetContentHasZeroLengthEvenWithCustomHeadRepresentationMetadata",
         "scopeSha256": "5a79b592a3f0eb1ca78dfb9b7cce55a3646ccce63e105deca623c7d90205aab6",
+        "terminalReportExpected": false,
+        "testFactory": false,
+        "unresolvedFixedControlWaitCount": 0,
+        "unresolvedLifecycleRepetitionCount": 0,
+        "unresolvedLifecycleReceiverCount": 0,
+        "unresolvedPolicyBuilderCount": 0,
+        "unresolvedPolicyInstallationCount": 0,
+        "unwrappedDynamicNodeCount": 0
+      }
+    },
+    {
+      "review": {
+        "applicablePathBoundsMillis": {
+          "NORMAL_STARTUP": 10000,
+          "RUNNING_STOP": 2000,
+          "NORMAL_START_THEN_RUNNING_STOP": 12000,
+          "SHUTDOWN_DURING_STARTUP_FROM_OUTER_START": 13000,
+          "STARTUP_TIMEOUT_PLUS_ROLLBACK": 13000
+        },
+        "applicationCleanupCount": 0,
+        "applicationCleanupMillis": 0,
+        "branchBoundsMillis": {
+          "COMPLETE_CORE": 57000,
+          "INCOMPLETE_CORE": 58000
+        },
+        "classification": "LOCAL_POLICY_STRICT_FIT",
+        "cleanupProof": null,
+        "closureStatus": "CLOSED",
+        "completeGenerationMultiplier": 1,
+        "controlJoinMillis": 45000,
+        "controlProof": {
+          "line": 62,
+          "lineSha256": "f9d8a3de322abeccfe79ea11e4d2cee8391ecdfde9974e19436e4bf39a239fa6",
+          "path": "src/test/java/com/soklet/FiniteHttpResponseSafetyTests.java",
+          "rationale": "The full callable hash binds the reviewed latch, future, executor, or process-control join allowance."
+        },
+        "controlTopology": "CONSERVATIVE_SEQUENTIAL_SUM",
+        "controlledCompletionProof": null,
+        "controlledLifecycleCoreMillis": null,
+        "generationCount": 1,
+        "generationMode": "SINGLE",
+        "generationProof": null,
+        "incompleteBranchCleanupCount": 0,
+        "incompleteGenerationMultiplier": 1,
+        "lifecycleCoreBranchBoundsMillis": {
+          "COMPLETE_CORE": 12000,
+          "INCOMPLETE_CORE": 13000
+        },
+        "outerGuard": {
+          "kind": "EXPLICIT_METHOD_TIMEOUT",
+          "millis": 75000,
+          "path": "src/test/java/com/soklet/FiniteHttpResponseSafetyTests.java"
+        },
+        "phasePolicy": {
+          "controlledStartupMillis": null,
+          "forcedShutdownMillis": 1000,
+          "gracefulShutdownMillis": 1000,
+          "startupCancellationMillis": 1000,
+          "startupMillis": 10000,
+          "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
+        },
+        "policyProof": {
+          "line": 62,
+          "lineSha256": "f9d8a3de322abeccfe79ea11e4d2cee8391ecdfde9974e19436e4bf39a239fa6",
+          "path": "src/test/java/com/soklet/FiniteHttpResponseSafetyTests.java",
+          "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
+        },
+        "priorCompleteGenerationMultiplier": 0,
+        "rationale": "Every applicable lifecycle branch, repeated generation, cleanup/report phase, and control join is composed under the effective outer guard.",
+        "requiredAction": "RAISE_OUTER_BOUND",
+        "requiredReserveMillis": 1,
+        "reserveMillis": 17000,
+        "terminalReportCount": 0,
+        "terminalReportMillis": 0,
+        "totalComposedBoundMillis": 58000
+      },
+      "source": {
+        "applicationRunSiteCount": 0,
+        "cleanupConfigured": false,
+        "disabled": false,
+        "dynamicNodeCount": 0,
+        "dynamicNodeGuardMillis": null,
+        "effectiveOuterTimeoutMillis": 75000,
+        "fileSha256": "e25f25c3af7f08fc6d1a029c0c93ad02f268e82dd1dde11375ad45152ae3a2be",
+        "fixedControlWaitCount": 0,
+        "fixedControlWaitMillis": 0,
+        "factoryGenerationHasExecution": false,
+        "factoryGenerationFixedControlWaitMillis": 0,
+        "factoryGenerationOuterTimeoutMillis": null,
+        "factoryGenerationOuterTimeoutScope": null,
+        "factoryGenerationUnresolvedFixedControlWaitCount": 0,
+        "generationSiteCount": 1,
+        "hasExecution": true,
+        "hasInlineCleanup": false,
+        "hasInlineNoStartupTimeout": false,
+        "hasInlinePolicy": false,
+        "hasLocalPolicy": true,
+        "hasNoStartupTimeout": false,
+        "id": "SCOPE-bb0e2d5e7c5c5a9e",
+        "inlineCleanupMillis": null,
+        "line": 62,
+        "lineSha256": "f9d8a3de322abeccfe79ea11e4d2cee8391ecdfde9974e19436e4bf39a239fa6",
+        "observedOperations": [
+          "CONFIGURE_POLICY",
+          "CONSTRUCT_HTTP_SERVER",
+          "CONSTRUCT_SOKLET",
+          "START"
+        ],
+        "outerTimeoutScope": "METHOD",
+        "path": "src/test/java/com/soklet/FiniteHttpResponseSafetyTests.java",
+        "scopeKind": "TEST",
+        "scopeName": "bodylessMarshalerHooksPreserveStatusAndPipelineFraming",
+        "scopeSha256": "1b82773ab2ae045136fd607fd6c5dff71301f88a8275fc05deb62b4c7a9dbc26",
         "terminalReportExpected": false,
         "testFactory": false,
         "unresolvedFixedControlWaitCount": 0,
@@ -96470,7 +97330,7 @@
           "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
         },
         "policyProof": {
-          "line": 61,
+          "line": 81,
           "lineSha256": "65c389d0121cca054b6c2515ecc2c84dacb4e032d0f00fdb99a105bb665acd90",
           "path": "src/test/java/com/soklet/FiniteHttpResponseSafetyTests.java",
           "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
@@ -96491,7 +97351,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "959a2acc86f7e87d8d576a6c5f621cad19d11163789093430dc4e92361b93c0c",
+        "fileSha256": "e25f25c3af7f08fc6d1a029c0c93ad02f268e82dd1dde11375ad45152ae3a2be",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -96506,9 +97366,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": true,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-5010b1c7e7c7d8c0",
+        "id": "SCOPE-25d0147b84debc92",
         "inlineCleanupMillis": null,
-        "line": 61,
+        "line": 81,
         "lineSha256": "65c389d0121cca054b6c2515ecc2c84dacb4e032d0f00fdb99a105bb665acd90",
         "observedOperations": [
           "CONFIGURE_POLICY",
@@ -96578,7 +97438,7 @@
           "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
         },
         "policyProof": {
-          "line": 71,
+          "line": 91,
           "lineSha256": "ef3453f241b3df3978c610347d02accb3c73b85ca56ded077d908f8d43bffdb9",
           "path": "src/test/java/com/soklet/FiniteHttpResponseSafetyTests.java",
           "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
@@ -96599,7 +97459,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "959a2acc86f7e87d8d576a6c5f621cad19d11163789093430dc4e92361b93c0c",
+        "fileSha256": "e25f25c3af7f08fc6d1a029c0c93ad02f268e82dd1dde11375ad45152ae3a2be",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -96614,9 +97474,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": true,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-5e77260c9473415e",
+        "id": "SCOPE-d1ef0ddb65814adc",
         "inlineCleanupMillis": null,
-        "line": 71,
+        "line": 91,
         "lineSha256": "ef3453f241b3df3978c610347d02accb3c73b85ca56ded077d908f8d43bffdb9",
         "observedOperations": [
           "CONFIGURE_POLICY",
@@ -96686,7 +97546,7 @@
           "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
         },
         "policyProof": {
-          "line": 88,
+          "line": 108,
           "lineSha256": "11f86692458565bf74b3c60fb252b5b685fe4b53aa2df94d274326977162b636",
           "path": "src/test/java/com/soklet/FiniteHttpResponseSafetyTests.java",
           "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
@@ -96707,7 +97567,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "959a2acc86f7e87d8d576a6c5f621cad19d11163789093430dc4e92361b93c0c",
+        "fileSha256": "e25f25c3af7f08fc6d1a029c0c93ad02f268e82dd1dde11375ad45152ae3a2be",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -96722,9 +97582,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": true,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-ebef270796e644b4",
+        "id": "SCOPE-5e5666eb8a2906bd",
         "inlineCleanupMillis": null,
-        "line": 88,
+        "line": 108,
         "lineSha256": "11f86692458565bf74b3c60fb252b5b685fe4b53aa2df94d274326977162b636",
         "observedOperations": [
           "CONFIGURE_POLICY",
@@ -96794,7 +97654,7 @@
           "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
         },
         "policyProof": {
-          "line": 100,
+          "line": 120,
           "lineSha256": "9e5059d3298312a1036aed5633ae94ba0e19e12428355c949d7e5c36b21d4846",
           "path": "src/test/java/com/soklet/FiniteHttpResponseSafetyTests.java",
           "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
@@ -96815,7 +97675,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "959a2acc86f7e87d8d576a6c5f621cad19d11163789093430dc4e92361b93c0c",
+        "fileSha256": "e25f25c3af7f08fc6d1a029c0c93ad02f268e82dd1dde11375ad45152ae3a2be",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -96830,9 +97690,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": true,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-f49473db2351ff0f",
+        "id": "SCOPE-2ef1e772740edba8",
         "inlineCleanupMillis": null,
-        "line": 100,
+        "line": 120,
         "lineSha256": "9e5059d3298312a1036aed5633ae94ba0e19e12428355c949d7e5c36b21d4846",
         "observedOperations": [
           "CONFIGURE_POLICY",
@@ -96902,7 +97762,7 @@
           "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
         },
         "policyProof": {
-          "line": 113,
+          "line": 133,
           "lineSha256": "ad5f8e9d130514c70850e1f4fe9d62a1554693c69c72c61dcda63e6298ce9aa8",
           "path": "src/test/java/com/soklet/FiniteHttpResponseSafetyTests.java",
           "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
@@ -96923,7 +97783,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "959a2acc86f7e87d8d576a6c5f621cad19d11163789093430dc4e92361b93c0c",
+        "fileSha256": "e25f25c3af7f08fc6d1a029c0c93ad02f268e82dd1dde11375ad45152ae3a2be",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -96938,9 +97798,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": true,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-950956c46366f51a",
+        "id": "SCOPE-1946f82de5329cb4",
         "inlineCleanupMillis": null,
-        "line": 113,
+        "line": 133,
         "lineSha256": "ad5f8e9d130514c70850e1f4fe9d62a1554693c69c72c61dcda63e6298ce9aa8",
         "observedOperations": [
           "CONFIGURE_POLICY",
@@ -96990,7 +97850,7 @@
         "generationCount": 2,
         "generationMode": "SEQUENTIAL",
         "generationProof": {
-          "line": 127,
+          "line": 147,
           "lineSha256": "c35d1430471ce020093d779b6a18e37f717d9a6304b2efda6591ba13620226fd",
           "path": "src/test/java/com/soklet/FiniteHttpResponseSafetyTests.java",
           "rationale": "The full callable hash and independent verifier override bind the reviewed generation topology."
@@ -97015,7 +97875,7 @@
           "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
         },
         "policyProof": {
-          "line": 127,
+          "line": 147,
           "lineSha256": "c35d1430471ce020093d779b6a18e37f717d9a6304b2efda6591ba13620226fd",
           "path": "src/test/java/com/soklet/FiniteHttpResponseSafetyTests.java",
           "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
@@ -97036,7 +97896,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "959a2acc86f7e87d8d576a6c5f621cad19d11163789093430dc4e92361b93c0c",
+        "fileSha256": "e25f25c3af7f08fc6d1a029c0c93ad02f268e82dd1dde11375ad45152ae3a2be",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -97051,9 +97911,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": true,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-b03743442c901077",
+        "id": "SCOPE-704389cee1ba831a",
         "inlineCleanupMillis": null,
-        "line": 127,
+        "line": 147,
         "lineSha256": "c35d1430471ce020093d779b6a18e37f717d9a6304b2efda6591ba13620226fd",
         "observedOperations": [
           "CONFIGURE_POLICY",
@@ -182766,7 +183626,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "e9ae8e962240fd39f3fde1d87e8c2ef74074961513df51fc1edf39553076ed85",
+        "fileSha256": "a2923829b2b0cbf979fcecf6e663ed81142bfe062eba5a67547e10556d175095",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -182866,7 +183726,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "e9ae8e962240fd39f3fde1d87e8c2ef74074961513df51fc1edf39553076ed85",
+        "fileSha256": "a2923829b2b0cbf979fcecf6e663ed81142bfe062eba5a67547e10556d175095",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -182966,7 +183826,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "e9ae8e962240fd39f3fde1d87e8c2ef74074961513df51fc1edf39553076ed85",
+        "fileSha256": "a2923829b2b0cbf979fcecf6e663ed81142bfe062eba5a67547e10556d175095",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -182993,6 +183853,206 @@
         "scopeKind": "TEST",
         "scopeName": "bodyless_response_with_body_maps_to_500",
         "scopeSha256": "c85f6ef2721420a5c448d34c640f51964b314de5f94ac46dc4f6090f59fb5ed5",
+        "terminalReportExpected": false,
+        "testFactory": false,
+        "unresolvedFixedControlWaitCount": 0,
+        "unresolvedLifecycleRepetitionCount": 0,
+        "unresolvedLifecycleReceiverCount": 0,
+        "unresolvedPolicyBuilderCount": 0,
+        "unresolvedPolicyInstallationCount": 0,
+        "unwrappedDynamicNodeCount": 0
+      }
+    },
+    {
+      "review": {
+        "applicablePathBoundsMillis": {
+          "NORMAL_STARTUP": 30000,
+          "RUNNING_STOP": 18000,
+          "NORMAL_START_THEN_RUNNING_STOP": 48000,
+          "SHUTDOWN_DURING_STARTUP_FROM_OUTER_START": 50000,
+          "STARTUP_TIMEOUT_PLUS_ROLLBACK": 50000
+        },
+        "applicationCleanupCount": 0,
+        "applicationCleanupMillis": 0,
+        "branchBoundsMillis": {
+          "COMPLETE_CORE": 48000,
+          "INCOMPLETE_CORE": 50000
+        },
+        "classification": "STANDARD_60_SECOND_DEADLOCK_GUARD",
+        "cleanupProof": null,
+        "closureStatus": "CLOSED",
+        "completeGenerationMultiplier": 1,
+        "controlJoinMillis": 0,
+        "controlProof": null,
+        "controlTopology": "NONE",
+        "controlledCompletionProof": null,
+        "controlledLifecycleCoreMillis": null,
+        "generationCount": 1,
+        "generationMode": "SINGLE",
+        "generationProof": null,
+        "incompleteBranchCleanupCount": 0,
+        "incompleteGenerationMultiplier": 1,
+        "lifecycleCoreBranchBoundsMillis": {
+          "COMPLETE_CORE": 48000,
+          "INCOMPLETE_CORE": 50000
+        },
+        "outerGuard": {
+          "kind": "STANDARD_JUNIT_DEFAULT",
+          "millis": 60000,
+          "path": "src/test/resources/junit-platform.properties"
+        },
+        "phasePolicy": {
+          "controlledStartupMillis": null,
+          "forcedShutdownMillis": 3000,
+          "gracefulShutdownMillis": 15000,
+          "startupCancellationMillis": 2000,
+          "startupMillis": 30000,
+          "mode": "INHERITED_DEFAULT"
+        },
+        "policyProof": null,
+        "priorCompleteGenerationMultiplier": 0,
+        "rationale": "Every applicable lifecycle branch, repeated generation, cleanup/report phase, and control join is composed under the effective outer guard.",
+        "requiredAction": "NONE",
+        "requiredReserveMillis": 0,
+        "reserveMillis": 10000,
+        "terminalReportCount": 0,
+        "terminalReportMillis": 0,
+        "totalComposedBoundMillis": 50000
+      },
+      "source": {
+        "applicationRunSiteCount": 0,
+        "cleanupConfigured": false,
+        "disabled": false,
+        "dynamicNodeCount": 0,
+        "dynamicNodeGuardMillis": null,
+        "effectiveOuterTimeoutMillis": 60000,
+        "fileSha256": "a2923829b2b0cbf979fcecf6e663ed81142bfe062eba5a67547e10556d175095",
+        "fixedControlWaitCount": 0,
+        "fixedControlWaitMillis": 0,
+        "factoryGenerationHasExecution": false,
+        "factoryGenerationFixedControlWaitMillis": 0,
+        "factoryGenerationOuterTimeoutMillis": null,
+        "factoryGenerationOuterTimeoutScope": null,
+        "factoryGenerationUnresolvedFixedControlWaitCount": 0,
+        "generationSiteCount": 1,
+        "hasExecution": true,
+        "hasInlineCleanup": false,
+        "hasInlineNoStartupTimeout": false,
+        "hasInlinePolicy": false,
+        "hasLocalPolicy": false,
+        "hasNoStartupTimeout": false,
+        "id": "SCOPE-c559caca1c4c70dd",
+        "inlineCleanupMillis": null,
+        "line": 78,
+        "lineSha256": "efaba7580a16fc70aaf384b6e5c40edf0b35a80a29a239561ba8d73a1669e96d",
+        "observedOperations": [
+          "RUN_SIMULATOR"
+        ],
+        "outerTimeoutScope": "DEFAULT",
+        "path": "src/test/java/com/soklet/ResponseErrorMappingTests.java",
+        "scopeKind": "TEST",
+        "scopeName": "emptyResetContentResourceBodiesAreNormalized",
+        "scopeSha256": "0ad0d20b5f5baa63a87c48243e15562679e93cf6ef79f6d23a5c7b10670f8c05",
+        "terminalReportExpected": false,
+        "testFactory": false,
+        "unresolvedFixedControlWaitCount": 0,
+        "unresolvedLifecycleRepetitionCount": 0,
+        "unresolvedLifecycleReceiverCount": 0,
+        "unresolvedPolicyBuilderCount": 0,
+        "unresolvedPolicyInstallationCount": 0,
+        "unwrappedDynamicNodeCount": 0
+      }
+    },
+    {
+      "review": {
+        "applicablePathBoundsMillis": {
+          "NORMAL_STARTUP": 30000,
+          "RUNNING_STOP": 18000,
+          "NORMAL_START_THEN_RUNNING_STOP": 48000,
+          "SHUTDOWN_DURING_STARTUP_FROM_OUTER_START": 50000,
+          "STARTUP_TIMEOUT_PLUS_ROLLBACK": 50000
+        },
+        "applicationCleanupCount": 0,
+        "applicationCleanupMillis": 0,
+        "branchBoundsMillis": {
+          "COMPLETE_CORE": 48000,
+          "INCOMPLETE_CORE": 50000
+        },
+        "classification": "STANDARD_60_SECOND_DEADLOCK_GUARD",
+        "cleanupProof": null,
+        "closureStatus": "CLOSED",
+        "completeGenerationMultiplier": 1,
+        "controlJoinMillis": 0,
+        "controlProof": null,
+        "controlTopology": "NONE",
+        "controlledCompletionProof": null,
+        "controlledLifecycleCoreMillis": null,
+        "generationCount": 1,
+        "generationMode": "SINGLE",
+        "generationProof": null,
+        "incompleteBranchCleanupCount": 0,
+        "incompleteGenerationMultiplier": 1,
+        "lifecycleCoreBranchBoundsMillis": {
+          "COMPLETE_CORE": 48000,
+          "INCOMPLETE_CORE": 50000
+        },
+        "outerGuard": {
+          "kind": "STANDARD_JUNIT_DEFAULT",
+          "millis": 60000,
+          "path": "src/test/resources/junit-platform.properties"
+        },
+        "phasePolicy": {
+          "controlledStartupMillis": null,
+          "forcedShutdownMillis": 3000,
+          "gracefulShutdownMillis": 15000,
+          "startupCancellationMillis": 2000,
+          "startupMillis": 30000,
+          "mode": "INHERITED_DEFAULT"
+        },
+        "policyProof": null,
+        "priorCompleteGenerationMultiplier": 0,
+        "rationale": "Every applicable lifecycle branch, repeated generation, cleanup/report phase, and control join is composed under the effective outer guard.",
+        "requiredAction": "NONE",
+        "requiredReserveMillis": 0,
+        "reserveMillis": 10000,
+        "terminalReportCount": 0,
+        "terminalReportMillis": 0,
+        "totalComposedBoundMillis": 50000
+      },
+      "source": {
+        "applicationRunSiteCount": 0,
+        "cleanupConfigured": false,
+        "disabled": false,
+        "dynamicNodeCount": 0,
+        "dynamicNodeGuardMillis": null,
+        "effectiveOuterTimeoutMillis": 60000,
+        "fileSha256": "a2923829b2b0cbf979fcecf6e663ed81142bfe062eba5a67547e10556d175095",
+        "fixedControlWaitCount": 0,
+        "fixedControlWaitMillis": 0,
+        "factoryGenerationHasExecution": false,
+        "factoryGenerationFixedControlWaitMillis": 0,
+        "factoryGenerationOuterTimeoutMillis": null,
+        "factoryGenerationOuterTimeoutScope": null,
+        "factoryGenerationUnresolvedFixedControlWaitCount": 0,
+        "generationSiteCount": 1,
+        "hasExecution": true,
+        "hasInlineCleanup": false,
+        "hasInlineNoStartupTimeout": false,
+        "hasInlinePolicy": false,
+        "hasLocalPolicy": false,
+        "hasNoStartupTimeout": false,
+        "id": "SCOPE-a62f7fabfa55d899",
+        "inlineCleanupMillis": null,
+        "line": 93,
+        "lineSha256": "ffb989c0a7fcaf39a4f946c555cb9c7f43d600870b4f1288a53bce5611e3e381",
+        "observedOperations": [
+          "RUN_SIMULATOR"
+        ],
+        "outerTimeoutScope": "DEFAULT",
+        "path": "src/test/java/com/soklet/ResponseErrorMappingTests.java",
+        "scopeKind": "TEST",
+        "scopeName": "bodylessMarshalerHooksRetainTheirStatus",
+        "scopeSha256": "a15f411f1c507c0a836463ec8dc337b78ab7c995053affa755f71ebe2bf01871",
         "terminalReportExpected": false,
         "testFactory": false,
         "unresolvedFixedControlWaitCount": 0,
@@ -217826,7 +218886,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 90000,
-        "fileSha256": "35a45527d51a01bec95daaaad91f41c1a75419331c13e90a540ca7397b5b2c8e",
+        "fileSha256": "855f0760416f282f48af34545868a01c69cc256285e445b375b326a0f82c0f24",
         "fixedControlWaitCount": 3,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -217847,7 +218907,6 @@
         "lineSha256": "e3c1864a2c9756f1aba11296f26558d92a28b607034754cbe84d87e7712468f5",
         "observedOperations": [
           "CONFIGURE_POLICY",
-          "CONSTRUCT_HTTP_SERVER",
           "CONSTRUCT_SOKLET",
           "CONSTRUCT_SSE_SERVER",
           "START",
@@ -228409,7 +229468,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "186f65cd1076b59dfd8faa53ea3f38a202192f0b94dd8ac8f80168188d65c51d",
+        "fileSha256": "645c66569193cb1d3f1a237e13bbeb48ab658874610db4d04653ecef936db796",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -228424,9 +229483,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": false,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-30d710ea11269ed1",
+        "id": "SCOPE-a375924b1eecb3a5",
         "inlineCleanupMillis": null,
-        "line": 1003,
+        "line": 1190,
         "lineSha256": "eb1330201fbb720b0b57900b53e3ca841a355092b163c677581a7170b3376480",
         "observedOperations": [
           "RUN_SIMULATOR"
@@ -228436,6 +229495,222 @@
         "scopeKind": "TEST",
         "scopeName": "staticFilesHeadersReachSimulatorEndToEnd",
         "scopeSha256": "a637b5510e8ac7bce1b216e03e7906928a7948c4320fd61bf93951efb6488aaf",
+        "terminalReportExpected": false,
+        "testFactory": false,
+        "unresolvedFixedControlWaitCount": 0,
+        "unresolvedLifecycleRepetitionCount": 0,
+        "unresolvedLifecycleReceiverCount": 0,
+        "unresolvedPolicyBuilderCount": 0,
+        "unresolvedPolicyInstallationCount": 0,
+        "unwrappedDynamicNodeCount": 0
+      }
+    },
+    {
+      "review": {
+        "applicablePathBoundsMillis": {
+          "NORMAL_STARTUP": 30000,
+          "RUNNING_STOP": 18000,
+          "NORMAL_START_THEN_RUNNING_STOP": 48000,
+          "SHUTDOWN_DURING_STARTUP_FROM_OUTER_START": 50000,
+          "STARTUP_TIMEOUT_PLUS_ROLLBACK": 50000
+        },
+        "applicationCleanupCount": 0,
+        "applicationCleanupMillis": 0,
+        "branchBoundsMillis": {
+          "COMPLETE_CORE": 60000,
+          "INCOMPLETE_CORE": 62000
+        },
+        "classification": "STANDARD_60_SECOND_DEADLOCK_GUARD",
+        "cleanupProof": null,
+        "closureStatus": "CLOSED",
+        "completeGenerationMultiplier": 1,
+        "controlJoinMillis": 12000,
+        "controlProof": {
+          "line": 1240,
+          "lineSha256": "b1e1b035c9f10e30ddc8f5d474dbceb53febc8c78bf94600c8f66e674b440711",
+          "path": "src/test/java/com/soklet/StaticFilesTests.java",
+          "rationale": "The full callable hash binds the reviewed latch, future, executor, or process-control join allowance."
+        },
+        "controlTopology": "CONSERVATIVE_SEQUENTIAL_SUM",
+        "controlledCompletionProof": null,
+        "controlledLifecycleCoreMillis": null,
+        "generationCount": 1,
+        "generationMode": "SINGLE",
+        "generationProof": null,
+        "incompleteBranchCleanupCount": 0,
+        "incompleteGenerationMultiplier": 1,
+        "lifecycleCoreBranchBoundsMillis": {
+          "COMPLETE_CORE": 48000,
+          "INCOMPLETE_CORE": 50000
+        },
+        "outerGuard": {
+          "kind": "EXPLICIT_METHOD_TIMEOUT",
+          "millis": 75000,
+          "path": "src/test/java/com/soklet/StaticFilesTests.java"
+        },
+        "phasePolicy": {
+          "controlledStartupMillis": null,
+          "forcedShutdownMillis": 3000,
+          "gracefulShutdownMillis": 15000,
+          "startupCancellationMillis": 2000,
+          "startupMillis": 30000,
+          "mode": "INHERITED_DEFAULT"
+        },
+        "policyProof": null,
+        "priorCompleteGenerationMultiplier": 0,
+        "rationale": "Every applicable lifecycle branch, repeated generation, cleanup/report phase, and control join is composed under the effective outer guard.",
+        "requiredAction": "RAISE_OUTER_BOUND",
+        "requiredReserveMillis": 0,
+        "reserveMillis": 13000,
+        "terminalReportCount": 0,
+        "terminalReportMillis": 0,
+        "totalComposedBoundMillis": 62000
+      },
+      "source": {
+        "applicationRunSiteCount": 0,
+        "cleanupConfigured": false,
+        "disabled": false,
+        "dynamicNodeCount": 0,
+        "dynamicNodeGuardMillis": null,
+        "effectiveOuterTimeoutMillis": 75000,
+        "fileSha256": "645c66569193cb1d3f1a237e13bbeb48ab658874610db4d04653ecef936db796",
+        "fixedControlWaitCount": 0,
+        "fixedControlWaitMillis": 0,
+        "factoryGenerationHasExecution": false,
+        "factoryGenerationFixedControlWaitMillis": 0,
+        "factoryGenerationOuterTimeoutMillis": null,
+        "factoryGenerationOuterTimeoutScope": null,
+        "factoryGenerationUnresolvedFixedControlWaitCount": 0,
+        "generationSiteCount": 1,
+        "hasExecution": true,
+        "hasInlineCleanup": false,
+        "hasInlineNoStartupTimeout": false,
+        "hasInlinePolicy": false,
+        "hasLocalPolicy": false,
+        "hasNoStartupTimeout": false,
+        "id": "SCOPE-02885e48c7f3ecf0",
+        "inlineCleanupMillis": null,
+        "line": 1240,
+        "lineSha256": "b1e1b035c9f10e30ddc8f5d474dbceb53febc8c78bf94600c8f66e674b440711",
+        "observedOperations": [
+          "CONSTRUCT_HTTP_SERVER",
+          "CONSTRUCT_SOKLET",
+          "START",
+          "CLOSE"
+        ],
+        "outerTimeoutScope": "METHOD",
+        "path": "src/test/java/com/soklet/StaticFilesTests.java",
+        "scopeKind": "TEST",
+        "scopeName": "staticFilesSecureBodyReachesBuiltInHttpTransport",
+        "scopeSha256": "c05bbc1f2400ab0357fcb101ae68a0ff72cadf39d91fc6237b0d127e49f5888b",
+        "terminalReportExpected": false,
+        "testFactory": false,
+        "unresolvedFixedControlWaitCount": 0,
+        "unresolvedLifecycleRepetitionCount": 0,
+        "unresolvedLifecycleReceiverCount": 0,
+        "unresolvedPolicyBuilderCount": 0,
+        "unresolvedPolicyInstallationCount": 0,
+        "unwrappedDynamicNodeCount": 0
+      }
+    },
+    {
+      "review": {
+        "applicablePathBoundsMillis": {
+          "NORMAL_STARTUP": 30000,
+          "RUNNING_STOP": 18000,
+          "NORMAL_START_THEN_RUNNING_STOP": 48000,
+          "SHUTDOWN_DURING_STARTUP_FROM_OUTER_START": 50000,
+          "STARTUP_TIMEOUT_PLUS_ROLLBACK": 50000
+        },
+        "applicationCleanupCount": 0,
+        "applicationCleanupMillis": 0,
+        "branchBoundsMillis": {
+          "COMPLETE_CORE": 54000,
+          "INCOMPLETE_CORE": 56000
+        },
+        "classification": "STANDARD_60_SECOND_DEADLOCK_GUARD",
+        "cleanupProof": null,
+        "closureStatus": "CLOSED",
+        "completeGenerationMultiplier": 1,
+        "controlJoinMillis": 6000,
+        "controlProof": {
+          "line": 1270,
+          "lineSha256": "f2329fc75f93ac54bfef90efbc095e54e61162f2df01c04dec40d0ea3ff118ac",
+          "path": "src/test/java/com/soklet/StaticFilesTests.java",
+          "rationale": "The full callable hash binds the reviewed latch, future, executor, or process-control join allowance."
+        },
+        "controlTopology": "CONSERVATIVE_SEQUENTIAL_SUM",
+        "controlledCompletionProof": null,
+        "controlledLifecycleCoreMillis": null,
+        "generationCount": 1,
+        "generationMode": "SINGLE",
+        "generationProof": null,
+        "incompleteBranchCleanupCount": 0,
+        "incompleteGenerationMultiplier": 1,
+        "lifecycleCoreBranchBoundsMillis": {
+          "COMPLETE_CORE": 48000,
+          "INCOMPLETE_CORE": 50000
+        },
+        "outerGuard": {
+          "kind": "STANDARD_JUNIT_DEFAULT",
+          "millis": 60000,
+          "path": "src/test/resources/junit-platform.properties"
+        },
+        "phasePolicy": {
+          "controlledStartupMillis": null,
+          "forcedShutdownMillis": 3000,
+          "gracefulShutdownMillis": 15000,
+          "startupCancellationMillis": 2000,
+          "startupMillis": 30000,
+          "mode": "INHERITED_DEFAULT"
+        },
+        "policyProof": null,
+        "priorCompleteGenerationMultiplier": 0,
+        "rationale": "Every applicable lifecycle branch, repeated generation, cleanup/report phase, and control join is composed under the effective outer guard.",
+        "requiredAction": "NONE",
+        "requiredReserveMillis": 0,
+        "reserveMillis": 4000,
+        "terminalReportCount": 0,
+        "terminalReportMillis": 0,
+        "totalComposedBoundMillis": 56000
+      },
+      "source": {
+        "applicationRunSiteCount": 0,
+        "cleanupConfigured": false,
+        "disabled": false,
+        "dynamicNodeCount": 0,
+        "dynamicNodeGuardMillis": null,
+        "effectiveOuterTimeoutMillis": 60000,
+        "fileSha256": "645c66569193cb1d3f1a237e13bbeb48ab658874610db4d04653ecef936db796",
+        "fixedControlWaitCount": 0,
+        "fixedControlWaitMillis": 0,
+        "factoryGenerationHasExecution": false,
+        "factoryGenerationFixedControlWaitMillis": 0,
+        "factoryGenerationOuterTimeoutMillis": null,
+        "factoryGenerationOuterTimeoutScope": null,
+        "factoryGenerationUnresolvedFixedControlWaitCount": 0,
+        "generationSiteCount": 1,
+        "hasExecution": true,
+        "hasInlineCleanup": false,
+        "hasInlineNoStartupTimeout": false,
+        "hasInlinePolicy": false,
+        "hasLocalPolicy": false,
+        "hasNoStartupTimeout": false,
+        "id": "SCOPE-3c391a065c6cae4f",
+        "inlineCleanupMillis": null,
+        "line": 1270,
+        "lineSha256": "f2329fc75f93ac54bfef90efbc095e54e61162f2df01c04dec40d0ea3ff118ac",
+        "observedOperations": [
+          "CONSTRUCT_HTTP_SERVER",
+          "CONSTRUCT_SOKLET",
+          "START",
+          "CLOSE"
+        ],
+        "outerTimeoutScope": "DEFAULT",
+        "path": "src/test/java/com/soklet/StaticFilesTests.java",
+        "scopeKind": "TEST",
+        "scopeName": "staticFilesLiveTransportNeverServesPostValidationSymlink",
+        "scopeSha256": "bf51d911740e8e12b87f06bdc14adb20265b5289c4891d357b919c97daa9c26f",
         "terminalReportExpected": false,
         "testFactory": false,
         "unresolvedFixedControlWaitCount": 0,
@@ -228509,7 +229784,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "186f65cd1076b59dfd8faa53ea3f38a202192f0b94dd8ac8f80168188d65c51d",
+        "fileSha256": "645c66569193cb1d3f1a237e13bbeb48ab658874610db4d04653ecef936db796",
         "fixedControlWaitCount": 0,
         "fixedControlWaitMillis": 0,
         "factoryGenerationHasExecution": false,
@@ -228524,9 +229799,9 @@
         "hasInlinePolicy": false,
         "hasLocalPolicy": false,
         "hasNoStartupTimeout": false,
-        "id": "SCOPE-e436351bec56bf61",
+        "id": "SCOPE-5dd703d40b0db344",
         "inlineCleanupMillis": null,
-        "line": 1051,
+        "line": 1329,
         "lineSha256": "4fe20d5f77a409953deda0560ed66c10628be6f6ee2d131e1b16f004f3b959e3",
         "observedOperations": [
           "RUN_SIMULATOR"
@@ -286503,9 +287778,9 @@
         "requiredAction": "NONE"
       },
       "source": {
-        "fileSha256": "959a2acc86f7e87d8d576a6c5f621cad19d11163789093430dc4e92361b93c0c",
-        "id": "HELPER-9d43c4847a38464c",
-        "line": 283,
+        "fileSha256": "e25f25c3af7f08fc6d1a029c0c93ad02f268e82dd1dde11375ad45152ae3a2be",
+        "id": "HELPER-7c00c342abdbbfbf",
+        "line": 303,
         "lineSha256": "518de06adc75665b6688573480e707422cbe9fed60f5a25b53ea755349a5c0b3",
         "observedOperations": [
           "CLOSE"
@@ -287860,7 +289135,7 @@
         "requiredAction": "NONE"
       },
       "source": {
-        "fileSha256": "35a45527d51a01bec95daaaad91f41c1a75419331c13e90a540ca7397b5b2c8e",
+        "fileSha256": "855f0760416f282f48af34545868a01c69cc256285e445b375b326a0f82c0f24",
         "id": "HELPER-04d397ef823f3888",
         "line": 125,
         "lineSha256": "179644d43d5fd95d1f8fd0262c83156a291bac6f0d7acd22bcd694715da4541d",
@@ -287887,7 +289162,7 @@
         "requiredAction": "NONE"
       },
       "source": {
-        "fileSha256": "35a45527d51a01bec95daaaad91f41c1a75419331c13e90a540ca7397b5b2c8e",
+        "fileSha256": "855f0760416f282f48af34545868a01c69cc256285e445b375b326a0f82c0f24",
         "id": "HELPER-9643492a01494489",
         "line": 140,
         "lineSha256": "31c3a3bc5df94d3f45b2f1a4a3c1356037e71bf3daed9f70e99a9bc0c4368dfe",

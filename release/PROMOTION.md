@@ -5,12 +5,18 @@ and ordinary CI. It consumes the completed release-validation evidence
 directory and the four already-built unsigned artifacts. It cannot compile,
 package, generate Javadocs, or invoke a build lifecycle.
 
+The main `soklet.com` website is independently owner-deployed at any time and
+is outside candidate validation and promotion. It has no release pin or frozen
+hash, required release tag, deployment order, or promotion receipt. The four
+packaged Javadoc sites still consume the accepted library artifacts under the
+[G5 runbook](G5_RELEASE_RUNBOOK.md).
+
 The four modes are intentionally distinct:
 
 1. `prepare` is offline. It verifies the independently supplied validation-
    evidence SHA-256, separately pinned reviewed release-manifest SHA-256,
    candidate commit, fixed `com.soklet:soklet:4.0.0` coordinates, exact ordered
-   26-gate PASS set and gate pins, every typed gate receipt in the format-v2
+   25-gate PASS set and gate pins, every typed gate receipt in the format-v2
    evidence envelope, reviewed workflow identity, and all four artifact names,
    sizes, and SHA-256 values.
    Each receipt must match its gate's evidence contract, toolchain, canonical

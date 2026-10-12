@@ -99,8 +99,6 @@ release_benchmarks_release_note="$project_root/CHANGELOG.md"
 release_scans_verifier="$project_root/scripts/verify-release-scans.mjs"
 release_benchmarks_verifier="$project_root/scripts/verify-release-benchmarks.mjs"
 javadoc_toolchain_self_test="$project_root/scripts/verify-javadoc-toolchain-self-test.mjs"
-website_mirror_verifier="$project_root/scripts/verify-release-website-mirror.mjs"
-website_mirror_self_test="$project_root/scripts/verify-release-website-mirror-self-test.mjs"
 for release_harness_source in \
 	"$release_harness_registry" "$release_harness_bundle_builder" \
 	"$release_harness_importer" \
@@ -115,7 +113,6 @@ for release_harness_source in \
 	"$release_benchmarks_producer" "$release_benchmarks_producer_self_test" \
 	"$release_benchmarks_release_note" \
 	"$javadoc_toolchain_self_test" \
-	"$website_mirror_verifier" "$website_mirror_self_test" \
 	"$release_scans_verifier" "$release_benchmarks_verifier"; do
 	[[ -f "$release_harness_source" && ! -L "$release_harness_source" ]] \
 		|| fail "release-harness contract source is missing or is a symlink."
@@ -143,7 +140,6 @@ done
 # gate evidence can be recorded or imported.
 node "$release_harness_importer" --verify-config
 node "$javadoc_toolchain_self_test"
-node "$website_mirror_self_test"
 node "$release_harness_importer_self_test"
 node "$release_workflow_artifact_verifier_self_test"
 node "$release_scans_codeql_preparer_self_test"
@@ -162,7 +158,7 @@ assert_ready_gate_has_dispatch() {
 		matrix-closure|\
 		candidate-conformance|candidate-localization|barebones-app|\
 		soklet-servlet-javax|soklet-servlet-jakarta|toystore-app|soklet-otel|\
-		soklet-website|typescript-interop|go-interop)
+		typescript-interop|go-interop)
 			return 0
 			;;
 		*)
@@ -182,8 +178,8 @@ while IFS=$'\t' read -r configured_gate_id configured_gate_status; do
 		assert_ready_gate_has_dispatch "$configured_gate_id"
 	fi
 done < <(node "$evidence_helper" list-gate-ids "$manifest_path")
-[[ "$configured_gate_count" -eq 26 ]] \
-	|| fail "release manifest dispatch inventory must contain exactly 26 gates."
+[[ "$configured_gate_count" -eq 25 ]] \
+	|| fail "release manifest dispatch inventory must contain exactly 25 gates."
 
 head_commit=$(git rev-parse --verify HEAD)
 [[ "$head_commit" == "$candidate_commit" ]] \
@@ -547,22 +543,13 @@ clone_pinned_gate() {
 	local gate_id=$1
 	local repository=${gate_repository[$gate_id]:-}
 	local commit=${gate_commit[$gate_id]:-}
-	local fetch_source=$repository
 	local checkout="$checkout_root/$gate_id"
 	[[ -n "$repository" && "$commit" =~ ^[0-9a-f]{40}$ ]] \
 		|| fail "gate $gate_id does not have an immutable repository pin."
-	if [[ "$gate_id" == soklet-website ]]; then
-		[[ -n ${SOKLET_RELEASE_WEBSITE_MIRROR:-} ]] \
-			|| fail "private website mirror is required for the soklet-website gate."
-		node "$website_mirror_verifier" "$manifest_path" \
-			"$SOKLET_RELEASE_WEBSITE_MIRROR" \
-			|| fail "private website mirror does not match the exact candidate pin."
-		fetch_source=$SOKLET_RELEASE_WEBSITE_MIRROR
-	fi
 	[[ ! -e "$checkout" ]] || fail "checkout path already exists: $checkout"
 	mkdir -p "$checkout"
 	git -C "$checkout" init --quiet
-	git -C "$checkout" remote add origin "$fetch_source"
+	git -C "$checkout" remote add origin "$repository"
 	git -C "$checkout" fetch --quiet --no-tags --depth=1 origin "$commit"
 	git -C "$checkout" checkout --quiet --detach FETCH_HEAD
 	[[ $(git -C "$checkout" rev-parse HEAD) == "$commit" ]] \
@@ -1237,50 +1224,6 @@ run_barebones() {
 		"runtime-log=$log"
 }
 
-run_website() {
-	local checkout
-	checkout=$(clone_pinned_gate soklet-website)
-	local npm_cache="$work_root/npm-cache-website"
-	local npm_home="$work_root/npm-home-website"
-	local npm_user_config="$npm_home/user.npmrc"
-	local npm_global_config="$npm_home/global.npmrc"
-	local log="$evidence_root/soklet-website.log"
-	mkdir -p "$npm_cache" "$npm_home"
-	touch "$npm_user_config" "$npm_global_config"
-	(
-		cd "$checkout"
-		env -i PATH="$PATH" HOME="$npm_home" LANG=C.UTF-8 CI=true NO_COLOR=1 \
-			npm_config_cache="$npm_cache" npm_config_userconfig="$npm_user_config" \
-			npm_config_globalconfig="$npm_global_config" npm ci --ignore-scripts
-		env -i PATH="$PATH" HOME="$npm_home" LANG=C.UTF-8 CI=true NO_COLOR=1 \
-			npm_config_cache="$npm_cache" npm_config_userconfig="$npm_user_config" \
-			npm_config_globalconfig="$npm_global_config" npm run lint
-		env -i PATH="$PATH" HOME="$npm_home" LANG=C.UTF-8 CI=true NO_COLOR=1 \
-			npm_config_cache="$npm_cache" npm_config_userconfig="$npm_user_config" \
-			npm_config_globalconfig="$npm_global_config" npm run ssg-build
-		git diff --exit-code
-	) 2>&1 | tee "$log"
-	assert_pinned_checkout_unchanged soklet-website "$checkout"
-	local raw_root="$evidence_root/raw/soklet-website"
-	local distribution="$raw_root/dist"
-	mkdir -p "$raw_root"
-	cp -R "$checkout/dist" "$distribution"
-	record_gate soklet-website "build-log=$log" "distribution=$distribution"
-	[[ -f "$gate_evidence_root/soklet-website.json" \
-			&& ! -L "$gate_evidence_root/soklet-website.json" \
-			&& -d "$checkout" && ! -L "$checkout" \
-			&& -d "$distribution" && ! -L "$distribution" ]] \
-		|| fail "private website evidence or cleanup inputs are invalid."
-	node "$website_mirror_verifier" "$manifest_path" \
-		"$SOKLET_RELEASE_WEBSITE_MIRROR" \
-		|| fail "private website mirror changed before cleanup."
-	rm -rf -- "$checkout" "$distribution" "$SOKLET_RELEASE_WEBSITE_MIRROR"
-	[[ ! -e "$checkout" && ! -e "$distribution" \
-			&& ! -e "$SOKLET_RELEASE_WEBSITE_MIRROR" ]] \
-		|| fail "private website source or distribution remained after the gate."
-	unset SOKLET_RELEASE_WEBSITE_MIRROR
-}
-
 run_interoperability() {
 	local gate_id=$1
 	local checkout
@@ -1320,7 +1263,6 @@ run_maven_downstream soklet-servlet-javax
 run_maven_downstream soklet-servlet-jakarta
 run_maven_downstream toystore-app
 run_maven_downstream soklet-otel
-run_website
 run_interoperability typescript-interop
 run_interoperability go-interop
 

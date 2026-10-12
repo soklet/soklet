@@ -19,7 +19,10 @@ package com.soklet;
 import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.io.IOException;
+import java.nio.channels.SeekableByteChannel;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
 
 import static java.util.Objects.requireNonNull;
 
@@ -37,7 +40,7 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public sealed interface MarshaledResponseBody permits MarshaledResponseBody.Bytes, MarshaledResponseBody.File, MarshaledResponseBody.FileChannel, MarshaledResponseBody.ByteBuffer {
+public sealed interface MarshaledResponseBody permits MarshaledResponseBody.Bytes, MarshaledResponseBody.File, MarshaledResponseBody.FileChannel, MarshaledResponseBody.ByteBuffer, MarshaledResponseBody.SecureFile {
 	/**
 	 * The number of bytes this body will write.
 	 *
@@ -140,6 +143,66 @@ public sealed interface MarshaledResponseBody permits MarshaledResponseBody.Byte
 		@NonNull
 		public Long getLength() {
 			return getCount();
+		}
+	}
+
+	/**
+	 * A no-follow static-file body whose path is reopened relative to a pinned directory.
+	 * Soklet creates these descriptors for {@link StaticFiles}; an application cannot construct one
+	 * directly. The opened channel is owned by the transport for the duration of delivery.
+	 * <p>
+	 * Custom transports must use {@link #openChannel()}, apply {@link #getOffset()} and {@link #getCount()},
+	 * and close the channel after delivery or failure. A transport that cannot handle this descriptor
+	 * must reject it; converting it to an ordinary path-backed body loses its secure-open policy.
+	 */
+	@ThreadSafe
+	final class SecureFile implements MarshaledResponseBody {
+		private final SecureStaticFileRoot root;
+		private final Path path;
+		private final Long offset;
+		private final Long count;
+		private final Object fileKey;
+		private final long expectedSize;
+		private final java.nio.file.attribute.FileTime expectedModifiedTime;
+
+		SecureFile(SecureStaticFileRoot root, Path path, Long offset, Long count,
+				BasicFileAttributes attributes) {
+			this.root = requireNonNull(root);
+			this.path = requireNonNull(path);
+			this.offset = requireNonNull(offset);
+			this.count = requireNonNull(count);
+			this.fileKey = requireNonNull(attributes.fileKey(),
+					"Secure static-file delivery requires a stable file identity.");
+			this.expectedSize = attributes.size();
+			this.expectedModifiedTime = attributes.lastModifiedTime();
+			validateOffsetAndCount(offset, count);
+		}
+
+		/**
+		 * Opens the approved path beneath the pinned root without following symbolic links.
+		 * The caller must close the returned channel.
+		 *
+		 * @return an open channel for the response body
+		 * @throws IOException if the path changed or secure traversal fails
+		 */
+		public @NonNull SeekableByteChannel openChannel() throws IOException {
+			return root.open(path, fileKey, expectedSize, expectedModifiedTime);
+		}
+
+		/** @return the zero-based starting byte offset */
+		public @NonNull Long getOffset() {
+			return offset;
+		}
+
+		/** @return the number of bytes to send */
+		public @NonNull Long getCount() {
+			return count;
+		}
+
+		/** @return the number of bytes to send */
+		@Override
+		public @NonNull Long getLength() {
+			return count;
 		}
 	}
 

@@ -60,7 +60,6 @@ const EXPECTED_GATE_IDS = [
   'soklet-servlet-jakarta',
   'toystore-app',
   'soklet-otel',
-  'soklet-website',
   'typescript-interop',
   'go-interop',
 ];
@@ -262,14 +261,6 @@ const EXPECTED_GATE_CONTRACTS = Object.freeze({
     repository: 'https://github.com/soklet/soklet-otel.git',
     toolchain: 'java',
     versionProperty: 'soklet.version',
-  }),
-  'soklet-website': Object.freeze({
-    access: 'PRIVATE_READ_ONLY',
-    artifactIdentity: 'revetware/soklet.com-source',
-    kind: 'DOWNSTREAM',
-    repository: 'https://github.com/revetware/soklet.com.git',
-    toolchain: 'nodePin',
-    versionProperty: null,
   }),
   'typescript-interop': Object.freeze({
     access: 'PUBLIC_READ_ONLY',
@@ -669,17 +660,6 @@ export const EXPECTED_GATE_EVIDENCE_CONTRACTS = Object.freeze({
       surefireRole('candidate-surefire-reports'),
     ],
   ),
-  'soklet-website': gateEvidenceContract(
-    'soklet-website',
-    'nodePin',
-    'npm ci --ignore-scripts; npm run lint; npm run ssg-build',
-    'candidate-documentation',
-    'CLEAN_INSTALL_LINT_AND_STATIC_BUILD_PASS',
-    [
-      logRole('build-log', 'soklet-website.log'),
-      directoryRole('distribution', 'application/vnd.soklet.site-distribution', 'dist'),
-    ],
-  ),
   'typescript-interop': gateEvidenceContract(
     'typescript-interop',
     'nodePin',
@@ -995,7 +975,7 @@ function validateGate(gate, index, toolchains) {
 
   const expectedAccess = gate.repository === null
     ? 'LOCAL_CHECKOUT'
-    : gate.id === 'soklet-website' ? 'PRIVATE_READ_ONLY' : 'PUBLIC_READ_ONLY';
+    : 'PUBLIC_READ_ONLY';
   if (gate.access !== expectedAccess) {
     fail(`Gate ${gate.id} access mode does not match its repository ownership`);
   }

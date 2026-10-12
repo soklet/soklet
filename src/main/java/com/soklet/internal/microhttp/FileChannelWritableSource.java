@@ -36,6 +36,7 @@ import static com.soklet.internal.ObjectIdentity.sameInstance;
  */
 class FileChannelWritableSource implements WritableSource {
     private static final int MAX_SOCKET_CAUSE_DEPTH = 16;
+    private static final int MAX_RECORDED_SOCKET_FAILURES = 8;
     private final FileChannel fileChannel;
     private final boolean closeOnComplete;
     private final boolean nativeTransfer;
@@ -82,23 +83,27 @@ class FileChannelWritableSource implements WritableSource {
             } else {
                 if (socketSink == null || !sameInstance(socketSink.channel, socketChannel))
                     socketSink = new SocketSink(socketChannel);
-                socketSink.failure = null;
                 // Custom channels may throw after partial progress. Keep their
                 // sink failures typed at the original write boundary, without
                 // any later write whose response offset would be uncertain.
                 written = fileChannel.transferTo(position, bytesToWrite, socketSink);
             }
-        } catch (IOException failure) {
+        } catch (IOException | RuntimeException failure) {
             if (!nativeTransfer) {
-                SocketChannelIo.@Nullable SocketIoException socketFailure = socketIoCause(failure,
-                        socketSink == null ? null : socketSink.failure);
+                SocketChannelIo.@Nullable SocketIoException socketFailure = socketIoCause(failure, socketSink);
+                // A propagated failure ends this response. Do not carry its
+                // witnesses into any subsequent (unsupported) source reuse.
+                if (socketSink != null)
+                    socketSink.failures.clear();
                 if (socketFailure != null)
                     throw socketFailure;
                 throw new ResponseBodySourceException(fileChannel.isOpen()
                         ? "Unable to transfer the response file"
                         : "Response file channel closed during delivery", failure);
             }
-            throw classifyTransferFailure(socketChannel, failure);
+            if (failure instanceof IOException ioFailure)
+                throw classifyTransferFailure(socketChannel, ioFailure);
+            throw (RuntimeException) failure;
         }
         if (written > 0) {
             position += written;
@@ -112,7 +117,7 @@ class FileChannelWritableSource implements WritableSource {
                         new EOFException("Response file was truncated"));
         } catch (ResponseBodySourceException failure) {
             throw failure;
-        } catch (IOException failure) {
+        } catch (IOException | RuntimeException failure) {
             throw new ResponseBodySourceException("Unable to inspect the response file", failure);
         }
 
@@ -132,8 +137,8 @@ class FileChannelWritableSource implements WritableSource {
     }
 
     private static SocketChannelIo.@Nullable SocketIoException socketIoCause(Throwable failure,
-            SocketChannelIo.@Nullable SocketIoException sinkFailure) {
-        if (sinkFailure == null)
+            @Nullable SocketSink sink) {
+        if (sink == null || sink.failures.isEmpty())
             return null;
         IdentityHashMap<Throwable, Boolean> visited = new IdentityHashMap<>();
         Throwable current = failure;
@@ -144,10 +149,12 @@ class FileChannelWritableSource implements WritableSource {
             // even if its application-supplied cause mentions a socket failure.
             if (current instanceof ResponseBodySourceException)
                 return null;
-            // Only the failure witnessed by this transfer's sink proves peer
-            // failure. A channel may attach a stale exception to a source error.
-            if (sameInstance(current, sinkFailure))
-                return sinkFailure;
+            // A custom source may defer a witnessed failure to its next
+            // transfer or retry and rethrow an earlier failure. Only this
+            // source's socket sink can establish that identity provenance.
+            if (current instanceof SocketChannelIo.SocketIoException socketFailure
+                    && sink.failures.containsKey(socketFailure))
+                return socketFailure;
             current = current.getCause();
         }
         return null;
@@ -194,13 +201,17 @@ class FileChannelWritableSource implements WritableSource {
 
     private static final class SocketSink implements WritableByteChannel {
         private final SocketChannel channel;
-        private SocketChannelIo.@Nullable SocketIoException failure;
+        // Keep the first bounded set of witnesses across successful/zero-byte
+        // transfer returns. Additional failures remain diagnostic if a custom
+        // source exceeds the bound; no Throwable-message heuristics are used.
+        private final IdentityHashMap<SocketChannelIo.SocketIoException, Boolean> failures = new IdentityHashMap<>();
         private SocketSink(SocketChannel channel) { this.channel = channel; }
         @Override public int write(ByteBuffer buffer) throws IOException {
             try {
                 return SocketChannelIo.write(channel, buffer);
             } catch (SocketChannelIo.SocketIoException failure) {
-                this.failure = failure;
+                if (failures.size() < MAX_RECORDED_SOCKET_FAILURES)
+                    failures.put(failure, Boolean.TRUE);
                 throw failure;
             }
         }

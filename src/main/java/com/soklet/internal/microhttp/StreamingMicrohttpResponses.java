@@ -1134,7 +1134,7 @@ public final class StreamingMicrohttpResponses {
 
 				long written;
 				try {
-					written = SocketChannelIo.write(socketChannel, this.buffers, this.bufferIndex,
+					written = SocketChannelIo.writeGathering(socketChannel, this.buffers, this.bufferIndex,
 							lastBufferIndex - this.bufferIndex + 1);
 				} finally {
 					lastBuffer.limit(originalLimit);

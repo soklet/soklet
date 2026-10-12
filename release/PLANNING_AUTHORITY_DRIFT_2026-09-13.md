@@ -4,6 +4,14 @@ This records the follow-up required by the owner-approved September 13 release
 implementation plan. It does not replace the frozen planning snapshot or assert
 that mutable source files are the bytes approved historically.
 
+Current policy supersession — October 12: the main `soklet.com` website is
+independently owner-deployed at any time. It has no candidate gate, release pin
+or frozen hash, release tag, deployment order, or G4/U9/G5 dependency. The
+current release uses 25 gates and five downstream pins. Earlier website-gate
+references, approvals, and recorded provenance remain historical evidence;
+they do not impose current website requirements. The four packaged Javadoc
+sites retain their accepted-artifact contracts.
+
 ## Planning-authority snapshot
 
 The read-only comparison of all nine sources named by
@@ -93,7 +101,7 @@ The historical contract's release-validator invocation instructions describe
 the preview workflow. Current operation is documented in
 [release validation](README.md#d1p-historical-preview-scope): final acceptance
 uses the current exact-version API/freeze checks, transition census, and typed
-26-gate evidence. Workspace generation/full verification is pre-G3 only and
+25-gate evidence. Workspace generation/full verification is pre-G3 only and
 explicitly rejects the existing seal. Do not regenerate the D1p manifests,
 change the seal, or apply its historical linear-history rule as a new K/L
 release requirement. Preserve the original preview and record the existing
@@ -154,6 +162,92 @@ See the [slice report](https://github.com/soklet/soklet/blob/070e37ba40107ae6856
 attribution, validator results, test evidence and remaining release conditions.
 These semantic anchors are current development review records; they neither
 refreeze the independent MCP API nor accept an immutable release candidate.
+
+### October 12 current-inventory reconciliation
+
+The owner requested reconciliation of version, lifecycle, and privacy inventory
+drift against the current source. This review preserves the immutable version
+baseline and its classifications, removal records and D2 anchors, the accepted
+lifecycle baseline, historical approvals, and the independent main-website
+policy. Current source seals are updated only after reviewing their changed
+source locations and behavior.
+
+The version review relocates the README's existing target-version anchors and
+refreshes current file contexts affected by this reconciliation. It neither
+changes product versions nor reclassifies historical occurrences. The final
+census digest is retained with local verification output, outside this sealed
+document, to avoid a self-referential hash.
+
+The lifecycle review retains all existing scope reviews and adds two static-file
+wire probes. Their shared helper now limits each response to eight KiB and an
+absolute four-second read deadline, with a two-second connection timeout.
+Two sequential exchanges require twelve seconds of control allowance in
+addition to fifty seconds of default lifecycle allowance; that test has a
+seventy-five-second outer guard. The single-exchange test fits its existing
+sixty-second guard. Exact helper and owning-file hashes bind these reviews;
+scanner rules and existing lifecycle allowances are unchanged.
+
+The privacy semantic anchor changes from
+`69b85d3c284f50be6a69dc46acf44d5f27dc1d55aff92f6eb028ca9984e553ef`
+to `16bcc0621409b6a602d7e0552a7e34e0281d37006753e30c55df94ad1ef8c168`.
+The review adds eighteen current exception anchors and retires one obsolete
+content-hash helper anchor. Fixed framework wrapper text remains distinct from
+potentially path-bearing provider causes at the application exception boundary.
+Two exact exclusions identify the static-file entity-tag factory and response
+copier as non-telemetry calls; broad discovery matchers remain unchanged.
+
+Verifier, negative-control, and targeted Java test results are retained under
+the workspace's `.local-artifacts/soklet-inventory-reconciliation-2026-10-12/`
+directory. These are development checks, not immutable-candidate receipts or
+publication approval.
+
+### October 12 macOS static-file compatibility review
+
+The owner requested secure static-file operation on macOS Java 21. The default
+macOS provider in Java 17/21 does not expose secure directory streams. The
+replacement implementation uses the JDK's read-only descriptor operations on
+recognized OpenJDK Linux/macOS x86-64 and AArch64 providers. It traverses each
+component relative to a pinned directory, rejects symlinks, and checks the
+opened file's type, identity, size, and modification time before reading. This
+also closes the previous name-check/open/name-check ABA gap. Nonblocking opens
+reject raced-in FIFOs without waiting; descriptors are close-on-exec and have
+explicit ownership transfer and cleanup.
+
+The bridge does not change JVM capability flags or call the older macOS
+`fstatat`/`fdopendir` bindings. It depends on recognized JDK internals and access
+to `jdk.unsupported`; unsupported layouts/providers or denied access fail
+closed. An installed legacy SecurityManager is rejected before native access.
+There are no added external runtime dependencies. Contents that are modified
+in place still require the documented application-controlled immutability
+contract; descriptor identity is not an atomic content snapshot.
+
+The existing `MarshaledResponseBody.SecureFile` variant is now attributed as
+one exact non-MCP public API owner. Its constructor remains package-private;
+custom transports use its checked channel opener and region metadata, or reject
+unsupported bodies. Retaining a distinct variant prevents an older transport
+from silently treating a pinned body as an ordinary path-backed file. A new
+canary checks the distinct type, construction restriction, channel contract,
+and late symlink rejection. The reviewed compatibility set, MCP inventories,
+and all frozen MCP signatures remain unchanged.
+
+The privacy semantic anchor changes from
+`16bcc0621409b6a602d7e0552a7e34e0281d37006753e30c55df94ad1ef8c168`
+to `c5c36b67c9fb5b71b354bebef8b6fd7f002cc3423b68ea91a56df1b6ed1e839d`.
+Fourteen exact exception anchors replace six retired directory-stream anchors
+within the existing application exception boundary. Four adversarial canaries
+cover opened-descriptor identity, FIFO rejection, missing runtime capabilities,
+and legacy SecurityManager rejection. Other boundaries, exclusions, broad
+matchers, and historical approvals are unchanged.
+
+The lifecycle discovery adds the exact new native-access test file and its
+seven candidates. Existing lifecycle scope reviews, accepted baseline,
+scanner rules, and timeout policies remain unchanged. Child processes have
+explicit waits, forced cleanup, capped file-based diagnostics, and outer test
+guards. Source hashes, runtime-specific test reports, static-analysis results,
+and inventory verification output are retained under the workspace's
+`.local-artifacts/soklet-static-file-macos21-2026-10-12/` directory. The current
+version census is resealed after these reviewed changes. These development
+checks leave the independent main website and release-gate decisions unchanged.
 
 ## Required owner disposition record
 

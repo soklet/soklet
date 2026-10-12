@@ -36046,6 +36046,10 @@
         "src/test/java/com/soklet/McpSubscriptionMaintenanceMetricsAggregationTests.java#keysCompareAllDimensionsAndRedactApplicationPaths",
         "src/test/java/com/soklet/McpTaskCapabilityBoundaryPublicRuntimeTests.java#advancedTaskReturnsWithoutCreationContextAreInternalErrors",
         "src/test/java/com/soklet/McpTasksSimulatorPublicRuntimeTests.java#ineligibleTaskReturnIsAnInternalErrorInSimulation",
+        "src/test/java/com/soklet/NativeStaticFileAccessTests.java#installedLegacySecurityManagerIsRejectedEvenAfterBridgeInitialization",
+        "src/test/java/com/soklet/NativeStaticFileAccessTests.java#missingUnsupportedModuleFailsClosedInsteadOfReopeningPaths",
+        "src/test/java/com/soklet/NativeStaticFileAccessTests.java#openedIdentityCannotBeBorrowedFromAnAuthorizedNameRestoredAfterOpen",
+        "src/test/java/com/soklet/NativeStaticFileAccessTests.java#openingAFifoDoesNotBlockAndItsOpenedTypeIsRejected",
         "src/test/java/com/soklet/ResourceMethodBindingValidationTests.java#bindingDiagnosticsDoNotRetainRequestOrAnnotationValues",
         "src/test/java/com/soklet/ResourceMethodBindingValidationTests.java#customInstanceProviderCanStillCreateResourcesWithPrivateConstructors",
         "src/test/java/com/soklet/ResourceMethodBindingValidationTests.java#incompatibleDefaultConstructorsFailDuringSetupWithoutConstructingAnything",
@@ -36061,6 +36065,10 @@
         "src/test/java/com/soklet/SseHandshakeOutcomeRuntimeTests.java#simulatedInterceptorFramingHeadersCannotActivateAnAcceptedHandshake",
         "src/test/java/com/soklet/SseReadDeadlineRuntimeTests.java#eofBeforeCompleteHeadersIsAQuietClientDisconnect",
         "src/test/java/com/soklet/SseTests.java#stoppedHandshakeWriterDoesNotRecordATransportFailureButIndependentWriteFailureStillDoes",
+        "src/test/java/com/soklet/StaticFileIdentityTests.java#bothSymlinkModesFailClosedOnProviderWithoutSecureTraversal",
+        "src/test/java/com/soklet/StaticFilesTests.java#staticFilesDoesNotFollowAReplacementAfterResponseConstruction",
+        "src/test/java/com/soklet/StaticFilesTests.java#staticFilesRejectsARegularReplacementWithTheSameLength",
+        "src/test/java/com/soklet/StaticFilesTests.java#staticFilesSecureBodyReachesBuiltInHttpTransport",
         "src/test/java/com/soklet/StreamingResourceOwnershipRuntimeTests.java#cleanupOnlyFailureCannotProduceSuccessfulCompletion",
         "src/test/java/com/soklet/StreamingResourceOwnershipRuntimeTests.java#producerFailureRemainsPrimaryWhenCleanupAlsoFails",
         "src/test/java/com/soklet/StreamingServerSettingsTests.java#defaultsAndNullResetsResolveIndependently",
@@ -36069,13 +36077,17 @@
         "src/test/java/com/soklet/internal/mcp/protocol/McpAppMimeTypeTests.java#malformed_values_never_retain_sensitive_input_in_messages_or_causes",
         "src/test/java/com/soklet/internal/mcp/protocol/McpLegacyHttpObservationDispatcherTests.java#idleGetReservationsHaveTheirOwnSessionSizedBudgetAndLeaveTransientCapacity",
         "src/test/java/com/soklet/internal/mcp/protocol/McpLegacyHttpWireTests.java#legacyPromptResultsValidateRolesContentAndRevisionSpecificIcons",
+        "src/test/java/com/soklet/internal/microhttp/FileBodyFactorySafetyTests.java#invalidChannelRegionsAreRejectedWithoutTakingCallerOwnership",
+        "src/test/java/com/soklet/internal/microhttp/FileBodyFactorySafetyTests.java#invalidPathRegionsAreRejectedBeforeALazyFactoryCanOpenAFile",
+        "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java#customFileTransferBoundsLifetimeSocketWitnessesAndRejectsUncheckedForeignCauses",
         "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java#customFileTransferFailureAfterPartialProgressCannotCompleteACorruptBody",
+        "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java#customFileTransferRetainsDeferredAndRetriedFailuresFromTheSameResponse",
         "src/test/java/com/soklet/internal/microhttp/MicrohttpInternalTests.java#readableFileDoesNotHideAnAmbiguousNativeTransferFailure",
         "src/test/java/com/soklet/internal/microhttp/RequestParserHardeningTests.java#transferEncodingRejectsParametersWithoutDiscardingMalformedSuffixes"
       ],
       "category": "EXCEPTION",
       "classification": "EXACT_APPLICATION_BOUNDARY",
-      "contract": "Every explicit Throwable construction is inventoried conservatively as a possible application-boundary surface. This general completeness lens intentionally overlaps the request-exception and JSON-RPC error lenses. Exact exception objects and cause chains may reach documented application callbacks, while Soklet built-in fallback logging emits only bounded throwable metadata. Private SseSocketIoException wrappers keep a fixed message and the exact original socket IOException cause; handshake/termination callbacks receive the original cause, while typed socket failures follow the quiet remote-close path. Accepted-SSE framing validation and invalid GET observation configuration throw fixed non-disclosing IllegalArgumentException values. The private stopped-handshake marker carries fixed text and an original local IOException, which is unwrapped for existing handshake failure callbacks; routine stop refusals produce no write-error diagnostic. Native file-transfer failures keep their exact original cause. A bounded failure-only file read and typed socket write establish peer failure independently; readable-file or ambiguous native failures remain response-source errors. Custom FileChannel transfers keep socket failures typed at the original sink and retain untyped source failures without a recovery probe after uncertain progress. An elected handshake write deadline carries fixed SocketTimeoutException text with the original closed-channel cause, and is observed as WRITE_TIMEOUT rather than routine peer loss. Transfer-coding parameter rejection and scoped IPv6 resource-URI rejection use fixed diagnostics without retaining request headers or resource addresses. HTTP-date weekday validation raises a fixed DateTimeException that is consumed by the date parser and yields Optional.empty() without emitting input or exception carriers.",
+      "contract": "Every explicit Throwable construction is inventoried conservatively as a possible application-boundary surface. This general completeness lens intentionally overlaps the request-exception and JSON-RPC error lenses. Exact exception objects and cause chains may reach documented application callbacks, while Soklet built-in fallback logging emits only bounded throwable metadata. Private SseSocketIoException wrappers keep a fixed message and the exact original socket IOException cause; handshake/termination callbacks receive the original cause, while typed socket failures follow the quiet remote-close path. Accepted-SSE framing validation and invalid GET observation configuration throw fixed non-disclosing IllegalArgumentException values. The private stopped-handshake marker carries fixed text and an original local IOException, which is unwrapped for existing handshake failure callbacks; routine stop refusals produce no write-error diagnostic. Native file-transfer failures keep their exact original cause. A bounded failure-only file read and typed socket write establish peer failure independently; readable-file or ambiguous native failures remain response-source errors. Custom FileChannel transfers keep socket failures typed at the original sink and retain untyped source failures without a recovery probe after uncertain progress. An elected handshake write deadline carries fixed SocketTimeoutException text with the original closed-channel cause, and is observed as WRITE_TIMEOUT rather than routine peer loss. Transfer-coding parameter rejection and scoped IPv6 resource-URI rejection use fixed diagnostics without retaining request headers or resource addresses. HTTP-date weekday validation raises a fixed DateTimeException that is consumed by the date parser and yields Optional.empty() without emitting input or exception carriers. Custom file-channel socket-failure witnesses remain confined to one response source and one socket sink. At most the first eight witnessed failures are retained across deferred transfer returns and retries; propagated failures clear these identities. Unchecked custom-source failures preserve their exact cause within an explicit source-failure wrapper unless the bounded cause chain contains a witnessed sink identity. Eager finite file-region validation emits fixed offset/count/range diagnostics without retaining file paths, numeric values, or channel carriers. Secure static-file root validation and secure-body read/materialization failures use fixed framework wrapper text, while original provider errors may retain filesystem paths in their causes at the intentional application exception/callback boundary. Static-file lookup consumes its IOException and UnsupportedOperationException traversal failures as an absent response; secure-body delivery failures retain explicit response-source provenance and the original read cause. The SHA-256-unavailable failure now belongs to the shared content-hash helper; the existing public path-based hash failure remains an exact configured-path exception. The read-only native static-file bridge keeps construction, traversal, unavailable-runtime, opened-descriptor identity, and descriptor-ownership failures at this same explicit application exception boundary. Its framework messages are fixed and do not interpolate paths; preserved JDK reflection/native causes and suppressed close failures remain unredacted diagnostics. No telemetry or log sink is added, and replacement-file identity is checked from the opened descriptor before hashing or delivery.",
       "id": "PRIV-BOUND-022",
       "name": "Explicit Java Throwable construction and wrapping",
       "sourcePaths": [
@@ -40572,6 +40584,33 @@
         },
         {
           "file": "src/main/java/com/soklet/MarshaledResponse.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/MarshaledResponse.java#com.soklet.MarshaledResponse#materializeSecureFile(MarshaledResponseBody.SecureFile)->Throwable.EOFException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "materializeSecureFile(MarshaledResponseBody.SecureFile)",
+          "occurrence": 1,
+          "owner": "com.soklet.MarshaledResponse",
+          "sink": "Throwable.EOFException"
+        },
+        {
+          "file": "src/main/java/com/soklet/MarshaledResponse.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/MarshaledResponse.java#com.soklet.MarshaledResponse#materializeSecureFile(MarshaledResponseBody.SecureFile)->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "materializeSecureFile(MarshaledResponseBody.SecureFile)",
+          "occurrence": 1,
+          "owner": "com.soklet.MarshaledResponse",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/MarshaledResponse.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/MarshaledResponse.java#com.soklet.MarshaledResponse#materializeSecureFile(MarshaledResponseBody.SecureFile)->Throwable.UncheckedIOException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "materializeSecureFile(MarshaledResponseBody.SecureFile)",
+          "occurrence": 1,
+          "owner": "com.soklet.MarshaledResponse",
+          "sink": "Throwable.UncheckedIOException"
+        },
+        {
+          "file": "src/main/java/com/soklet/MarshaledResponse.java",
           "key": "PRIV-MATCH-011:src/main/java/com/soklet/MarshaledResponse.java#com.soklet.MarshaledResponse#releaseBodyResources(MarshaledResponseBody)->Throwable.UncheckedIOException@1",
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "releaseBodyResources(MarshaledResponseBody)",
@@ -42794,6 +42833,114 @@
           "sink": "Throwable.IllegalArgumentException"
         },
         {
+          "file": "src/main/java/com/soklet/NativeStaticFileAccess.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/NativeStaticFileAccess.java#com.soklet.NativeStaticFileAccess#NativeStaticFileAccess()->Throwable.ReflectiveOperationException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "NativeStaticFileAccess()",
+          "occurrence": 1,
+          "owner": "com.soklet.NativeStaticFileAccess",
+          "sink": "Throwable.ReflectiveOperationException"
+        },
+        {
+          "file": "src/main/java/com/soklet/NativeStaticFileAccess.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/NativeStaticFileAccess.java#com.soklet.NativeStaticFileAccess#NativeStaticFileAccess()->Throwable.ReflectiveOperationException@2",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "NativeStaticFileAccess()",
+          "occurrence": 2,
+          "owner": "com.soklet.NativeStaticFileAccess",
+          "sink": "Throwable.ReflectiveOperationException"
+        },
+        {
+          "file": "src/main/java/com/soklet/NativeStaticFileAccess.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/NativeStaticFileAccess.java#com.soklet.NativeStaticFileAccess#checkDirectory(Handle)->Throwable.IOException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "checkDirectory(Handle)",
+          "occurrence": 1,
+          "owner": "com.soklet.NativeStaticFileAccess",
+          "sink": "Throwable.IOException"
+        },
+        {
+          "file": "src/main/java/com/soklet/NativeStaticFileAccess.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/NativeStaticFileAccess.java#com.soklet.NativeStaticFileAccess#checkPath(Path)->Throwable.IOException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "checkPath(Path)",
+          "occurrence": 1,
+          "owner": "com.soklet.NativeStaticFileAccess",
+          "sink": "Throwable.IOException"
+        },
+        {
+          "file": "src/main/java/com/soklet/NativeStaticFileAccess.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/NativeStaticFileAccess.java#com.soklet.NativeStaticFileAccess#checkSecurityManager()->Throwable.IOException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "checkSecurityManager()",
+          "occurrence": 1,
+          "owner": "com.soklet.NativeStaticFileAccess",
+          "sink": "Throwable.IOException"
+        },
+        {
+          "file": "src/main/java/com/soklet/NativeStaticFileAccess.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/NativeStaticFileAccess.java#com.soklet.NativeStaticFileAccess#constant(MethodHandles.Lookup,Class<?>,String)->Throwable.ReflectiveOperationException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "constant(MethodHandles.Lookup,Class<?>,String)",
+          "occurrence": 1,
+          "owner": "com.soklet.NativeStaticFileAccess",
+          "sink": "Throwable.ReflectiveOperationException"
+        },
+        {
+          "file": "src/main/java/com/soklet/NativeStaticFileAccess.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/NativeStaticFileAccess.java#com.soklet.NativeStaticFileAccess#forPath(Path)->Throwable.IOException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "forPath(Path)",
+          "occurrence": 1,
+          "owner": "com.soklet.NativeStaticFileAccess",
+          "sink": "Throwable.IOException"
+        },
+        {
+          "file": "src/main/java/com/soklet/NativeStaticFileAccess.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/NativeStaticFileAccess.java#com.soklet.NativeStaticFileAccess#forPath(Path)->Throwable.IOException@2",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "forPath(Path)",
+          "occurrence": 2,
+          "owner": "com.soklet.NativeStaticFileAccess",
+          "sink": "Throwable.IOException"
+        },
+        {
+          "file": "src/main/java/com/soklet/NativeStaticFileAccess.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/NativeStaticFileAccess.java#com.soklet.NativeStaticFileAccess#ioFailure(Throwable)->Throwable.IOException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "ioFailure(Throwable)",
+          "occurrence": 1,
+          "owner": "com.soklet.NativeStaticFileAccess",
+          "sink": "Throwable.IOException"
+        },
+        {
+          "file": "src/main/java/com/soklet/NativeStaticFileAccess.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/NativeStaticFileAccess.java#com.soklet.NativeStaticFileAccess#openAt(Handle,Path)->Throwable.IOException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "openAt(Handle,Path)",
+          "occurrence": 1,
+          "owner": "com.soklet.NativeStaticFileAccess",
+          "sink": "Throwable.IOException"
+        },
+        {
+          "file": "src/main/java/com/soklet/NativeStaticFileAccess.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/NativeStaticFileAccess.java#com.soklet.NativeStaticFileAccess#openDirectory(Path)->Throwable.IOException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "openDirectory(Path)",
+          "occurrence": 1,
+          "owner": "com.soklet.NativeStaticFileAccess",
+          "sink": "Throwable.IOException"
+        },
+        {
+          "file": "src/main/java/com/soklet/NativeStaticFileAccess.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/NativeStaticFileAccess.java#com.soklet.NativeStaticFileAccess.Handle#value()->Throwable.IOException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "value()",
+          "occurrence": 1,
+          "owner": "com.soklet.NativeStaticFileAccess.Handle",
+          "sink": "Throwable.IOException"
+        },
+        {
           "file": "src/main/java/com/soklet/ParameterizedHeaderValue.java",
           "key": "PRIV-MATCH-011:src/main/java/com/soklet/ParameterizedHeaderValue.java#com.soklet.ParameterizedHeaderValue.Builder#assertNoControlCharacters(String,String)->Throwable.IllegalArgumentException@1",
           "matcherRuleId": "PRIV-MATCH-011",
@@ -43404,6 +43551,69 @@
           "occurrence": 8,
           "owner": "com.soklet.ResponseCookie.Rfc6265Utils",
           "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/SecureStaticFileRoot.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SecureStaticFileRoot.java#com.soklet.SecureStaticFileRoot#SecureStaticFileRoot(Path)->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "SecureStaticFileRoot(Path)",
+          "occurrence": 1,
+          "owner": "com.soklet.SecureStaticFileRoot",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/SecureStaticFileRoot.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SecureStaticFileRoot.java#com.soklet.SecureStaticFileRoot#SecureStaticFileRoot(Path)->Throwable.IllegalArgumentException@2",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "SecureStaticFileRoot(Path)",
+          "occurrence": 2,
+          "owner": "com.soklet.SecureStaticFileRoot",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/SecureStaticFileRoot.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SecureStaticFileRoot.java#com.soklet.SecureStaticFileRoot#SecureStaticFileRoot(Path)->Throwable.UncheckedIOException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "SecureStaticFileRoot(Path)",
+          "occurrence": 1,
+          "owner": "com.soklet.SecureStaticFileRoot",
+          "sink": "Throwable.UncheckedIOException"
+        },
+        {
+          "file": "src/main/java/com/soklet/SecureStaticFileRoot.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SecureStaticFileRoot.java#com.soklet.SecureStaticFileRoot#checkIdentity(BasicFileAttributes,Object,long,java.nio.file.attribute.FileTime)->Throwable.IOException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "checkIdentity(BasicFileAttributes,Object,long,java.nio.file.attribute.FileTime)",
+          "occurrence": 1,
+          "owner": "com.soklet.SecureStaticFileRoot",
+          "sink": "Throwable.IOException"
+        },
+        {
+          "file": "src/main/java/com/soklet/SecureStaticFileRoot.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SecureStaticFileRoot.java#com.soklet.SecureStaticFileRoot#open(Path,Object,long,java.nio.file.attribute.FileTime)->Throwable.IOException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "open(Path,Object,long,java.nio.file.attribute.FileTime)",
+          "occurrence": 1,
+          "owner": "com.soklet.SecureStaticFileRoot",
+          "sink": "Throwable.IOException"
+        },
+        {
+          "file": "src/main/java/com/soklet/SecureStaticFileRoot.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SecureStaticFileRoot.java#com.soklet.SecureStaticFileRoot#open(Path,Object,long,java.nio.file.attribute.FileTime)->Throwable.IOException@2",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "open(Path,Object,long,java.nio.file.attribute.FileTime)",
+          "occurrence": 2,
+          "owner": "com.soklet.SecureStaticFileRoot",
+          "sink": "Throwable.IOException"
+        },
+        {
+          "file": "src/main/java/com/soklet/SecureStaticFileRoot.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/SecureStaticFileRoot.java#com.soklet.SecureStaticFileRoot#openRelative(Path,Object,long,java.nio.file.attribute.FileTime)->Throwable.IOException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "openRelative(Path,Object,long,java.nio.file.attribute.FileTime)",
+          "occurrence": 1,
+          "owner": "com.soklet.SecureStaticFileRoot",
+          "sink": "Throwable.IOException"
         },
         {
           "file": "src/main/java/com/soklet/ShutdownCleanup.java",
@@ -44802,21 +45012,21 @@
         },
         {
           "file": "src/main/java/com/soklet/StaticFiles.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/StaticFiles.java#com.soklet.StaticFiles.ContentHashEntityTagResolver#entityTagFor(Path,BasicFileAttributes)->Throwable.IllegalStateException@1",
-          "matcherRuleId": "PRIV-MATCH-011",
-          "member": "entityTagFor(Path,BasicFileAttributes)",
-          "occurrence": 1,
-          "owner": "com.soklet.StaticFiles.ContentHashEntityTagResolver",
-          "sink": "Throwable.IllegalStateException"
-        },
-        {
-          "file": "src/main/java/com/soklet/StaticFiles.java",
           "key": "PRIV-MATCH-011:src/main/java/com/soklet/StaticFiles.java#com.soklet.StaticFiles.ContentHashEntityTagResolver#entityTagFor(Path,BasicFileAttributes)->Throwable.UncheckedIOException@1",
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "entityTagFor(Path,BasicFileAttributes)",
           "occurrence": 1,
           "owner": "com.soklet.StaticFiles.ContentHashEntityTagResolver",
           "sink": "Throwable.UncheckedIOException"
+        },
+        {
+          "file": "src/main/java/com/soklet/StaticFiles.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/StaticFiles.java#com.soklet.StaticFiles.ContentHashEntityTagResolver#hash(InputStream)->Throwable.IllegalStateException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "hash(InputStream)",
+          "occurrence": 1,
+          "owner": "com.soklet.StaticFiles.ContentHashEntityTagResolver",
+          "sink": "Throwable.IllegalStateException"
         },
         {
           "file": "src/main/java/com/soklet/StreamingResponseBody.java",
@@ -52560,6 +52770,33 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/microhttp/MicrohttpResponse.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/MicrohttpResponse.java#com.soklet.internal.microhttp.MicrohttpResponse#validateFileRegion(long,long)->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "validateFileRegion(long,long)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.MicrohttpResponse",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/MicrohttpResponse.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/MicrohttpResponse.java#com.soklet.internal.microhttp.MicrohttpResponse#validateFileRegion(long,long)->Throwable.IllegalArgumentException@2",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "validateFileRegion(long,long)",
+          "occurrence": 2,
+          "owner": "com.soklet.internal.microhttp.MicrohttpResponse",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/MicrohttpResponse.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/MicrohttpResponse.java#com.soklet.internal.microhttp.MicrohttpResponse#validateFileRegion(long,long)->Throwable.IllegalArgumentException@3",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "validateFileRegion(long,long)",
+          "occurrence": 3,
+          "owner": "com.soklet.internal.microhttp.MicrohttpResponse",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/MicrohttpResponse.java",
           "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/MicrohttpResponse.java#com.soklet.internal.microhttp.MicrohttpResponse#validateHeaderForSerialization(Header)->Throwable.IllegalArgumentException@1",
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "validateHeaderForSerialization(Header)",
@@ -53117,6 +53354,33 @@
           "sink": "Throwable.MalformedRequestException"
         },
         {
+          "file": "src/main/java/com/soklet/internal/microhttp/SeekableChannelWritableSource.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/SeekableChannelWritableSource.java#com.soklet.internal.microhttp.SeekableChannelWritableSource#writeTo(SocketChannel,long)->Throwable.EOFException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "writeTo(SocketChannel,long)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.SeekableChannelWritableSource",
+          "sink": "Throwable.EOFException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/SeekableChannelWritableSource.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/SeekableChannelWritableSource.java#com.soklet.internal.microhttp.SeekableChannelWritableSource#writeTo(SocketChannel,long)->Throwable.ResponseBodySourceException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "writeTo(SocketChannel,long)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.SeekableChannelWritableSource",
+          "sink": "Throwable.ResponseBodySourceException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/SeekableChannelWritableSource.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/SeekableChannelWritableSource.java#com.soklet.internal.microhttp.SeekableChannelWritableSource#writeTo(SocketChannel,long)->Throwable.ResponseBodySourceException@2",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "writeTo(SocketChannel,long)",
+          "occurrence": 2,
+          "owner": "com.soklet.internal.microhttp.SeekableChannelWritableSource",
+          "sink": "Throwable.ResponseBodySourceException"
+        },
+        {
           "file": "src/main/java/com/soklet/internal/microhttp/SocketChannelIo.java",
           "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/SocketChannelIo.java#com.soklet.internal.microhttp.SocketChannelIo#read(SocketChannel,ByteBuffer)->Throwable.SocketIoException@1",
           "matcherRuleId": "PRIV-MATCH-011",
@@ -53136,9 +53400,9 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/microhttp/SocketChannelIo.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/SocketChannelIo.java#com.soklet.internal.microhttp.SocketChannelIo#write(SocketChannel,ByteBuffer[],int,int)->Throwable.SocketIoException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/SocketChannelIo.java#com.soklet.internal.microhttp.SocketChannelIo#writeGathering(SocketChannel,ByteBuffer[],int,int)->Throwable.SocketIoException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "write(SocketChannel,ByteBuffer[],int,int)",
+          "member": "writeGathering(SocketChannel,ByteBuffer[],int,int)",
           "occurrence": 1,
           "owner": "com.soklet.internal.microhttp.SocketChannelIo",
           "sink": "Throwable.SocketIoException"
@@ -58890,11 +59154,13 @@
     },
     {
       "canaryTests": [
-        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java#construction_does_not_bind_and_failed_start_is_restartable"
+        "src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntimeTests.java#construction_does_not_bind_and_failed_start_is_restartable",
+        "src/test/java/com/soklet/internal/microhttp/ContinueResponseDisconnectTests.java#inlineContinueSocketResetClosesWithoutTransportFailure",
+        "src/test/java/com/soklet/internal/microhttp/ContinueResponseDisconnectTests.java#inlineNonSocketFailureRemainsDiagnostic"
       ],
       "category": "LOG",
       "classification": "NO_EMISSION",
-      "contract": "The dedicated MCP runtime wires every internal microhttp EventLoop to NoopLogger; inventoried microhttp logger declarations and calls therefore emit no transport diagnostic for MCP traffic, and alternate wiring creates a new unclassified candidate.",
+      "contract": "The dedicated MCP runtime wires every internal microhttp EventLoop to NoopLogger; inventoried microhttp logger declarations and calls therefore emit no transport diagnostic for MCP traffic, and alternate wiring creates a new unclassified candidate. Inline and selector-driven 100-continue writes now share the existing typed socket-failure classifier. Routine socket loss closes quietly; non-socket failures remain diagnostic at the existing onWritable logger boundary.",
       "id": "PRIV-BOUND-034",
       "name": "Disabled internal microhttp logger channel for MCP",
       "sourcePaths": [
@@ -59095,15 +59361,6 @@
           "occurrence": 3,
           "owner": "com.soklet.internal.microhttp.ConnectionEventLoop.Connection",
           "sink": "MicrohttpLogger.invocation.log"
-        },
-        {
-          "file": "src/main/java/com/soklet/internal/microhttp/ConnectionEventLoop.java",
-          "key": "PRIV-MATCH-013:src/main/java/com/soklet/internal/microhttp/ConnectionEventLoop.java#com.soklet.internal.microhttp.ConnectionEventLoop.Connection#onPartialRequestParsed()->MicrohttpLogger.invocation.logFailure@1",
-          "matcherRuleId": "PRIV-MATCH-013",
-          "member": "onPartialRequestParsed()",
-          "occurrence": 1,
-          "owner": "com.soklet.internal.microhttp.ConnectionEventLoop.Connection",
-          "sink": "MicrohttpLogger.invocation.logFailure"
         },
         {
           "file": "src/main/java/com/soklet/internal/microhttp/ConnectionEventLoop.java",
@@ -67666,10 +67923,10 @@
         },
         {
           "file": "src/main/java/com/soklet/Soklet.java",
-          "key": "PRIV-MATCH-016:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet#toHttpRequestResult(Request,ResourceMethod,ServerType)->LogEvent.attachment.finish@1",
+          "key": "PRIV-MATCH-016:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet#toHttpRequestResult(Request,ResourceMethod,ServerType)->LogEvent.attachment.finish@2",
           "matcherRuleId": "PRIV-MATCH-016",
           "member": "toHttpRequestResult(Request,ResourceMethod,ServerType)",
-          "occurrence": 1,
+          "occurrence": 2,
           "owner": "com.soklet.Soklet",
           "sink": "LogEvent.attachment.finish"
         },
@@ -73250,6 +73507,17 @@
       "sink": "MetricsCollector.invocation.snapshot"
     },
     {
+      "file": "src/main/java/com/soklet/StaticFiles.java",
+      "id": "PRIV-EX-046",
+      "key": "PRIV-MATCH-015:src/main/java/com/soklet/StaticFiles.java#com.soklet.StaticFiles#marshaledResponseFor(String,Request)->MetricsCollector.invocation.defaultInstance@1",
+      "matcherRuleId": "PRIV-MATCH-015",
+      "member": "marshaledResponseFor(String,Request)",
+      "occurrence": 1,
+      "owner": "com.soklet.StaticFiles",
+      "rationale": "This exact call is ContentHashEntityTagResolver.defaultInstance(), selecting the built-in static-file entity-tag policy for a secure channel read. The receiver is not a MetricsCollector, no metric observation or telemetry export occurs, and the broad defaultInstance vocabulary matcher remains unchanged.",
+      "sink": "MetricsCollector.invocation.defaultInstance"
+    },
+    {
       "file": "src/main/java/com/soklet/Utilities.java",
       "id": "PRIV-EX-039",
       "key": "PRIV-MATCH-015:src/main/java/com/soklet/Utilities.java#com.soklet.Utilities#percentDecode(String,Charset,boolean)->MetricsCollector.invocation.reset@1",
@@ -73471,6 +73739,17 @@
     },
     {
       "file": "src/main/java/com/soklet/Soklet.java",
+      "id": "PRIV-EX-044",
+      "key": "PRIV-MATCH-016:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet#normalizeEmptyResetContent(MarshaledResponse)->LogEvent.attachment.finish@1",
+      "matcherRuleId": "PRIV-MATCH-016",
+      "member": "normalizeEmptyResetContent(MarshaledResponse)",
+      "occurrence": 1,
+      "owner": "com.soklet.Soklet",
+      "rationale": "The receiver at this exact site is a Response.Copier or MarshaledResponse.Copier, not a LogEvent.Copier. It removes a zero-length 205 body while preserving response status and metadata; it emits no log or attachment. The original HttpRequestResult copy at toHttpRequestResult is now occurrence 2 and retains its existing application-boundary classification. The broad fluent-attachment matcher remains unchanged.",
+      "sink": "LogEvent.attachment.finish"
+    },
+    {
+      "file": "src/main/java/com/soklet/Soklet.java",
       "id": "PRIV-EX-037",
       "key": "PRIV-MATCH-016:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet#resolveResourceMethodForRequest(Request,ResourceMethodResolver,ServerType)->LogEvent.attachment.finish@1",
       "matcherRuleId": "PRIV-MATCH-016",
@@ -73478,6 +73757,17 @@
       "occurrence": 1,
       "owner": "com.soklet.Soklet",
       "rationale": "This finish call creates a Request copy with GET solely for HEAD fallback route lookup. The receiver is Request.Copier, not LogEvent.Builder/Copier; it emits no LogEvent or attachment. The application still receives the HEAD request. Preserve the broad fluent matcher.",
+      "sink": "LogEvent.attachment.finish"
+    },
+    {
+      "file": "src/main/java/com/soklet/Soklet.java",
+      "id": "PRIV-EX-045",
+      "key": "PRIV-MATCH-016:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet#toHttpRequestResult(Request,ResourceMethod,ServerType)->LogEvent.attachment.finish@1",
+      "matcherRuleId": "PRIV-MATCH-016",
+      "member": "toHttpRequestResult(Request,ResourceMethod,ServerType)",
+      "occurrence": 1,
+      "owner": "com.soklet.Soklet",
+      "rationale": "The receiver at this exact site is a Response.Copier or MarshaledResponse.Copier, not a LogEvent.Copier. It removes a zero-length 205 body while preserving response status and metadata; it emits no log or attachment. The original HttpRequestResult copy at toHttpRequestResult is now occurrence 2 and retains its existing application-boundary classification. The broad fluent-attachment matcher remains unchanged.",
       "sink": "LogEvent.attachment.finish"
     },
     {
@@ -73589,6 +73879,17 @@
       "owner": "com.soklet.Soklet.DefaultSimulator",
       "rationale": "The receivers at these exact calls are Response/MarshaledResponse builders or MarshaledResponse/HttpRequestResult copiers, not LogEvent builders/copiers. They build local simulated responses (including admission 503) and do not emit logs or attachments. Existing fixture-capture boundaries cover their exact response values. Do not weaken the broad fluent matcher. Exact reviewed member: com.soklet.Soklet.DefaultSimulator#performSseRequestWhileAdmitted(Request); occurrence 1.",
       "sink": "LogEvent.attachment.marshaledResponse"
+    },
+    {
+      "file": "src/main/java/com/soklet/StaticFiles.java",
+      "id": "PRIV-EX-047",
+      "key": "PRIV-MATCH-016:src/main/java/com/soklet/StaticFiles.java#com.soklet.StaticFiles#marshaledResponseFor(String,Request)->LogEvent.attachment.finish@1",
+      "matcherRuleId": "PRIV-MATCH-016",
+      "member": "marshaledResponseFor(String,Request)",
+      "occurrence": 1,
+      "owner": "com.soklet.StaticFiles",
+      "rationale": "This exact finish() call completes a MarshaledResponse.Copier after replacing a path-based finite body with its secure static-file descriptor. The receiver is not a LogEvent builder/copier; no log emission or carrier attachment occurs. Response fields and any subsequent application-owned rendering remain exact existing response surfaces; the broad fluent attachment matcher remains unchanged.",
+      "sink": "LogEvent.attachment.finish"
     }
   ],
   "scanRoots": [

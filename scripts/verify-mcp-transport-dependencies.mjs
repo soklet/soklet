@@ -961,6 +961,18 @@ function requireSocketIoBoundary(method, operation) {
   `SocketChannelIo.${operation} must return the actual socket ${operation} result and wrap its IOException in the typed boundary`);
 }
 
+
+function requireGatheringSocketIoBoundary(method) {
+  const signature = /^writeGathering\s*\(\s*SocketChannel\s+([A-Za-z_$][\w$]*)\s*,\s*ByteBuffer\s*\[\s*\]\s+([A-Za-z_$][\w$]*)\s*,\s*int\s+([A-Za-z_$][\w$]*)\s*,\s*int\s+([A-Za-z_$][\w$]*)\s*\)\s*throws\s+IOException\s*$/u;
+  const parameters = signature.exec(method.signatureCode.trim());
+  if (parameters === null) {
+    fail('Transport characterization structural assertion failed: SocketChannelIo.writeGathering must retain its SocketChannel/ByteBuffer[]/offset/length IO boundary');
+  }
+  requireStructural(method, new RegExp(
+    `^\\s*try\\s*\\{\\s*return\\s+${escapeRegex(parameters[1])}\\s*\\.\\s*write\\s*\\(\\s*${escapeRegex(parameters[2])}\\s*,\\s*${escapeRegex(parameters[3])}\\s*,\\s*${escapeRegex(parameters[4])}\\s*\\)\\s*;\\s*\\}\\s*catch\\s*\\(\\s*IOException\\s+([A-Za-z_$][\\w$]*)\\s*\\)\\s*\\{\\s*throw\\s+new\\s+SocketIoException\\s*\\(\\s*\\1\\s*\\)\\s*;\\s*\\}\\s*$`, 'u'),
+    'SocketChannelIo.writeGathering must return the actual gathering socket write result and wrap its IOException in the typed boundary');
+}
+
 function oneAnonymousMethod(outerMethod, anonymousType, methodName) {
   const construction = new RegExp(`\\bnew\\s+${escapeRegex(anonymousType)}\\s*\\(\\s*\\)\\s*\\{`, 'gu');
   const constructions = [...outerMethod.bodyCode.matchAll(construction)];
@@ -1610,6 +1622,8 @@ function verifyCharacterizationSources(root, sourceFiles) {
     requireSocketIoBoundary(oneMethod(socketIo.lexed, socketIoPath,
       'com.soklet.internal.microhttp.SocketChannelIo', operation), operation);
   }
+  requireGatheringSocketIoBoundary(oneMethod(socketIo.lexed, socketIoPath,
+    'com.soklet.internal.microhttp.SocketChannelIo', 'writeGathering'));
   for (const readPath of [readable, discard,
     oneMethod(eventLoop.lexed, eventLoopPath,
       'com.soklet.internal.microhttp.ConnectionEventLoop.Connection',

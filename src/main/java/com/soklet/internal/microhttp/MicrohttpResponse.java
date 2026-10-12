@@ -1,12 +1,14 @@
 package com.soklet.internal.microhttp;
 
 import com.soklet.StreamTerminationReason;
+import com.soklet.MarshaledResponseBody;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.channels.SeekableByteChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -56,6 +58,7 @@ public final class MicrohttpResponse {
         requireNonNull(path);
         requireNonNull(offset);
         requireNonNull(count);
+        validateFileRegion(offset, count);
 
         return new MicrohttpResponse(status, reason, headers, count,
                 () -> new FileChannelWritableSource(FileChannel.open(path, READ), offset, count, true),
@@ -70,11 +73,45 @@ public final class MicrohttpResponse {
         requireNonNull(offset);
         requireNonNull(count);
         requireNonNull(closeOnComplete);
+        validateFileRegion(offset, count);
 
         return new MicrohttpResponse(status, reason, headers, count,
                 () -> new FileChannelWritableSource(fileChannel, offset, count, closeOnComplete),
                 null,
                 false);
+    }
+
+    public static MicrohttpResponse withSecureFileBody(int status, String reason, List<Header> headers,
+                                                        MarshaledResponseBody.SecureFile file) {
+        requireNonNull(file);
+        long offset = file.getOffset();
+        long count = file.getCount();
+        validateFileRegion(offset, count);
+        return new MicrohttpResponse(status, reason, headers, count, () -> {
+            SeekableByteChannel channel = file.openChannel();
+            try {
+                if (channel instanceof FileChannel fileChannel)
+                    return new FileChannelWritableSource(fileChannel, offset, count, true);
+                return new SeekableChannelWritableSource(channel, offset, count);
+            } catch (IOException | RuntimeException failure) {
+                try {
+                    channel.close();
+                } catch (IOException closeFailure) {
+                    failure.addSuppressed(closeFailure);
+                }
+                throw failure;
+            }
+        }, null, false);
+    }
+
+    private static void validateFileRegion(long offset, long count) {
+        // Reject metadata before a lazy source can open a file or accept channel ownership.
+        if (offset < 0)
+            throw new IllegalArgumentException("Offset must be >= 0.");
+        if (count < 0)
+            throw new IllegalArgumentException("Count must be >= 0.");
+        if (Long.MAX_VALUE - offset < count)
+            throw new IllegalArgumentException("Offset plus count exceeds maximum supported file position.");
     }
 
     public static MicrohttpResponse withByteBufferBody(int status, String reason, List<Header> headers,

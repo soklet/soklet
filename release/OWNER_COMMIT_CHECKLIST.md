@@ -3,13 +3,19 @@
 This is a review checklist, not permission for an agent to stage, commit, push,
 tag, publish, or deploy. All commits remain owner-controlled. Preparation is
 not acceptance, and acceptance is not G5 publication approval. Preserve the
-approved K/L order and the existing 26-gate universe.
+approved K/L order and the existing 25-gate universe.
+
+The main `soklet.com` website is independently owner-deployed at any time.
+It has no candidate gate, release pin or frozen hash, required release tag,
+deployment-order requirement, or G4/U9/G5 dependency. Website changes do not
+require a new library candidate. The four packaged Javadoc sites retain their
+artifact provenance and publication contracts.
 
 ## Review each repository independently
 
 Apply this checklist to `soklet`, `soklet-servlet-javax`,
-`soklet-servlet-jakarta`, `soklet-otel`, `barebones-app`, `toystore-app`, and
-`soklet.com`, plus the four generated sites `javadoc.soklet.com`,
+`soklet-servlet-jakarta`, `soklet-otel`, `barebones-app`, and `toystore-app`,
+plus the four generated sites `javadoc.soklet.com`,
 `javax.javadoc.soklet.com`, `jakarta.javadoc.soklet.com`, and
 `otel.javadoc.soklet.com`. From each intended repository root, inspect:
 
@@ -27,8 +33,8 @@ Confirm the repository, intended branch, owner-reviewed scope, and destination
 before staging. Preserve unrelated work. A branch name does not prove which
 remote branch is the default or whether a hosting integration auto-deploys it;
 check the remote and actual hosting settings. In particular, verify both
-servlet repositories and the website deliberately, rather than assuming their
-current `main` checkout is an unpublished feature branch. No deployment policy
+servlet repositories deliberately, rather than assuming their current `main`
+checkout is an unpublished feature branch. No deployment policy
 was inferred from the absence of a checked-in workflow.
 
 Use explicit reviewed paths for staging, including new files. `git add -u`
@@ -60,20 +66,21 @@ repository's default branch. Before relying on `.github/workflows/release-valida
 the owner must verify that registration and the reviewed workflow version. If
 necessary, make a separately reviewed, non-deploying default-branch preparation
 change first. A workflow visible only on a feature branch is not a runnable
-release gate. Do not merge unrelated release content or trigger a website
-deployment merely to register it.
+release gate. Keep that core workflow preparation separate from independently
+managed website work.
 
 Finish code, dependency, documentation, changelog-date, and packaged-Javadoc
 repairs before G4. Build and independently reproduce the candidate artifacts;
 import the exact packaged Javadoc JARs into the four site previews and verify
 full payload parity. Then obtain owner-created, retrievable downstream commits
-and update the six candidate pins. The manifest must name the actual final
+and update the five candidate pins. The manifest must name the actual final
 commits, not earlier migrations or moving branch names. CI's pre-downstream core
 source pin is a separate acyclic build input; do not replace it with a future
 final core tag that depends on those same downstream receipts.
 
 G5 does not make these edits or regenerate artifacts. If a repair changes any
-approved input, prepare and accept a new candidate before publication.
+approved release input, prepare and accept a new candidate before publication.
+Main-website content is outside those release inputs.
 
 ## Load-bearing new files in the September 13–14 handoff
 
@@ -148,7 +155,11 @@ commit SHA. The verifier checks that identity and the declared core dependency
 before building; do not restore an arbitrary branch checkout or a version
 override that masks an incompatible baseline.
 
-### Website
+### Independent website content checks
+
+These checks support ordinary website quality and source-link review. They do
+not supply a release gate, pin the website, or constrain when the owner deploys
+it. The repository's README describes the independent build workflow.
 
 - `soklet.com/scripts/verify-core-blob-links.mjs`
 - `soklet.com/scripts/verify-core-blob-links-self-test.mjs`
@@ -185,8 +196,9 @@ Review exact artifact provenance, release version, API/deep links, and preview
 contents before replacing `dist`; preserve the old tree in a separate backup.
 Local generation is preparation only. Before deployment require the final
 accepted Javadoc JAR to match the reviewed import and verify hosting triggers.
-The Javadoc sites are still published after the accepted libraries and examples,
-before the main website; they are not additional candidate gates.
+The Javadoc sites are still published after the accepted libraries and examples;
+they are not additional candidate gates. Their order places no constraint on
+the independently deployed main website.
 
 ### ToyStore
 
@@ -236,12 +248,12 @@ before treating its gate as runnable.
    canonical Linux JDK 17 `mvn -B -ntp -Dgpg.skip=true clean verify` recipe.
    Require main, sources, and Javadoc JAR equality and install the exact main
    JAR/POM into an isolated rehearsal repository.
-3. Put those canonical main-JAR bytes into barebones; validate all six
+3. Put those canonical main-JAR bytes into barebones; validate all five
    downstreams, the nine packaged-consumer combinations, and preparatory
    client smoke against the canonical artifact. Finish tracked launch claims
    and obtain the owner's reviewed downstream commits. Confirm exact commits
    can be retrieved by the runner; do not push automatically.
-4. Repin the six downstream commits and associated metadata only after their
+4. Repin the five downstream commits and associated metadata only after their
    tested identities and executable paths are satisfied. Do not clear a
    security block merely because commits now exist.
 5. Obtain the owner's final core candidate commit, rebuild with the identical
@@ -249,7 +261,7 @@ before treating its gate as runnable.
    the main JAR to equal barebones' vendored bytes. A mismatch returns to
    preparation and affected downstream validation, not a parity waiver.
 6. Freeze the exact candidate commit/tree, run the required producer/review/
-   validation sequence and all 26 typed PASS receipts, and retain final client
+   validation sequence and all 25 typed PASS receipts, and retain final client
    smoke outside the immutable source tree. A tracked correction requires a
    new candidate and acceptance run.
 
@@ -262,15 +274,20 @@ candidate evidence, or separate publication approval.
 Before any owner-authorized push, inspect branch protections, CI triggers,
 hosting integrations, release automation, and the exact target branch. Choose
 an intentionally non-deploying branch or hold the triggering push where
-necessary. Repository publication and application/website deployment are
+necessary. Repository publication and application/Javadoc deployment are
 different actions; do not assume either happens automatically from a local
-commit. The website commit must exist before pinning and acceptance. Website
-deployment, not its preparation commit, is last in G5.
+commit.
 
 Under separate G5 authorization, preserve the established publication order:
-accepted core and public resolution, both adapters, OTel, examples, four
-Javadoc sites, then the website. Before website deployment, check its actual
-public URLs, not merely local paths. Check every dynamically discovered core
+accepted core and public resolution, both adapters, OTel, examples, and four
+Javadoc sites. Record the actual hosting trigger decision and public link
+results in the [G5 authorization and deployment evidence](G5_RELEASE_RUNBOOK.md),
+without editing the accepted candidate during promotion.
+
+For independent website work, use its own content checks and inspect actual
+public URLs, not merely local paths. The owner may deploy before, during, or
+after library publication without a release tag or candidate reacceptance.
+Check every dynamically discovered core
 `/blob/master/` target, including page links and navigation—not only newly
 added documents. From the website checkout, run its documented checker with
 `--core /absolute/soklet --core-ref FULL_40_CHARACTER_COMMIT_SHA --built-site /absolute/soklet.com/dist --live`
@@ -278,9 +295,6 @@ and retain its JSON output. It requires public HTTP 200 blob pages and public
 master file bytes matching the intended commit. A feature-branch commit does
 not make a default-branch link valid; a local-only pass is not a substitute.
 Check exact public Maven
-coordinates, download hashes, and Javadoc deep links as well. Failed links stop
-deployment; changing tracked URLs requires renewed preparation/acceptance.
-
-Record the actual hosting trigger decision and public link results in the
-[G5 authorization and deployment evidence](G5_RELEASE_RUNBOOK.md), without
-editing the accepted candidate during promotion.
+coordinates, download targets, and Javadoc deep links as well. These link checks
+are ordinary content-quality checks; their results and website edits do not
+enter the library's G5 receipt set or invalidate its candidate.

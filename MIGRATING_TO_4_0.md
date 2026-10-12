@@ -251,6 +251,9 @@ Request parsing also corrects these cases:
 
 The standard HTTP parser rejects HTTP/1.0 transfer encoding, malformed chunk
 extensions, and whitespace around a chunk size without a following extension.
+Transfer-coding parameters are also rejected: send `Transfer-Encoding: chunked`,
+not `Transfer-Encoding: chunked;foo=bar`. This restriction does not prohibit
+extensions on individual chunk-size lines, such as `4;name=value`.
 Method tokens are limited to 64 bytes; chunk-size lines, including extensions
 but excluding CRLF, are limited to 8,192 bytes. These are fixed bounds independent
 of the aggregate request-size setting. Malformed framing returns HTTP 400 and
@@ -271,6 +274,20 @@ Final ordinary responses require a status from `200` through `599`; returning
 a `1xx` or out-of-range status fails processing with HTTP `500`. Put a streaming
 body in `MarshaledResponse.streamingResponseBody(...)` or `.stream(...)`:
 the default response marshaler rejects `StreamingResponseBody` in `Response.body(...)`.
+
+The transport sends no body for 204, 205, or 304. A `205 Reset Content` always
+has `Content-Length: 0`, including HEAD responses and custom HEAD representation
+metadata. Resource methods returning 205 may omit the body or provide an empty
+string, empty byte array, or zero-length finite `MarshaledResponseBody`; these
+empty bodies normalize to absent. A nonempty 205 resource body or streaming
+body fails processing with HTTP 500. Resource methods returning 204 or 304 must
+still omit their body entirely; even an empty string or byte array is a present
+body for that existing validation rule. Custom marshaler hooks for framework
+responses (errors, OPTIONS, preflight, and missing routes) retain their previous
+behavior: their final status is validated and the transport omits bodies for
+204, 205, and 304. Audit resource methods that return these statuses separately
+from those hooks.
+
 Expected typed cancellation during streaming cleanup is quiet; independent
 producer, cleanup and transport failures remain observable. Client disconnect
 and server shutdown no longer produce routine `RESPONSE_STREAM_CANCELED` log
@@ -292,6 +309,34 @@ Rejected and ordinary finite responses on the SSE port discard application
 framing and hop-by-hop headers, including fields named by `Connection`, then
 emit one `Connection: close` and the actual body length. Bodyless status codes
 keep their body and length restrictions. Other headers and cookies remain.
+
+### HTTP dates and cookie expiry
+
+`HttpDate` resolves obsolete two-digit years using HTTP's moving fifty-year
+window before validating the calendar date and weekday. Invalid dates,
+including times written as `24:00:00`, are rejected. Send valid HTTP dates;
+an unparseable conditional date is ignored rather than becoming a usable
+cache validator.
+
+Cookie expiry follows a separate rule. When importing a `Set-Cookie` header,
+`ResponseCookie.fromSetCookieHeaderRepresentation(...)` maps years 00–69 to
+2000–2069 and 70–99 to 1970–1999; weekday text does not govern cookie expiry.
+Only an explicitly supplied `Max-Age` is retained, and zero or negative values
+normalize to zero. A positive explicit `Max-Age` remains authoritative when
+`Expires` is also present, independent of attribute order. An `Expires`-only
+cookie retains its absolute expiry without acquiring a synthesized `Max-Age`.
+This preserves classic deletion cookies such as
+`Expires=Thu, 01 Jan 70 00:00:00 GMT`.
+
+### MCP resource addresses
+
+Exact MCP resource URIs and URI templates reject scoped IPv6 literals, such as
+`http://[fe80::1%25eth0]/report`. Public factories and annotation processing
+reject these declarations before serving; an invalid client resource URI
+receives an invalid-parameters error. Use an ordinary IPv6 address or a stable
+application-owned absolute URI. Ordinary IPv6 templates remain supported;
+normalizing the scheme or host does not lowercase template captures, and
+captured values are decoded exactly once with UTF-8 percent escapes.
 
 ### HTTP streaming callbacks and sources
 
@@ -1460,8 +1505,28 @@ The four nested adapter builder types are now final. Internal mutation hooks
 `SokletHttpServletResponse.setPrintWriter(...)` are no longer public: use
 `HttpServletRequest.changeSessionId()` and `HttpServletResponse.getWriter()`
 for their supported servlet operations.
-Empty 204 and 304 responses remain bodyless through either conversion method;
+Empty 204, 205, and 304 responses remain bodyless through either conversion method;
 ordinary empty 200 responses retain their byte-array representation.
+
+Query parameters always use UTF-8, while an eligible URL-encoded POST body uses
+the request-body charset. Both adapters now fail with `IllegalRequestException`
+when parameter names or values contain malformed or unmappable bytes, instead
+of replacing them with U+FFFD. The default Soklet error marshaler returns HTTP
+400. Valid encoded U+FFFD remains legal. Parameter decoding shares one snapshot:
+a failure is retained and subsequent parameter accessors rethrow it. Set any
+body encoding before reading parameters or the request body, and fix malformed
+input at the caller rather than depending on replacement decoding.
+
+Concurrent `setAttribute(name, sameValue)` calls share an in-progress binding
+notification. An ordinary follower waits at most 200 milliseconds; on timeout
+or interruption it returns without a duplicate `valueBound` and may precede
+publication of the attribute. Interruption restores the thread's interrupt
+status. The pending owner still publishes the binding and balances later
+unbind notifications. A completed listener failure propagates to the owner and
+followers that observe it before returning. Listener reentry does not wait.
+Binding listeners should avoid waiting for work or locks that a concurrent
+setter may hold; the bounded wait prevents such application lock cycles from
+permanently blocking a request.
 
 Both `SokletHttpServletResponse` implementations still capture their entire body
 in memory and copy it into a finite response through `toMarshaledResponse()` or
@@ -1870,12 +1935,35 @@ that canonicalize case and Unicode aliases, resolvers receive directory-entry
 spelling; some Linux case-insensitive mounts retain the requested spelling instead.
 Do not use spelling-only access checks on those mounts; use a case-sensitive
 static root or policy suited to its filesystem. Distinct hard-link names keep their
-own policies. No-follow mode rejects a symbolic-link root and links below it,
-retains the configured ancestor path and resolves trusted ancestor links afresh.
-With `followSymlinks` enabled, the root target is resolved at construction;
-swapping an ancestor link does not retarget that helper. No-follow mode revalidates
-file identity after application resolvers. Keep the served directory namespace stable during
-response delivery; path-backed bodies do not provide an atomic filesystem snapshot.
+own policies. No-follow mode rejects a symbolic-link root and links below it
+and keeps the configured root spelling for resolver paths. Both symlink policies
+pin the resolved root directory at construction; replacing its pathname or an
+ancestor link does not retarget delivery. With `followSymlinks` enabled, only
+links resolving inside that root are eligible. Delivery opens each path component
+relative to a pinned directory descriptor without following replacement links
+and checks the opened file's identity against its approved metadata. Rebuild the
+helper when intentionally switching deployment roots.
+
+`StaticFiles` supports the default OpenJDK filesystem providers on Linux and
+macOS, on x86-64 and AArch64, including macOS Java 17 and 21 without public
+`SecureDirectoryStream` support. The descriptor bridge adds no external dependency
+and ordinarily needs no JVM flags. Custom or modular runtimes must make
+`jdk.unsupported` available and resolved and permit the bridge's access.
+Construction fails closed for unsupported providers, platforms or architectures,
+unavailable or changed JDK internals, denied access, installed SecurityManagers,
+or missing stable file identities.
+
+Keep served files immutable while responses are in flight: an open descriptor
+does not provide a snapshot of concurrent in-place writes. Custom resolvers that
+read paths or make policy decisions from mutable file contents cannot atomically
+bind their own reads to the later response body.
+
+Custom transports must handle `MarshaledResponseBody.SecureFile`, which
+`StaticFiles` produces under both symlink policies. Acquire its channel with
+`openChannel()`, seek to `getOffset()`, send exactly `getCount()` bytes, and close
+the returned channel after completion or failure. Opening a filesystem path
+separately discards the pinned-root and opened-file identity checks. Reject any
+body variant the transport does not support.
 
 The default response marshaler supplies Content-Type only when a body exists.
 Explicit representation headers, including headers for HEAD, are retained.

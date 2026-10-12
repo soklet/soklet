@@ -468,6 +468,53 @@ run('streaming helper-only wait and policy edits invalidate unchanged caller pro
   }
 });
 
+run('static-file wire probes compose whole-response controls under their guards', () => {
+  for (const [name, allowance, guard, reserve] of [
+    ['staticFilesSecureBodyReachesBuiltInHttpTransport', 12_000, 75_000, 13_000],
+    ['staticFilesLiveTransportNeverServesPostValidationSymlink', 6_000, 60_000, 4_000],
+  ]) {
+    const row = rowByName(INVENTORY, name);
+    assert.equal(row.review.generationCount, 1);
+    assert.equal(row.review.controlJoinMillis, allowance);
+    assert.equal(row.review.controlTopology, 'CONSERVATIVE_SEQUENTIAL_SUM');
+    assert.equal(row.review.lifecycleCoreBranchBoundsMillis.INCOMPLETE_CORE, 50_000);
+    assert.equal(row.review.totalComposedBoundMillis, 50_000 + allowance);
+    assert.equal(row.review.outerGuard.millis, guard);
+    assert.equal(row.review.reserveMillis, reserve);
+
+    const document = clone(INVENTORY);
+    rowByName(document, name).review.controlJoinMillis -= 1;
+    expectFailure(() => verifyDocument(document), /semantic closure rows/u);
+  }
+});
+
+run('static-file helper deadline and response cap edits invalidate unchanged owner proofs', () => {
+  const path = 'src/test/java/com/soklet/StaticFilesTests.java';
+  const originalTexts = sourceTexts(path);
+  const originalScopes = buildLifecycleScopeObservations(originalTexts);
+  for (const [before, after] of [
+    ['TimeUnit.SECONDS.toNanos(4)', 'TimeUnit.SECONDS.toNanos(8)'],
+    ['wire.size() > 8192 - read', 'wire.size() > 16384 - read'],
+    ['socket.connect(new InetSocketAddress("127.0.0.1", port), 2000)',
+      'socket.connect(new InetSocketAddress("127.0.0.1", port), 4000)'],
+  ]) {
+    const texts = new Map(originalTexts);
+    assert.ok(texts.get(path).includes(before));
+    texts.set(path, texts.get(path).replace(before, after));
+    const changed = buildLifecycleScopeObservations(texts);
+    for (const name of ['staticFilesSecureBodyReachesBuiltInHttpTransport',
+      'staticFilesLiveTransportNeverServesPostValidationSymlink']) {
+      const original = originalScopes.find((scope) => scope.scopeName === name);
+      const mutated = changed.find((scope) => scope.scopeName === name);
+      assert.equal(mutated.scopeSha256, original.scopeSha256,
+        'The owner callable is unchanged; its file hash must bind the wire helper.');
+      assert.notEqual(mutated.fileSha256, original.fileSha256);
+    }
+    expectFailure(() => buildReviewedLifecycleScopeRows(changed,
+      { requireRegistryCompleteness: false }), /override is stale/u);
+  }
+});
+
 run('SSE admission saturation composes its finite controls under a larger outer guard', () => {
   const row = rowByName(INVENTORY,
     'defaultConnectionAdmissionSaturatesAt256AndRecoversAfterDisconnect');

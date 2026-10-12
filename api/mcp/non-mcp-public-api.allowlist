@@ -13,6 +13,7 @@ com.soklet.LifecyclePolicy$Builder
 com.soklet.MarshaledResponse
 com.soklet.MarshaledResponse$Builder
 com.soklet.MarshaledResponse$Copier
+com.soklet.MarshaledResponseBody$SecureFile
 com.soklet.MetricsCollector$HistogramSnapshot
 com.soklet.MetricsCollector$HttpResponseStreamTerminationKey
 com.soklet.MetricsCollector$HttpServerRouteKey

@@ -58,6 +58,26 @@ class FiniteHttpResponseSafetyTests {
 	}
 
 	@Test
+	@Timeout(75)
+	void bodylessMarshalerHooksPreserveStatusAndPipelineFraming() throws Exception {
+		AtomicInteger status = new AtomicInteger();
+		ResponseMarshaler marshaler = ResponseMarshaler.builder().notFoundHandler(request ->
+				MarshaledResponse.withStatusCode(status.get()).body(new byte[]{1}).build()).build();
+		try (Fixture fixture = new Fixture(null, RequestInterceptor.defaultInstance(), marshaler)) {
+			for (int bodylessStatus : List.of(204, 205, 304)) {
+				status.set(bodylessStatus);
+				List<WireResponse> responses = fixture.boundedPipeline("GET", "/missing", "/clean");
+				assertEquals(bodylessStatus, responses.get(0).status());
+				assertEquals("", responses.get(0).body());
+				if (bodylessStatus == 205)
+					assertEquals(List.of("0"), responses.get(0).headers().get("content-length"));
+				assertEquals(200, responses.get(1).status());
+				assertEquals("def", responses.get(1).body());
+			}
+		}
+	}
+
+	@Test
 	void upgradeRequiredRetainsItsAdvertisementWithoutAcceptingUnsafeFraming() throws Exception {
 		try (Fixture fixture = new Fixture(null, RequestInterceptor.defaultInstance(), ResponseMarshaler.defaultInstance())) {
 			WireResponse response = fixture.pipeline("GET", "/upgrade", "/clean").get(0);

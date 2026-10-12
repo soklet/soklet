@@ -2181,7 +2181,12 @@ documentation examples rather than a Soklet verification surface. The later
 revision drift without within-response mixing, node loss, fresh-context
 subscription reconnect, node-local delivery, and cleanup through two
 simultaneous real loopback listeners. The format-v2 release contract now
-enumerates exactly 26 ordered gates. At the initial JDK 21 gate checkpoint, a
+enumerates exactly 25 ordered gates. The owner's October 12 policy removes
+the main `soklet.com` website from candidate validation: the owner may deploy
+it independently at any time, without release pins, frozen hashes, a required
+release tag, or deployment-order coupling. The four packaged Javadoc sites
+retain their library-artifact provenance and publication contracts.
+At the initial JDK 21 gate checkpoint, a
 same-version macOS arm64 Corretto 21.0.12.9.1 run passed the full core
 `clean test` at 1,681/0/0/4; static analysis reports `BUILD SUCCESS` with the
 existing advisory inventory after the `SelfAssignment` fix, and SpotBugs
@@ -2189,7 +2194,7 @@ reports zero bugs and errors. The exact
 checksum-pinned Corretto 21.0.12.9.1 toolchain now drives `core-jdk-21`,
 `static-analysis`, and `spotbugs`. Twenty gates are dispatch-configured
 with executable `READY` paths, and none remain `BLOCKED_HARNESS_MISSING`; the
-six downstreams remain `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, leaving six
+five downstreams remain `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`, leaving five
 fail-closed blockers. `READY` means configured, never passed. The matrix-closure
 hook is `READY`, and the candidate-contained registry and residual evidence
 produce a canonical `PASSED` report at 113 `CORE_COMPLETE`, 119
