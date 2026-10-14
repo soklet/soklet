@@ -221,9 +221,9 @@ public class McpHttpServerRuntimeTests {
 				empty.getMessage());
 
 		McpHttpEndpointBinding first = endpointBinding(
-				"/same", "first", ignored -> completeResult("first"));
+				"/same", "first", ignored -> McpApplicationDispatchOutcome.completed(completeResult("first")));
 		McpHttpEndpointBinding second = endpointBinding(
-				"/same", "second", ignored -> completeResult("second"));
+				"/same", "second", ignored -> McpApplicationDispatchOutcome.completed(completeResult("second")));
 		IllegalArgumentException duplicate = Assertions.assertThrows(
 				IllegalArgumentException.class,
 				() -> new McpHttpServerRuntime(configuration,
@@ -266,9 +266,9 @@ public class McpHttpServerRuntimeTests {
 		McpHttpServerRuntime runtime = new McpHttpServerRuntime(configuration,
 				List.of(
 						endpointBinding(asciiBoundary, "boundary",
-								ignored -> completeResult("boundary")),
+								ignored -> McpApplicationDispatchOutcome.completed(completeResult("boundary"))),
 						endpointBinding(percentEncodedPath, "encoded",
-								ignored -> completeResult("encoded"))));
+								ignored -> McpApplicationDispatchOutcome.completed(completeResult("encoded")))));
 		try {
 			int port = runtime.start().getPort();
 			RawResponse response = send(port, "POST", asciiBoundary,
@@ -300,10 +300,10 @@ public class McpHttpServerRuntimeTests {
 		AtomicInteger betaInterceptions = new AtomicInteger();
 		McpHttpEndpointBinding alpha = endpointBinding("/alpha", "alpha",
 				alphaAdmissions, alphaInterceptions,
-				ignored -> completeResult("alpha"));
+				ignored -> McpApplicationDispatchOutcome.completed(completeResult("alpha")));
 		McpHttpEndpointBinding beta = endpointBinding("/beta", "beta",
 				betaAdmissions, betaInterceptions,
-				ignored -> completeResult("beta"));
+				ignored -> McpApplicationDispatchOutcome.completed(completeResult("beta")));
 		McpHttpServerRuntime runtime = new McpHttpServerRuntime(
 				configuration(0), List.of(alpha, beta));
 
@@ -362,10 +362,10 @@ public class McpHttpServerRuntimeTests {
 			Assertions.assertTrue(releaseAlpha.await(10,
 					TimeUnit.SECONDS),
 					"Timed out waiting to release the alpha endpoint");
-			return completeResult("alpha");
+			return McpApplicationDispatchOutcome.completed(completeResult("alpha"));
 		});
 		McpHttpEndpointBinding beta = endpointBinding(
-				"/beta", "beta", ignored -> completeResult("beta"));
+				"/beta", "beta", ignored -> McpApplicationDispatchOutcome.completed(completeResult("beta")));
 		McpHttpServerRuntime runtime = new McpHttpServerRuntime(
 				configuration(0), List.of(alpha, beta),
 				McpJsonLimits.productionDefaults(),
@@ -423,14 +423,14 @@ public class McpHttpServerRuntimeTests {
 			Assertions.assertTrue(releaseAlpha.await(10,
 					TimeUnit.SECONDS),
 					"Timed out waiting to release the alpha endpoint");
-			return completeResult("alpha");
+			return McpApplicationDispatchOutcome.completed(completeResult("alpha"));
 		});
 		McpHttpEndpointBinding beta = endpointBinding("/beta", "beta", ignored -> {
 			betaEntered.countDown();
 			Assertions.assertTrue(releaseBeta.await(10,
 					TimeUnit.SECONDS),
 					"Timed out waiting to release the beta endpoint");
-			return completeResult("beta");
+			return McpApplicationDispatchOutcome.completed(completeResult("beta"));
 		});
 		McpHttpServerRuntime runtime = new McpHttpServerRuntime(
 				configuration(0), List.of(alpha, beta),

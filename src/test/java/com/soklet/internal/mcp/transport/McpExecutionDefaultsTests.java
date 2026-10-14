@@ -37,9 +37,6 @@ public class McpExecutionDefaultsTests {
 	@Test
 	public void transport_configuration_accepts_the_selected_defaults_for_both_strategies() {
 		for (McpThreadStrategy threadStrategy : McpThreadStrategy.values()) {
-			if (!threadStrategy.supported())
-				continue;
-
 			McpTransportConfiguration configuration = new McpTransportConfiguration(
 					"127.0.0.1",
 					0,
@@ -66,11 +63,11 @@ public class McpExecutionDefaultsTests {
 	@Test
 	public void application_workers_are_daemon_for_every_supported_strategy() throws Exception {
 		for (McpThreadStrategy strategy : McpThreadStrategy.values()) {
-			if (!strategy.supported()) continue;
 			java.util.concurrent.ExecutorService executor = strategy.createExecutor(1, "daemon-strategy-", (thread, failure) -> { });
 			try {
 				Thread worker = executor.submit(Thread::currentThread).get(2, java.util.concurrent.TimeUnit.SECONDS);
 				Assertions.assertTrue(worker.isDaemon());
+				Assertions.assertEquals(strategy == McpThreadStrategy.VIRTUAL, worker.isVirtual());
 				Assertions.assertTrue(worker.getName().startsWith("daemon-strategy-"));
 			} finally {
 				executor.shutdownNow();

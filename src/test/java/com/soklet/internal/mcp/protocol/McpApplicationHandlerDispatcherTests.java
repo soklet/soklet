@@ -37,6 +37,74 @@ import java.util.function.BooleanSupplier;
 @NotThreadSafe
 public class McpApplicationHandlerDispatcherTests {
 	@Test
+	public void queuedPromotionAndCallbacksKeepEachTicketsMetricSequence() throws Exception {
+		ManualExecutorService executor = new ManualExecutorService();
+		SequenceRecordingObserver observer = new SequenceRecordingObserver();
+		McpApplicationHandlerDispatcher dispatcher = new McpApplicationHandlerDispatcher(1, 1, executor, observer);
+		McpApplicationHandlerDispatcher.Ticket first;
+		McpApplicationHandlerDispatcher.Ticket second;
+		McpApplicationHandlerDispatcher.Ticket rejected;
+		try (var scope = observer.useMetricSequence(new NamedMetricSequence("first"))) {
+			first = dispatcher.newTicket(() -> observer.record("work"),
+					failure -> observer.record("unexpected-failure"),
+					failure -> observer.record("cancel"), () -> observer.record("exit"));
+		}
+		try (var scope = observer.useMetricSequence(new NamedMetricSequence("second"))) {
+			second = dispatcher.newTicket(() -> {
+				observer.record("work");
+				throw new IllegalStateException("Expected handler failure.");
+			}, failure -> observer.record("failure"),
+					failure -> observer.record("cancel"), () -> observer.record("exit"));
+		}
+		try (var scope = observer.useMetricSequence(new NamedMetricSequence("rejected"))) {
+			rejected = dispatcher.newTicket(() -> observer.record("unexpected-work"),
+					failure -> observer.record("unexpected-failure"));
+		}
+		NamedMetricSequence unrelated = new NamedMetricSequence("unrelated");
+		try (var scope = observer.useMetricSequence(unrelated)) {
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.Admission.DISPATCHED, dispatcher.admit(first));
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.Admission.QUEUED, dispatcher.admit(second));
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.Admission.REJECTED, dispatcher.admit(rejected));
+			executor.command().run();
+			Assertions.assertSame(unrelated, observer.currentMetricSequence());
+			Assertions.assertEquals(List.of("started:first", "queued:second", "capacity:rejected",
+					"work:first", "finished:first", "dequeued:second", "started:second", "exit:first",
+					"work:second", "failure:second", "finished:second", "exit:second"), observer.events);
+			Assertions.assertEquals(0, dispatcher.snapshot().activeSlots());
+			Assertions.assertEquals(0, dispatcher.snapshot().queueDepth());
+		} finally {
+			stop(dispatcher, executor);
+		}
+		Assertions.assertNull(observer.currentMetricSequence());
+	}
+
+	@Test
+	public void shutdownCancellationKeepsTheCanceledTicketsMetricSequence() throws Exception {
+		ManualExecutorService executor = new ManualExecutorService();
+		SequenceRecordingObserver observer = new SequenceRecordingObserver();
+		McpApplicationHandlerDispatcher dispatcher = new McpApplicationHandlerDispatcher(1, 1, executor, observer);
+		try {
+			for (String name : List.of("active", "queued")) {
+				try (var scope = observer.useMetricSequence(new NamedMetricSequence(name))) {
+					McpApplicationHandlerDispatcher.Ticket ticket = dispatcher.newTicket(() -> {},
+							failure -> observer.record("failure"), failure -> observer.record("cancel"),
+							() -> observer.record("exit"));
+					dispatcher.admit(ticket);
+				}
+			}
+			Runnable cancel = dispatcher.stopAcceptingAndReserveCancellation(new IllegalStateException("Stopping."));
+			cancel.run();
+			cancel.run();
+			executor.command().run();
+			Assertions.assertEquals(List.of("started:active", "queued:queued", "dequeued:queued",
+					"cancel:queued", "exit:queued", "cancel:active", "finished:active", "exit:active"), observer.events);
+			Assertions.assertNull(observer.currentMetricSequence());
+		} finally {
+			stop(dispatcher, executor);
+		}
+	}
+
+	@Test
 	public void physicalExitObserverRunsOnceAfterSlotAccounting() throws Exception {
 		ExecutorService executor = singleThreadExecutor(
 				"mcp-application-physical-exit-test");
@@ -845,6 +913,34 @@ public class McpApplicationHandlerDispatcherTests {
 		Assertions.assertTrue(condition.getAsBoolean(), "Condition did not become true in time.");
 	}
 
+	private record NamedMetricSequence(String name) implements McpApplicationExecutionObserver.MetricSequence {}
+
+	private static final class SequenceRecordingObserver extends RecordingExecutionObserver {
+		private final ThreadLocal<MetricSequence> current = new ThreadLocal<>();
+		private final List<String> events = new CopyOnWriteArrayList<>();
+
+		@Override public MetricSequence currentMetricSequence() { return this.current.get(); }
+
+		@Override public MetricScope useMetricSequence(MetricSequence sequence) {
+			MetricSequence previous = this.current.get();
+			if (sequence == null) this.current.remove(); else this.current.set(sequence);
+			return () -> {
+				if (previous == null) this.current.remove(); else this.current.set(previous);
+			};
+		}
+
+		private void record(String event) {
+			MetricSequence sequence = this.current.get();
+			this.events.add(event + ":" + (sequence instanceof NamedMetricSequence named ? named.name() : "none"));
+		}
+
+		@Override public void recordHandlerExecutionStarted() { record("started"); }
+		@Override public void recordHandlerExecutionFinished() { record("finished"); }
+		@Override public void recordHandlerQueued() { record("queued"); }
+		@Override public void recordHandlerDequeued() { record("dequeued"); }
+		@Override public void recordHandlerCapacityRejected() { record("capacity"); }
+	}
+
 	private static class RecordingExecutionObserver
 			implements McpApplicationExecutionObserver {
 		private final List<String> transitions;
@@ -950,6 +1046,16 @@ public class McpApplicationHandlerDispatcherTests {
 			this.dispatcherReference = dispatcherReference;
 			this.recordAttempts = new AtomicInteger();
 			this.successfulDrainReentries = new AtomicInteger();
+		}
+
+		@Override
+		public MetricSequence currentMetricSequence() {
+			throw new IllegalStateException("Synthetic metric sequence capture failure.");
+		}
+
+		@Override
+		public MetricScope useMetricSequence(MetricSequence sequence) {
+			throw new IllegalStateException("Synthetic metric scope acquisition failure.");
 		}
 
 		@Override

@@ -25,10 +25,6 @@ import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.ByteArrayOutputStream;
 import java.lang.Thread.UncaughtExceptionHandler;
-import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
-import java.lang.invoke.MethodHandles.Lookup;
-import java.lang.invoke.MethodType;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -72,7 +68,6 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class Utilities {
-	private static final boolean VIRTUAL_THREADS_AVAILABLE;
 	private static final byte @NonNull [] EMPTY_BYTE_ARRAY;
 	@NonNull
 	private static final Pattern HEAD_WHITESPACE_PATTERN;
@@ -83,19 +78,6 @@ public final class Utilities {
 
 	static {
 		EMPTY_BYTE_ARRAY = new byte[0];
-
-		boolean virtualThreadsAvailable = false;
-
-		try {
-			// Detect if Virtual Threads are usable by feature testing via reflection.
-			// Hat tip to https://github.com/javalin/javalin for this technique
-			Class.forName("java.lang.Thread$Builder$OfVirtual");
-			virtualThreadsAvailable = true;
-		} catch (Exception ignored) {
-			// We don't care why this failed, but if we're here we know JVM does not support virtual threads
-		}
-
-		VIRTUAL_THREADS_AVAILABLE = virtualThreadsAvailable;
 
 		// See https://www.regular-expressions.info/unicode.html
 		// \p{Z} or \p{Separator}: Unicode space-separator characters.
@@ -114,122 +96,36 @@ public final class Utilities {
 	}
 
 	/**
-	 * Does the platform runtime support virtual threads (either Java 19 and 20 w/preview enabled or Java 21+)?
-	 *
-	 * @return {@code true} if the runtime supports virtual threads, {@code false} otherwise
-	 */
-	@NonNull
-	static Boolean virtualThreadsAvailable() {
-		return VIRTUAL_THREADS_AVAILABLE;
-	}
-
-	/**
-	 * Provides a virtual thread factory if supported by the runtime.
-	 * <p>
-	 * In order to support Soklet users who are not yet ready to enable virtual threads (those <strong>not</strong> running either Java 19 and 20 w/preview enabled or Java 21+),
-	 * we compile Soklet with a source level &lt; 19 and avoid any hard references to virtual threads by dynamically creating our {@link ThreadFactory} via {@link MethodHandle} references.
-	 * <p>
-	 * <strong>You should not call this method if {@link Utilities#virtualThreadsAvailable()} is {@code false}.</strong>
+	 * Provides a virtual thread factory.
 	 *
 	 * @param threadNamePrefix         thread name prefix for the virtual thread factory builder
 	 * @param uncaughtExceptionHandler uncaught exception handler for the virtual thread factory builder
 	 * @return a virtual thread factory
-	 * @throws IllegalStateException if the runtime environment does not support virtual threads
 	 */
 	@NonNull
 	static ThreadFactory createVirtualThreadFactory(@NonNull String threadNamePrefix,
-																									@NonNull UncaughtExceptionHandler uncaughtExceptionHandler) {
+			@NonNull UncaughtExceptionHandler uncaughtExceptionHandler) {
 		requireNonNull(threadNamePrefix);
 		requireNonNull(uncaughtExceptionHandler);
 
-		if (!virtualThreadsAvailable())
-			throw new IllegalStateException("Virtual threads are not available. Please confirm you are using Java 19-20 with the '--enable-preview' javac parameter specified or Java 21+");
-
-		// Hat tip to https://github.com/javalin/javalin for this technique
-		Class<?> threadBuilderOfVirtualClass;
-
-		try {
-			threadBuilderOfVirtualClass = Class.forName("java.lang.Thread$Builder$OfVirtual");
-		} catch (ClassNotFoundException e) {
-			throw new IllegalStateException("Unable to load virtual thread builder class", e);
-		}
-
-		Lookup lookup = MethodHandles.publicLookup();
-
-		MethodHandle methodHandleThreadOfVirtual;
-		MethodHandle methodHandleThreadBuilderOfVirtualName;
-		MethodHandle methodHandleThreadBuilderOfVirtualUncaughtExceptionHandler;
-		MethodHandle methodHandleThreadBuilderOfVirtualFactory;
-
-		try {
-			methodHandleThreadOfVirtual = lookup.findStatic(Thread.class, "ofVirtual", MethodType.methodType(threadBuilderOfVirtualClass));
-			methodHandleThreadBuilderOfVirtualName = lookup.findVirtual(threadBuilderOfVirtualClass, "name", MethodType.methodType(threadBuilderOfVirtualClass, String.class, long.class));
-			methodHandleThreadBuilderOfVirtualUncaughtExceptionHandler = lookup.findVirtual(threadBuilderOfVirtualClass, "uncaughtExceptionHandler", MethodType.methodType(threadBuilderOfVirtualClass, UncaughtExceptionHandler.class));
-			methodHandleThreadBuilderOfVirtualFactory = lookup.findVirtual(threadBuilderOfVirtualClass, "factory", MethodType.methodType(ThreadFactory.class));
-		} catch (NoSuchMethodException | IllegalAccessException e) {
-			throw new IllegalStateException("Unable to load method handle for virtual thread factory", e);
-		}
-
-		try {
-			// Thread.ofVirtual()
-			Object virtualThreadBuilder = methodHandleThreadOfVirtual.invoke();
-			// .name(threadNamePrefix, start)
-			methodHandleThreadBuilderOfVirtualName.invoke(virtualThreadBuilder, threadNamePrefix, 1);
-			// .uncaughtExceptionHandler(uncaughtExceptionHandler)
-			methodHandleThreadBuilderOfVirtualUncaughtExceptionHandler.invoke(virtualThreadBuilder, uncaughtExceptionHandler);
-			// .factory();
-			return (ThreadFactory) methodHandleThreadBuilderOfVirtualFactory.invoke(virtualThreadBuilder);
-		} catch (Throwable t) {
-			throw new IllegalStateException("Unable to create virtual thread factory", t);
-		}
+		return Thread.ofVirtual()
+				.name(threadNamePrefix, 1L)
+				.uncaughtExceptionHandler(uncaughtExceptionHandler)
+				.factory();
 	}
 
 	/**
-	 * Provides a virtual-thread-per-task executor service if supported by the runtime.
-	 * <p>
-	 * In order to support Soklet users who are not yet ready to enable virtual threads (those <strong>not</strong> running either Java 19 and 20 w/preview enabled or Java 21+),
-	 * we compile Soklet with a source level &lt; 19 and avoid any hard references to virtual threads by dynamically creating our executor service via {@link MethodHandle} references.
-	 * <p>
-	 * <strong>You should not call this method if {@link Utilities#virtualThreadsAvailable()} is {@code false}.</strong>
-	 * <pre>{@code // This method is effectively equivalent to this code
-	 * return Executors.newThreadPerTaskExecutor(
-	 *   Thread.ofVirtual()
-	 *    .name(threadNamePrefix)
-	 *    .uncaughtExceptionHandler(uncaughtExceptionHandler)
-	 *    .factory()
-	 * );}</pre>
+	 * Provides a virtual-thread-per-task executor service.
 	 *
 	 * @param threadNamePrefix         thread name prefix for the virtual thread factory builder
 	 * @param uncaughtExceptionHandler uncaught exception handler for the virtual thread factory builder
 	 * @return a virtual-thread-per-task executor service
-	 * @throws IllegalStateException if the runtime environment does not support virtual threads
 	 */
 	@NonNull
 	static ExecutorService createVirtualThreadsNewThreadPerTaskExecutor(@NonNull String threadNamePrefix,
-																																			@NonNull UncaughtExceptionHandler uncaughtExceptionHandler) {
-		requireNonNull(threadNamePrefix);
-		requireNonNull(uncaughtExceptionHandler);
-
-		if (!virtualThreadsAvailable())
-			throw new IllegalStateException("Virtual threads are not available. Please confirm you are using Java 19-20 with the '--enable-preview' javac parameter specified or Java 21+");
-
-		ThreadFactory threadFactory = createVirtualThreadFactory(threadNamePrefix, uncaughtExceptionHandler);
-
-		Lookup lookup = MethodHandles.publicLookup();
-		MethodHandle methodHandleExecutorsNewThreadPerTaskExecutor;
-
-		try {
-			methodHandleExecutorsNewThreadPerTaskExecutor = lookup.findStatic(Executors.class, "newThreadPerTaskExecutor", MethodType.methodType(ExecutorService.class, ThreadFactory.class));
-		} catch (NoSuchMethodException | IllegalAccessException e) {
-			throw new IllegalStateException("Unable to load method handle for virtual thread factory", e);
-		}
-
-		try {
-			// return Executors.newThreadPerTaskExecutor(threadFactory);
-			return (ExecutorService) methodHandleExecutorsNewThreadPerTaskExecutor.invoke(threadFactory);
-		} catch (Throwable t) {
-			throw new IllegalStateException("Unable to create virtual thread executor service", t);
-		}
+			@NonNull UncaughtExceptionHandler uncaughtExceptionHandler) {
+		return Executors.newThreadPerTaskExecutor(
+				createVirtualThreadFactory(threadNamePrefix, uncaughtExceptionHandler));
 	}
 
 	/**

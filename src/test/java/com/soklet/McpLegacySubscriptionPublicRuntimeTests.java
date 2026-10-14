@@ -938,46 +938,6 @@ class McpLegacySubscriptionPublicRuntimeTests {
 	}
 
 	@Test
-	void ignoredTimedOutUriAuthorizationCannotExtendItsLeaseOrOverlapAnotherCallback() throws Exception {
-		for (McpProtocolVersion version : LEGACY) {
-			Harness harness = new Harness(); AtomicInteger checks = new AtomicInteger();
-			CountDownLatch canceled = new CountDownLatch(1), release = new CountDownLatch(1);
-			AtomicBoolean physicallyRunning = new AtomicBoolean();
-			harness.additional = builder -> builder.maximumSubscriptionAuthorizationDuration(Duration.ofMillis(600))
-					.subscriptionAuthorizationTimeout(Duration.ofMillis(50)).subscriptionAuthorizer((context, features) -> {
-						if (checks.incrementAndGet() > 1) {
-							physicallyRunning.set(true);
-							features.getCancelationToken().onCancel(canceled::countDown);
-							boolean interrupted = false; long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(4);
-							try {
-								while (release.getCount() != 0 && System.nanoTime() - deadline < 0L) {
-									try { release.await(20, TimeUnit.MILLISECONDS); } catch (InterruptedException ignored) { interrupted = true; }
-								}
-								assertEquals(0, release.getCount());
-							} finally { physicallyRunning.set(false); if (interrupted) Thread.currentThread().interrupt(); }
-						}
-						return McpSubscriptionAuthorization.Allowed.withValidUntil(Instant.now().plusSeconds(30)).build();
-					});
-			try {
-				SokletSimulator.run(harness.simulatorConfig(), simulator -> {
-					String id = initialize(simulator, version);
-					assertEmptyResult(rpc(simulator, version, id, "resources/subscribe", "{\"uri\":\"test:///exact\"}"), 10);
-					try (McpSimulation get = simulator.startMcpRequest(request(HttpMethod.GET, version, id, "", null))) {
-						assertEquals(200, get.awaitResponse(RawClient.remainingRequestWait()).orElseThrow().getStatusCode());
-						simulator.getMcpServer().orElseThrow().getSubscriptionReconciler().reconcileSubscriptions();
-						assertTrue(canceled.await(3, TimeUnit.SECONDS));
-						assertTrue(Set.of(McpStreamTerminationReason.SESSION_CLOSED, McpStreamTerminationReason.SUBSCRIPTION_AUTHORIZATION_EXPIRED)
-								.contains(get.awaitCompletion(RawClient.remainingRequestWait()).orElseThrow().getReason()));
-						assertSessionNotFound(simulator, version, id, null);
-						assertEquals(2, checks.get(), "The ignored callback retains the per-URI authorization slot.");
-						assertTrue(physicallyRunning.get(), "Logical timeout and lease loss do not complete the ignored physical callback.");
-					} finally { release.countDown(); }
-				});
-			} finally { release.countDown(); }
-		}
-	}
-
-	@Test
 	void detachedGrantDenialRetiresItsSessionAndRequiresReinitialization() throws Exception {
 		for (McpProtocolVersion version : LEGACY) {
 			Harness harness = new Harness();

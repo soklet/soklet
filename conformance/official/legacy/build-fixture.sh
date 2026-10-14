@@ -34,12 +34,12 @@ if grep -n 'com\.soklet\.internal' "$SOURCE" "$RUNTIME_SOURCE"; then
 fi
 
 mkdir -p "$CLASSES_DIR"
-javac --release 17 -proc:none -Xlint:all -Werror \
+javac --release 21 -proc:none -Xlint:all -Werror \
   -classpath "$CANDIDATE_JAR" \
   -d "$CLASSES_DIR" \
   "$SOURCE" "$RUNTIME_SOURCE"
 
-jdeps -q --multi-release 17 -verbose:class \
+jdeps -q --multi-release 21 -verbose:class \
   -classpath "$CANDIDATE_JAR" "$CLASSES_DIR" \
   > "$DEPENDENCIES_FILE"
 if grep -n 'com\.soklet\.internal' "$DEPENDENCIES_FILE"; then

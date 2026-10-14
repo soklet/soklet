@@ -379,8 +379,8 @@ public class McpHttpServerCustomHeaderTests {
 		McpApplicationRequestRouter router = McpApplicationRequestRouter.fromHandlers(
 				Map.of(METHOD, ignored -> {
 					handlers.incrementAndGet();
-					return McpWireResult.complete(new McpJsonObject(
-							Map.of("ok", McpJsonBoolean.TRUE)));
+					return McpApplicationDispatchOutcome.completed(McpWireResult.complete(new McpJsonObject(
+							Map.of("ok", McpJsonBoolean.TRUE))));
 				}));
 		return new McpHttpServerRuntime(
 				McpHttpTransportConfiguration.productionDefaults(0), policy, endpoint,

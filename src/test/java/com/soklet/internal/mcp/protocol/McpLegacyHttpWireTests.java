@@ -324,9 +324,9 @@ public class McpLegacyHttpWireTests {
 		McpApplicationCompletionRoute completionRoute = new McpApplicationCompletionRoute(
 				(invocation, argumentName, argumentValue, contextArguments) -> {
 					entries.incrementAndGet();
-					return McpWireResult.complete(new McpJsonObject(Map.of(
+					return McpApplicationDispatchOutcome.completed(McpWireResult.complete(new McpJsonObject(Map.of(
 							"completion", new McpJsonObject(Map.of("values",
-									new McpJsonArray(List.of(new McpJsonString("modern"))))))));
+									new McpJsonArray(List.of(new McpJsonString("modern")))))))));
 				}, Set.of("value"), Set.of("2026-07-28"));
 		McpApplicationRequestRouter router = McpApplicationRequestRouter
 				.fromFrameworkHandlersAndCompletionRoutes(Map.of(), Map.of(), Map.of(),
@@ -672,11 +672,11 @@ public class McpLegacyHttpWireTests {
 									Optional.of("working"));
 						}
 					}
-					return McpWireResult.complete(new McpJsonObject(Map.of(
+					return McpApplicationDispatchOutcome.completed(McpWireResult.complete(new McpJsonObject(Map.of(
 							"content", new McpJsonArray(List.of(
 								new McpJsonObject(Map.of(
 										"type", new McpJsonString("text"),
-										"text", new McpJsonString("ok"))))))));
+										"text", new McpJsonString("ok")))))))));
 				}));
 		McpHttpEndpointBinding binding = new McpHttpEndpointBinding(policy,
 				modern, router, McpRuntimeObservationSink.disabledInstance(),
@@ -944,8 +944,8 @@ public class McpLegacyHttpWireTests {
 				.fromToolRoutes(Map.of("modern-only", new McpApplicationToolRoute(
 						invocation -> {
 							handlerCalls.incrementAndGet();
-							return McpWireResult.complete(new McpJsonObject(Map.of(
-									"content", new McpJsonArray(List.of()))));
+							return McpApplicationDispatchOutcome.completed(McpWireResult.complete(new McpJsonObject(Map.of(
+									"content", new McpJsonArray(List.of())))));
 						}, request -> McpRateLimitDecision.allowed())));
 		McpHttpEndpointPolicy sharedPolicy = McpHttpEndpointPolicy.forDiscovery(
 				CorsAuthorizer.rejectAllInstance(),

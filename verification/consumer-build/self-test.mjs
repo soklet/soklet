@@ -43,30 +43,34 @@ try {
     test(`malformed or duplicate arguments fail: ${args.join(' ')}`, () =>
       assert.throws(() => parseArguments(args)));
   }
-  for (const feature of [17, 21, 25]) {
+  for (const feature of [21, 25]) {
     test(`consumer Java ${feature} source selection`, () => {
       assert.equal(javaFeatureVersion(`openjdk version "${feature}.0.1" 2026-01-01`), feature);
       const fixture = join(temporary, `fixture-${feature}`);
-      assert.equal(materializeFixture(source, fixture, feature), feature >= 21 ? 'HTTP_MCP_SSE' : 'HTTP_MCP');
-      assert.equal(existsSync(join(fixture, 'src/main/java/example/ConsumerSseEndpoints.java')), feature >= 21);
+      assert.equal(materializeFixture(source, fixture, feature), 'HTTP_MCP_SSE');
+      assert.equal(existsSync(join(fixture, 'src/main/java/example/ConsumerSseEndpoints.java')), true);
       assert.ok(readFileSync(join(fixture, 'src/main/java/example/ConsumerEndpoints.java'))
         .equals(readFileSync(join(source, 'src/main/java/example/ConsumerEndpoints.java'))));
       assert.equal(existsSync(join(fixture, 'src/sse')), false);
       assert.throws(() => materializeFixture(source, fixture, feature), /must not already exist/u);
-      requirePositiveOutput(`Consumer HTTP/MCP${feature >= 21 ? '/SSE' : ''} packaged routing passed on Java ${feature}\n`, feature);
+      requirePositiveOutput(`Consumer HTTP/MCP/SSE packaged routing passed on Java ${feature}\n`, feature);
     });
   }
   test('early-access Java feature is recognized', () =>
     assert.equal(javaFeatureVersion('openjdk version "25-ea"'), 25));
-  for (const version of ['openjdk version "16.0.2"', 'java version "1.8.0"', 'unknown runtime']) {
+  for (const version of ['openjdk version "16.0.2"', 'openjdk version "17.0.12"', 'openjdk version "20.0.2"',
+    'java version "1.8.0"', 'unknown runtime']) {
     test(`unsupported or unrecognized runtime fails: ${version}`, () =>
-      assert.throws(() => javaFeatureVersion(version), /Java 17 or newer/u));
+      assert.throws(() => javaFeatureVersion(version), /Java 21 or newer/u));
   }
-  test('source materialization rejects unsupported runtimes', () =>
-    assert.throws(() => materializeFixture(source, join(temporary, 'bad-runtime'), 16), /Java 17 or newer/u));
+  test('source materialization rejects unsupported runtimes', () => {
+    for (const feature of [17, 20, NaN])
+      assert.throws(() => materializeFixture(source, join(temporary, 'bad-runtime'), feature), /Java 21 or newer/u);
+  });
   test('routing output cannot claim unsupported SSE or the wrong Java version', () => {
     assert.throws(() => requirePositiveOutput('Consumer HTTP/MCP/SSE packaged routing passed on Java 17', 17));
     assert.throws(() => requirePositiveOutput('Consumer HTTP/MCP packaged routing passed on Java 21', 21));
+    assert.throws(() => requirePositiveOutput('Consumer HTTP/MCP/SSE packaged routing passed on Java 25', 21));
   });
   for (const name of ['missing-http-index', 'corrupt-http-index', 'no-processor']) {
     test(`negative result requires exact framework rejection: ${name}`, () => {
@@ -80,7 +84,7 @@ try {
 
   const helperClasses = join(temporary, 'helper-classes');
   mkdirSync(helperClasses);
-  run(binary('javac'), ['--release', '17', '-proc:none', '-d', helperClasses,
+  run(binary('javac'), ['--release', '21', '-proc:none', '-d', helperClasses,
     join(source, 'tools/ConsumerJarMutation.java')]);
   const originalTree = join(temporary, 'original');
   const mcpBytes = Buffer.from('example.Endpoint|example.Provider\n', 'utf8');

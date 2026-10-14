@@ -16,6 +16,7 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import com.soklet.McpRequestOutcome;
 import com.soklet.StreamTerminationReason;
 import com.soklet.internal.microhttp.MicrohttpRequest;
 import org.junit.jupiter.api.Assertions;
@@ -50,8 +51,9 @@ public class McpApplicationInterceptionTests {
 				(invocation, continuation) -> {
 					Assertions.assertSame(identity, invocation.admissionIdentity());
 					stages.add("interceptor-before");
-					McpWireResult downstream = continuation.invoke();
-					Assertions.assertEquals("handler", resultValue(downstream));
+					McpApplicationDispatchOutcome downstream = continuation.invoke();
+					Assertions.assertEquals("handler", resultValue(Assertions.assertInstanceOf(
+							McpApplicationDispatchOutcome.Completed.class, downstream).getValue()));
 					stages.add("interceptor-after");
 					return result("transformed");
 				});
@@ -83,6 +85,62 @@ public class McpApplicationInterceptionTests {
 		} finally {
 			execution.stop();
 			Assertions.assertTrue(execution.awaitTermination(Duration.ofSeconds(5)));
+		}
+	}
+
+	@Test
+	public void expected_errors_return_through_the_continuation_without_losing_classification()
+			throws Exception {
+		McpJsonRpcError applicationError = new McpJsonRpcError(1_001,
+				"Application-owned", Optional.of(new McpJsonString("application data")));
+		McpJsonRpcError protocolError = McpJsonRpcError.missingRequiredClientExtension(
+				"example.com/required-extension");
+		record Scenario(McpApplicationDispatchOutcome result,
+				McpRequestOutcome outcome, McpJsonRpcError error) {}
+		List<Scenario> scenarios = List.of(
+				new Scenario(McpApplicationDispatchOutcome.invalidInput(),
+						McpRequestOutcome.PROTOCOL_ERROR, new McpJsonRpcError(
+								McpJsonRpcError.INVALID_PARAMS, "Invalid params", Optional.empty())),
+				new Scenario(McpApplicationDispatchOutcome.applicationError(applicationError),
+						McpRequestOutcome.APPLICATION_ERROR, applicationError),
+				new Scenario(McpApplicationDispatchOutcome.protocolError(protocolError),
+						McpRequestOutcome.PROTOCOL_ERROR, protocolError));
+
+		for (Scenario scenario : scenarios) {
+			ManualExecutorService executor = new ManualExecutorService();
+			AtomicInteger handlerInvocations = new AtomicInteger();
+			AtomicInteger returnedErrors = new AtomicInteger();
+			AtomicInteger cleanups = new AtomicInteger();
+			AtomicReference<McpApplicationResponse> response = new AtomicReference<>();
+			McpApplicationExecution execution = execution(executor,
+					(invocation, continuation) -> {
+						McpApplicationDispatchOutcome downstream = continuation.invoke();
+						Assertions.assertSame(scenario.result(), downstream);
+						returnedErrors.incrementAndGet();
+						Assertions.assertThrows(IllegalStateException.class, continuation::invoke);
+						return downstream;
+					});
+			try {
+				execution.start();
+				dispatch(execution, 1, "returned-error", invocation -> {
+					handlerInvocations.incrementAndGet();
+					return scenario.result();
+				}, response, cleanups);
+				runCommand(executor.takeCommand(), "mcp-interceptor-returned-error-test");
+
+				Assertions.assertEquals(1, handlerInvocations.get());
+				Assertions.assertEquals(1, returnedErrors.get());
+				Assertions.assertEquals(1, cleanups.get());
+				Assertions.assertEquals(400, response.get().status());
+				Assertions.assertEquals(scenario.outcome(), response.get().outcome());
+				Assertions.assertTrue(response.get().throwables().isEmpty());
+				McpJsonRpcMessage.ErrorResponse error = Assertions.assertInstanceOf(
+						McpJsonRpcMessage.ErrorResponse.class, response.get().message().orElseThrow());
+				Assertions.assertEquals(scenario.error(), error.error());
+			} finally {
+				execution.stop();
+				Assertions.assertTrue(execution.awaitTermination(Duration.ofSeconds(5)));
+			}
 		}
 	}
 
@@ -124,7 +182,7 @@ public class McpApplicationInterceptionTests {
 		AtomicInteger handlerInvocations = new AtomicInteger();
 		McpApplicationExecution execution = execution(executor,
 				(invocation, continuation) -> {
-					McpWireResult first = continuation.invoke();
+					McpApplicationDispatchOutcome first = continuation.invoke();
 					IllegalStateException failure = Assertions.assertThrows(
 							IllegalStateException.class, continuation::invoke);
 					Assertions.assertEquals(
@@ -411,9 +469,9 @@ public class McpApplicationInterceptionTests {
 		return ((McpJsonString) result.fields().members().get("value")).value();
 	}
 
-	private static McpWireResult result(String value) {
-		return McpWireResult.complete(new McpJsonObject(
-				Map.of("value", new McpJsonString(value))));
+	private static McpApplicationDispatchOutcome result(String value) {
+		return McpApplicationDispatchOutcome.completed(McpWireResult.complete(new McpJsonObject(
+				Map.of("value", new McpJsonString(value)))));
 	}
 
 	private static McpEffectiveAdmissionIdentity admissionIdentity(String suffix) {

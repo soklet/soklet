@@ -208,7 +208,7 @@ The standalone [SSE connection harness](docs/sse-connection-qualification.md)
 checks paced delivery to 256 live clients, overload rejection, subscription churn,
 and physical teardown. The separate [SSE heap probe](docs/sse-lifecycle-footprint-probe.md)
 measures idle connections, distinct full queues, retained terminated runtimes, and
-released references. Both compile with Java 17 and require Java 21 or newer for
-live SSE. Their standalone commands avoid the recorded MCP benchmark-module
+released references. Both require Java 21 or newer to compile and run. Their
+standalone commands avoid the recorded MCP benchmark-module
 compile blocker. See the [milestone 5b report](https://github.com/soklet/soklet/blob/070e37ba40107ae68563cbb0a9f9cff7a9f5ce89/docs/streaming-api-milestone-5b.md)
 for the tested workloads, selected defaults, raw evidence, and limitations.

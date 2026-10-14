@@ -36,7 +36,7 @@ const verifierPath = resolve(projectRoot,
 const temporaryRoot = mkdtempSync(join(tmpdir(),
   'soklet-mcp-transport-dependencies-self-test-'));
 const goldenRoot = resolve(temporaryRoot, 'golden');
-const EXPECTED_CASE_COUNT = 126;
+const EXPECTED_CASE_COUNT = 131;
 let passedCases = 0;
 
 const FIXTURE_SOURCES = Object.freeze([
@@ -617,6 +617,20 @@ try {
         (source) => appendType(source, 'final class ReplayStore {}'));
     }, /state\/storage type declaration/u);
 
+  expectRejected('reviewed operation-validation helper does not allow session storage',
+    (root) => {
+      mutateSource(root, RUNTIME, (source) => source.replace(
+        'private static final class OperationValidationState {',
+        'private static final class OperationValidationState {\n\t\tprivate Object sessionState;'));
+    }, /state\/storage field declaration/u);
+
+  expectRejected('reviewed operation-validation flag does not allow another owner',
+    (root) => {
+      mutateSource(root, RUNTIME, (source) => source.replace(
+        'final class McpHttpServerRuntime implements AutoCloseable {',
+        'final class McpHttpServerRuntime implements AutoCloseable {\n\tprivate boolean unsupportedSessionOperation;'));
+    }, /state\/storage field declaration/u);
+
   expectRejected('SessionStore type declaration is future storage state',
     (root) => {
       mutateSource(root, BRIDGE,
@@ -819,9 +833,33 @@ try {
   expectRejected('subscription events must use the installed response stream',
     (root) => {
       mutateSource(root, RUNTIME, (source) => replaceAfter(source,
-        'private void projectResourceNotification(',
+        'private void projectResourceNotificationWithMetricSequence(',
         'stream = requireNonNull(responseStream);', 'stream = newResponseStream();'));
     }, /projectResourceNotification must use the installed responseStream/u);
+
+  expectRejected('resource projection cannot bypass its metric scope',
+    (root) => {
+      mutateSource(root, RUNTIME, (source) => replaceAfter(source,
+        'private void projectResourceNotification(',
+        'try (McpApplicationExecutionObserver.MetricScope ignored = useMetricSequence())',
+        'try (McpApplicationExecutionObserver.MetricScope ignored = () -> {})'));
+    }, /resource projection must delegate exactly once within its request metric sequence scope/u);
+
+  expectRejected('resource projection cannot duplicate its scoped delegate',
+    (root) => {
+      mutateSource(root, RUNTIME, (source) => replaceAfter(source,
+        'private void projectResourceNotification(',
+        'projectResourceNotificationWithMetricSequence();',
+        'projectResourceNotificationWithMetricSequence(); projectResourceNotificationWithMetricSequence();'));
+    }, /resource projection must delegate exactly once within its request metric sequence scope/u);
+
+  expectRejected('request metric scope cannot discard its retained sequence',
+    (root) => {
+      mutateSource(root, RUNTIME, (source) => replaceAfter(source,
+        'private McpApplicationExecutionObserver.MetricScope useMetricSequence(',
+        'applicationExecutionObserver.useMetricSequence(this.metricSequence)',
+        'applicationExecutionObserver.useMetricSequence(null)'));
+    }, /request metric scope must bind the control's retained sequence/u);
 
   expectRejected('resource events must retain accepted URI filtering',
     (root) => {
@@ -834,7 +872,7 @@ try {
   expectRejected('resource projection must retain its captured authorization guard',
     (root) => {
       mutateSource(root, RUNTIME, (source) => replaceAfter(source,
-        'private void projectResourceNotification(',
+        'private void projectResourceNotificationWithMetricSequence(',
         '() -> resourceNotificationWriteAllowed(stream, authorizationGeneration)',
         '() -> true'));
     }, /must offer on its installed stream with the captured authorization guard/u);

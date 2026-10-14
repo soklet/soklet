@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createHash, randomBytes } from 'node:crypto';
-import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync,
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync,
   readlinkSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { delimiter, dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,14 +8,18 @@ import { createEnvironment, createSessionConfig, inspectorArguments, sanitizedSe
 import { startProcess } from './process.mjs';
 import { adjudicateTrace, startProxy, validResult, PROTOCOL } from './trace.mjs';
 import { parseControl } from '../run-against-public-fixture.mjs';
+import {buildUpstream, verifyUpstreamBuild, INSPECTOR_SOURCE_PIN} from './upstream-build.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '../../..');
 const PACKAGE_SHA = '8fc642c9ec63e951bf987d4ccf2c7a198a33f350f7d424ad2e95a1f48dbfe2c0';
 const LOCK_SHA = '37dfcdb1476f7f31c4aeea13971a729588bad7719c67bb8349f7bd8c52d29f29';
 const INSPECTOR_INTEGRITY = 'sha512-V1SqfR+m3NWMkEe2i3v2GMm00pZtAl/JISAHQzYnOZElEuwuLLkU8vTWBYg5HMCYTgpvuMmzb+MZz98HjdcGuw==';
-const FIXTURE_WARNING = 'LifecycleObserver::didReceiveLogEvent [MCP_SERVER_CONFIGURATION]: No admission controller is configured for the MCP server; every request and notification will be admitted as anonymous.\n';
+const FIXTURE_WARNING = ''; // Current public fixture explicitly installs acceptAllInstance.
 const MEMORY_STORE_CAVEAT = '[mcp-inspector] Secrets are not written anywhere and are lost on exit.\n';
+const UPSTREAM_MEMORY_STORE_CAVEAT = MEMORY_STORE_CAVEAT
+  + '[mcp-inspector] How the secret store is chosen, and how to secure it: https://github.com/modelcontextprotocol/inspector/blob/main/docs/secret-storage.md\n';
+const CLI_PROFILE = 'apps-toggle-skills-enabled';
 const fixtureMain = 'com.soklet.conformance.McpConformanceFixture';
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const hashFile = path => sha(readFileSync(path));
@@ -81,15 +85,31 @@ async function command(command, args, cwd, env, timeoutMs = 30000) {
   return result;
 }
 
+export function workingTreeFileRows(directory, paths) {
+  return [...new Set(paths)].sort().map(path => {
+    const absolute = resolve(directory, path);
+    try { lstatSync(absolute); }
+    catch (error) {
+      // Git still lists tracked deletions until the owner commits. Preserve
+      // their absence in the fingerprint rather than rejecting a dirty tree.
+      if (error.code === 'ENOENT') return [path, 'DELETED'];
+      throw error;
+    }
+    return [path, hashFile(regularFile(absolute))];
+  });
+}
+
 async function sourceIdentity(env) {
   const gitOptions = ['-c', `safe.directory=${root}`];
   const listing = await command('/usr/bin/git', [...gitOptions, 'ls-files', '--cached', '--others', '--exclude-standard', '-z'], root, env);
   const paths = [...new Set(listing.stdout.split('\0').filter(Boolean))].sort();
-  const rows = paths.map(path => [path, hashFile(regularFile(resolve(root, path)))]);
+  const rows = workingTreeFileRows(root, paths);
   const head = await command('/usr/bin/git', [...gitOptions, 'rev-parse', 'HEAD'], root, env);
   const state = await command('/usr/bin/git', [...gitOptions, 'status', '--porcelain'], root, env);
   return { kind: 'TRACKED_AND_UNIGNORED_WORKING_TREE', head: head.stdout.trim(),
-    dirty: state.stdout !== '', files: paths.length, sha256: sha(json(rows)) };
+    dirty: state.stdout !== '', files: paths.length,
+    deletedFiles: rows.filter(([, identity]) => identity === 'DELETED').length,
+    sha256: sha(json(rows)) };
 }
 
 function makeIsolation(path, java) {
@@ -125,10 +145,10 @@ function readyLine(processHandle) {
   });
 }
 
-export function validateCliOutput(stdout, stderr, operation) {
+export function validateCliOutput(stdout, stderr, operation, currentSource = false) {
   // The pinned memory store emits this one fixed caveat. It is accounted for,
   // not a general permission for arbitrary stderr or credential diagnostics.
-  if (stderr !== MEMORY_STORE_CAVEAT) return false;
+  if (stderr !== (currentSource ? UPSTREAM_MEMORY_STORE_CAVEAT : MEMORY_STORE_CAVEAT)) return false;
   try {
     const output = JSON.parse(stdout);
     if (Object.keys(output).length !== 1 || !Object.hasOwn(output, 'result')) return false;
@@ -152,7 +172,7 @@ async function probe({ java, classpath, entry, work, enabled, operation }) {
   let fixture;
   let proxy;
   let client;
-  const record = { name, requestedExtensions: enabled ? 'ENABLED' : 'DISABLED', operation,
+  const record = { name, requestedExtensions: enabled ? 'APPS_ENABLED_SKILLS_ENABLED' : 'APPS_DISABLED_SKILLS_ENABLED', operation,
     status: 'FAILED', baseTransport: 'NOT_RUN', cliOutputMatches: false,
     fixtureShutdown: 'NOT_PROVEN', configUnchanged: false, trace: [] };
   try {
@@ -162,18 +182,19 @@ async function probe({ java, classpath, entry, work, enabled, operation }) {
     const ready = await readyLine(fixture);
     if (ready.host !== '127.0.0.1' || ready.path !== '/mcp'
         || !Number.isInteger(ready.port) || ready.port < 1 || ready.port > 65535) fail('FIXTURE_ADDRESS_INVALID');
-    proxy = await startProxy({ fixturePort: ready.port, token, enabled });
-    const config = createSessionConfig(`http://127.0.0.1:${proxy.port}/mcp`, token, enabled);
+    proxy = await startProxy({ fixturePort: ready.port, token, enabled, cliProfile: CLI_PROFILE });
+    const config = createSessionConfig(`http://127.0.0.1:${proxy.port}/mcp`, token, {apps: enabled, skills: true});
     const configPath = resolve(sessionRoot, 'session.json');
     const configBytes = json(config);
     writeFileSync(configPath, configBytes, { mode: 0o600, flag: 'wx' });
     record.config = sanitizedSessionConfig(config);
-    client = managed(process.execPath, inspectorArguments(entry, configPath, operation),
+    client = managed(process.execPath, [...inspectorArguments(entry, configPath, operation),
+      ...(enabled ? ['--advertise-apps'] : [])],
       { cwd: sessionRoot, env, timeoutMs: 30000 });
     const exit = await client.completion;
     record.cliExit = { code: exit.code, signal: exit.signal };
-    record.cliOutputMatches = validateCliOutput(exit.stdout, exit.stderr, operation);
-    record.memoryStoreCaveatObserved = exit.stderr === MEMORY_STORE_CAVEAT;
+    record.cliOutputMatches = validateCliOutput(exit.stdout, exit.stderr, operation, true);
+    record.memoryStoreCaveatObserved = exit.stderr === UPSTREAM_MEMORY_STORE_CAVEAT;
     record.configUnchanged = readFileSync(configPath, 'utf8') === configBytes;
     record.trace = proxy.rows;
     fixture.child.stdin.end();
@@ -182,10 +203,10 @@ async function probe({ java, classpath, entry, work, enabled, operation }) {
     const stopped = lines.length === 2 && parseControl(lines[1], 'stopped');
     if (fixtureExit.code === 0 && fixtureExit.signal === null && stopped?.clean === true
         && fixtureExit.stderr === FIXTURE_WARNING) record.fixtureShutdown = 'CLEAN';
-    record.fixtureAnonymousAdmissionWarning = fixtureExit.stderr === FIXTURE_WARNING;
+    record.fixtureExplicitAdmissionQuiet = fixtureExit.stderr === FIXTURE_WARNING;
     if (exit.code !== 0 || exit.signal !== null || !record.cliOutputMatches
         || !record.configUnchanged || record.fixtureShutdown !== 'CLEAN' || proxy.failure()) fail('PROBE_CHECK_FAILED');
-    record.status = adjudicateTrace(record.trace, enabled, operation);
+    record.status = adjudicateTrace(record.trace, enabled, operation, CLI_PROFILE);
     if (record.status !== 'FAILED') record.baseTransport = 'PASSED';
   } catch {
     // Never emit arbitrary upstream exception messages, stdout, or stderr.
@@ -209,7 +230,7 @@ async function probe({ java, classpath, entry, work, enabled, operation }) {
 }
 
 export async function runHarness({ candidateJar, candidatePom, java, workDirectory,
-  surface = 'cli', browserExecutable }) {
+  surface = 'cli', browserExecutable, inspectorBuild }) {
   if (!['cli', 'web'].includes(surface)) fail('HARNESS_SURFACE_INVALID');
   const web = surface === 'web';
   const jar = regularFile(candidateJar);
@@ -228,19 +249,16 @@ export async function runHarness({ candidateJar, candidatePom, java, workDirecto
       fail('WORK_DIRECTORY_ANCESTOR_INVALID');
   }
   if (process.versions.node !== '26.5.0') fail('NODE_VERSION_MISMATCH');
-  const packageBytes = readFileSync(resolve(here, 'package.json'));
-  const lockBytes = readFileSync(resolve(here, 'package-lock.json'));
-  verifyDependencyPins(packageBytes, lockBytes);
   mkdirSync(work, { recursive: true, mode: 0o700 });
   const env = makeIsolation(resolve(work, 'build-isolation'), javaPath);
   const receipt = { formatVersion: 1, evidenceClass: 'LOCAL_HOST_HARNESS_DEVELOPMENT_ONLY', stage: 'INPUTS',
     status: 'FAILED', releaseCandidateEvidence: false, sourceTreeIdentity: null,
     candidateJarSha256: hashFile(jar), candidatePomSha256: hashFile(pom),
     harnessId: 'soklet.inspector.base-transport.v1',
-    profileId: `modern-${surface}-extension-toggles.v1`,
-    targetName: '@modelcontextprotocol/inspector', targetVersion: '2.7.0',
-    targetCommit: '2e90a628e6296c62e4bef942afbb43d3faa4baf4',
-    artifactIntegrity: INSPECTOR_INTEGRITY, packageLockSha256: LOCK_SHA,
+    profileId: web ? 'modern-web-extension-toggles.v1' : 'modern-cli-apps-toggle-skills-enabled.v1',
+    targetName: '@modelcontextprotocol/inspector', targetVersion: INSPECTOR_SOURCE_PIN.packageVersion,
+    targetCommit: INSPECTOR_SOURCE_PIN.commit, distribution: INSPECTOR_SOURCE_PIN.distribution,
+    sourceArchiveSha256: INSPECTOR_SOURCE_PIN.archiveSha256,
     protocolVersion: PROTOCOL, executedAt: new Date().toISOString(),
     appsRendering: 'NOT_RUN', skillsRetrieval: 'NOT_RUN', browserVersion: null,
     limitations: ['Dirty-tree development evidence is not a release receipt.',
@@ -250,7 +268,7 @@ export async function runHarness({ candidateJar, candidatePom, java, workDirecto
       'Disposable bearer authorization terminates at the loopback proxy, not at Soklet.',
       'No OAuth, production host, localization, tenant isolation, or Skills activation is qualified.',
       web ? 'Both web rows require exact actual extension advertisements; a disabled-row mismatch fails.'
-        : 'Requested extension settings are verified on the wire; a disabled-row mismatch stays blocked.'],
+        : 'The CLI supports Apps toggling with --advertise-apps; Skills stay enabled in both rows. No Skills-OFF qualification is claimed.'],
     runs: [] };
   const persist = () => writeFileSync(resolve(work, 'receipt.json'), json(receipt), { mode: 0o600 });
   const onSignal = () => {
@@ -271,28 +289,13 @@ export async function runHarness({ candidateJar, candidatePom, java, workDirecto
     const embeddedPom = await command('/usr/bin/unzip', ['-p', jar,
       'META-INF/maven/com.soklet/soklet/pom.xml'], work, env);
     if (sha(embeddedPom.stdout) !== receipt.candidatePomSha256) fail('CANDIDATE_POM_MISMATCH');
-    const install = resolve(work, 'installed');
-    mkdirSync(install, { mode: 0o700 });
-    copyFileSync(resolve(here, 'package.json'), resolve(install, 'package.json'));
-    copyFileSync(resolve(here, 'package-lock.json'), resolve(install, 'package-lock.json'));
-    const npmUserConfig = resolve(work, 'build-isolation/npm-user.npmrc');
-    const npmGlobalConfig = resolve(work, 'build-isolation/npm-global.npmrc');
-    writeFileSync(npmUserConfig, '', { mode: 0o600, flag: 'wx' });
-    writeFileSync(npmGlobalConfig, '', { mode: 0o600, flag: 'wx' });
-    const installEnv = { ...env, npm_config_cache: resolve(work, 'npm-cache'),
-      npm_config_userconfig: npmUserConfig, npm_config_globalconfig: npmGlobalConfig,
-      npm_config_registry: 'https://registry.npmjs.org/', npm_config_ignore_scripts: 'true',
-      INSPECTOR_SKIP_CLIENT_INSTALL: '1' };
-    receipt.stage = 'INSTALL';
-    await command('npm', ['ci', '--ignore-scripts', '--no-audit', '--no-fund'], install, installEnv, 300000);
-    verifyDependencyPins(readFileSync(resolve(install, 'package.json')), readFileSync(resolve(install, 'package-lock.json')));
-    const inspector = resolve(install, 'node_modules/@modelcontextprotocol/inspector');
-    const entry = regularFile(resolve(inspector, 'clients/launcher/build/index.js'));
-    const identity = JSON.parse(readFileSync(resolve(inspector, 'package.json')));
-    if (identity.name !== receipt.targetName || identity.version !== receipt.targetVersion) fail('INSTALLED_IDENTITY_MISMATCH');
-    // Otherwise upstream --web may invoke a build with new dependency activity.
-    if (web) regularFile(resolve(inspector, 'clients/web/dist/index.html'));
-    receipt.installedTreeIdentity = directoryIdentity(resolve(install, 'node_modules'));
+    const buildDirectory = inspectorBuild ? resolve(inspectorBuild) : resolve(work, 'upstream-build');
+    receipt.stage = 'UPSTREAM_SOURCE_BUILD';
+    const upstream = inspectorBuild ? verifyUpstreamBuild(buildDirectory)
+      : await buildUpstream({workDirectory: buildDirectory});
+    const entry = upstream.entry;
+    receipt.upstreamBuild = upstream;
+    receipt.installedTreeIdentity = upstream.identity;
     receipt.launcherSha256 = hashFile(entry);
     const fixtureOutput = resolve(work, 'public-fixture');
     receipt.stage = 'FIXTURE_BUILD';
@@ -317,7 +320,7 @@ export async function runHarness({ candidateJar, candidatePom, java, workDirecto
     }
     receipt.stage = 'POST_RUN_INTEGRITY';
     if (receipt.candidateJarSha256 !== hashFile(jar) || receipt.candidatePomSha256 !== hashFile(pom)
-        || JSON.stringify(receipt.installedTreeIdentity) !== JSON.stringify(directoryIdentity(resolve(install, 'node_modules')))
+        || JSON.stringify(receipt.installedTreeIdentity) !== JSON.stringify(verifyUpstreamBuild(buildDirectory).identity)
         || JSON.stringify(receipt.fixtureClassTree) !== JSON.stringify(directoryIdentity(resolve(fixtureOutput, 'classes')))
         || JSON.stringify(receipt.sourceTreeIdentity) !== JSON.stringify(await sourceIdentity(env))) fail('RUN_INPUT_DRIFT');
     if (web) {
@@ -355,10 +358,10 @@ export async function runHarness({ candidateJar, candidatePom, java, workDirecto
 if (resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) {
   try {
     const args = process.argv.slice(2);
-    if (args.length !== 8 || args[0] !== '--candidate-jar' || args[2] !== '--candidate-pom'
+    if (![8, 10].includes(args.length) || (args.length === 10 && args[8] !== '--inspector-build') || args[0] !== '--candidate-jar' || args[2] !== '--candidate-pom'
         || args[4] !== '--java' || args[6] !== '--work-dir') fail('USAGE');
     const result = await runHarness({ candidateJar: args[1], candidatePom: args[3],
-      java: args[5], workDirectory: args[7] });
+      java: args[5], workDirectory: args[7], inspectorBuild: args[9] });
     console.log(`Inspector harness: ${result.status}`);
     process.exitCode = result.status === 'PASSED' ? 0 : result.status === 'BLOCKED_HOST_EXTENSION_TOGGLE' ? 2 : 1;
   } catch {

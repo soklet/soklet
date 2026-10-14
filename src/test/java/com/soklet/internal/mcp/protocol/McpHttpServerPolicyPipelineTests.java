@@ -97,7 +97,7 @@ public class McpHttpServerPolicyPipelineTests {
 			Assertions.assertEquals("principal",
 					invocation.admissionIdentity().admittedIdentity()
 							.principal().orElseThrow());
-			return result("ordered");
+			return McpApplicationDispatchOutcome.completed(result("ordered"));
 		});
 
 		try {
@@ -142,7 +142,7 @@ public class McpHttpServerPolicyPipelineTests {
 				});
 		McpHttpServerRuntime runtime = runtime(policy, invocation -> {
 			handlerInvocations.incrementAndGet();
-			return result("unreachable");
+			return McpApplicationDispatchOutcome.completed(result("unreachable"));
 		});
 
 		try {
@@ -182,7 +182,7 @@ public class McpHttpServerPolicyPipelineTests {
 										"Authentication required", Optional.empty()),
 								rejectionHeaders)));
 		McpHttpServerRuntime runtime = runtime(policy,
-				invocation -> result("unreachable"),
+				invocation -> McpApplicationDispatchOutcome.completed(result("unreachable")),
 				McpApplicationExecutionConfiguration.productionDefaults(),
 				transportWithInboundHeaderLimits(8, 512));
 
@@ -219,7 +219,7 @@ public class McpHttpServerPolicyPipelineTests {
 				});
 		McpHttpServerRuntime runtime = runtime(policy, invocation -> {
 			handlerInvocations.incrementAndGet();
-			return result("unreachable");
+			return McpApplicationDispatchOutcome.completed(result("unreachable"));
 		});
 
 		try {
@@ -311,7 +311,7 @@ public class McpHttpServerPolicyPipelineTests {
 				});
 		McpHttpServerRuntime runtime = runtime(policy, invocation -> {
 			handlerInvocations.incrementAndGet();
-			return result("unreachable");
+			return McpApplicationDispatchOutcome.completed(result("unreachable"));
 		});
 		try {
 			int port = runtime.start().getPort();
@@ -363,7 +363,7 @@ public class McpHttpServerPolicyPipelineTests {
 				});
 		McpHttpServerRuntime runtime = runtime(policy, invocation -> {
 			stages.add("handler");
-			return result("unreachable");
+			return McpApplicationDispatchOutcome.completed(result("unreachable"));
 		});
 
 		try {
@@ -402,7 +402,7 @@ public class McpHttpServerPolicyPipelineTests {
 		McpHttpServerRuntime runtime = runtime(policy, invocation -> {
 			handlerInvocations.incrementAndGet();
 			String id = ((McpJsonRpcId.StringId) invocation.request().id()).value();
-			return result(id);
+			return McpApplicationDispatchOutcome.completed(result(id));
 		}, new McpApplicationExecutionConfiguration(
 				1, 1, Duration.ofSeconds(15), Duration.ofMillis(10)));
 
@@ -449,7 +449,7 @@ public class McpHttpServerPolicyPipelineTests {
 				});
 		McpHttpServerRuntime runtime = runtime(policy, invocation -> {
 			handlerInvocations.incrementAndGet();
-			return result("unreachable");
+			return McpApplicationDispatchOutcome.completed(result("unreachable"));
 		});
 
 		try {

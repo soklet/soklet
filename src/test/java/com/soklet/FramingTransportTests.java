@@ -5,8 +5,6 @@ import com.soklet.annotation.POST;
 import com.soklet.annotation.SseEventSource;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledForJreRange;
-import org.junit.jupiter.api.condition.JRE;
 
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
@@ -63,7 +61,6 @@ class FramingTransportTests {
     }
 
     @Test
-    @EnabledForJreRange(min = JRE.JAVA_21)
     void sseRejectsBareCarriageReturnsAndReframesApplicationRejections() throws Exception {
         int httpPort = TestSupport.findFreePort();
         int ssePort = TestSupport.findFreePort();

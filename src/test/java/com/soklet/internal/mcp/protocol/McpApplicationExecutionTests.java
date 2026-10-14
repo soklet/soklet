@@ -98,7 +98,7 @@ public class McpApplicationExecutionTests {
 					handlersEntered.countDown();
 					try { holdHandlers.await(); }
 					catch (InterruptedException ignored) { firstInterrupted.countDown(); Thread.currentThread().interrupt(); }
-					return McpWireResult.complete(McpJsonObject.empty());
+					return McpApplicationDispatchOutcome.completed(McpWireResult.complete(McpJsonObject.empty()));
 				}, 100L, new McpApplicationResponseWriter() {
 					@Override public boolean write(McpApplicationResponse response) { firstResponse.set(response); return true; }
 					@Override public void didFinishPhysicalWork() { firstPhysicalExits.incrementAndGet(); }
@@ -106,7 +106,7 @@ public class McpApplicationExecutionTests {
 				execution.dispatch(transportRequest(), request("second-deadline"), profile, admissionIdentity(), invocation -> {
 					handlersEntered.countDown();
 					holdHandlers.await();
-					return McpWireResult.complete(McpJsonObject.empty());
+					return McpApplicationDispatchOutcome.completed(McpWireResult.complete(McpJsonObject.empty()));
 				}, 200L, response -> { secondResponse.set(response); return true; }, cleanups::incrementAndGet);
 				Assertions.assertTrue(handlersEntered.await(3, TimeUnit.SECONDS));
 				trigger.start();
@@ -275,7 +275,7 @@ public class McpApplicationExecutionTests {
 			execution.dispatch(transportRequest, request,
 					Mcp20260728ProtocolProfile.INSTANCE, admissionIdentity(), invocation -> {
 				handlerInvocations.incrementAndGet();
-				return McpWireResult.complete(McpJsonObject.empty());
+				return McpApplicationDispatchOutcome.completed(McpWireResult.complete(McpJsonObject.empty()));
 			}, System.nanoTime() + TimeUnit.SECONDS.toNanos(30), response -> {
 				responses.incrementAndGet();
 				return true;
@@ -330,7 +330,7 @@ public class McpApplicationExecutionTests {
 		execution.dispatch(transportRequest(), request("start-after-stop"),
 				Mcp20260728ProtocolProfile.INSTANCE, admissionIdentity(), invocation -> {
 			handlerInvocations.incrementAndGet();
-			return McpWireResult.complete(McpJsonObject.empty());
+			return McpApplicationDispatchOutcome.completed(McpWireResult.complete(McpJsonObject.empty()));
 		}, System.nanoTime() + TimeUnit.SECONDS.toNanos(30), response -> {
 			responses.incrementAndGet();
 			return true;
@@ -372,7 +372,7 @@ public class McpApplicationExecutionTests {
 			execution.dispatch(transportRequest(), request("already-expired"),
 					Mcp20260728ProtocolProfile.INSTANCE, admissionIdentity(), invocation -> {
 				handlerInvocations.incrementAndGet();
-				return McpWireResult.complete(McpJsonObject.empty());
+				return McpApplicationDispatchOutcome.completed(McpWireResult.complete(McpJsonObject.empty()));
 			}, 99L, value -> {
 				response.set(value);
 				return true;
@@ -1235,7 +1235,7 @@ public class McpApplicationExecutionTests {
 						});
 						exchangeHandlerEntered.countDown();
 						releaseExchangeHandler.await();
-						return McpWireResult.complete(McpJsonObject.empty());
+						return McpApplicationDispatchOutcome.completed(McpWireResult.complete(McpJsonObject.empty()));
 					}, deadline, ignored -> true, () -> {});
 			Assertions.assertTrue(exchangeHandlerEntered.await(5, TimeUnit.SECONDS));
 
@@ -1353,7 +1353,7 @@ public class McpApplicationExecutionTests {
 							handlerInterrupted.set(true);
 							Thread.currentThread().interrupt();
 						}
-						return McpWireResult.complete(McpJsonObject.empty());
+						return McpApplicationDispatchOutcome.completed(McpWireResult.complete(McpJsonObject.empty()));
 					}, 100L, writer, cleanups::incrementAndGet);
 
 			handlerThread = new Thread(executor.takeCommand(),
@@ -1415,7 +1415,7 @@ public class McpApplicationExecutionTests {
 					Mcp20260728ProtocolProfile.INSTANCE, admissionIdentity(),
 					invocation -> {
 						handlerInvocations.incrementAndGet();
-						return McpWireResult.complete(McpJsonObject.empty());
+						return McpApplicationDispatchOutcome.completed(McpWireResult.complete(McpJsonObject.empty()));
 					}, System.nanoTime() + TimeUnit.SECONDS.toNanos(30), response -> {
 						responses.incrementAndGet();
 						return true;
@@ -1466,7 +1466,7 @@ public class McpApplicationExecutionTests {
 						Mcp20260728ProtocolProfile.INSTANCE, admissionIdentity(),
 						invocation -> {
 							handlerInvocations.incrementAndGet();
-							return McpWireResult.complete(McpJsonObject.empty());
+							return McpApplicationDispatchOutcome.completed(McpWireResult.complete(McpJsonObject.empty()));
 						}, 50L, response -> {
 							writerEntered.countDown();
 							awaitLatch(allowWriter);
@@ -1541,7 +1541,7 @@ public class McpApplicationExecutionTests {
 					Mcp20260728ProtocolProfile.INSTANCE, admissionIdentity(), invocation -> {
 						activeEntered.countDown();
 						releaseActive.await();
-						return McpWireResult.complete(McpJsonObject.empty());
+						return McpApplicationDispatchOutcome.completed(McpWireResult.complete(McpJsonObject.empty()));
 					}, 1_000L, response -> true, () -> {});
 			Assertions.assertTrue(activeEntered.await(5, TimeUnit.SECONDS),
 					"The monitor-probe handler did not enter.");
@@ -1550,7 +1550,7 @@ public class McpApplicationExecutionTests {
 					request(deadline ? "deadline-queued" : "cancel-queued"),
 					Mcp20260728ProtocolProfile.INSTANCE, admissionIdentity(), invocation -> {
 						queuedInvocations.incrementAndGet();
-						return McpWireResult.complete(McpJsonObject.empty());
+						return McpApplicationDispatchOutcome.completed(McpWireResult.complete(McpJsonObject.empty()));
 					}, deadline ? 10L : 1_000L, response -> {
 						queuedResponses.incrementAndGet();
 						return true;

@@ -221,10 +221,10 @@ export async function run({ candidateJar, candidatePom, java, dependencies, work
     const classes = resolve(work, 'classes');
     mkdirSync(classes);
     const compile = await command(resolve(dirname(jvm), 'javac'),
-      ['--release', '17', '-proc:none', '-Xlint:all', '-Werror', '-cp', jar, '-d', classes, source], 60000);
+      ['--release', '21', '-proc:none', '-Xlint:all', '-Werror', '-cp', jar, '-d', classes, source], 60000);
     assert.equal(compile.stderr, '');
     const audit = await command(resolve(dirname(jvm), 'jdeps'),
-      ['--multi-release', '17', '-verbose:class', '-filter:none', '-cp', jar, classes], 60000);
+      ['--multi-release', '21', '-verbose:class', '-filter:none', '-cp', jar, classes], 60000);
     assert.doesNotMatch(audit.stdout, /com\.soklet\.internal\.|not found/);
     receipt.publicApiOnly = true;
     const classIdentity = directoryIdentity(classes);

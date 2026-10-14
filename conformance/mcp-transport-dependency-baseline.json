@@ -23,6 +23,14 @@
           "path": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java"
         },
         {
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#projectResourceNotificationWithMetricSequence",
+          "path": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java"
+        },
+        {
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#useMetricSequence",
+          "path": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java"
+        },
+        {
           "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#refreshResourceNotificationAuthorityWhileLocked",
           "path": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java"
         },
@@ -586,6 +594,18 @@
           "file": "src/main/java/com/soklet/Soklet.java",
           "owner": "com.soklet.Soklet.DefaultSimulator",
           "rationale": "Existing rejected simulation lifecycle proof handle; it is not an MCP wire session or future transport state."
+        },
+        {
+          "field": "unsupportedSessionOperation",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.OperationValidationMetadata",
+          "rationale": "Immutable per-call snapshot of the existing operation-validation boolean, consumed after admission/rate/session fencing; no retained session handle, storage, or replay state."
+        },
+        {
+          "field": "unsupportedSessionOperation",
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.OperationValidationState",
+          "rationale": "Helper-local replacement for the existing processRequestSafely validation boolean; one synchronous validation call builds an immutable snapshot without retaining transport/session state."
         }
       ],
       "reviewedExistingDomainTypes": [

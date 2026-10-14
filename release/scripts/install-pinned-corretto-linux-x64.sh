@@ -17,7 +17,7 @@ helper=scripts/release-validation-evidence.mjs
 
 case "$toolchain_name" in
 	java)
-		expected_major=17
+		expected_major=21
 		environment_name=JAVA_HOME
 		;;
 	coreJdk21)

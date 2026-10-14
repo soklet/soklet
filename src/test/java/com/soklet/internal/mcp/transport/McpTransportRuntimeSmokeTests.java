@@ -17,7 +17,6 @@
 package com.soklet.internal.mcp.transport;
 
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayOutputStream;
@@ -34,7 +33,6 @@ public class McpTransportRuntimeSmokeTests {
 
 	@Test
 	public void virtual_live_post_uses_independent_listener_and_event_driven_sse_body() throws Exception {
-		Assumptions.assumeTrue(McpThreadStrategy.VIRTUAL.supported());
 		runLivePost(McpThreadStrategy.VIRTUAL);
 	}
 

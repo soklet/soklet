@@ -1664,6 +1664,51 @@ final class McpPrivacyBoundaryFuzzTests {
       'PRIV-MATCH-016': 36,
     },
   );
+  const outcomeFixturePath = join(privacySourceDirectory,
+    'SyntheticDispatchOutcome.java');
+  writeFileSync(outcomeFixturePath, `package com.soklet;
+
+sealed interface SyntheticDispatchOutcome {
+  default Throwable failure() {
+    abstract class LocalCallback {
+      public abstract Throwable receive(Throwable failure);
+    }
+    return switch (this) {
+      case Complete ignored -> null;
+      case Failed failed -> select(failed.getFailure());
+    };
+  }
+  private static Throwable select(Throwable value) { return value; }
+  final class Complete implements SyntheticDispatchOutcome {}
+  final class Failed implements SyntheticDispatchOutcome {
+    private final Throwable failure;
+    private Failed(Throwable failure) { this.failure = failure; }
+    public Throwable getFailure() { return this.failure; }
+  }
+  interface Callback {
+    Throwable publish(Throwable failure);
+  }
+}
+`);
+  try {
+    const outcomeCandidates = derivePrivacyBoundaryCandidates(
+      privacyProjectRoot, privacyScanRoots, privacyArtifactRoots,
+      semanticGitExecutable(),
+    ).filter(({ file }) => file.endsWith('/SyntheticDispatchOutcome.java'));
+    assert.deepEqual(outcomeCandidates.map(({ owner, member, sink }) =>
+      [owner, member, sink]).sort(), [
+      ['com.soklet.SyntheticDispatchOutcome', 'failure()',
+        'RequestOrThrowable.declaration'],
+      ['com.soklet.SyntheticDispatchOutcome.Callback', 'publish(Throwable)',
+        'RequestOrThrowable.declaration'],
+      ['com.soklet.SyntheticDispatchOutcome.Failed', 'getFailure()',
+        'RequestOrThrowable.declaration'],
+      ['com.soklet.SyntheticDispatchOutcome.LocalCallback', 'receive(Throwable)',
+        'RequestOrThrowable.declaration'],
+    ].sort(), 'Switch-arm calls are expressions; actual carrier declarations remain classified.');
+  } finally {
+    rmSync(outcomeFixturePath);
+  }
   assert.equal(
     privacyCandidates.some(({ file }) =>
       file.endsWith('/OutsidePrivacyFixture.java')),

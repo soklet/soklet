@@ -17,8 +17,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestFactory;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Timeout;
-import org.junit.jupiter.api.condition.EnabledForJreRange;
-import org.junit.jupiter.api.condition.JRE;
 import java.io.IOException;
 import java.net.Socket;
 import java.nio.channels.SocketChannel;
@@ -39,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @Timeout(60)
 class SseHandshakeOutcomeRuntimeTests {
 	@Test void simulatedInterceptorFramingHeadersCannotActivateAnAcceptedHandshake() throws Exception { assertInterceptorFramingRejected(false); }
-	@Test @EnabledForJreRange(min = JRE.JAVA_21)
+	@Test
 	void liveInterceptorFramingHeadersCannotActivateAnAcceptedHandshake() throws Exception { assertInterceptorFramingRejected(true); }
 	private static void assertInterceptorFramingRejected(boolean live) throws Exception {
 		for (String header : List.of("Content-Length", "Transfer-Encoding")) {
@@ -83,7 +81,6 @@ class SseHandshakeOutcomeRuntimeTests {
 	}
 
 	@Test
-	@EnabledForJreRange(min = JRE.JAVA_21)
 	void headAndOptionsAdvertiseOnlyGetAndOptionsWithoutStreamAdmission() throws Exception {
 		try (Fixture f = started(8, 0, ResponseMarshaler.defaultInstance())) {
 			for (HttpMethod method : List.of(HttpMethod.HEAD, HttpMethod.OPTIONS)) {
@@ -103,7 +100,6 @@ class SseHandshakeOutcomeRuntimeTests {
 	}
 
 	@Test
-	@EnabledForJreRange(min = JRE.JAVA_21)
 	void customMethodNotAllowedResponseStillUsesTheExistingHookAndCannotSendHeadContent() throws Exception {
 		AtomicInteger calls = new AtomicInteger();
 		ResponseMarshaler marshaler = ResponseMarshaler.builder().methodNotAllowedHandler((request, methods) -> {
@@ -121,7 +117,6 @@ class SseHandshakeOutcomeRuntimeTests {
 	}
 
 	@TestFactory
-	@EnabledForJreRange(min = JRE.JAVA_21)
 	Stream<DynamicTest> headAndOptionsDoNotConsumeOrRequireStreamCapacity() {
 		return Stream.of(true, false).map(fast -> DynamicTest.dynamicTest(fast ? "connection cap" : "lifecycle cap", () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
 			try (Fixture f = started(fast ? 8 : 1, fast ? 1 : 0, ResponseMarshaler.defaultInstance());
@@ -146,7 +141,6 @@ class SseHandshakeOutcomeRuntimeTests {
 	}
 
 	@Test
-	@EnabledForJreRange(min = JRE.JAVA_21)
 	void headFailureFallbackCannotSendContent() throws Exception {
 		ResponseMarshaler marshaler = ResponseMarshaler.builder()
 				.methodNotAllowedHandler((request, methods) -> { throw new IllegalStateException("failed policy"); })
@@ -160,7 +154,6 @@ class SseHandshakeOutcomeRuntimeTests {
 	}
 
 	@TestFactory
-	@EnabledForJreRange(min = JRE.JAVA_21)
 	Stream<DynamicTest> headTimeoutResponsesCannotSendContent() {
 		return Stream.of(false, true).map(failing -> DynamicTest.dynamicTest(failing ? "failsafe" : "custom", () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
 			ResponseMarshaler marshaler = ResponseMarshaler.builder()
@@ -188,7 +181,6 @@ class SseHandshakeOutcomeRuntimeTests {
 	}
 
 	@TestFactory
-	@EnabledForJreRange(min = JRE.JAVA_21)
 	Stream<DynamicTest> initializerFailuresReportEstablishedThenElectedTerminationWithoutInternalRejection() {
 		return Stream.of("checked", "overflow", "caught").map(mode -> DynamicTest.dynamicTest(mode, () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
 			try (Fixture f = started(8, 0, ResponseMarshaler.defaultInstance()); Socket socket = f.request(HttpMethod.GET, mode)) {
@@ -223,7 +215,6 @@ class SseHandshakeOutcomeRuntimeTests {
 	}
 
 	@TestFactory
-	@EnabledForJreRange(min = JRE.JAVA_21)
 	Stream<DynamicTest> bothCapacityBoundariesReportCapacityRatherThanApplicationRejection() {
 		return Stream.of(true, false).map(fast -> DynamicTest.dynamicTest(fast ? "connection cap" : "lifecycle cap", () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
 			try (Fixture f = started(fast ? 8 : 1, fast ? 1 : 0, ResponseMarshaler.defaultInstance()); Socket held = f.request(HttpMethod.GET, "ok")) {
@@ -238,7 +229,6 @@ class SseHandshakeOutcomeRuntimeTests {
 	}
 
 	@Test
-	@EnabledForJreRange(min = JRE.JAVA_21)
 	void handlerFailureKeepsItsActualCause() throws Exception {
 		try (Fixture f = started(8, 0, ResponseMarshaler.defaultInstance()); Socket socket = f.request(HttpMethod.GET, "handler")) {
 			assertTrue(readHead(socket).startsWith("HTTP/1.1 500")); await(() -> f.handshakeFailures.size() == 1);
@@ -249,7 +239,6 @@ class SseHandshakeOutcomeRuntimeTests {
 	}
 
 	@Test
-	@EnabledForJreRange(min = JRE.JAVA_21)
 	void explicitApplicationRejectionRemainsARejection() throws Exception {
 		try (Fixture f = started(8, 0, ResponseMarshaler.defaultInstance()); Socket socket = f.request(HttpMethod.GET, "reject")) {
 			assertTrue(readHead(socket).startsWith("HTTP/1.1 403")); await(() -> f.handshakeFailures.size() == 1);
@@ -260,7 +249,6 @@ class SseHandshakeOutcomeRuntimeTests {
 	}
 
 	@Test
-	@EnabledForJreRange(min = JRE.JAVA_21)
 	void headPreparationFailureKeepsItsCauseBeforeAnyStreamIsEstablished() throws Exception {
 		try (Fixture f = started(8, 0, ResponseMarshaler.defaultInstance()); Socket socket = f.request(HttpMethod.GET, "badheader")) {
 			assertTrue(readHead(socket).startsWith("HTTP/1.1 500")); await(() -> f.handshakeFailures.size() == 1);
@@ -271,7 +259,6 @@ class SseHandshakeOutcomeRuntimeTests {
 	}
 
 	@Test
-	@EnabledForJreRange(min = JRE.JAVA_21)
 	void failedAcceptedHeadWriteKeepsItsCauseAndDoesNotEstablishAStream() throws Exception {
 		try (Fixture f = new Fixture(8, 0, ResponseMarshaler.defaultInstance())) {
 			f.failHeadWrite = true;
@@ -288,7 +275,6 @@ class SseHandshakeOutcomeRuntimeTests {
 	}
 
 	@Test
-	@EnabledForJreRange(min = JRE.JAVA_21)
 	void handshakeWriteDeadlineRemainsATimeoutWithOriginalSocketCause() throws Exception {
 		byte[] responseBody = new byte[8 * 1024 * 1024];
 		RequestInterceptor interceptor = new RequestInterceptor() {

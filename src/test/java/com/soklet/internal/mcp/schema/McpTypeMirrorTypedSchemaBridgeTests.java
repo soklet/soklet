@@ -250,7 +250,7 @@ class McpTypeMirrorTypedSchemaBridgeTests {
 						    @McpHeader(name = "Output") String value) {}
 						""");
 		Compilation compilation = Compiler.javac()
-				.withOptions("--release", "17")
+				.withOptions("--release", "21")
 				.withProcessors(inspection)
 				.compile(fixture);
 		assertThat(compilation).succeeded();
@@ -320,7 +320,7 @@ class McpTypeMirrorTypedSchemaBridgeTests {
 
 		@Override
 		public SourceVersion getSupportedSourceVersion() {
-			return SourceVersion.RELEASE_17;
+			return SourceVersion.RELEASE_21;
 		}
 
 		@Override

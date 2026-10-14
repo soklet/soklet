@@ -30,10 +30,11 @@ const MAXIMUM_ROLE_BYTES = 128 * 1024 * 1024;
 const APPROVED_REGISTRY_SHA256 =
   '9276535363b871dcd73e1e20d0e65a5885e70b0b6d0e253b64b175af2db8a51a';
 // Current pins include the source-compatible nightly-profile correction,
-// scanner refresh, and two additional Skills fuzz-history targets. Keep the
+// scanner refresh, two additional Skills fuzz-history targets, and the Java 21
+// minimum approved for 4.0.0. Keep the
 // original approval identity separate from this expanded current contract.
 const CURRENT_REGISTRY_SHA256 =
-  'b7189136b7ec92d716540150cfb51668d3accfbcff64c801536e4b7e37cf5e68';
+  'a3473a83a35950fb8d70f2f4b0d5c5c1dd12a9a0225580ed1790f58af83b6e28';
 const EXPECTED_GATE_IDS = Object.freeze([
   'fuzz-nightly-history',
   'mcp-benchmarks',
@@ -395,6 +396,22 @@ export function verifyReleaseHarnessConfiguration(
     );
   }
   const historical = structuredClone(value);
+  // Retain the original approval digest while projecting only the explicitly
+  // migrated Java toolchains back to their historical Java 17 identities.
+  for (const id of ['mcp-benchmarks', 'operational-history']) {
+    const toolchain = historical.contracts.find((contract) => contract.id === id)
+      ?.toolchains.find(({ artifact }) => artifact.startsWith('corretto-'));
+    if (!sameJson(toolchain, {
+      artifact: 'corretto-21.0.12.9.1-linux-x64.tar.gz',
+      digest: 'sha256:f79824540cef882da0cdf1369f9d1d69afc14b5a9bc3a771fd5bb795793ce2f2',
+      version: '21.0.12.9.1',
+    })) fail(`${id} must use the reviewed Java 21 toolchain.`);
+    Object.assign(toolchain, {
+      artifact: 'corretto-17.0.20.8.1-linux-x64.tar.gz',
+      digest: 'sha256:89b50d4ef5d27ce1f8e5cad616525e14f7665b7b4a1ffca85381b0e21401034f',
+      version: '17.0.20.8.1',
+    });
+  }
   const historicalFuzz = historical.contracts.find((contract) =>
     contract.id === 'fuzz-nightly-history');
   const newSkillsTargets = [
@@ -1581,9 +1598,9 @@ function benchmarkConfiguration(policy) {
 function benchmarkJdkVersion(contract) {
   const toolchain = contract.toolchains.find(({ artifact }) =>
     artifact.startsWith('corretto-'));
-  if (toolchain === undefined || !/^17\.0\.20\./u.test(toolchain.version))
+  if (toolchain === undefined || toolchain.version !== '21.0.12.9.1')
     fail('MCP benchmark contract has an unsupported JDK pin.');
-  return toolchain.version.split('.').slice(0, 3).join('.');
+  return '21.0.12.1';
 }
 
 function requireBenchmarkReference(value, label) {

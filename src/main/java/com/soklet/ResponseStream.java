@@ -193,8 +193,8 @@ public interface ResponseStream {
 	 * A classic socket read can throw {@link java.net.SocketException} when cancelation closes its
 	 * owned socket or input stream before producer interruption takes effect. This can produce a
 	 * {@link LogEventType#RESPONSE_STREAM_FAILED} diagnostic while preserving the elected cancelation outcome.
-	 * On platform threads, interruption alone does not unblock a classic socket read. This includes the default
-	 * JDK 17 producer and a custom streaming executor that uses platform threads on a newer JDK. If cancelation must
+	 * On platform threads, interruption alone does not unblock a classic socket read. This applies when a custom
+	 * streaming executor uses platform threads. If cancelation must
 	 * close the socket to unblock that read, its close-induced exception remains diagnostic when it escapes the producer.
 	 *
 	 * @param streamResourceFactory the checked resource factory

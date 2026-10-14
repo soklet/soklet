@@ -372,8 +372,8 @@ public class McpInitializeRejectionDiagnosticsTests {
 		McpApplicationRequestRouter router = McpApplicationRequestRouter.fromHandlers(
 				Map.of("example/handler", ignored -> {
 					counters.handlers.incrementAndGet();
-					return McpWireResult.complete(new McpJsonObject(
-							Map.of("ok", McpJsonBoolean.TRUE)));
+					return McpApplicationDispatchOutcome.completed(McpWireResult.complete(new McpJsonObject(
+							Map.of("ok", McpJsonBoolean.TRUE))));
 				}));
 		return new McpHttpServerRuntime(
 				McpHttpTransportConfiguration.productionDefaults(0), policy, endpoint,

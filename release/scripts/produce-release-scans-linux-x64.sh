@@ -27,7 +27,7 @@ done
 		&& -x "$SOKLET_RELEASE_CORE_JDK_21_HOME/bin/javac" ]] \
 	|| { printf 'SOKLET_RELEASE_CORE_JDK_21_HOME must name the pinned JDK 21 installation.\n' >&2; exit 1; }
 
-# Packaging must use the canonical JDK 17 recipe, not the runner's ambient
+# Packaging must use the canonical JDK 21 recipe, not the runner's ambient
 # JAVA_HOME or the JDK 21 analysis runtime. Keep the bytes fixed while analysis
 # recompiles classes; never repackage an analysis build as the candidate.
 candidate_jar="$candidate_root/target/soklet-4.0.0.jar"
@@ -35,8 +35,8 @@ candidate_jar="$candidate_root/target/soklet-4.0.0.jar"
 	|| { printf 'Canonical candidate JAR is missing.\n' >&2; exit 1; }
 build_jdk=$(unzip -p "$candidate_jar" META-INF/MANIFEST.MF \
 	| tr -d '\r' | sed -n 's/^Build-Jdk-Spec: //p')
-[[ "$build_jdk" == 17 ]] \
-	|| { printf 'Release scans require the canonical JDK 17 artifact.\n' >&2; exit 1; }
+[[ "$build_jdk" == 21 ]] \
+	|| { printf 'Release scans require the canonical JDK 21 artifact.\n' >&2; exit 1; }
 candidate_jar_sha256=$(sha256sum "$candidate_jar" | cut -d ' ' -f 1)
 
 candidate_commit=$(git -C "$candidate_root" rev-parse --verify HEAD)

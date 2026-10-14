@@ -129,8 +129,8 @@ public class McpHttpServerConnectionContractTests {
 		McpApplicationRequestRouter router = McpApplicationRequestRouter.fromHandlers(
 				Map.of(CALL_TOOL, ignored -> {
 					handlers.incrementAndGet();
-					return McpWireResult.complete(new McpJsonObject(
-							Map.of("ok", McpJsonBoolean.TRUE)));
+					return McpApplicationDispatchOutcome.completed(McpWireResult.complete(new McpJsonObject(
+							Map.of("ok", McpJsonBoolean.TRUE))));
 				}));
 		McpHttpServerRuntime runtime = new McpHttpServerRuntime(
 				McpHttpTransportConfiguration.productionDefaults(0), endpointPolicy,

@@ -171,7 +171,7 @@ async function runCli(args) {
   mkdirSync(work);
   const classes = join(work, 'classes');
   mkdirSync(classes);
-  const build = await runProcess(join(dirname(java), 'javac'), ['--release', '17', '-proc:none',
+  const build = await runProcess(join(dirname(java), 'javac'), ['--release', '21', '-proc:none',
     '-Xlint:all', '-Werror', '-classpath', jar, '-d', classes,
     join(directory, 'src/com/soklet/interop/apps/AppsFixture.java'),
     join(directory, 'src/com/soklet/interop/apps/AppsFixtureMain.java')],

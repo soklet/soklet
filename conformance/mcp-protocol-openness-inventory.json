@@ -582,6 +582,27 @@
     },
     {
       "closureAuthority": "MCP_2026_07_28",
+      "compatibleOptionalMemberBehavior": "Extracted from processRequestSafely; preserves validated operation metadata and admission/rate/session ordering. Compatible same-revision methods or parameters still require an explicit R2C/profile disposition; none becomes routed or advertised implicitly.",
+      "conformanceRows": [
+        "MCP-DISC-001",
+        "MCP-PAGE-005",
+        "MCP-PROMPT-001",
+        "MCP-RESOURCE-001",
+        "MCP-TOOL-001"
+      ],
+      "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+      "id": "OPEN-067",
+      "key": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime#validateOperation",
+      "matcherRuleId": "OPEN-MATCH-004",
+      "method": "validateOperation",
+      "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime",
+      "phase": "deferred-r2c",
+      "roadmapNegativeInventoryKeys": [
+        "NI-07"
+      ]
+    },
+    {
+      "closureAuthority": "MCP_2026_07_28",
       "compatibleOptionalMemberBehavior": "Unknown inbound result metadata remains preserved; reserved server-information ownership changes only through a reviewed profile update.",
       "conformanceRows": [
         "MCP-DISC-001"

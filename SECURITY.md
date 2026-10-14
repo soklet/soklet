@@ -40,6 +40,12 @@ Soklet supplies bounded parsing, validation, lifecycle, transport, and selected
 cryptographic mechanisms inside the documented framework boundary. It does not
 claim to secure an application or deployment end to end. In particular:
 
+- `StaticFiles` requires an explicitly trusted, immutable root via
+  `trustedImmutableRoot(true)`. The operator must control the root, ancestors,
+  links, and files throughout helper and response use. Public NIO checks reject
+  observed changes but cannot prevent every replacement race in an
+  attacker-writable tree. Upload and tenant-writable directories are unsupported.
+  See [static-file migration](MIGRATING_TO_4_0.md#static-file-identity-and-cache-metadata).
 - Soklet does not implement an OAuth authorization server, access-token/JWT
   verifier, introspection client, dynamic client registration, protected
   resource metadata hosting, consent flow, identity-provider policy, or

@@ -18,4 +18,4 @@ Companion releases additionally pass
 That directory must come from the exact core candidate's packaged Javadoc JAR,
 not the currently deployed website. It is intentionally not vendored here.
 Java API links currently target Java 26; the library's compile/runtime floor
-remains Java 17.
+is Java 21.

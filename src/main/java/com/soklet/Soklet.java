@@ -336,6 +336,9 @@ public final class Soklet implements AutoCloseable {
 		// A built-in transport can replace the logical response before commitment.
 		// Keep write/finish observation aligned with that finite wire response.
 		HttpResponseStreamObservation streamObservation = new HttpResponseStreamObservation(request, processingStartedNanos);
+		HttpTransportResponseFeedback feedback = HttpTransportResponseFeedback.forConsumer(requestResultConsumer);
+		if (feedback != null)
+			feedback.claimLifecycleConsumer();
 		Consumer<HttpRequestResult> transportResultConsumer = requestResult -> {
 			if (serverType == ServerType.HTTP)
 				requestResult = requestResult.copy().responseStreamObservation(streamObservation).finish();
@@ -349,17 +352,26 @@ public final class Soklet implements AutoCloseable {
 				// An interceptor can replace an accepted handshake with a finite denial.
 				// The final response owns that decision in both live and simulated transports.
 				requestResult = requestResult.copy().sseHandshakeResult(null).finish();
+			HttpTransportResponseOutcome compatibilityOutcome = HttpTransportResponseOutcome.accepted();
 			try {
 				requestResultConsumer.accept(requestResult);
-			} catch (HttpTransportResponseReplacement replacement) {
-				marshaledResponseHolder.set(replacement.getMarshaledResponse());
-				requestResultHolder.set(requestResult.copy().marshaledResponse(replacement.getMarshaledResponse())
-						.headResponseCompressionBody(null).headResponseBodyLength(null).finish());
-				if (replacement.getCause() != null) throwables.add(replacement.getCause());
-				Throwable writeFailure = replacement.getWriteFailure();
-				if (writeFailure instanceof Error error) throw error;
-				if (writeFailure instanceof RuntimeException runtimeException) throw runtimeException;
-				if (writeFailure != null) throw new IllegalStateException("Unable to write replacement HTTP response.", writeFailure);
+			} catch (HttpTransportResponseFeedback.UnclaimedReplacement replacement) {
+				compatibilityOutcome = replacement.getOutcome();
+			} finally {
+				// Consume feedback even when a decorating callback fails after delivery.
+				HttpTransportResponseOutcome outcome = feedback == null ? compatibilityOutcome : feedback.finish();
+				if (outcome instanceof HttpTransportResponseOutcome.Accepted)
+					outcome = compatibilityOutcome;
+				switch (outcome) {
+					case HttpTransportResponseOutcome.Accepted ignored -> {}
+					case HttpTransportResponseOutcome.Replaced replacement -> {
+						marshaledResponseHolder.set(replacement.getMarshaledResponse());
+						requestResultHolder.set(requestResult.copy().marshaledResponse(replacement.getMarshaledResponse())
+								.headResponseCompressionBody(null).headResponseBodyLength(null).finish());
+						replacement.getPreparationFailure().ifPresent(throwables::add);
+						replacement.rethrowWriteFailure();
+					}
+				}
 			}
 		};
 
@@ -787,7 +799,7 @@ public final class Soklet implements AutoCloseable {
 						Duration responseWriteDuration = Duration.between(responseWriteStarted, responseWriteFinished);
 
 						try {
-							lifecycleObserver.didFailToWriteResponse(serverType, requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration, t);
+							lifecycleObserver.didFailToWriteResponse(serverType, requestHolder.get(), resourceMethodHolder.get(), marshaledResponseHolder.get(), responseWriteDuration, t2);
 						} catch (Throwable t3) {
 							throwables.add(t3);
 
@@ -804,7 +816,7 @@ public final class Soklet implements AutoCloseable {
 						safelyCollectMetrics.accept(
 								format("An exception occurred while invoking %s::didFailToWriteResponse", MetricsCollector.class.getSimpleName()),
 								(metricsInvocation) -> metricsInvocation.didFailToWriteResponse(serverType, requestHolder.get(), resourceMethodHolder.get(),
-										marshaledResponseHolder.get(), responseWriteDuration, t));
+										marshaledResponseHolder.get(), responseWriteDuration, t2));
 					}
 				}
 			} finally {
@@ -1144,9 +1156,8 @@ public final class Soklet implements AutoCloseable {
 		requireNonNull(request);
 		requireNonNull(marshaledResponse);
 		requireNonNull(suppressContentLength);
-		// Custom marshaler hooks retain their status; transport discards forbidden content.
-		enforceMarshaledResponseStatusCode(marshaledResponse, false);
-		marshaledResponse = normalizeEmptyResetContent(marshaledResponse);
+		// Normalize before another hook can replace an owned body and strand it.
+		marshaledResponse = normalizeBodylessMarshaledResponse(request, marshaledResponse);
 
 		// Don't write Content-Length for an accepted SSE Handshake, for example
 		if (!suppressContentLength)
@@ -1159,7 +1170,24 @@ public final class Soklet implements AutoCloseable {
 					.finish();
 
 		marshaledResponse = applyCorsResponseIfApplicable(request, marshaledResponse);
+		// CORS hooks and their postprocessor may replace the response too.
+		return normalizeBodylessMarshaledResponse(request, marshaledResponse);
+	}
 
+	@NonNull
+	private static MarshaledResponse normalizeBodylessMarshaledResponse(@NonNull Request request,
+			@NonNull MarshaledResponse marshaledResponse) {
+		enforceMarshaledResponseStatusCode(marshaledResponse, false);
+		if (isBodylessStatusCode(marshaledResponse.getStatusCode())) {
+			int statusCode = marshaledResponse.getStatusCode();
+			marshaledResponse = marshaledResponse.copy().withoutBody().headers(headers -> {
+				headers.remove("Transfer-Encoding");
+				if (statusCode == 205)
+					headers.put("Content-Length", List.of("0"));
+				else if (statusCode == 204 || request.getHttpMethod() != HttpMethod.HEAD)
+					headers.remove("Content-Length");
+			}).finish();
+		}
 		return marshaledResponse;
 	}
 
@@ -1816,10 +1844,10 @@ public final class Soklet implements AutoCloseable {
 		@Override
 		public HttpRequestResult performHttpRequest(@NonNull Request request) {
 			Runnable releaseScope = enterScope(InternalLifecycleComponentType.HTTP);
-			try {
+			try (HttpTransportResponseFeedback feedback = HttpTransportResponseFeedback.create()) {
 				// A caller may concurrently reuse an immutable Request. Each simulated
 				// dispatch needs its own identity, shared by handling and stream callbacks.
-				return performHttpRequestWhileAdmitted(requireNonNull(request).copy().finish());
+				return performHttpRequestWhileAdmitted(requireNonNull(request).copy().finish(), feedback);
 			} finally {
 				releaseScope.run();
 			}
@@ -1827,7 +1855,7 @@ public final class Soklet implements AutoCloseable {
 
 		@NonNull
 		private HttpRequestResult performHttpRequestWhileAdmitted(
-				@NonNull Request request) {
+				@NonNull Request request, @NonNull HttpTransportResponseFeedback feedback) {
 			MockHttpServer server = this.server;
 
 			if (server == null)
@@ -1842,7 +1870,7 @@ public final class Soklet implements AutoCloseable {
 
 			AtomicReference<StreamLifecycleCoordinator.Reservation> reservationHolder = new AtomicReference<>();
 			try {
-				requestHandler.handleRequest(request, requestResult -> {
+				requestHandler.handleRequest(request, HttpTransportResponseFeedback.fromWriter(feedback, requestResult -> {
 					// Simulated responses do not run transport compression or retain its private HEAD input.
 					HttpRequestResult result = requestResult.getHeadResponseCompressionBody().isEmpty() ? requestResult
 							: requestResult.copy().headResponseCompressionBody(null).finish();
@@ -1871,7 +1899,7 @@ public final class Soklet implements AutoCloseable {
 								}
 							}
 							// Synchronous replacement keeps didWrite/finish callbacks and metrics finite.
-							throw new HttpTransportResponseReplacement(unavailable, rejection, null);
+							return HttpTransportResponseOutcome.replaced(unavailable, rejection, null);
 						}
 						reservationHolder.set(reservation);
 						HttpResponseStreamObservation observation = result.getResponseStreamObservation();
@@ -1887,7 +1915,8 @@ public final class Soklet implements AutoCloseable {
 						}
 					}
 					requestResultHolder.set(result);
-				});
+					return HttpTransportResponseOutcome.accepted();
+				}));
 				return materializeStreamingResponse(request, requestResultHolder.get(), reservationHolder.get());
 			} finally {
 				// Also retire a reservation if handling fails before inline producer entry.
@@ -2328,8 +2357,8 @@ public final class Soklet implements AutoCloseable {
 		@Override
 		public SseRequestResult performSseRequest(@NonNull Request request) {
 			Runnable releaseScope = enterScope(InternalLifecycleComponentType.SSE);
-			try {
-				return performSseRequestWhileAdmitted(requireNonNull(request).copy().finish());
+			try (HttpTransportResponseFeedback feedback = HttpTransportResponseFeedback.create()) {
+				return performSseRequestWhileAdmitted(requireNonNull(request).copy().finish(), feedback);
 			} finally {
 				releaseScope.run();
 			}
@@ -2337,7 +2366,7 @@ public final class Soklet implements AutoCloseable {
 
 		@NonNull
 		private SseRequestResult performSseRequestWhileAdmitted(
-				@NonNull Request request) {
+				@NonNull Request request, @NonNull HttpTransportResponseFeedback feedback) {
 			MockSseServer sseServer = this.sseServer;
 
 			if (sseServer == null)
@@ -2353,7 +2382,7 @@ public final class Soklet implements AutoCloseable {
 			if (requestHandler == null)
 				throw new IllegalStateException("You must register a request handler prior to simulating SSE Event Source requests");
 
-			requestHandler.handleRequest(request, requestResult -> {
+			requestHandler.handleRequest(request, HttpTransportResponseFeedback.fromWriter(feedback, requestResult -> {
 				HttpRequestResult effectiveResult = requestResult;
 				Throwable preparationFailure = null;
 				if (requestResult.getSseHandshakeResult().orElse(null) instanceof SseHandshakeResult.Accepted) {
@@ -2391,8 +2420,9 @@ public final class Soklet implements AutoCloseable {
 				}
 				requestResultHolder.set(effectiveResult);
 				if (!sameInstance(effectiveResult, requestResult))
-					throw new HttpTransportResponseReplacement(effectiveResult.getMarshaledResponse(), preparationFailure, null);
-			});
+					return HttpTransportResponseOutcome.replaced(effectiveResult.getMarshaledResponse(), preparationFailure, null);
+				return HttpTransportResponseOutcome.accepted();
+			}));
 
 			HttpRequestResult requestResult = requestResultHolder.get();
 			if (requestResult == null)

@@ -224,8 +224,8 @@ public class McpTaskRequestRoutingRuntimeTests {
 		McpNormalizedEndpoint endpoint = endpointBuilder.build();
 		McpApplicationRequestHandler handler = invocation -> {
 			invocations.incrementAndGet();
-			return McpWireResult.complete(new McpJsonObject(
-					Map.of("accepted", McpJsonBoolean.TRUE)));
+			return McpApplicationDispatchOutcome.completed(McpWireResult.complete(new McpJsonObject(
+					Map.of("accepted", McpJsonBoolean.TRUE))));
 		};
 		Map<String, McpApplicationRequestHandler> handlers = Map.of(
 				"tasks/get", handler,

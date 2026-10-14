@@ -148,7 +148,7 @@ public class EmptyVarargsBindingTests {
 		assertNotNull(compiler);
 		try (var manager = compiler.getStandardFileManager(null, null, StandardCharsets.UTF_8)) {
 			var task = compiler.getTask(null, manager, null,
-					List.of("--release", "17", "-parameters", "-Asoklet.cacheMode=none",
+					List.of("--release", "21", "-parameters", "-Asoklet.cacheMode=none",
 							"-classpath", System.getProperty("java.class.path"), "-d", classes.toString()),
 					null, manager.getJavaFileObjects(source));
 			task.setProcessors(List.of(new SokletProcessor()));

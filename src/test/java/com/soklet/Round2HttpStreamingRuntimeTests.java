@@ -76,7 +76,6 @@ class Round2HttpStreamingRuntimeTests {
 	}
 
 	@Test
-	@org.junit.jupiter.api.condition.EnabledForJreRange(min = org.junit.jupiter.api.condition.JRE.JAVA_21)
 	void classicSocketUpstreamInterruptRemainsQuietAfterLiveDisconnect() throws Exception {
 		Fixture fixture = new Fixture(false, Duration.ofSeconds(3));
 		try (fixture; Socket client = fixture.request("/socket", "HTTP/1.1")) {

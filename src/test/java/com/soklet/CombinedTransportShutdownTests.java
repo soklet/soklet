@@ -20,8 +20,6 @@ import com.soklet.annotation.SseEventSource;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
-import org.junit.jupiter.api.condition.EnabledForJreRange;
-import org.junit.jupiter.api.condition.JRE;
 
 import java.io.ByteArrayOutputStream;
 import java.lang.reflect.Field;
@@ -42,7 +40,6 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Real concurrent work in all three built-in transports under one owner. */
 @Timeout(60)
-@EnabledForJreRange(min = JRE.JAVA_21)
 class CombinedTransportShutdownTests {
 
 	@Test

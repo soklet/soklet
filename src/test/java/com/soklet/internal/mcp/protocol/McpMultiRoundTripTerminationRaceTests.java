@@ -85,7 +85,7 @@ public class McpMultiRoundTripTerminationRaceTests {
 				stateRuntime, new ControllableClock(), 1, observations,
 				interceptors, invocation -> {
 					handlers.incrementAndGet();
-					return complete("must not run");
+					return McpApplicationDispatchOutcome.completed(complete("must not run"));
 				});
 		McpChunkedHttpClient client = null;
 
@@ -167,7 +167,7 @@ public class McpMultiRoundTripTerminationRaceTests {
 				stateRuntime, clock, 1, observations, interceptors, invocation -> {
 					invocation.requireHandlerEntry();
 					handlers.incrementAndGet();
-					return complete("peer complete");
+					return McpApplicationDispatchOutcome.completed(complete("peer complete"));
 				}, 1);
 		McpChunkedHttpClient blocked = null;
 		McpChunkedHttpClient peer = null;
@@ -265,8 +265,8 @@ public class McpMultiRoundTripTerminationRaceTests {
 						reason.set(invocation.cancellationReason().orElseThrow());
 						cancelations.incrementAndGet();
 					});
-					return sealInputRequired(stateRuntime, invocation,
-							new McpJsonString("blocked-seal"));
+					return McpApplicationDispatchOutcome.completed(sealInputRequired(stateRuntime, invocation,
+							new McpJsonString("blocked-seal")));
 				});
 		McpChunkedHttpClient client = null;
 		String deadlineBody = null;
@@ -372,21 +372,21 @@ public class McpMultiRoundTripTerminationRaceTests {
 						});
 						terminatedEntered.countDown();
 						awaitUninterruptibly(releaseTerminated);
-						return complete("late terminated branch");
+						return McpApplicationDispatchOutcome.completed(complete("late terminated branch"));
 					}
 					if ("branch-survivor".equals(requestId)) {
 						survivorEntered.countDown();
 						releaseSurvivor.await();
 						if (branchResult == BranchResult.COMPLETE)
-							return complete("survivor complete");
-						return sealInputRequired(stateRuntime, invocation,
-								new McpJsonString("survivor-next-round"));
+							return McpApplicationDispatchOutcome.completed(complete("survivor complete"));
+						return McpApplicationDispatchOutcome.completed(sealInputRequired(stateRuntime, invocation,
+								new McpJsonString("survivor-next-round")));
 					}
 					if ("branch-next".equals(requestId)) {
 						continuedRound.set(invocation
 								.frameworkRequestStateContinuation().orElseThrow()
 								.round());
-						return complete("next round complete");
+						return McpApplicationDispatchOutcome.completed(complete("next round complete"));
 					}
 					throw new AssertionError("Unexpected request ID " + requestId);
 				});
@@ -501,7 +501,7 @@ public class McpMultiRoundTripTerminationRaceTests {
 					});
 					handlerEntered.countDown();
 					awaitUninterruptibly(releaseHandler);
-					return inputRequired(roots);
+					return McpApplicationDispatchOutcome.completed(inputRequired(roots));
 				});
 		McpChunkedHttpClient client = null;
 

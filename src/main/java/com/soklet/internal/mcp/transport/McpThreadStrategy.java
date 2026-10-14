@@ -19,9 +19,6 @@ package com.soklet.internal.mcp.transport;
 import org.jspecify.annotations.NonNull;
 
 import java.lang.Thread.UncaughtExceptionHandler;
-import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
-import java.lang.invoke.MethodType;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -58,48 +55,17 @@ enum McpThreadStrategy {
 	},
 	VIRTUAL {
 		@Override
-		boolean supported() {
-			try {
-				Class.forName("java.lang.Thread$Builder$OfVirtual");
-				Executors.class.getMethod("newThreadPerTaskExecutor", ThreadFactory.class);
-				return true;
-			} catch (ClassNotFoundException | NoSuchMethodException e) {
-				return false;
-			}
-		}
-
-		@Override
 		@NonNull
 		ExecutorService createExecutor(int concurrency, @NonNull String threadNamePrefix,
 				@NonNull UncaughtExceptionHandler uncaughtExceptionHandler) {
 			validate(concurrency, threadNamePrefix, uncaughtExceptionHandler);
-
-			if (!supported())
-				throw new IllegalStateException("Virtual threads are not available on this runtime.");
-
-			ThreadFactory threadFactory = virtualThreadFactory(threadNamePrefix, uncaughtExceptionHandler);
-			MethodHandle newThreadPerTaskExecutor;
-
-			try {
-				newThreadPerTaskExecutor = MethodHandles.publicLookup().findStatic(
-						Executors.class,
-						"newThreadPerTaskExecutor",
-						MethodType.methodType(ExecutorService.class, ThreadFactory.class));
-			} catch (NoSuchMethodException | IllegalAccessException e) {
-				throw new IllegalStateException("Unable to access the virtual-thread executor factory.", e);
-			}
-
-			try {
-				return (ExecutorService) newThreadPerTaskExecutor.invoke(threadFactory);
-			} catch (Throwable throwable) {
-				throw new IllegalStateException("Unable to create a virtual-thread executor.", throwable);
-			}
+			// The dispatcher owns concurrency and queue admission limits.
+			return Executors.newThreadPerTaskExecutor(Thread.ofVirtual()
+					.name(threadNamePrefix, 1L)
+					.uncaughtExceptionHandler(uncaughtExceptionHandler)
+					.factory());
 		}
 	};
-
-	boolean supported() {
-		return true;
-	}
 
 	@NonNull
 	abstract ExecutorService createExecutor(int concurrency, @NonNull String threadNamePrefix,
@@ -125,44 +91,5 @@ enum McpThreadStrategy {
 			thread.setUncaughtExceptionHandler(uncaughtExceptionHandler);
 			return thread;
 		};
-	}
-
-	@NonNull
-	private static ThreadFactory virtualThreadFactory(@NonNull String prefix,
-			@NonNull UncaughtExceptionHandler uncaughtExceptionHandler) {
-		Class<?> virtualBuilderClass;
-
-		try {
-			virtualBuilderClass = Class.forName("java.lang.Thread$Builder$OfVirtual");
-		} catch (ClassNotFoundException e) {
-			throw new IllegalStateException("Unable to load the virtual-thread builder.", e);
-		}
-
-		MethodHandles.Lookup lookup = MethodHandles.publicLookup();
-
-		try {
-			MethodHandle ofVirtual = lookup.findStatic(
-					Thread.class,
-					"ofVirtual",
-					MethodType.methodType(virtualBuilderClass));
-			MethodHandle name = lookup.findVirtual(
-					virtualBuilderClass,
-					"name",
-					MethodType.methodType(virtualBuilderClass, String.class, long.class));
-			MethodHandle exceptionHandler = lookup.findVirtual(
-					virtualBuilderClass,
-					"uncaughtExceptionHandler",
-					MethodType.methodType(virtualBuilderClass, UncaughtExceptionHandler.class));
-			MethodHandle factory = lookup.findVirtual(
-					virtualBuilderClass,
-					"factory",
-					MethodType.methodType(ThreadFactory.class));
-			Object builder = ofVirtual.invoke();
-			builder = name.invoke(builder, prefix, 1L);
-			builder = exceptionHandler.invoke(builder, uncaughtExceptionHandler);
-			return (ThreadFactory) factory.invoke(builder);
-		} catch (Throwable throwable) {
-			throw new IllegalStateException("Unable to create a virtual-thread factory.", throwable);
-		}
 	}
 }

@@ -223,14 +223,14 @@ public class McpProtocolProfileIsolationTests {
 			handlerFields.add(invocation.request().params().fields());
 			if (!invocation.request().params().fields().members()
 					.containsKey("requestState"))
-				return McpWireResult.inputRequired("tools/call", Optional.empty(),
+				return McpApplicationDispatchOutcome.completed(McpWireResult.inputRequired("tools/call", Optional.empty(),
 						Optional.of(MRTR_STATE), Optional.empty(),
 						new McpJsonObject(Map.of("com.example/round",
-								new McpJsonString("initial"))));
-			return McpWireResult.complete(new McpJsonObject(Map.of(
+								new McpJsonString("initial")))));
+			return McpApplicationDispatchOutcome.completed(McpWireResult.complete(new McpJsonObject(Map.of(
 					"content", new McpJsonArray(List.of(new McpJsonObject(Map.of(
 							"type", new McpJsonString("text"),
-							"text", new McpJsonString("complete"))))))));
+							"text", new McpJsonString("complete")))))))));
 		}, ignored -> McpRateLimitDecision.allowed(), McpInputRequestPlan.empty(),
 				McpRequestStateMode.APPLICATION_PROTECTED);
 		McpApplicationRequestRouter router =

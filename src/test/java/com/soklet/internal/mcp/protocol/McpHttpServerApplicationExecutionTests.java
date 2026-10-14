@@ -65,11 +65,11 @@ public class McpHttpServerApplicationExecutionTests {
 		AtomicInteger invocations = new AtomicInteger();
 		McpApplicationRequestRouter router = router(invocation -> {
 			invocations.incrementAndGet();
-			return McpWireResult.complete(new McpJsonObject(
+			return McpApplicationDispatchOutcome.completed(McpWireResult.complete(new McpJsonObject(
 					Map.of("value", new McpJsonString("handled"))),
 					Optional.of(new McpResultMetadata(Optional.empty(),
 							new McpJsonObject(Map.of("com.example/trace",
-									new McpJsonString("trace-1"))))));
+									new McpJsonString("trace-1")))))));
 		});
 		McpHttpServerRuntime runtime = runtime(router, executionConfiguration(2, 2),
 				McpApplicationClock.SYSTEM);
@@ -112,7 +112,7 @@ public class McpHttpServerApplicationExecutionTests {
 				McpHttpTransportConfiguration.productionDefaults(0),
 				McpHttpEndpointPolicy.forDiscovery(CorsAuthorizer.rejectAllInstance(),
 						request -> McpRequestAdmissionDecision.ACCEPT),
-				endpoint, router(invocation -> completeResult("handled")),
+				endpoint, router(invocation -> McpApplicationDispatchOutcome.completed(completeResult("handled"))),
 				executionConfiguration(1, 1), McpApplicationClock.SYSTEM);
 
 		try {
@@ -136,7 +136,7 @@ public class McpHttpServerApplicationExecutionTests {
 			Assertions.assertTrue(releaseApplication.await(10,
 					TimeUnit.SECONDS),
 					"Timed out waiting to release the application request");
-			return completeResult("application-complete");
+			return McpApplicationDispatchOutcome.completed(completeResult("application-complete"));
 		});
 		McpHttpServerRuntime runtime = runtime(router, executionConfiguration(1, 1),
 				McpApplicationClock.SYSTEM);
@@ -196,7 +196,7 @@ public class McpHttpServerApplicationExecutionTests {
 				Assertions.assertTrue(releaseSecond.await(10,
 						TimeUnit.SECONDS),
 						"Timed out waiting to release the second request");
-			return completeResult("handled-" + ordinal);
+			return McpApplicationDispatchOutcome.completed(completeResult("handled-" + ordinal));
 		});
 		McpHttpServerRuntime runtime = runtime(router, executionConfiguration(2, 2),
 				McpApplicationClock.SYSTEM);
@@ -263,13 +263,13 @@ public class McpHttpServerApplicationExecutionTests {
 				Assertions.assertTrue(releaseFirst.await(10,
 						TimeUnit.SECONDS),
 						"Timed out waiting to release the expiring request");
-				return completeResult("unexpected-first-completion");
+				return McpApplicationDispatchOutcome.completed(completeResult("unexpected-first-completion"));
 			}
 			secondEntered.countDown();
 			Assertions.assertTrue(releaseSecond.await(10,
 					TimeUnit.SECONDS),
 					"Timed out waiting to release the surviving request");
-			return completeResult("survivor-complete");
+			return McpApplicationDispatchOutcome.completed(completeResult("survivor-complete"));
 		});
 		ControllableClock clock = new ControllableClock();
 		McpHttpServerRuntime runtime = runtime(router,
@@ -374,7 +374,7 @@ public class McpHttpServerApplicationExecutionTests {
 			} else if (invocationNumber == 2) {
 				secondEntered.countDown();
 			}
-			return completeResult("invocation-" + invocationNumber);
+			return McpApplicationDispatchOutcome.completed(completeResult("invocation-" + invocationNumber));
 		});
 		McpHttpServerRuntime runtime = runtime(router, executionConfiguration(1, 1),
 				McpApplicationClock.SYSTEM, observations);
@@ -465,7 +465,7 @@ public class McpHttpServerApplicationExecutionTests {
 					}
 				}
 			}
-			return completeResult("invocation-" + invocationNumber);
+			return McpApplicationDispatchOutcome.completed(completeResult("invocation-" + invocationNumber));
 		});
 		ControllableClock clock = new ControllableClock();
 		McpApplicationExecutionConfiguration configuration =
@@ -560,7 +560,7 @@ public class McpHttpServerApplicationExecutionTests {
 			Assertions.assertTrue(releaseHandler.await(10,
 					TimeUnit.SECONDS),
 					"Timed out waiting to release the application handler");
-			return completeResult("too-late");
+			return McpApplicationDispatchOutcome.completed(completeResult("too-late"));
 		});
 		McpHttpServerRuntime runtime = runtime(router,
 				new McpApplicationExecutionConfiguration(
@@ -628,7 +628,7 @@ public class McpHttpServerApplicationExecutionTests {
 					return McpRequestAdmissionDecision.ACCEPT;
 				}), endpoint, router(invocation -> {
 					handlerInvocations.incrementAndGet();
-					return completeResult("must-not-run");
+					return McpApplicationDispatchOutcome.completed(completeResult("must-not-run"));
 				}), new McpApplicationExecutionConfiguration(
 						1, 1, Duration.ofSeconds(5), Duration.ofDays(1)), clock);
 		ExecutorService client = Executors.newSingleThreadExecutor();
@@ -760,7 +760,7 @@ public class McpHttpServerApplicationExecutionTests {
 					return McpRequestAdmissionDecision.ACCEPT;
 				}), endpoint, router(invocation -> {
 					handlerInvocations.incrementAndGet();
-					return completeResult("must-not-run");
+					return McpApplicationDispatchOutcome.completed(completeResult("must-not-run"));
 				}), new McpApplicationExecutionConfiguration(
 						1, 1, Duration.ofSeconds(5), Duration.ofDays(1)), clock);
 		ExecutorService client = Executors.newSingleThreadExecutor();
@@ -841,8 +841,8 @@ public class McpHttpServerApplicationExecutionTests {
 					return McpRequestAdmissionDecision.ACCEPT;
 				});
 		McpHttpEndpointBinding binding = new McpHttpEndpointBinding(policy,
-				endpoint, router(invocation -> completeResult(
-						"invocation-" + handlerInvocations.incrementAndGet())));
+				endpoint, router(invocation -> McpApplicationDispatchOutcome.completed(completeResult(
+						"invocation-" + handlerInvocations.incrementAndGet()))));
 		McpHttpServerRuntime runtime = new McpHttpServerRuntime(
 				transportConfiguration(Duration.ofSeconds(5), 1, 1),
 				List.of(binding), McpJsonLimits.productionDefaults(),
@@ -1026,8 +1026,8 @@ public class McpHttpServerApplicationExecutionTests {
 						}
 					}
 					return McpRequestAdmissionDecision.ACCEPT;
-				}), endpoint, router(invocation -> completeResult(
-						"invocation-" + handlerInvocations.incrementAndGet())),
+				}), endpoint, router(invocation -> McpApplicationDispatchOutcome.completed(completeResult(
+						"invocation-" + handlerInvocations.incrementAndGet()))),
 				new McpApplicationExecutionConfiguration(
 						1, 1, Duration.ofSeconds(5), Duration.ofDays(1)), clock);
 		ExecutorService clients = Executors.newFixedThreadPool(2);
@@ -1234,7 +1234,7 @@ public class McpHttpServerApplicationExecutionTests {
 						TimeUnit.SECONDS),
 						"Timed out waiting to release the queued-work holder");
 			}
-			return completeResult("invocation-" + invocationNumber);
+			return McpApplicationDispatchOutcome.completed(completeResult("invocation-" + invocationNumber));
 		});
 		McpHttpServerRuntime runtime = runtime(router, executionConfiguration(1, 1),
 				McpApplicationClock.SYSTEM, observer);
@@ -1319,7 +1319,7 @@ public class McpHttpServerApplicationExecutionTests {
 					firstExited.countDown();
 				}
 			}
-			return completeResult("invocation-" + invocationNumber);
+			return McpApplicationDispatchOutcome.completed(completeResult("invocation-" + invocationNumber));
 		});
 		McpHttpServerRuntime runtime = runtime(router, executionConfiguration(1, 1),
 				McpApplicationClock.SYSTEM);
@@ -1394,7 +1394,7 @@ public class McpHttpServerApplicationExecutionTests {
 					firstExited.countDown();
 				}
 			}
-			return completeResult("invocation-" + invocationNumber);
+			return McpApplicationDispatchOutcome.completed(completeResult("invocation-" + invocationNumber));
 		});
 		McpHttpServerRuntime runtime = runtime(router, executionConfiguration(1, 1),
 				McpApplicationClock.SYSTEM);
@@ -1478,7 +1478,7 @@ public class McpHttpServerApplicationExecutionTests {
 					}
 				}
 			}
-			return completeResult("invocation-" + invocationNumber);
+			return McpApplicationDispatchOutcome.completed(completeResult("invocation-" + invocationNumber));
 		});
 		McpHttpServerRuntime runtime = runtime(router,
 				executionConfiguration(1, 1), McpApplicationClock.SYSTEM);

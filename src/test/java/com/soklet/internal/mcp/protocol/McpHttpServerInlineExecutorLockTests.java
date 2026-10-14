@@ -68,8 +68,8 @@ class McpHttpServerInlineExecutorLockTests {
 				McpApplicationRequestRouter.fromHandlers(Map.of(
 						APPLICATION_METHOD, invocation -> {
 							handlerProbe.run(invocation);
-							return McpWireResult.complete(new McpJsonObject(Map.of(
-									"value", new McpJsonString("complete"))));
+							return McpApplicationDispatchOutcome.completed(McpWireResult.complete(new McpJsonObject(Map.of(
+									"value", new McpJsonString("complete")))));
 						}));
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
 				McpImplementationMetadata.withNameAndVersion(

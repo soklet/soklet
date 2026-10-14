@@ -4,8 +4,8 @@ This separate public-API fixture exercises Soklet's server-side Apps contracts
 against a packaged candidate JAR. It also supplies a self-contained UI shell
 using the pinned official Apps SDK. The separate `run-host.mjs` profile drives
 actual Inspector rendering and its refresh bridge. Neither profile is an official
-core-conformance scenario or a production authentication example. The existing
-ordinary-tools Inspector profiles are unchanged.
+core-conformance scenario or a production authentication example. Ordinary-tools
+Inspector profiles are qualified separately.
 
 ## Scope
 
@@ -30,7 +30,8 @@ no credentials or personalized data, and needs no browser-side CDN/package
 fetches. Tools supply English, Portuguese, or Arabic structured data and a
 separately authored localized text summary. The complete-result sanitizer
 replaces raw text and metadata, removing a fixed synthetic private canary from
-both. Harmless `example/view` metadata stays metadata, never fallback text.
+both. Invalid tool arguments produce a sanitized text-only tool error with no
+structured catalog data. Harmless `example/view` metadata stays metadata, never fallback text.
 Currency and time zone are explicit application data (`USD`/`UTC`), not inferred
 from locale. The catalog localizer uses the same admitted caller locale.
 
@@ -51,6 +52,19 @@ denied; Inspector's automatic catalog-change subscription attempt is checked as
 an exact policy denial, not accepted as a stream or ignored.
 
 ## Build the shell
+
+Push and pull-request CI first compiles all fixture and contract-test sources
+against the packaged JAR with `--release 21`, then runs the Simulator and
+loopback HTTP authorization contracts on each supported CI JDK:
+
+```sh
+node verification/interoperability/apps/ci-contracts.mjs \
+  target/soklet-4.0.0.jar /absolute/path/to/jdk/bin/java
+```
+
+This fast check supplies an inert HTML shell and needs no SDK installation.
+It catches public-API and server-result drift; it does not qualify browser
+rendering or replace the candidate-backed shell and host checks below.
 
 Use Node 26.5.0/npm 11.17.0 and the exact existing
 [Inspector lock and dependency review](../inspector/dependency-review.md).
@@ -98,7 +112,7 @@ node verification/interoperability/apps/run.mjs \
   --work-dir /absolute/path/to/new-run
 ```
 
-Compilation uses only the candidate JAR and `--release 17 -proc:none -Xlint:all
+Compilation uses only the candidate JAR and `--release 21 -proc:none -Xlint:all
 -Werror`. `jdeps` rejects internal or missing class dependencies. Thirteen fixed
 scenarios execute 35 requests, including the supported subscription's unchallenged
 policy denial, actual localized catalog titles,
@@ -121,12 +135,12 @@ supervised loopback listener below. Nothing here establishes a production-host p
 
 For a separate, narrow live-HTTP authorization check, compile the public-API
 fixture and `AppsFixtureHttpAuthorizationTest.java` against the same candidate
-JAR with `--release 17 -proc:none -Xlint:all -Werror`, then run the test with
+JAR with `--release 21 -proc:none -Xlint:all -Werror`, then run the test with
 the candidate JAR on the classpath and the built shell as its argument:
 
 ```sh
 mkdir -p /absolute/path/to/new-classes
-"/absolute/path/to/jdk/bin/javac" --release 17 -proc:none -Xlint:all -Werror \
+"/absolute/path/to/jdk/bin/javac" --release 21 -proc:none -Xlint:all -Werror \
   -classpath /absolute/path/to/candidate.jar -d /absolute/path/to/new-classes \
   verification/interoperability/apps/src/com/soklet/interop/apps/AppsFixture.java \
   verification/interoperability/apps/test-src/com/soklet/interop/apps/AppsFixtureHttpAuthorizationTest.java
@@ -152,16 +166,22 @@ node verification/interoperability/apps/run-host.mjs \
   --java /absolute/path/to/jdk/bin/java \
   --shell /absolute/path/to/catalog.html \
   --dependencies /absolute/path/to/locked-install \
+  --inspector-build /absolute/path/to/prepared-inspector-build \
   --browser '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
   --work-dir /absolute/path/to/new-host-run
 ```
 
-This local macOS profile requires Node 26.5.0 and the exact installed dependency
-tree from the reviewed, script-disabled Inspector lock installation. It performs
+This local macOS profile requires Node 26.5.0, the exact dependency tree used to
+build the Apps SDK shell, and the separately prepared Inspector source build
+described in [the Inspector instructions](../inspector/README.md). The host is
+unmodified upstream commit `1974465ccb5454a5110e609e4140171fa360a544`, containing
+the plain-403 fix from PR #2690. Its package version is still `2.10.1`; receipts
+explicitly identify it as an **unreleased upstream source build**. The older
+locked installation supplies the shell dependencies only. The host runner performs
 no npm install or upstream modification. The candidate, embedded POM, fixture
-classes, shell/build receipt, harness sources, dependency tree, and complete
-Chrome distribution are identified and rechecked. It uses Inspector 2.7.0's
-read-only modern-HTTP configuration with Apps enabled and Skills disabled.
+classes, shell/build receipt, harness sources, dependency tree, verified upstream
+source/build receipt, and complete Chrome distribution are identified and
+rechecked. Configuration is read-only modern HTTP with Apps enabled and Skills disabled.
 
 The launcher receives a random disposable token through private stdin, binds
 only `127.0.0.1` on an ephemeral port, and stops on EOF. It emits only fixed
@@ -188,9 +208,21 @@ contexts are tracked across same-process frames and paused/attached cross-proces
 iframes. No synthetic MCP/SDK call is used as evidence of a button click.
 The probe checks actual text-only rendering, `lang`/`dir`, currency/UTC date,
 opaque `srcdoc` sandbox attributes, data clearing while pending, and successful
-render after refresh. A separate exact structural trace proves the UI resource
-and both tool responses match the fixture. Traces are sealed again after shutdown
-so late extra requests or errors cannot retain a passing verdict.
+render after refresh. The current upstream-source profile requires exactly eight
+successful MCP exchanges and one to eight individually validated subscription
+policy denials (HTTP 403), at most sixteen retained exchanges. Each retry must
+retain the exact authentication, protocol, capability, error-envelope and byte
+bounds; the first denial precedes the initial tool call, and successful exchanges
+retain their required order. This reuses the already reviewed bounded-denial
+validator without changing the historical exact-one-denial profile or receipts.
+
+A fixed six-second observation window follows the refresh and must complete
+without a process exit, interruption, browser exception, proxy rejection or
+unexpected traffic. The transport still caps all exchanges at 32. Real DOM
+disconnect and supervised cleanup follow, and traces are sealed again after
+all callers and the proxy stop. Late extra requests or errors cannot retain a
+passing verdict. The receipt records both the completed observation and these
+bounds, and input identity covers both trace validators.
 
 Only allowlisted structural facts and static input identities are saved in
 `receipt.json` and `sanitized-trace.json`. No raw browser/host diagnostics, live
@@ -200,7 +232,12 @@ the shared dependency installation and the user's host state are untouched.
 Failed attempts remain non-PASS. Successful runs qualify only this narrow local
 render/refresh profile, never the full host-security matrix.
 
-### Pinned host limitation: unsolicited OAuth recovery
+### Historical Inspector 2.7.0 limitation: unsolicited OAuth recovery
+
+The following describes retained historical receipts. The current source pin
+contains the upstream fix for an unchallenged 403, which must be verified by a
+fresh run. This does not change the fixture's denial policy or clear independent
+real-401 revocation/OAuth and browser-permission limitations.
 
 Inspector's web client attempts OAuth discovery after Soklet's intentional 403
 catalog-subscription denial, even with the configured disposable bearer header.
@@ -245,6 +282,7 @@ of the bundled SDK. They cover malicious translations, formatting, races,
 missing/conflicting host preferences, changed context, failed calls, and
 teardown. Browser-probe self-tests use CDP mocks; only a real `run-host.mjs`
 receipt establishes its narrow host result. Merely observing sandbox attributes
-is not proof of CSP or permissions enforcement. Host CSP/permission denial,
-full localization and tenant isolation, revocation/failure UI behavior, capability
-OFF/wrong-MIME host profiles, and later production-host qualification remain open.
+is not proof of CSP or permissions enforcement. The separate advanced Apps
+profiles cover caller transitions, revocation, permissions, CSP denial/allowlisting,
+and Apps OFF; each needs its own receipt. The MIME matrix provides direct-HTTP
+evidence only. Later production-host qualification remains separate.

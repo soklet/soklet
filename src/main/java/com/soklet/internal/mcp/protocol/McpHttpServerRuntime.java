@@ -4248,7 +4248,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				processor, application, publicRequest, simulation,
 				lifecycleAdmission, callback);
 		FutureTask<Void> task = new FutureTask<>(() -> {
-			try {
+			try (McpApplicationExecutionObserver.MetricScope ignored = requestControl.useMetricSequence()) {
 				MicrohttpResponse response = processRequest(requiredAddress, request,
 						requestControl, application);
 				requestControl.completeProtocol(response);
@@ -4956,346 +4956,36 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				"subscriptions/listen".equals(mappedRequest.method());
 		boolean legacyResourceSubscribe = legacy && "resources/subscribe".equals(mappedRequest.method());
 		boolean legacyResourceUnsubscribe = legacy && "resources/unsubscribe".equals(mappedRequest.method());
-		boolean completionRequestMethod =
-				"completion/complete".equals(mappedRequest.method());
-		boolean taskRequest = isTaskRequestMethod(mappedRequest.method());
 		boolean callerAwareCatalog = endpoint.catalogAccessAdapter().isPresent();
 		boolean pagedLegacyCatalog = legacy
 				&& McpLegacyCatalogPager.Kind.forMethod(mappedRequest.method()).isPresent()
 				&& !(resourcesListRequest && endpoint.customResourceListHandler());
-		Optional<String> operationName = Optional.empty();
-		Optional<CompletionRequest> completionRequest = Optional.empty();
 		Optional<McpApplicationToolRoute> toolRoute = Optional.empty();
 		Optional<McpApplicationPromptRoute> promptRoute = Optional.empty();
-		Optional<McpApplicationRequestHandler> applicationHandler = Optional.empty();
 		McpInputRequestPlan inputRequestPlan = McpInputRequestPlan.empty();
 		McpRequestStateMode requestStateMode = McpRequestStateMode.NONE;
 		boolean taskRequired = false;
-		McpJsonObject inputResponses = McpJsonObject.empty();
-		boolean inputResponsesSupplied = false;
 		Optional<String> suppliedRequestState = Optional.empty();
-		Optional<AcceptedSubscriptionFilter> acceptedSubscriptionFilter =
-				Optional.empty();
 		Optional<CatalogAccessSession> catalogAccessSession = Optional.empty();
 		Set<String> accessibleToolNames = Set.of();
 		Set<String> accessiblePromptNames = Set.of();
 		AtomicReference<@Nullable String> catalogSelectedLocaleSlot =
 				new AtomicReference<>();
-		boolean unsupportedSessionOperation = unsupportedLegacyMethod;
 
-		boolean invalidSessionOperationParameters = false;
-		try {
-			if (unsupportedLegacyMethod) {
-				// The valid envelope still needs admission and the owner/session fence.
-				// Unknown methods have no operation-specific parameter contract.
-			} else if (initializeRequest) {
-				// The 2025 mapper has already validated required initialization fields.
-				if (!mappedRequest.params().fields().members().keySet().containsAll(
-						Set.of("protocolVersion", "capabilities", "clientInfo")))
-					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
-							sessionEnabled && !initializeRequest);
-			} else if (pingRequest) {
-				if (!mappedRequest.params().fields().members().isEmpty())
-					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
-							sessionEnabled && !initializeRequest);
-			} else if (discoveryRequest) {
-				if (!mappedRequest.params().fields().members().isEmpty())
-					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
-							sessionEnabled && !initializeRequest);
-			} else if (toolsListRequest) {
-				if (capabilityRegistry.tools().isEmpty()) {
-					if (!sessionEnabled)
-						return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
-					unsupportedSessionOperation = true;
-				}
-				if (!unsupportedSessionOperation
-						&& !validFrameworkCatalogParams(mappedRequest.params().fields(), legacy))
-					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
-							sessionEnabled && !initializeRequest);
-			} else if (promptsListRequest) {
-				if (capabilityRegistry.prompts().isEmpty()) {
-					if (!sessionEnabled)
-						return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
-					unsupportedSessionOperation = true;
-				}
-				if (!unsupportedSessionOperation
-						&& !validFrameworkCatalogParams(mappedRequest.params().fields(), legacy))
-					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
-							sessionEnabled && !initializeRequest);
-			} else if ("skills/list".equals(mappedRequest.method())
-					|| "skills/get".equals(mappedRequest.method())) {
-				if (endpoint.skillsPlan().isEmpty())
-					return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
-				McpServerRuntimeBridge.SkillsPlan skillsPlan = endpoint.skillsPlan().orElseThrow();
-				Map<String, McpJsonValue> fields = mappedRequest.params().fields().members();
-				if ("skills/list".equals(mappedRequest.method())) {
-					if (!Set.of("cursor").containsAll(fields.keySet())
-							|| !skillsPlan.customListHandler() && fields.containsKey("cursor"))
-						return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
-								sessionEnabled && !initializeRequest);
-					if (fields.containsKey("cursor")
-							&& (!(fields.get("cursor") instanceof McpJsonString cursor)
-							|| !McpCursorValidator.fitsWithinUtf8ByteLimit(cursor.value(), skillsPlan.maximumCursorSizeInBytes())))
-						return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
-								sessionEnabled && !initializeRequest);
-				} else {
-					if (!fields.keySet().equals(Set.of("uri"))
-							|| !(fields.get("uri") instanceof McpJsonString uri))
-						return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
-								sessionEnabled && !initializeRequest);
-					try {
-						operationName = Optional.of(McpLevelOneUriTemplate.requireValidAbsoluteUri(uri.value(), "Skills URI"));
-					} catch (IllegalArgumentException ignored) {
-						return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
-								sessionEnabled && !initializeRequest);
-					}
-				}
-				applicationHandler = applicationRouter.resolve(mappedRequest.method());
-				if (applicationHandler.isEmpty())
-					return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
-			} else if (resourcesListRequest) {
-				if (capabilityRegistry.capabilities().resources().isEmpty()) {
-					if (!sessionEnabled)
-						return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
-					unsupportedSessionOperation = true;
-				}
-				if (!unsupportedSessionOperation) {
-					if (endpoint.customResourceListHandler()) {
-						Map<String, McpJsonValue> fields =
-								mappedRequest.params().fields().members();
-						if (!Set.of("cursor").containsAll(fields.keySet()))
-							return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
-									sessionEnabled && !initializeRequest);
-						Optional<String> cursor = Optional.empty();
-						if (fields.containsKey("cursor")) {
-							McpJsonValue cursorValue = fields.get("cursor");
-							if (!(cursorValue instanceof McpJsonString string)
-									|| !McpCursorValidator.fitsWithinUtf8ByteLimit(
-											string.value(), endpoint.maximumCursorSizeInBytes()))
-								return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
-										sessionEnabled && !initializeRequest);
-							cursor = Optional.of(string.value());
-						}
-						Optional<McpApplicationResourceListRoute> listRoute =
-								applicationRouter.resourceListRoute();
-						if (listRoute.isEmpty())
-							return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
-						Optional<String> resolvedCursor = cursor;
-						McpApplicationResourceListRoute resolvedRoute = listRoute.orElseThrow();
-						applicationHandler = Optional.of(invocation -> resourceResultWithCachePolicy(
-									resolvedRoute.handler().handle(
-											new McpApplicationResourceListInvocation(invocation,
-													resolvedCursor,
-													capabilityRegistry.exactResourceDescriptors(),
-													endpoint.resourceListCachePolicy())),
-									endpoint.resourceListCachePolicy(), true, false,
-									endpointPolicy.localizationEnabled(),
-									endpoint.maximumCursorSizeInBytes(), endpointPolicy.path(),
-									applicationRouter));
-					} else {
-						if (!unsupportedSessionOperation
-							&& !validFrameworkCatalogParams(mappedRequest.params().fields(), legacy))
-							return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
-									sessionEnabled && !initializeRequest);
-					}
-				}
-
-			} else if (resourceTemplatesListRequest) {
-				if (capabilityRegistry.capabilities().resources().isEmpty()) {
-					if (!sessionEnabled)
-						return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
-					unsupportedSessionOperation = true;
-				}
-				if (!unsupportedSessionOperation
-						&& !validFrameworkCatalogParams(mappedRequest.params().fields(), legacy))
-					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
-							sessionEnabled && !initializeRequest);
-			} else if (legacyResourceSubscribe || legacyResourceUnsubscribe) {
-				if (!sessionEnabled || !legacyTransportFamilies.getOrDefault(endpointRuntime.path(), Map.of())
-						.getOrDefault(selectedRevision, Set.of()).contains(McpResourceNotificationType.RESOURCE_UPDATED)) {
-					if (!sessionEnabled)
-						return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
-					unsupportedSessionOperation = true;
-				}
-				if (!unsupportedSessionOperation) {
-					Map<String, McpJsonValue> fields = mappedRequest.params().fields().members();
-					if (!fields.keySet().equals(Set.of("uri")) || !(fields.get("uri") instanceof McpJsonString uri))
-						return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
-								sessionEnabled && !initializeRequest);
-					try {
-						String validatedUri = McpLevelOneUriTemplate.requireValidAbsoluteUri(uri.value(), "Resource subscription URI");
-						operationName = Optional.of(validatedUri);
-						if (legacyResourceSubscribe)
-							acceptedSubscriptionFilter = Optional.of(new AcceptedSubscriptionFilter(false, false, false,
-									true, Map.of(URI.create(validatedUri), new SubscriptionResource(URI.create(validatedUri), validatedUri)),
-									false, List.of(), Set.of(), mappedRequest.params().metadata().clientCapabilities()));
-					} catch (IllegalArgumentException exception) {
-						return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
-								sessionEnabled && !initializeRequest);
-					}
-				}
-
-			} else if (subscriptionListenRequest) {
-				if (endpoint.subscriptionConfig().isEmpty()
-						|| endpointBinding.subscriptionEventSources().isEmpty())
-					return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
-				try {
-					acceptedSubscriptionFilter = Optional.of(
-							parseAcceptedSubscriptionFilter(mappedRequest,
-									endpoint.subscriptionConfig().orElseThrow(),
-									endpointPolicy.catalogLocalizer()
-											.map(McpRuntimeCatalogLocalizer
-													::localizedResponseKinds)
-											.orElseGet(Set::of),
-									!capabilityRegistry.tools().isEmpty(),
-									!capabilityRegistry.prompts().isEmpty()));
-				} catch (IllegalArgumentException exception) {
-					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
-							sessionEnabled && !initializeRequest);
-				}
-				if (acceptedSubscriptionFilter.orElseThrow().taskIdsRequested()
-						&& !mappedRequest.params().metadata().clientCapabilities()
-								.extensions().containsKey(TASKS_EXTENSION_IDENTIFIER))
-					return missingTasksCapability(protocolProfile, mappedRequest.id(),
-							corsHeaders);
-			} else if (completionRequestMethod) {
-				if (!capabilityRegistry.capabilities().completions()) {
-					if (!sessionEnabled)
-						return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
-					unsupportedSessionOperation = true;
-				}
-				if (!unsupportedSessionOperation) {
-					completionRequest = parseCompletionRequest(
-							mappedRequest.params().fields().members());
-					if (completionRequest.isEmpty())
-						return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
-								sessionEnabled && !initializeRequest);
-					operationName = Optional.of(completionRequest.orElseThrow().reference());
-				}
-
-			} else if (taskRequest) {
-				Optional<McpApplicationRequestHandler> taskHandler =
-						applicationRouter.resolve(mappedRequest.method());
-				boolean tasksSupported = capabilityRegistry.capabilities().extensions()
-						.containsKey(TASKS_EXTENSION_IDENTIFIER)
-						&& taskHandler.isPresent();
-				if (!tasksSupported)
-					return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
-				if (!mappedRequest.params().metadata().clientCapabilities().extensions()
-						.containsKey(TASKS_EXTENSION_IDENTIFIER))
-					return missingTasksCapability(protocolProfile, mappedRequest.id(),
-							corsHeaders);
-
-				Map<String, McpJsonValue> fields =
-						mappedRequest.params().fields().members();
-				McpJsonValue taskIdValue = fields.get("taskId");
-				if (!(taskIdValue instanceof McpJsonString taskId)
-						|| !validTaskId(taskId.value()))
-					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
-							sessionEnabled && !initializeRequest);
-				operationName = Optional.of(taskId.value());
-
-				if ("tasks/update".equals(mappedRequest.method())) {
-					try {
-						Optional<McpJsonObject> parsedInputResponses =
-								parseTaskInputResponses(fields);
-						if (parsedInputResponses.isEmpty())
-							return invalidParams(protocolProfile, mappedRequest,
-									corsHeaders);
-						inputResponses = parsedInputResponses.orElseThrow();
-					} catch (IllegalArgumentException exception) {
-						return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
-								sessionEnabled && !initializeRequest);
-					}
-				}
-				applicationHandler = taskHandler;
-			} else if ("tools/call".equals(mappedRequest.method())) {
-				Map<String, McpJsonValue> fields =
-						mappedRequest.params().fields().members();
-				try {
-					Optional<McpJsonObject> parsedInputResponses =
-							parseInputResponses(fields);
-					inputResponses = parsedInputResponses.orElseGet(McpJsonObject::empty);
-					inputResponsesSupplied = parsedInputResponses.isPresent();
-				} catch (IllegalArgumentException exception) {
-					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
-							sessionEnabled && !initializeRequest);
-				}
-				McpJsonValue nameValue = fields.get("name");
-				if (!(nameValue instanceof McpJsonString name) || name.value().isBlank())
-					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
-							sessionEnabled && !initializeRequest);
-				operationName = Optional.of(name.value());
-				if (!callerAwareCatalog) {
-					McpJsonValue argumentsValue = fields.get("arguments");
-					if (argumentsValue != null
-							&& !(argumentsValue instanceof McpJsonObject))
-						return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
-								sessionEnabled && !initializeRequest);
-				}
-			} else if ("prompts/get".equals(mappedRequest.method())) {
-				Map<String, McpJsonValue> fields =
-						mappedRequest.params().fields().members();
-				try {
-					Optional<McpJsonObject> parsedInputResponses =
-							parseInputResponses(fields);
-					inputResponses = parsedInputResponses.orElseGet(McpJsonObject::empty);
-					inputResponsesSupplied = parsedInputResponses.isPresent();
-				} catch (IllegalArgumentException exception) {
-					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
-							sessionEnabled && !initializeRequest);
-				}
-				McpJsonValue nameValue = fields.get("name");
-				if (!(nameValue instanceof McpJsonString name) || name.value().isBlank())
-					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
-							sessionEnabled && !initializeRequest);
-				operationName = Optional.of(name.value());
-
-				if (!callerAwareCatalog && !validPromptArgumentValues(fields.get("arguments")))
-					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
-							sessionEnabled && !initializeRequest);
-			} else if ("resources/read".equals(mappedRequest.method())) {
-				Map<String, McpJsonValue> fields = mappedRequest.params().fields().members();
-				try {
-					Optional<McpJsonObject> parsedInputResponses =
-							parseInputResponses(fields);
-					inputResponses = parsedInputResponses.orElseGet(McpJsonObject::empty);
-					inputResponsesSupplied = parsedInputResponses.isPresent();
-				} catch (IllegalArgumentException exception) {
-					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
-							sessionEnabled && !initializeRequest);
-				}
-				McpJsonValue uriValue = fields.get("uri");
-				if (!(uriValue instanceof McpJsonString uriString))
-					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
-							sessionEnabled && !initializeRequest);
-				String uri;
-				try {
-					uri = McpLevelOneUriTemplate.requireValidAbsoluteUri(
-							uriString.value(), "Resource URI");
-				} catch (IllegalArgumentException exception) {
-					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
-							sessionEnabled && !initializeRequest);
-				}
-				operationName = Optional.of(uri);
-			} else if (mappedRequest.method().startsWith("tasks/")
-					|| mappedRequest.method().startsWith("skills/")) {
-				// These framework extensions own their complete method namespaces.
-				// Unknown methods never fall through to an application route.
-				if (!sessionEnabled)
-					return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
-				unsupportedSessionOperation = true;
-			} else {
-				applicationHandler = applicationRouter.resolve(mappedRequest.method());
-				if (applicationHandler.isEmpty()) {
-					if (!sessionEnabled)
-						return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
-					unsupportedSessionOperation = true;
-				}
-			}
-		} catch (DeferredLegacyOperationValidation ignored) {
-			invalidSessionOperationParameters = true;
+		OperationValidationOutcome.Continued operationValidation;
+		switch (validateOperation(endpointRuntime, endpoint, capabilityRegistry, applicationRouter,
+				protocolProfile, mappedRequest, corsHeaders, legacy, sessionEnabled)) {
+			case OperationValidationOutcome.Continued continued -> operationValidation = continued;
+			case OperationValidationOutcome.Rejected rejected -> { return rejected.getResponse(); }
 		}
+		OperationValidationMetadata validationMetadata = operationValidation.getMetadata();
+		Optional<String> operationName = validationMetadata.getOperationName();
+		Optional<CompletionRequest> completionRequest = validationMetadata.getCompletionRequest();
+		Optional<McpApplicationRequestHandler> applicationHandler = validationMetadata.getApplicationHandler();
+		McpJsonObject inputResponses = validationMetadata.getInputResponses();
+		boolean inputResponsesSupplied = validationMetadata.getInputResponsesSupplied();
+		Optional<AcceptedSubscriptionFilter> acceptedSubscriptionFilter = validationMetadata.getAcceptedSubscriptionFilter();
+		boolean unsupportedSessionOperation = validationMetadata.getUnsupportedSessionOperation();
 
 		boolean completionPromptRequest = completionRequest
 				.map(value -> value.promptReference()).orElse(false);
@@ -5399,8 +5089,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 		if (unsupportedSessionOperation)
 			return methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders);
-		if (invalidSessionOperationParameters)
-			return invalidParams(protocolProfile, mappedRequest, corsHeaders);
+		switch (operationValidation) {
+			case OperationValidationOutcome.Completed ignored -> {}
+			case OperationValidationOutcome.DeferredInvalidParameters ignored -> {
+				return invalidParams(protocolProfile, mappedRequest, corsHeaders);
+			}
+		}
 		if ("prompts/get".equals(mappedRequest.method())
 				&& capabilityRegistry.prompts().isEmpty()
 				&& applicationRouter.resolve(mappedRequest.method()).isEmpty())
@@ -5516,14 +5210,13 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				inputRequestPlan = route.inputRequestPlan();
 				requestStateMode = route.requestStateMode();
 				Map<String, String> variables = templateVariables;
-				applicationHandler = Optional.of(invocation -> resourceResultWithCachePolicy(
-						route.handler().handle(new McpApplicationResourceReadInvocation(
-								invocation, uri, variables, route.cachePolicy())),
-						route.cachePolicy(), false,
-						resourceRetry,
-						endpointPolicy.localizationEnabled(),
-						endpoint.maximumCursorSizeInBytes(), endpointPolicy.path(),
-						applicationRouter));
+				applicationHandler = Optional.of(invocation -> route.handler().handle(
+						new McpApplicationResourceReadInvocation(invocation, uri, variables, route.cachePolicy()))
+						.mapCompleted(result -> resourceResultWithCachePolicy(result,
+								route.cachePolicy(), false, resourceRetry,
+								endpointPolicy.localizationEnabled(),
+								endpoint.maximumCursorSizeInBytes(), endpointPolicy.path(),
+								applicationRouter)));
 			} else {
 				// Preserve the generic package-private seam used by transport tests.
 				if (endpoint.skillsPlan().isPresent() && !fields.keySet().equals(Set.of("uri")))
@@ -6215,7 +5908,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						completion.reference()).orElse(null);
 				if (route == null) {
 					applicationHandler = Optional.of(invocation ->
-							emptyCompletionResult());
+							McpApplicationDispatchOutcome.completed(emptyCompletionResult()));
 				}
 			} else {
 				route = applicationRouter.resolveResourceCompletion(
@@ -6232,7 +5925,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					if (!argumentNames.contains(completion.argumentName())
 							|| !argumentNames.containsAll(completion.contextArguments().keySet()))
 						return invalidParams(protocolProfile, mappedRequest, corsHeaders);
-					applicationHandler = Optional.of(invocation -> emptyCompletionResult());
+					applicationHandler = Optional.of(invocation ->
+							McpApplicationDispatchOutcome.completed(emptyCompletionResult()));
 				} else if (!route.argumentNames().contains(completion.argumentName())
 						|| !route.argumentNames().containsAll(
 							completion.contextArguments().keySet())) {
@@ -6466,10 +6160,11 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				if (!taskId.equals(snapshot.task().getTaskId()))
 					throw new IllegalStateException(
 							"The MCP task manager returned a mismatched task ID.");
-				McpServerRuntimeBridge.requireTaskInputCapabilities(snapshot,
-						requiredFilter.clientCapabilities());
+				if (McpServerRuntimeBridge.taskInputCapabilityError(snapshot,
+						requiredFilter.clientCapabilities()).isPresent())
+					continue;
 			} catch (Throwable throwable) {
-				// One unavailable, malformed, or capability-incompatible task must not
+				// One unavailable or malformed task must not
 				// destroy unrelated advisory subscriptions in the same request. Polling
 				// remains the explicit, authoritative task-error path.
 				if (throwable instanceof InterruptedException)
@@ -9353,20 +9048,458 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						"Method not found", data), corsHeaders);
 	}
 
-	/** Carries no Throwable evidence; only defers an operation error behind session fencing. */
-	private static final class DeferredLegacyOperationValidation extends RuntimeException {
-		private static final long serialVersionUID = 1L;
-		private static final DeferredLegacyOperationValidation INSTANCE = new DeferredLegacyOperationValidation();
-		private DeferredLegacyOperationValidation() { super(null, null, false, false); }
+	/** Validates operation fields while preserving partial metadata for policy/session fencing. */
+	@NonNull
+	private OperationValidationOutcome validateOperation(
+			@NonNull EndpointRuntime endpointRuntime,
+			@NonNull McpNormalizedEndpoint endpoint,
+			@NonNull McpServerCapabilityRegistry capabilityRegistry,
+			@NonNull McpApplicationRequestRouter applicationRouter,
+			@NonNull McpProtocolProfile protocolProfile,
+			McpJsonRpcMessage.@NonNull Request mappedRequest,
+			@NonNull List<@NonNull Header> corsHeaders, boolean legacy, boolean sessionEnabled) {
+		McpHttpEndpointBinding endpointBinding = endpointRuntime.binding();
+		McpHttpEndpointPolicy endpointPolicy = endpointBinding.endpointPolicy();
+		String selectedRevision = protocolProfile.revision();
+		boolean unsupportedLegacyMethod = legacy
+				&& !McpLegacyHttpWire.supportsRequestMethod(mappedRequest.method());
+		boolean initializeRequest = legacy && "initialize".equals(mappedRequest.method());
+		boolean pingRequest = legacy && "ping".equals(mappedRequest.method());
+		boolean discoveryRequest = "server/discover".equals(mappedRequest.method());
+		boolean toolsListRequest = "tools/list".equals(mappedRequest.method());
+		boolean promptsListRequest = "prompts/list".equals(mappedRequest.method());
+		boolean resourcesListRequest = "resources/list".equals(mappedRequest.method());
+		boolean resourceTemplatesListRequest = "resources/templates/list".equals(mappedRequest.method());
+		boolean subscriptionListenRequest = "subscriptions/listen".equals(mappedRequest.method());
+		boolean legacyResourceSubscribe = legacy && "resources/subscribe".equals(mappedRequest.method());
+		boolean legacyResourceUnsubscribe = legacy && "resources/unsubscribe".equals(mappedRequest.method());
+		boolean completionRequestMethod = "completion/complete".equals(mappedRequest.method());
+		boolean taskRequest = isTaskRequestMethod(mappedRequest.method());
+		boolean callerAwareCatalog = endpoint.catalogAccessAdapter().isPresent();
+		final boolean deferInvalidParameters = sessionEnabled && !initializeRequest;
+		OperationValidationState state = new OperationValidationState();
+		state.unsupportedSessionOperation = unsupportedLegacyMethod;
+		if (unsupportedLegacyMethod) {
+			// The valid envelope still needs admission and the owner/session fence.
+			// Unknown methods have no operation-specific parameter contract.
+		} else if (initializeRequest) {
+			// The 2025 mapper has already validated required initialization fields.
+			if (!mappedRequest.params().fields().members().keySet().containsAll(
+					Set.of("protocolVersion", "capabilities", "clientInfo")))
+				return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+						deferInvalidParameters, state);
+		} else if (pingRequest) {
+			if (!mappedRequest.params().fields().members().isEmpty())
+				return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+						deferInvalidParameters, state);
+		} else if (discoveryRequest) {
+			if (!mappedRequest.params().fields().members().isEmpty())
+				return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+						deferInvalidParameters, state);
+		} else if (toolsListRequest) {
+			if (capabilityRegistry.tools().isEmpty()) {
+				if (!sessionEnabled)
+					return OperationValidationOutcome.rejected(methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders));
+				state.unsupportedSessionOperation = true;
+			}
+			if (!state.unsupportedSessionOperation
+					&& !validFrameworkCatalogParams(mappedRequest.params().fields(), legacy))
+				return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+						deferInvalidParameters, state);
+		} else if (promptsListRequest) {
+			if (capabilityRegistry.prompts().isEmpty()) {
+				if (!sessionEnabled)
+					return OperationValidationOutcome.rejected(methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders));
+				state.unsupportedSessionOperation = true;
+			}
+			if (!state.unsupportedSessionOperation
+					&& !validFrameworkCatalogParams(mappedRequest.params().fields(), legacy))
+				return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+						deferInvalidParameters, state);
+		} else if ("skills/list".equals(mappedRequest.method())
+				|| "skills/get".equals(mappedRequest.method())) {
+			if (endpoint.skillsPlan().isEmpty())
+				return OperationValidationOutcome.rejected(methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders));
+			McpServerRuntimeBridge.SkillsPlan skillsPlan = endpoint.skillsPlan().orElseThrow();
+			Map<String, McpJsonValue> fields = mappedRequest.params().fields().members();
+			if ("skills/list".equals(mappedRequest.method())) {
+				if (!Set.of("cursor").containsAll(fields.keySet())
+						|| !skillsPlan.customListHandler() && fields.containsKey("cursor"))
+					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+							deferInvalidParameters, state);
+				if (fields.containsKey("cursor")
+						&& (!(fields.get("cursor") instanceof McpJsonString cursor)
+						|| !McpCursorValidator.fitsWithinUtf8ByteLimit(cursor.value(), skillsPlan.maximumCursorSizeInBytes())))
+					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+							deferInvalidParameters, state);
+			} else {
+				if (!fields.keySet().equals(Set.of("uri"))
+						|| !(fields.get("uri") instanceof McpJsonString uri))
+					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+							deferInvalidParameters, state);
+				try {
+					state.operationName = Optional.of(McpLevelOneUriTemplate.requireValidAbsoluteUri(uri.value(), "Skills URI"));
+				} catch (IllegalArgumentException ignored) {
+					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+							deferInvalidParameters, state);
+				}
+			}
+			state.applicationHandler = applicationRouter.resolve(mappedRequest.method());
+			if (state.applicationHandler.isEmpty())
+				return OperationValidationOutcome.rejected(methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders));
+		} else if (resourcesListRequest) {
+			if (capabilityRegistry.capabilities().resources().isEmpty()) {
+				if (!sessionEnabled)
+					return OperationValidationOutcome.rejected(methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders));
+				state.unsupportedSessionOperation = true;
+			}
+			if (!state.unsupportedSessionOperation) {
+				if (endpoint.customResourceListHandler()) {
+					Map<String, McpJsonValue> fields =
+							mappedRequest.params().fields().members();
+					if (!Set.of("cursor").containsAll(fields.keySet()))
+						return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+								deferInvalidParameters, state);
+					Optional<String> cursor = Optional.empty();
+					if (fields.containsKey("cursor")) {
+						McpJsonValue cursorValue = fields.get("cursor");
+						if (!(cursorValue instanceof McpJsonString string)
+								|| !McpCursorValidator.fitsWithinUtf8ByteLimit(
+										string.value(), endpoint.maximumCursorSizeInBytes()))
+							return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+									deferInvalidParameters, state);
+						cursor = Optional.of(string.value());
+					}
+					Optional<McpApplicationResourceListRoute> listRoute =
+							applicationRouter.resourceListRoute();
+					if (listRoute.isEmpty())
+						return OperationValidationOutcome.rejected(methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders));
+					Optional<String> resolvedCursor = cursor;
+					McpApplicationResourceListRoute resolvedRoute = listRoute.orElseThrow();
+					state.applicationHandler = Optional.of(invocation -> resolvedRoute.handler().handle(
+							new McpApplicationResourceListInvocation(invocation, resolvedCursor,
+									capabilityRegistry.exactResourceDescriptors(), endpoint.resourceListCachePolicy()))
+							.mapCompleted(result -> resourceResultWithCachePolicy(result,
+									endpoint.resourceListCachePolicy(), true, false,
+									endpointPolicy.localizationEnabled(),
+									endpoint.maximumCursorSizeInBytes(), endpointPolicy.path(),
+									applicationRouter)));
+				} else {
+					if (!state.unsupportedSessionOperation
+						&& !validFrameworkCatalogParams(mappedRequest.params().fields(), legacy))
+						return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+								deferInvalidParameters, state);
+				}
+			}
+
+		} else if (resourceTemplatesListRequest) {
+			if (capabilityRegistry.capabilities().resources().isEmpty()) {
+				if (!sessionEnabled)
+					return OperationValidationOutcome.rejected(methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders));
+				state.unsupportedSessionOperation = true;
+			}
+			if (!state.unsupportedSessionOperation
+					&& !validFrameworkCatalogParams(mappedRequest.params().fields(), legacy))
+				return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+						deferInvalidParameters, state);
+		} else if (legacyResourceSubscribe || legacyResourceUnsubscribe) {
+			if (!sessionEnabled || !legacyTransportFamilies.getOrDefault(endpointRuntime.path(), Map.of())
+					.getOrDefault(selectedRevision, Set.of()).contains(McpResourceNotificationType.RESOURCE_UPDATED)) {
+				if (!sessionEnabled)
+					return OperationValidationOutcome.rejected(methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders));
+				state.unsupportedSessionOperation = true;
+			}
+			if (!state.unsupportedSessionOperation) {
+				Map<String, McpJsonValue> fields = mappedRequest.params().fields().members();
+				if (!fields.keySet().equals(Set.of("uri")) || !(fields.get("uri") instanceof McpJsonString uri))
+					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+							deferInvalidParameters, state);
+				try {
+					String validatedUri = McpLevelOneUriTemplate.requireValidAbsoluteUri(uri.value(), "Resource subscription URI");
+					state.operationName = Optional.of(validatedUri);
+					if (legacyResourceSubscribe)
+						state.acceptedSubscriptionFilter = Optional.of(new AcceptedSubscriptionFilter(false, false, false,
+								true, Map.of(URI.create(validatedUri), new SubscriptionResource(URI.create(validatedUri), validatedUri)),
+								false, List.of(), Set.of(), mappedRequest.params().metadata().clientCapabilities()));
+				} catch (IllegalArgumentException exception) {
+					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+							deferInvalidParameters, state);
+				}
+			}
+
+		} else if (subscriptionListenRequest) {
+			if (endpoint.subscriptionConfig().isEmpty()
+					|| endpointBinding.subscriptionEventSources().isEmpty())
+				return OperationValidationOutcome.rejected(methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders));
+			try {
+				state.acceptedSubscriptionFilter = Optional.of(
+						parseAcceptedSubscriptionFilter(mappedRequest,
+								endpoint.subscriptionConfig().orElseThrow(),
+								endpointPolicy.catalogLocalizer()
+										.map(McpRuntimeCatalogLocalizer
+												::localizedResponseKinds)
+										.orElseGet(Set::of),
+								!capabilityRegistry.tools().isEmpty(),
+								!capabilityRegistry.prompts().isEmpty()));
+			} catch (IllegalArgumentException exception) {
+				return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+						deferInvalidParameters, state);
+			}
+			if (state.acceptedSubscriptionFilter.orElseThrow().taskIdsRequested()
+					&& !mappedRequest.params().metadata().clientCapabilities()
+							.extensions().containsKey(TASKS_EXTENSION_IDENTIFIER))
+				return OperationValidationOutcome.rejected(missingTasksCapability(protocolProfile, mappedRequest.id(),
+						corsHeaders));
+		} else if (completionRequestMethod) {
+			if (!capabilityRegistry.capabilities().completions()) {
+				if (!sessionEnabled)
+					return OperationValidationOutcome.rejected(methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders));
+				state.unsupportedSessionOperation = true;
+			}
+			if (!state.unsupportedSessionOperation) {
+				state.completionRequest = parseCompletionRequest(
+						mappedRequest.params().fields().members());
+				if (state.completionRequest.isEmpty())
+					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+							deferInvalidParameters, state);
+				state.operationName = Optional.of(state.completionRequest.orElseThrow().reference());
+			}
+
+		} else if (taskRequest) {
+			Optional<McpApplicationRequestHandler> taskHandler =
+					applicationRouter.resolve(mappedRequest.method());
+			boolean tasksSupported = capabilityRegistry.capabilities().extensions()
+					.containsKey(TASKS_EXTENSION_IDENTIFIER)
+					&& taskHandler.isPresent();
+			if (!tasksSupported)
+				return OperationValidationOutcome.rejected(methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders));
+			if (!mappedRequest.params().metadata().clientCapabilities().extensions()
+					.containsKey(TASKS_EXTENSION_IDENTIFIER))
+				return OperationValidationOutcome.rejected(missingTasksCapability(protocolProfile, mappedRequest.id(),
+						corsHeaders));
+
+			Map<String, McpJsonValue> fields =
+					mappedRequest.params().fields().members();
+			McpJsonValue taskIdValue = fields.get("taskId");
+			if (!(taskIdValue instanceof McpJsonString taskId)
+					|| !validTaskId(taskId.value()))
+				return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+						deferInvalidParameters, state);
+			state.operationName = Optional.of(taskId.value());
+
+			if ("tasks/update".equals(mappedRequest.method())) {
+				try {
+					Optional<McpJsonObject> parsedInputResponses =
+							parseTaskInputResponses(fields);
+					if (parsedInputResponses.isEmpty())
+						return OperationValidationOutcome.rejected(invalidParams(protocolProfile, mappedRequest,
+								corsHeaders));
+					state.inputResponses = parsedInputResponses.orElseThrow();
+				} catch (IllegalArgumentException exception) {
+					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+							deferInvalidParameters, state);
+				}
+			}
+			state.applicationHandler = taskHandler;
+		} else if ("tools/call".equals(mappedRequest.method())) {
+			Map<String, McpJsonValue> fields =
+					mappedRequest.params().fields().members();
+			try {
+				Optional<McpJsonObject> parsedInputResponses =
+						parseInputResponses(fields);
+				state.inputResponses = parsedInputResponses.orElseGet(McpJsonObject::empty);
+				state.inputResponsesSupplied = parsedInputResponses.isPresent();
+			} catch (IllegalArgumentException exception) {
+				return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+						deferInvalidParameters, state);
+			}
+			McpJsonValue nameValue = fields.get("name");
+			if (!(nameValue instanceof McpJsonString name) || name.value().isBlank())
+				return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+						deferInvalidParameters, state);
+			state.operationName = Optional.of(name.value());
+			if (!callerAwareCatalog) {
+				McpJsonValue argumentsValue = fields.get("arguments");
+				if (argumentsValue != null
+						&& !(argumentsValue instanceof McpJsonObject))
+					return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+							deferInvalidParameters, state);
+			}
+		} else if ("prompts/get".equals(mappedRequest.method())) {
+			Map<String, McpJsonValue> fields =
+					mappedRequest.params().fields().members();
+			try {
+				Optional<McpJsonObject> parsedInputResponses =
+						parseInputResponses(fields);
+				state.inputResponses = parsedInputResponses.orElseGet(McpJsonObject::empty);
+				state.inputResponsesSupplied = parsedInputResponses.isPresent();
+			} catch (IllegalArgumentException exception) {
+				return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+						deferInvalidParameters, state);
+			}
+			McpJsonValue nameValue = fields.get("name");
+			if (!(nameValue instanceof McpJsonString name) || name.value().isBlank())
+				return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+						deferInvalidParameters, state);
+			state.operationName = Optional.of(name.value());
+
+			if (!callerAwareCatalog && !validPromptArgumentValues(fields.get("arguments")))
+				return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+						deferInvalidParameters, state);
+		} else if ("resources/read".equals(mappedRequest.method())) {
+			Map<String, McpJsonValue> fields = mappedRequest.params().fields().members();
+			try {
+				Optional<McpJsonObject> parsedInputResponses =
+						parseInputResponses(fields);
+				state.inputResponses = parsedInputResponses.orElseGet(McpJsonObject::empty);
+				state.inputResponsesSupplied = parsedInputResponses.isPresent();
+			} catch (IllegalArgumentException exception) {
+				return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+						deferInvalidParameters, state);
+			}
+			McpJsonValue uriValue = fields.get("uri");
+			if (!(uriValue instanceof McpJsonString uriString))
+				return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+						deferInvalidParameters, state);
+			String uri;
+			try {
+				uri = McpLevelOneUriTemplate.requireValidAbsoluteUri(
+						uriString.value(), "Resource URI");
+			} catch (IllegalArgumentException exception) {
+				return invalidOperationParams(protocolProfile, mappedRequest, corsHeaders,
+						deferInvalidParameters, state);
+			}
+			state.operationName = Optional.of(uri);
+		} else if (mappedRequest.method().startsWith("tasks/")
+				|| mappedRequest.method().startsWith("skills/")) {
+			// These framework extensions own their complete method namespaces.
+			// Unknown methods never fall through to an application route.
+			if (!sessionEnabled)
+				return OperationValidationOutcome.rejected(methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders));
+			state.unsupportedSessionOperation = true;
+		} else {
+			state.applicationHandler = applicationRouter.resolve(mappedRequest.method());
+			if (state.applicationHandler.isEmpty()) {
+				if (!sessionEnabled)
+					return OperationValidationOutcome.rejected(methodNotFound(endpointBinding, protocolProfile, mappedRequest, corsHeaders));
+				state.unsupportedSessionOperation = true;
+			}
+		}
+		return OperationValidationOutcome.completed(state.getMetadata());
 	}
 
 	@NonNull
-	private MicrohttpResponse invalidOperationParams(
+	private OperationValidationOutcome invalidOperationParams(
 			@NonNull McpProtocolProfile protocolProfile,
 			McpJsonRpcMessage.@NonNull Request request,
-			@NonNull List<@NonNull Header> corsHeaders, boolean deferUntilSession) {
-		if (deferUntilSession) throw DeferredLegacyOperationValidation.INSTANCE;
-		return invalidParams(protocolProfile, request, corsHeaders);
+			@NonNull List<@NonNull Header> corsHeaders, boolean deferUntilSession,
+			@NonNull OperationValidationState state) {
+		return deferUntilSession
+				? OperationValidationOutcome.deferredInvalidParameters(state.getMetadata())
+				: OperationValidationOutcome.rejected(invalidParams(protocolProfile, request, corsHeaders));
+	}
+
+	private sealed interface OperationValidationOutcome {
+		@NonNull
+		static Completed completed(@NonNull OperationValidationMetadata metadata) {
+			return new Completed(metadata);
+		}
+
+		@NonNull
+		static DeferredInvalidParameters deferredInvalidParameters(@NonNull OperationValidationMetadata metadata) {
+			return new DeferredInvalidParameters(metadata);
+		}
+
+		@NonNull
+		static Rejected rejected(@NonNull MicrohttpResponse response) {
+			return new Rejected(response);
+		}
+
+		sealed interface Continued extends OperationValidationOutcome {
+			@NonNull
+			OperationValidationMetadata getMetadata();
+		}
+
+		final class Completed implements Continued {
+			@NonNull
+			private final OperationValidationMetadata metadata;
+
+			private Completed(@NonNull OperationValidationMetadata metadata) {
+				this.metadata = requireNonNull(metadata);
+			}
+
+			@Override
+			@NonNull
+			public OperationValidationMetadata getMetadata() { return this.metadata; }
+		}
+
+		final class DeferredInvalidParameters implements Continued {
+			@NonNull
+			private final OperationValidationMetadata metadata;
+
+			private DeferredInvalidParameters(@NonNull OperationValidationMetadata metadata) {
+				this.metadata = requireNonNull(metadata);
+			}
+
+			@Override
+			@NonNull
+			public OperationValidationMetadata getMetadata() { return this.metadata; }
+		}
+
+		final class Rejected implements OperationValidationOutcome {
+			@NonNull
+			private final MicrohttpResponse response;
+
+			private Rejected(@NonNull MicrohttpResponse response) {
+				this.response = requireNonNull(response);
+			}
+
+			@NonNull
+			public MicrohttpResponse getResponse() { return this.response; }
+		}
+	}
+
+	/** Mutable only during validation; outcomes retain an immutable snapshot. */
+	private static final class OperationValidationState {
+		private Optional<String> operationName = Optional.empty();
+		private Optional<CompletionRequest> completionRequest = Optional.empty();
+		private Optional<McpApplicationRequestHandler> applicationHandler = Optional.empty();
+		private McpJsonObject inputResponses = McpJsonObject.empty();
+		private boolean inputResponsesSupplied = false;
+		private Optional<AcceptedSubscriptionFilter> acceptedSubscriptionFilter = Optional.empty();
+		private boolean unsupportedSessionOperation = false;
+
+		private OperationValidationMetadata getMetadata() {
+			return new OperationValidationMetadata(this);
+		}
+	}
+
+	private static final class OperationValidationMetadata {
+		private final Optional<String> operationName;
+		private final Optional<CompletionRequest> completionRequest;
+		private final Optional<McpApplicationRequestHandler> applicationHandler;
+		private final McpJsonObject inputResponses;
+		private final boolean inputResponsesSupplied;
+		private final Optional<AcceptedSubscriptionFilter> acceptedSubscriptionFilter;
+		private final boolean unsupportedSessionOperation;
+
+		private OperationValidationMetadata(OperationValidationState state) {
+			this.operationName = requireNonNull(state.operationName);
+			this.completionRequest = requireNonNull(state.completionRequest);
+			this.applicationHandler = requireNonNull(state.applicationHandler);
+			this.inputResponses = requireNonNull(state.inputResponses);
+			this.inputResponsesSupplied = state.inputResponsesSupplied;
+			this.acceptedSubscriptionFilter = requireNonNull(state.acceptedSubscriptionFilter);
+			this.unsupportedSessionOperation = state.unsupportedSessionOperation;
+		}
+
+		private Optional<String> getOperationName() { return this.operationName; }
+		private Optional<CompletionRequest> getCompletionRequest() { return this.completionRequest; }
+		private Optional<McpApplicationRequestHandler> getApplicationHandler() { return this.applicationHandler; }
+		private McpJsonObject getInputResponses() { return this.inputResponses; }
+		private boolean getInputResponsesSupplied() { return this.inputResponsesSupplied; }
+		private Optional<AcceptedSubscriptionFilter> getAcceptedSubscriptionFilter() { return this.acceptedSubscriptionFilter; }
+		private boolean getUnsupportedSessionOperation() { return this.unsupportedSessionOperation; }
 	}
 
 	@NonNull
@@ -10453,7 +10586,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					callback = control.takeResponseCallback();
 				}
 				control.markStreamOpenedInOrder(true);
-				applicationExecutionObserver.recordSubscriptionOpened(endpoint.path());
+				try (McpApplicationExecutionObserver.MetricScope ignored = control.useMetricSequence()) {
+					applicationExecutionObserver.recordSubscriptionOpened(endpoint.path());
+				}
 			}
 			}
 			transportMetricDrainScheduler.schedule();
@@ -10557,8 +10692,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					control.simulation.didFinishRequest(McpRequestOutcome.COMPLETE, cause == null ? List.of() : List.of(cause));
 				}
 				control.markStreamClosed(reason, closeReason);
-				applicationExecutionObserver.recordSubscriptionClosed(endpoint.path(), closeReason,
-						Duration.ofNanos(Math.max(0L, applicationClock.nanoTime() - openedNanos)));
+				try (McpApplicationExecutionObserver.MetricScope ignored = control.useMetricSequence()) {
+					applicationExecutionObserver.recordSubscriptionClosed(endpoint.path(), closeReason,
+							Duration.ofNanos(Math.max(0L, applicationClock.nanoTime() - openedNanos)));
+				}
 				transportMetricDrainScheduler.schedule();
 				control.finishTransportLifecycle();
 			}
@@ -10659,8 +10796,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 		void maintenanceOutcome(McpMetricsEvent.SubscriptionMaintenance.Outcome outcome) {
 			try {
-				applicationExecutionObserver.recordSubscriptionMaintenance(endpoint.path(),
-						McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION, outcome);
+				try (McpApplicationExecutionObserver.MetricScope ignored = control.useMetricSequence()) {
+					applicationExecutionObserver.recordSubscriptionMaintenance(endpoint.path(),
+							McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION, outcome);
+				}
 				transportMetricDrainScheduler.schedule();
 			} catch (Throwable ignored) { /* Observation failure must not alter GET authorization maintenance. */ }
 		}
@@ -10698,6 +10837,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	private final class RequestControl {
 		@NonNull
 		private final MicrohttpRequest request;
+		private final McpApplicationExecutionObserver.MetricSequence metricSequence;
 		private long deadlineNanos;
 		@NonNull
 		private final LifecycleRequestProcessor processor;
@@ -10844,6 +10984,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				@Nullable Runnable lifecycleAdmission,
 				@NonNull Consumer<@NonNull MicrohttpResponse> responseCallback) {
 			this.request = requireNonNull(request);
+			this.metricSequence = applicationExecutionObserver.newRequestMetricSequence();
 			this.deadlineNanos = deadlineNanos;
 			if (!(requireNonNull(processor)
 					instanceof LifecycleRequestProcessor lifecycleProcessor))
@@ -10884,6 +11025,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			this.subscriptionAuthorizationRenewalScheduled = false;
 			this.subscriptionAuthorizationMaintenanceScheduled = false;
 			this.lifecycleWorkOwners = lifecycleAdmission == null ? 0 : 1;
+		}
+
+		private McpApplicationExecutionObserver.MetricScope useMetricSequence() {
+			return applicationExecutionObserver.useMetricSequence(this.metricSequence);
 		}
 
 		private final List<Throwable> legacyHttpAdmissionFailures = new ArrayList<>();
@@ -11193,6 +11338,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		 * handoff's finally block cancels any subsequently registered exchange.
 		 */
 		private boolean cancelLegacySessionRequest(McpLegacySessionStore.Cause cause) {
+			try (McpApplicationExecutionObserver.MetricScope ignored = useMetricSequence()) {
+				return cancelLegacySessionRequestWithMetricSequence(cause);
+			}
+		}
+
+		private boolean cancelLegacySessionRequestWithMetricSequence(McpLegacySessionStore.Cause cause) {
 			requireNonNull(cause);
 			if (cause == McpLegacySessionStore.Cause.SERVER_STOPPING)
 				return cancelFromSimulation(StreamTerminationReason.SERVER_STOPPING);
@@ -11648,16 +11799,23 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					if (!taskId.equals(snapshot.task().getTaskId()))
 						throw new IllegalStateException(
 								"The MCP task manager returned a mismatched task ID.");
-					McpServerRuntimeBridge.requireTaskInputCapabilities(snapshot,
-							filter.clientCapabilities());
+					if (McpServerRuntimeBridge.taskInputCapabilityError(snapshot,
+							filter.clientCapabilities()).isPresent()) {
+						// Retain an acknowledged task across an unsupported input generation;
+						// projection suppresses that generation, while later ones remain retryable.
+						if (check.kind() != SubscriptionAuthorizationCheckKind.INITIAL
+								&& filter.acceptedTaskIds().contains(taskId))
+							accepted.add(taskId);
+						continue;
+					}
 					accepted.add(taskId);
 				} catch (Throwable throwable) {
 					if (throwable instanceof InterruptedException interrupted) {
 						Thread.currentThread().interrupt();
 						throw interrupted;
 					}
-					// Once acknowledged, a transient lookup failure or unsupported
-					// input generation must not permanently remove this task. Its
+					// Once acknowledged, a transient lookup failure must not
+					// permanently remove this task. Its
 					// projection still checks ownership, access and capabilities before
 					// delivery; a later terminal generation remains retryable.
 					if (check.kind() != SubscriptionAuthorizationCheckKind.INITIAL
@@ -11892,6 +12050,15 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				@NonNull String endpointPath,
 				@NonNull SubscriptionAuthorizationCheckKind kind,
 				@NonNull SubscriptionAuthorizationResult result) {
+			try (McpApplicationExecutionObserver.MetricScope ignored = useMetricSequence()) {
+				recordSubscriptionAuthorizationResultWithMetricSequence(endpointPath, kind, result);
+			}
+		}
+
+		private void recordSubscriptionAuthorizationResultWithMetricSequence(
+				@NonNull String endpointPath,
+				@NonNull SubscriptionAuthorizationCheckKind kind,
+				@NonNull SubscriptionAuthorizationResult result) {
 			McpMetricsEvent.SubscriptionMaintenance.Outcome outcome = switch (
 					requireNonNull(result).disposition()) {
 				case ALLOWED -> McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED;
@@ -12040,6 +12207,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 
 		private void runScheduledSubscriptionAuthorizationCheck() {
+			try (McpApplicationExecutionObserver.MetricScope ignored = useMetricSequence()) {
+				runScheduledSubscriptionAuthorizationCheckWithMetricSequence();
+			}
+		}
+
+		private void runScheduledSubscriptionAuthorizationCheckWithMetricSequence() {
 			SubscriptionAuthorizationCheck check;
 			SubscriptionAuthorizationCheckKind kind;
 			SubscriptionAuthorizationFailure failure = null;
@@ -12077,6 +12250,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 
 		private void rejectScheduledSubscriptionAuthorizationCheck() {
+			try (McpApplicationExecutionObserver.MetricScope ignored = useMetricSequence()) {
+				rejectScheduledSubscriptionAuthorizationCheckWithMetricSequence();
+			}
+		}
+
+		private void rejectScheduledSubscriptionAuthorizationCheckWithMetricSequence() {
 			SubscriptionAuthorizationFailure failure;
 			SubscriptionAuthorizationCheckKind kind;
 			synchronized (lock) {
@@ -12095,6 +12274,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 
 		private void reconcileSubscriptionAuthorization() {
+			try (McpApplicationExecutionObserver.MetricScope ignored = useMetricSequence()) {
+				reconcileSubscriptionAuthorizationWithMetricSequence();
+			}
+		}
+
+		private void reconcileSubscriptionAuthorizationWithMetricSequence() {
 			SubscriptionAuthorizationCheck checkToCancel;
 			CatalogProjectionCheck catalogCheckToCancel;
 			TaskProjectionCheck taskCheckToCancel;
@@ -12463,6 +12648,13 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 
 		private void recordCatalogProjectionResult(@NonNull String endpointPath,
+				@NonNull CatalogProjectionDisposition disposition) {
+			try (McpApplicationExecutionObserver.MetricScope ignored = useMetricSequence()) {
+				recordCatalogProjectionResultWithMetricSequence(endpointPath, disposition);
+			}
+		}
+
+		private void recordCatalogProjectionResultWithMetricSequence(@NonNull String endpointPath,
 				@NonNull CatalogProjectionDisposition disposition) {
 			McpMetricsEvent.SubscriptionMaintenance.Outcome outcome = switch (
 					requireNonNull(disposition)) {
@@ -12915,6 +13107,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 
 		private void scheduleCatalogSubscriptionEvent(@NonNull Event event) {
+			try (McpApplicationExecutionObserver.MetricScope ignored = useMetricSequence()) {
+				scheduleCatalogSubscriptionEventWithMetricSequence(event);
+			}
+		}
+
+		private void scheduleCatalogSubscriptionEventWithMetricSequence(@NonNull Event event) {
 			Event requiredEvent = requireNonNull(event);
 			boolean submit = false;
 			int coalesced = 0;
@@ -12980,6 +13178,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 
 		private void projectCatalogNotification() {
+			try (McpApplicationExecutionObserver.MetricScope ignored = useMetricSequence()) {
+				projectCatalogNotificationWithMetricSequence();
+			}
+		}
+
+		private void projectCatalogNotificationWithMetricSequence() {
 			McpCatalogProjectionQueue.Projection projection;
 			CatalogProjectionCheck check;
 			SubscriptionRegistration registration;
@@ -13217,6 +13421,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 
 		private void rejectCatalogProjection() {
+			try (McpApplicationExecutionObserver.MetricScope ignored = useMetricSequence()) {
+				rejectCatalogProjectionWithMetricSequence();
+			}
+		}
+
+		private void rejectCatalogProjectionWithMetricSequence() {
 			McpRequestSseStream stream = null;
 			String endpointPath = null;
 			synchronized (lock) {
@@ -13246,6 +13456,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 
 		private void projectTaskNotification() {
+			try (McpApplicationExecutionObserver.MetricScope ignored = useMetricSequence()) {
+				projectTaskNotificationWithMetricSequence();
+			}
+		}
+
+		private void projectTaskNotificationWithMetricSequence() {
 			TaskNotificationProjection projection;
 			SubscriptionRegistration registration;
 			McpRequestSseStream stream;
@@ -13328,10 +13544,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					if (!projection.taskId().equals(snapshot.task().getTaskId()))
 						throw new IllegalStateException(
 								"The MCP task manager returned a mismatched task ID.");
-					try {
-						McpServerRuntimeBridge.requireTaskInputCapabilities(snapshot,
-								registration.filter().clientCapabilities());
-					} catch (McpProtocolJsonRpcException exception) {
+					if (McpServerRuntimeBridge.taskInputCapabilityError(snapshot,
+							registration.filter().clientCapabilities()).isPresent()) {
 						finishTaskNotificationProjection(check);
 						return;
 					}
@@ -13568,6 +13782,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 
 		private void projectResourceNotification() {
+			try (McpApplicationExecutionObserver.MetricScope ignored = useMetricSequence()) {
+				projectResourceNotificationWithMetricSequence();
+			}
+		}
+
+		private void projectResourceNotificationWithMetricSequence() {
 			McpRequestSseStream stream;
 			SubscriptionRegistration registration;
 			Object key;
@@ -13726,6 +13946,13 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 		private void completeSubscription(
 				@NonNull StreamTerminationReason closeReason) {
+			try (McpApplicationExecutionObserver.MetricScope ignored = useMetricSequence()) {
+				completeSubscriptionWithMetricSequence(closeReason);
+			}
+		}
+
+		private void completeSubscriptionWithMetricSequence(
+				@NonNull StreamTerminationReason closeReason) {
 			requireNonNull(closeReason);
 			McpRequestSseStream stream;
 			SubscriptionRegistration registration = null;
@@ -13809,6 +14036,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		 * A disconnect, failed writer or later write-idle timeout stays abrupt.
 		 */
 		private void finishSubscriptionStreamFailure(@NonNull SubscriptionStreamFailure failure) {
+			try (McpApplicationExecutionObserver.MetricScope ignored = useMetricSequence()) {
+				finishSubscriptionStreamFailureWithMetricSequence(failure);
+			}
+		}
+
+		private void finishSubscriptionStreamFailureWithMetricSequence(@NonNull SubscriptionStreamFailure failure) {
 			SubscriptionRegistration registration;
 			McpJsonRpcMessage.ResultResponse preRendered;
 			McpStreamTerminationReason completionReason;
@@ -13852,6 +14085,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 		/** Elects a finite response before canceling admission work or its waiter. */
 		private void rejectPendingSubscriptionOnShutdown() {
+			try (McpApplicationExecutionObserver.MetricScope ignored = useMetricSequence()) {
+				rejectPendingSubscriptionOnShutdownWithMetricSequence();
+			}
+		}
+
+		private void rejectPendingSubscriptionOnShutdownWithMetricSequence() {
 			McpApplicationExecutionObserver.MetricDeferral metricDeferral =
 					applicationExecutionObserver.beginRequestTransitionDeferral();
 			try {
@@ -13943,6 +14182,13 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 		private boolean startObservation(@NonNull McpRuntimeObservationSink sink,
 				@NonNull McpRuntimeRequestInput input) {
+			try (McpApplicationExecutionObserver.MetricScope ignored = useMetricSequence()) {
+				return startObservationWithMetricSequence(sink, input);
+			}
+		}
+
+		private boolean startObservationWithMetricSequence(@NonNull McpRuntimeObservationSink sink,
+				@NonNull McpRuntimeRequestInput input) {
 			requireNonNull(sink);
 			requireNonNull(input);
 			synchronized (lock) {
@@ -13976,6 +14222,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 
 		private void markTerminalWhileLocked() {
+			try (McpApplicationExecutionObserver.MetricScope ignored = useMetricSequence()) {
+				markTerminalWhileLockedWithMetricSequence();
+			}
+		}
+
+		private void markTerminalWhileLockedWithMetricSequence() {
 			if (!Thread.holdsLock(lock))
 				throw new IllegalStateException(
 						"The request-control lock is required to mark a terminal request.");
@@ -14378,6 +14630,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 
 		private void submit(@NonNull FutureTask<@Nullable Void> task) {
+			try (McpApplicationExecutionObserver.MetricScope ignored = useMetricSequence()) {
+				submitWithMetricSequence(task);
+			}
+		}
+
+		private void submitWithMetricSequence(@NonNull FutureTask<@Nullable Void> task) {
 			requireNonNull(task);
 			ProtocolSubmission submission;
 			McpApplicationExecutionObserver.MetricDeferral metricDeferral =
@@ -14534,6 +14792,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 
 		private void completeProtocol(@Nullable MicrohttpResponse response) {
+			try (McpApplicationExecutionObserver.MetricScope ignored = useMetricSequence()) {
+				completeProtocolWithMetricSequence(response);
+			}
+		}
+
+		private void completeProtocolWithMetricSequence(@Nullable MicrohttpResponse response) {
 			if (response != null) noteLegacyHttpResponse(response);
 			ProtocolResponseReservation reservation;
 			StreamTerminationReason applicationStopReason = null;
@@ -14731,6 +14995,15 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				@NonNull McpApplicationResponse response,
 				@NonNull McpJsonRpcId requestId,
 				@NonNull List<@NonNull Header> additionalHeaders) {
+			try (McpApplicationExecutionObserver.MetricScope ignored = useMetricSequence()) {
+				return writeApplicationResponseWithMetricSequence(response, requestId, additionalHeaders);
+			}
+		}
+
+		private boolean writeApplicationResponseWithMetricSequence(
+				@NonNull McpApplicationResponse response,
+				@NonNull McpJsonRpcId requestId,
+				@NonNull List<@NonNull Header> additionalHeaders) {
 			requireNonNull(response);
 			requireNonNull(requestId);
 			requireNonNull(additionalHeaders);
@@ -14894,6 +15167,13 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 		private void cancel(@NonNull StreamTerminationReason reason,
 				@Nullable Throwable cause) {
+			try (McpApplicationExecutionObserver.MetricScope ignored = useMetricSequence()) {
+				cancelWithMetricSequence(reason, cause);
+			}
+		}
+
+		private void cancelWithMetricSequence(@NonNull StreamTerminationReason reason,
+				@Nullable Throwable cause) {
 			McpApplicationExecutionObserver.MetricDeferral metricDeferral =
 					McpHttpServerRuntime.this.applicationExecutionObserver
 							.beginRequestTransitionDeferral();
@@ -14905,6 +15185,13 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 
 		private boolean cancelFromSimulation(
+				@NonNull StreamTerminationReason reason) {
+			try (McpApplicationExecutionObserver.MetricScope ignored = useMetricSequence()) {
+				return cancelFromSimulationWithMetricSequence(reason);
+			}
+		}
+
+		private boolean cancelFromSimulationWithMetricSequence(
 				@NonNull StreamTerminationReason reason) {
 			McpApplicationExecutionObserver.MetricDeferral metricDeferral =
 					McpHttpServerRuntime.this.applicationExecutionObserver
@@ -15021,6 +15308,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 
 		private void onTimer(long nowNanos) {
+			try (McpApplicationExecutionObserver.MetricScope ignored = useMetricSequence()) {
+				onTimerWithMetricSequence(nowNanos);
+			}
+		}
+
+		private void onTimerWithMetricSequence(long nowNanos) {
 			LegacyGetControl get; synchronized (lock) { get = legacyGet; }
 			if (get != null && get.headOwned) { get.onTimer(nowNanos); return; }
 			maintainLegacySessionTerminalTransport(nowNanos);
@@ -15208,6 +15501,14 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private void streamTerminated(@NonNull StreamTerminationReason reason,
 				@Nullable McpStreamTerminationReason exactReason,
 				@Nullable Throwable cause) {
+			try (McpApplicationExecutionObserver.MetricScope ignored = useMetricSequence()) {
+				streamTerminatedWithMetricSequence(reason, exactReason, cause);
+			}
+		}
+
+		private void streamTerminatedWithMetricSequence(@NonNull StreamTerminationReason reason,
+				@Nullable McpStreamTerminationReason exactReason,
+				@Nullable Throwable cause) {
 			requireNonNull(reason);
 			if (finishLegacySessionStreamIfOwned(reason, exactReason, cause))
 				return;
@@ -15351,6 +15652,13 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 		private void finishProtocolDeadline(
 				@NonNull ProtocolDeadlineExpiration expiration) {
+			try (McpApplicationExecutionObserver.MetricScope ignored = useMetricSequence()) {
+				finishProtocolDeadlineWithMetricSequence(expiration);
+			}
+		}
+
+		private void finishProtocolDeadlineWithMetricSequence(
+				@NonNull ProtocolDeadlineExpiration expiration) {
 			requireNonNull(expiration);
 			cancelTaskProjection(
 					StreamTerminationReason.RESPONSE_TIMEOUT);
@@ -15400,6 +15708,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 
 		private void applicationTerminated() {
+			try (McpApplicationExecutionObserver.MetricScope ignored = useMetricSequence()) {
+				applicationTerminatedWithMetricSequence();
+			}
+		}
+
+		private void applicationTerminatedWithMetricSequence() {
 			boolean remove;
 			boolean finishCanceled;
 			boolean noTransportResponse;

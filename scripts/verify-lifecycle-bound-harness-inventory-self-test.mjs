@@ -394,6 +394,13 @@ for (const [name, reduced] of [
 
 run('new listener-bound execution scopes remain required', () => {
   for (const name of [
+    'realWorkerCannotOvertakePausedSubmission',
+    'realDeadlineCannotOvertakePausedSubmission',
+    'realCancellationCannotOvertakePausedSubmission',
+    'ignoredTimedOutJuneAuthorizationCannotExtendItsLeaseOrOverlapAnotherCallback',
+    'ignoredTimedOutNovemberAuthorizationCannotExtendItsLeaseOrOverlapAnotherCallback',
+    'expiredQueuedJuneAuthorizationNeverInvokesTheCallback',
+    'expiredQueuedNovemberAuthorizationNeverInvokesTheCallback',
     'aggregateInputRequestTreesFailClosedWithoutCanaryAndServerRecovers',
     'aggregateDynamicResourcePageFailsClosedWithoutCanaryAndRecovers',
     'applicationResultBoundsFailClosedWithoutLeaksAndServerRecovers',

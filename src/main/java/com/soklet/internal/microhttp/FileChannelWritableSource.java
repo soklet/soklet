@@ -94,7 +94,7 @@ class FileChannelWritableSource implements WritableSource {
                 // A propagated failure ends this response. Do not carry its
                 // witnesses into any subsequent (unsupported) source reuse.
                 if (socketSink != null)
-                    socketSink.failures.clear();
+                    socketSink.clearFailures();
                 if (socketFailure != null)
                     throw socketFailure;
                 throw new ResponseBodySourceException(fileChannel.isOpen()
@@ -138,7 +138,7 @@ class FileChannelWritableSource implements WritableSource {
 
     private static SocketChannelIo.@Nullable SocketIoException socketIoCause(Throwable failure,
             @Nullable SocketSink sink) {
-        if (sink == null || sink.failures.isEmpty())
+        if (sink == null || sink.latestFailure == null)
             return null;
         IdentityHashMap<Throwable, Boolean> visited = new IdentityHashMap<>();
         Throwable current = failure;
@@ -153,7 +153,7 @@ class FileChannelWritableSource implements WritableSource {
             // transfer or retry and rethrow an earlier failure. Only this
             // source's socket sink can establish that identity provenance.
             if (current instanceof SocketChannelIo.SocketIoException socketFailure
-                    && sink.failures.containsKey(socketFailure))
+                    && (sameInstance(socketFailure, sink.latestFailure) || sink.failures.containsKey(socketFailure)))
                 return socketFailure;
             current = current.getCause();
         }
@@ -202,14 +202,21 @@ class FileChannelWritableSource implements WritableSource {
     private static final class SocketSink implements WritableByteChannel {
         private final SocketChannel channel;
         // Keep the first bounded set of witnesses across successful/zero-byte
-        // transfer returns. Additional failures remain diagnostic if a custom
-        // source exceeds the bound; no Throwable-message heuristics are used.
+        // transfer returns, plus the latest failure even after that set fills.
+        // This covers retries that throw either their first or last failure
+        // while bounding retention and requiring exact identity provenance.
         private final IdentityHashMap<SocketChannelIo.SocketIoException, Boolean> failures = new IdentityHashMap<>();
+        private SocketChannelIo.@Nullable SocketIoException latestFailure;
         private SocketSink(SocketChannel channel) { this.channel = channel; }
+        private void clearFailures() {
+            failures.clear();
+            latestFailure = null;
+        }
         @Override public int write(ByteBuffer buffer) throws IOException {
             try {
                 return SocketChannelIo.write(channel, buffer);
             } catch (SocketChannelIo.SocketIoException failure) {
+                latestFailure = failure;
                 if (failures.size() < MAX_RECORDED_SOCKET_FAILURES)
                     failures.put(failure, Boolean.TRUE);
                 throw failure;

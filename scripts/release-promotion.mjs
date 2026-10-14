@@ -391,7 +391,7 @@ const GATE_RECEIPT_IDENTITIES = Object.freeze({
     'CANDIDATE_ARTIFACT_LOCALIZATION_PROVIDER_PASSES',
   ),
   'barebones-app': receiptIdentity(
-    'javac --release 17; live loopback probes; clean shutdown',
+    'javac --release 21; live loopback probes; clean shutdown',
     'candidate',
     'COMPILE_START_RESPOND_TERMINATE_AND_RELEASE_PORT',
   ),

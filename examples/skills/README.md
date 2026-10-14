@@ -25,7 +25,7 @@ path with the packaged candidate you want to exercise:
 ```sh
 export SOKLET_CANDIDATE_JAR=/absolute/path/to/soklet-4.0.0-candidate.jar
 SOKLET_SKILLS_CLASSES=$(mktemp -d)
-javac --release 17 -proc:none \
+javac --release 21 -proc:none \
   -cp "$SOKLET_CANDIDATE_JAR" \
   -d "$SOKLET_SKILLS_CLASSES" \
   examples/skills/src/com/soklet/examples/skills/SkillsExample.java

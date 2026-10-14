@@ -234,7 +234,7 @@ const BOUND_NAME_PATTERN = /^(?:maximum|minimum)[A-Z].*|^.*(?:Capacity|Concurren
 const PRIVACY_BOUNDARY_INVENTORY_PATH =
   'conformance/mcp-privacy-boundary-inventory.json';
 const EXPECTED_PRIVACY_SEMANTICS_SHA256 =
-  'c5c36b67c9fb5b71b354bebef8b6fd7f002cc3423b68ea91a56df1b6ed1e839d';
+  '0653bfd75e02564a1d99d21eda6e7a75cf39bf5a37a6f33b4d7fe915d5c1ce2a';
 const PRIVACY_TOP_LEVEL_KEYS = Object.freeze([
   'artifactRoots',
   'boundaries',
@@ -977,6 +977,20 @@ function javaVisibleMemberDeclarations(source, structure, typeScopes,
     const method = nameMatch[1];
     if (controls.has(method)) continue;
     const nameIndex = nameMatch.index;
+    const containingTypes = typeScopes
+      .filter(({ closing: typeClosing, opening: typeOpening }) =>
+        typeOpening < nameIndex && typeClosing > nameIndex);
+    if (containingTypes.length === 0) continue;
+    // This pass finds declarations without a body. Calls inside a default
+    // interface method (including switch-expression arms) are not implicitly
+    // public declarations. Keep declarations in nested local types visible.
+    const owner = ownerAt(
+      structure.match(/\bpackage\s+([\w.]+)\s*;/u)?.[1] ?? '',
+      typeScopes,
+      nameIndex,
+    );
+    if (methodScopes.some((scope) => scope.owner === owner
+        && scope.opening < nameIndex && scope.closing > nameIndex)) continue;
     const opening = nameMatch.index + nameMatch[0].lastIndexOf('(');
     const closing = matchingDelimiter(structure, opening, '(', ')');
     if (closing < 0) continue;
@@ -997,19 +1011,11 @@ function javaVisibleMemberDeclarations(source, structure, typeScopes,
     if (prior.length === 0 || prior.endsWith('.') || prior.endsWith('::')
         || prior.includes('=')
         || /\b(?:new|return|throw)\s*$/u.test(prior)) continue;
-    const containingTypes = typeScopes
-      .filter(({ closing: typeClosing, opening: typeOpening }) =>
-        typeOpening < opening && typeClosing > opening);
-    if (containingTypes.length === 0) continue;
     add({
       headerStart,
       method,
       opening: semicolon,
-      owner: ownerAt(
-        structure.match(/\bpackage\s+([\w.]+)\s*;/u)?.[1] ?? '',
-        typeScopes,
-        opening,
-      ),
+      owner,
       parameters: structure.slice(opening + 1, closing),
     });
   }

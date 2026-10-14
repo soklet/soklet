@@ -8,8 +8,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import {
-  directoryIdentity, runHarness, validateCliOutput, verifyDependencyPins,
+  directoryIdentity, runHarness, validateCliOutput, verifyDependencyPins, workingTreeFileRows,
 } from './run.mjs';
+import {adjudicateTrace, projectExchange, SKILLS, UI} from './trace.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const packagePath = join(here, 'package.json');
@@ -22,6 +23,62 @@ const expectedNames = [
 ];
 const output = value => `${JSON.stringify(value)}\n`;
 const memoryStoreCaveat = '[mcp-inspector] Secrets are not written anywhere and are lost on exit.\n';
+
+test('current source CLI requires explicit Apps selection with Skills enabled and retains strict historical interpretation', () => {
+  for (const enabled of [true, false]) {
+    const rows = ['server/discover', 'tools/list', 'tools/list'].map((method, index) => ({
+      sequence: index + 1, method, responseStatus: 200,
+      requestedExtensions: enabled ? 'APPS_ENABLED_SKILLS_ENABLED' : 'APPS_DISABLED_SKILLS_ENABLED',
+      authorized: true, requestEnvelopeValid: true, protocolMetadataMatches: true,
+      protocolHeaderMatches: true, methodHeaderMatches: true, perRequestCapabilitiesPresent: true,
+      noSessionState: true, toolSelectionValid: true, responseJson: true, responseNoStore: true,
+      responseCorrelated: true, resultMatchesFixture: true, extensionSelectionMatches: true,
+      appsAdvertised: enabled, appsMimeMatches: enabled, skillsAdvertised: true, skillsShapeMatches: true,
+    }));
+    assert.equal(adjudicateTrace(rows, enabled, 'tools/list', 'apps-toggle-skills-enabled'), 'PASSED');
+    assert.equal(adjudicateTrace(rows, enabled, 'tools/list'), 'FAILED');
+    for (const key of ['appsAdvertised', 'appsMimeMatches', 'skillsAdvertised', 'skillsShapeMatches',
+      'authorized', 'extensionSelectionMatches', 'resultMatchesFixture']) {
+      const mutated = structuredClone(rows);
+      mutated[1][key] = !mutated[1][key];
+      assert.equal(adjudicateTrace(mutated, enabled, 'tools/list', 'apps-toggle-skills-enabled'), 'FAILED');
+    }
+    assert.equal(adjudicateTrace([...rows, rows[2]], enabled, 'tools/list', 'apps-toggle-skills-enabled'), 'FAILED');
+    const extensions = {[SKILLS]: {}, ...(enabled ? {[UI]: {mimeTypes: ['text/html;profile=mcp-app']}} : {})};
+    const row = projectExchange({request: {method: 'tools/list', params: {_meta: {
+      'io.modelcontextprotocol/clientCapabilities': {extensions}}}}, response: {}, headers: {},
+      responseHeaders: {}, enabled, cliProfile: 'apps-toggle-skills-enabled'});
+    assert.equal(row.extensionSelectionMatches, true);
+    assert.equal(row.requestedExtensions, rows[0].requestedExtensions);
+  }
+});
+
+test('current source CLI recognizes only the two exact memory-store diagnostic lines', () => {
+  const list = output({result: {tools: expectedNames.map(name => ({name}))}});
+  const current = memoryStoreCaveat + '[mcp-inspector] How the secret store is chosen, and how to secure it: https://github.com/modelcontextprotocol/inspector/blob/main/docs/secret-storage.md\n';
+  assert.equal(validateCliOutput(list, current, 'tools/list', true), true);
+  assert.equal(validateCliOutput(list, current + 'unexpected\n', 'tools/list', true), false);
+  assert.equal(validateCliOutput(list, memoryStoreCaveat, 'tools/list', true), false);
+  assert.equal(validateCliOutput(list, current, 'tools/list'), false);
+});
+
+test('working-tree identity records tracked deletions and detects restoration without weakening symlink checks', () => {
+  const scratch = mkdtempSync(join(tmpdir(), 'soklet-inspector-source-'));
+  try {
+    writeFileSync(join(scratch, 'present.java'), 'source');
+    const paths = ['removed.java', 'present.java'];
+    const deleted = workingTreeFileRows(scratch, paths);
+    assert.deepEqual(deleted[1], ['removed.java', 'DELETED']);
+    assert.deepEqual(workingTreeFileRows(scratch, paths.reverse()), deleted);
+    writeFileSync(join(scratch, 'removed.java'), 'restored');
+    assert.notDeepEqual(workingTreeFileRows(scratch, paths), deleted);
+    unlinkSync(join(scratch, 'removed.java'));
+    symlinkSync('missing.java', join(scratch, 'removed.java'));
+    assert.throws(() => workingTreeFileRows(scratch, paths), /INPUT_FILE_INVALID/);
+  } finally {
+    rmSync(scratch, {recursive: true, force: true});
+  }
+});
 
 test('dependency checker accepts only the exact reviewed manifest and lock', () => {
   const packageBytes = readFileSync(packagePath);

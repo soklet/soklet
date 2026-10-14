@@ -123,9 +123,9 @@ public class McpInputRequestContractTests {
 		McpInputRequestPlan plan = new McpInputRequestPlan(List.of(
 				McpInputRequestDeclaration.elicitationUrl(McpInputRequirement.CONDITIONAL)));
 		McpApplicationRequestHandler handler =
-				ignored -> McpWireResult.complete(McpJsonObject.empty());
+				ignored -> McpApplicationDispatchOutcome.completed(McpWireResult.complete(McpJsonObject.empty()));
 		McpApplicationResourceReadHandler resourceHandler =
-				ignored -> McpWireResult.complete(McpJsonObject.empty());
+				ignored -> McpApplicationDispatchOutcome.completed(McpWireResult.complete(McpJsonObject.empty()));
 		McpRateLimiter rateLimiter = ignored -> McpRateLimitDecision.allowed();
 		McpResourceCachePolicy cachePolicy =
 				new McpResourceCachePolicy(10L, McpCacheScope.PUBLIC);

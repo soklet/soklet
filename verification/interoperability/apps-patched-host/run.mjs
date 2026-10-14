@@ -6,7 +6,8 @@ import { delimiter, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createEnvironment, createSessionConfig, sanitizedSessionConfig } from '../inspector/config.mjs';
 import { startProcess } from '../inspector/process.mjs';
-import { directoryIdentity } from '../inspector/run.mjs';
+import { directoryIdentity, verifyDependencyPins } from '../inspector/run.mjs';
+import { verifyUpstreamBuild } from '../inspector/upstream-build.mjs';
 import { browserVersion, chromeArguments, validWebConfig } from '../inspector/web-probe.mjs';
 import { connectCdp } from '../inspector/cdp.mjs';
 import { regularFile, validateShellBuild } from '../apps/run.mjs';
@@ -42,6 +43,30 @@ export const PERMISSIONS_HOST_BLOCKED = 'BLOCKED_HOST_PERMISSION_POLICY';
 const transitionMode = options => options['--profile'] === 'transitions';
 const revocationMode = options => options['--profile'] === 'revocation';
 const permissionsMode = options => options['--profile'] === 'permissions';
+const SOURCE_DISTRIBUTION = 'UNRELEASED_UPSTREAM_SOURCE_BUILD';
+export const sourceProfile = profile => profile.replace(/experimental-(?:patched-)?/, 'upstream-source-');
+function profileOf(receipt) {
+  return receipt?.hostMode === SOURCE_DISTRIBUTION
+    ? [PROFILE, TRANSITION_PROFILE, REVOCATION_PROFILE, PERMISSIONS_PROFILE].find(profile => sourceProfile(profile) === receipt.profile) : receipt?.profile;
+}
+function verifiedHostIdentity(receipt) {
+  if (receipt?.hostMode === SOURCE_DISTRIBUTION)
+    return receipt.sourceIdentityVerified === true && receipt.patchIdentityVerified === false
+      && receipt.target?.name === '@modelcontextprotocol/inspector'
+      && receipt.target.version === '2.10.1'
+      && receipt.target.commit === '1974465ccb5454a5110e609e4140171fa360a544'
+      && receipt.target.distribution === SOURCE_DISTRIBUTION
+      && /^[a-f0-9]{64}$/.test(receipt.upstreamBuildReceiptSha256);
+  return receipt?.patchIdentityVerified === true
+    && (receipt.sourceIdentityVerified === undefined || receipt.sourceIdentityVerified === false)
+    && (receipt.hostMode === undefined || receipt.hostMode === 'EXPERIMENTAL_AUTH_PATCH');
+}
+export function validateSourceExperimentPins(candidate, shell) {
+  if (!/^[a-f0-9]{64}$/.test(candidate?.jarSha256)
+      || shell?.sha256 !== '3229c8e0a9ee17dcbb2030040fac282b172715588c7b25963275529c0b650f60')
+    fail('APPS_HOST_EXPERIMENT_PIN');
+}
+
 export function validateExperimentPins(provenance, candidate, shell) {
   if (provenance?.patchedTree?.files !== 9391
       || provenance.patchedTree.sha256 !== '6546d769cd9fd869b7608c774b9dcfc39b3050d851c57ad83b439cdcbb84ebcb'
@@ -53,16 +78,18 @@ export function validateExperimentPins(provenance, candidate, shell) {
 }
 
 export function parseHostArguments(args) {
-  const keys = ['--candidate-jar', '--candidate-pom', '--java', '--shell', '--original-dependencies', '--dependencies', '--browser', '--work-dir'];
-  if (args.length !== keys.length * 2 && args.length !== (keys.length + 1) * 2) fail('APPS_HOST_ARGUMENTS');
+  const keys = ['--candidate-jar', '--candidate-pom', '--java', '--shell', '--dependencies', '--browser', '--work-dir'];
+  if (args.length % 2 !== 0) fail('APPS_HOST_ARGUMENTS');
   const options = {};
   for (let i = 0; i < args.length; i += 2) {
-    if (![...keys, '--profile'].includes(args[i]) || Object.hasOwn(options, args[i]) || !args[i + 1]) fail('APPS_HOST_ARGUMENTS');
+    if (![...keys, '--original-dependencies', '--inspector-build', '--profile'].includes(args[i]) || Object.hasOwn(options, args[i])
+        || typeof args[i + 1] !== 'string' || !args[i + 1]) fail('APPS_HOST_ARGUMENTS');
     options[args[i]] = args[i + 1];
   }
   if (keys.some(key => !Object.hasOwn(options, key))
-      || (Object.hasOwn(options, '--profile') && !['transitions', 'revocation', 'permissions'].includes(options['--profile'])))
+      || (!Object.hasOwn(options, '--inspector-build') && !Object.hasOwn(options, '--original-dependencies')))
     fail('APPS_HOST_ARGUMENTS');
+  if (Object.hasOwn(options, '--profile') && !['transitions', 'revocation', 'permissions'].includes(options['--profile'])) fail('APPS_HOST_ARGUMENTS');
   return options;
 }
 
@@ -94,10 +121,10 @@ function exactPermissions(value, blocked) {
 }
 
 export function completedHostChecks(receipt, {allowBlockedPermission = false} = {}) {
-  const transitions = receipt?.profile === TRANSITION_PROFILE;
-  const revocation = receipt?.profile === REVOCATION_PROFILE;
-  const permissions = receipt?.profile === PERMISSIONS_PROFILE;
-  return [PROFILE, TRANSITION_PROFILE, REVOCATION_PROFILE, PERMISSIONS_PROFILE].includes(receipt?.profile)
+  const transitions = profileOf(receipt) === TRANSITION_PROFILE;
+  const revocation = profileOf(receipt) === REVOCATION_PROFILE;
+  const permissions = profileOf(receipt) === PERMISSIONS_PROFILE;
+  return [PROFILE, TRANSITION_PROFILE, REVOCATION_PROFILE, PERMISSIONS_PROFILE].includes(profileOf(receipt))
     && (!transitions || (Number.isSafeInteger(receipt.initialTraceCount)
       && receipt.transitions?.betaRenderedInSameApp === true
       && receipt.transitions?.previousTenantCleared === true
@@ -109,7 +136,7 @@ export function completedHostChecks(receipt, {allowBlockedPermission = false} = 
       && receipt.revocation?.revokedViewRequiresReopen === true))
     && (!permissions || exactPermissions(receipt.permissions, false)
       || allowBlockedPermission && exactPermissions(receipt.permissions, true))
-    && receipt.experimental === true && receipt.patchIdentityVerified === true
+    && receipt.experimental === true && verifiedHostIdentity(receipt)
     && receipt.fullHostQualification === false && receipt.releaseCandidateEvidence === false
     && receipt.observationWindowCompleted === true
     && receipt.traceVerdict === 'PASSED' && uiChecks.every(key => receipt.ui?.[key] === true)
@@ -141,12 +168,12 @@ export function adjudicateHost(receipt, rejections) {
       || receipt.failure || receipt.integrityFailure || receipt.browserFailure || receipt.cleanupFailure
       || !Array.isArray(rejections)) return 'FAILED';
   if (!receipt.traceFailure && rejections.length === 0)
-    return receipt.profile === TRANSITION_PROFILE ? TRANSITION_SUCCESS
-      : receipt.profile === REVOCATION_PROFILE ? REVOCATION_SUCCESS
-      : receipt.profile === PERMISSIONS_PROFILE
+    return profileOf(receipt) === TRANSITION_PROFILE ? TRANSITION_SUCCESS
+      : profileOf(receipt) === REVOCATION_PROFILE ? REVOCATION_SUCCESS
+      : profileOf(receipt) === PERMISSIONS_PROFILE
         ? exactPermissions(receipt.permissions, true) ? PERMISSIONS_HOST_BLOCKED : PERMISSIONS_SUCCESS
         : SUCCESS;
-  return receipt.profile === REVOCATION_PROFILE && receipt.traceFailure === 'APPS_POST_ONLY'
+  return profileOf(receipt) === REVOCATION_PROFILE && receipt.traceFailure === 'APPS_POST_ONLY'
     && expectedRevocationOAuthFallback(rejections)
     ? REVOCATION_HOST_BLOCKED : 'FAILED';
 }
@@ -359,14 +386,21 @@ export async function runHost(options) {
       || process.versions.node !== '26.5.0') fail('APPS_HOST_RUNTIME');
   const browserRoot = resolve(dirname(browserPath), '../..');
   const dependencies = resolve(options['--dependencies']);
-  const original = resolve(options['--original-dependencies']);
-  const modules = resolve(dependencies, 'node_modules');
-  const inspector = resolve(modules, '@modelcontextprotocol/inspector');
-  const entry = regularFile(resolve(inspector, 'clients/launcher/build/index.js'));
+  const original = options['--original-dependencies'] ? resolve(options['--original-dependencies']) : null;
+  const buildRoot = options['--inspector-build'] ? resolve(options['--inspector-build']) : null;
+  const upstream = buildRoot ? verifyUpstreamBuild(buildRoot) : null;
+  const inspector = upstream?.inspector ?? resolve(dependencies, 'node_modules/@modelcontextprotocol/inspector');
+  const entry = regularFile(upstream?.entry ?? resolve(inspector, 'clients/launcher/build/index.js'));
   regularFile(resolve(inspector, 'clients/web/dist/index.html'));
-  const provenance = verifyPatchedDependencies(original, dependencies);
-  const installed = provenance.patchedTree;
-  validateExperimentPins(provenance, {jarSha256: hash(jar)}, {sha256: hash(shell)});
+  function shellDependenciesIdentity() {
+    verifyDependencyPins(readFileSync(regularFile(resolve(dependencies, 'package.json'))),
+      readFileSync(regularFile(resolve(dependencies, 'package-lock.json'))));
+    return directoryIdentity(dependencies);
+  }
+  const provenance = upstream ? upstream.provenance : verifyPatchedDependencies(original, dependencies);
+  const installed = upstream ? shellDependenciesIdentity() : provenance.patchedTree;
+  if (upstream) validateSourceExperimentPins({jarSha256: hash(jar)}, {sha256: hash(shell)});
+  else validateExperimentPins(provenance, {jarSha256: hash(jar)}, {sha256: hash(shell)});
   if (lstatSync(shell).size > 512 * 1024 || lstatSync(shellReceipt).size > 2 * 1024 * 1024) fail('APPS_HOST_SHELL_BOUND');
   const shellInputs = ['../inspector/process.mjs', 'assets/catalog-entry.mjs', 'assets/catalog-shell.html',
     'assets/catalog-shell.mjs', 'build-shell.mjs'].map(path => ({path,
@@ -378,7 +412,7 @@ export async function runHost(options) {
   const browserIdentity = directoryIdentity(browserRoot);
   const inputSnapshot = sourceInputs();
   const work = resolve(options['--work-dir']);
-  validateWorkDirectory(work, [original, dependencies, browserRoot, resolve(dirname(java), '..')]);
+  validateWorkDirectory(work, [original, buildRoot, dependencies, browserRoot, resolve(dirname(java), '..')].filter(Boolean));
   const privateRoot = resolve(work, 'private-session');
   const env = createEnvironment(privateRoot, java);
   // The parent must exist, and an existing/racing output directory is never reused.
@@ -398,10 +432,13 @@ export async function runHost(options) {
   process.on('SIGTERM', interrupt);
   const receipt = {formatVersion: 1, profile: transitions ? TRANSITION_PROFILE
     : revocation ? REVOCATION_PROFILE : permissions ? PERMISSIONS_PROFILE : PROFILE,
-    status: 'FAILED', stage: 'INPUTS', experimental: true, patchIdentityVerified: true, provenance,
+    status: 'FAILED', stage: 'INPUTS', experimental: true,
+    hostMode: upstream ? SOURCE_DISTRIBUTION : 'EXPERIMENTAL_AUTH_PATCH',
+    sourceIdentityVerified: !!upstream, patchIdentityVerified: !upstream, provenance,
+    ...(upstream ? {upstreamBuildReceiptSha256: upstream.receiptSha256, upstreamBuildIdentity: upstream.identity} : {}),
     fullHostQualification: false, releaseCandidateEvidence: false,
     executedAt: new Date().toISOString(), protocolVersion: '2026-07-28',
-    target: {name: '@modelcontextprotocol/inspector', version: '2.7.0', commit: '2e90a628e6296c62e4bef942afbb43d3faa4baf4'},
+    target: upstream?.target ?? {name: '@modelcontextprotocol/inspector', version: '2.7.0', commit: '2e90a628e6296c62e4bef942afbb43d3faa4baf4'},
     candidate: candidateIdentity, shell: shellIdentity,
     installedTreeIdentity: installed, browserDistributionIdentity: browserIdentity,
     inputs: inputSnapshot, runtime: {node: process.version, platform: process.platform, architecture: process.arch},
@@ -414,7 +451,8 @@ export async function runHost(options) {
       deniedSubscriptions: 8, mcpExchanges: transitions ? 18 : revocation ? 17 : 16},
     limitations: ['Dirty-tree local development evidence, not immutable release conformance.',
       'One Inspector build, browser build, authenticated English alpha caller and Apps-enabled modern-HTTP profile only.',
-      'An exact isolated auth-patched host, not the unchanged released Inspector; historical FAILED host evidence remains unchanged.',
+      upstream ? 'An unmodified upstream source build, not a released Inspector package; historical host evidence remains unchanged.'
+        : 'An exact isolated auth-patched host, not the unchanged released Inspector; historical FAILED host evidence remains unchanged.',
       'One to eight exact denied subscription retries are observed, never authorized or converted to success.',
       transitions
         ? 'Only one same-App beta/Portuguese refresh then denied refresh; no credential revocation, general CSP/permissions, OAuth, or production-host qualification.'
@@ -424,6 +462,7 @@ export async function runHost(options) {
             ? 'One declared geolocation feature and three undeclared features in one opaque App; no user/browser grant, device access, other permission combinations, OAuth, or production-host qualification.'
         : 'No general CSP/permissions enforcement, localization matrix, tenant switching, revocation, OAuth, or production-host qualification.',
       'Only allowlisted structural facts retained; private browser/config/runtime state is deleted after supervised cleanup.']};
+  if (upstream) receipt.profile = sourceProfile(receipt.profile);
   let fixture, proxy, host, browser, cdp, observation, configPath, configBytes, privateCreated = false;
   let hostExited = false, browserExited = false;
   async function command(executable, args, timeoutMs = 10000) {
@@ -435,7 +474,10 @@ export async function runHost(options) {
     return hash(jar) === receipt.candidate.jarSha256 && hash(pom) === receipt.candidate.pomSha256
       && hash(shell) === receipt.shell.sha256 && hash(shellReceipt) === receipt.shell.receiptSha256
       && JSON.stringify(sourceInputs()) === JSON.stringify(receipt.inputs)
-      && JSON.stringify(verifyPatchedDependencies(original, dependencies)) === JSON.stringify(provenance)
+      && (upstream
+        ? JSON.stringify(verifyUpstreamBuild(buildRoot)) === JSON.stringify(upstream)
+          && JSON.stringify(shellDependenciesIdentity()) === JSON.stringify(installed)
+        : JSON.stringify(verifyPatchedDependencies(original, dependencies)) === JSON.stringify(provenance))
       && receipt.fixtureClassTree !== undefined
       && JSON.stringify(directoryIdentity(resolve(work, 'classes'))) === JSON.stringify(receipt.fixtureClassTree)
       && JSON.stringify(directoryIdentity(browserRoot)) === JSON.stringify(receipt.browserDistributionIdentity);
@@ -454,10 +496,10 @@ export async function runHost(options) {
     receipt.stage = 'COMPILE';
     const sources = ['AppsFixture.java', 'AppsFixtureMain.java'].map(file => resolve(apps, 'src/com/soklet/interop/apps', file));
     if (sources.some(path => readFileSync(path, 'utf8').includes('com.soklet.internal'))) fail('APPS_HOST_INTERNAL_REFERENCE');
-    const compile = await command(resolve(dirname(java), 'javac'), ['--release', '17', '-proc:none', '-Xlint:all', '-Werror',
+    const compile = await command(resolve(dirname(java), 'javac'), ['--release', '21', '-proc:none', '-Xlint:all', '-Werror',
       '-classpath', jar, '-d', classes, ...sources], 120000);
     if (compile.stdout !== '' || compile.stderr !== '') fail('APPS_HOST_COMPILE_OUTPUT');
-    const audit = await command(resolve(dirname(java), 'jdeps'), ['-q', '--multi-release', '17', '-verbose:class', '-classpath', jar, classes], 60000);
+    const audit = await command(resolve(dirname(java), 'jdeps'), ['-q', '--multi-release', '21', '-verbose:class', '-classpath', jar, classes], 60000);
     if (audit.stderr !== '' || audit.stdout.includes('com.soklet.internal') || audit.stdout.includes('not found')) fail('APPS_HOST_DEPENDENCY_AUDIT');
     writeFileSync(resolve(work, 'dependencies.txt'), audit.stdout, {mode: 0o600, flag: 'wx'});
     receipt.fixtureClassTree = directoryIdentity(classes);

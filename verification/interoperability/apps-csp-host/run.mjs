@@ -6,7 +6,8 @@ import { delimiter, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createEnvironment, createSessionConfig, sanitizedSessionConfig } from '../inspector/config.mjs';
 import { startProcess } from '../inspector/process.mjs';
-import { directoryIdentity } from '../inspector/run.mjs';
+import { directoryIdentity, verifyDependencyPins } from '../inspector/run.mjs';
+import { verifyUpstreamBuild } from '../inspector/upstream-build.mjs';
 import { browserVersion, chromeArguments, validWebConfig } from '../inspector/web-probe.mjs';
 import { connectCdp } from '../inspector/cdp.mjs';
 import { regularFile, validateShellBuild } from '../apps/run.mjs';
@@ -34,8 +35,32 @@ export const SUCCESS = 'EXPERIMENTAL_APPS_CSP_DENIAL_PASSED';
 export const ALLOWLIST_PROFILE = 'soklet.inspector.experimental-apps-csp-allowlist.v1';
 export const ALLOWLIST_SUCCESS = 'EXPERIMENTAL_APPS_CSP_ALLOWLIST_PASSED';
 const allowlistMode = options => options['--profile'] === 'allowlist';
-const cspVerdict = receipt => receipt?.profile === ALLOWLIST_PROFILE
+const cspVerdict = receipt => profileOf(receipt) === ALLOWLIST_PROFILE
   ? adjudicateAllowlistEvidence(receipt.csp) : adjudicateCspEvidence(receipt?.csp);
+const SOURCE_DISTRIBUTION = 'UNRELEASED_UPSTREAM_SOURCE_BUILD';
+export const sourceProfile = profile => profile.replace(/experimental-(?:patched-)?/, 'upstream-source-');
+function profileOf(receipt) {
+  return receipt?.hostMode === SOURCE_DISTRIBUTION
+    ? [PROFILE, ALLOWLIST_PROFILE].find(profile => sourceProfile(profile) === receipt.profile) : receipt?.profile;
+}
+function verifiedHostIdentity(receipt) {
+  if (receipt?.hostMode === SOURCE_DISTRIBUTION)
+    return receipt.sourceIdentityVerified === true && receipt.patchIdentityVerified === false
+      && receipt.target?.name === '@modelcontextprotocol/inspector'
+      && receipt.target.version === '2.10.1'
+      && receipt.target.commit === '1974465ccb5454a5110e609e4140171fa360a544'
+      && receipt.target.distribution === SOURCE_DISTRIBUTION
+      && /^[a-f0-9]{64}$/.test(receipt.upstreamBuildReceiptSha256);
+  return receipt?.patchIdentityVerified === true
+    && (receipt.sourceIdentityVerified === undefined || receipt.sourceIdentityVerified === false)
+    && (receipt.hostMode === undefined || receipt.hostMode === 'EXPERIMENTAL_AUTH_PATCH');
+}
+export function validateSourceExperimentPins(candidate, shell) {
+  if (!/^[a-f0-9]{64}$/.test(candidate?.jarSha256)
+      || shell?.sha256 !== '3229c8e0a9ee17dcbb2030040fac282b172715588c7b25963275529c0b650f60')
+    fail('APPS_HOST_EXPERIMENT_PIN');
+}
+
 export function validateExperimentPins(provenance, candidate, shell, {allowlist = false} = {}) {
   if (provenance?.patchedTree?.files !== 9391
       || provenance.patchedTree.sha256 !== '6546d769cd9fd869b7608c774b9dcfc39b3050d851c57ad83b439cdcbb84ebcb'
@@ -48,15 +73,18 @@ export function validateExperimentPins(provenance, candidate, shell, {allowlist 
 }
 
 export function parseHostArguments(args) {
-  const keys = ['--candidate-jar', '--candidate-pom', '--java', '--shell', '--original-dependencies', '--dependencies', '--browser', '--work-dir'];
-  if (args.length !== keys.length * 2 && args.length !== (keys.length + 1) * 2) fail('APPS_HOST_ARGUMENTS');
+  const keys = ['--candidate-jar', '--candidate-pom', '--java', '--shell', '--dependencies', '--browser', '--work-dir'];
+  if (args.length % 2 !== 0) fail('APPS_HOST_ARGUMENTS');
   const options = {};
   for (let i = 0; i < args.length; i += 2) {
-    if (![...keys, '--profile'].includes(args[i]) || Object.hasOwn(options, args[i]) || !args[i + 1]) fail('APPS_HOST_ARGUMENTS');
+    if (![...keys, '--original-dependencies', '--inspector-build', '--profile'].includes(args[i]) || Object.hasOwn(options, args[i])
+        || typeof args[i + 1] !== 'string' || !args[i + 1]) fail('APPS_HOST_ARGUMENTS');
     options[args[i]] = args[i + 1];
   }
   if (keys.some(key => !Object.hasOwn(options, key))
-      || (Object.hasOwn(options, '--profile') && options['--profile'] !== 'allowlist')) fail('APPS_HOST_ARGUMENTS');
+      || (!Object.hasOwn(options, '--inspector-build') && !Object.hasOwn(options, '--original-dependencies')))
+    fail('APPS_HOST_ARGUMENTS');
+  if (Object.hasOwn(options, '--profile') && !['allowlist'].includes(options['--profile'])) fail('APPS_HOST_ARGUMENTS');
   return options;
 }
 
@@ -72,9 +100,9 @@ export function fixtureControl(line, event) {
 }
 
 export function completedHostChecks(receipt) {
-  const allowlist = receipt?.profile === ALLOWLIST_PROFILE;
-  return [PROFILE, ALLOWLIST_PROFILE].includes(receipt?.profile)
-    && receipt.experimental === true && receipt.patchIdentityVerified === true
+  const allowlist = profileOf(receipt) === ALLOWLIST_PROFILE;
+  return [PROFILE, ALLOWLIST_PROFILE].includes(profileOf(receipt))
+    && receipt.experimental === true && verifiedHostIdentity(receipt)
     && receipt.fullHostQualification === false && receipt.releaseCandidateEvidence === false
     && receipt.observationWindowCompleted === true && receipt.interrupted === false
     && cspVerdict(receipt) === 'PASSED'
@@ -106,7 +134,7 @@ export function adjudicateHost(receipt, rejections) {
   if (!completedHostChecks(receipt) || receipt.failure || receipt.integrityFailure || receipt.browserFailure || receipt.cleanupFailure || receipt.canaryFailure
       || !Array.isArray(rejections)) return 'FAILED';
   return !receipt.traceFailure && rejections.length === 0
-    ? receipt.profile === ALLOWLIST_PROFILE ? ALLOWLIST_SUCCESS : SUCCESS : 'FAILED';
+    ? profileOf(receipt) === ALLOWLIST_PROFILE ? ALLOWLIST_SUCCESS : SUCCESS : 'FAILED';
 }
 
 function cleanFixtureExit(exit) {
@@ -282,14 +310,21 @@ export async function runHost(options) {
       || process.versions.node !== '26.5.0') fail('APPS_HOST_RUNTIME');
   const browserRoot = resolve(dirname(browserPath), '../..');
   const dependencies = resolve(options['--dependencies']);
-  const original = resolve(options['--original-dependencies']);
-  const modules = resolve(dependencies, 'node_modules');
-  const inspector = resolve(modules, '@modelcontextprotocol/inspector');
-  const entry = regularFile(resolve(inspector, 'clients/launcher/build/index.js'));
+  const original = options['--original-dependencies'] ? resolve(options['--original-dependencies']) : null;
+  const buildRoot = options['--inspector-build'] ? resolve(options['--inspector-build']) : null;
+  const upstream = buildRoot ? verifyUpstreamBuild(buildRoot) : null;
+  const inspector = upstream?.inspector ?? resolve(dependencies, 'node_modules/@modelcontextprotocol/inspector');
+  const entry = regularFile(upstream?.entry ?? resolve(inspector, 'clients/launcher/build/index.js'));
   regularFile(resolve(inspector, 'clients/web/dist/index.html'));
-  const provenance = verifyPatchedDependencies(original, dependencies);
-  const installed = provenance.patchedTree;
-  validateExperimentPins(provenance, {jarSha256: hash(jar)}, {sha256: hash(shell)}, {allowlist});
+  function shellDependenciesIdentity() {
+    verifyDependencyPins(readFileSync(regularFile(resolve(dependencies, 'package.json'))),
+      readFileSync(regularFile(resolve(dependencies, 'package-lock.json'))));
+    return directoryIdentity(dependencies);
+  }
+  const provenance = upstream ? upstream.provenance : verifyPatchedDependencies(original, dependencies);
+  const installed = upstream ? shellDependenciesIdentity() : provenance.patchedTree;
+  if (upstream) validateSourceExperimentPins({jarSha256: hash(jar)}, {sha256: hash(shell)});
+  else validateExperimentPins(provenance, {jarSha256: hash(jar)}, {sha256: hash(shell)}, {allowlist});
   if (lstatSync(shell).size > 512 * 1024 || lstatSync(shellReceipt).size > 2 * 1024 * 1024) fail('APPS_HOST_SHELL_BOUND');
   const shellInputs = ['../inspector/process.mjs', 'assets/catalog-entry.mjs', 'assets/catalog-shell.html',
     'assets/catalog-shell.mjs', 'build-shell.mjs'].map(path => ({path,
@@ -301,7 +336,7 @@ export async function runHost(options) {
   const browserIdentity = directoryIdentity(browserRoot);
   const inputSnapshot = sourceInputs();
   const work = resolve(options['--work-dir']);
-  validateWorkDirectory(work, [original, dependencies, browserRoot, resolve(dirname(java), '..')]);
+  validateWorkDirectory(work, [original, buildRoot, dependencies, browserRoot, resolve(dirname(java), '..')].filter(Boolean));
   const privateRoot = resolve(work, 'private-session');
   const env = createEnvironment(privateRoot, java);
   // The parent must exist, and an existing/racing output directory is never reused.
@@ -320,10 +355,13 @@ export async function runHost(options) {
   process.on('SIGINT', interrupt);
   process.on('SIGTERM', interrupt);
   const receipt = {formatVersion: 1, profile: allowlist ? ALLOWLIST_PROFILE : PROFILE,
-    status: 'FAILED', stage: 'INPUTS', experimental: true, patchIdentityVerified: true, provenance,
+    status: 'FAILED', stage: 'INPUTS', experimental: true,
+    hostMode: upstream ? SOURCE_DISTRIBUTION : 'EXPERIMENTAL_AUTH_PATCH',
+    sourceIdentityVerified: !!upstream, patchIdentityVerified: !upstream, provenance,
+    ...(upstream ? {upstreamBuildReceiptSha256: upstream.receiptSha256, upstreamBuildIdentity: upstream.identity} : {}),
     fullHostQualification: false, releaseCandidateEvidence: false,
     executedAt: new Date().toISOString(), protocolVersion: '2026-07-28',
-    target: {name: '@modelcontextprotocol/inspector', version: '2.7.0', commit: '2e90a628e6296c62e4bef942afbb43d3faa4baf4'},
+    target: upstream?.target ?? {name: '@modelcontextprotocol/inspector', version: '2.7.0', commit: '2e90a628e6296c62e4bef942afbb43d3faa4baf4'},
     candidate: candidateIdentity, shell: shellIdentity,
     installedTreeIdentity: installed, browserDistributionIdentity: browserIdentity,
     inputs: inputSnapshot, runtime: {node: process.version, platform: process.platform, architecture: process.arch},
@@ -335,7 +373,8 @@ export async function runHost(options) {
       canaryHeaderBytes: 8192, canaryExchangeMs: 5000, canaryCloseMs: 1000},
     limitations: ['Dirty-tree local development evidence, not immutable release conformance.',
       'One Inspector build, browser build, authenticated English alpha caller and Apps-enabled modern-HTTP profile only.',
-      'An exact isolated auth-patched host, not the unchanged released Inspector; historical FAILED host evidence remains unchanged.',
+      upstream ? 'An unmodified upstream source build, not a released Inspector package; historical host evidence remains unchanged.'
+        : 'An exact isolated auth-patched host, not the unchanged released Inspector; historical FAILED host evidence remains unchanged.',
       'One to eight exact denied subscription retries are observed, never authorized or converted to success.',
       allowlist ? 'One declared loopback origin for connect-src and img-src plus the undeclared Inspector origin; no general CSP/permissions, localization, tenant, revocation, OAuth, or production-host qualification.'
         : 'Only connect-src and img-src denial in the existing opaque App frame; no general CSP/permissions, localization, tenant, revocation, OAuth, or production-host qualification.',
@@ -343,6 +382,7 @@ export async function runHost(options) {
       allowlist ? 'Declared-origin App requests must reach the independent canary; undeclared-origin App requests require trusted enforcing CSP violations. Main-frame controls bracket the App phase.'
         : 'Exact loopback canary URLs are allowed by interception; trusted enforced CSP violations, failed App operations, and before/after successful main-frame controls are independently required.',
       'Only allowlisted structural facts retained; private browser/config/runtime state is deleted after supervised cleanup.']};
+  if (upstream) receipt.profile = sourceProfile(receipt.profile);
   let fixture, proxy, host, browser, cdp, observation, canary, configPath, configBytes, privateCreated = false;
   let hostExited = false, browserExited = false;
   async function command(executable, args, timeoutMs = 10000) {
@@ -354,7 +394,10 @@ export async function runHost(options) {
     return hash(jar) === receipt.candidate.jarSha256 && hash(pom) === receipt.candidate.pomSha256
       && hash(shell) === receipt.shell.sha256 && hash(shellReceipt) === receipt.shell.receiptSha256
       && JSON.stringify(sourceInputs()) === JSON.stringify(receipt.inputs)
-      && JSON.stringify(verifyPatchedDependencies(original, dependencies)) === JSON.stringify(provenance)
+      && (upstream
+        ? JSON.stringify(verifyUpstreamBuild(buildRoot)) === JSON.stringify(upstream)
+          && JSON.stringify(shellDependenciesIdentity()) === JSON.stringify(installed)
+        : JSON.stringify(verifyPatchedDependencies(original, dependencies)) === JSON.stringify(provenance))
       && receipt.fixtureClassTree !== undefined
       && JSON.stringify(directoryIdentity(resolve(work, 'classes'))) === JSON.stringify(receipt.fixtureClassTree)
       && JSON.stringify(directoryIdentity(browserRoot)) === JSON.stringify(receipt.browserDistributionIdentity);
@@ -373,10 +416,10 @@ export async function runHost(options) {
     receipt.stage = 'COMPILE';
     const sources = ['AppsFixture.java', 'AppsFixtureMain.java'].map(file => resolve(apps, 'src/com/soklet/interop/apps', file));
     if (sources.some(path => readFileSync(path, 'utf8').includes('com.soklet.internal'))) fail('APPS_HOST_INTERNAL_REFERENCE');
-    const compile = await command(resolve(dirname(java), 'javac'), ['--release', '17', '-proc:none', '-Xlint:all', '-Werror',
+    const compile = await command(resolve(dirname(java), 'javac'), ['--release', '21', '-proc:none', '-Xlint:all', '-Werror',
       '-classpath', jar, '-d', classes, ...sources], 120000);
     if (compile.stdout !== '' || compile.stderr !== '') fail('APPS_HOST_COMPILE_OUTPUT');
-    const audit = await command(resolve(dirname(java), 'jdeps'), ['-q', '--multi-release', '17', '-verbose:class', '-classpath', jar, classes], 60000);
+    const audit = await command(resolve(dirname(java), 'jdeps'), ['-q', '--multi-release', '21', '-verbose:class', '-classpath', jar, classes], 60000);
     if (audit.stderr !== '' || audit.stdout.includes('com.soklet.internal') || audit.stdout.includes('not found')) fail('APPS_HOST_DEPENDENCY_AUDIT');
     writeFileSync(resolve(work, 'dependencies.txt'), audit.stdout, {mode: 0o600, flag: 'wx'});
     receipt.fixtureClassTree = directoryIdentity(classes);

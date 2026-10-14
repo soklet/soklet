@@ -133,12 +133,12 @@ export async function run(options) {
     const tests = join(directory, 'test-src/com/soklet/interop/apps/AppsFixtureContractTest.java');
     if ([source, tests].some(file => readFileSync(file, 'utf8').includes('com.soklet.internal')))
       throw new Error('APPS_INTERNAL_SOURCE_REFERENCE');
-    await command('compile-release-17', javac, ['--release', '17', '-proc:none', '-Xlint:all', '-Werror',
+    await command('compile-release-21', javac, ['--release', '21', '-proc:none', '-Xlint:all', '-Werror',
       '-classpath', jar, '-d', classes, source, tests], 120000);
     const contracts = await command('server-contracts', java, ['-ea', '-classpath', classes + delimiter + jar,
       'com.soklet.interop.apps.AppsFixtureContractTest', shell], 60000);
     receipt.contracts = contractSummary(contracts.stdout, contracts.stderr);
-    const dependencies = await command('public-api-dependencies', jdeps, ['-q', '--multi-release', '17',
+    const dependencies = await command('public-api-dependencies', jdeps, ['-q', '--multi-release', '21',
       '-verbose:class', '-classpath', jar, classes], 60000);
     if (dependencies.stdout.includes('com.soklet.internal') || dependencies.stdout.includes('not found'))
       throw new Error('APPS_NONPUBLIC_DEPENDENCY');

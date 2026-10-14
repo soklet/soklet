@@ -225,7 +225,7 @@ public class McpPublicJavadocTests {
 			DiagnosticCollector<JavaFileObject> diagnostics =
 					new DiagnosticCollector<>();
 			JavacTask task = (JavacTask) compiler.getTask(null, fileManager,
-					diagnostics, List.of("--release", "17", "-proc:none",
+					diagnostics, List.of("--release", "21", "-proc:none",
 							"-classpath", System.getProperty("java.class.path")),
 					null, fileManager.getJavaFileObjectsFromPaths(sourcePaths));
 			List<CompilationUnitTree> units = new ArrayList<>();
@@ -434,7 +434,7 @@ public class McpPublicJavadocTests {
 													 Set<String> phaseFiveTypeNames) throws IOException {
 		DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
 		List<String> options = List.of(
-				"--release", "17",
+				"--release", "21",
 				"-proc:none",
 				"-classpath", System.getProperty("java.class.path")
 		);

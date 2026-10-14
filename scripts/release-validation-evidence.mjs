@@ -574,7 +574,7 @@ export const EXPECTED_GATE_EVIDENCE_CONTRACTS = Object.freeze({
   'barebones-app': gateEvidenceContract(
     'barebones-app',
     'java',
-    'javac --release 17; live loopback probes; clean shutdown',
+    'javac --release 21; live loopback probes; clean shutdown',
     'candidate',
     'COMPILE_START_RESPOND_TERMINATE_AND_RELEASE_PORT',
     [
@@ -878,7 +878,7 @@ function validateToolchains(toolchains, projectRoot) {
   );
   requireExactKeys(toolchains.nodePin, ['path', 'sha256'], 'Node toolchain pin');
 
-  validateCorrettoToolchain(toolchains.java, 17, 'Candidate Java toolchain');
+  validateCorrettoToolchain(toolchains.java, 21, 'Candidate Java toolchain');
   validateCorrettoToolchain(toolchains.javadocJava, 26, 'Javadoc Java toolchain');
   if (toolchains.coreJdk21 !== null)
     validateCorrettoToolchain(toolchains.coreJdk21, 21, 'Core JDK 21 toolchain');

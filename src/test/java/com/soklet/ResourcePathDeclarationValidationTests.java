@@ -276,8 +276,8 @@ public class ResourcePathDeclarationValidationTests {
 		var diagnostics = new DiagnosticCollector<JavaFileObject>();
 		try (var manager = compiler.getStandardFileManager(diagnostics, null, StandardCharsets.UTF_8)) {
 			var task = compiler.getTask(null, manager, diagnostics, process
-					? List.of("--release", "17", "-parameters", "-classpath", System.getProperty("java.class.path"), "-d", classes.toString(), "-Asoklet.cacheMode=none")
-					: List.of("--release", "17", "-proc:none", "-classpath", System.getProperty("java.class.path"), "-d", classes.toString()),
+					? List.of("--release", "21", "-parameters", "-classpath", System.getProperty("java.class.path"), "-d", classes.toString(), "-Asoklet.cacheMode=none")
+					: List.of("--release", "21", "-proc:none", "-classpath", System.getProperty("java.class.path"), "-d", classes.toString()),
 					null, manager.getJavaFileObjectsFromPaths(List.of(source)));
 			if (process) task.setProcessors(List.of(new SokletProcessor()));
 			return task.call();

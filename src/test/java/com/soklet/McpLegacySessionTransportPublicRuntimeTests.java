@@ -214,7 +214,9 @@ class McpLegacySessionTransportPublicRuntimeTests {
 			@Override public void didFinishRequestHandling(ServerType type, Request request, ResourceMethod method,
 					MarshaledResponse response, Duration duration, List<Throwable> failures) { finishes.incrementAndGet(); }
 		};
-		try (Fixture fixture = new Fixture(true, builder -> builder.requestTimeout(Duration.ofMillis(150)), null, collector)) {
+		// The deadline starts before asynchronous observer dispatch. Allow that
+		// scheduling step to complete before exercising expiry during the blocked start.
+		try (Fixture fixture = new Fixture(true, builder -> builder.requestTimeout(Duration.ofSeconds(1)), null, collector)) {
 			try (RawClient client = fixture.openControl("DELETE", "/mcp", McpProtocolVersion.V2025_11_25,
 					"unknown.valid", "alice", "", List.of())) {
 				assertTrue(entered.await(5, TimeUnit.SECONDS));
@@ -443,7 +445,10 @@ class McpLegacySessionTransportPublicRuntimeTests {
 					assertTrue(entered.await(5, TimeUnit.SECONDS));
 					assertFalse(get.readBody(head).contains("data:"));
 					assertTrue(get.terminalRead);
-					awaitCondition(() -> token.get() != null && token.get().isCanceled());
+					// The client can read the terminal chunk before the writer's
+					// termination callback retires subscription diagnostics.
+					awaitCondition(() -> token.get() != null && token.get().isCanceled()
+							&& fixture.server.getDiagnostics().getActiveSubscriptions() == 0);
 					assertTrue(fixture.server.getDiagnostics().getActiveHandlerExecutions() >= 1);
 					assertEquals(0, fixture.server.getDiagnostics().getActiveSubscriptions());
 					release.countDown();

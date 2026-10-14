@@ -17,8 +17,6 @@ import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestFactory;
 import org.junit.jupiter.api.Timeout;
-import org.junit.jupiter.api.condition.EnabledForJreRange;
-import org.junit.jupiter.api.condition.JRE;
 
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
@@ -94,7 +92,6 @@ class SseDurationBoundaryTests {
 	}
 
 	@Test
-	@EnabledForJreRange(min = JRE.JAVA_21)
 	void maximumHeartbeatStillAcceptsApplicationWritesAndStopsCompletely() throws Exception {
 		try (LiveFixture fixture = new LiveFixture(Duration.ofMillis(Long.MAX_VALUE))) {
 			fixture.broadcaster().broadcastEvent(SseEvent.withData("first").build());
@@ -106,7 +103,6 @@ class SseDurationBoundaryTests {
 	}
 
 	@Test
-	@EnabledForJreRange(min = JRE.JAVA_21)
 	void idleHeartbeatRemainsACommentAndDoesNotPreventLaterEvents() throws Exception {
 		try (LiveFixture fixture = new LiveFixture(Duration.ofMillis(25))) {
 			assertEquals(":\n\n", readThrough(fixture.socket, "\n\n"));
@@ -121,7 +117,6 @@ class SseDurationBoundaryTests {
 	}
 
 	@Test
-	@EnabledForJreRange(min = JRE.JAVA_21)
 	void retryWireValuesUseNonnegativeWholeMillisecondsAtBothBounds() throws Exception {
 		try (LiveFixture fixture = new LiveFixture(Duration.ofMinutes(10))) {
 			for (RetryCase testCase : List.of(new RetryCase(Duration.ZERO, "0"),
@@ -136,7 +131,6 @@ class SseDurationBoundaryTests {
 	}
 
 	@Test
-	@EnabledForJreRange(min = JRE.JAVA_21)
 	void absentDataAndEmptyDataRemainDistinctOnTheWire() throws Exception {
 		try (LiveFixture fixture = new LiveFixture(Duration.ofMinutes(10))) {
 			fixture.broadcaster().broadcastEvent(SseEvent.withEvent("ready").build());

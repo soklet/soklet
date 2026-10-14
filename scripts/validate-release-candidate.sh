@@ -1157,7 +1157,7 @@ run_barebones() {
 	mkdir -p "$classes"
 	find "$checkout/src" -type f -name '*.java' -print | LC_ALL=C sort > "$sources"
 	[[ -s "$sources" ]] || fail "barebones-app has no Java sources."
-	javac --release 17 -parameters -processor com.soklet.SokletProcessor \
+	javac --release 21 -parameters -processor com.soklet.SokletProcessor \
 		-classpath "$vendored_jar" -d "$classes" @"$sources"
 	local log="$evidence_root/barebones-app.log"
 	local port_file="$work_root/barebones-loopback-port.txt"

@@ -813,7 +813,7 @@ regression checks wire order directly instead of treating asynchronous metric
 delivery as an activation barrier. The internal order remains acknowledgment
 queued, subscription activated, and then response handed to the transport
 callback.
-Current supported-JDK revalidation on local Amazon Corretto
+Historical Java 17 revalidation, before the Java 21 minimum migration, on local Amazon Corretto
 17.0.20.1+10-LTS passes `mvn -B -ntp clean test` at 1,667/0/0/72 over the
 same 462 main and 196 test sources. The two corrected methods pass 2/2 once
 and 20/20 across ten combined repetitions. Both corrections are test-only
@@ -847,7 +847,7 @@ public API, Phase 4/5/6 freeze inventory, timeout, or asserted count changed.
 This is local snapshot evidence, not an immutable release-candidate PASS
 receipt.
 
-Current JDK 17 application-execution revalidation on local Amazon Corretto
+Historical Java 17 application-execution revalidation, before the Java 21 minimum migration, on local Amazon Corretto
 17.0.20.1+10-LTS passes the exact `mvn -B -ntp clean test` at 1,667/0/0/72
 over the unchanged 462 main and 196 test sources. The affected method passes
 1/1 focused and 20/20 repeated runs, and the full
@@ -1223,10 +1223,16 @@ and all collector failures are contained.
 
 Direct restart orders the old generation's `ServerStopped` before the new
 `ServerStarted`; managed startup rollback orders `ServerStarted` before
-`ServerStopped`. The FIFO guarantee is metric record/enqueue order only, not a
-universal cross-thread causal or per-request total order for independently
-racing producers. No public API, diagnostics/snapshot field, aggregate family,
-label, event variant, or wire dimension was added.
+`ServerStopped`. Retained records for one request are delivered in enqueue
+order across submission, protocol, handler, timeout, cancellation, and request
+observation transitions. A deferred `RequestAccepted` therefore precedes that
+request's later retained `ProtocolError` or `RequestRejected`. An independent
+request can still deliver while another request's transition is withheld;
+there is no global FIFO guarantee across deferred requests. The existing
+4,096-record bound still permits omission, so metrics are not a lossless
+request-state log. Internal sequencing uses an opaque identity without request
+or application values. No public API, diagnostics/snapshot field, aggregate
+family, label, event variant, or wire dimension was added.
 
 The eighth vertical extends the same FIFO to all 23 declared variants with
 `ConnectionAccepted`, `ConnectionRejected`, and `TransportFailure`.
@@ -2063,8 +2069,9 @@ Phase 4 enum field appended after every existing constant, so existing ordinals
 are preserved and the incompatibility set at that amendment checkpoint remains
 559 records.
 
-These are FIFO record/enqueue-order guarantees, not a universal cross-thread
-causal total order. Default aggregation now covers `ServerStarted`,
+Delivery serializes eligible queued records, not a universal cross-thread
+causal total order. An earlier record held by a pending transition can be
+overtaken by an eligible record, including one from the same request. Default aggregation now covers `ServerStarted`,
 `ServerStopped`, `RequestAccepted`, `RequestRejected`, `RequestStarted`,
 `RequestFinished`, `RequestStreamOpened`, `RequestStreamClosed`, the five
 handler variants, `SubscriptionOpened`, `SubscriptionClosed`,
@@ -2115,7 +2122,7 @@ snapshot as an additional mandatory freeze. Generated evidence is written
 under `target/japicmp/` and `target/mcp-api-freezes/`. Neither script updates a
 reviewed file.
 
-CI runs the aggregate on JDK 17; the scripts themselves use the
+CI runs the aggregate on JDK 21; the scripts themselves use the
 caller-selected JDK. On the exact current source, the aggregate gate covers
 654 reviewed incompatibilities across 311 owners: 250 MCP and 61 non-MCP.
 The provisional inventory contains 14 MCP Tasks owners. The frozen inventories

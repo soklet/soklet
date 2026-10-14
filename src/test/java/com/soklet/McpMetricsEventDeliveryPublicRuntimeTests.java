@@ -178,15 +178,22 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 	}
 
 	@Test
-	public void queuedMetricEntriesRetainOnlyTheBoundedMetricEvent() {
+	public void queuedMetricEntriesRetainOnlyTheBoundedMetricEventAndEmptyOrderingIdentity() {
 		Class<?> entryType = java.util.Arrays.stream(
 				DefaultMcpServer.class.getDeclaredClasses())
 				.filter(candidate -> candidate.getSimpleName()
 						.equals("McpMetricEventDeliveryEntry"))
 				.findFirst().orElseThrow();
 
+		Class<?> sequenceType = java.util.Arrays.stream(DefaultMcpServer.class.getDeclaredClasses())
+				.filter(candidate -> candidate.getSimpleName().equals("RequestMetricSequence"))
+				.findFirst().orElseThrow();
+		Assertions.assertTrue(java.lang.reflect.Modifier.isStatic(sequenceType.getModifiers()));
+		Assertions.assertTrue(java.lang.reflect.Modifier.isFinal(sequenceType.getModifiers()));
+		Assertions.assertEquals(0, sequenceType.getDeclaredFields().length,
+				"The ordering identity must not carry request data, an outer reference, or predecessor links.");
 		Assertions.assertTrue(entryType.isRecord());
-		Assertions.assertEquals(List.of(McpMetricsEvent.class),
+		Assertions.assertEquals(List.of(McpMetricsEvent.class, sequenceType),
 				java.util.Arrays.stream(entryType.getRecordComponents())
 						.map(component -> component.getType()).toList(),
 				"Deferred metric delivery must not retain Request, Throwable, or request-context carriers.");

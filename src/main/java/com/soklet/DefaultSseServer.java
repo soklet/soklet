@@ -1052,14 +1052,6 @@ final class DefaultSseServer implements SseServer {
 			if (isStarted())
 				return;
 
-			// Cowardly refuse to START on a runtime without virtual threads.
-			// Checked here, not in the constructor, so an SSE server can be built and carried in a
-			// SokletConfig on any supported JDK; only starting a *live* SSE server requires virtual
-			// threads (JDK 21+). This keeps HTTP-only apps and the off-network simulator usable
-			// on JDK 17-20.
-			if (!Utilities.virtualThreadsAvailable())
-				throw new IllegalStateException(format("Virtual threads are required to start %s", getClass().getSimpleName()));
-
 			// Should never happen, this would already be set by the Soklet instance
 			if (getRequestHandler().isEmpty())
 				throw new IllegalStateException(format("No %s was registered for %s", RequestHandler.class, getClass()));
@@ -2167,14 +2159,13 @@ final class DefaultSseServer implements SseServer {
 			// To write the handshake response, we delegate to the Soklet instance, handing it the request we just parsed
 			// and receiving a MarshaledResponse to write.  This lets the normal Soklet request processing flow occur.
 			// Subsequent writes to the open socket (those following successful transmission of the "accepted" handshake response) are done via a SseBroadcaster and sidestep the Soklet request processing flow.
-			final Request requestForHandler = request;
-
-			try {
+			try (HttpTransportResponseFeedback feedback = HttpTransportResponseFeedback.create()) {
+				final Request requestForHandler = request;
 				InetSocketAddress remoteAddressSnapshotForHandler = remoteAddress;
-				requiredRequestHandler().handleRequest(requestForHandler, (@NonNull HttpRequestResult requestResult) -> {
+				requiredRequestHandler().handleRequest(requestForHandler, HttpTransportResponseFeedback.fromWriter(feedback, (@NonNull HttpRequestResult requestResult) -> {
 					if (!handshakeResponseOwner.compareAndSet(
 							HandshakeResponseOwner.UNCLAIMED, HandshakeResponseOwner.HANDLER))
-						return;
+						return HttpTransportResponseOutcome.accepted();
 
 					cancelTimeout(handshakeContext.handshakeTimeoutFutureRef.getAndSet(null));
 					Throwable requestHandlingFailure = requestResult.getRequestHandlingFailure().orElse(null);
@@ -2287,9 +2278,10 @@ final class DefaultSseServer implements SseServer {
 							notifyDidFailToAcceptConnection(remoteAddressSnapshotForHandler, ConnectionRejectionReason.INTERNAL_ERROR, failureCause);
 					}
 					if (!sameInstance(effectiveRequestResult, requestResult) || responseWriteFailure != null)
-						throw new HttpTransportResponseReplacement(effectiveRequestResult.getMarshaledResponse(),
+						return HttpTransportResponseOutcome.replaced(effectiveRequestResult.getMarshaledResponse(),
 								preparationFailure, responseWriteFailure);
-				});
+					return HttpTransportResponseOutcome.accepted();
+				}));
 			} catch (Throwable t) {
 				HandshakeResponseOwner responseOwner = handshakeResponseOwner.get();
 				boolean writeFailsafeResponse = false;
@@ -2307,7 +2299,7 @@ final class DefaultSseServer implements SseServer {
 					try {
 						synchronized (channelLock) {
 							writeHandshakeFully(clientSocketChannel, createFailsafeHandshakeHttpResponse(StatusCode.HTTP_500,
-									requestForHandler.getHttpMethod() == HttpMethod.HEAD));
+									request.getHttpMethod() == HttpMethod.HEAD));
 						}
 					} catch (Throwable t2) {
 						// best effort

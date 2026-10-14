@@ -64,7 +64,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
-import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -138,8 +137,6 @@ final class DefaultHttpServer implements HttpServer {
 	static final Integer DEFAULT_STREAMING_CALLBACK_CONCURRENCY;
 	@NonNull
 	static final Duration DEFAULT_STREAMING_CLEANUP_TIMEOUT;
-	@NonNull
-	private static final Integer DEFAULT_NONVIRTUAL_STREAMING_CONCURRENCY_MULTIPLIER;
 	private static final Integer UNPARSED_REQUEST_CAPTURE_LIMIT_IN_BYTES;
 	private static final Integer UNPARSED_RESPONSE_SIZE_LIMIT_IN_BYTES;
 
@@ -168,7 +165,6 @@ final class DefaultHttpServer implements HttpServer {
 		DEFAULT_STREAMING_LIFECYCLE_CAPACITY = 256;
 		DEFAULT_STREAMING_CALLBACK_CONCURRENCY = 4;
 		DEFAULT_STREAMING_CLEANUP_TIMEOUT = Duration.ofSeconds(5);
-		DEFAULT_NONVIRTUAL_STREAMING_CONCURRENCY_MULTIPLIER = 4;
 		UNPARSED_REQUEST_CAPTURE_LIMIT_IN_BYTES = 64 * 1_024;
 		UNPARSED_RESPONSE_SIZE_LIMIT_IN_BYTES = 64 * 1_024;
 	}
@@ -309,9 +305,8 @@ final class DefaultHttpServer implements HttpServer {
 		if (this.socketSelectTimeout.isNegative() || this.socketSelectTimeout.isZero())
 			throw new IllegalArgumentException("Socket select timeout must be > 0");
 
-		int defaultRequestHandlerConcurrency = Utilities.virtualThreadsAvailable()
-				? Math.max(1, this.concurrency * DEFAULT_VIRTUAL_REQUEST_HANDLER_CONCURRENCY_MULTIPLIER)
-				: Math.max(1, this.concurrency);
+		int defaultRequestHandlerConcurrency = Math.max(1,
+				this.concurrency * DEFAULT_VIRTUAL_REQUEST_HANDLER_CONCURRENCY_MULTIPLIER);
 
 		this.requestHandlerConcurrency = builder.requestHandlerConcurrency != null
 				? builder.requestHandlerConcurrency
@@ -359,21 +354,11 @@ final class DefaultHttpServer implements HttpServer {
 			int threadPoolSize = getRequestHandlerConcurrency();
 			int queueCapacity = getRequestHandlerQueueCapacity();
 
-			if (Utilities.virtualThreadsAvailable()) {
-				ThreadFactory threadFactory = Utilities.createVirtualThreadFactory(threadNamePrefix, (Thread thread, Throwable throwable) -> {
-					safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unexpected exception occurred during server HTTP request processing")
-							.throwable(throwable)
-							.build());
-				});
-
-				return new ThreadPoolExecutor(
-						threadPoolSize,
-						threadPoolSize,
-						0L,
-						TimeUnit.MILLISECONDS,
-						new ArrayBlockingQueue<>(queueCapacity),
-						threadFactory);
-			}
+			ThreadFactory threadFactory = Utilities.createVirtualThreadFactory(threadNamePrefix, (Thread thread, Throwable throwable) -> {
+				safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unexpected exception occurred during server HTTP request processing")
+						.throwable(throwable)
+						.build());
+			});
 
 			return new ThreadPoolExecutor(
 					threadPoolSize,
@@ -381,7 +366,7 @@ final class DefaultHttpServer implements HttpServer {
 					0L,
 					TimeUnit.MILLISECONDS,
 					new ArrayBlockingQueue<>(queueCapacity),
-					new NonvirtualThreadFactory(threadNamePrefix));
+					threadFactory);
 		};
 
 		this.streamingLifecycleCapacity = builder.streamingLifecycleCapacity != null
@@ -449,24 +434,13 @@ final class DefaultHttpServer implements HttpServer {
 
 		this.streamingExecutorServiceSupplier = builder.streamingExecutorServiceSupplier != null ? builder.streamingExecutorServiceSupplier : () -> {
 			String threadNamePrefix = "streaming-";
-			if (Utilities.virtualThreadsAvailable()) {
-				// Lifecycle admission bounds the number of producer tasks and retained
-				// cleanup lifetimes. Each admitted producer gets its own virtual thread.
-				return Utilities.createVirtualThreadsNewThreadPerTaskExecutor(threadNamePrefix, (Thread thread, Throwable throwable) -> {
-					safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unexpected exception occurred during server streaming response processing")
-							.throwable(throwable)
-							.build());
-				});
-			}
-
-			int threadPoolSize = Math.max(1, getConcurrency() * DEFAULT_NONVIRTUAL_STREAMING_CONCURRENCY_MULTIPLIER);
-			return new ThreadPoolExecutor(
-					threadPoolSize,
-					threadPoolSize,
-					0L,
-					TimeUnit.MILLISECONDS,
-					new SynchronousQueue<>(),
-					new NonvirtualThreadFactory(threadNamePrefix));
+			// Lifecycle admission bounds the number of producer tasks and retained
+			// cleanup lifetimes. Each admitted producer gets its own virtual thread.
+			return Utilities.createVirtualThreadsNewThreadPerTaskExecutor(threadNamePrefix, (Thread thread, Throwable throwable) -> {
+				safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Unexpected exception occurred during server streaming response processing")
+						.throwable(throwable)
+						.build());
+			});
 		};
 
 		if (this.requestHandlerTimeout.isNegative() || this.requestHandlerTimeout.isZero())
@@ -668,7 +642,7 @@ final class DefaultHttpServer implements HttpServer {
 
 							Request request = null;
 
-							try {
+							try (HttpTransportResponseFeedback feedback = HttpTransportResponseFeedback.create()) {
 								notifyWillReadRequest(remoteAddress, requestTarget);
 
 								// Normalize body
@@ -728,13 +702,13 @@ final class DefaultHttpServer implements HttpServer {
 
 								Request requestForResponse = request;
 
-								requestHandler.handleRequest(requestForResponse, requestResult -> {
+								requestHandler.handleRequest(requestForResponse, HttpTransportResponseFeedback.fromWriter(feedback, requestResult -> {
 									// Elect response ownership before reserving or submitting an HTTP
 									// stream. A late handler observes the timeout's finite response.
 									if (!responseWritten.compareAndSet(false, true)) {
 										MicrohttpResponse timeoutResponse = timeoutResponseRef.get();
 										if (timeoutResponse != null)
-											throw new HttpTransportResponseReplacement(describeFiniteTransportResponse(timeoutResponse), null, null);
+											return HttpTransportResponseOutcome.replaced(describeFiniteTransportResponse(timeoutResponse), null, null);
 										throw new RejectedExecutionException("Response ownership has already been claimed.");
 									}
 									cancelTimeout(timeoutFutureRef.getAndSet(null));
@@ -785,7 +759,7 @@ final class DefaultHttpServer implements HttpServer {
 											Throwable writeFailure = null;
 											try { microHttpCallback.accept(failsafeResponse); }
 											catch (Throwable throwable) { writeFailure = throwable; }
-											throw new HttpTransportResponseReplacement(replacement, preparationFailure, writeFailure);
+											return HttpTransportResponseOutcome.replaced(replacement, preparationFailure, writeFailure);
 										} finally {
 											// Offer the wire response before application observer entry, and
 											// dispatch rejection through bounded callback work. Finite
@@ -798,16 +772,20 @@ final class DefaultHttpServer implements HttpServer {
 										observation.prepare(new DefaultStreamingResponseHandle(ServerType.HTTP, observation.getRequest(),
 												requestResult.getResourceMethod().orElse(null), requestResult.getMarshaledResponse(), streamEstablishedAt),
 												streamEstablishedNanos, this.metricsCollector, getLifecycleObserver(), this::safelyLog);
+									boolean replaced = !microhttpResponse.streaming()
+											&& (requestResult.getMarshaledResponse().isStreaming()
+													|| microhttpResponse.status() != requestResult.getMarshaledResponse().getStatusCode());
 									try { microHttpCallback.accept(microhttpResponse); }
 									catch (Throwable throwable) {
 										StreamingMicrohttpResponses.discard(microhttpResponse);
+										if (replaced)
+											return HttpTransportResponseOutcome.replaced(describeFiniteTransportResponse(microhttpResponse), null, throwable);
 										throw propagateResponseWriteFailure(throwable);
 									}
-									if (!microhttpResponse.streaming()
-											&& (requestResult.getMarshaledResponse().isStreaming()
-													|| microhttpResponse.status() != requestResult.getMarshaledResponse().getStatusCode()))
-										throw new HttpTransportResponseReplacement(describeFiniteTransportResponse(microhttpResponse), null, null);
-								});
+									return replaced
+											? HttpTransportResponseOutcome.replaced(describeFiniteTransportResponse(microhttpResponse), null, null)
+											: HttpTransportResponseOutcome.accepted();
+								}));
 							} catch (Throwable t) {
 								Integer failsafeStatusCode = 500;
 								RequestReadFailureReason failureReason = RequestReadFailureReason.INTERNAL_ERROR;

@@ -43,6 +43,34 @@ public interface McpApplicationExecutionObserver {
 	interface PendingMetricRecord {
 	}
 
+	/** Opaque request ordering identity. Implementations must not retain request data. */
+	interface MetricSequence {
+	}
+
+	/** A thread-bound ordering context; entering it does not defer delivery. */
+	interface MetricScope extends AutoCloseable {
+		@Override
+		void close();
+	}
+
+	/** Allocates an independent identity before request submission or publication. */
+	@NonNull
+	default MetricSequence newRequestMetricSequence() {
+		return DisabledMetricSequence.INSTANCE;
+	}
+
+	/** Captures the identity for work or observation that will continue on another thread. */
+	@Nullable
+	default MetricSequence currentMetricSequence() {
+		return null;
+	}
+
+	/** Restores the previous binding on close; null represents request-independent work. */
+	@NonNull
+	default MetricScope useMetricSequence(@Nullable MetricSequence sequence) {
+		return () -> {};
+	}
+
 	/** Physical HTTP observation without a fabricated MCP request context. */
 	interface HttpRequestObservation {
 		void didFinish(int statusCode, @NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers,
@@ -83,9 +111,10 @@ public interface McpApplicationExecutionObserver {
 
 	/**
 	 * Begins provisional metric observation for a short runtime transition. The
-	 * built-in observer withholds only this transition's records until its token
-	 * closes, then signals asynchronous delivery. Any cleanup thread may close
-	 * that token, and repeated close is harmless.
+	 * built-in observer withholds this transition's records and later retained
+	 * records in the same request sequence until its token closes, then signals
+	 * asynchronous delivery. Unrelated requests remain eligible. Any cleanup
+	 * thread may close that token, and repeated close is harmless.
 	 */
 	@NonNull
 	default MetricDeferral beginRequestTransitionDeferral() {
@@ -184,6 +213,10 @@ public interface McpApplicationExecutionObserver {
 /** Shared no-op provisional metric identity. */
 enum DisabledPendingMetricRecord
 		implements McpApplicationExecutionObserver.PendingMetricRecord {
+	INSTANCE
+}
+
+enum DisabledMetricSequence implements McpApplicationExecutionObserver.MetricSequence {
 	INSTANCE
 }
 

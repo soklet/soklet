@@ -32,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        jdk: ['17', '21']
+        jdk: ['21', '25']
     env:
       MAVEN_OPTS: -Xmx512m -XX:ActiveProcessorCount=2
       JAVA_TOOL_OPTIONS: -Xmx512m -XX:ActiveProcessorCount=2
@@ -55,11 +55,11 @@ jobs:
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     strategy:
-      # Do not cancel the 21/25 jobs if 17 fails — we want every JDK's result.
+      # Retain every supported JDK's result if another matrix leg fails.
       fail-fast: false
       matrix:
-        # 17 exercises the platform-thread fallback path; 21+ exercises virtual threads.
-        jdk: ['17', '21', '25']
+        # Exercise the minimum supported JDK and the newer LTS runtime.
+        jdk: ['21', '25']
     steps:
       - name: Check out
         uses: actions/checkout@v6
@@ -96,8 +96,13 @@ jobs:
       - name: Package main, source, and Javadoc JARs
         run: mvn -B -ntp -DskipTests clean package
 
-      - name: Compile benchmarks
-        run: mvn -B -ntp -f benchmarks/pom.xml -DskipTests clean compile
+      - name: Run benchmark contract tests
+        run: mvn -B -ntp -f benchmarks/pom.xml -Dtest=EndToEndHttpBenchmarkTests clean test
+
+      - name: Run packaged Apps fixture contracts
+        run: >-
+          node verification/interoperability/apps/ci-contracts.mjs
+          target/soklet-4.0.0.jar "${JAVA_HOME}/bin/java"
 
   packaged-consumer:
     name: Packaged consumer (${{ matrix.mode }}, JDK ${{ matrix.runtime.jdk }})
@@ -109,7 +114,6 @@ jobs:
       matrix:
         mode: [maven, gradle, javac]
         runtime:
-          - { jdk: '17', pin: java, environment: JAVA_HOME }
           - { jdk: '21', pin: coreJdk21, environment: SOKLET_RELEASE_CORE_JDK_21_HOME }
           - { jdk: '25', pin: toystoreJava, environment: SOKLET_RELEASE_TOYSTORE_JAVA_HOME }
     steps:
@@ -124,7 +128,7 @@ jobs:
           "${RUNNER_TEMP}" "${GITHUB_PATH}"
           "${RUNNER_TEMP}/consumer-node-distribution.txt"
 
-      - name: Install checksum-pinned Corretto 17 for packaging
+      - name: Install checksum-pinned Corretto 21 for packaging
         run: >-
           bash release/scripts/install-pinned-corretto-linux-x64.sh
           java "${RUNNER_TEMP}" "${GITHUB_PATH}" "${GITHUB_ENV}"
@@ -222,7 +226,7 @@ jobs:
           retention-days: 30
 
   api-diff:
-    name: API Compatibility and MCP Freezes (JDK 17)
+    name: API Compatibility and MCP Freezes (JDK 21)
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -230,11 +234,11 @@ jobs:
       - name: Check out
         uses: actions/checkout@v6
 
-      - name: Set up JDK 17
+      - name: Set up JDK 21
         uses: actions/setup-java@v6
         with:
           distribution: corretto
-          java-version: '17'
+          java-version: '21'
           cache: maven
 
       - name: Verify reviewed API incompatibilities and MCP freezes
@@ -312,7 +316,7 @@ jobs:
   static-analysis:
     name: Static Analysis (JDK 21)
     # Error Prone requires JDK 21+ to run and lags the newest JDKs, so this gate pins JDK 21 while
-    # the build's release target stays 17. NullAway runs as advisory WARN visibility (it does not
+    # the build's release target stays 21. NullAway runs as advisory WARN visibility (it does not
     # fail the build); the gate fails only on Error Prone's default-ERROR checks. Opinionated style
     # checks are disabled in the static-analysis Maven profile.
     if: github.event_name == 'push' || github.event_name == 'pull_request'
@@ -333,7 +337,7 @@ jobs:
 
   spotbugs:
     name: SpotBugs (JDK 21)
-    # SpotBugs runs as a separate opt-in gate so the normal test matrix and release-17 compile path stay
+    # SpotBugs runs as a separate opt-in gate so the normal test matrix and release-21 compile path stay
     # unchanged. The Maven profile carries a reviewed baseline for low-signal categories and fails on any
     # unfiltered findings.
     if: github.event_name == 'push' || github.event_name == 'pull_request'
@@ -359,7 +363,7 @@ jobs:
         run: node scripts/verify-spotbugs-exclusions.mjs
 
   mcp-conformance-phase-5:
-    name: MCP Conformance Candidate Artifact Phase 5 (JDK 17)
+    name: MCP Conformance Candidate Artifact Phase 5 (JDK 21)
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -369,11 +373,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up JDK 17
+      - name: Set up JDK 21
         uses: actions/setup-java@v6
         with:
           distribution: corretto
-          java-version: '17'
+          java-version: '21'
           cache: maven
 
       - name: Initialize MCP conformance evidence
@@ -938,7 +942,7 @@ jobs:
             ${{ runner.temp }}/soak-nightly-java-distribution.txt
 
   operational-history:
-    name: Operational History (exact candidate, JDK 17)
+    name: Operational History (exact candidate, JDK 21)
     if: github.event_name == 'workflow_dispatch' && inputs.operational_candidate_commit != ''
     runs-on: [self-hosted, linux, x64]
     timeout-minutes: 420
@@ -980,7 +984,7 @@ jobs:
           "${RUNNER_TEMP}" "${GITHUB_PATH}"
           "${RUNNER_TEMP}/operational-node-distribution.txt"
 
-      - name: Install checksum-pinned Corretto 17
+      - name: Install checksum-pinned Corretto 21
         shell: bash
         run: >-
           bash release/scripts/install-pinned-corretto-linux-x64.sh

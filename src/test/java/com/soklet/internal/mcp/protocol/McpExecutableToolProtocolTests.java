@@ -64,7 +64,7 @@ public class McpExecutableToolProtocolTests {
 		McpApplicationRequestRouter router = McpApplicationRequestRouter.fromToolRoutes(
 				Map.of("lookup", new McpApplicationToolRoute(invocation -> {
 					handlers.incrementAndGet();
-					return McpWireResult.complete(McpJsonObject.empty());
+					return McpApplicationDispatchOutcome.completed(McpWireResult.complete(McpJsonObject.empty()));
 				}, ignored -> McpRateLimitDecision.allowed())));
 		McpHttpServerRuntime runtime = new McpHttpServerRuntime(
 				McpHttpTransportConfiguration.productionDefaults(0),

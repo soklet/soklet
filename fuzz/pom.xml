@@ -15,7 +15,7 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-        <maven.compiler.release>17</maven.compiler.release>
+        <maven.compiler.release>21</maven.compiler.release>
         <jazzer.version>0.30.0</jazzer.version>
         <!-- Jazzer supports JUnit 5.9.0 and newer. Align its transitive JUnit modules
              with this BOM as well as our explicit launcher/engine dependencies. -->

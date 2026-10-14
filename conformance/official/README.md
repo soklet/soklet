@@ -589,7 +589,7 @@ node conformance/official/run.mjs \
   --work-dir /absolute/project/target/conformance/official/phase-5 \
   --classpath "$(cat target/conformance/official/public-fixture-classpath.txt)" \
   --project-root /absolute/project \
-  --java /absolute/jdk17/bin/java \
+  --java /absolute/jdk21/bin/java \
   --phase 5 \
   --mode verify \
   --p0c-policy accepted-2026-09-22
@@ -657,7 +657,7 @@ node conformance/official/run.mjs \
   --work-dir /absolute/project/target/conformance/official/release-phase-5 \
   --classpath "$(cat /absolute/project/target/conformance/official/release-fixture-classpath.txt)" \
   --project-root /absolute/project \
-  --java /absolute/jdk17/bin/java \
+  --java /absolute/jdk21/bin/java \
   --phase 5 \
   --mode release \
   --p0c-policy accepted-2026-09-22 \

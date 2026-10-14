@@ -51,6 +51,9 @@ always return the exact static shell and typed security metadata with private
 zero-TTL caching. This is negotiation, not resource access revocation. It does
 not prove handler non-invocation via instrumentation or general authorization.
 
+The current candidate main-JAR SHA-256 is
+`96e5eb86c17cfae3cbd7867bbbdaf480ef22e8ae48dfbdc0b812371bfa0c6145`. This replaces the older development candidate for new runs; historical receipts remain unchanged.
+
 ## Reproduce
 
 ```sh
@@ -64,10 +67,10 @@ node verification/interoperability/apps-mime-boundary/run.mjs \
 ```
 
 The adjacent shell `.receipt.json` is mandatory. Candidate and shell must match
-the exact prior pins; the embedded candidate POM and shell source/build receipt
+the current reviewed pins; the embedded candidate POM and shell source/build receipt
 must agree. Work must be a new directory under an existing non-symlink parent,
 outside protected source/input/JDK paths. Fixture sources compile once against
-the candidate using release 17, no annotation processing and lint warnings as
+the candidate using release 21, no annotation processing and lint warnings as
 errors. Public dependency analysis rejects internal/missing references.
 
 ## Success, lifecycle and privacy

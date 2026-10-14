@@ -202,6 +202,10 @@ public final class AppsFixture {
 				}).build())
 				.toolResultSanitizer((context, name, arguments, result) -> {
 					McpToolOutput raw = (McpToolOutput) result.getPayload();
+					// Modern input-schema failures are tool error results and have no
+					// structured catalog data. Sanitize them without exposing raw text.
+					if (raw.isError())
+						return McpCompleteResult.fromToolErrorText("Tool request failed.");
 					McpJsonObject data = (McpJsonObject) raw.getStructuredContent().orElseThrow();
 					String summary = ((McpJsonString) data.find("summary").orElseThrow()).getValue();
 					// Explicit allowlist for this fixture. _meta is not a secret channel.

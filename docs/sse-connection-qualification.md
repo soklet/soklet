@@ -16,12 +16,12 @@ The first run of the final initializer/broadcaster candidate is recorded in
 ## Reproduction
 
 Build the current runtime first (`mvn -DskipTests package`, using the repository's
-usual signing/Javadoc switches when appropriate). The harness compiles with Java
-17; live SSE requires Java 21 or newer. Compile separately from the JMH module:
+usual signing/Javadoc switches when appropriate). The harness requires Java 21
+or newer to compile and run. Compile separately from the JMH module:
 
 ```sh
 mkdir -p /tmp/soklet-sse-qualification
-javac --release 17 -proc:none -parameters -cp target/classes \
+javac --release 21 -proc:none -parameters -cp target/classes \
   -d /tmp/soklet-sse-qualification \
   benchmarks/src/main/java/com/soklet/SseConnectionQualification.java
 java -cp target/classes:/tmp/soklet-sse-qualification \

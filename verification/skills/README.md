@@ -66,7 +66,7 @@ sh verification/skills/run-corpus.sh "$JAVA_HOME" "$PWD/target/classes" \
 The fifth argument is optional: SnakeYAML Engine is used only as a second,
 test-only **normalized syntax-event** comparison, never as the sole oracle or an
 object constructor. Obtain it separately; this script performs no downloads.
-The runner compiles with `--release 17` and can run on Java 17 or 26 against the
+The runner compiles with `--release 21` and can run on Java 21 or newer against the
 same candidate classes. A 256 MiB heap bounds the test process.
 
 `cases.jsonl` records every case's independent syntax, document-count, JSON-model,

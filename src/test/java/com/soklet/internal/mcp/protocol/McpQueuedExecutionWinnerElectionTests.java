@@ -108,7 +108,7 @@ public class McpQueuedExecutionWinnerElectionTests {
 				queuedInterceptors,
 				invocation -> {
 					queuedInvocations.incrementAndGet();
-					return McpWireResult.complete(McpJsonObject.empty());
+					return McpApplicationDispatchOutcome.completed(McpWireResult.complete(McpJsonObject.empty()));
 				});
 
 		try {
@@ -119,7 +119,7 @@ public class McpQueuedExecutionWinnerElectionTests {
 			application.dispatch(transportRequest(), request("active-owner"),
 					Mcp20260728ProtocolProfile.INSTANCE, admissionIdentity(), invocation -> {
 						activeInvocations.incrementAndGet();
-						return McpWireResult.complete(McpJsonObject.empty());
+						return McpApplicationDispatchOutcome.completed(McpWireResult.complete(McpJsonObject.empty()));
 					}, ACTIVE_DEADLINE_NANOS, response -> {
 						activeWrites.incrementAndGet();
 						return true;
@@ -423,7 +423,7 @@ public class McpQueuedExecutionWinnerElectionTests {
 			this.execution.dispatch(transportRequest(), request("active-race"),
 					Mcp20260728ProtocolProfile.INSTANCE, admissionIdentity(), invocation -> {
 						this.activeInvocations.incrementAndGet();
-						return McpWireResult.complete(McpJsonObject.empty());
+						return McpApplicationDispatchOutcome.completed(McpWireResult.complete(McpJsonObject.empty()));
 					}, ACTIVE_DEADLINE_NANOS, response -> {
 						this.activeResponse.compareAndSet(null, response);
 						this.activeWrites.incrementAndGet();
@@ -433,7 +433,7 @@ public class McpQueuedExecutionWinnerElectionTests {
 					this.queuedRequest, Mcp20260728ProtocolProfile.INSTANCE,
 					admissionIdentity(), invocation -> {
 						this.queuedInvocations.incrementAndGet();
-						return McpWireResult.complete(McpJsonObject.empty());
+						return McpApplicationDispatchOutcome.completed(McpWireResult.complete(McpJsonObject.empty()));
 					}, QUEUED_DEADLINE_NANOS, response -> {
 						this.queuedResponse.compareAndSet(null, response);
 						this.queuedWrites.incrementAndGet();

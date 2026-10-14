@@ -224,7 +224,7 @@ function benchmarkFixture(contract, candidate) {
   const entry = (benchmark, artifact, forks, score) => ({
     benchmark,
     forks,
-    jdkVersion: '17.0.20',
+    jdkVersion: '21.0.12.1',
     jmhVersion: '1.37',
     jvmArgs: clone(configuration.candidateJvm),
     measurementIterations: configuration.measurement.iterations,

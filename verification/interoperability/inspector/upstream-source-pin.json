@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "commit": "1974465ccb5454a5110e609e4140171fa360a544",
+  "packageVersion": "2.10.1",
+  "distribution": "UNRELEASED_UPSTREAM_SOURCE_BUILD",
+  "archiveUrl": "https://codeload.github.com/modelcontextprotocol/inspector/tar.gz/1974465ccb5454a5110e609e4140171fa360a544",
+  "archiveSha256": "62fee5e07546c79a2c52eb4a63eaddb57487dafe30af9f418599596fd706b183",
+  "sourceFiles": 1658,
+  "sourceSha256": "b4d6aa6c13f151206e81dfcba9edb0a74764687305b285df64874b9dd7364d08",
+  "node": "26.5.0",
+  "npm": "11.17.0",
+  "locks": {
+    "package-lock.json": "57cd066521ad2c469f0c2d4d78208626b663bfc5b7cdfebf0089e4b2768c076b",
+    "clients/web/package-lock.json": "432e8b08d17ae1a49fc793967256b6e8813eac0addef7dd0ee4df83be2f95bd3",
+    "clients/cli/package-lock.json": "b97488eac977cc1952edde80e396b9c489fbcf3047d45c1bf29ce5093a7180fa",
+    "clients/launcher/package-lock.json": "894059ee0863c3a5d6e915a57a729634fc080a48fc0e6d7b060f5c7ce2d1009c"
+  }
+}

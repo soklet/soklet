@@ -26,8 +26,6 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -979,17 +977,6 @@ public final class EndToEndHttpBenchmark {
 		private static final List<GarbageCollectorMXBean> GC_BEANS = ManagementFactory.getGarbageCollectorMXBeans();
 		private static final com.sun.management.ThreadMXBean ALLOCATION_BEAN =
 				ManagementFactory.getThreadMXBean() instanceof com.sun.management.ThreadMXBean bean ? bean : null;
-		private static final Method TOTAL_ALLOCATED_BYTES = totalAllocatedBytesMethod();
-
-		private static Method totalAllocatedBytesMethod() {
-			try {
-				// Keep the module's Java 17 API target while using this newer-JDK
-				// whole-JVM counter when available. Per-thread sums are not equivalent.
-				return com.sun.management.ThreadMXBean.class.getMethod("getTotalThreadAllocatedBytes");
-			} catch (NoSuchMethodException unavailable) {
-				return null;
-			}
-		}
 
 		static void initialize(boolean requireAllocation) {
 			if (ALLOCATION_BEAN != null && ALLOCATION_BEAN.isThreadAllocatedMemorySupported()
@@ -1001,21 +988,13 @@ public final class EndToEndHttpBenchmark {
 
 		static ProcessMetrics capture() {
 			Long allocation = null;
-			if (ALLOCATION_BEAN != null && TOTAL_ALLOCATED_BYTES != null && ALLOCATION_BEAN.isThreadAllocatedMemorySupported()
+			if (ALLOCATION_BEAN != null && ALLOCATION_BEAN.isThreadAllocatedMemorySupported()
 					&& ALLOCATION_BEAN.isThreadAllocatedMemoryEnabled()) {
 				try {
-					long bytes = (long) TOTAL_ALLOCATED_BYTES.invoke(ALLOCATION_BEAN);
+					long bytes = ALLOCATION_BEAN.getTotalThreadAllocatedBytes();
 					if (bytes >= 0L) allocation = bytes;
-				} catch (IllegalAccessException failure) {
-					throw new IllegalStateException("Cannot access the JVM's public total allocation counter", failure);
-				} catch (InvocationTargetException failure) {
-					Throwable cause = failure.getCause();
+				} catch (UnsupportedOperationException unavailable) {
 					// Some VMs support per-thread allocation without a whole-JVM counter.
-					if (!(cause instanceof UnsupportedOperationException)) {
-						if (cause instanceof RuntimeException runtime) throw runtime;
-						if (cause instanceof Error error) throw error;
-						throw new IllegalStateException("JVM total allocation counter failed", cause);
-					}
 				}
 			}
 			Long collections = GC_BEANS.isEmpty() ? null : 0L;

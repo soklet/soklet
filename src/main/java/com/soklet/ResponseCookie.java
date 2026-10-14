@@ -111,7 +111,8 @@ public final class ResponseCookie {
 	 * <p>
 	 * An example of a {@code Set-Cookie} header representation is {@code Set-Cookie: <cookie-name>=<cookie-value>; Domain=<domain-value>; Secure; HttpOnly}
 	 * <p>
-	 * Note: while the spec does not forbid multiple cookie name/value pairs to be specified in the same {@code Set-Cookie} header, this format is unusual - Soklet does not currently support parsing these kinds of cookies.
+	 * Each header should describe one cookie. Folded headers containing multiple cookies are not supported.
+	 * Invalid {@code Max-Age} attributes are ignored; nonpositive values expire the cookie immediately.
 	 * <p>
 	 * See <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie">https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie</a> for details.
 	 *
@@ -131,16 +132,27 @@ public final class ResponseCookie {
 		if (normalizedSetCookieHeaderRepresentation == null || normalizedSetCookieHeaderRepresentation.length() == 0)
 			return Optional.empty();
 
-		List<HttpCookie> cookies = HttpCookie.parse(normalizedSetCookieHeaderRepresentation);
+		List<String> components = List.of(normalizedSetCookieHeaderRepresentation.split(";", -1));
+		ParsedSetCookieAttributes attributes = parseSetCookieAttributes(components);
+		// HttpCookie throws on malformed Max-Age and uses different expiry-date
+		// rules. Parse explicit expiry attributes ourselves while retaining its
+		// existing handling of the cookie pair and other standard attributes.
+		List<String> httpCookieComponents = new ArrayList<>();
+		httpCookieComponents.add(components.get(0));
+		for (int i = 1; i < components.size(); i++) {
+			String component = components.get(i);
+			int equalsIndex = component.indexOf('=');
+			String name = trimSetCookieComponent(equalsIndex == -1 ? component : component.substring(0, equalsIndex));
+			if (!"max-age".equalsIgnoreCase(name))
+				httpCookieComponents.add(component);
+		}
+		List<HttpCookie> cookies = HttpCookie.parse(String.join(";", httpCookieComponents));
 
 		if (cookies.size() == 0)
 			return Optional.empty();
 
-		// Technically OK per the spec to "fold" multiple cookie name/value pairs into the same header but this is
-		// unusual, and we don't support it here.  Pick the first cookie and use it.
+		// Folded headers are unsupported; preserve the existing first-cookie selection.
 		HttpCookie httpCookie = cookies.get(0);
-
-		ParsedSetCookieAttributes attributes = parseSetCookieAttributes(normalizedSetCookieHeaderRepresentation);
 
 		return Optional.of(ResponseCookie.with(httpCookie.getName(), httpCookie.getValue())
 				.maxAge(attributes.maxAge)
@@ -174,34 +186,31 @@ public final class ResponseCookie {
 	}
 
 	@NonNull
-	private static ParsedSetCookieAttributes parseSetCookieAttributes(@NonNull String setCookieHeaderRepresentation) {
-		requireNonNull(setCookieHeaderRepresentation);
-
+	private static ParsedSetCookieAttributes parseSetCookieAttributes(@NonNull List<String> components) {
 		ParsedSetCookieAttributes attributes = new ParsedSetCookieAttributes();
-		List<String> components = splitSetCookieHeaderRespectingQuotes(setCookieHeaderRepresentation);
 
 		if (components.size() <= 1)
 			return attributes;
 
 		for (int i = 1; i < components.size(); i++) {
-			String component = trimAggressivelyToNull(components.get(i));
+			String component = trimSetCookieComponent(components.get(i));
 			if (component == null)
 				continue;
 
 			int equalsIndex = component.indexOf('=');
-			String attributeName = trimAggressivelyToNull(equalsIndex == -1 ? component : component.substring(0, equalsIndex));
+			String attributeName = trimSetCookieComponent(equalsIndex == -1 ? component : component.substring(0, equalsIndex));
 
 			if (attributeName == null)
 				continue;
 
-			String attributeValue = equalsIndex == -1 ? null : trimAggressivelyToNull(component.substring(equalsIndex + 1));
+			String attributeValue = equalsIndex == -1 ? null : trimSetCookieComponent(component.substring(equalsIndex + 1));
 
 			// Preserve explicit Max-Age only: HttpCookie also synthesizes it from
 			// Expires using different date rules. That can incorrectly override a
 			// valid cookie expiry. Nonpositive Max-Age means immediate expiry.
 			if ("max-age".equalsIgnoreCase(attributeName)) {
 				if (attributes.maxAge == null && attributeValue != null)
-					attributes.maxAge = Duration.ofSeconds(Math.max(0, Long.parseLong(stripOptionalQuotes(attributeValue))));
+					attributes.maxAge = parseMaxAge(stripOptionalQuotes(attributeValue));
 				continue;
 			}
 
@@ -236,49 +245,33 @@ public final class ResponseCookie {
 		return attributes;
 	}
 
-	@NonNull
-	private static List<@NonNull String> splitSetCookieHeaderRespectingQuotes(@NonNull String headerValue) {
-		requireNonNull(headerValue);
+	@Nullable
+	private static String trimSetCookieComponent(@NonNull String value) {
+		int start = 0;
+		int end = value.length();
+		while (start < end && (Character.isWhitespace(value.charAt(start)) || Character.isSpaceChar(value.charAt(start))))
+			start++;
+		while (end > start && (Character.isWhitespace(value.charAt(end - 1)) || Character.isSpaceChar(value.charAt(end - 1))))
+			end--;
+		return start == end ? null : value.substring(start, end);
+	}
 
-		List<String> parts = new ArrayList<>();
-		StringBuilder current = new StringBuilder(headerValue.length());
-		boolean inQuotes = false;
-		boolean escaped = false;
-
-		for (int i = 0; i < headerValue.length(); i++) {
-			char c = headerValue.charAt(i);
-
-			if (escaped) {
-				current.append(c);
-				escaped = false;
-				continue;
-			}
-
-			if (c == '\\') {
-				escaped = true;
-				current.append(c);
-				continue;
-			}
-
-			if (c == '"') {
-				inQuotes = !inQuotes;
-				current.append(c);
-				continue;
-			}
-
-			if (c == ';' && !inQuotes) {
-				parts.add(current.toString());
-				current.setLength(0);
-				continue;
-			}
-
-			current.append(c);
+	@Nullable
+	private static Duration parseMaxAge(@NonNull String value) {
+		boolean negative = value.startsWith("-");
+		int start = negative ? 1 : 0;
+		if (start == value.length())
+			return null;
+		long seconds = 0;
+		for (int i = start; i < value.length(); i++) {
+			char character = value.charAt(i);
+			if (character < '0' || character > '9')
+				return null;
+			int digit = character - '0';
+			// Very distant expiration dates saturate instead of overflowing.
+			seconds = seconds > (Long.MAX_VALUE - digit) / 10 ? Long.MAX_VALUE : seconds * 10 + digit;
 		}
-
-		if (current.length() > 0)
-			parts.add(current.toString());
-
-		return parts;
+		return Duration.ofSeconds(negative ? 0 : seconds);
 	}
 
 	@NonNull

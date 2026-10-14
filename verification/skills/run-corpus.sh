@@ -30,7 +30,7 @@ fi
 # be mistaken for this run after compilation or pin validation fails.
 [ ! -e "$output" ] || { echo "OUTPUT_DIRECTORY must not already exist." >&2; exit 2; }
 mkdir -p "$output/classes"
-"$java_home/bin/javac" --release 17 -proc:none -classpath "$core_classes" \
+"$java_home/bin/javac" --release 21 -proc:none -classpath "$core_classes" \
 	-d "$output/classes" "$verification_root/SkillYamlCorpusRunner.java" \
 	"$verification_root/SkillYamlEvents.java" "$verification_root/SkillYamlReferenceEvents.java"
 classpath="$output/classes:$core_classes"

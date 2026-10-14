@@ -99,7 +99,12 @@ public class ResponseErrorMappingTests {
 				.optionsHandler((request, methods) -> result.apply(request))
 				.notFoundHandler(result::apply)
 				.methodNotAllowedHandler((request, methods) -> result.apply(request))
-				.corsPreflightAllowedHandler((request, preflight, allowed) -> result.apply(request)).build();
+				.corsPreflightAllowedHandler((request, preflight, allowed) -> result.apply(request))
+				.corsAllowedHandler((request, cors, allowed, original) -> result.apply(request).copy()
+						.headers(headers -> request.getHeader("X-Cors-PostProcess")
+								.ifPresent(value -> headers.put("X-Cors-PostProcess", java.util.List.of(value)))).finish())
+				.postProcessor(response -> response.getHeaders().containsKey("X-Cors-PostProcess")
+						? response.copy().body(new byte[]{1}).finish() : response).build();
 		SokletSimulator.run(SimulatorConfig.builder().httpServer().responseMarshaler(marshaler)
 				.corsAuthorizer(CorsAuthorizer.acceptAllInstance())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ExplodeResource.class))).build(), simulator -> {
@@ -110,18 +115,90 @@ public class ResponseErrorMappingTests {
 					var corsHeaders = new java.util.HashMap<>(headers);
 					corsHeaders.put("Origin", java.util.List.of("https://example.com"));
 					corsHeaders.put("Access-Control-Request-Method", java.util.List.of("GET"));
+					var allowedCorsHeaders = new java.util.HashMap<>(headers);
+					allowedCorsHeaders.put("Origin", java.util.List.of("https://example.com"));
+					var postProcessedCorsHeaders = new java.util.HashMap<>(allowedCorsHeaders);
+					postProcessedCorsHeaders.put("X-Cors-PostProcess", java.util.List.of("true"));
 					for (Request request : java.util.List.of(
 							Request.withPath(HttpMethod.GET, "/explode").headers(headers).build(),
+							Request.withPath(HttpMethod.HEAD, "/explode").headers(headers).build(),
 							Request.withPath(HttpMethod.OPTIONS, "/explode").headers(headers).build(),
 							Request.withPath(HttpMethod.GET, "/missing").headers(headers).build(),
+							Request.withPath(HttpMethod.HEAD, "/missing").headers(headers).build(),
 							Request.withPath(HttpMethod.POST, "/explode").headers(headers).build(),
-							Request.withPath(HttpMethod.OPTIONS, "/explode").headers(corsHeaders).build())) {
-						Assertions.assertEquals(status, simulator.performHttpRequest(request).getMarshaledResponse().getStatusCode(),
-								request.getHttpMethod() + " " + request.getResourcePath());
+							Request.withPath(HttpMethod.OPTIONS, "/explode").headers(corsHeaders).build(),
+							Request.withPath(HttpMethod.GET, "/missing").headers(allowedCorsHeaders).build(),
+							Request.withPath(HttpMethod.HEAD, "/missing").headers(allowedCorsHeaders).build(),
+							Request.withPath(HttpMethod.GET, "/missing").headers(postProcessedCorsHeaders).build(),
+							Request.withPath(HttpMethod.HEAD, "/missing").headers(postProcessedCorsHeaders).build())) {
+						String context = request.getHttpMethod() + " " + request.getResourcePath();
+						MarshaledResponse response = simulator.performHttpRequest(request).getMarshaledResponse();
+						Assertions.assertEquals(status, response.getStatusCode(), context);
+						Assertions.assertTrue(response.getBody().isEmpty(), context);
+						Assertions.assertEquals(0L, response.getBodyLength(), context);
+						if (status != 304 || request.getHttpMethod() != HttpMethod.HEAD)
+							Assertions.assertEquals(status == 205 ? java.util.List.of("0") : null,
+									response.getHeaders().get("Content-Length"), context);
 					}
 				}
 			}
 		});
+	}
+
+	@Test
+	public void bodylessMarshalerHooksReleaseOwnedChannelsAndPreserveBorrowedChannels(@org.junit.jupiter.api.io.TempDir java.nio.file.Path directory) throws Exception {
+		java.nio.file.Path file = java.nio.file.Files.writeString(directory.resolve("body"), "body");
+		for (int status : java.util.List.of(204, 205, 304)) {
+			for (boolean owned : java.util.List.of(false, true)) {
+				for (boolean cors : java.util.List.of(false, true)) {
+					try (java.nio.channels.FileChannel channel = java.nio.channels.FileChannel.open(file)) {
+						MarshaledResponse hookResponse = MarshaledResponse.withStatusCode(status).body(channel, 0L, 4L, owned)
+								.headers(java.util.Map.of("Content-Length", java.util.List.of("4"))).build();
+						SokletSimulator.run(SimulatorConfig.builder().httpServer()
+								.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(java.time.Duration.ofSeconds(2))
+										.startupCancelationTimeout(java.time.Duration.ofSeconds(1))
+										.gracefulShutdownTimeout(java.time.Duration.ofSeconds(1)).forcedShutdownTimeout(java.time.Duration.ofSeconds(1)).build())
+								.corsAuthorizer(CorsAuthorizer.acceptAllInstance())
+								.responseMarshaler(ResponseMarshaler.builder().notFoundHandler(request -> hookResponse)
+										.corsAllowedHandler((request, approvedCors, allowed, original) ->
+											MarshaledResponse.withStatusCode(status).body(new byte[]{1}).build()).build())
+								.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ExplodeResource.class))).build(), simulator -> {
+							MarshaledResponse response = simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/missing")
+									.headers(cors ? java.util.Map.of("Origin", java.util.List.of("https://example.com")) : java.util.Map.of()).build()).getMarshaledResponse();
+							Assertions.assertEquals(status, response.getStatusCode());
+							Assertions.assertTrue(response.getBody().isEmpty());
+							Assertions.assertEquals(!owned, channel.isOpen());
+							Assertions.assertEquals(status == 205 ? java.util.List.of("0") : null,
+									response.getHeaders().get("Content-Length"));
+						});
+					}
+				}
+			}
+		}
+	}
+
+	@Test
+	public void throwingCorsHookDoesNotStrandOriginalBodylessOwnedChannel(@org.junit.jupiter.api.io.TempDir java.nio.file.Path directory) throws Exception {
+		java.nio.file.Path file = java.nio.file.Files.writeString(directory.resolve("body"), "body");
+		try (java.nio.channels.FileChannel channel = java.nio.channels.FileChannel.open(file)) {
+			MarshaledResponse hookResponse = MarshaledResponse.withStatusCode(205).body(channel, 0L, 4L, true).build();
+			SokletSimulator.run(SimulatorConfig.builder().httpServer()
+					.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(java.time.Duration.ofSeconds(2))
+							.startupCancelationTimeout(java.time.Duration.ofSeconds(1))
+							.gracefulShutdownTimeout(java.time.Duration.ofSeconds(1)).forcedShutdownTimeout(java.time.Duration.ofSeconds(1)).build())
+					.corsAuthorizer(CorsAuthorizer.acceptAllInstance())
+					.responseMarshaler(ResponseMarshaler.builder().notFoundHandler(request -> hookResponse)
+							.corsAllowedHandler((request, cors, allowed, original) -> {
+								Assertions.assertFalse(channel.isOpen(), "Original owned body must close before the CORS hook");
+								throw new IllegalStateException("CORS hook failure");
+							}).build())
+					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ExplodeResource.class))).build(), simulator -> {
+				MarshaledResponse response = simulator.performHttpRequest(Request.withPath(HttpMethod.GET, "/missing")
+						.headers(java.util.Map.of("Origin", java.util.List.of("https://example.com"))).build()).getMarshaledResponse();
+				Assertions.assertEquals(500, response.getStatusCode());
+				Assertions.assertFalse(channel.isOpen());
+			});
+		}
 	}
 
 	public static class ExplodeResource {

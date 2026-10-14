@@ -148,7 +148,7 @@ class EndToEndHttpBenchmarkTests {
 			};
 			ManagedResponseStream responseStream = new ManagedResponseStream(
 					Request.withPath(HttpMethod.GET, "/" + scenario.name()).build(), uncanceledToken(),
-					null, null, sink, () -> {}, failure -> { throw new AssertionError(failure); },
+					() -> false, null, null, sink, () -> {}, failure -> { throw new AssertionError(failure); },
 					failure -> { throw new AssertionError(failure); });
 			StreamingResponseBody.WriterBody body = (StreamingResponseBody.WriterBody)
 					responses.get(index).getStreamingResponseBody().orElseThrow();

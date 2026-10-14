@@ -409,7 +409,7 @@ try {
   assertions += 2;
   const spotbugsExecutionIndex = runner.indexOf('-Pspotbugs compile spotbugs:check');
   assert.notEqual(spotbugsExecutionIndex, -1);
-  assert.match(runner, /\[\[ "\$build_jdk" == 17 \]\]/u);
+  assert.match(runner, /\[\[ "\$build_jdk" == 21 \]\]/u);
   const artifactCaptureIndex = runner.indexOf('candidate_jar_sha256=$(sha256sum');
   const artifactRecheckIndex = runner.indexOf('"$candidate_jar_sha256" "$candidate_jar"');
   assert.ok(artifactCaptureIndex > 0 && artifactCaptureIndex < spotbugsExecutionIndex);
@@ -473,7 +473,7 @@ try {
   const canonicalPackagingIndex = releaseScanJob.indexOf('java "${RUNNER_TEMP}" "${GITHUB_PATH}" "${GITHUB_ENV}"');
   const candidateBuildIndex = releaseScanJob.indexOf('mvn -B -ntp -Dgpg.skip=true -DskipTests clean package');
   assert.ok(canonicalPackagingIndex > 0 && candidateBuildIndex > canonicalPackagingIndex,
-    'release scans must install canonical JDK 17 before packaging the candidate');
+    'release scans must install canonical JDK 21 before packaging the candidate');
   assert.match(releaseScanJob, /release-scans-build-java-distribution\.txt/u);
   assertions += 2;
   assert.match(

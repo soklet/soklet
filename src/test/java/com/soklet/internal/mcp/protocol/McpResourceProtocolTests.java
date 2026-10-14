@@ -108,7 +108,7 @@ public class McpResourceProtocolTests {
 		McpApplicationRequestRouter router = McpApplicationRequestRouter.fromResourceRoutes(
 				Map.of(), List.of(new McpApplicationResourceTemplateRoute(
 						"catalog://other/{id}", new McpApplicationResourceReadRoute(
-								ignored -> emptyReadResult()))), Optional.empty());
+								ignored -> McpApplicationDispatchOutcome.completed(emptyReadResult())))), Optional.empty());
 		try (McpHttpServerRuntime runtime = runtime(templateOnly, router,
 				ignored -> McpAdmissionDecision.acceptedAnonymous(), Optional.empty())) {
 			int port = runtime.start().getPort();
@@ -131,7 +131,7 @@ public class McpResourceProtocolTests {
 		try (McpHttpServerRuntime runtime = runtime(endpoint,
 				McpApplicationRequestRouter.fromResourceRoutes(
 						Map.of("catalog://items/1", new McpApplicationResourceReadRoute(
-								ignored -> emptyReadResult())),
+								ignored -> McpApplicationDispatchOutcome.completed(emptyReadResult()))),
 						List.of(), Optional.empty()), ignored -> {
 					admissions.incrementAndGet();
 					return McpAdmissionDecision.acceptedAnonymous();
@@ -179,11 +179,11 @@ public class McpResourceProtocolTests {
 					} else if (invocation.cursor().orElseThrow().equals("big")) {
 						fields.put("nextCursor", new McpJsonString("世界語"));
 					}
-					return McpWireResult.complete(new McpJsonObject(fields));
+					return McpApplicationDispatchOutcome.completed(McpWireResult.complete(new McpJsonObject(fields)));
 				});
 		McpApplicationRequestRouter router = McpApplicationRequestRouter.fromResourceRoutes(
 				Map.of("catalog://items/1", new McpApplicationResourceReadRoute(
-						ignored -> emptyReadResult())), List.of(), Optional.of(listRoute));
+						ignored -> McpApplicationDispatchOutcome.completed(emptyReadResult()))), List.of(), Optional.of(listRoute));
 
 		try (McpHttpServerRuntime runtime = runtime(endpoint, router, ignored -> {
 			admissions.incrementAndGet();
@@ -257,15 +257,15 @@ public class McpResourceProtocolTests {
 				.build();
 		McpApplicationResourceListRoute listRoute =
 				new McpApplicationResourceListRoute(ignored ->
-						McpWireResult.complete(new McpJsonObject(Map.of(
+						McpApplicationDispatchOutcome.completed(McpWireResult.complete(new McpJsonObject(Map.of(
 								"resources", new McpJsonArray(List.of()),
-								"cacheScope", new McpJsonString("private")))));
+								"cacheScope", new McpJsonString("private"))))));
 		McpApplicationResourceReadRoute readRoute =
 				new McpApplicationResourceReadRoute(ignored -> {
 					Map<String, McpJsonValue> fields = new java.util.LinkedHashMap<>(
 							emptyReadResult().fields().members());
 					fields.put("ttlMs", new McpJsonNumber(-1L));
-					return McpWireResult.complete(new McpJsonObject(fields));
+					return McpApplicationDispatchOutcome.completed(McpWireResult.complete(new McpJsonObject(fields)));
 				}, publicCache);
 		McpApplicationRequestRouter router =
 				McpApplicationRequestRouter.fromResourceRoutes(
@@ -302,7 +302,7 @@ public class McpResourceProtocolTests {
 				.customResourceListHandler()
 				.build();
 		McpApplicationResourceListRoute listRoute =
-				new McpApplicationResourceListRoute(ignored -> McpWireResult.complete(
+				new McpApplicationResourceListRoute(ignored -> McpApplicationDispatchOutcome.completed(McpWireResult.complete(
 						new McpJsonObject(Map.of("resources", new McpJsonArray(List.of(
 								new McpJsonObject(Map.of(
 										"uri", new McpJsonString(registeredUri),
@@ -310,11 +310,11 @@ public class McpResourceProtocolTests {
 								new McpJsonObject(Map.of(
 										"uri", new McpJsonString(
 												"catalog://items/a%2fb"),
-										"name", new McpJsonString("Lowercase")))))))));
+										"name", new McpJsonString("Lowercase"))))))))));
 		McpApplicationRequestRouter router = McpApplicationRequestRouter
 				.fromResourceRoutes(Map.of(registeredUri,
 						new McpApplicationResourceReadRoute(
-								ignored -> emptyReadResult())),
+								ignored -> McpApplicationDispatchOutcome.completed(emptyReadResult()))),
 						List.of(), Optional.of(listRoute));
 
 		try (McpHttpServerRuntime runtime = runtime(endpoint, router,
@@ -337,8 +337,8 @@ public class McpResourceProtocolTests {
 				.build();
 		McpApplicationRequestRouter router = McpApplicationRequestRouter.fromResourceRoutes(
 				Map.of(), List.of(), Optional.of(new McpApplicationResourceListRoute(
-						ignored -> McpWireResult.complete(new McpJsonObject(Map.of(
-								"resources", new McpJsonArray(List.of())))))));
+						ignored -> McpApplicationDispatchOutcome.completed(McpWireResult.complete(new McpJsonObject(Map.of(
+								"resources", new McpJsonArray(List.of()))))))));
 		try (McpHttpServerRuntime runtime = runtime(endpoint, router, ignored -> {
 			admissions.incrementAndGet();
 			return McpAdmissionDecision.acceptedAnonymous();
@@ -432,13 +432,13 @@ public class McpResourceProtocolTests {
 				new McpApplicationResourceReadRoute(invocation -> {
 					exactInvocations.incrementAndGet();
 					Assertions.assertTrue(invocation.templateVariables().isEmpty());
-					return emptyReadResult();
+					return McpApplicationDispatchOutcome.completed(emptyReadResult());
 				}, exactCache);
 		McpApplicationResourceReadRoute templateRoute =
 				new McpApplicationResourceReadRoute(invocation -> {
 					templateInvocations.incrementAndGet();
 					templateVariables.set(invocation.templateVariables());
-					return emptyReadResult();
+					return McpApplicationDispatchOutcome.completed(emptyReadResult());
 				}, templateCache);
 		McpApplicationRequestRouter router = McpApplicationRequestRouter.fromResourceRoutes(
 				Map.of("catalog://items/special", exactRoute),
@@ -577,11 +577,11 @@ public class McpResourceProtocolTests {
 						new McpApplicationResourceTemplateRoute(
 								"catalog://items/{itemId}",
 								new McpApplicationResourceReadRoute(
-										ignored -> emptyReadResult())),
+										ignored -> McpApplicationDispatchOutcome.completed(emptyReadResult()))),
 						new McpApplicationResourceTemplateRoute(
 								"catalog://items/{slug}",
 								new McpApplicationResourceReadRoute(
-										ignored -> emptyReadResult()))), Optional.empty()));
+										ignored -> McpApplicationDispatchOutcome.completed(emptyReadResult())))), Optional.empty()));
 	}
 
 	@Test
@@ -691,7 +691,7 @@ public class McpResourceProtocolTests {
 				"at most 256 resource URI templates"), excessiveRoutes.getMessage());
 
 		McpApplicationResourceReadRoute route =
-				new McpApplicationResourceReadRoute(ignored -> emptyReadResult());
+				new McpApplicationResourceReadRoute(ignored -> McpApplicationDispatchOutcome.completed(emptyReadResult()));
 		List<McpApplicationResourceTemplateRoute> routes = new java.util.ArrayList<>();
 		for (int index = 0;
 				index <= McpLevelOneUriTemplate.MAXIMUM_TEMPLATE_COUNT_PER_ENDPOINT;
@@ -706,7 +706,7 @@ public class McpResourceProtocolTests {
 	@Test
 	public void exact_resource_routes_use_rfc3986_syntax_equivalence() {
 		McpApplicationResourceReadRoute route =
-				new McpApplicationResourceReadRoute(ignored -> emptyReadResult());
+				new McpApplicationResourceReadRoute(ignored -> McpApplicationDispatchOutcome.completed(emptyReadResult()));
 		McpApplicationRequestRouter router = McpApplicationRequestRouter
 				.fromResourceRoutes(Map.of("CATALOG://ITEMS/a%2Fb", route),
 						List.of(), Optional.empty());
@@ -727,7 +727,7 @@ public class McpResourceProtocolTests {
 	@Test
 	public void template_resource_routes_use_rfc3986_syntax_equivalence() {
 		McpApplicationResourceReadRoute route =
-				new McpApplicationResourceReadRoute(ignored -> emptyReadResult());
+				new McpApplicationResourceReadRoute(ignored -> McpApplicationDispatchOutcome.completed(emptyReadResult()));
 		McpApplicationRequestRouter router = McpApplicationRequestRouter
 				.fromResourceRoutes(Map.of(), List.of(
 						new McpApplicationResourceTemplateRoute(
@@ -756,7 +756,7 @@ public class McpResourceProtocolTests {
 	public void exact_resource_routes_preserve_large_uri_compatibility_beyond_template_limit() {
 		String largeUri = "test:///exact/" + "a".repeat(900_000);
 		McpApplicationResourceReadRoute exactRoute =
-				new McpApplicationResourceReadRoute(ignored -> emptyReadResult());
+				new McpApplicationResourceReadRoute(ignored -> McpApplicationDispatchOutcome.completed(emptyReadResult()));
 		McpApplicationRequestRouter router = McpApplicationRequestRouter
 				.fromResourceRoutes(Map.of(largeUri, exactRoute), List.of(
 						new McpApplicationResourceTemplateRoute(
@@ -775,7 +775,7 @@ public class McpResourceProtocolTests {
 	public void exact_only_router_skips_template_limit_for_large_unknown_uri() {
 		String largeUnknownUri = "test:///unknown/" + "a".repeat(70_000);
 		McpApplicationResourceReadRoute exactRoute =
-				new McpApplicationResourceReadRoute(ignored -> emptyReadResult());
+				new McpApplicationResourceReadRoute(ignored -> McpApplicationDispatchOutcome.completed(emptyReadResult()));
 		McpApplicationRequestRouter router = McpApplicationRequestRouter
 				.fromResourceRoutes(Map.of("test:///known", exactRoute), List.of(),
 						Optional.empty());
@@ -799,7 +799,7 @@ public class McpResourceProtocolTests {
 		McpLevelOneUriTemplate parsedTemplate =
 				McpLevelOneUriTemplate.parse(templateWire);
 		McpApplicationResourceReadRoute route =
-				new McpApplicationResourceReadRoute(ignored -> emptyReadResult());
+				new McpApplicationResourceReadRoute(ignored -> McpApplicationDispatchOutcome.completed(emptyReadResult()));
 		McpApplicationRequestRouter router = McpApplicationRequestRouter
 				.fromResourceRoutes(Map.of(), List.of(
 						new McpApplicationResourceTemplateRoute(
@@ -829,7 +829,7 @@ public class McpResourceProtocolTests {
 	@Test
 	public void shared_prefix_routes_fail_before_exceeding_aggregate_match_work() {
 		McpApplicationResourceReadRoute route =
-				new McpApplicationResourceReadRoute(ignored -> emptyReadResult());
+				new McpApplicationResourceReadRoute(ignored -> McpApplicationDispatchOutcome.completed(emptyReadResult()));
 		List<McpApplicationResourceTemplateRoute> routes = new ArrayList<>();
 		for (int index = 0;
 				index < McpLevelOneUriTemplate.MAXIMUM_TEMPLATE_COUNT_PER_ENDPOINT;

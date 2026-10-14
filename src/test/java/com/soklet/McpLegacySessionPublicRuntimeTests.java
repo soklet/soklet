@@ -145,6 +145,51 @@ class McpLegacySessionPublicRuntimeTests {
 	}
 
 	@Test
+	void deferredParameterFailuresRetainOnlyValidatedOperationMetadataForPolicyHooks() throws Exception {
+		AtomicInteger handlers = new AtomicInteger();
+		try (Fixture fixture = new Fixture((context, arguments, features) -> {
+			handlers.incrementAndGet();
+			return McpCompleteResult.fromToolText("unexpected");
+		})) {
+			for (McpProtocolVersion version : LEGACY) {
+				String live = sessionId(fixture.initialize(version, "alice", null, "{}", "metadata"));
+				for (String[] operation : List.of(
+						new String[]{"tools/call", "\"name\":\"work\",\"arguments\":true", "work"},
+						new String[]{"prompts/get", "\"name\":\"private-prompt\",\"arguments\":{\"subject\":42}", "private-prompt"},
+						new String[]{"tools/call", "\"name\":42,\"arguments\":true", "<none>"})) {
+					String method = operation[0], params = operation[1], name = operation[2];
+					fixture.policyOperations.clear();
+					assertEquals(403, fixture.post("/mcp", version, method, params, "1", "dead", "alice",
+							List.of(new HeaderValue("X-Admission-Status", "403"))).status());
+					assertEquals(List.of("admission:" + name), fixture.policyOperations);
+
+					fixture.policyOperations.clear();
+					assertEquals(429, fixture.post("/mcp", version, method, params, "1", "dead", "alice",
+							List.of(new HeaderValue("X-Limit", "deny"))).status());
+					assertEquals(List.of("admission:" + name, "limit:" + name), fixture.policyOperations);
+
+					fixture.policyOperations.clear();
+					assertEquals(404, fixture.post("/mcp", version, method, params, "1", "dead", "alice", List.of()).status());
+					assertEquals(List.of("admission:" + name, "limit:" + name), fixture.policyOperations);
+
+					fixture.policyOperations.clear();
+					Response admitted = fixture.post("/mcp", version, method, params, "1", live, "alice", List.of());
+					assertEquals(200, admitted.status(), admitted.body());
+					assertTrue(admitted.body().contains("\"code\":-32602"), admitted.body());
+					assertEquals(List.of("admission:" + name, "limit:" + name), fixture.policyOperations);
+
+					fixture.policyOperations.clear();
+					Response stateless = fixture.post("/stateless", version, method, params, "1", null, "alice", List.of());
+					assertEquals(200, stateless.status(), stateless.body());
+					assertTrue(stateless.body().contains("\"code\":-32602"), stateless.body());
+					assertTrue(fixture.policyOperations.isEmpty(), "Stateless parameter failures remain immediate.");
+				}
+			}
+			assertEquals(0, handlers.get(), "Deferred validation must never enter the application handler.");
+		}
+	}
+
+	@Test
 	void defaultStatelessServersNeitherIssueNorRequireSessionIds() throws Exception {
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp",
 				McpImplementation.withNameAndVersion("plain", "1").build(), ALL)
@@ -865,6 +910,7 @@ class McpLegacySessionPublicRuntimeTests {
 		final AtomicInteger admissions = new AtomicInteger();
 		final AtomicInteger limits = new AtomicInteger();
 		final AtomicInteger owners = new AtomicInteger();
+		final List<String> policyOperations = new CopyOnWriteArrayList<>();
 		final McpServer server;
 		final Soklet soklet;
 		final int port;
@@ -894,6 +940,7 @@ class McpLegacySessionPublicRuntimeTests {
 					.requestTimeout(Duration.ofSeconds(10))
 					.admissionController(context -> {
 						admissions.incrementAndGet();
+						policyOperations.add("admission:" + context.getOperationName().orElse("<none>"));
 						String denied = context.getRequest().getHeader("X-Admission-Status").orElse(null);
 						if (denied != null)
 							return McpAdmissionDecision.rejected(McpAdmissionRejection.withStatusCodeAndError(
@@ -907,6 +954,7 @@ class McpLegacySessionPublicRuntimeTests {
 					})
 					.requestRateLimiter(context -> {
 						limits.incrementAndGet();
+						policyOperations.add("limit:" + context.getOperationName().orElse("<none>"));
 						return context.getRequest().getHeader("X-Limit").filter("deny"::equals).isPresent()
 								? McpRateLimitDecision.denied(Duration.ofSeconds(1)) : McpRateLimitDecision.allowed();
 					})

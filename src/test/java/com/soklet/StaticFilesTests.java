@@ -381,7 +381,7 @@ public class StaticFilesTests {
 		Path indexHtml = tempDir.resolve("index.html");
 		Files.writeString(appJs, "console.log('hi');", StandardCharsets.UTF_8);
 		Files.writeString(indexHtml, "<!doctype html>", StandardCharsets.UTF_8);
-		StaticFiles staticFiles = StaticFiles.withRoot(tempDir)
+		StaticFiles staticFiles = StaticFiles.withRoot(tempDir).trustedImmutableRoot(true)
 				.indexFileNames(List.of("index.html"))
 				.build();
 
@@ -418,7 +418,7 @@ public class StaticFilesTests {
 		Files.writeString(indexHtml, "<!doctype html>", StandardCharsets.UTF_8);
 		Files.writeString(appJs, "console.log('hi');", StandardCharsets.UTF_8);
 		AtomicReference<Path> resolvedPath = new AtomicReference<>();
-		StaticFiles staticFiles = StaticFiles.withRoot(tempDir)
+		StaticFiles staticFiles = StaticFiles.withRoot(tempDir).trustedImmutableRoot(true)
 				.indexFileNames(List.of("index.html"))
 				.cacheControlResolver((path, attributes) -> Optional.of(path.getFileName().toString().endsWith(".js")
 						? "public, max-age=31536000, immutable"
@@ -453,26 +453,26 @@ public class StaticFilesTests {
 		Files.writeString(customFile, "abcdef", StandardCharsets.UTF_8);
 		Files.writeString(unknownFile, "abcdef", StandardCharsets.UTF_8);
 
-		StaticFiles defaultStaticFiles = StaticFiles.withRoot(tempDir).build();
+		StaticFiles defaultStaticFiles = StaticFiles.withRoot(tempDir).trustedImmutableRoot(true).build();
 		MarshaledResponse textResponse = defaultStaticFiles.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.GET, "/example.txt")).orElseThrow();
 		Assertions.assertEquals(List.of("text/plain; charset=UTF-8"), textResponse.getHeaders().get("Content-Type"));
 		MarshaledResponse unknownResponse = defaultStaticFiles.marshaledResponseFor("example.unknown", Request.fromPath(HttpMethod.GET, "/example.unknown")).orElseThrow();
 		Assertions.assertFalse(unknownResponse.getHeaders().containsKey("Content-Type"));
 
-		StaticFiles omittedStaticFiles = StaticFiles.withRoot(tempDir)
+		StaticFiles omittedStaticFiles = StaticFiles.withRoot(tempDir).trustedImmutableRoot(true)
 				.mimeTypeResolver((path) -> Optional.empty())
 				.build();
 		MarshaledResponse omittedResponse = omittedStaticFiles.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.GET, "/example.txt")).orElseThrow();
 		Assertions.assertFalse(omittedResponse.getHeaders().containsKey("Content-Type"));
 
-		StaticFiles customStaticFiles = StaticFiles.withRoot(tempDir)
+		StaticFiles customStaticFiles = StaticFiles.withRoot(tempDir).trustedImmutableRoot(true)
 				.mimeTypeResolver((path) -> Optional.of("application/x-example"))
 				.build();
 		MarshaledResponse customResponse = customStaticFiles.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.GET, "/example.txt")).orElseThrow();
 		Assertions.assertEquals(List.of("application/x-example"), customResponse.getHeaders().get("Content-Type"));
 
 		MimeTypeResolver defaultMimeTypeResolver = MimeTypeResolver.defaultInstance();
-		StaticFiles extendedStaticFiles = StaticFiles.withRoot(tempDir)
+		StaticFiles extendedStaticFiles = StaticFiles.withRoot(tempDir).trustedImmutableRoot(true)
 				.mimeTypeResolver((path) -> path.getFileName().toString().endsWith(".foo")
 						? Optional.of("application/x-foo")
 						: defaultMimeTypeResolver.contentTypeFor(path))
@@ -543,7 +543,7 @@ public class StaticFilesTests {
 				Map.entry("mpd", "application/dash+xml"),
 				Map.entry("vtt", "text/vtt; charset=UTF-8")
 		);
-		StaticFiles staticFiles = StaticFiles.withRoot(tempDir).build();
+		StaticFiles staticFiles = StaticFiles.withRoot(tempDir).trustedImmutableRoot(true).build();
 
 		for (Map.Entry<String, String> entry : contentTypesByExtension.entrySet()) {
 			String extension = entry.getKey();
@@ -564,7 +564,7 @@ public class StaticFilesTests {
 	public void staticFilesRejectsAFileMutatedByAResolver(@TempDir Path tempDir) throws IOException {
 		Path file = tempDir.resolve("example.txt");
 		Files.writeString(file, "abcdef", StandardCharsets.UTF_8);
-		StaticFiles staticFiles = StaticFiles.withRoot(tempDir)
+		StaticFiles staticFiles = StaticFiles.withRoot(tempDir).trustedImmutableRoot(true)
 				.entityTagResolver(StaticFiles.EntityTagResolver.disabledInstance())
 				.lastModifiedResolver(StaticFiles.LastModifiedResolver.disabledInstance())
 				.cacheControlResolver((path, attributes) -> {
@@ -594,14 +594,14 @@ public class StaticFilesTests {
 		Files.write(emptyFile, new byte[0]);
 		Files.writeString(largeFile, "a".repeat(9000), StandardCharsets.UTF_8);
 
-		StaticFiles staticFiles = StaticFiles.withRoot(tempDir)
+		StaticFiles staticFiles = StaticFiles.withRoot(tempDir).trustedImmutableRoot(true)
 				.entityTagResolver(StaticFiles.EntityTagResolver.fromContentHash())
 				.build();
 
 		MarshaledResponse response = staticFiles.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.GET, "/example.txt")).orElseThrow();
 		Assertions.assertEquals(List.of("\"sha256-bef57ec7f53a6d40beb640a780a639c83bc29ac8a9816f1fc6c5c6dcd93c4721\""), response.getHeaders().get("ETag"));
 
-		MarshaledResponse secondResponse = StaticFiles.withRoot(tempDir)
+		MarshaledResponse secondResponse = StaticFiles.withRoot(tempDir).trustedImmutableRoot(true)
 				.entityTagResolver(StaticFiles.EntityTagResolver.fromContentHash())
 				.build()
 				.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.GET, "/example.txt"))
@@ -653,7 +653,7 @@ public class StaticFilesTests {
 		Files.writeString(file, "abcdef", StandardCharsets.UTF_8);
 		AtomicInteger invocations = new AtomicInteger();
 		StaticFiles.EntityTagResolver contentHashResolver = StaticFiles.EntityTagResolver.fromContentHash();
-		StaticFiles staticFiles = StaticFiles.withRoot(tempDir)
+		StaticFiles staticFiles = StaticFiles.withRoot(tempDir).trustedImmutableRoot(true)
 				.entityTagResolver((path, attributes) -> {
 					invocations.incrementAndGet();
 					return contentHashResolver.entityTagFor(path, attributes);
@@ -676,7 +676,7 @@ public class StaticFilesTests {
 		Files.writeString(hiddenFile, "secret", StandardCharsets.UTF_8);
 		Files.writeString(deniedFile, "internal", StandardCharsets.UTF_8);
 		AtomicReference<Path> resolvedPath = new AtomicReference<>();
-		StaticFiles staticFiles = StaticFiles.withRoot(tempDir)
+		StaticFiles staticFiles = StaticFiles.withRoot(tempDir).trustedImmutableRoot(true)
 				.accessResolver((path, attributes) -> {
 					resolvedPath.set(path);
 
@@ -697,7 +697,7 @@ public class StaticFilesTests {
 		Assertions.assertEquals(403, deniedResponse.getStatusCode());
 		Assertions.assertTrue(deniedResponse.getBody().isEmpty());
 
-		StaticFiles defaultStaticFiles = StaticFiles.withRoot(tempDir)
+		StaticFiles defaultStaticFiles = StaticFiles.withRoot(tempDir).trustedImmutableRoot(true)
 				.accessResolver(null)
 				.build();
 		Assertions.assertTrue(defaultStaticFiles.marshaledResponseFor(".env", Request.fromPath(HttpMethod.GET, "/.env")).isPresent());
@@ -715,7 +715,7 @@ public class StaticFilesTests {
 			AtomicInteger cacheControlInvocations = new AtomicInteger();
 			AtomicInteger headersInvocations = new AtomicInteger();
 			AtomicInteger rangeInvocations = new AtomicInteger();
-			StaticFiles staticFiles = StaticFiles.withRoot(tempDir)
+			StaticFiles staticFiles = StaticFiles.withRoot(tempDir).trustedImmutableRoot(true)
 					.accessResolver((path, attributes) -> access)
 					.mimeTypeResolver((path) -> {
 						mimeInvocations.incrementAndGet();
@@ -769,7 +769,7 @@ public class StaticFilesTests {
 		Path secret = outside.resolve("secret.txt");
 		Files.writeString(secret, "secret", StandardCharsets.UTF_8);
 		AtomicInteger accessInvocations = new AtomicInteger();
-		StaticFiles staticFiles = StaticFiles.withRoot(root)
+		StaticFiles staticFiles = StaticFiles.withRoot(root).trustedImmutableRoot(true)
 				.followSymlinks(true)
 				.accessResolver((path, attributes) -> {
 					accessInvocations.incrementAndGet();
@@ -797,7 +797,7 @@ public class StaticFilesTests {
 		Path file = tempDir.resolve("example.txt");
 		Files.writeString(file, "abcdef", StandardCharsets.UTF_8);
 		AtomicInteger accessInvocations = new AtomicInteger();
-		StaticFiles staticFiles = StaticFiles.withRoot(tempDir)
+		StaticFiles staticFiles = StaticFiles.withRoot(tempDir).trustedImmutableRoot(true)
 				.accessResolver((path, attributes) -> {
 					accessInvocations.incrementAndGet();
 					return StaticFiles.Access.ALLOW;
@@ -831,7 +831,7 @@ public class StaticFilesTests {
 		Path file = tempDir.resolve("example.txt");
 		Files.writeString(file, "abcdef", StandardCharsets.UTF_8);
 		StaticFiles.EntityTagResolver contentHashResolver = StaticFiles.EntityTagResolver.fromContentHash();
-		StaticFiles staticFiles = StaticFiles.withRoot(tempDir)
+		StaticFiles staticFiles = StaticFiles.withRoot(tempDir).trustedImmutableRoot(true)
 				.entityTagResolver((path, attributes) -> {
 					try {
 						Files.delete(path);
@@ -855,7 +855,7 @@ public class StaticFilesTests {
 		Files.writeString(indexHtml, "hidden", StandardCharsets.UTF_8);
 		Files.writeString(indexHtm, "fallback", StandardCharsets.UTF_8);
 		AtomicReference<Path> resolvedPath = new AtomicReference<>();
-		StaticFiles staticFiles = StaticFiles.withRoot(tempDir)
+		StaticFiles staticFiles = StaticFiles.withRoot(tempDir).trustedImmutableRoot(true)
 				.indexFileNames(List.of("index.html", "index.htm"))
 				.accessResolver((path, attributes) -> {
 					resolvedPath.set(path);
@@ -874,7 +874,7 @@ public class StaticFilesTests {
 		Path file = tempDir.resolve("example.txt");
 		Files.writeString(file, "abcdef", StandardCharsets.UTF_8);
 
-		StaticFiles nullReturningAccessResolver = StaticFiles.withRoot(tempDir)
+		StaticFiles nullReturningAccessResolver = StaticFiles.withRoot(tempDir).trustedImmutableRoot(true)
 				.accessResolver((path, attributes) -> null)
 				.build();
 		NullPointerException nullPointerException = Assertions.assertThrows(NullPointerException.class, () ->
@@ -882,7 +882,7 @@ public class StaticFilesTests {
 		Assertions.assertTrue(nullPointerException.getMessage().contains("accessResolver returned null"));
 
 		AtomicInteger headerInvocations = new AtomicInteger();
-		StaticFiles throwingAccessResolver = StaticFiles.withRoot(tempDir)
+		StaticFiles throwingAccessResolver = StaticFiles.withRoot(tempDir).trustedImmutableRoot(true)
 				.accessResolver((path, attributes) -> {
 					throw new IllegalStateException("boom");
 				})
@@ -902,7 +902,7 @@ public class StaticFilesTests {
 		Path file = tempDir.resolve("example.txt");
 		Files.writeString(file, "abcdef", StandardCharsets.UTF_8);
 
-		StaticFiles nullReturningResolver = StaticFiles.withRoot(tempDir)
+		StaticFiles nullReturningResolver = StaticFiles.withRoot(tempDir).trustedImmutableRoot(true)
 				.cacheControlResolver((path, attributes) -> null)
 				.build();
 		NullPointerException nullPointerException = Assertions.assertThrows(NullPointerException.class, () ->
@@ -914,7 +914,7 @@ public class StaticFilesTests {
 			IllegalArgumentException factoryFailure = Assertions.assertThrows(IllegalArgumentException.class,
 					() -> StaticFiles.HeadersResolver.fromHeaders(Map.of(name, List.of("value"))));
 			Assertions.assertTrue(factoryFailure.getMessage().contains("StaticFiles.HeadersResolver"));
-			StaticFiles conflictingHeaderResolver = StaticFiles.withRoot(tempDir)
+			StaticFiles conflictingHeaderResolver = StaticFiles.withRoot(tempDir).trustedImmutableRoot(true)
 					.headersResolver((path, attributes) -> Map.of(name, List.of("value"))).build();
 			IllegalArgumentException callbackFailure = Assertions.assertThrows(IllegalArgumentException.class,
 					() -> conflictingHeaderResolver.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.GET, "/example.txt")));
@@ -922,7 +922,7 @@ public class StaticFilesTests {
 		}
 
 		IllegalArgumentException applicationFailure = new IllegalArgumentException("application failure");
-		StaticFiles throwingHeaderResolver = StaticFiles.withRoot(tempDir)
+		StaticFiles throwingHeaderResolver = StaticFiles.withRoot(tempDir).trustedImmutableRoot(true)
 				.headersResolver((path, attributes) -> { throw applicationFailure; }).build();
 		Assertions.assertSame(applicationFailure, Assertions.assertThrows(IllegalArgumentException.class,
 				() -> throwingHeaderResolver.marshaledResponseFor("example.txt", Request.fromPath(HttpMethod.GET, "/example.txt"))));
@@ -948,17 +948,17 @@ public class StaticFilesTests {
 			return;
 		}
 
-		StaticFiles noFollowStaticFiles = StaticFiles.withRoot(tempDir).build();
+		StaticFiles noFollowStaticFiles = StaticFiles.withRoot(tempDir).trustedImmutableRoot(true).build();
 		Assertions.assertTrue(noFollowStaticFiles.marshaledResponseFor("link.txt", Request.fromPath(HttpMethod.GET, "/link.txt")).isEmpty());
 
-		StaticFiles followStaticFiles = StaticFiles.withRoot(tempDir)
+		StaticFiles followStaticFiles = StaticFiles.withRoot(tempDir).trustedImmutableRoot(true)
 				.followSymlinks(true)
 				.build();
 		Assertions.assertTrue(followStaticFiles.marshaledResponseFor("link.txt", Request.fromPath(HttpMethod.GET, "/link.txt")).isPresent());
 	}
 
 	@Test
-	public void followingSymlinksPinsTheResolvedTargetForDelivery(@TempDir Path tempDir) throws IOException {
+	public void followingSymlinksCapturesTheResolvedTargetForDelivery(@TempDir Path tempDir) throws IOException {
 		Path root = Files.createDirectory(tempDir.resolve("public"));
 		Path target = root.resolve("target.txt");
 		Path link = root.resolve("link.txt");
@@ -970,7 +970,7 @@ public class StaticFilesTests {
 		} catch (UnsupportedOperationException | IOException unavailable) {
 			return;
 		}
-		StaticFiles staticFiles = StaticFiles.withRoot(root).followSymlinks(true).build();
+		StaticFiles staticFiles = StaticFiles.withRoot(root).trustedImmutableRoot(true).followSymlinks(true).build();
 		MarshaledResponse response = staticFiles.marshaledResponseFor("link.txt",
 				Request.fromPath(HttpMethod.GET, "/link.txt")).orElseThrow();
 		Files.delete(link);
@@ -983,7 +983,7 @@ public class StaticFilesTests {
 	}
 
 	@Test
-	public void followingSymlinksPinsASymlinkedRoot(@TempDir Path tempDir) throws IOException {
+	public void followingSymlinksRejectsARetargetedRoot(@TempDir Path tempDir) throws IOException {
 		Path actualRoot = Files.createDirectory(tempDir.resolve("release-one"));
 		Path otherRoot = Files.createDirectory(tempDir.resolve("release-two"));
 		Files.writeString(actualRoot.resolve("asset.txt"), "public", StandardCharsets.UTF_8);
@@ -994,15 +994,14 @@ public class StaticFilesTests {
 		} catch (UnsupportedOperationException | IOException unavailable) {
 			return;
 		}
-		StaticFiles staticFiles = StaticFiles.withRoot(rootLink).followSymlinks(true).build();
+		StaticFiles staticFiles = StaticFiles.withRoot(rootLink).trustedImmutableRoot(true).followSymlinks(true).build();
 		MarshaledResponse response = staticFiles.marshaledResponseFor("asset.txt",
 				Request.fromPath(HttpMethod.GET, "/asset.txt")).orElseThrow();
 		Files.delete(rootLink);
 		Files.createSymbolicLink(rootLink, otherRoot);
-		Assertions.assertEquals("public", new String(response.bodyBytesOrEmpty(), StandardCharsets.UTF_8));
-		Assertions.assertEquals("public", new String(staticFiles.marshaledResponseFor("asset.txt",
-				Request.fromPath(HttpMethod.GET, "/asset.txt")).orElseThrow()
-				.bodyBytesOrEmpty(), StandardCharsets.UTF_8));
+		Assertions.assertThrows(UncheckedIOException.class, response::bodyBytesOrEmpty);
+		Assertions.assertTrue(staticFiles.marshaledResponseFor("asset.txt",
+				Request.fromPath(HttpMethod.GET, "/asset.txt")).isEmpty());
 	}
 
 	@Test
@@ -1026,7 +1025,7 @@ public class StaticFilesTests {
 			Files.setPosixFilePermissions(secret,
 					java.nio.file.attribute.PosixFilePermissions.fromString("---------"));
 			org.junit.jupiter.api.Assumptions.assumeFalse(Files.isReadable(secret));
-			StaticFiles staticFiles = StaticFiles.withRoot(root)
+			StaticFiles staticFiles = StaticFiles.withRoot(root).trustedImmutableRoot(true)
 					.accessResolver((path, attributes) -> {
 						try {
 							Files.delete(target);
@@ -1052,7 +1051,7 @@ public class StaticFilesTests {
 		Path secret = tempDir.resolve("secret.txt");
 		Files.writeString(publicFile, "public", StandardCharsets.UTF_8);
 		Files.writeString(secret, "secret", StandardCharsets.UTF_8);
-		StaticFiles staticFiles = StaticFiles.withRoot(root).build();
+		StaticFiles staticFiles = StaticFiles.withRoot(root).trustedImmutableRoot(true).build();
 		MarshaledResponse response = staticFiles.marshaledResponseFor("asset.txt",
 				Request.fromPath(HttpMethod.GET, "/asset.txt")).orElseThrow();
 		Assertions.assertEquals("public", new String(response.bodyBytesOrEmpty(), StandardCharsets.UTF_8));
@@ -1071,7 +1070,7 @@ public class StaticFilesTests {
 		Path root = Files.createDirectory(tempDir.resolve("public"));
 		Path file = root.resolve("asset.txt");
 		Files.writeString(file, "public", StandardCharsets.UTF_8);
-		StaticFiles staticFiles = StaticFiles.withRoot(root).build();
+		StaticFiles staticFiles = StaticFiles.withRoot(root).trustedImmutableRoot(true).build();
 		MarshaledResponse response = staticFiles.marshaledResponseFor("asset.txt",
 				Request.fromPath(HttpMethod.GET, "/asset.txt")).orElseThrow();
 		Path replacement = root.resolve("replacement.txt");
@@ -1087,7 +1086,7 @@ public class StaticFilesTests {
 		Path secret = tempDir.resolve("secret.txt");
 		Files.writeString(index, "public", StandardCharsets.UTF_8);
 		Files.writeString(secret, "secret", StandardCharsets.UTF_8);
-		StaticFiles staticFiles = StaticFiles.withRoot(root)
+		StaticFiles staticFiles = StaticFiles.withRoot(root).trustedImmutableRoot(true)
 				.indexFileNames(List.of("index.html")).build();
 		MarshaledResponse indexResponse = staticFiles.marshaledResponseFor("",
 				Request.fromPath(HttpMethod.GET, "/")).orElseThrow();
@@ -1113,7 +1112,7 @@ public class StaticFilesTests {
 		Path outside = Files.createDirectory(tempDir.resolve("outside"));
 		Files.writeString(publicFile, "public", StandardCharsets.UTF_8);
 		Files.writeString(outside.resolve("asset.txt"), "secret", StandardCharsets.UTF_8);
-		StaticFiles staticFiles = StaticFiles.withRoot(root).build();
+		StaticFiles staticFiles = StaticFiles.withRoot(root).trustedImmutableRoot(true).build();
 		MarshaledResponse response = staticFiles.marshaledResponseFor("child/asset.txt",
 				Request.fromPath(HttpMethod.GET, "/child/asset.txt")).orElseThrow();
 
@@ -1131,7 +1130,7 @@ public class StaticFilesTests {
 		Path oldRoot = tempDir.resolve("old-public");
 		Files.move(root, oldRoot);
 		Files.createSymbolicLink(root, outside);
-		Assertions.assertEquals("public", new String(response.bodyBytesOrEmpty(), StandardCharsets.UTF_8));
+		Assertions.assertThrows(UncheckedIOException.class, response::bodyBytesOrEmpty);
 	}
 
 	@Test
@@ -1152,7 +1151,7 @@ public class StaticFilesTests {
 			return;
 		}
 
-		StaticFiles staticFiles = StaticFiles.withRoot(root)
+		StaticFiles staticFiles = StaticFiles.withRoot(root).trustedImmutableRoot(true)
 				.followSymlinks(true)
 				.build();
 		Assertions.assertTrue(staticFiles.marshaledResponseFor("link1.txt", Request.fromPath(HttpMethod.GET, "/link1.txt")).isEmpty());
@@ -1192,7 +1191,7 @@ public class StaticFilesTests {
 		Files.writeString(appJs, "console.log('hi');", StandardCharsets.UTF_8);
 		String appJsLength = String.valueOf(Files.size(appJs));
 
-		StaticFiles staticFiles = StaticFiles.withRoot(tempDir)
+		StaticFiles staticFiles = StaticFiles.withRoot(tempDir).trustedImmutableRoot(true)
 					.cacheControlResolver((path, attributes) -> Optional.of(path.getFileName().toString().endsWith(".js")
 							? "public, max-age=31536000, immutable"
 							: "no-cache"))
@@ -1239,7 +1238,7 @@ public class StaticFilesTests {
 	@Timeout(75)
 	public void staticFilesSecureBodyReachesBuiltInHttpTransport(@TempDir Path tempDir) throws Exception {
 		Files.writeString(tempDir.resolve("asset.txt"), "public", StandardCharsets.UTF_8);
-		StaticAssetResource resource = new StaticAssetResource(StaticFiles.withRoot(tempDir).build());
+		StaticAssetResource resource = new StaticAssetResource(StaticFiles.withRoot(tempDir).trustedImmutableRoot(true).build());
 		InstanceProvider defaultProvider = InstanceProvider.defaultInstance();
 		int port = TestSupport.findFreePort();
 		SokletConfig configuration = SokletConfig.withHttpServer(HttpServer.withPort(port)
@@ -1281,7 +1280,7 @@ public class StaticFilesTests {
 			return;
 		}
 		SwappingStaticAssetResource resource = new SwappingStaticAssetResource(
-				StaticFiles.withRoot(root).build(), asset, secret);
+				StaticFiles.withRoot(root).trustedImmutableRoot(true).build(), asset, secret);
 		InstanceProvider defaultProvider = InstanceProvider.defaultInstance();
 		int port = TestSupport.findFreePort();
 		SokletConfig configuration = SokletConfig.withHttpServer(HttpServer.withPort(port)

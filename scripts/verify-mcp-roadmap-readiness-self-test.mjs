@@ -182,7 +182,7 @@ try {
     'A clean roadmap verification must not mutate candidate or signature bytes/metadata.');
   assert.equal(result.negativeInventoryCount, 15);
   assert.equal(result.deferredFeatureCount, 16);
-  assert.equal(result.opennessValidatorCount, 46);
+  assert.equal(result.opennessValidatorCount, 47);
   assert.equal(result.activeTextRuleCount, 22);
 
   expectRejected('planning-authority JSON must be canonical', () => {

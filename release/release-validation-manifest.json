@@ -9,7 +9,7 @@
   "promotion": {
     "helper": {
       "path": "scripts/release-promotion.mjs",
-      "sha256": "1f237856902166a043d2f53c38aae5dd89cc05859fe5c8c60dc4c336f9deb79a"
+      "sha256": "a4d784c436082fa2824069abfd82cad18e4eb0816d1be432ded2014dec618a77"
     },
     "wrapper": {
       "path": "scripts/promote-release-candidate.sh",
@@ -33,13 +33,13 @@
       "version": "1.25.12"
     },
     "java": {
-      "archive": "amazon-corretto-17.0.20.8.1-linux-x64.tar.gz",
-      "archiveSha256": "89b50d4ef5d27ce1f8e5cad616525e14f7665b7b4a1ffca85381b0e21401034f",
+      "archive": "amazon-corretto-21.0.12.9.1-linux-x64.tar.gz",
+      "archiveSha256": "f79824540cef882da0cdf1369f9d1d69afc14b5a9bc3a771fd5bb795793ce2f2",
       "distribution": "corretto",
-      "distributionUrl": "https://corretto.aws/downloads/resources/17.0.20.8.1/amazon-corretto-17.0.20.8.1-linux-x64.tar.gz",
-      "runtimeVersion": "17.0.20+8-LTS",
-      "vendorVersion": "Corretto-17.0.20.8.1",
-      "version": "17.0.20"
+      "distributionUrl": "https://corretto.aws/downloads/resources/21.0.12.9.1/amazon-corretto-21.0.12.9.1-linux-x64.tar.gz",
+      "runtimeVersion": "21.0.12.1+9-LTS",
+      "vendorVersion": "Corretto-21.0.12.9.1",
+      "version": "21.0.12.1"
     },
     "javadocJava": {
       "archive": "amazon-corretto-26.0.2.11.1-linux-x64.tar.gz",

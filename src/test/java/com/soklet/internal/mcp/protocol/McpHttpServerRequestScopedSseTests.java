@@ -53,7 +53,7 @@ public class McpHttpServerRequestScopedSseTests {
 	@Test
 	public void completion_without_related_notifications_remains_json()
 			throws Exception {
-		McpHttpServerRuntime runtime = runtime(invocation -> completeResult("json"));
+		McpHttpServerRuntime runtime = runtime(invocation -> McpApplicationDispatchOutcome.completed(completeResult("json")));
 		try {
 			int port = runtime.start().getPort();
 			try (McpChunkedHttpClient client = McpChunkedHttpClient.postMcp(
@@ -84,7 +84,7 @@ public class McpHttpServerRequestScopedSseTests {
 			throws Exception {
 		McpHttpServerRuntime runtime = runtime(invocation -> {
 			Assertions.assertTrue(invocation.sendNotification(progress("token-1", 1)));
-			return completeResult("streamed");
+			return McpApplicationDispatchOutcome.completed(completeResult("streamed"));
 		});
 		try {
 			int port = runtime.start().getPort();
@@ -141,7 +141,7 @@ public class McpHttpServerRequestScopedSseTests {
 				handlerInterrupted.countDown();
 				throw exception;
 			}
-			return completeResult("must-not-be-written");
+			return McpApplicationDispatchOutcome.completed(completeResult("must-not-be-written"));
 		});
 
 		try {
@@ -195,10 +195,10 @@ public class McpHttpServerRequestScopedSseTests {
 				try {
 					notificationAccepted.set(invocation.sendNotification(
 							progress("unoffered", 1)));
-					return McpWireResult.complete(new McpJsonObject(Map.of(
+					return McpApplicationDispatchOutcome.completed(McpWireResult.complete(new McpJsonObject(Map.of(
 							"content", new McpJsonArray(List.of(new McpJsonObject(Map.of(
 									"type", new McpJsonString("text"),
-									"text", new McpJsonString("must-not-be-written"))))))));
+									"text", new McpJsonString("must-not-be-written")))))))));
 				} finally {
 					handlerFinished.countDown();
 				}
@@ -283,7 +283,7 @@ public class McpHttpServerRequestScopedSseTests {
 				handlerInterrupted.countDown();
 				throw exception;
 			}
-			return completeResult("too-late");
+			return McpApplicationDispatchOutcome.completed(completeResult("too-late"));
 		};
 		McpHttpServerRuntime runtime = runtime(handler, clock,
 				transportConfiguration(Duration.ofSeconds(1), Duration.ofSeconds(10)),
@@ -346,7 +346,7 @@ public class McpHttpServerRequestScopedSseTests {
 				handlerInterrupted.countDown();
 				throw exception;
 			}
-			return completeResult("must-not-be-written");
+			return McpApplicationDispatchOutcome.completed(completeResult("must-not-be-written"));
 		}, clock,
 				transportConfiguration(Duration.ofSeconds(4), Duration.ofSeconds(5)),
 				new McpApplicationExecutionConfiguration(
@@ -426,7 +426,7 @@ public class McpHttpServerRequestScopedSseTests {
 				handlerInterrupted.countDown();
 				throw exception;
 			}
-			return completeResult("must-not-be-written");
+			return McpApplicationDispatchOutcome.completed(completeResult("must-not-be-written"));
 		}, clock,
 				transportConfiguration(Duration.ofSeconds(4), Duration.ofSeconds(5)),
 				new McpApplicationExecutionConfiguration(
@@ -477,7 +477,7 @@ public class McpHttpServerRequestScopedSseTests {
 		McpApplicationRequestHandler handler = invocation -> {
 			String requestId = ((McpJsonRpcId.StringId) invocation.request().id()).value();
 			if (!"slow".equals(requestId))
-				return completeResult("fast");
+				return McpApplicationDispatchOutcome.completed(completeResult("fast"));
 
 			invocation.sendNotification(largeProgress("slow"));
 			secondNotificationAttempted.countDown();
@@ -486,7 +486,7 @@ public class McpHttpServerRequestScopedSseTests {
 			} finally {
 				secondNotificationFinished.countDown();
 			}
-			return completeResult("slow");
+			return McpApplicationDispatchOutcome.completed(completeResult("slow"));
 		};
 		McpHttpServerRuntime runtime = runtime(handler, clock,
 				transportConfiguration(Duration.ofSeconds(1),
@@ -549,7 +549,7 @@ public class McpHttpServerRequestScopedSseTests {
 			throws Exception {
 		McpHttpServerRuntime runtime = runtime(invocation -> {
 			invocation.sendNotification(largeProgress("terminal-lane"));
-			return completeResult("terminal-lane-complete");
+			return McpApplicationDispatchOutcome.completed(completeResult("terminal-lane-complete"));
 		}, McpApplicationClock.SYSTEM,
 				transportConfiguration(Duration.ofSeconds(15),
 						Duration.ofSeconds(60), 1),
@@ -639,7 +639,7 @@ public class McpHttpServerRequestScopedSseTests {
 		McpHttpServerRuntime runtime = runtime(invocation -> {
 			String requestId = ((McpJsonRpcId.StringId) invocation.request().id()).value();
 			if (!"stream-before-stop".equals(requestId))
-				return completeResult("after-restart");
+				return McpApplicationDispatchOutcome.completed(completeResult("after-restart"));
 
 			invocation.sendNotification(progress("stream-before-stop", 1));
 			try {
@@ -651,7 +651,7 @@ public class McpHttpServerRequestScopedSseTests {
 				handlerInterrupted.countDown();
 				throw exception;
 			}
-			return completeResult("must-not-be-written");
+			return McpApplicationDispatchOutcome.completed(completeResult("must-not-be-written"));
 		});
 
 		McpChunkedHttpClient stream = null;
@@ -706,7 +706,7 @@ public class McpHttpServerRequestScopedSseTests {
 		});
 		McpHttpServerRuntime runtime = runtime(invocation -> {
 			invocation.sendNotification(largeProgress("keepalive-race"));
-			return completeResult("terminal-wins");
+			return McpApplicationDispatchOutcome.completed(completeResult("terminal-wins"));
 		}, clock,
 				transportConfiguration(Duration.ofSeconds(1),
 						Duration.ofSeconds(10), 1),
@@ -751,7 +751,7 @@ public class McpHttpServerRequestScopedSseTests {
 		});
 		McpHttpServerRuntime runtime = runtime(invocation -> {
 			invocation.sendNotification(progress("deadline-race", 1));
-			return completeResult("stale-terminal");
+			return McpApplicationDispatchOutcome.completed(completeResult("stale-terminal"));
 		}, clock,
 				transportConfiguration(Duration.ofSeconds(1),
 						Duration.ofSeconds(10)),

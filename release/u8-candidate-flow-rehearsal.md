@@ -74,8 +74,8 @@ mvn -B -ntp -Dgpg.skip=true clean verify
 ```
 
 It runs with the checksum-pinned `release/release-validation-manifest.json`
-candidate toolchain: Amazon Corretto 17.0.20.8.1
-(`java.version` 17.0.20, runtime 17.0.20+8-LTS) and Apache Maven 3.9.16.
+candidate toolchain: Amazon Corretto 21.0.12.9.1
+(`java.version` 21.0.12.1, runtime 21.0.12.1+9-LTS) and Apache Maven 3.9.16.
 The exact distribution digests in that tracked manifest are part of the
 recipe. The three parity artifacts are:
 
@@ -262,7 +262,7 @@ reviews the recipe and the pairwise hash comparison.
 **Command family.** Create two independent clean source directories with
 `git clone --no-checkout --no-hardlinks`, detach each at the same full proposed
 pre-downstream commit, and verify the same root tree and clean status in both.
-In each directory, with the pinned Corretto 17 and Maven distributions, run
+In each directory, with the pinned Corretto 21 and Maven distributions, run
 exactly:
 
 ```text
@@ -299,8 +299,8 @@ consumes both build receipts and the install rehearsal receipt.
 
 Before the downstream owner-commit/pin step, rerun the
 [packaged consumer fixture](../verification/consumer-build/README.md) against
-that same canonical Java-17-built main JAR in all nine combinations of consumer
-Java 17/21/25 and Maven/Gradle/direct javac. Use fresh consumer output directories,
+that same canonical Java-21-built main JAR in all six combinations of consumer
+Java 21/25 and Maven/Gradle/direct javac. Use fresh consumer output directories,
 verify the candidate hash before and after each run, and retain generated-index
 and live-request evidence. These consumer runtimes must not rebuild or replace
 the core JAR. Preparation results do not substitute for immutable-candidate
@@ -335,7 +335,7 @@ checked-in release-validator command family:
 
 | Gate | Required rehearsal command family and binding |
 |---|---|
-| `barebones-app` | First verify that tracked `soklet-4.0.0.jar` equals step 3's candidate main JAR. Compile and run against that unchanged vendored file with `javac --release 17 -parameters -processor com.soklet.SokletProcessor -classpath soklet-4.0.0.jar`, then perform the noninteractive loopback start/probe/graceful-stop/port-release checks. Retain the file under the version-2 `vendored-jar` evidence role and recheck its hash. |
+| `barebones-app` | First verify that tracked `soklet-4.0.0.jar` equals step 3's candidate main JAR. Compile and run against that unchanged vendored file with `javac --release 21 -parameters -processor com.soklet.SokletProcessor -classpath soklet-4.0.0.jar`, then perform the noninteractive loopback start/probe/graceful-stop/port-release checks. Retain the file under the version-2 `vendored-jar` evidence role and recheck its hash. |
 | `soklet-servlet-javax` | For adapter 2.0.0, run `mvn -B -ntp -Dgpg.skip=true clean verify`, then `mvn -B -ntp -Dgpg.skip=true -Dsoklet.version=4.0.0 clean verify`, both forced to the isolated repository. Prove the default property is exact `4.0.0` and both configurations resolve the identical `com.soklet:soklet:4.0.0` candidate JAR. No 3.x compatibility leg remains. |
 | `soklet-servlet-jakarta` | The same default-property/explicit-override command family and identical-candidate coordinate/hash proof as the `javax` repository, for adapter 2.0.0. |
 | `toystore-app` | Run `mvn -B -ntp -Dgpg.skip=true clean verify`, then `mvn -B -ntp -Dgpg.skip=true -Dsoklet.version=4.0.0 clean verify`, both against the isolated repository. On the final F2 tree, prove both legs resolve the exact candidate coordinate/hash because the tracked property default is exact `4.0.0`. Retain the separate Milestone-R pinned-base receipt that proved the former default `3.5.1` and candidate override; do not misstate that historical default as the final F2 default. |
@@ -448,7 +448,7 @@ project owner reviews the equality result and any required downstream rerun.
 **Command family.** Create another new clean source directory with
 `git clone --no-checkout --no-hardlinks`, detach it at step 5's exact post-pin
 core commit/tree, and verify its clean status. Read the same committed literal
-timestamp, use the same pinned Corretto 17/Maven distributions, and run
+timestamp, use the same pinned Corretto 21/Maven distributions, and run
 exactly:
 
 ```text

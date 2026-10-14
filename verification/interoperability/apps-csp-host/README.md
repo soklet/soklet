@@ -1,11 +1,40 @@
 # Apps CSP — real-host connect and image allowlists
 
-Two experimental profiles use the isolated one-file auth-patched Inspector and
-the same static App shell. Both preserve the real DOM catalog open and SDK-backed
+Two experimental profiles use the reviewed unmodified Inspector source build
+or the historical isolated auth patch with the same static App shell. Both
+preserve the real DOM catalog open and SDK-backed
 Refresh action, then exercise `fetch` (`connect-src`) and `Image` (`img-src`) in
 the genuine opaque App default context. The default profile retains explicit
 empty allowlists; `--profile allowlist` supplies one explicit loopback origin for
 both directives. The previous denial receipt remains a historical snapshot.
+
+## Unmodified upstream source mode
+
+Pass `--inspector-build /absolute/prepared-inspector-build` to run the reviewed
+unmodified upstream source commit `1974465ccb5454a5110e609e4140171fa360a544`.
+Its source version is `2.10.1`; this is an **unreleased upstream source build**,
+not an npm release or the historical local auth patch. Prepare and verify it
+with `../inspector/upstream-build.mjs` before starting this harness.
+
+In this mode, `--dependencies` supplies the App-shell SDK installation only,
+and `--original-dependencies` may be omitted. Its package and lockfile pins are
+verified; its installed tree is recorded and rechecked for changes. It does not
+supply the running Inspector. The source build supplies the actual launcher
+and web files, and its build receipt and complete tree are verified before
+and after the run. Browser, shell, candidate JAR/POM, compiled fixture, and
+harness source identities are also rechecked. The candidate's actual JAR SHA-256 is recorded and rechecked, and its
+embedded POM must match the supplied POM. Public-API compilation and dependency
+audits remain mandatory. The shell's exact prior hash and build receipt remain
+required; this mode does not rebuild or change the shell.
+
+Source-mode receipts use an `upstream-source-apps-*` profile and explicitly
+record `sourceIdentityVerified: true`, `patchIdentityVerified: false`, and
+`UNRELEASED_UPSTREAM_SOURCE_BUILD`. All existing trace, authentication, Origin,
+DOM, observation, cleanup, and profile-specific security assertions still apply.
+A passing experiment remains local development evidence, with
+`fullHostQualification: false` and `releaseCandidateEvidence: false`.
+Omitting `--inspector-build` preserves the historical patched-host mode,
+including its original candidate and patch identity checks and receipts.
 
 ## Causal evidence, not a harness-blocked request
 
@@ -91,7 +120,7 @@ existing matched default context, not an isolated world. CSP is not bypassed;
 unsafe-eval bypass is explicitly disabled for the probe evaluations. The exact
 host-generated inner CSP and existing opaque iframe attributes must match.
 
-## Reproduce
+## Reproduce the upstream source mode
 
 ```sh
 node --test verification/interoperability/apps-csp-host/*-self-test.mjs
@@ -100,20 +129,27 @@ node verification/interoperability/apps-csp-host/run.mjs \
   --candidate-pom /path/to/original-candidate-pom.xml \
   --java /path/to/jdk/bin/java \
   --shell /path/to/catalog-shell.html \
-  --original-dependencies /path/to/original-installation \
-  --dependencies /path/to/final-patched-installation \
+  --inspector-build /path/to/prepared-inspector-build \
+  --dependencies /path/to/pinned-shell-dependencies \
   --browser '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
   --work-dir /path/to/new-results
 ```
 
 Add `--profile allowlist` to run the declared-origin case in a new work
-directory. The adjacent shell build receipt is required. The default denial
-profile pins the current core JAR SHA-256
-`64253678715421002d70ec2ea049650429a7af5ec31700cf03e6f5e1d784a727`;
-the allowlist profile records and rechecks its supplied candidate JAR and POM.
-The shell and original/patched Inspector installations are pinned. Browser and all
-source/class/config identities are recorded and rechecked. Public fixture
-compilation targets release 17 with annotation processing disabled and lint
+directory. The adjacent shell build receipt is required. Source mode records
+and rechecks the supplied candidate JAR/POM for both profiles, while retaining
+the exact shell identity.
+
+For historical patched-host reproduction, omit `--inspector-build`, supply
+`--original-dependencies /path/to/original-installation`, and point
+`--dependencies` at the prepared final patched installation. In that mode only,
+the default denial profile requires core JAR SHA-256
+`64253678715421002d70ec2ea049650429a7af5ec31700cf03e6f5e1d784a727` and its matching
+POM; the allowlist profile records and rechecks its supplied candidate instead.
+The original/patched installations retain their exact patch checks. Browser and
+all source/class/config identities are recorded and rechecked in either mode.
+Public fixture
+compilation targets release 21 with annotation processing disabled and lint
 warnings as errors; dependency analysis must remain public-API-only.
 
 ## Final gate and bounds

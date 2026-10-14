@@ -19,8 +19,6 @@ import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestFactory;
 import org.junit.jupiter.api.Timeout;
-import org.junit.jupiter.api.condition.EnabledForJreRange;
-import org.junit.jupiter.api.condition.JRE;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
@@ -63,7 +61,6 @@ class UnparsedRequestAdditionalTransportTests {
 	}
 
 	@TestFactory
-	@EnabledForJreRange(min = JRE.JAVA_21)
 	Stream<DynamicTest> ssePreRequestRejectionsUseTheSameHook() {
 		return Stream.of(
 				new Case("malformed", "MALFORMED_REQUEST", "GET /events HTTP/1.1\r\nHost: localhost\r\nBroken-Header\r\n\r\n", 4096, 1024, 8192),
@@ -108,7 +105,6 @@ class UnparsedRequestAdditionalTransportTests {
 	}
 
 	@Test
-	@EnabledForJreRange(min = JRE.JAVA_21)
 	void sseLfHeaderBoundaryExcludesFollowingCrLfRequest() throws Exception {
 		String rejected = "GET /events HTTP/1.1\nHost: localhost\nBroken-Header\n\n";
 		Case c = new Case("malformed LF", "MALFORMED_REQUEST", rejected, 4096, 1024, 8192);
@@ -123,7 +119,6 @@ class UnparsedRequestAdditionalTransportTests {
 	}
 
 	@Test
-	@EnabledForJreRange(min = JRE.JAVA_21)
 	void uncooperativeSseUnparsedHandlerPreventsCompleteShutdownUntilItActuallyReturns() throws Exception {
 		CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
 		Case c = new Case("malformed", "MALFORMED_REQUEST", "GET /events HTTP/1.1\r\nHost: localhost\r\nBroken-Header\r\n\r\n", 4096, 1024, 8192);
@@ -168,7 +163,6 @@ class UnparsedRequestAdditionalTransportTests {
 	}
 
 	@Test
-	@EnabledForJreRange(min = JRE.JAVA_21)
 	void sseCaptureExcludesFollowingRequestAndCapsRetainedBytes() throws Exception {
 		String rejected = "GET /events HTTP/1.1\r\nHost: localhost\r\nX-A: " + "a".repeat(70_000) + "\r\nBroken-Header\r\n\r\n";
 		Case c = new Case("large malformed", "MALFORMED_REQUEST", rejected, 200_000, 100_000, 8192);
@@ -184,7 +178,6 @@ class UnparsedRequestAdditionalTransportTests {
 	}
 
 	@TestFactory
-	@EnabledForJreRange(min = JRE.JAVA_21)
 	Stream<DynamicTest> sseInvalidOrFailedMarshalingUsesTheOriginalFallback() {
 		List<Function<UnparsedRequest, MarshaledResponse>> handlers = List.of(
 				request -> { throw new IllegalStateException("application failure"); },
@@ -202,7 +195,6 @@ class UnparsedRequestAdditionalTransportTests {
 	}
 
 	@Test
-	@EnabledForJreRange(min = JRE.JAVA_21)
 	void stalledSseMarshalerReceivesInterruptionAndCannotWriteALateResponse() throws Exception {
 		CountDownLatch entered = new CountDownLatch(1), interrupted = new CountDownLatch(1), release = new CountDownLatch(1);
 		Case c = new Case("timeout", "REQUEST_READ_TIMEOUT", "GET /events HTTP/1.1\r\nHost: localhost\r\n", 4096, 1024, 8192);

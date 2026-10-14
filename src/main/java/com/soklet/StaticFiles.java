@@ -27,7 +27,6 @@ import java.io.UncheckedIOException;
 import java.nio.channels.Channels;
 import java.nio.channels.SeekableByteChannel;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.LinkOption;
@@ -48,21 +47,24 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Helper for serving files from a configured root directory. Both symlink policies pin the
- * root and open each path component relative to an open directory descriptor. File identity is
- * checked on the opened response file, so changing a pathname cannot redirect its delivery.
+ * Helper for serving files from an explicitly trusted, immutable root directory.
+ * The builder requires {@link Builder#trustedImmutableRoot(Boolean) trustedImmutableRoot(true)}:
+ * only the application operator may control the root, its ancestors, links, and files, and they
+ * must remain unchanged while the helper or its responses are in use. Upload directories and
+ * other attacker-writable trees are not supported.
  * <p>
- * Supported environments use the default OpenJDK filesystem providers on Linux or macOS, on
- * x86-64 or AArch64, with stable file identities. This includes macOS Java 17 and 21, whose public
- * provider does not expose {@link java.nio.file.SecureDirectoryStream}. The descriptor bridge
- * adds no external dependency and needs no JVM flags on ordinary classpath installations.
- * Custom or modular runtimes must make {@code jdk.unsupported} available and resolved and permit
- * the bridge's access. Unsupported providers, platforms, architectures, unavailable JDK internals,
- * denied access, installed SecurityManagers, or missing stable identities fail closed.
+ * Delivery uses public NIO APIs, with {@link java.nio.file.SecureDirectoryStream} where available
+ * and a checked pathname fallback otherwise (including macOS Java 21 and Windows). Stable file
+ * identities are required. Checks reject observed changes; they do not make concurrent mutation
+ * safe. Public Java APIs cannot bind regular-file attributes to an opened channel, and copying
+ * bytes does not close that identity race. No JDK internals, native-access flags, or retained
+ * directory descriptors are used.
  * <p>
- * Keep served file contents immutable while responses are in flight. Open file descriptors do
- * not provide a snapshot of concurrent in-place writes.
+ * The resolved root identity is captured at construction. Rebuild the helper when intentionally
+ * switching deployment roots, after in-flight responses have completed. Search-only directories
+ * use checked pathname access when public secure-directory handles cannot be acquired.
  *
+
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
@@ -132,6 +134,9 @@ public final class StaticFiles {
 	private StaticFiles(@NonNull Builder builder) {
 		requireNonNull(builder);
 
+		if (!Boolean.TRUE.equals(builder.trustedImmutableRoot))
+			throw new IllegalArgumentException("StaticFiles requires trustedImmutableRoot(true): the root, ancestors, links, and files must be operator-controlled and immutable while in use.");
+
 		this.root = builder.root.toAbsolutePath().normalize();
 		this.followSymlinks = builder.followSymlinks == null ? false : builder.followSymlinks;
 		this.indexFileNames = List.copyOf(builder.indexFileNames == null ? List.of() : builder.indexFileNames);
@@ -149,7 +154,7 @@ public final class StaticFiles {
 		try {
 			this.followRoot = this.root.toRealPath();
 			// Preserve the configured spelling for no-follow resolver paths. The
-			// delivery root is pinned below, so replacing this path cannot redirect it.
+			// delivery root identity is captured below, so observed replacement fails closed.
 			this.noFollowRoot = this.root;
 		} catch (IOException e) {
 			throw new UncheckedIOException(format("Unable to resolve static file root '%s'.", this.root), e);
@@ -163,7 +168,7 @@ public final class StaticFiles {
 		} else if (!Files.isDirectory(this.noFollowRoot, LinkOption.NOFOLLOW_LINKS)) {
 			throw new IllegalArgumentException(format("Static file root '%s' is not a directory.", this.root));
 		}
-		this.secureRoot = new SecureStaticFileRoot(getResolutionRoot());
+		this.secureRoot = new SecureStaticFileRoot(getResolutionRoot(), this.root);
 	}
 
 	/**
@@ -199,13 +204,13 @@ public final class StaticFiles {
 		Path file = resolvedFile.path();
 		BasicFileAttributes attributes = resolvedFile.attributes();
 		// Path resolution can race a rename of an ancestor. Check the selected
-		// object through the pinned root before any application resolver sees its
-		// metadata. Delivery repeats this check immediately before writing.
+		// object against the captured root before any application resolver sees its
+		// metadata. These checks supplement the required immutable-root contract.
 		if (attributes.fileKey() == null)
 			return Optional.empty();
 		try (SeekableByteChannel ignored = secureRoot.open(file,
 					attributes.fileKey(), attributes.size(), attributes.lastModifiedTime())) {
-			// Identity and containment were verified by the secure opener.
+			// The selected path still matches its expected identity and containment.
 		} catch (IOException | UnsupportedOperationException failure) {
 			return Optional.empty();
 		}
@@ -240,7 +245,7 @@ public final class StaticFiles {
 		String contentType = requireNonNull(getMimeTypeResolver().contentTypeFor(file), "mimeTypeResolver returned null; use Optional.empty() to omit Content-Type.").orElse(null);
 
 		// Resolvers can execute application code. Recheck the selected path and identity
-		// before response creation; delivery checks again through the pinned root.
+		// before response creation; delivery checks again against the captured root.
 		ResolvedFile current = getFollowSymlinks()
 				? followedRegularFile(file).orElse(null)
 				: noFollowResolvedFileForCandidate(file).orElse(null);
@@ -343,7 +348,7 @@ public final class StaticFiles {
 		Path relative;
 
 		try {
-			relative = FileSystems.getDefault().getPath(relativePath);
+			relative = getResolutionRoot().getFileSystem().getPath(relativePath);
 		} catch (InvalidPathException e) {
 			return Optional.empty();
 		}
@@ -600,10 +605,31 @@ public final class StaticFiles {
 		private RangeRequestsResolver rangeRequestsResolver;
 		@Nullable
 		private Boolean followSymlinks;
+		@Nullable
+		private Boolean trustedImmutableRoot;
 
 		private Builder(@NonNull Path root) {
 			requireNonNull(root);
 			this.root = root;
+		}
+
+		/**
+		 * Declares that the root, its ancestors, links, and files are controlled exclusively by the
+		 * application operator and remain unchanged while this helper or its responses are in use.
+		 * <p>
+		 * This declaration is required on every platform. It does not set filesystem permissions or
+		 * freeze files. Do not enable it for uploads, tenant-writable directories, or any tree that
+		 * untrusted code can mutate. Public NIO checks cannot exclude all path-replacement races.
+		 * Passing {@code false} or {@code null} withdraws the declaration and makes {@link #build()}
+		 * fail closed. Deploy a new helper for a new immutable asset tree.
+		 *
+		 * @param trustedImmutableRoot {@code true} to accept the immutable-root contract
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder trustedImmutableRoot(@Nullable Boolean trustedImmutableRoot) {
+			this.trustedImmutableRoot = trustedImmutableRoot;
+			return this;
 		}
 
 		/**
@@ -738,9 +764,9 @@ public final class StaticFiles {
 		 * <p>
 		 * Passing {@code null} restores the default of {@code false}. When disabled, any symbolic-link
 		 * component under the static root causes the candidate path to be hidden. Enabling this option
-		 * resolves links inside the configured root, then securely opens the resolved target through
-		 * a pinned root. Links that resolve outside the root are hidden. A replacement link introduced
-		 * after resolution is never followed during delivery.
+		 * resolves links inside the configured root. Links that resolve outside the root are hidden.
+		 * The required trusted immutable-root contract applies to links and their targets too;
+		 * observed replacement links are rejected during delivery.
 		 *
 		 * @param followSymlinks {@code true} to follow symlinks, {@code false} to reject them, or
 		 * {@code null} for the default
@@ -757,10 +783,10 @@ public final class StaticFiles {
 		 * <p>
 		 * The configured root is validated as a directory when this method is called.
 		 * With {@code followSymlinks} enabled it is resolved to a real path; otherwise
-		 * a symbolic-link root is rejected. The resolved directory handle is pinned for the lifetime
-		 * of this helper in either mode. Rebuild the helper when intentionally switching deployment roots.
-		 * Both modes require the descriptor access and runtime support described by {@link StaticFiles};
-		 * construction fails closed when those or stable file identities are unavailable.
+		 * a symbolic-link root is rejected. The resolved root identity is captured without retaining
+		 * an open directory handle. Both modes require {@link #trustedImmutableRoot(Boolean)} to be
+		 * explicitly set to {@code true} and a provider with stable file identities. Rebuild the helper
+		 * when intentionally switching deployment roots, after in-flight responses have completed.
 		 * Pass the root's {@link Path#toRealPath} value explicitly to use its
 		 * resolved directory without enabling symlink traversal.
 		 *
@@ -811,7 +837,7 @@ public final class StaticFiles {
 		 * <p>
 		 * This resolver streams the served file through SHA-256 on the request-handling thread and
 		 * emits strong ETags with values of the form {@code sha256-<lowercase-hex>}. When used by
-		 * {@link StaticFiles}, it hashes a securely opened file rather than reopening its path. It does not
+		 * {@link StaticFiles}, it hashes a channel acquired under the helper's root and file checks. It does not
 		 * cache digests and it fully reads the file for {@link HttpMethod#HEAD} requests as well as
 		 * {@link HttpMethod#GET} requests. Applications serving large files or HEAD-heavy traffic should
 		 * prefer a manifest-backed resolver.

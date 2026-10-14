@@ -69,7 +69,7 @@ change first. A workflow visible only on a feature branch is not a runnable
 release gate. Keep that core workflow preparation separate from independently
 managed website work.
 
-Finish code, dependency, documentation, changelog-date, and packaged-Javadoc
+Finish code, dependency, release-note, documentation, and packaged-Javadoc
 repairs before G4. Build and independently reproduce the candidate artifacts;
 import the exact packaged Javadoc JARs into the four site previews and verify
 full payload parity. Then obtain owner-created, retrievable downstream commits
@@ -80,7 +80,10 @@ final core tag that depends on those same downstream receipts.
 
 G5 does not make these edits or regenerate artifacts. If a repair changes any
 approved release input, prepare and accept a new candidate before publication.
-Main-website content is outside those release inputs.
+Main-website content is outside those release inputs. Keep the 4.0.0 changelog
+header `Unreleased` until the owner's tagging step. If that step changes the
+tracked release notes or date, include those bytes in a newly accepted candidate
+before promotion; do not edit an already accepted source tree during promotion.
 
 ## Load-bearing new files in the September 13–14 handoff
 
@@ -101,7 +104,7 @@ configuration, documentation, and generated files must be reviewed as well.
 - `release/scripts/install-pinned-gradle-linux-x64.sh`
 - `scripts/verify-consumer-ci-self-test.mjs`
 - the entire reviewed `verification/consumer-build/` fixture, including its
-  build files, README, Java sources, optional SSE sources, mutation helper,
+  build files, README, integrated HTTP/MCP/SSE Java sources, mutation helper,
   verifier, library, and self-test
 
 The tests, executable helpers, and fixture sources are consumed by builds,
@@ -237,20 +240,23 @@ exit results, reports, commit/tree identities, and tool/artifact hashes.
 Do not regenerate the sealed D1p manifests or edit the historical contract to
 make current checks pass. Review the
 [historical-source dispositions and current semantic repins](PLANNING_AUTHORITY_DRIFT_2026-09-13.md)
-instead. Resolve the external conformance toolchain's separate security review
-before treating its gate as runnable.
+instead. Apply the conformance toolchain's accepted
+[September 27 dependency disposition](../conformance/official/DEPENDENCY_REPIN_DISPOSITION_2026-09-27.md)
+and require its fresh candidate-run audits; the disposition makes the configured
+gate runnable but does not supply a candidate PASS receipt.
 
 ## Preserve the acyclic K/L preparation order
 
 1. Finish and review artifact-affecting core changes, then obtain the owner's
    pre-downstream core commit.
 2. Build that exact commit in two independent clean checkouts with the pinned
-   canonical Linux JDK 17 `mvn -B -ntp -Dgpg.skip=true clean verify` recipe.
+   canonical Linux JDK 21 `mvn -B -ntp -Dgpg.skip=true clean verify` recipe.
    Require main, sources, and Javadoc JAR equality and install the exact main
    JAR/POM into an isolated rehearsal repository.
 3. Put those canonical main-JAR bytes into barebones; validate all five
-   downstreams, the nine packaged-consumer combinations, and preparatory
-   client smoke against the canonical artifact. Finish tracked launch claims
+   downstreams, the six packaged-consumer combinations (Maven, Gradle, and
+   direct javac on Java 21 and 25), and preparatory client smoke against the
+   canonical artifact. Finish tracked launch claims
    and obtain the owner's reviewed downstream commits. Confirm exact commits
    can be retrieved by the runner; do not push automatically.
 4. Repin the five downstream commits and associated metadata only after their

@@ -78,6 +78,7 @@ com.soklet.SseServer$Builder
 com.soklet.SseTransportAttachmentContext
 com.soklet.StartupContext
 com.soklet.StartupDisposition
+com.soklet.StaticFiles$Builder
 com.soklet.StreamResourceFactory
 com.soklet.StreamTerminationReason
 com.soklet.StreamingResponseBody

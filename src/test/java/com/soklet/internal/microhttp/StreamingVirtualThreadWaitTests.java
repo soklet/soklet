@@ -24,8 +24,6 @@ import com.soklet.internal.mcp.transport.McpOutboundChannel;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
-import org.junit.jupiter.api.condition.EnabledForJreRange;
-import org.junit.jupiter.api.condition.JRE;
 
 import java.nio.ByteBuffer;
 import java.lang.reflect.Method;
@@ -42,7 +40,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /** Small isolated probes of active waits, with no spare carrier for compensation. */
-@EnabledForJreRange(min = JRE.JAVA_21)
 @Timeout(20)
 public class StreamingVirtualThreadWaitTests {
 	@Test
@@ -85,8 +82,7 @@ public class StreamingVirtualThreadWaitTests {
 	}
 
 	public static void main(String[] args) throws Exception {
-		ExecutorService producers = (ExecutorService) Executors.class
-				.getMethod("newVirtualThreadPerTaskExecutor").invoke(null);
+		ExecutorService producers = Executors.newVirtualThreadPerTaskExecutor();
 		ScheduledExecutorService timer = Executors.newSingleThreadScheduledExecutor();
 		StreamLifecycleCoordinator coordinator = new StreamLifecycleCoordinator(3, 1, Duration.ofSeconds(1),
 				failure -> { throw new AssertionError(failure); });

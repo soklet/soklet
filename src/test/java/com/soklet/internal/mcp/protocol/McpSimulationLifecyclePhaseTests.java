@@ -95,7 +95,7 @@ public class McpSimulationLifecyclePhaseTests {
 				interrupts.incrementAndGet();
 				Thread.currentThread().interrupt();
 			}
-			return McpWireResult.complete(McpJsonObject.empty());
+			return McpApplicationDispatchOutcome.completed(McpWireResult.complete(McpJsonObject.empty()));
 		});
 
 		try (runtime;
@@ -150,8 +150,8 @@ public class McpSimulationLifecyclePhaseTests {
 				interrupts.incrementAndGet();
 				Thread.currentThread().interrupt();
 			}
-			return McpWireResult.complete(new McpJsonObject(
-					Map.of("value", new McpJsonString("drained"))));
+			return McpApplicationDispatchOutcome.completed(McpWireResult.complete(new McpJsonObject(
+					Map.of("value", new McpJsonString("drained")))));
 		});
 
 		try (runtime;
@@ -219,7 +219,7 @@ public class McpSimulationLifecyclePhaseTests {
 				interrupted.countDown();
 				Thread.currentThread().interrupt();
 			}
-			return McpWireResult.complete(McpJsonObject.empty());
+			return McpApplicationDispatchOutcome.completed(McpWireResult.complete(McpJsonObject.empty()));
 		});
 
 		try (runtime;

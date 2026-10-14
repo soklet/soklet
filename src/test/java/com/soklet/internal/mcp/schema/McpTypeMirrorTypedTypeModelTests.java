@@ -193,7 +193,7 @@ class McpTypeMirrorTypedTypeModelTests {
 		JavaFileObject fixture = JavaFileObjects.forSourceString(
 				"fixtures.Fixture", source);
 		Compilation compilation = Compiler.javac()
-				.withOptions("--release", "17")
+				.withOptions("--release", "21")
 				.withProcessors(inspection)
 				.compile(fixture);
 		assertThat(compilation).succeeded();
@@ -287,7 +287,7 @@ class McpTypeMirrorTypedTypeModelTests {
 
 		@Override
 		public SourceVersion getSupportedSourceVersion() {
-			return SourceVersion.RELEASE_17;
+			return SourceVersion.RELEASE_21;
 		}
 
 		@Override

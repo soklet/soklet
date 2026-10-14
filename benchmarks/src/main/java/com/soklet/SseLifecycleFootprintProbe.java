@@ -64,8 +64,6 @@ public final class SseLifecycleFootprintProbe {
 
 	public static void main(String[] arguments) throws Exception {
 		Options options = Options.parse(arguments);
-		if (Runtime.version().feature() < 21)
-			throw new IllegalStateException("Real built-in SSE requires Java 21 or newer");
 		System.out.println("{\"type\":\"metadata\",\"java\":" + quote(System.getProperty("java.version"))
 				+ ",\"vendor\":" + quote(System.getProperty("java.vendor"))
 				+ ",\"os\":" + quote(System.getProperty("os.name"))

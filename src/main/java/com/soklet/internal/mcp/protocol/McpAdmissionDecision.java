@@ -504,7 +504,7 @@ interface McpRateLimiter {
 @FunctionalInterface
 interface McpApplicationRequestInterceptor {
 	@NonNull
-	McpWireResult intercept(@NonNull McpApplicationInvocation invocation,
+	McpApplicationDispatchOutcome intercept(@NonNull McpApplicationInvocation invocation,
 			@NonNull McpApplicationHandlerInvocation handlerInvocation) throws Exception;
 
 	@NonNull
@@ -520,5 +520,5 @@ interface McpApplicationRequestInterceptor {
 @FunctionalInterface
 interface McpApplicationHandlerInvocation {
 	@NonNull
-	McpWireResult invoke() throws Exception;
+	McpApplicationDispatchOutcome invoke() throws Exception;
 }

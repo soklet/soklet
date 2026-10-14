@@ -21,7 +21,6 @@ import com.soklet.annotation.SseEventSource;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
@@ -58,8 +57,6 @@ public class RealtimeTransportSoakTests {
 
 	@Test
 	public void concurrentSseChurnReturnsResourcesAndActiveStreamsToBaseline() throws Exception {
-		assumeVirtualThreadRuntime();
-
 		long startedAt = System.nanoTime();
 		MetricsCollector metricsCollector = MetricsCollector.defaultInstance();
 		int port = findFreePort();
@@ -143,11 +140,6 @@ public class RealtimeTransportSoakTests {
 
 			socket.setSoLinger(true, 0);
 		}
-	}
-
-	private static void assumeVirtualThreadRuntime() {
-		Assumptions.assumeTrue(Runtime.version().feature() >= 21,
-				"SSE realtime soak tests require a virtual-thread-capable runtime");
 	}
 
 	private static RunResult runConcurrent(int clients,

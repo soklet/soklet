@@ -75,7 +75,7 @@ class McpHttpServerObservationTerminalRaceTests {
 		RecordingObservation observation = new RecordingObservation();
 		AtomicReference<MicrohttpResponse> response = new AtomicReference<>();
 		McpHttpServerRuntime runtime = runtime(acceptingPolicy(),
-				invocation -> completeResult("pending-delivery"), observation,
+				invocation -> McpApplicationDispatchOutcome.completed(completeResult("pending-delivery")), observation,
 				McpApplicationClock.SYSTEM);
 		try {
 			InetSocketAddress address = runtime.start();
@@ -103,7 +103,7 @@ class McpHttpServerObservationTerminalRaceTests {
 		AtomicInteger releaseCountDuringCallback = new AtomicInteger(-1);
 		AtomicReference<Throwable> callbackFailure = new AtomicReference<>();
 		McpHttpServerRuntime runtime = runtime(acceptingPolicy(),
-				invocation -> completeResult("body-first"), observation,
+				invocation -> McpApplicationDispatchOutcome.completed(completeResult("body-first")), observation,
 				McpApplicationClock.SYSTEM);
 
 		try {
@@ -141,7 +141,7 @@ class McpHttpServerObservationTerminalRaceTests {
 		AtomicInteger releases = new AtomicInteger();
 		AtomicReference<MicrohttpResponse> response = new AtomicReference<>();
 		McpHttpServerRuntime runtime = runtime(acceptingPolicy(),
-				invocation -> completeResult("handler-first"), observation,
+				invocation -> McpApplicationDispatchOutcome.completed(completeResult("handler-first")), observation,
 				McpApplicationClock.SYSTEM);
 
 		try {
@@ -198,7 +198,7 @@ class McpHttpServerObservationTerminalRaceTests {
 			});
 			Assertions.assertTrue(invocation.sendNotification(
 					progress("reentrant-cancel")));
-			return completeResult("must-not-be-written");
+			return McpApplicationDispatchOutcome.completed(completeResult("must-not-be-written"));
 		}, observation, McpApplicationClock.SYSTEM);
 		runtimeReference.set(runtime);
 
@@ -255,7 +255,7 @@ class McpHttpServerObservationTerminalRaceTests {
 		McpHttpServerRuntime runtime = runtime(acceptingPolicy(), invocation -> {
 			Assertions.assertTrue(invocation.sendNotification(
 					progress("early-terminal-owner")));
-			return completeResult("early-terminal-owner");
+			return McpApplicationDispatchOutcome.completed(completeResult("early-terminal-owner"));
 		}, observation, McpApplicationClock.SYSTEM,
 				McpJsonLimits.productionDefaults(), ignored -> executor);
 
@@ -327,7 +327,7 @@ class McpHttpServerObservationTerminalRaceTests {
 							progress("terminal-cancel-race")));
 					handlerSentProgress.countDown();
 					releaseHandler.await();
-					return completeResult("terminal-wins");
+					return McpApplicationDispatchOutcome.completed(completeResult("terminal-wins"));
 				}, observation, clock);
 
 		try {
@@ -705,7 +705,7 @@ class McpHttpServerObservationTerminalRaceTests {
 		});
 		McpHttpServerRuntime runtime = runtime(policy, invocation -> {
 			handlerInvocations.incrementAndGet();
-			return completeResult("must-not-run");
+			return McpApplicationDispatchOutcome.completed(completeResult("must-not-run"));
 		}, observation, McpApplicationClock.SYSTEM);
 
 		try {
@@ -739,7 +739,7 @@ class McpHttpServerObservationTerminalRaceTests {
 		McpHttpServerRuntime runtime = runtime(acceptingPolicy(), invocation -> {
 			notificationAccepted.set(invocation.sendNotification(
 					progress("handoff-failure")));
-			return completeResult("must-not-be-delivered");
+			return McpApplicationDispatchOutcome.completed(completeResult("must-not-be-delivered"));
 		}, observation, McpApplicationClock.SYSTEM);
 
 		try {
@@ -783,10 +783,10 @@ class McpHttpServerObservationTerminalRaceTests {
 					detachedHandlerEntered.countDown();
 					Assertions.assertTrue(releaseHandler.await(10, TimeUnit.SECONDS),
 							"The detached legacy handler was not released.");
-					return McpWireResult.complete(new McpJsonObject(Map.of(
+					return McpApplicationDispatchOutcome.completed(McpWireResult.complete(new McpJsonObject(Map.of(
 							"content", new McpJsonArray(List.of(new McpJsonObject(Map.of(
 									"type", new McpJsonString("text"),
-									"text", new McpJsonString("must-not-be-delivered"))))))));
+									"text", new McpJsonString("must-not-be-delivered")))))))));
 				} finally {
 					handlerFinished.countDown();
 				}
@@ -858,7 +858,7 @@ class McpHttpServerObservationTerminalRaceTests {
 		RecordingObservation observation = new RecordingObservation();
 		AtomicReference<MicrohttpResponse> renderedResponse = new AtomicReference<>();
 		McpHttpServerRuntime runtime = runtime(acceptingPolicy(),
-				invocation -> completeResult("x".repeat(2_048)), observation,
+				invocation -> McpApplicationDispatchOutcome.completed(completeResult("x".repeat(2_048))), observation,
 				McpApplicationClock.SYSTEM, limitsWithOutputBytes(1_024));
 
 		try {

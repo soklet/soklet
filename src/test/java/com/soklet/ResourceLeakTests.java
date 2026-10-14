@@ -23,8 +23,6 @@ import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
-import org.junit.jupiter.api.condition.EnabledForJreRange;
-import org.junit.jupiter.api.condition.JRE;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.BufferedReader;
@@ -89,7 +87,6 @@ public class ResourceLeakTests {
 	}
 
 	@Test
-	@EnabledForJreRange(min = JRE.JAVA_21)
 	public void sseConnectionReturnsResourcesNearBaselineAfterShutdown() throws Exception {
 		ResourceSnapshot stoppedBaseline = ResourceSnapshot.captureAfterGc();
 		int port = findFreePort();

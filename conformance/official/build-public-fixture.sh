@@ -38,14 +38,14 @@ mkdir -p "$CLASSES_DIR" "$TEST_CLASSES_DIR"
 # contains SokletProcessor's service descriptor, so disable processor discovery
 # rather than letting javac execute an irrelevant processor and emit
 # JDK-dependent processing warnings under -Werror.
-javac --release 17 -proc:none -Xlint:all -Werror \
+javac --release 21 -proc:none -Xlint:all -Werror \
   -classpath "$CANDIDATE_JAR" \
   -d "$CLASSES_DIR" \
   "$SOURCE_ROOT/com/soklet/McpOfficialSchemaConformanceTool.java" \
   "$SOURCE_ROOT/com/soklet/conformance/McpConformanceFixture.java" \
   "$SOURCE_ROOT/com/soklet/conformance/transport/TransportCompositionFixture.java"
 
-javac --release 17 -proc:none -Xlint:all -Werror \
+javac --release 21 -proc:none -Xlint:all -Werror \
   -classpath "$CLASSES_DIR:$CANDIDATE_JAR" \
   -d "$TEST_CLASSES_DIR" \
   "$TEST_SOURCE_ROOT/com/soklet/conformance/McpConformanceFixtureContractTest.java" \
@@ -60,7 +60,7 @@ java -ea -classpath "$TEST_CLASSES_DIR:$CLASSES_DIR:$CANDIDATE_JAR" \
 java -ea -classpath "$TEST_CLASSES_DIR:$CLASSES_DIR:$CANDIDATE_JAR" \
   com.soklet.conformance.transport.TransportCompositionFixtureContractTest
 
-jdeps -q --multi-release 17 -verbose:class \
+jdeps -q --multi-release 21 -verbose:class \
   -classpath "$CANDIDATE_JAR" "$CLASSES_DIR" "$TEST_CLASSES_DIR" \
   > "$DEPENDENCIES_FILE"
 

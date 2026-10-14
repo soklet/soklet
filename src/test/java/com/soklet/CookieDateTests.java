@@ -72,4 +72,45 @@ class CookieDateTests {
 					.orElseThrow().getMaxAge().orElseThrow());
 		assertTrue(ResponseCookie.fromSetCookieHeaderRepresentation("a=b; Expires=invalid").orElseThrow().getMaxAge().isEmpty());
 	}
+
+	@Test
+	void cookieAttributesTrimTabsAndDoNotTreatStrayQuotesAsDelimiters() {
+		for (String header : List.of("a=;\tMax-Age=0; Path=/", "a=; Path=/;\tMax-Age=0",
+				"a=; HttpOnly;\tMax-Age=0", "a=; Foo=\"bar; Max-Age=0", "a=; Foo=bar\\; Max-Age=0",
+				"a=;\t Max-Age \t=\t 0\t ; Path=/", "a=;\u00a0\tMax-Age=0\t\u00a0; Path=/")) {
+			ResponseCookie cookie = ResponseCookie.fromSetCookieHeaderRepresentation(header).orElseThrow();
+			assertEquals(Duration.ZERO, cookie.getMaxAge().orElseThrow(), header);
+			assertTrue(cookie.toSetCookieHeaderRepresentation().contains("Max-Age=0"), header);
+		}
+		assertEquals(Duration.ofSeconds(60), ResponseCookie.fromSetCookieHeaderRepresentation(
+				"a=b; Max-Age=60\t; Path=/").orElseThrow().getMaxAge().orElseThrow());
+		ResponseCookie cookie = ResponseCookie.fromSetCookieHeaderRepresentation(
+				"a=;\tExpires=Thu, 01 Jan 1970 00:00:00 GMT\t; Path=/").orElseThrow();
+		assertEquals(Instant.EPOCH, cookie.getExpires().orElseThrow());
+		assertTrue(cookie.getMaxAge().isEmpty());
+	}
+
+	@Test
+	void invalidMaxAgeIsIgnoredWithoutDiscardingTheCookieOrItsExpiry() {
+		for (String age : List.of("", "-", "+60", "60seconds", "6 0", "5, c=d", "999999999999999999999x")) {
+			ResponseCookie cookie = ResponseCookie.fromSetCookieHeaderRepresentation(
+					"a=b; Max-Age=" + age + "; Expires=Thu, 01 Jan 70 00:00:00 GMT; Path=/; HttpOnly").orElseThrow();
+			assertEquals("a", cookie.getName());
+			assertEquals("b", cookie.getValue().orElseThrow());
+			assertTrue(cookie.getMaxAge().isEmpty(), age);
+			assertEquals(Instant.EPOCH, cookie.getExpires().orElseThrow(), age);
+			assertEquals("/", cookie.getPath().orElseThrow(), age);
+			assertTrue(cookie.getHttpOnly(), age);
+		}
+		assertEquals(Duration.ZERO, ResponseCookie.fromSetCookieHeaderRepresentation(
+				"a=; Max-Age=invalid; Max-Age=0").orElseThrow().getMaxAge().orElseThrow());
+	}
+
+	@Test
+	void veryLargeMaxAgesSaturateWithoutOverflow() {
+		assertEquals(Duration.ofSeconds(Long.MAX_VALUE), ResponseCookie.fromSetCookieHeaderRepresentation(
+				"a=b; Max-Age=999999999999999999999").orElseThrow().getMaxAge().orElseThrow());
+		assertEquals(Duration.ZERO, ResponseCookie.fromSetCookieHeaderRepresentation(
+				"a=; Max-Age=-999999999999999999999").orElseThrow().getMaxAge().orElseThrow());
+	}
 }

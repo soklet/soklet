@@ -7,7 +7,7 @@ The client uses explicit modern HTTP (`2026-07-28`) and isolated memory-only
 secret storage. No accounts, stored credentials, user configuration, installs,
 upstream patches, browser, or external server are involved.
 
-Use Node 26.5.0, JDK 17+, and the original dependency installation matching the
+Use Node 26.5.0, JDK 21+, and the original dependency installation matching the
 existing [Inspector package/lock review](../inspector/dependency-review.md).
 The runner checks the complete installed tree against its original reviewed
 identity; an auth-patched installation is deliberately rejected.
@@ -23,7 +23,7 @@ node verification/interoperability/skills/run.mjs \
 
 The work directory must be new and outside source directories. The candidate
 POM must match its embedded JAR copy. Compilation uses only the candidate JAR,
-`--release 17 -proc:none -Xlint:all -Werror`; `jdeps` rejects internal/missing
+`--release 21 -proc:none -Xlint:all -Werror`; `jdeps` rejects internal/missing
 dependencies. The listener and observer bind only IPv4 loopback on ephemeral
 ports. Each child has a timeout and output bound; all children are supervised
 and the example must report clean shutdown. Private per-run client state is

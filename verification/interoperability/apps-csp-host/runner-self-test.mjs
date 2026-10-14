@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {adjudicateHost, canaryNetworkMatches, completedHostChecks, fixtureControl, parseHostArguments,
   PROFILE, SUCCESS, ALLOWLIST_PROFILE, ALLOWLIST_SUCCESS, validateExperimentPins} from './run.mjs';
+import { sourceProfile, validateSourceExperimentPins } from './run.mjs';
 import {adjudicateCspEvidence, adjudicateAllowlistEvidence} from './browser-probe.mjs';
 import {adjudicateCanary, CANARY_FAILURES} from './canary.mjs';
 
@@ -342,4 +343,64 @@ test('late interruption, cleanup, input, browser, endpoint and transport failure
   for (const rejections of [null, {}, Array(1), [{}], [{code: 'APPS_AUTH_REQUIRED'}],
     [{path: 'OAUTH_REGISTRATION_ROOT', method: 'POST', code: 'APPS_POST_ONLY'}]])
     assert.equal(adjudicateHost(complete(), rejections), 'FAILED');
+});
+
+
+test('upstream source mode is explicit and keeps all required candidate and shell inputs', () => {
+  const args = ['--candidate-jar', 'a', '--candidate-pom', 'b', '--java', 'c', '--shell', 'd',
+    '--dependencies', 'e', '--browser', 'f', '--work-dir', 'g', '--inspector-build', 'source'];
+  assert.equal(parseHostArguments(args)['--inspector-build'], 'source');
+  assert.equal(parseHostArguments([...args, '--original-dependencies', 'legacy'])['--inspector-build'], 'source');
+  for (const invalid of [args.slice(0, -2), args.slice(2), [...args, '--inspector-build', 'duplicate'],
+    [...args.slice(0, -1), ''], [...args, '--profile'], [...args, '--unknown', 'value']])
+    assert.throws(() => parseHostArguments(invalid), /APPS_HOST_ARGUMENTS/);
+});
+
+test('unreleased upstream source receipts cannot claim patched or released host verification', () => {
+  const source = {...complete(), profile: sourceProfile(PROFILE),
+    hostMode: 'UNRELEASED_UPSTREAM_SOURCE_BUILD', sourceIdentityVerified: true,
+    patchIdentityVerified: false, upstreamBuildReceiptSha256: 'a'.repeat(64),
+    target: {name: '@modelcontextprotocol/inspector', version: '2.10.1',
+      commit: '1974465ccb5454a5110e609e4140171fa360a544', distribution: 'UNRELEASED_UPSTREAM_SOURCE_BUILD'}};
+  assert.equal(completedHostChecks(source), true);
+  assert.equal(adjudicateHost(source, []), SUCCESS);
+  for (const change of [{sourceIdentityVerified: false}, {sourceIdentityVerified: 'true'},
+    {patchIdentityVerified: true}, {patchIdentityVerified: undefined}, {hostMode: undefined},
+    {hostMode: 'RELEASED_PACKAGE'}, {profile: PROFILE}, {fullHostQualification: true},
+    {releaseCandidateEvidence: true}, {upstreamBuildReceiptSha256: undefined},
+    {upstreamBuildReceiptSha256: 'invalid'}])
+    assert.equal(adjudicateHost({...source, ...change}, []), 'FAILED');
+  for (const change of [{name: 'other'}, {version: '2.7.0'}, {commit: '0'.repeat(40)},
+    {distribution: 'RELEASED_PACKAGE'}])
+    assert.equal(adjudicateHost({...source, target: {...source.target, ...change}}, []), 'FAILED');
+  for (const change of [{sourceIdentityVerified: true}, {hostMode: 'RELEASED_PACKAGE'},
+    {profile: sourceProfile(PROFILE)}])
+    assert.equal(adjudicateHost({...complete(), ...change}, []), 'FAILED');
+  assert.equal(adjudicateHost({...source, inputsUnchanged: false}, []), 'FAILED');
+  assert.equal(adjudicateHost(source, [{code: 'APPS_AUTH_REQUIRED'}]), 'FAILED');
+});
+
+test('explicit source mode records a fresh candidate while retaining the exact shell identity', () => {
+  const candidate = {jarSha256: '96e5eb86c17cfae3cbd7867bbbdaf480ef22e8ae48dfbdc0b812371bfa0c6145'};
+  const shell = {sha256: '3229c8e0a9ee17dcbb2030040fac282b172715588c7b25963275529c0b650f60'};
+  assert.doesNotThrow(() => validateSourceExperimentPins(candidate, shell));
+  for (const bad of [undefined, null, {jarSha256: ''}, {jarSha256: 'A'.repeat(64)}, {jarSha256: 'a'.repeat(63)}])
+    assert.throws(() => validateSourceExperimentPins(bad, shell), /APPS_HOST_EXPERIMENT_PIN/);
+  for (const bad of [undefined, null, {sha256: '0'.repeat(64)}])
+    assert.throws(() => validateSourceExperimentPins(candidate, bad), /APPS_HOST_EXPERIMENT_PIN/);
+});
+
+test('upstream source allowlist mode still requires positive App contact and CSP negative controls', () => {
+  const source = {...completeAllowlist(), profile: sourceProfile(ALLOWLIST_PROFILE),
+    hostMode: 'UNRELEASED_UPSTREAM_SOURCE_BUILD', sourceIdentityVerified: true,
+    patchIdentityVerified: false, upstreamBuildReceiptSha256: 'a'.repeat(64),
+    target: {name: '@modelcontextprotocol/inspector', version: '2.10.1',
+      commit: '1974465ccb5454a5110e609e4140171fa360a544', distribution: 'UNRELEASED_UPSTREAM_SOURCE_BUILD'}};
+  assert.equal(adjudicateHost(source, []), ALLOWLIST_SUCCESS);
+  const missingContact = structuredClone(source);
+  missingContact.canary.phases.APP.connect = 0;
+  assert.equal(adjudicateHost(missingContact, []), 'FAILED');
+  const missingDenial = structuredClone(source);
+  missingDenial.csp.rows[4].matchingViolationCount = 0;
+  assert.equal(adjudicateHost(missingDenial, []), 'FAILED');
 });

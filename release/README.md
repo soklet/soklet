@@ -70,8 +70,11 @@ recorded separately in that document.
 The [September 22 streaming inventory checkpoint](https://github.com/soklet/soklet/blob/070e37ba40107ae68563cbb0a9f9cff7a9f5ce89/docs/streaming-api-milestone-6b.md)
 records the next current-only finite/privacy review, lifecycle harness
 reconciliation and source-version census. Its development checks do not change
-the release-gate universe or statuses, downstream commit pins, historical
-approvals, or the independent MCP API refreeze requirement.
+the release-gate universe or statuses, downstream commit pins, or historical
+approvals. The independent MCP API refreeze was still pending at that checkpoint;
+the [September 29 refreeze](../api/mcp/README.md#2026-09-29-current-mcp-g2-refreeze)
+supersedes that requirement. The current API snapshots must still pass the
+immutable candidate's API-freeze gate.
 
 The release-harness registry retains five executable evidence producers. Two
 are blocking imported release gates:
@@ -89,9 +92,13 @@ are blocking imported release gates:
   changelog entry describing the regression and a separate project-owner
   approval bound to that same reviewed draft.
 
-Release-scan artifact packaging now uses checksum-pinned Corretto 17, matching
+The current minimum runtime and compiler target is Java 21; supported runtime
+checks cover Java 21 and 25. Historical results and frozen planning records
+retain the Java versions under which they were originally approved or run.
+
+Release-scan artifact packaging now uses checksum-pinned Corretto 21, matching
 the canonical candidate build, while analysis explicitly uses checksum-pinned
-Corretto 21. The producer requires `Build-Jdk-Spec: 17` and verifies the main-JAR
+Corretto 21. The producer requires `Build-Jdk-Spec: 21` and verifies the main-JAR
 hash before and after analysis. This fixes reliance on ambient `JAVA_HOME`
 during candidate packaging: controlled local 17/21 builds produced different
 JAR bytes, including their `Build-Jdk-Spec` metadata. Local tests of this change
@@ -298,7 +305,7 @@ the unchanged 462 main and 196 test sources, with static-analysis clean compile
 successful, the focused terminal/subscription set at 32/32, clean smoke at 6/6
 plus its strict verifier and verifier self-test, and the cross-feature smoke
 method at 10/10 repeated stress runs. These are local snapshot results, not
-candidate PASS receipts. Current supported-JDK revalidation on local Amazon
+candidate PASS receipts. Historical Java 17 revalidation, before the Java 21 minimum migration, on local Amazon
 Corretto 17.0.20.1+10-LTS passes `mvn -B -ntp clean test` at 1,667/0/0/72
 over the same 462 main and 196 test sources. The two corrected methods pass
 2/2 once and 20/20 across ten combined repetitions. Both corrections are
@@ -306,8 +313,8 @@ test-only synchronization: live transport smoke waits for the complete idle
 snapshot, and observation containment waits for actual typed failure-log
 publication before exact inspection. The original exact counts and timeout
 assertions remain; production behavior, public API, and frozen inventories
-are unchanged. This local clean-test result does not replace the candidate's
-pinned JDK 17 `clean verify` gate. `release-scans` is now `READY`, but no scan
+are unchanged. This historical clean-test result does not replace the candidate's
+pinned JDK 21 `clean verify` gate. `release-scans` is now `READY`, but no scan
 PASS receipt exists until the exact candidate reports contain no unapproved
 findings.
 
@@ -337,7 +344,7 @@ public API, Phase 4/5/6 freeze inventory, timeout, or asserted count changed.
 This is local snapshot evidence, not an immutable release-candidate PASS
 receipt.
 
-Current JDK 17 application-execution revalidation on local Amazon Corretto
+Historical Java 17 application-execution revalidation, before the Java 21 minimum migration, on local Amazon Corretto
 17.0.20.1+10-LTS passes the exact `mvn -B -ntp clean test` at 1,667/0/0/72
 over the unchanged 462 main and 196 test sources. The affected method passes
 1/1 focused and 20/20 repeated runs, and the full
@@ -677,10 +684,10 @@ Once every gate is ready, the validator:
 2. verifies the checked-in manifest and exact Corretto, Maven, Node, npm, and
    Go toolchains, rejecting any `READY` gate whose named toolchain is absent or
    unpinned;
-3. performs one unsigned JDK 17 `clean verify` build and hashes the POM plus the
+3. performs one unsigned JDK 21 `clean verify` build and hashes the POM plus the
    main, sources, and Javadocs JARs; Javadoc alone uses the independently pinned
    Corretto 26 executable via `SOKLET_JAVADOC_HOME`, while compilation and
-   Maven remain on JDK 17. It then runs the separately configured
+   Maven remain on JDK 21. It then runs the separately configured
    supported-JDK gates against the same candidate tree;
 4. installs the already-built POM and main JAR with the pinned `install-file`
    goal into a fresh isolated Maven repository and byte-compares the result;
@@ -721,8 +728,12 @@ is supplied by eight independent Soklet candidate-artifact notification checks,
 not counted as an upstream pass. Release evidence must include the exact
 successful `taskNotificationSupplement` result; missing, false, reordered,
 duplicate, or extra checks fail closed. The final-tag schema golden-message
-count remains 48. This coverage does not resolve the external toolchain's open
-security-risk disposition or change its blocked gate status.
+count remains 48. The external toolchain's former security block was separately
+resolved by the accepted
+[September 27 dependency disposition](../conformance/official/DEPENDENCY_REPIN_DISPOSITION_2026-09-27.md).
+The gate is now `READY` under that exact dependency overlay and fresh-audit
+contract; this coverage is not a candidate PASS receipt or a waiver for changed
+dependency findings.
 
 Version 3 additionally requires the [selected legacy checks](../conformance/official/legacy/README.md)
 and their HTTP runtime supplement under `legacy/evidence.json` in the same
@@ -740,7 +751,7 @@ basename. Duplicate, missing, extra, substituted, or misnamed artifacts fail
 closed. Promotion independently revalidates that complete receipt structure;
 it does not trust a generic list of nonempty paths.
 
-The JDK 17 candidate build and every supported-JDK gate retain verified
+The JDK 21 candidate build and every supported-JDK gate retain verified
 Surefire reports; the JDK-specific gates also bind their checksum-verified
 distribution receipts. The candidate-Javadoc gate runs the exact
 `McpPublicJavadocTests` inventory contract and retains its Surefire reports,
@@ -760,15 +771,15 @@ The soak module compiles source at the candidate commit, as documented in
 `soak/README.md`; it does not claim to consume the candidate JAR. Artifact-based
 gates use the checksum-matched JAR or the isolated Maven repository.
 
-The candidate build uses the exact Corretto 17 compiler and Maven runtime.
+The candidate build uses the exact Corretto 21 compiler and Maven runtime.
 The workflow independently installs the pinned Corretto 26 Javadoc generator,
 exports only `SOKLET_JAVADOC_HOME` for it, and retains its checksum-bound
 distribution receipt alongside the compiler receipt. The validator verifies
 every full vendor build, runtime version, and compiler or Javadoc executable
 version plus the default Maven runtime before any build. Corretto 21
-is selected only for `core-jdk-21`, `static-analysis`, and `spotbugs`.
+is used for candidate packaging, `core-jdk-21`, `static-analysis`, and `spotbugs`.
 Corretto 25 is selected only for `core-jdk-25`, `fuzz-replay`, `soak-smoke`,
-and ToyStore; the other Java gates use Corretto 17 for execution, with
+and ToyStore; the other Java gates use Corretto 21 for execution, with
 documentation generation consistently delegated to Corretto 26.
 ToyStore and `soklet-otel` intentionally
 have no default compatibility leg: both migrated sources target the new 4.0

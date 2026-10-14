@@ -188,10 +188,10 @@ export async function run({ candidateJar, candidatePom, java, dependencies, work
     receipt.stage = 'COMPILE';
     const classes = resolve(work, 'classes');
     mkdirSync(classes);
-    const compile = await command(resolve(dirname(jvm), 'javac'), ['--release', '17', '-proc:none', '-Xlint:all', '-Werror',
+    const compile = await command(resolve(dirname(jvm), 'javac'), ['--release', '21', '-proc:none', '-Xlint:all', '-Werror',
       '-cp', jar, '-d', classes, resolve(example, 'src/com/soklet/examples/skills/SkillsExample.java')], 60000);
     assert.equal(compile.stderr, '');
-    const audit = await command(resolve(dirname(jvm), 'jdeps'), ['--multi-release', '17', '-verbose:class', '-filter:none',
+    const audit = await command(resolve(dirname(jvm), 'jdeps'), ['--multi-release', '21', '-verbose:class', '-filter:none',
       '-cp', jar, classes]);
     assert.doesNotMatch(audit.stdout, /com\.soklet\.internal\.|not found/);
     receipt.publicApiOnly = true;

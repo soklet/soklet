@@ -6,7 +6,7 @@ against that listener using an isolated client home and static synthetic bearer
 credentials. It does not modify Inspector, use saved user authentication, or
 contact an external service.
 
-Use Node 26.5.0, JDK 17+, and the original pinned dependency installation from
+Use Node 26.5.0, JDK 21+, and the original pinned dependency installation from
 [`../inspector/dependency-review.md`](../inspector/dependency-review.md). The
 candidate POM must match the copy embedded in its JAR. The work directory must
 be new and outside the source tree.

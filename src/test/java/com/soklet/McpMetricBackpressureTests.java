@@ -87,7 +87,6 @@ public class McpMetricBackpressureTests {
 
 	@Test
 	public void blockedProgressReportersLeaveVirtualThreadCarriersAvailable() throws Exception {
-		org.junit.jupiter.api.Assumptions.assumeTrue(Runtime.version().feature() >= 21);
 		Path output = Files.createTempFile("soklet-mcp-progress-carriers-", ".log");
 		try {
 			Process process = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin", "java").toString(),
@@ -106,7 +105,7 @@ public class McpMetricBackpressureTests {
 	}
 
 	public static void main(String[] args) throws Exception {
-		ExecutorService executor = (ExecutorService) Executors.class.getMethod("newVirtualThreadPerTaskExecutor").invoke(null);
+		ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 		List<McpOutboundChannel> channels = new ArrayList<>();
 		CountDownLatch blocked = new CountDownLatch(2);
 		DefaultMcpServer server = server(new RecordingCollector());
@@ -592,6 +591,14 @@ public class McpMetricBackpressureTests {
 
 	private static Object invoke(Object target, String method, Class<?> parameterType,
 			Object argument) throws Exception {
+		if (method.equals("recordAndDrain")) {
+			Class<?> sequenceType = java.util.Arrays.stream(DefaultMcpServer.class.getDeclaredClasses())
+					.filter(candidate -> candidate.getSimpleName().equals("RequestMetricSequence"))
+					.findFirst().orElseThrow();
+			Method reflected = target.getClass().getDeclaredMethod(method, parameterType, sequenceType);
+			reflected.setAccessible(true);
+			return reflected.invoke(target, argument, null);
+		}
 		Method reflected = target.getClass().getDeclaredMethod(method, parameterType);
 		reflected.setAccessible(true);
 		return reflected.invoke(target, argument);

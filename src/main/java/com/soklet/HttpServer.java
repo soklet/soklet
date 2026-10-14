@@ -373,8 +373,7 @@ public interface HttpServer {
 		/**
 		 * Sets the maximum number of application request handlers that may execute
 		 * concurrently. Passing {@code null} restores the transport-derived default:
-		 * the effective event-loop concurrency when virtual threads are unavailable,
-		 * or 16 times it when they are available, with a minimum of one.
+		 * 16 times the effective event-loop concurrency, with a minimum of one.
 		 *
 		 * @param requestHandlerConcurrency request-handler concurrency, or
 		 * {@code null} for the default
@@ -594,11 +593,8 @@ public interface HttpServer {
 		 * supplied executor and calls {@link ExecutorService#shutdown()} during
 		 * graceful shutdown or {@link ExecutorService#shutdownNow()} during forced
 		 * shutdown, which may interrupt its tasks. Passing {@code null} restores a
-		 * framework-managed executor. With virtual threads, each admitted streaming
+		 * framework-managed virtual-thread-per-task executor. Each admitted streaming
 		 * producer gets its own thread, bounded by streaming lifecycle admission.
-		 * Otherwise, the fixed platform pool has four times the effective event-loop
-		 * concurrency, with a minimum of one, and no pending task queue. An unavailable
-		 * platform worker rejects admission before streaming headers are committed.
 		 * <p>
 		 * The executor must dispatch tasks asynchronously and reject unavailable work
 		 * with {@link java.util.concurrent.RejectedExecutionException}. Running a task

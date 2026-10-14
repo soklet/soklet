@@ -21,7 +21,7 @@ publication, downstream publication, or deployment was performed while this
 document was written.
 
 The accepted build recipe keeps Maven and compilation on the pinned Corretto
-17 toolchain, while Javadoc alone uses the separately pinned Corretto 26
+21 toolchain, while Javadoc alone uses the separately pinned Corretto 26
 toolchain from `toolchains.javadocJava` through `SOKLET_JAVADOC_HOME`.
 Changing that generator changes candidate artifact provenance and requires
 fresh acceptance; it is not a publication-time regeneration step.
@@ -287,7 +287,7 @@ before continuing its dependent release steps.
 After core and the three libraries resolve publicly:
 
 1. At the exact `barebones-app` pin, require the vendored
-   `soklet-4.0.0.jar` SHA-256 to equal public Central, compile with Java 17 and
+   `soklet-4.0.0.jar` SHA-256 to equal public Central, compile with Java 21 and
    `-parameters`/`SokletProcessor`, start on loopback, probe its documented
    route, request graceful shutdown, and prove port release. Create and verify
    signed tag `soklet-4.0.0`, then publish its GitHub release.
@@ -380,7 +380,7 @@ its local dependency cache:
 - download core main/sources/Javadoc/POM/signatures/checksums through the public
   Central path and GitHub release, comparing exact bytes;
 - copy the [MCP quickstart](../MCP_QUICKSTART.md) into a new minimal Maven
-  project, compile with Java 17, start it, run raw discovery plus Inspector
+  project, compile with Java 21, start it, run raw discovery plus Inspector
   2.3.0 `tools/list` and `tools/call`, shut down, and prove port release;
 - compile/run the README raw-`javac` HTTP example with only the public core JAR;
 - run the barebones and ToyStore documented public-dependency smoke;

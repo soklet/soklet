@@ -145,7 +145,7 @@ public class McpGeneratedEndpointProviderLoaderTests {
 			Iterable<? extends javax.tools.JavaFileObject> sources =
 					fileManager.getJavaFileObjects(sourceFile.toFile());
 			List<String> options = List.of(
-					"--release", "17",
+					"--release", "21",
 					"-proc:none",
 					"-classpath", System.getProperty("java.class.path"),
 					"-d", compiledFixtureDirectory.toString());

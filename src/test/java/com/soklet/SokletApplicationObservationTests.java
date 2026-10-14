@@ -22,8 +22,6 @@ import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
-import org.junit.jupiter.api.condition.EnabledForJreRange;
-import org.junit.jupiter.api.condition.JRE;
 
 import java.io.InputStream;
 import java.net.HttpURLConnection;
@@ -197,7 +195,6 @@ final class SokletApplicationObservationTests {
 
 	@Test
 	@Timeout(value = 120, unit = TimeUnit.SECONDS)
-	@EnabledForJreRange(min = JRE.JAVA_21)
 	void realStandaloneMixedTransportLifecyclePreservesOrderAndSealsSnapshot()
 			throws Exception {
 		List<String> transitions = new CopyOnWriteArrayList<>();

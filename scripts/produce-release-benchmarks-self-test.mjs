@@ -52,7 +52,7 @@ function entry(benchmark, score, artifact = '3.5.1', forks = 1) {
   return {
     benchmark,
     forks,
-    jdkVersion: '17.0.20',
+    jdkVersion: '21.0.12.1',
     jmhVersion: '1.37',
     jvmArgs: [...configuration.candidateJvm],
     measurementIterations: configuration.measurement.iterations,
@@ -103,7 +103,7 @@ for (const [label, mutate] of [
   ['duplicate benchmark', (value) => { value[1].benchmark = JSON_BENCHMARKS[0]; }],
   ['artifact drift', (value) => { value[0].params.artifact = '4.0.0'; }],
   ['JMH drift', (value) => { value[0].jmhVersion = '1.36'; }],
-  ['JDK drift', (value) => { value[0].jdkVersion = '17.0.19'; }],
+  ['JDK drift', (value) => { value[0].jdkVersion = '21.0.11'; }],
   ['JVM drift', (value) => { value[0].jvmArgs = ['-Xmx2g']; }],
   ['fork drift', (value) => { value[0].forks = 5; }],
   ['warmup drift', (value) => { value[0].warmupIterations = 9; }],

@@ -71,8 +71,10 @@ export function validResult(method, result, surface = 'cli') {
 // Deliberately project booleans/enums/counts, not raw IDs, metadata, arguments,
 // headers, response bodies, or hashes of potentially sensitive body bytes.
 export function projectExchange({ request, response, headers, status, responseHeaders,
-  requestBytes, responseBytes, authorized, enabled, sequence, surface = 'cli' }) {
+  requestBytes, responseBytes, authorized, enabled, sequence, surface = 'cli', cliProfile = 'historical' }) {
   if (surface !== 'cli' && surface !== 'web') throw new Error('INVALID_TRACE_SURFACE');
+  if (!['historical', 'apps-toggle-skills-enabled'].includes(cliProfile)
+      || (surface === 'web' && cliProfile !== 'historical')) throw new Error('INVALID_CLI_PROFILE');
   const methods = surface === 'web' ? WEB_METHODS : METHODS;
   const method = methods.has(request?.method) ? request.method : 'UNSUPPORTED';
   const metadata = request?.params?._meta;
@@ -85,12 +87,15 @@ export function projectExchange({ request, response, headers, status, responseHe
     : JSON.stringify(extensions[UI]) === JSON.stringify({ mimeTypes: ['text/html;profile=mcp-app'] }));
   const skillsShape = skills && object(extensions[SKILLS])
     && Object.keys(extensions[SKILLS]).length === 0;
-  const extensionSelectionMatches = enabled
-    ? uiShape && skillsShape : !ui && !skills;
+  const extensionSelectionMatches = cliProfile === 'apps-toggle-skills-enabled'
+    ? (enabled ? uiShape : !ui) && skillsShape
+    : enabled ? uiShape && skillsShape : !ui && !skills;
   const row = {
     ...(surface === 'web' ? { surface: 'web' } : {}),
     sequence,
-    requestedExtensions: enabled ? 'ENABLED' : 'DISABLED',
+    requestedExtensions: cliProfile === 'apps-toggle-skills-enabled'
+      ? (enabled ? 'APPS_ENABLED_SKILLS_ENABLED' : 'APPS_DISABLED_SKILLS_ENABLED')
+      : enabled ? 'ENABLED' : 'DISABLED',
     method,
     authorized,
     requestEnvelopeValid: request?.jsonrpc === '2.0' && object(request.params)
@@ -121,7 +126,11 @@ export function projectExchange({ request, response, headers, status, responseHe
   return row;
 }
 
-export function adjudicateTrace(rows, enabled, operation) {
+export function adjudicateTrace(rows, enabled, operation, cliProfile = 'historical') {
+  if (!['historical', 'apps-toggle-skills-enabled'].includes(cliProfile)) return 'FAILED';
+  const requested = cliProfile === 'apps-toggle-skills-enabled'
+    ? (enabled ? 'APPS_ENABLED_SKILLS_ENABLED' : 'APPS_DISABLED_SKILLS_ENABLED')
+    : enabled ? 'ENABLED' : 'DISABLED';
   // Exact unmodified 2.7.0 CLI acquisition observed against the candidate:
   // managed tools perform their initial listing and the CLI refreshes again.
   const expectedMethods = operation === 'tools/list' ? ['server/discover', 'tools/list', 'tools/list']
@@ -134,8 +143,11 @@ export function adjudicateTrace(rows, enabled, operation) {
     'resultMatchesFixture'];
   if (rows.some((row, index) => row.sequence !== index + 1 || !METHODS.has(row.method)
       || row.responseStatus !== 200 || required.some(key => row[key] !== true)
-      || row.requestedExtensions !== (enabled ? 'ENABLED' : 'DISABLED'))) return 'FAILED';
-  if (rows.every(row => row.extensionSelectionMatches)) return 'PASSED';
+      || row.requestedExtensions !== requested)) return 'FAILED';
+  if (rows.every(row => row.extensionSelectionMatches
+      && (cliProfile === 'historical' || (row.appsAdvertised === enabled
+        && row.appsMimeMatches === enabled && row.skillsAdvertised && row.skillsShapeMatches)))) return 'PASSED';
+  if (cliProfile !== 'historical') return 'FAILED';
   // An observed host limitation stays a non-passing row, not an accepted skip.
   if (!enabled && rows.every(row => row.appsAdvertised && row.appsMimeMatches
       && row.skillsAdvertised && row.skillsShapeMatches)) return 'BLOCKED_HOST_EXTENSION_TOGGLE';
@@ -183,11 +195,13 @@ function collectBody(stream) {
   });
 }
 
-export async function startProxy({ fixturePort, token, enabled, surface = 'cli' }) {
+export async function startProxy({ fixturePort, token, enabled, surface = 'cli', cliProfile = 'historical' }) {
   if (!Number.isInteger(fixturePort) || fixturePort < 1 || fixturePort > 65535
       || !/^[a-f0-9]{64}$/.test(token) || typeof enabled !== 'boolean'
       || (surface !== 'cli' && surface !== 'web'))
     throw new Error('INVALID_PROXY_CONFIGURATION');
+  if (!['historical', 'apps-toggle-skills-enabled'].includes(cliProfile)
+      || (surface === 'web' && cliProfile !== 'historical')) throw new Error('INVALID_CLI_PROFILE');
   const methods = surface === 'web' ? WEB_METHODS : METHODS;
   const rows = [];
   const sockets = new Set();
@@ -221,7 +235,7 @@ export async function startProxy({ fixturePort, token, enabled, surface = 'cli' 
           rows.push(projectExchange({ request, response: value,
             headers: incoming.headers, status: response.statusCode,
             responseHeaders: response.headers, requestBytes: body.length,
-            responseBytes: bytes.length, authorized, enabled, sequence: rows.length + 1, surface }));
+            responseBytes: bytes.length, authorized, enabled, sequence: rows.length + 1, surface, cliProfile }));
           outgoing.writeHead(response.statusCode, response.headers);
           outgoing.end(bytes);
         } catch {

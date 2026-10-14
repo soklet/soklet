@@ -87,9 +87,6 @@ public class McpTransportContainmentSpikeTests {
 		List<DynamicTest> tests = new ArrayList<>();
 
 		for (McpThreadStrategy strategy : McpThreadStrategy.values()) {
-			if (!strategy.supported())
-				continue;
-
 			for (NamedScenario scenario : scenarios) {
 				tests.add(DynamicTest.dynamicTest(
 						strategy.name().toLowerCase(Locale.ROOT) + ": " + scenario.name(),
@@ -1207,7 +1204,7 @@ public class McpTransportContainmentSpikeTests {
 						"residual slot was not backed by the still-running handler worker");
 				Assertions.assertTrue(retainedThread.getName().startsWith("soklet-mcp-handler-"),
 						"handler escaped the MCP-owned executor: " + retainedThread.getName());
-				Assertions.assertEquals(strategy == McpThreadStrategy.VIRTUAL, isVirtual(retainedThread),
+				Assertions.assertEquals(strategy == McpThreadStrategy.VIRTUAL, retainedThread.isVirtual(),
 						"handler worker did not match the configured thread strategy");
 
 				try (RawHttpClient queued = RawHttpClient.post(
@@ -1375,16 +1372,6 @@ public class McpTransportContainmentSpikeTests {
 		Assertions.assertTrue(configuration.requestDeadline().toNanos() > 0L);
 		Assertions.assertTrue(configuration.responseWriteIdleTimeout().toNanos() > 0L);
 		Assertions.assertTrue(configuration.keepAliveInterval().toNanos() > 0L);
-	}
-
-	private static boolean isVirtual(Thread thread) {
-		try {
-			return (boolean) Thread.class.getMethod("isVirtual").invoke(thread);
-		} catch (NoSuchMethodException exception) {
-			return false;
-		} catch (ReflectiveOperationException exception) {
-			throw new AssertionError("Unable to inspect handler thread strategy", exception);
-		}
 	}
 
 	private static McpTransportConfiguration configuration(McpThreadStrategy strategy,

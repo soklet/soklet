@@ -485,7 +485,7 @@ try {
   assert.equal(tracked.candidate.version, '4.0.0');
   assert.equal(tracked.value.formatVersion, 2);
   assert.equal(tracked.gates.length, 25);
-  assert.equal(tracked.toolchains.java.vendorVersion, 'Corretto-17.0.20.8.1');
+  assert.equal(tracked.toolchains.java.vendorVersion, 'Corretto-21.0.12.9.1');
   assert.deepEqual(tracked.toolchains.javadocJava, {
     archive: 'amazon-corretto-26.0.2.11.1-linux-x64.tar.gz',
     archiveSha256: 'f61206891b8e1009b117eefe38784cf31b0a5cdb02fd2e023556f436b85dedaa',
@@ -729,7 +729,7 @@ try {
     /github-token: \$\{\{ github\.token \}\}/,
   );
   const benchmarkDraftProvenanceStep = benchmarkFinalizerJob[1].match(
-    /      - name: Verify successful exact-candidate benchmark draft\n([\s\S]*?)\n\n      - name: Install checksum-pinned Corretto 17/,
+    /      - name: Verify successful exact-candidate benchmark draft\n([\s\S]*?)\n\n      - name: Install checksum-pinned Corretto 21/,
   );
   assert.notEqual(benchmarkDraftProvenanceStep, null);
   assert.match(
@@ -1835,10 +1835,10 @@ run_barebones
   );
   assertRejectsManifestMutation(
     (manifest) => {
-      manifest.toolchains.java.version = '17.0.20.1';
-      manifest.toolchains.java.runtimeVersion = '17.0.20.1+8-LTS';
+      manifest.toolchains.java.version = '21.0.12.2';
+      manifest.toolchains.java.runtimeVersion = '21.0.12.2+9-LTS';
     },
-    /Candidate Java toolchain must pin an exact Corretto 17 build/,
+    /Candidate Java toolchain must pin an exact Corretto 21 build/,
   );
   writeFileSync(fixtureManifestPath, `${JSON.stringify(readyManifest, null, 2)}\n`);
 
@@ -2010,7 +2010,7 @@ run_barebones
     SOKLET_EVIDENCE_CORE_JDK_21_VERSION: '21.0.12.1',
     SOKLET_EVIDENCE_GIT_VERSION: 'git version 2.50.1',
     SOKLET_EVIDENCE_GO_VERSION: 'go version go1.25.12 linux/amd64',
-    SOKLET_EVIDENCE_JAVA_VERSION: '17.0.20',
+    SOKLET_EVIDENCE_JAVA_VERSION: '21.0.12.1',
     SOKLET_EVIDENCE_JAVADOC_JAVA_VERSION: '26.0.2.1',
     SOKLET_EVIDENCE_MAVEN_VERSION: '3.9.16',
     SOKLET_EVIDENCE_NODE_VERSION: '26.5.0',
@@ -2820,7 +2820,7 @@ run_barebones
     .every(({ interoperability }) =>
       interoperability.candidateSha256 === descriptor.artifacts.mainJar.sha256));
   assert.equal(evidence.toolchains.coreJdk21, '21.0.12.1');
-  assert.equal(evidence.toolchains.java, '17.0.20');
+  assert.equal(evidence.toolchains.java, '21.0.12.1');
   assert.equal(evidence.toolchains.javadocJava, '26.0.2.1');
   assert.equal(evidence.toolchains.toystoreJava, '25.0.4');
 

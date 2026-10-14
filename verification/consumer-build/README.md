@@ -26,10 +26,8 @@ for macOS/Linux classpath recipes and runs Maven with `-o` and Gradle with
 Gradle resolves the candidate directly from that file-based Maven repository,
 even with a fresh `GRADLE_USER_HOME` for each run.
 
-The driver detects the selected Java runtime, copies common sources from
-`src/main/java`, and adds `src/sse/java` to the prepared fixture's ordinary main
-source root only on Java 21+. Java 17 packages HTTP/MCP routes only: packaging an
-SSE route would require an SSE server, whose live runtime requires Java 21+.
+The driver requires Java 21 or later and copies the HTTP, MCP, and SSE sources
+from `src/main/java` into the prepared fixture's ordinary main source root.
 This same prepared source tree is used for Maven, Gradle, and direct javac; no
 reflective `fromClasses` resolver substitutes for generated-index discovery.
 
@@ -42,7 +40,7 @@ Then run:
 java -cp /absolute/consumer-build-1.0.0.jar:/absolute/soklet-4.0.0.jar example.ConsumerSmoke
 ```
 
-Repeat using Java 17, 21, and 25. Gradle 9.1.0 supports all three runtimes;
+Repeat using Java 21 and 25. Gradle 9.1.0 supports both runtimes;
 its official binary distribution SHA-256 is
 `a17ddd85a26b6a7f5ddb71ff8b05fc5104c0202c6e64782429790c933686c806`.
 See the [Gradle compatibility matrix](https://docs.gradle.org/current/userguide/compatibility.html).
@@ -51,7 +49,7 @@ Use checksum-verified tool distributions, not an unpinned wrapper download.
 The smoke checks both generated indexes and uses the default framework resolver
 to execute HTTP, MCP discovery,
 typed tool binding, required/optional prompt binding, managed HTTP streaming
-with a checked source factory and neutral callback registration, and (on Java 21+)
+with a checked source factory and neutral callback registration, and
 SSE initialization through real loopback listeners. It requires exact
 streamed bodies, once-only HTTP source cleanup, an SSE event delivered after
 initializer setup, and complete SSE shutdown. It exercises ordinary classpath packaging with
@@ -75,14 +73,13 @@ a separate output directory and proves missing-metadata startup failure through
 the framework, without requiring the intentionally absent MCP descriptor index.
 A compile-only success never establishes working routing.
 
-`result.json` records the Java feature version, selected `HTTP_MCP` or
-`HTTP_MCP_SSE` source variant, candidate and consumer JAR identities, positive
-runtime output, and each negative control's log. Mutated JAR controls also
+`result.json` records the Java feature version, `HTTP_MCP_SSE` source variant,
+candidate and consumer JAR identities, positive runtime output, and each negative control's log. Mutated JAR controls also
 record the preserved MCP-index digest and unchanged-entry count. Commands are
 bounded to 180 seconds and 16 MiB of captured output; mutation inputs are bounded
 to 64 MiB compressed/expanded, 16 MiB per entry, and 1,024 entries.
 
-Run the fixture's own 24-case contract tests with a JDK 17+ on `JAVA_HOME` or
+Run the fixture's own 25-case contract tests with a JDK 21+ on `JAVA_HOME` or
 `PATH`:
 
 ```sh

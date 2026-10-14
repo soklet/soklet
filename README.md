@@ -14,7 +14,7 @@
 
 A small [HTTP/1.1 server](https://github.com/ebarlas/microhttp) and route handler for Java, well-suited for building RESTful APIs, broadcasting [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events), and exposing dedicated [Model Context Protocol](https://modelcontextprotocol.io/) servers.<br/><br/>
 Zero dependencies. Dependency Injection friendly.<br/>
-Optionally powered by [JEP 444: Virtual Threads](https://openjdk.org/jeps/444).
+Powered by [JEP 444: Virtual Threads](https://openjdk.org/jeps/444).
 
 Soklet codes like a library, not a framework.
 
@@ -71,7 +71,7 @@ Redistributed-source attributions are retained in [`NOTICE`](NOTICE); the
 
 Soklet is a single JAR, available on Maven Central.
 
-JDK 17+ is required (or JDK 21+ for [Server-Sent Events](https://www.soklet.com/docs/server-sent-events)).
+JDK 21+ is required for Soklet and its Servlet and OpenTelemetry adapters.
 
 Upgrading from 3.5.1? Read the [4.0.0 migration guide](MIGRATING_TO_4_0.md).
 Building an MCP server? Start with the copy/paste [MCP quickstart](MCP_QUICKSTART.md).
@@ -195,7 +195,7 @@ shutdown skips it.
 
 Here we use raw `javac` to build and `java` to run.
 
-This example requires JDK 17+ to be installed on your machine ([or see this example of using Docker for Soklet apps](https://github.com/soklet/barebones-app?tab=readme-ov-file#building-and-running-with-docker)). If you need a JDK, Amazon provides [Corretto](https://aws.amazon.com/corretto/) - a free-to-use-commercially, production-ready distribution of [OpenJDK](https://openjdk.org/) that includes long-term support.
+This example requires JDK 21+ to be installed on your machine ([or see this example of using Docker for Soklet apps](https://github.com/soklet/barebones-app?tab=readme-ov-file#building-and-running-with-docker)). If you need a JDK, Amazon provides [Corretto](https://aws.amazon.com/corretto/) - a free-to-use-commercially, production-ready distribution of [OpenJDK](https://openjdk.org/) that includes long-term support.
 
 ##### Build
 
@@ -629,32 +629,26 @@ public MarshaledResponse exampleImage() {
 
 [`MarshaledResponse`](https://javadoc.soklet.com/com/soklet/MarshaledResponse.html) supports known-length byte-array, file, file-channel, and [`ByteBuffer`](https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/nio/ByteBuffer.html) bodies. The standard HTTP server can write file-backed responses without first loading the whole file into heap memory. If you already selected a trusted file and want file-response semantics like validators and byte ranges, use [`MarshaledResponse::withFile`](<https://javadoc.soklet.com/com/soklet/MarshaledResponse.html#withFile(java.nio.file.Path,com.soklet.Request)>); its builder can set `Content-Type`, `Content-Encoding`, cache headers, validators, and range behavior. For safe static roots, use [`StaticFiles`](https://javadoc.soklet.com/com/soklet/StaticFiles.html) instead of hand-rolled path joins; it handles root containment, validators, optional content-hash ETags, access policy, single byte ranges, MIME defaults, and `GET`/`HEAD` behavior.
 
-`StaticFiles` defaults to no-follow delivery through a pinned root directory.
-It opens each path component relative to an open directory descriptor and checks
-the identity of the opened file before delivery. Both symlink policies support
-the default OpenJDK filesystem providers on Linux and macOS, on x86-64 and
-AArch64, including macOS Java 17 and 21 where `SecureDirectoryStream` is absent.
-This adds no external dependency. Ordinary classpath installations need no JVM
-flags; custom or modular runtimes must make `jdk.unsupported` available and
-resolved and permit the JDK bridge's access. Unsupported providers, platforms,
-architectures, inaccessible or changed JDK internals, SecurityManager-enabled
-runtimes, and missing stable file identities fail closed at construction.
+`StaticFiles` requires `.trustedImmutableRoot(true)` before `build()`. This is an
+explicit deployment contract: only the application operator may control the
+root, its ancestors, links, and files, and they must remain unchanged while the
+helper or any of its responses are in use. Construction fails without that
+setting. Upload directories and attacker-writable trees are unsupported.
 
-Replace the `StaticFiles` instance when deploying a new root. Keep the root
-limited to publishable assets: readable files inside it are allowed by default.
-`followSymlinks(true)` permits links that resolve inside the root, then opens the
-resolved target through the pinned root; a later replacement link is not followed
-during delivery. `MarshaledResponse.withFile(Path, Request)` assumes the caller
-owns and controls the selected path until delivery completes.
-Both modes also need read and traverse permissions on each directory
-inside the root; a traverse-only directory is treated as unresolved.
-Keep roots immutable while a response is in flight when using custom resolvers
-that read a path or base access policy on file contents or mutable attributes.
-Those callbacks run before delivery and cannot atomically bind their own path
-reads to the later response body.
-Do not rewrite files in place while serving them: Java's portable file-channel API
-does not provide a snapshot of changing file contents, so a concurrent write can
-make body bytes differ from response validators or range metadata.
+Delivery uses public NIO APIs, preferring `SecureDirectoryStream` where available
+and checked pathname access otherwise, including macOS Java 21 and Windows.
+There is no architecture allowlist, private JDK access, `jdk.unsupported`
+dependency, or retained directory descriptor. Providers must expose stable file
+identities and support no-follow file opens. Observed path, identity, size, or
+modification-time changes fail closed; these checks cannot make a mutable tree
+safe. Public Java APIs cannot inspect an opened regular file's identity.
+
+Create a new helper for a new immutable deployment tree after prior responses
+finish. Limit the root to publishable assets: readable files inside it are
+allowed by default. Symlinks are rejected by default; `followSymlinks(true)`
+permits immutable links whose targets remain inside the resolved root.
+`MarshaledResponse.withFile(Path, Request)` remains a lower-level API whose
+caller owns the selected path and its safety until delivery completes.
 
 ##### Response Compression
 
@@ -1515,7 +1509,7 @@ Request Wrapping: wraps around the whole "outside" of an entire [`Request`](http
 Request wrapping runs before Soklet resolves which [`ResourceMethod`](https://javadoc.soklet.com/com/soklet/ResourceMethod.html) should handle the request. If you want to rewrite the HTTP method or path, return a modified [`Request`](https://javadoc.soklet.com/com/soklet/Request.html) via the consumer and Soklet will route using the wrapped request. You must call `requestProcessor.accept(...)` exactly once before returning; otherwise Soklet logs an error and returns a 500 response.
 
 ```java
-// Java 17-compatible request-local storage.
+// Request-local storage, bound and restored by the interceptor.
 public static final ThreadLocal<Locale> CURRENT_LOCALE = new ThreadLocal<>();
 
 SokletConfig config = SokletConfig.withHttpServer(

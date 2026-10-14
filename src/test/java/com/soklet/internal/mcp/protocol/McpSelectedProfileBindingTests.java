@@ -182,16 +182,16 @@ public class McpSelectedProfileBindingTests {
 				Map.of(
 						"custom/profile", invocation -> {
 							handlerProfile.set(invocation.protocolProfile());
-							return McpWireResult.complete(new McpJsonObject(Map.of(
-									"exactProfile", McpJsonBoolean.TRUE)));
+							return McpApplicationDispatchOutcome.completed(McpWireResult.complete(new McpJsonObject(Map.of(
+									"exactProfile", McpJsonBoolean.TRUE))));
 						},
 						"custom/application-error", invocation -> {
-							throw new McpApplicationJsonRpcException(new McpJsonRpcError(
+							return McpApplicationDispatchOutcome.applicationError(new McpJsonRpcError(
 									1_001, "Application-owned", Optional.empty()));
 						},
-						"custom/oversized", invocation -> McpWireResult.complete(
+						"custom/oversized", invocation -> McpApplicationDispatchOutcome.completed(McpWireResult.complete(
 								new McpJsonObject(Map.of("oversized",
-										new McpJsonString("x".repeat(1_100_000)))))));
+										new McpJsonString("x".repeat(1_100_000))))))));
 		McpSubscriptionEventSource source = new McpSubscriptionEventSource(
 				new Object(), listener -> () -> {});
 		McpHttpEndpointBinding binding = new McpHttpEndpointBinding(policy, endpoint,

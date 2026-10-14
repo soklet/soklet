@@ -7,7 +7,7 @@ following hold:
 - the candidate jar contains exactly one embedded Soklet POM, that POM is
   byte-identical to the checkout POM supplying the examples, and it declares no
   compile- or runtime-scoped dependency;
-- the generic provider compiles and runs on Java 17 with only the candidate
+- the generic provider compiles and runs on Java 21 with only the candidate
   jar.
 
 Translation-library adapters are intentionally documentation examples, not

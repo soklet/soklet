@@ -1,15 +1,43 @@
-# Apps render/refresh on an isolated auth-patched Inspector
+# Apps render/refresh with MCP Inspector
 
-This separate experimental profile runs the existing real candidate-backed Apps
-fixture, shell, Inspector bridge and DOM interactions against the exact local
-auth patch validated by `../inspector-auth-patch`. It neither modifies the
-original host installation nor changes the existing Apps harness or its failed
-receipt. No package installation, upstream submission or dependency repin occurs.
+This experimental harness runs the real candidate-backed Apps fixture, shell,
+Inspector bridge and DOM interactions with either the reviewed unmodified
+upstream source build or the historical isolated auth patch. The reproduction
+command below selects the source build. Neither mode modifies its host
+installation or replaces historical receipts.
 
-## Reproduce
+## Unmodified upstream source mode
 
-Use the original and already prepared **final** patched installation. All input
-paths are explicit, and the work directory must be new with an existing parent:
+Pass `--inspector-build /absolute/prepared-inspector-build` to run the reviewed
+unmodified upstream source commit `1974465ccb5454a5110e609e4140171fa360a544`.
+Its source version is `2.10.1`; this is an **unreleased upstream source build**,
+not an npm release or the historical local auth patch. Prepare and verify it
+with `../inspector/upstream-build.mjs` before starting this harness.
+
+In this mode, `--dependencies` supplies the App-shell SDK installation only,
+and `--original-dependencies` may be omitted. Its package and lockfile pins are
+verified; its installed tree is recorded and rechecked for changes. It does not
+supply the running Inspector. The source build supplies the actual launcher
+and web files, and its build receipt and complete tree are verified before
+and after the run. Browser, shell, candidate JAR/POM, compiled fixture, and
+harness source identities are also rechecked. The candidate's actual JAR SHA-256 is recorded and rechecked, and its
+embedded POM must match the supplied POM. Public-API compilation and dependency
+audits remain mandatory. The shell's exact prior hash and build receipt remain
+required; this mode does not rebuild or change the shell.
+
+Source-mode receipts use an `upstream-source-apps-*` profile and explicitly
+record `sourceIdentityVerified: true`, `patchIdentityVerified: false`, and
+`UNRELEASED_UPSTREAM_SOURCE_BUILD`. All existing trace, authentication, Origin,
+DOM, observation, cleanup, and profile-specific security assertions still apply.
+A passing experiment remains local development evidence, with
+`fullHostQualification: false` and `releaseCandidateEvidence: false`.
+Omitting `--inspector-build` preserves the historical patched-host mode,
+including its original candidate and patch identity checks and receipts.
+
+## Reproduce the upstream source mode
+
+Use the prepared upstream source build and the shell SDK installation. All
+input paths are explicit, and work must be a new directory with an existing parent:
 
 ```sh
 node --test verification/interoperability/apps-patched-host/*-self-test.mjs
@@ -18,22 +46,27 @@ node verification/interoperability/apps-patched-host/run.mjs \
   --candidate-pom /path/to/original-candidate-pom.xml \
   --java /path/to/jdk/bin/java \
   --shell /path/to/catalog-shell.html \
-  --original-dependencies /path/to/original-installation \
-  --dependencies /path/to/final-patched-installation \
+  --inspector-build /path/to/prepared-inspector-build \
+  --dependencies /path/to/pinned-shell-dependencies \
   --browser '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
   --work-dir /path/to/new-results
 ```
 
-The shell's adjacent `.receipt.json` is mandatory. All three profiles pin the
-current candidate JAR; shell and patched backend/tree retain their exact prior
-identities. The older candidate cannot compile the current fixture's
-`ContentSecurityPolicy.defaultInstance()` call; historical receipts remain
-unchanged. Original dependencies and the one-file patch recipe are checked
-before and after the run, including independent file inodes and unchanged file/link/directory
-identities outside the patch. The browser distribution/version is recorded and
-rechecked, not silently represented as an approved released-host combination.
+The shell's adjacent `.receipt.json` is mandatory. The source mode records and
+rechecks the supplied candidate JAR/POM while retaining the exact shell identity.
+The browser distribution/version is recorded and rechecked.
+
+To reproduce the historical patched-host mode, omit `--inspector-build`, supply
+`--original-dependencies /path/to/original-installation`, and point
+`--dependencies` at the prepared final patched installation. Use that historical
+experiment's pinned candidate JAR and matching POM. All four profiles retain
+their exact candidate/shell/patch identities; original dependencies and the
+one-file patch recipe are checked before and after the run, including independent
+file inodes and unchanged file/link/directory identities outside the patch.
+Historical receipts remain unchanged.
+
 Node must match the existing pinned runtime. Java fixture compilation targets
-release 17 with annotation processing disabled and lint warnings treated as
+release 21 with annotation processing disabled and lint warnings treated as
 errors; public-only dependency analysis is also required.
 
 ## Exact success boundary
@@ -178,7 +211,8 @@ exception still fails. These classifications are diagnostic hints, not proof of
 fault ownership. Browser interception and fixed local backend destinations do
 not constitute an OS-wide network firewall.
 
-This is one dirty candidate, local patch and browser build. The default profile
+Each run covers one development candidate, selected Inspector mode and browser
+build. The default profile
 is English/alpha only; the opt-in profiles add a beta/Portuguese switch and
 denial or an open-App revocation. None establishes general CSP/permission
 enforcement, localization/RTL, idle-view invalidation, capability-OFF/wrong-MIME

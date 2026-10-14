@@ -96,7 +96,7 @@ public class McpConditionalCapabilityProxyRuntimeTests {
 								inputPlan).orElseThrow();
 				Assertions.assertTrue(emitter.emit(1.0d, Optional.of(2.0d),
 						Optional.of("forwarded")));
-				return complete("supported complete");
+				return McpApplicationDispatchOutcome.completed(complete("supported complete"));
 			}
 
 			blockedReporterSuppressed.set(McpServerRuntimeBridge
@@ -113,7 +113,7 @@ public class McpConditionalCapabilityProxyRuntimeTests {
 			} finally {
 				blockedHandlerExited.countDown();
 			}
-			return complete("late result must be discarded");
+			return McpApplicationDispatchOutcome.completed(complete("late result must be discarded"));
 		});
 		ForwardingIdleProxy proxy = null;
 		McpChunkedHttpClient missingClient = null;

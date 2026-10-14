@@ -97,6 +97,11 @@ final class SokletDirectLifecycleRaceTests {
 				"A shutdown after the start claim is cancellation, never close-before-start");
 		Assertions.assertEquals(InternalStartupDisposition.CANCELED,
 				result.startupDisposition());
+		SokletShutdownIncompleteException terminalFailure = Assertions.assertInstanceOf(
+				SokletShutdownIncompleteException.class,
+				soklet.getDirectLifecycle().applicationTerminalFailure(result).orElseThrow());
+		Assertions.assertSame(soklet.getShutdownResult().orElseThrow(),
+				terminalFailure.getShutdownResult());
 		Assertions.assertEquals(0, http.attachCalls());
 		Assertions.assertTrue(setupReturned.await(2, TimeUnit.SECONDS));
 	}
@@ -411,6 +416,7 @@ final class SokletDirectLifecycleRaceTests {
 			Assertions.assertEquals(InternalLifecycleStateMachine.State.CLOSED,
 					owner.state());
 			Assertions.assertSame(result, owner.awaitCompletion());
+			Assertions.assertTrue(owner.applicationTerminalFailure(result).isEmpty());
 		} finally {
 			callbackSoklet.close();
 		}
@@ -500,6 +506,14 @@ final class SokletDirectLifecycleRaceTests {
 				soklet.getDirectLifecycle().result().orElseThrow());
 		Assertions.assertEquals(InternalStartupDisposition.TIMED_OUT,
 				result.startupDisposition());
+		SokletStartupException terminalFailure = Assertions.assertInstanceOf(
+				SokletStartupException.class,
+				soklet.getDirectLifecycle().applicationTerminalFailure(result).orElseThrow());
+		Assertions.assertSame(exactTimeout, terminalFailure.getCause());
+		Assertions.assertSame(startupException.getShutdownResult(),
+				terminalFailure.getShutdownResult());
+		Assertions.assertEquals(StartupDisposition.TIMED_OUT,
+				terminalFailure.getStartupDisposition());
 		Assertions.assertNotEquals(
 				InternalLifecycleComponentShutdownDisposition.UNEXPECTED_TERMINATION,
 				result.participantResult(InternalLifecycleComponentType.HTTP)

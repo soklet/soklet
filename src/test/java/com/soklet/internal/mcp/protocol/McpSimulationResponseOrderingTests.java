@@ -115,9 +115,9 @@ class McpSimulationResponseOrderingTests {
 			progressThread.set(helper);
 			helper.start();
 			assertTrue(openedBeforeHead.await(5, TimeUnit.SECONDS));
-			return McpWireResult.complete(new McpJsonObject(Map.of("content",
+			return McpApplicationDispatchOutcome.completed(McpWireResult.complete(new McpJsonObject(Map.of("content",
 					new McpJsonArray(List.of(new McpJsonObject(Map.of(
-							"type", new McpJsonString("text"), "text", new McpJsonString("done"))))))));
+							"type", new McpJsonString("text"), "text", new McpJsonString("done")))))))));
 		};
 		McpApplicationRequestRouter router = McpApplicationRequestRouter.fromToolRoutes(Map.of(
 				"race", new McpApplicationToolRoute(handler, ignored -> McpRateLimitDecision.allowed())));

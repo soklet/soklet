@@ -18,13 +18,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 @Timeout(60)
 class DecoratedSseQueuedAdmissionTests {
 	@Test
 	void decoratedParsedHandshakeRetainsAdmissionAcrossQuiesceAndCustomCallsRemainSealed() throws Exception {
-		assumeTrue(Runtime.version().feature() >= 21, "SSE requires virtual threads");
 		int port;
 		try (ServerSocket reserved = new ServerSocket(0)) { port = reserved.getLocalPort(); }
 		CountDownLatch occupied = new CountDownLatch(1), release = new CountDownLatch(1);

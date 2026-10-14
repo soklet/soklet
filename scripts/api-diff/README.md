@@ -10,7 +10,7 @@ Run it with a supported JDK, Maven, and Node.js available:
 scripts/api-diff/verify.sh
 ```
 
-CI selects JDK 17 explicitly; the script itself uses the caller-selected JDK.
+CI selects JDK 21 explicitly; the script itself uses the caller-selected JDK.
 The Maven profile pins both the 3.5.1 baseline coordinate and japicmp version.
 The wrapper writes generated evidence under `target/japicmp/` and compares it with
 `api/mcp/current-incompatibilities.jsonl` in both directions. It never updates
@@ -61,5 +61,5 @@ bidirectionally with `api/mcp/provisional.signatures.jsonl`; “provisional”
 describes the Tasks protocol/API maturity bucket, not an exemption from the
 4.0.0 signature gate. `McpPublicApiInventoryTests` remains a fast, independent
 source/class-tree guard, but it is not the authoritative baseline-derived owner
-algorithm. CI invokes the aggregate gate on JDK 17, while local runs use the
+algorithm. CI invokes the aggregate gate on JDK 21, while local runs use the
 caller's JDK.

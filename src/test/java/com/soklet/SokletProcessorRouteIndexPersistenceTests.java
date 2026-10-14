@@ -317,7 +317,7 @@ public class SokletProcessorRouteIndexPersistenceTests {
 			try (var manager = compiler.getStandardFileManager(collector, null, StandardCharsets.UTF_8)) {
 				String classpath = classes + System.getProperty("path.separator") + System.getProperty("java.class.path");
 				for (Path dependency : dependencies) classpath += System.getProperty("path.separator") + dependency;
-				List<String> arguments = new ArrayList<>(List.of("--release", "17", "-parameters", "-classpath", classpath,
+				List<String> arguments = new ArrayList<>(List.of("--release", "21", "-parameters", "-classpath", classpath,
 						"-d", classes.toString(), "-s", generated.toString(), "-Asoklet.cacheMode=" + mode, "-Asoklet.cacheDir=" + cache));
 				arguments.addAll(options);
 				var task = compiler.getTask(null, manager, collector, arguments, null, manager.getJavaFileObjectsFromPaths(sources));

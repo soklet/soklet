@@ -22,8 +22,6 @@ import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
-import org.junit.jupiter.api.condition.EnabledForJreRange;
-import org.junit.jupiter.api.condition.JRE;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -47,7 +45,6 @@ import static com.soklet.TestSupport.findFreePort;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 /** Qualifies the selected lifecycle defaults through the built-in SSE transport. */
-@EnabledForJreRange(min = JRE.JAVA_21)
 @Timeout(value = 60, unit = SECONDS)
 public class SseLifecycleAdmissionTests {
 

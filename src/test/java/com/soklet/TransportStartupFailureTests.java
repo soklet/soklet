@@ -33,7 +33,6 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 @Timeout(60)
 class TransportStartupFailureTests {
@@ -54,7 +53,6 @@ class TransportStartupFailureTests {
 
 	private void occupiedPortRetainsRealCauseAndCompleteRollback(Mode mode) throws Exception {
 		boolean sse = mode.name().startsWith("SSE");
-		assumeTrue(!sse || Runtime.version().feature() >= 21, "SSE requires virtual threads");
 		AtomicReference<Throwable> observedDelegateFailure = new AtomicReference<>();
 		try (ServerSocket occupied = new ServerSocket()) {
 			occupied.bind(new InetSocketAddress("127.0.0.1", 0));
@@ -136,6 +134,20 @@ class TransportStartupFailureTests {
 	}
 
 	@Test
+	void startupFailureTakesPrecedenceWhenRollbackCannotProveTermination() throws Exception {
+		IllegalArgumentException expected = new IllegalArgumentException("custom start failed before incomplete rollback");
+		Soklet soklet = customWithTerminationProof(expected, null, false);
+		SokletStartupException failure = assertThrows(SokletStartupException.class, soklet::start);
+		ShutdownResult result = failure.getShutdownResult();
+		assertSame(expected, failure.getCause());
+		assertSame(expected, result.getStartupFailureCause().orElseThrow());
+		assertEquals(StartupDisposition.FAILED, result.getStartupDisposition());
+		assertFalse(result.isComplete());
+		assertSame(result, soklet.awaitShutdown());
+		assertSame(result, assertThrows(SokletShutdownIncompleteException.class, soklet::close).getShutdownResult());
+	}
+
+	@Test
 	void independentFailureBeforeStartThrowRetainsItsControllingEvent() throws Exception {
 		IllegalStateException independent = new IllegalStateException("independent failure before ready");
 		Soklet soklet = custom(new IllegalArgumentException("later start throw"), independent);
@@ -151,6 +163,10 @@ class TransportStartupFailureTests {
 	}
 
 	private static Soklet custom(RuntimeException startFailure, RuntimeException independentFailure) throws Exception {
+		return customWithTerminationProof(startFailure, independentFailure, true);
+	}
+
+	private static Soklet customWithTerminationProof(RuntimeException startFailure, RuntimeException independentFailure, boolean proveTermination) throws Exception {
 		HttpServer server = new HttpServer() {
 			private final TransportIdentity identity = TransportIdentity.create();
 			@Override public TransportIdentity getTransportIdentity() { return identity; }
@@ -161,8 +177,8 @@ class TransportStartupFailureTests {
 						if (independentFailure != null) signal.signalTerminationFailure(independentFailure);
 						throw startFailure;
 					}
-					@Override public void shutdownGracefully(ShutdownContext ignored) { signal.signalTerminated(); }
-					@Override public void shutdownForcibly(ShutdownContext ignored) { signal.signalTerminated(); }
+					@Override public void shutdownGracefully(ShutdownContext ignored) { if (proveTermination) signal.signalTerminated(); }
+					@Override public void shutdownForcibly(ShutdownContext ignored) { if (proveTermination) signal.signalTerminated(); }
 				};
 			}
 		};

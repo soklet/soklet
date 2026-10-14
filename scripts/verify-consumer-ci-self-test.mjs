@@ -22,7 +22,6 @@ export function verifyConsumerCiContract(workflow, installationScript, consumerR
     "if: github.event_name == 'push' || github.event_name == 'pull_request'",
     'runs-on: ubuntu-24.04', 'timeout-minutes: 30', 'fail-fast: false',
     'mode: [maven, gradle, javac]',
-    "{ jdk: '17', pin: java, environment: JAVA_HOME }",
     "{ jdk: '21', pin: coreJdk21, environment: SOKLET_RELEASE_CORE_JDK_21_HOME }",
     "{ jdk: '25', pin: toystoreJava, environment: SOKLET_RELEASE_TOYSTORE_JAVA_HOME }",
     'install-pinned-node-linux-x64.sh', 'install-pinned-corretto-linux-x64.sh',
@@ -36,7 +35,7 @@ export function verifyConsumerCiContract(workflow, installationScript, consumerR
     'These PR/push results are not immutable-candidate release receipts.',
   ]) assert.ok(job.includes(required), `Consumer CI contract omitted ${required}`);
   assert.ok(job.indexOf('java "${RUNNER_TEMP}"') < job.indexOf('-DskipTests clean package'),
-    'Canonical JDK 17 must be installed before packaging');
+    'Canonical JDK 21 must be installed before packaging');
   assert.ok(job.indexOf('javadocJava "${RUNNER_TEMP}"') < job.indexOf('-DskipTests clean package'),
     'Separate checksum-pinned Javadoc JDK must be installed before packaging');
   assert.ok(job.indexOf('consumer-prewarm/pom.xml') < job.indexOf('node verification/consumer-build/verify.mjs'),
@@ -53,7 +52,7 @@ export function verifyConsumerCiContract(workflow, installationScript, consumerR
   assert.ok(installationScript.includes('[[ "$actual_version" == "$gradle_version" ]]'),
     'Extracted executable version must be checked');
   const documentedDistributions = [...consumerReadme.matchAll(
-    /\bGradle (\d+\.\d+\.\d+) supports all three runtimes;\s*its official binary distribution SHA-256 is\s*`([a-f0-9]{64})`\./g,
+    /\bGradle (\d+\.\d+\.\d+) supports both runtimes;\s*its official binary distribution SHA-256 is\s*`([a-f0-9]{64})`\./g,
   )];
   assert.equal(documentedDistributions.length, 1,
     'Consumer README must declare exactly one Gradle distribution version/checksum pair');

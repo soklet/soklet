@@ -80,6 +80,7 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.time.Duration;
 import java.util.ArrayDeque;
+import java.util.Collections;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.IdentityHashMap;
@@ -534,6 +535,22 @@ final class DefaultMcpServer implements McpServer {
 			@Override
 			public void beginDeferral() {
 				mcpMetricEventDelivery.beginDeferral();
+			}
+
+			@Override
+			public McpApplicationExecutionObserver.@NonNull MetricSequence newRequestMetricSequence() {
+				return new RequestMetricSequence();
+			}
+
+			@Override
+			public McpApplicationExecutionObserver.@Nullable MetricSequence currentMetricSequence() {
+				return mcpMetricEventDelivery.currentSequence.get();
+			}
+
+			@Override
+			public McpApplicationExecutionObserver.@NonNull MetricScope useMetricSequence(
+					McpApplicationExecutionObserver.@Nullable MetricSequence sequence) {
+				return mcpMetricEventDelivery.useSequence(sequence);
 			}
 
 			@Override
@@ -2874,8 +2891,10 @@ final class DefaultMcpServer implements McpServer {
 		String boundedMethod = metricMethod(jsonRpcMethod);
 		CancelationToken token = requireNonNull(cancelationToken);
 		Optional<ProgressEmitter> emitter = requireNonNull(progressEmitter);
+		RequestMetricSequence metricSequence =
+				this.mcpMetricEventDelivery.currentSequence.get();
 		token.onCancel(() -> this.mcpMetricEventDelivery.recordAndDrain(
-				McpMetricsEvent.cancelationSignaled(endpointPath, boundedMethod)));
+				McpMetricsEvent.cancelationSignaled(endpointPath, boundedMethod), metricSequence));
 
 		Map<Class<?>, Object> features = new LinkedHashMap<>();
 		features.put(CancelationToken.class, token);
@@ -3265,6 +3284,7 @@ final class DefaultMcpServer implements McpServer {
 		private final String endpointPath;
 		@NonNull
 		private final String jsonRpcMethod;
+		private final @Nullable RequestMetricSequence metricSequence;
 		@Nullable
 		private Double lastAcceptedProgress;
 
@@ -3276,6 +3296,7 @@ final class DefaultMcpServer implements McpServer {
 			this.progressEmitter = requireNonNull(progressEmitter);
 			this.endpointPath = requireNonNull(endpointPath);
 			this.jsonRpcMethod = requireNonNull(jsonRpcMethod);
+			this.metricSequence = mcpMetricEventDelivery.currentSequence.get();
 		}
 
 		@Override
@@ -3320,7 +3341,7 @@ final class DefaultMcpServer implements McpServer {
 			// The writer may block. An interruptible lock preserves report ordering
 			// without pinning a virtual-thread carrier while the outbound queue waits.
 			DefaultMcpServer.this.mcpMetricEventDelivery.recordAndDrain(
-					McpMetricsEvent.progressEmitted(this.endpointPath, this.jsonRpcMethod));
+					McpMetricsEvent.progressEmitted(this.endpointPath, this.jsonRpcMethod), this.metricSequence);
 		}
 	}
 
@@ -4078,6 +4099,8 @@ final class DefaultMcpServer implements McpServer {
 				this.instanceProvider);
 		String metricEndpointPath = input.endpoint().getPath();
 		String metricJsonRpcMethod = metricMethod(input.jsonRpcMethod());
+		RequestMetricSequence metricSequence =
+				this.mcpMetricEventDelivery.currentSequence.get();
 		Optional<McpTraceLogRecord> traceLogRecord = McpTraceLogRecord.capture(
 				context.traceCorrelationToken(),
 				this.logRawValidatedTraceIds
@@ -4097,7 +4120,7 @@ final class DefaultMcpServer implements McpServer {
 		}
 		this.mcpMetricEventDelivery.recordAndDrain(
 				McpMetricsEvent.requestStarted(metricEndpointPath,
-						metricJsonRpcMethod));
+						metricJsonRpcMethod), metricSequence);
 
 		List<Throwable> immutableStartThrowables = List.copyOf(startThrowables);
 		return new RequestObservation() {
@@ -4133,7 +4156,7 @@ final class DefaultMcpServer implements McpServer {
 						McpMetricsEvent.requestFinished(
 								metricEndpointPath,
 								metricJsonRpcMethod,
-								outcome, duration));
+								outcome, duration), metricSequence);
 				traceLogRecord.ifPresent(record -> safelyLogRequestObservation(
 						observer, LogEvent.with(
 								LogEventType.MCP_TRACE_CORRELATION,
@@ -4151,43 +4174,53 @@ final class DefaultMcpServer implements McpServer {
 
 			@Override
 			public void didOpenRequestStream() {
-				mcpMetricEventDelivery.record(
-						McpMetricsEvent.requestStreamOpened(
-								metricEndpointPath,
-								metricJsonRpcMethod));
+				try (McpApplicationExecutionObserver.MetricScope ignored = mcpMetricEventDelivery.useSequence(metricSequence)) {
+					mcpMetricEventDelivery.record(
+							McpMetricsEvent.requestStreamOpened(
+									metricEndpointPath,
+									metricJsonRpcMethod));
+				}
 			}
 
 			@Override
 			public void didCloseRequestStream(
 					@NonNull McpStreamTerminationReason reason,
 					@NonNull Duration duration) {
-				mcpMetricEventDelivery.record(
-						McpMetricsEvent.requestStreamClosed(
-								metricEndpointPath,
-								metricJsonRpcMethod, reason,
-								duration));
+				try (McpApplicationExecutionObserver.MetricScope ignored = mcpMetricEventDelivery.useSequence(metricSequence)) {
+					mcpMetricEventDelivery.record(
+							McpMetricsEvent.requestStreamClosed(
+									metricEndpointPath,
+									metricJsonRpcMethod, reason,
+									duration));
+				}
 			}
 
 			@Override
 			public void didOpenSubscription() {
-				mcpMetricEventDelivery.record(
-						McpMetricsEvent.subscriptionOpened(
-								metricEndpointPath));
+				try (McpApplicationExecutionObserver.MetricScope ignored = mcpMetricEventDelivery.useSequence(metricSequence)) {
+					mcpMetricEventDelivery.record(
+							McpMetricsEvent.subscriptionOpened(
+									metricEndpointPath));
+				}
 			}
 
 			@Override
 			public void didCloseSubscription(
 					@NonNull McpStreamTerminationReason reason,
 					@NonNull Duration duration) {
-				mcpMetricEventDelivery.record(
-						McpMetricsEvent.subscriptionClosed(
-								metricEndpointPath, reason, duration));
+				try (McpApplicationExecutionObserver.MetricScope ignored = mcpMetricEventDelivery.useSequence(metricSequence)) {
+					mcpMetricEventDelivery.record(
+							McpMetricsEvent.subscriptionClosed(
+									metricEndpointPath, reason, duration));
+				}
 			}
 
 			@Override
 			public void didEmitKeepAlive() {
-				mcpMetricEventDelivery.record(
-						McpMetricsEvent.keepAliveEmitted());
+				try (McpApplicationExecutionObserver.MetricScope ignored = mcpMetricEventDelivery.useSequence(metricSequence)) {
+					mcpMetricEventDelivery.record(
+							McpMetricsEvent.keepAliveEmitted());
+				}
 			}
 		};
 	}
@@ -4259,8 +4292,11 @@ final class DefaultMcpServer implements McpServer {
 	}
 
 	/**
-	 * Serializes eligible semantic metrics while withholding only records owned
-	 * by a pending transition. Server/Soklet lifecycle deferral is separate.
+	 * Serializes retained semantic metrics in enqueue order for each request.
+	 * An open transition also withholds that request's successors, while other
+	 * requests remain eligible. Ordering identities have no request payload or
+	 * predecessor links; their queue retention shares the event-count bound.
+	 * Server/Soklet lifecycle deferral is separate.
 	 */
 	@ThreadSafe
 	private final class McpMetricEventDelivery {
@@ -4272,6 +4308,8 @@ final class DefaultMcpServer implements McpServer {
 		private final IdentityHashMap<@NonNull McpMetricEventDeliveryEntry, @NonNull MetricTransition> deferredEvents;
 		@NonNull
 		private final ThreadLocal<MetricTransition> currentTransition;
+		@NonNull
+		private final ThreadLocal<RequestMetricSequence> currentSequence;
 		private int deferralDepth;
 		private boolean delivering;
 		private boolean asynchronousDrainRequired;
@@ -4282,6 +4320,21 @@ final class DefaultMcpServer implements McpServer {
 			this.pendingEvents = new ArrayDeque<>();
 			this.deferredEvents = new IdentityHashMap<>();
 			this.currentTransition = new ThreadLocal<>();
+			this.currentSequence = new ThreadLocal<>();
+		}
+
+		private McpApplicationExecutionObserver.@NonNull MetricScope useSequence(
+				McpApplicationExecutionObserver.@Nullable MetricSequence sequence) {
+			RequestMetricSequence previous = this.currentSequence.get();
+			setSequence(sequence);
+			return () -> setSequence(previous);
+		}
+
+		private void setSequence(McpApplicationExecutionObserver.@Nullable MetricSequence sequence) {
+			if (sequence == null)
+				this.currentSequence.remove();
+			else
+				this.currentSequence.set((RequestMetricSequence) sequence);
 		}
 
 		private McpApplicationExecutionObserver.@NonNull MetricDeferral beginTransitionDeferral() {
@@ -4352,8 +4405,18 @@ final class DefaultMcpServer implements McpServer {
 		@NonNull
 		private McpMetricEventDeliveryEntry record(
 				@NonNull McpMetricsEvent event, boolean requireAsynchronousDrain) {
+			return record(event, requireAsynchronousDrain, this.currentSequence.get());
+		}
+
+		@NonNull
+		private McpMetricEventDeliveryEntry record(@NonNull McpMetricsEvent event,
+				boolean requireAsynchronousDrain,
+				@Nullable RequestMetricSequence sequence) {
+			if (event instanceof McpMetricsEvent.ServerStarted
+					|| event instanceof McpMetricsEvent.ServerStopped)
+				sequence = null;
 			McpMetricEventDeliveryEntry entry =
-					new McpMetricEventDeliveryEntry(event);
+					new McpMetricEventDeliveryEntry(event, sequence);
 			synchronized (this.lock) {
 				if (this.pendingEvents.size() >= MAXIMUM_PENDING_MCP_METRIC_EVENTS) {
 					if (!(event instanceof McpMetricsEvent.ServerStarted)
@@ -4388,8 +4451,9 @@ final class DefaultMcpServer implements McpServer {
 			return entry;
 		}
 
-		private void recordAndDrain(@NonNull McpMetricsEvent event) {
-			record(event);
+		private void recordAndDrain(@NonNull McpMetricsEvent event,
+				@Nullable RequestMetricSequence sequence) {
+			record(event, false, sequence);
 			drain();
 			signalAsynchronousDrainIfNeeded();
 		}
@@ -4462,7 +4526,11 @@ final class DefaultMcpServer implements McpServer {
 							return;
 						}
 					}
-					safelyRecordMcpMetrics(entry.event());
+					// A collector can reenter the server. Its new work must not inherit
+					// the request identity of the thread that happened to drain the queue.
+					try (McpApplicationExecutionObserver.MetricScope ignored = useSequence(null)) {
+						safelyRecordMcpMetrics(entry.event());
+					}
 				}
 			} finally {
 				if (deliveryClaimed) {
@@ -4478,11 +4546,21 @@ final class DefaultMcpServer implements McpServer {
 
 		@Nullable
 		private McpMetricEventDeliveryEntry takeEligibleEntryWhileLocked() {
+			Set<RequestMetricSequence> withheldSequences = null;
 			Iterator<McpMetricEventDeliveryEntry> iterator = this.pendingEvents.iterator();
 			while (iterator.hasNext()) {
 				McpMetricEventDeliveryEntry entry = iterator.next();
 				MetricTransition transition = this.deferredEvents.get(entry);
-				if (transition != null && transition.openScopes != 0)
+				if (transition != null && transition.openScopes != 0) {
+					if (entry.sequence() != null) {
+						if (withheldSequences == null)
+							withheldSequences = Collections.newSetFromMap(new IdentityHashMap<>());
+						withheldSequences.add(entry.sequence());
+					}
+					continue;
+				}
+				if (withheldSequences != null && entry.sequence() != null
+						&& withheldSequences.contains(entry.sequence()))
 					continue;
 				iterator.remove();
 				this.deferredEvents.remove(entry);
@@ -4542,10 +4620,16 @@ final class DefaultMcpServer implements McpServer {
 		private int openScopes;
 	}
 
+	/** Identity only: no back-reference, predecessor chain, or request carrier. */
+	private static final class RequestMetricSequence
+			implements McpApplicationExecutionObserver.MetricSequence {
+	}
+
 	/** Immutable metric event without request-scoped application carriers. */
 	@ThreadSafe
 	private record McpMetricEventDeliveryEntry(
-			@NonNull McpMetricsEvent event)
+			@NonNull McpMetricsEvent event,
+			@Nullable RequestMetricSequence sequence)
 			implements PendingMetricRecord {
 		private McpMetricEventDeliveryEntry {
 			requireNonNull(event);

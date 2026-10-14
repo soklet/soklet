@@ -10,7 +10,7 @@ final 4.0 shape.
 Three-trial measurements of the final initializer/broadcaster candidate are
 recorded in [the September 23 integration checks](sse-final-candidate-checks-2026-09-23.md).
 
-The probe compiles with Java 17 and requires Java 21+ at runtime. It needs an
+The probe requires Java 21 or newer to compile and run. It needs an
 already compiled current runtime in `target/classes`; it does not build the
 benchmark module or fetch dependencies. Run measurements alone, without
 concurrent builds, tests, or throughput benchmarks. The default invocation uses
@@ -76,7 +76,7 @@ probe_jdk=/Users/agents/Java/amazon-corretto-21.jdk/Contents/Home
 probe_output=/private/tmp/soklet-sse-footprint-probe
 probe_dependencies=target/classes:/Users/agents/.m2/repository/org/jspecify/jspecify/1.0.1/jspecify-1.0.1.jar:/Users/agents/.m2/repository/com/google/code/findbugs/jsr305/3.0.2/jsr305-3.0.2.jar:/Users/agents/.m2/repository/com/google/errorprone/error_prone_annotations/2.50.0/error_prone_annotations-2.50.0.jar
 mkdir -p "$probe_output"
-"$probe_jdk/bin/javac" --release 17 -proc:none \
+"$probe_jdk/bin/javac" --release 21 -proc:none \
   -cp "$probe_dependencies" -d "$probe_output" \
   benchmarks/src/main/java/com/soklet/SseLifecycleFootprintProbe.java
 

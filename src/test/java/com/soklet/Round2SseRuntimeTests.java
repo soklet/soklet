@@ -3,8 +3,6 @@ package com.soklet;
 import com.soklet.annotation.SseEventSource;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
-import org.junit.jupiter.api.condition.EnabledForJreRange;
-import org.junit.jupiter.api.condition.JRE;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -22,7 +20,6 @@ import static com.soklet.TestSupport.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 @Timeout(60)
-@EnabledForJreRange(min = JRE.JAVA_21)
 class Round2SseRuntimeTests {
 	@Test void bytesBeforeResetDoNotReportServerAcceptanceOrTransportErrors() throws Exception {
 		try (ReaderFixture fixture = new ReaderFixture(Duration.ofSeconds(2), Duration.ofSeconds(3), 64)) {
@@ -93,7 +90,11 @@ class Round2SseRuntimeTests {
 					.getRequestHandlerExecutorService().orElseThrow()).getActiveCount());
 			try (Socket complete = fixture.completeRequest()) {
 				assertTrue(readHeaders(complete).startsWith("HTTP/1.1 200"));
+				// The accepted response reaches the client before initialization runs.
+				await(() -> fixture.resource.initializers.get() >= 1);
 				assertEquals(1, fixture.resource.initializers.get());
+				// The accept observer runs independently after the reader is submitted.
+				await(() -> fixture.acceptedRequests.get() >= 3);
 			}
 			assertEquals(3, fixture.acceptedRequests.get());
 			assertEquals(0, fixture.rejectedRequests.get());

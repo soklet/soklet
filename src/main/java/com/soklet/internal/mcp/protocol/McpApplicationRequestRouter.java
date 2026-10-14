@@ -67,20 +67,7 @@ import static java.util.Objects.requireNonNull;
 @FunctionalInterface
 interface McpApplicationRequestHandler {
 	@NonNull
-	McpWireResult handle(@NonNull McpApplicationInvocation invocation) throws Exception;
-}
-
-/**
- * Internal control signal for a validated JSON-RPC request whose application
- * input failed schema validation or binding before its typed handler ran.
- *
- * @author <a href="https://www.revetkn.com">Mark Allen</a>
- */
-@NotThreadSafe
-final class McpInvalidApplicationInputException extends Exception {
-	McpInvalidApplicationInputException() {
-		super(null, null, false, false);
-	}
+	McpApplicationDispatchOutcome handle(@NonNull McpApplicationInvocation invocation) throws Exception;
 }
 
 /**
@@ -94,28 +81,6 @@ final class McpApplicationJsonRpcException extends Exception {
 	private final McpJsonRpcError error;
 
 	McpApplicationJsonRpcException(@NonNull McpJsonRpcError error) {
-		super(null, null, false, false);
-		this.error = requireNonNull(error);
-	}
-
-	@NonNull
-	McpJsonRpcError error() {
-		return error;
-	}
-}
-
-/**
- * Internal control signal for a framework-detected protocol error after
- * application dispatch has begun.
- *
- * @author <a href="https://www.revetkn.com">Mark Allen</a>
- */
-@NotThreadSafe
-final class McpProtocolJsonRpcException extends Exception {
-	@NonNull
-	private final McpJsonRpcError error;
-
-	McpProtocolJsonRpcException(@NonNull McpJsonRpcError error) {
 		super(null, null, false, false);
 		this.error = requireNonNull(error);
 	}
@@ -213,7 +178,7 @@ record McpApplicationCompletionRoute(
 @ThreadSafe
 @FunctionalInterface
 interface McpApplicationCompletionHandler {
-	@NonNull McpWireResult handle(@NonNull McpApplicationInvocation invocation,
+	@NonNull McpApplicationDispatchOutcome handle(@NonNull McpApplicationInvocation invocation,
 			@NonNull String argumentName, @NonNull String argumentValue,
 			@NonNull Map<@NonNull String, @NonNull String> contextArguments)
 			throws Exception;
@@ -229,7 +194,7 @@ interface McpApplicationCompletionHandler {
 @FunctionalInterface
 interface McpApplicationResourceReadHandler {
 	@NonNull
-	McpWireResult handle(@NonNull McpApplicationResourceReadInvocation invocation)
+	McpApplicationDispatchOutcome handle(@NonNull McpApplicationResourceReadInvocation invocation)
 			throws Exception;
 }
 
@@ -346,7 +311,7 @@ record McpApplicationResourceTemplateMatch(@NonNull String uriTemplate,
 @FunctionalInterface
 interface McpApplicationResourceListHandler {
 	@NonNull
-	McpWireResult handle(@NonNull McpApplicationResourceListInvocation invocation)
+	McpApplicationDispatchOutcome handle(@NonNull McpApplicationResourceListInvocation invocation)
 			throws Exception;
 }
 
@@ -2855,7 +2820,7 @@ final class McpApplicationExecution {
 				AtomicBoolean handlerInvoked = new AtomicBoolean();
 				AtomicBoolean interceptorActive = new AtomicBoolean(true);
 				Thread interceptorThread = Thread.currentThread();
-				McpWireResult result;
+				McpApplicationDispatchOutcome result;
 				try {
 					result = this.requestInterceptor.intercept(invocation, () -> {
 						if (!interceptorActive.get())
@@ -2878,21 +2843,22 @@ final class McpApplicationExecution {
 				if (result == null)
 					throw new IllegalStateException(
 							"An MCP application interceptor or handler returned null.");
-				respond(McpApplicationResponse.success(request.id(),
-						renderApplicationResult(result)));
-			} catch (McpInvalidApplicationInputException exception) {
 				if (!cancellation.isCancellationRequested())
-					respond(profiledFrameworkError(McpProfileErrorKind.OPERATION,
-							McpApplicationResponse.invalidParams(request.id())));
-			} catch (McpProtocolJsonRpcException exception) {
-				if (!cancellation.isCancellationRequested())
-					respond(profiledFrameworkError(McpProfileErrorKind.OPERATION,
-							McpApplicationResponse.protocolJsonRpcError(
-									request.id(), exception.error())));
-			} catch (McpApplicationJsonRpcException exception) {
-				if (!cancellation.isCancellationRequested())
-					respond(McpApplicationResponse.applicationJsonRpcError(
-							request.id(), exception.error()));
+					respond(switch (result) {
+						case McpApplicationDispatchOutcome.Completed completed ->
+								McpApplicationResponse.success(request.id(),
+										renderApplicationResult(completed.getValue()));
+						case McpApplicationDispatchOutcome.InvalidInput ignored ->
+								profiledFrameworkError(McpProfileErrorKind.OPERATION,
+										McpApplicationResponse.invalidParams(request.id()));
+						case McpApplicationDispatchOutcome.ApplicationError error ->
+								McpApplicationResponse.applicationJsonRpcError(
+										request.id(), error.getError());
+						case McpApplicationDispatchOutcome.ProtocolError error ->
+								profiledFrameworkError(McpProfileErrorKind.OPERATION,
+										McpApplicationResponse.protocolJsonRpcError(
+												request.id(), error.getError()));
+					});
 			} catch (McpRequestStateUnavailableException exception) {
 				if (!cancellation.isCancellationRequested())
 					respond(profiledFrameworkError(McpProfileErrorKind.CONTROL,

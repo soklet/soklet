@@ -523,7 +523,7 @@ async function produce(options) {
   const javac = resolve(javaHome, 'bin/javac');
   const java = resolve(javaHome, 'bin/java');
   runChecked(javac, [
-    '--release', '17',
+    '--release', '21',
     '-classpath', candidateJar,
     '-d', classes,
     ...javaSources(candidateRoot),

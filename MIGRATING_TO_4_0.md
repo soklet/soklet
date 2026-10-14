@@ -20,10 +20,28 @@ that stay on them do so without project support.
 After publication, only the latest 4.x patch release is supported. Snapshots,
 older 4.x patches, and unreleased source builds are not supported releases.
 
+## Java 21 minimum
+
+Soklet 4.0.0 and its Servlet and OpenTelemetry adapters require Java 21 or
+newer to compile and run. Upgrade application toolchains, CI, container images,
+and deployment JVMs, including any servlet-container JVM, before adopting these
+artifacts. Java 17–20 are no longer supported. Preview features are not required.
+
+The default HTTP and MCP application executors use virtual threads directly,
+and SSE is available on every supported runtime. Custom executor policies and
+existing admission, queue, lifecycle, and shutdown bounds remain in effect.
+
+On Java 21, blocking inside a `synchronized` method or block can pin a virtual
+thread to its carrier and limit throughput. Profile application callbacks and
+long-running critical sections with JFR before tuning executors. Java 24 removed
+monitor-related pinning, so Java 25 includes that improvement; native calls can
+still pin. See the [Java 21 virtual-thread guide](https://docs.oracle.com/en/java/javase/21/core/virtual-threads.html)
+and [Java 24 release notes](https://www.oracle.com/java/technologies/javase/24-relnote-issues.html).
+
 ## Recommended migration order
 
-1. Move the build to Java 17 or later and set the Soklet coordinate to
-   `com.soklet:soklet:4.0.0`.
+1. Move build and deployment runtimes to Java 21 or later and set the Soklet
+   coordinate to `com.soklet:soklet:4.0.0`.
 2. Replace direct transport lifecycle calls and per-server shutdown settings
    with the Soklet-wide lifecycle.
 3. Choose either `SokletApplication` for a standalone process or direct
@@ -491,10 +509,9 @@ batches; all admitted application work remains counted until it exits.
 
 Precommit HTTP streaming rejection now reports the finite failsafe status to request write/finish observers and metrics, with bounded termination observation retaining the original rejected stream. The finite response and request finish do not wait for termination observers. These observers use a separate bounded allowance on the managed callback executor; accepted work remains tracked through shutdown. Capacity exhaustion while accepting omits that notification and logs `RESPONSE_STREAM_CANCELED`; omissions during graceful drain or forced shutdown are not logged. Admitted streams retain their reserved callback jobs. Transport handoff exceptions reach `didFailToWriteResponse` instead of being reported as successful writes.
 
-The default HTTP streaming executor uses one virtual thread per admitted producer
-on JDK 21+. Lifecycle admission bounds these tasks and retained cleanup. On JDK
-17, the default pool has four platform workers per event-loop concurrency unit
-and no pending producer queue: exhaustion returns 503 before streaming headers.
+The default HTTP streaming executor uses one virtual thread per admitted producer.
+Lifecycle admission bounds these tasks and retained cleanup; exhaustion returns
+503 before streaming headers.
 A custom streaming executor must dispatch asynchronously and start accepted work
 promptly; use direct handoff and rejection to avoid queuing behind long-lived
 producers. Inline or caller-runs execution is rejected.
@@ -1930,39 +1947,55 @@ IP literals are normalized with `InetAddress.getHostAddress()`, including IPv6.
 
 ### Static-file identity and cache metadata
 
-Static-file resolver spelling follows native real-path resolution. On platforms
-that canonicalize case and Unicode aliases, resolvers receive directory-entry
-spelling; some Linux case-insensitive mounts retain the requested spelling instead.
-Do not use spelling-only access checks on those mounts; use a case-sensitive
-static root or policy suited to its filesystem. Distinct hard-link names keep their
-own policies. No-follow mode rejects a symbolic-link root and links below it
-and keeps the configured root spelling for resolver paths. Both symlink policies
-pin the resolved root directory at construction; replacing its pathname or an
-ancestor link does not retarget delivery. With `followSymlinks` enabled, only
-links resolving inside that root are eligible. Delivery opens each path component
-relative to a pinned directory descriptor without following replacement links
-and checks the opened file's identity against its approved metadata. Rebuild the
-helper when intentionally switching deployment roots.
+`StaticFiles` now requires an explicit immutable-root declaration:
 
-`StaticFiles` supports the default OpenJDK filesystem providers on Linux and
-macOS, on x86-64 and AArch64, including macOS Java 17 and 21 without public
-`SecureDirectoryStream` support. The descriptor bridge adds no external dependency
-and ordinarily needs no JVM flags. Custom or modular runtimes must make
-`jdk.unsupported` available and resolved and permit the bridge's access.
-Construction fails closed for unsupported providers, platforms or architectures,
-unavailable or changed JDK internals, denied access, installed SecurityManagers,
-or missing stable file identities.
+```java
+StaticFiles assets = StaticFiles.withRoot(Path.of("public"))
+    .trustedImmutableRoot(true)
+    .build();
+```
 
-Keep served files immutable while responses are in flight: an open descriptor
-does not provide a snapshot of concurrent in-place writes. Custom resolvers that
-read paths or make policy decisions from mutable file contents cannot atomically
-bind their own reads to the later response body.
+Without `trustedImmutableRoot(true)`, `build()` throws `IllegalArgumentException`.
+Passing `false` or `null` withdraws the declaration. The setting does not freeze
+files or change permissions: the operator must exclusively control the root,
+its ancestors, links, and files, keeping them unchanged while the helper or its
+responses are in use. Do not use it for uploads, tenant-writable directories,
+or any tree an untrusted actor can mutate. Deploy a new immutable tree and
+construct a new helper after prior responses have finished.
+
+Public NIO replaces the private JDK/Unsafe bridge. `SecureDirectoryStream` is
+used where available, with checked pathname access otherwise, including on
+macOS Java 21 and Windows. No architecture allowlist, native-access flags, or
+`jdk.unsupported` module is required. Providers without stable file identities
+or no-follow opens fail closed. No directory handle is retained by the helper,
+so constructing helpers repeatedly does not accumulate descriptors until GC.
+Observed root/file identity, size, modification-time, or containment changes
+are rejected. These are checks for observed changes, not protection against an
+attacker who can swap a path and restore it between checks. Public NIO cannot
+obtain regular-file attributes from an already-open channel, even when secure
+directory traversal is available. Slower copying does not close that gap.
+
+Resolver spelling follows native real-path resolution. Platforms that
+canonicalize case and Unicode aliases supply directory-entry spelling; some
+Linux case-insensitive mounts retain the requested spelling instead. Avoid
+spelling-only access checks on those mounts. Distinct hard-link names keep
+their own policies. No-follow mode rejects a symbolic-link root and links below
+it, preserving configured-root spelling for resolver paths. Both modes capture
+the resolved root identity at construction; a changed root requires a new
+helper. `followSymlinks(true)` permits only immutable links resolving inside
+that root. Custom resolver path reads are also subject to this trust contract.
+
+`MarshaledResponseBody` has a new permitted subtype, `SecureFile`. Update
+exhaustive switches over this sealed interface and tests that previously
+expected every static-file response to be `MarshaledResponseBody.File`. Recompile
+those callers for 4.0.0; old exhaustive switches can fail at runtime on the new
+variant. Explicit `MarshaledResponse.withFile(...)` responses still use `File`.
 
 Custom transports must handle `MarshaledResponseBody.SecureFile`, which
 `StaticFiles` produces under both symlink policies. Acquire its channel with
 `openChannel()`, seek to `getOffset()`, send exactly `getCount()` bytes, and close
 the returned channel after completion or failure. Opening a filesystem path
-separately discards the pinned-root and opened-file identity checks. Reject any
+separately discards the helper's root and file validation. Reject any
 body variant the transport does not support.
 
 The default response marshaler supplies Content-Type only when a body exists.

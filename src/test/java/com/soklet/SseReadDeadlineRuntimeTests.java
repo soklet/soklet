@@ -21,8 +21,6 @@ import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestFactory;
 import org.junit.jupiter.api.Timeout;
-import org.junit.jupiter.api.condition.EnabledForJreRange;
-import org.junit.jupiter.api.condition.JRE;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
@@ -51,7 +49,6 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** Wire responses, quiet client disconnects and independent SSE deadline phases. */
 @Timeout(60)
-@EnabledForJreRange(min = JRE.JAVA_21)
 class SseReadDeadlineRuntimeTests {
 
 	@TestFactory
@@ -138,8 +135,13 @@ class SseReadDeadlineRuntimeTests {
 				fixture.assertTargetHandshakeTimeout();
 				assertTrue(fixture.requestRejections.isEmpty());
 				assertTrue(fixture.readFailures.isEmpty());
+				// A queue/active-count snapshot can look idle between dequeue and
+				// task entry. A FIFO marker on this single-worker executor proves
+				// the expired handshake has actually returned before we check calls.
+				CountDownLatch queuedWorkRetired = new CountDownLatch(1);
+				fixture.executor.execute(queuedWorkRetired::countDown);
 				fixture.releaseWorker.countDown();
-				await(() -> fixture.executor.getActiveCount() == 0 && fixture.executor.getQueue().isEmpty(),
+				assertTrue(queuedWorkRetired.await(2, TimeUnit.SECONDS),
 						"Expired queued work must retire without resource entry");
 				assertEquals(0, fixture.resource.calls.get());
 				fixture.assertNoInternalNoise();

@@ -83,7 +83,7 @@ public class McpSelectedProfileApplicationResultTests {
 						request(scenario.method(), Integer.toString(callsBefore)), fake,
 						invocation -> {
 							Assertions.assertSame(fake, invocation.protocolProfile());
-							return scenario.canonical();
+							return McpApplicationDispatchOutcome.completed(scenario.canonical());
 						}, Optional.empty());
 				Assertions.assertEquals(callsBefore + 1, fake.calls().size(),
 						"Each successful application result must be rendered exactly once.");
@@ -117,8 +117,8 @@ public class McpSelectedProfileApplicationResultTests {
 			McpApplicationResponse replaced = dispatch(execution,
 					request("tools/call", "intercepted"), fake, invocation -> {
 						handlerInvocations.incrementAndGet();
-						return McpWireResult.complete(McpJsonObject.empty());
-					}, Optional.of((invocation, downstream) -> replacement));
+						return McpApplicationDispatchOutcome.completed(McpWireResult.complete(McpJsonObject.empty()));
+					}, Optional.of((invocation, downstream) -> McpApplicationDispatchOutcome.completed(replacement)));
 			Assertions.assertEquals(0, handlerInvocations.get());
 			Assertions.assertEquals(1, fake.calls().size());
 			Assertions.assertSame(replacement, fake.calls().get(0).canonical());
@@ -130,7 +130,7 @@ public class McpSelectedProfileApplicationResultTests {
 					Map.of("custom", McpJsonBoolean.TRUE)));
 			McpApplicationResponse customResponse = dispatch(execution,
 					request("custom/result", "custom"), fake,
-					invocation -> custom, Optional.empty());
+					invocation -> McpApplicationDispatchOutcome.completed(custom), Optional.empty());
 			McpJsonRpcMessage.ResultResponse customMessage = Assertions.assertInstanceOf(
 					McpJsonRpcMessage.ResultResponse.class,
 					customResponse.message().orElseThrow());
@@ -143,7 +143,7 @@ public class McpSelectedProfileApplicationResultTests {
 			McpApplicationResponse applicationError = dispatch(execution,
 					request("tools/call", "application-error"), fake,
 					invocation -> {
-						throw new McpApplicationJsonRpcException(new McpJsonRpcError(
+						return McpApplicationDispatchOutcome.applicationError(new McpJsonRpcError(
 								1_001, "Application-owned", Optional.empty()));
 					}, Optional.empty());
 			McpJsonRpcMessage.ErrorResponse errorMessage = Assertions.assertInstanceOf(

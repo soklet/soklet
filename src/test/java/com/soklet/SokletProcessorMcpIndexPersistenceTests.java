@@ -492,7 +492,7 @@ public class SokletProcessorMcpIndexPersistenceTests {
 				diagnostics, null, StandardCharsets.UTF_8)) {
 			String classpath = classes + System.getProperty("path.separator")
 					+ System.getProperty("java.class.path");
-			List<String> options = new ArrayList<>(List.of("--release", "17",
+			List<String> options = new ArrayList<>(List.of("--release", "21",
 					"-parameters", "-classpath", classpath, "-d",
 					classes.toString(), "-s", generated.toString()));
 			options.addAll(processorOptions);

@@ -64,10 +64,11 @@ class ResidualWorkerProcessTests {
 			while (!Files.exists(directory.resolve("incomplete")) && process.isAlive() && System.nanoTime() < deadline)
 				Thread.sleep(10);
 			assertTrue(Files.exists(directory.resolve("incomplete")), () -> read(log));
-			assertEquals("INCOMPLETE", Files.readString(directory.resolve("incomplete")), () -> read(log));
-			assertFalse(Files.exists(directory.resolve("cleanup")), "Incomplete core must still skip cleanup");
 			assertTrue(process.waitFor(3, TimeUnit.SECONDS), "Residual framework work kept process alive: " + read(log));
 			assertEquals(0, process.exitValue(), () -> read(log));
+			// File creation precedes write completion; read fixture output only after the child exits.
+			assertEquals("INCOMPLETE", Files.readString(directory.resolve("incomplete")), () -> read(log));
+			assertFalse(Files.exists(directory.resolve("cleanup")), "Incomplete core must still skip cleanup");
 			assertEquals("true", Files.readString(directory.resolve("blocked-daemon")));
 			String workers = Files.readString(directory.resolve("workers"));
 			assertFalse(workers.contains("=false"), workers);

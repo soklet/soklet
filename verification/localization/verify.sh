@@ -57,7 +57,7 @@ generic_classes="$temporary_directory/generic-classes"
 mkdir -p "$generic_classes"
 
 # The generic provider sees only the packaged Soklet jar.
-javac --release 17 -proc:none -Xlint:all -Werror \
+javac --release 21 -proc:none -Xlint:all -Werror \
 	-classpath "$candidate_artifact" \
 	-d "$generic_classes" \
 	@"$generic_sources"

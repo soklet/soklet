@@ -4,6 +4,12 @@
 
 ### Breaking Changes
 
+- **Java 21 minimum:** Soklet and its Servlet and OpenTelemetry adapters now
+  require Java 21 or newer to compile and run. Default virtual-thread executors
+  use the standard JDK APIs directly; Java 17 compatibility fallbacks are removed.
+  Custom executor support and admission/lifecycle bounds remain in place. See
+  [Java 21 minimum](MIGRATING_TO_4_0.md#java-21-minimum).
+
 - **HTTP occurrence lists and strict text:** HTTP multi-value collections now
   use `List`, preserving duplicates, order and empty values. Headers retain
   physical occurrences rather than splitting comma lists. Malformed text is
@@ -56,6 +62,19 @@
   callback; a waiting setter returns after at most 200 milliseconds or on
   interruption, without invoking another callback. See
   [Servlet adapters](MIGRATING_TO_4_0.md#servlet-adapters).
+- **Static roots require explicit trust:** `StaticFiles` now requires
+  `.trustedImmutableRoot(true)`. The operator must control the root, ancestors,
+  links, and files and keep them immutable while the helper or its responses
+  are in use. Mutable or attacker-writable trees are unsupported. Public NIO
+  replaces the private JDK/Unsafe bridge, restoring macOS Java 21 and Windows
+  compatibility without an architecture allowlist or `jdk.unsupported`.
+  Rebuild the helper when switching deployment roots. See
+  [Static-file identity and cache metadata](MIGRATING_TO_4_0.md#static-file-identity-and-cache-metadata).
+- **Static-file body type:** `MarshaledResponseBody.SecureFile` is a new permitted
+  subtype produced by `StaticFiles`. Update exhaustive switches and file-body
+  assertions, and recompile callers. Custom transports must open and close its
+  channel through the descriptor. See
+  [Static-file identity and cache metadata](MIGRATING_TO_4_0.md#static-file-identity-and-cache-metadata).
 - **File delivery:** the standard HTTP transport retains the real-socket
   `FileChannel.transferTo` path for the JDK's standard file channels, allowing
   native transfer when supported. Custom/provider channels use a typed socket
@@ -357,6 +376,32 @@ maintenance or security fixes afterward. See the explicit
 
 ### Correctness Fixes
 
+- MCP semantic metric delivery preserves enqueue order for retained records from
+  the same request across submission, execution, timeout, and cancellation.
+  Deferred acceptance can no longer be overtaken by that request's protocol
+  error or rejection. Independent requests still progress, and the existing
+  4,096-record queue bound and overflow behavior are unchanged.
+- Internal MCP dispatch, deferred operation validation, and transport response
+  replacement use sealed outcomes with exhaustive switches and named factories.
+  Public handler exceptions and callback signatures retain their contracts;
+  admission precedence, error privacy, and response ownership remain enforced.
+- Response-write failure observers and metrics receive the actual write failure
+  when writing a fallback response fails, and observe the effective replacement
+  response when an HTTP/1.0 streaming rejection cannot be written.
+- Transport replacement feedback stays bound to its request when decorators
+  forward handlers or callbacks to another thread and wait for completion.
+  Nested admission-rejected requests keep their response and failure feedback
+  separate from the outer request, including HTTP and SSE dispatch.
+
+- Response replacements remain visible to lifecycle observers and metrics when
+  a transport decorator hands work to another thread without joining it.
+  Bodyless marshaler-hook responses now omit content and normalize framing in
+  shared processing, keeping Simulator results consistent with the wire and
+  releasing owned channels. Deferred socket failures remain correctly classified
+  after more than eight retries without unbounded retention.
+- Imported cookies tolerate attribute whitespace and malformed `Max-Age`
+  without losing valid expiry metadata. Later servlet session sets/removals
+  supersede a slow pending binding, preventing stale publication.
 - Rejected response statuses now release owned file channels, including invalid
   bodyless resource responses and invalid final statuses from marshaler hooks or
   interceptors. Borrowed channels stay open, and cleanup failures preserve the
@@ -385,6 +430,15 @@ maintenance or security fixes afterward. See the explicit
 
 ### Security Hardening
 
+- Static-file responses validate observed root/file identity, size, and
+  modification-time changes before resolver callbacks, after callbacks, and
+  before delivery. Both symlink policies require the explicit immutable-root
+  contract above; public APIs do not secure attacker-writable trees against
+  every replacement race. Helpers no longer retain directory descriptors.
+- Completed HTTP requests now release oversized parser input buffers before
+  the connection returns to keep-alive idle. Previously, a large request could
+  leave a request-sized allocation retained by each idle connection, allowing
+  repeated large requests across connections to exhaust heap memory.
 - Fixed a configured request-header and trailer size-limit bypass when a
   pipelined input buffer was compacted after a section began. Section sizes
   could be undercounted by the discarded buffer prefix, allowing requests to
@@ -496,11 +550,6 @@ maintenance or security fixes afterward. See the explicit
 
 ### Fixes
 
-- Static-file delivery uses pinned directory descriptors and validates the opened
-  file's identity, preserving containment on supported Linux and macOS runtimes,
-  including macOS Java 17 and 21 without public `SecureDirectoryStream` support.
-  Raced-in FIFOs cannot block file acquisition. Unsupported runtime access fails
-  closed; see [Static-file identity and cache metadata](MIGRATING_TO_4_0.md#static-file-identity-and-cache-metadata).
 - Fixed `HttpDate.toHeaderValue(Instant)` so it rejects instants outside the four-digit IMF-fixdate year range instead of rendering invalid header values or leaking formatter exceptions.
 - Hardened the low-level HTTP event loop so unchecked task failures are contained to the affected connection instead of terminating the event loop thread.
 - Fixed multipart parsing for unnamed parts and made multipart header decoding explicitly UTF-8.

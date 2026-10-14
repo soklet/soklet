@@ -104,7 +104,7 @@ public class StreamingDocumentationExamplesTests {
 		DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
 		try (var fileManager = compiler.getStandardFileManager(diagnostics, Locale.ROOT, StandardCharsets.UTF_8)) {
 			boolean compiled = compiler.getTask(null, fileManager, diagnostics,
-					List.of("--release", "17", "-proc:none", "-parameters", "-encoding", "UTF-8",
+					List.of("--release", "21", "-proc:none", "-parameters", "-encoding", "UTF-8",
 							"-classpath", System.getProperty("java.class.path"), "-d", compilationDirectory.toString()),
 					null, fileManager.getJavaFileObjectsFromPaths(sourcePaths)).call();
 			Assertions.assertTrue(compiled, () -> "Published streaming examples did not compile:\n" + diagnostics.getDiagnostics());

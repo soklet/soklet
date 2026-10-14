@@ -338,8 +338,8 @@ public class McpHttpServerModernHeaderTests {
 				.build();
 		McpApplicationRequestHandler handler = ignored -> {
 			handlerInvocations.incrementAndGet();
-			return McpWireResult.complete(new McpJsonObject(
-					Map.of("ok", McpJsonBoolean.TRUE)));
+			return McpApplicationDispatchOutcome.completed(McpWireResult.complete(new McpJsonObject(
+					Map.of("ok", McpJsonBoolean.TRUE))));
 		};
 		McpApplicationRequestRouter router = McpApplicationRequestRouter.fromHandlers(
 				Map.of("tools/call", handler,

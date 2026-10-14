@@ -50,7 +50,7 @@ export function parseArguments(args) {
 }
 
 export function validatePins(candidate, shell) {
-  if (candidate?.jarSha256 !== '64253678715421002d70ec2ea049650429a7af5ec31700cf03e6f5e1d784a727'
+  if (candidate?.jarSha256 !== '96e5eb86c17cfae3cbd7867bbbdaf480ef22e8ae48dfbdc0b812371bfa0c6145'
       || shell?.sha256 !== '3229c8e0a9ee17dcbb2030040fac282b172715588c7b25963275529c0b650f60') fail('APPS_MIME_PIN');
 }
 
@@ -278,9 +278,9 @@ export async function run(options) {
     const classes = resolve(work, 'classes'); mkdirSync(classes);
     const sources = ['AppsFixture.java', 'AppsFixtureMain.java'].map(name => resolve(apps, 'src/com/soklet/interop/apps', name));
     if (sources.some(path => readFileSync(path, 'utf8').includes('com.soklet.internal'))) fail('APPS_MIME_INTERNAL_REFERENCE');
-    const compile = await command(javac, ['--release', '17', '-proc:none', '-Xlint:all', '-Werror', '-classpath', jar, '-d', classes, ...sources], 120000);
+    const compile = await command(javac, ['--release', '21', '-proc:none', '-Xlint:all', '-Werror', '-classpath', jar, '-d', classes, ...sources], 120000);
     if (compile.stdout !== '' || compile.stderr !== '') fail('APPS_MIME_COMPILE_OUTPUT');
-    const audit = await command(jdeps, ['-q', '--multi-release', '17', '-verbose:class', '-classpath', jar, classes], 60000);
+    const audit = await command(jdeps, ['-q', '--multi-release', '21', '-verbose:class', '-classpath', jar, classes], 60000);
     if (audit.stderr !== '' || audit.stdout.includes('com.soklet.internal') || audit.stdout.includes('not found')) fail('APPS_MIME_DEPENDENCY_AUDIT');
     writeFileSync(resolve(work, 'dependencies.txt'), audit.stdout, {mode: 0o600, flag: 'wx'});
     receipt.publicApiOnly = true; receipt.fixtureClassTree = directoryIdentity(classes);

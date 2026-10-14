@@ -16,8 +16,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.TestFactory;
 import org.junit.jupiter.api.Timeout;
-import org.junit.jupiter.api.condition.EnabledForJreRange;
-import org.junit.jupiter.api.condition.JRE;
 
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
@@ -82,7 +80,6 @@ class SseMemoizedBroadcastTests {
 	}
 
 	@TestFactory
-	@EnabledForJreRange(min = JRE.JAVA_21)
 	Stream<DynamicTest> liveBroadcastCachesProviderAndSerializationFailuresAndRecoversOnTheNextCall() {
 		return cases().map(testCase -> DynamicTest.dynamicTest(testCase.toString(), () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
 			try (LiveFixture fixture = new LiveFixture()) {
@@ -199,7 +196,6 @@ class SseMemoizedBroadcastTests {
 	}
 
 	@TestFactory
-	@EnabledForJreRange(min = JRE.JAVA_21)
 	Stream<DynamicTest> liveKeySelectionFailureDoesNotAffectOtherClients() {
 		return Stream.of(false, true).map(comments -> DynamicTest.dynamicTest(comments ? "comments" : "events", () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
 			try (LiveFixture fixture = new LiveFixture()) {

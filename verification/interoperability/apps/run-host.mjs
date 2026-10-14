@@ -7,10 +7,13 @@ import { fileURLToPath } from 'node:url';
 import { createEnvironment, createSessionConfig, sanitizedSessionConfig } from '../inspector/config.mjs';
 import { startProcess } from '../inspector/process.mjs';
 import { directoryIdentity, verifyDependencyPins } from '../inspector/run.mjs';
+import { verifyUpstreamBuild } from '../inspector/upstream-build.mjs';
 import { browserVersion, chromeArguments, validWebConfig } from '../inspector/web-probe.mjs';
 import { connectCdp } from '../inspector/cdp.mjs';
 import { regularFile, validateShellBuild } from './run.mjs';
-import { startAppsProxy, adjudicateAppsTrace } from './host-trace.mjs';
+import { startAppsProxy } from './host-trace.mjs';
+import { adjudicatePatchedAppsTrace as adjudicateUpstreamAppsTrace } from '../apps-patched-host/trace.mjs';
+export { adjudicateUpstreamAppsTrace };
 import { beginBrowserObservation, exerciseApps, disconnectApps } from './browser-probe.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -28,7 +31,7 @@ const uiChecks = ['selectedAppViaDom', 'hostAppReady', 'catalogRendered', 'textO
 const installedPin = { files: 9391, sha256: '8c0b1ed101c4c7e7497aa4aaba7e953b03a44bc58179308db1613a988d5a2b8d' };
 
 export function parseHostArguments(args) {
-  const keys = ['--candidate-jar', '--candidate-pom', '--java', '--shell', '--dependencies', '--browser', '--work-dir'];
+  const keys = ['--candidate-jar', '--candidate-pom', '--java', '--shell', '--dependencies', '--inspector-build', '--browser', '--work-dir'];
   if (args.length !== keys.length * 2) fail('APPS_HOST_ARGUMENTS');
   const options = {};
   for (let i = 0; i < args.length; i += 2) {
@@ -50,12 +53,13 @@ export function fixtureControl(line, event) {
 }
 
 export function completedHostChecks(receipt) {
-  return receipt.traceVerdict === 'PASSED' && uiChecks.every(key => receipt.ui?.[key] === true)
+  return receipt.observationWindowCompleted === true
+    && receipt.traceVerdict === 'PASSED' && uiChecks.every(key => receipt.ui?.[key] === true)
     && receipt.browser?.pageNetworkPolicySatisfied === true && receipt.browser?.noBrowserExceptions === true
     && receipt.authentication?.invalidCredentialRejected === true && receipt.authentication?.validCredentialAccepted === true
     && ['fixtureShutdown', 'hostShutdown', 'browserShutdown'].every(key => receipt[key] === 'CLEAN')
     && ['readOnlyMemoryStore', 'hostAuthRequired', 'hostOriginRestricted', 'configUnchanged',
-      'inputsUnchanged', 'disconnected', 'privateStateRemoved'].every(key => receipt[key] === true)
+      'inputsUnchanged', 'sourceIdentityVerified', 'disconnected', 'privateStateRemoved'].every(key => receipt[key] === true)
     && ['cdp', 'browser', 'host', 'proxy', 'fixture'].every(key => receipt.cleanup?.[key] === true);
 }
 
@@ -63,6 +67,7 @@ export function completedHostChecks(receipt) {
  * host attempts unconfigured OAuth recovery after a deliberate policy denial. */
 export function adjudicateHost(receipt, rejections) {
   if (!completedHostChecks(receipt) || receipt.browserFailure || receipt.cleanupFailure
+      || receipt.integrityFailure || receipt.failure && receipt.failure !== 'APPS_HOST_TRACE'
       || !Array.isArray(rejections)) return 'FAILED';
   if (!receipt.traceFailure && rejections.length === 0) return 'PASSED';
   const paths = ['OAUTH_PROTECTED_RESOURCE_PATH', 'OAUTH_PROTECTED_RESOURCE_ROOT',
@@ -214,7 +219,7 @@ async function fixtureAuthentication(port, token) {
   return facts;
 }
 
-function sourceInputs() {
+export function sourceInputs() {
   const rows = [];
   function visit(path) {
     for (const entry of readdirSync(path, {withFileTypes: true}).sort((a, b) => a.name.localeCompare(b.name))) {
@@ -226,6 +231,8 @@ function sourceInputs() {
   }
   visit(here);
   visit(resolve(here, '../inspector'));
+  const trace = resolve(here, '../apps-patched-host/trace.mjs');
+  rows.push({path: trace.slice(root.length + 1), sha256: hash(trace)});
   const control = resolve(here, '../run-against-public-fixture.mjs');
   rows.push({path: control.slice(root.length + 1), sha256: hash(control)});
   return rows;
@@ -243,9 +250,10 @@ export async function runHost(options) {
   const browserRoot = resolve(dirname(browserPath), '../..');
   const dependencies = resolve(options['--dependencies']);
   const modules = resolve(dependencies, 'node_modules');
-  const inspector = resolve(modules, '@modelcontextprotocol/inspector');
-  const entry = regularFile(resolve(inspector, 'clients/launcher/build/index.js'));
-  regularFile(resolve(inspector, 'clients/web/dist/index.html'));
+  const inspectorBuild = resolve(options['--inspector-build']);
+  const upstream = verifyUpstreamBuild(inspectorBuild);
+  const entry = regularFile(upstream.entry);
+  regularFile(resolve(upstream.inspector, 'clients/web/dist/index.html'));
   verifyDependencyPins(readFileSync(resolve(dependencies, 'package.json')), readFileSync(resolve(dependencies, 'package-lock.json')));
   const installed = directoryIdentity(modules);
   if (JSON.stringify(installed) !== JSON.stringify(installedPin)) fail('APPS_HOST_INSTALLED_TREE_DRIFT');
@@ -280,10 +288,11 @@ export async function runHost(options) {
   const interrupt = () => { interrupted = true; for (const handle of active) void handle.stop().catch(() => {}); };
   process.on('SIGINT', interrupt);
   process.on('SIGTERM', interrupt);
-  const receipt = {formatVersion: 1, profile: 'soklet.inspector.apps-render-refresh.v1',
+  const receipt = {formatVersion: 1, profile: 'soklet.inspector.upstream-source-apps-render-refresh.v1',
     status: 'FAILED', stage: 'INPUTS', fullHostQualification: false, releaseCandidateEvidence: false,
     executedAt: new Date().toISOString(), protocolVersion: '2026-07-28',
-    target: {name: '@modelcontextprotocol/inspector', version: '2.7.0', commit: '2e90a628e6296c62e4bef942afbb43d3faa4baf4'},
+    target: upstream.target, sourceIdentityVerified: true,
+    upstreamBuild: {identity: upstream.identity, receiptSha256: upstream.receiptSha256},
     candidate: {jarSha256: hash(jar), pomSha256: hash(pom)},
     shell: {sha256: hash(shell), receiptSha256: hash(shellReceipt), bytes: lstatSync(shell).size},
     installedTreeIdentity: installed, browserDistributionIdentity: directoryIdentity(browserRoot),
@@ -291,9 +300,11 @@ export async function runHost(options) {
     fixtureShutdown: 'NOT_PROVEN', hostShutdown: 'NOT_PROVEN', browserShutdown: 'NOT_PROVEN',
     bounds: {compileMs: 120000, identityMs: 10000, fixtureMs: 120000, hostMs: 120000, browserMs: 90000,
       childOutputBytes: 2 * 1024 * 1024, gracefulExitWaitMs: 3000, fixtureEofWaitMs: 6000,
-      termGraceMs: 2000, killGraceMs: 2000},
+      termGraceMs: 2000, killGraceMs: 2000, postRefreshObservationMs: 6000,
+      proxyMaxExchanges: 32, acceptedTraceMaxExchanges: 16, maxSubscriptionDenials: 8},
     limitations: ['Dirty-tree local development evidence, not immutable release conformance.',
-      'One Inspector build, browser build, authenticated English alpha caller and Apps-enabled modern-HTTP profile only.',
+      'One unmodified unreleased Inspector source build, browser build, authenticated English alpha caller and Apps-enabled modern-HTTP profile only.',
+      'One to eight exact policy-denied subscription retries are observed; none is authorized or converted to success.',
       'No general CSP/permissions enforcement, localization matrix, tenant switching, revocation, OAuth, or production-host qualification.',
       'Only allowlisted structural facts retained; private browser/config/runtime state is deleted after supervised cleanup.']};
   let fixture, proxy, host, browser, cdp, observation;
@@ -309,6 +320,7 @@ export async function runHost(options) {
       && hash(shell) === receipt.shell.sha256 && hash(shellReceipt) === receipt.shell.receiptSha256
       && JSON.stringify(sourceInputs()) === JSON.stringify(receipt.inputs)
       && JSON.stringify(directoryIdentity(modules)) === JSON.stringify(installed)
+      && JSON.stringify(verifyUpstreamBuild(inspectorBuild)) === JSON.stringify(upstream)
       && receipt.fixtureClassTree !== undefined
       && JSON.stringify(directoryIdentity(resolve(work, 'classes'))) === JSON.stringify(receipt.fixtureClassTree)
       && JSON.stringify(directoryIdentity(browserRoot)) === JSON.stringify(receipt.browserDistributionIdentity);
@@ -323,10 +335,10 @@ export async function runHost(options) {
     receipt.stage = 'COMPILE';
     const sources = ['AppsFixture.java', 'AppsFixtureMain.java'].map(file => resolve(here, 'src/com/soklet/interop/apps', file));
     if (sources.some(path => readFileSync(path, 'utf8').includes('com.soklet.internal'))) fail('APPS_HOST_INTERNAL_REFERENCE');
-    const compile = await command(resolve(dirname(java), 'javac'), ['--release', '17', '-proc:none', '-Xlint:all', '-Werror',
+    const compile = await command(resolve(dirname(java), 'javac'), ['--release', '21', '-proc:none', '-Xlint:all', '-Werror',
       '-classpath', jar, '-d', classes, ...sources], 120000);
     if (compile.stdout !== '' || compile.stderr !== '') fail('APPS_HOST_COMPILE_OUTPUT');
-    const audit = await command(resolve(dirname(java), 'jdeps'), ['-q', '--multi-release', '17', '-verbose:class', '-classpath', jar, classes], 60000);
+    const audit = await command(resolve(dirname(java), 'jdeps'), ['-q', '--multi-release', '21', '-verbose:class', '-classpath', jar, classes], 60000);
     if (audit.stderr !== '' || audit.stdout.includes('com.soklet.internal') || audit.stdout.includes('not found')) fail('APPS_HOST_DEPENDENCY_AUDIT');
     writeFileSync(resolve(work, 'dependencies.txt'), audit.stdout, {mode: 0o600, flag: 'wx'});
     receipt.fixtureClassTree = directoryIdentity(classes);
@@ -368,9 +380,17 @@ export async function runHost(options) {
     await cdp.send('Page.navigate', {url: origin}, sessionId);
     receipt.stage = 'APPS_UI';
     receipt.ui = await exerciseApps(cdp, sessionId, observation);
-    const traceDeadline = Date.now() + 5000;
-    while (Date.now() < traceDeadline && adjudicateAppsTrace(proxy.rows) !== 'PASSED' && !proxy.failure()) await pause();
-    receipt.traceVerdict = adjudicateAppsTrace(proxy.rows);
+    receipt.stage = 'OBSERVE';
+    const observeUntil = performance.now() + 6000;
+    const observationFailed = () => interrupted || hostExited || browserExited
+      || cdp.failure() || proxy.failure() || observation.failure();
+    while (performance.now() < observeUntil) {
+      if (observationFailed()) fail('APPS_HOST_OBSERVATION_INTERRUPTED');
+      await pause();
+    }
+    if (observationFailed()) fail('APPS_HOST_OBSERVATION_INTERRUPTED');
+    receipt.observationWindowCompleted = true;
+    receipt.traceVerdict = adjudicateUpstreamAppsTrace(proxy.rows);
     // Finish a genuine UI disconnect and graceful shutdown even if a trace
     // check failed; a failure still cannot become PASS below or after sealing.
     await disconnectApps(cdp, sessionId, observation);
@@ -433,7 +453,7 @@ export async function runHost(options) {
     process.off('SIGTERM', interrupt);
     // Seal after all callers and the proxy have stopped. Late disconnect or
     // shutdown traffic must not escape the pre-disconnect adjudication.
-    receipt.traceVerdict = adjudicateAppsTrace(proxy?.rows ?? []);
+    receipt.traceVerdict = adjudicateUpstreamAppsTrace(proxy?.rows ?? []);
     receipt.traceFailure = proxy?.failure() ?? null;
     receipt.browserFailure = observation?.failure()
       ?? (cdp?.failure() === 'CDP_CLOSED' ? null : cdp?.failure()) ?? null;
@@ -459,6 +479,9 @@ export async function runHost(options) {
     if (!receipt.inputsUnchanged) {
       receipt.status = 'FAILED'; receipt.integrityFailure = 'APPS_HOST_INPUT_DRIFT';
       receipt.failure ??= 'APPS_HOST_INPUT_DRIFT';
+    }
+    if (interrupted) {
+      receipt.status = 'FAILED'; receipt.failure = 'APPS_HOST_INTERRUPTED';
     }
     const finalStatus = adjudicateHost(receipt, proxy?.rejections ?? []);
     receipt.renderRefresh = completedHostChecks(receipt) && !receipt.browserFailure && !receipt.cleanupFailure

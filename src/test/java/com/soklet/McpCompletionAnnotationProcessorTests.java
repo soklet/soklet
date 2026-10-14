@@ -216,7 +216,7 @@ public class McpCompletionAnnotationProcessorTests {
 			String classpath = classes + System.getProperty("path.separator")
 					+ System.getProperty("java.class.path");
 			JavaCompiler.CompilationTask task = compiler.getTask(diagnostics,
-					fileManager, null, List.of("--release", "17", "-parameters",
+					fileManager, null, List.of("--release", "21", "-parameters",
 						"-Asoklet.cacheMode=none", "-classpath", classpath,
 						"-d", classes.toString(), "-s", generated.toString()),
 					null, fileManager.getJavaFileObjects(sourceFile));

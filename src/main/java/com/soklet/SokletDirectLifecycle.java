@@ -356,15 +356,23 @@ final class SokletDirectLifecycle {
 	}
 
 	void throwIfUnsuccessfulShutdown(@NonNull ShutdownResult result) {
+		Optional<RuntimeException> failure = shutdownFailure(result);
+		if (failure.isPresent())
+			throw failure.orElseThrow();
+	}
+
+	@NonNull
+	private Optional<RuntimeException> shutdownFailure(@NonNull ShutdownResult result) {
 		ShutdownResult exactResult = requireNonNull(result);
 		UnexpectedTerminationClaim unexpected =
 				this.terminalUnexpectedTermination;
 		if (exactResult.getStartupDisposition() == StartupDisposition.READY
 				&& unexpected != null)
-			throw new SokletUnexpectedTerminationException(
-					unexpected.event(), exactResult, unexpected.failure());
+			return Optional.of(new SokletUnexpectedTerminationException(
+					unexpected.event(), exactResult, unexpected.failure()));
 		if (!exactResult.isComplete())
-			throw new SokletShutdownIncompleteException(exactResult);
+			return Optional.of(new SokletShutdownIncompleteException(exactResult));
+		return Optional.empty();
 	}
 
 	@NonNull
@@ -375,12 +383,7 @@ final class SokletDirectLifecycle {
 				|| exactResult.startupDisposition()
 				== InternalStartupDisposition.TIMED_OUT)
 			return Optional.of(startupException(exactResult));
-		try {
-			throwIfUnsuccessfulShutdown(exactResult);
-			return Optional.empty();
-		} catch (RuntimeException failure) {
-			return Optional.of(failure);
-		}
+		return shutdownFailure(publicResultFor(exactResult));
 	}
 
 	void requestShutdownIntent() {

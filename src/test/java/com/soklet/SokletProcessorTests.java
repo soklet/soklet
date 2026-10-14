@@ -413,7 +413,7 @@ public class SokletProcessorTests {
 			String classpath = classes + System.getProperty("path.separator")
 					+ System.getProperty("java.class.path");
 			JavaCompiler.CompilationTask task = compiler.getTask(null, fileManager,
-					null, List.of("--release", "17", "-parameters",
+					null, List.of("--release", "21", "-parameters",
 						"-Asoklet.cacheMode=none", "-classpath", classpath,
 						"-d", classes.toString(), "-s", generated.toString()),
 					null, fileManager.getJavaFileObjectsFromPaths(sources));

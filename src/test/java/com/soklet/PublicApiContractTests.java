@@ -90,7 +90,7 @@ class PublicApiContractTests {
 				.getStandardFileManager(diagnostics, Locale.ROOT,
 						StandardCharsets.UTF_8)) {
 			JavacTask task = (JavacTask) compiler.getTask(null, fileManager,
-					diagnostics, List.of("--release", "17", "-proc:none",
+					diagnostics, List.of("--release", "21", "-proc:none",
 							"-classpath", System.getProperty("java.class.path")),
 					null, fileManager.getJavaFileObjectsFromPaths(sourcePaths));
 			List<CompilationUnitTree> compilationUnits = new ArrayList<>();

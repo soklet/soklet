@@ -8,11 +8,12 @@ the explicit additions for `2025-06-18` and `2025-11-25` clients.
 ## 1. Configure the dependency and compiler
 
 Soklet's annotation processor generates the endpoint descriptor at compile
-time. Keep Java parameter names and select the processor explicitly:
+time. Use JDK 21 or newer, keep Java parameter names, and select the processor
+explicitly:
 
 ```xml
 <properties>
-  <maven.compiler.release>17</maven.compiler.release>
+  <maven.compiler.release>21</maven.compiler.release>
 </properties>
 
 <dependencies>

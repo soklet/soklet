@@ -152,7 +152,7 @@ public class StreamingLifecycleTests {
 	public void defaultProducerCapacityNeverCommitsAStreamQueuedBehindHeldProducers() throws Exception {
 		CountDownLatch release = new CountDownLatch(1);
 		AtomicInteger entered = new AtomicInteger();
-		int heldCount = Utilities.virtualThreadsAvailable() ? 17 : 4;
+		int heldCount = 17;
 		Fixture fixture = new Fixture(heldCount + 1, 1, Duration.ofSeconds(2), Duration.ZERO, null);
 		List<Socket> heldSockets = new ArrayList<>();
 		fixture.body("held", StreamingResponseBody.fromWriter(stream -> {
@@ -171,14 +171,11 @@ public class StreamingLifecycleTests {
 						StandardCharsets.ISO_8859_1));
 			}
 			try (Socket extra = fixture.request("/stream/held")) {
-				assertStatus(extra, Utilities.virtualThreadsAvailable() ? 200 : 503);
-				if (Utilities.virtualThreadsAvailable())
-					Assertions.assertEquals("5\r\nready\r\n", new String(extra.getInputStream().readNBytes(10),
-							StandardCharsets.ISO_8859_1));
-				else
-					readRemainder(extra);
+				assertStatus(extra, 200);
+				Assertions.assertEquals("5\r\nready\r\n", new String(extra.getInputStream().readNBytes(10),
+						StandardCharsets.ISO_8859_1));
 			}
-			Assertions.assertEquals(Utilities.virtualThreadsAvailable() ? heldCount + 1 : heldCount, entered.get());
+			Assertions.assertEquals(heldCount + 1, entered.get());
 		} finally {
 			release.countDown();
 			for (Socket socket : heldSockets)

@@ -56,13 +56,11 @@ public class TransportProcessOwnershipTests {
 
 	@Test
 	void sseKeepsProcessAliveAfterMainReturnsAndReleasesItOnClose(@TempDir Path directory) throws Exception {
-		assumeTrue(Runtime.version().feature() >= 21, "SSE requires virtual threads");
 		assertDirectLiveness("SSE", directory, List.of("sse-event-loop"));
 	}
 
 	@Test
 	void aggregateHttpAndSseReleasesEveryListenerOnClose(@TempDir Path directory) throws Exception {
-		assumeTrue(Runtime.version().feature() >= 21, "SSE requires virtual threads");
 		assertDirectLiveness("BOTH", directory, List.of("event-loop", "connection-event-loop", "sse-event-loop"));
 	}
 

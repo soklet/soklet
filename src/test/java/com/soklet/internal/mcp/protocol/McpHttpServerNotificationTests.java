@@ -128,8 +128,8 @@ public class McpHttpServerNotificationTests {
 						handlerInterrupted.set(true);
 						throw exception;
 					}
-					return McpWireResult.complete(new McpJsonObject(
-							Map.of("completed", McpJsonBoolean.TRUE)));
+					return McpApplicationDispatchOutcome.completed(McpWireResult.complete(new McpJsonObject(
+							Map.of("completed", McpJsonBoolean.TRUE))));
 				}));
 		McpHttpEndpointPolicy policy = McpHttpEndpointPolicy.forDiscovery(
 				CorsAuthorizer.rejectAllInstance(),

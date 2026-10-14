@@ -9,18 +9,49 @@ Apps/Skills advertisements. They do not
 qualify an Apps renderer, a Skills consumer, or an immutable release candidate.
 It is not a new release gate and does not replace the TypeScript/Go hooks.
 
-Inspector is exactly `2.7.0` (source commit
-`2e90a628e6296c62e4bef942afbb43d3faa4baf4`), with Apps SDK `2.0.0`. Read the
-[dependency review](dependency-review.md) before execution. Package and lock
-digests are independently pinned by the runner. Installation uses the exact
-lock, an isolated npm cache/configuration, and `npm ci --ignore-scripts`.
-No floating `npx`, native build, or upstream lifecycle script is used.
+The current default is an **unmodified upstream source build** at commit
+`1974465ccb5454a5110e609e4140171fa360a544`, containing upstream
+[fix #2690](https://github.com/modelcontextprotocol/inspector/pull/2690) for plain
+HTTP 403 incorrectly starting OAuth recovery. Its package still says `2.10.1`;
+this is **not the published Inspector 2.10.1 package** and is always recorded as
+`UNRELEASED_UPSTREAM_SOURCE_BUILD`. Read the
+[source-build dependency review](UPSTREAM_DEPENDENCY_REVIEW_2026-10-12.md).
+
+`upstream-source-pin.json` pins the commit archive, all 1,658 original source
+files, and the original root/web/CLI/launcher dependency locks. The builder
+installs each lock with lifecycle scripts disabled in private npm/config/cache
+paths, then directly invokes the reviewed compiler/bundler/test binaries.
+It never patches Inspector, runs npm lifecycle scripts, or uses a Git checkout.
+No commit, tag, package publication, user account, or saved auth state is involved.
+
+Build once in a fresh directory, then reuse the verified build for local probes:
+
+```sh
+node verification/interoperability/inspector/upstream-build.mjs \
+  --work-dir /absolute/path/to/new-inspector-source-build
+```
+
+The builder also runs both upstream challenge/fetch regression suites. The
+October 12 build passed all **67 tests**, including bare 403, intact response
+body, no observer challenge, and preserved 401/challenged-403 behavior.
+`verifyUpstreamBuild()` rejects source, lock, archive, build-tree or recipe drift
+before returning the launcher. Callers check it again after execution. Its
+receipt binds the unreleased source commit and complete installed/build tree;
+it is local build provenance, not a published-package or host-qualification PASS.
+
+The unchanged `package.json`, `package-lock.json`, and September 19
+[dependency review](dependency-review.md) retain the historical **2.7.0**
+installation and pinned **Apps SDK 2.0.0** shell-build dependencies. They are not
+the source of the current default Inspector executable. Historical 2.7.0
+observations below remain scoped to that version; reruns produce new receipts.
 
 ## Run the CLI profile
 
 Requirements: POSIX process groups, Node `26.5.0`, npm `11.17.0`, a real JDK
 executable (not the macOS `/usr/bin/java` launcher), Git, and `unzip`. Network
-access is needed for locked npm artifacts; the probes themselves use loopback.
+access is needed only when building the source/dependency installation; a supplied
+`--inspector-build` is verified without fetching. The probes use loopback.
+Omitting `--inspector-build` creates a fresh pinned source build inside the run.
 Use the candidate's original POM: its bytes must match the POM embedded in the
 JAR. The work directory must be new and below this repository's
 `target/inspector/` directory.
@@ -30,13 +61,17 @@ node verification/interoperability/inspector/run.mjs \
   --candidate-jar /absolute/path/to/candidate.jar \
   --candidate-pom /absolute/path/to/pom.xml \
   --java /absolute/path/to/jdk/bin/java \
-  --work-dir target/inspector/local-run
+  --work-dir target/inspector/local-run \
+  --inspector-build /absolute/path/to/verified-inspector-source-build
 ```
 
 The runner compiles the existing public fixture against only that candidate
 JAR and executes its standalone contracts. Each of four probes then starts a
 fresh JVM and Inspector process: tool listing and `test_simple_text`, with
-Apps/Skills requested enabled and requested disabled. Every config explicitly
+Apps explicitly enabled with `--advertise-apps`, then disabled by omitting that
+flag. Skills remain enabled in both rows: this source CLI has no supported
+Skills-disable switch and does not forward the catalog extension toggle. This
+current profile qualifies Apps ON/OFF advertisements, not Skills OFF. Every config explicitly
 uses modern `2026-07-28`, HTTP, read-only `--config`, and `--stored-auth-only`.
 
 `receipt.json` records the candidate JAR/POM, exact working-tree identity,
@@ -47,7 +82,18 @@ these files outside `target` when recording a checkpoint; a Maven clean removes
 the working output. Do not archive the entire installation/cache/session tree
 as a trace or release receipt.
 
-## Verdicts and the pinned CLI limitation
+## Current verdict and historical CLI limitation
+
+The current source profile is `modern-cli-apps-toggle-skills-enabled.v1`. All
+four rows require their exact requested Apps value and a valid Skills
+advertisement, complete fixture results, the two exact upstream memory-store
+diagnostic lines, empty fixture stderr under its explicit admission policy,
+unchanged inputs and graceful shutdown. Extra output or a capability mismatch
+fails. Tracked working-tree deletions are represented explicitly in the source
+fingerprint; restoring or changing a file invalidates that fingerprint.
+
+The following both-extension-toggle observation applies only to historical
+Inspector 2.7.0 receipts, not the current profile:
 
 Exit `0` requires all four probes to pass. Exit `2` means both enabled probes
 pass but both requested-disabled probes still advertise Apps and Skills in the
@@ -88,7 +134,8 @@ node verification/interoperability/inspector/run-web.mjs \
   --candidate-pom /absolute/path/to/pom.xml \
   --java /absolute/path/to/jdk/bin/java \
   --browser '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
-  --work-dir target/inspector/web-local-run
+  --work-dir target/inspector/web-local-run \
+  --inspector-build /absolute/path/to/verified-inspector-source-build
 ```
 
 Two fresh browser/Inspector/JVM sessions request both extensions ON, then OFF.

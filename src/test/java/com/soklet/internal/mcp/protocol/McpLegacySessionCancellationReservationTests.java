@@ -60,7 +60,7 @@ class McpLegacySessionCancellationReservationTests {
 				execution.start();
 				execution.dispatch(transport, request(profile), profile, identity(), call -> {
 					invocation.set(call);
-					return McpWireResult.complete(McpJsonObject.empty());
+					return McpApplicationDispatchOutcome.completed(McpWireResult.complete(McpJsonObject.empty()));
 				}, System.nanoTime() + TimeUnit.SECONDS.toNanos(20), response -> {
 					writerEntered.countDown();
 					awaitUninterruptibly(releaseWriter);
@@ -108,7 +108,7 @@ class McpLegacySessionCancellationReservationTests {
 				execution.dispatch(transport, request(profile), profile, identity(), call -> {
 					invocation.set(call); handlerEntered.countDown();
 					awaitUninterruptibly(releaseHandler);
-					return McpWireResult.complete(McpJsonObject.empty());
+					return McpApplicationDispatchOutcome.completed(McpWireResult.complete(McpJsonObject.empty()));
 				}, System.nanoTime() + TimeUnit.SECONDS.toNanos(20), new McpApplicationResponseWriter() {
 					@Override public boolean write(McpApplicationResponse response) { responses.incrementAndGet(); return true; }
 					@Override public void didFinishPhysicalWork() { physicalExits.incrementAndGet(); }
@@ -167,7 +167,7 @@ class McpLegacySessionCancellationReservationTests {
 					handlerEntered.countDown();
 					awaitUninterruptibly(releaseHandler);
 					handlerReturned.countDown();
-					return McpWireResult.complete(McpJsonObject.empty());
+					return McpApplicationDispatchOutcome.completed(McpWireResult.complete(McpJsonObject.empty()));
 				}, System.nanoTime() + TimeUnit.SECONDS.toNanos(20), new McpApplicationResponseWriter() {
 					@Override public boolean write(McpApplicationResponse response) { responses.incrementAndGet(); return true; }
 					@Override public void didFinishPhysicalWork() { physicalExits.incrementAndGet(); }
@@ -237,7 +237,7 @@ class McpLegacySessionCancellationReservationTests {
 							request -> McpRequestAdmissionDecision.ACCEPT), endpoint,
 					McpApplicationRequestRouter.fromHandlers(Map.of("tools/call", call -> {
 						invocation.set(call); handlerEntered.countDown(); awaitUninterruptibly(releaseHandler);
-						return McpWireResult.complete(McpJsonObject.empty());
+						return McpApplicationDispatchOutcome.completed(McpWireResult.complete(McpJsonObject.empty()));
 					})), observation, List.of(), Optional.empty(), Map.of(revision, endpoint));
 			McpHttpTransportConfiguration transportConfiguration = McpHttpTransportConfiguration.productionDefaults(0);
 			McpHttpServerRuntime runtime = new McpHttpServerRuntime(transportConfiguration, List.of(binding),

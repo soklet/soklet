@@ -70,13 +70,13 @@ if (mode === 'maven' || mode === 'gradle') {
     .map(name => join(fixture, 'src/main/java/example', name));
   const classes = join(output, 'classes');
   mkdirSync(classes);
-  run(join(javaHome, 'bin', 'javac'), ['--release', '17', '-parameters',
+  run(join(javaHome, 'bin', 'javac'), ['--release', '21', '-parameters',
     '-processor', 'com.soklet.SokletProcessor', '-cp', jar, '-d', classes, ...sources]);
   consumerJar = join(output, 'consumer.jar');
   run(join(javaHome, 'bin', 'jar'), ['--create', '--file', consumerJar, '-C', classes, '.']);
   unprocessed = join(output, 'unprocessed');
   mkdirSync(unprocessed);
-  run(join(javaHome, 'bin', 'javac'), ['--release', '17', '-parameters', '-proc:none',
+  run(join(javaHome, 'bin', 'javac'), ['--release', '21', '-parameters', '-proc:none',
     '-cp', jar, '-d', unprocessed, ...sources]);
 }
 const result = run(java, ['-cp', `${consumerJar}:${jar}`, 'example.ConsumerSmoke']);
@@ -84,7 +84,7 @@ requirePositiveOutput(result, javaFeature);
 const consumerHash = hash(consumerJar);
 const helperClasses = join(output, 'helper-classes');
 mkdirSync(helperClasses);
-run(join(javaHome, 'bin', 'javac'), ['--release', '17', '-proc:none', '-d', helperClasses,
+run(join(javaHome, 'bin', 'javac'), ['--release', '21', '-proc:none', '-d', helperClasses,
   join(source, 'tools/ConsumerJarMutation.java')]);
 const negativeControls = [];
 for (const name of ['missing-http-index', 'corrupt-http-index']) {

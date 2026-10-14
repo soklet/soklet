@@ -1121,14 +1121,49 @@ public class MicrohttpInternalTests {
 	}
 
 	@Test
+	public void customFileTransferRetainsLatestFailureAfterManyDeferredRetries(@TempDir Path directory) throws Exception {
+		Path file = directory.resolve("latest-witness-source");
+		Files.writeString(file, "abc");
+		for (boolean deferred : List.of(false, true)) {
+			for (boolean unchecked : List.of(false, true)) {
+				List<IOException> witnessed = new ArrayList<>();
+				try (TransferProbeFileChannel channel = new TransferProbeFileChannel(FileChannel.open(file, READ), null) {
+					@Override public long transferTo(long position, long count, java.nio.channels.WritableByteChannel target) throws IOException {
+						do {
+							try { target.write(ByteBuffer.wrap(new byte[] {'a'})); }
+							catch (IOException failure) { witnessed.add(failure); }
+							if (deferred && witnessed.size() < 16) return 0L;
+						} while (witnessed.size() < 16);
+						IOException latest = witnessed.getLast();
+						if (unchecked) throw new java.io.UncheckedIOException(latest);
+						throw latest;
+					}
+				}) {
+					FileChannelWritableSource source = new FileChannelWritableSource(channel, 0, 3, false);
+					SocketChannel socket = new PartialWriteSocketChannel(3) {
+						@Override public int write(ByteBuffer buffer) throws IOException { throw new IOException("Controlled sink failure"); }
+					};
+					if (deferred)
+						for (int attempt = 0; attempt < 15; attempt++) Assertions.assertEquals(0L, source.writeTo(socket, 3));
+					SocketChannelIo.SocketIoException failure = Assertions.assertThrows(SocketChannelIo.SocketIoException.class,
+							() -> source.writeTo(socket, 3));
+					Assertions.assertSame(witnessed.getLast(), failure);
+					Assertions.assertEquals(16, witnessed.size());
+					Assertions.assertEquals(0, channel.probeReads, "Classifying custom sink failures must never probe the source");
+				}
+			}
+		}
+	}
+
+	@Test
 	public void customFileTransferBoundsLifetimeSocketWitnessesAndRejectsUncheckedForeignCauses(@TempDir Path directory) throws Exception {
 		Path file = directory.resolve("bounded-witness-source");
 		Files.writeString(file, "abc");
-		for (int reportedIndex : List.of(0, 7, 8)) {
+		for (int reportedIndex : List.of(0, 7, 8, 9)) {
 			List<IOException> witnessed = new ArrayList<>();
 			try (TransferProbeFileChannel channel = new TransferProbeFileChannel(FileChannel.open(file, READ), null) {
 				@Override public long transferTo(long position, long count, java.nio.channels.WritableByteChannel target) throws IOException {
-					for (int attempt = 0; attempt < 9; attempt++) {
+					for (int attempt = 0; attempt < 10; attempt++) {
 						try { target.write(ByteBuffer.wrap(new byte[] {'a'})); }
 						catch (IOException failure) { witnessed.add(failure); }
 					}
@@ -1139,7 +1174,7 @@ public class MicrohttpInternalTests {
 				SocketChannel socket = new PartialWriteSocketChannel(3) {
 					@Override public int write(ByteBuffer buffer) throws IOException { throw new IOException("Controlled sink failure"); }
 				};
-				if (reportedIndex < 8) {
+				if (reportedIndex < 8 || reportedIndex == 9) {
 					SocketChannelIo.SocketIoException failure = Assertions.assertThrows(SocketChannelIo.SocketIoException.class,
 							() -> source.writeTo(socket, 3));
 					Assertions.assertSame(witnessed.get(reportedIndex), failure);
@@ -1149,7 +1184,7 @@ public class MicrohttpInternalTests {
 					Assertions.assertInstanceOf(java.io.UncheckedIOException.class, failure.getCause());
 					Assertions.assertSame(witnessed.get(reportedIndex), failure.getCause().getCause());
 				}
-				Assertions.assertEquals(9, witnessed.size());
+				Assertions.assertEquals(10, witnessed.size());
 				Assertions.assertEquals(0, channel.probeReads);
 			}
 		}

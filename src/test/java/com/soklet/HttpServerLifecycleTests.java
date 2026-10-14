@@ -32,7 +32,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.net.HttpURLConnection;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -118,6 +117,13 @@ public class HttpServerLifecycleTests {
 					failure.getCause());
 			Assertions.assertSame(failure.getShutdownResult(),
 					soklet.getShutdownResult().orElseThrow());
+			SokletStartupException terminalFailure = Assertions.assertInstanceOf(
+					SokletStartupException.class,
+					soklet.getDirectLifecycle().applicationTerminalFailure(
+							failure.getInternalShutdownResult()).orElseThrow());
+			Assertions.assertSame(failure.getCause(), terminalFailure.getCause());
+			Assertions.assertSame(failure.getShutdownResult(), terminalFailure.getShutdownResult());
+			Assertions.assertEquals(StartupDisposition.FAILED, terminalFailure.getStartupDisposition());
 			Assertions.assertEquals(SokletStatus.CLOSED, soklet.getStatus());
 			Assertions.assertTrue(builtIn.getEventLoop().isEmpty());
 			Assertions.assertTrue(
@@ -151,6 +157,12 @@ public class HttpServerLifecycleTests {
 		SokletUnexpectedTerminationException replay = Assertions.assertThrows(
 				SokletUnexpectedTerminationException.class, soklet::close);
 		Assertions.assertSame(result, replay.getShutdownResult());
+		SokletUnexpectedTerminationException terminalFailure = Assertions.assertInstanceOf(
+				SokletUnexpectedTerminationException.class,
+				soklet.getDirectLifecycle().applicationTerminalFailure(
+						soklet.getDirectLifecycle().result().orElseThrow()).orElseThrow());
+		Assertions.assertSame(result, terminalFailure.getShutdownResult());
+		Assertions.assertSame(replay.getCause(), terminalFailure.getCause());
 	}
 
 	@Test
@@ -287,7 +299,7 @@ public class HttpServerLifecycleTests {
 	}
 
 	@Test
-	void defaultRequestHandlerExecutorUsesRuntimeThreadStrategy()
+	void defaultRequestHandlerExecutorUsesVirtualThreads()
 			throws Exception {
 		int port = findFreePort();
 		AtomicReference<Boolean> handlerThreadVirtual = new AtomicReference<>();
@@ -300,9 +312,7 @@ public class HttpServerLifecycleTests {
 			HttpURLConnection connection = open("GET",
 					new URL("http://127.0.0.1:" + port + "/thread"), Map.of());
 			Assertions.assertEquals(200, connection.getResponseCode());
-			Assertions.assertEquals(Boolean.valueOf(
-					Utilities.virtualThreadsAvailable()),
-					handlerThreadVirtual.get());
+			Assertions.assertEquals(Boolean.TRUE, handlerThreadVirtual.get());
 		} finally {
 			ThreadRecordingResource.HANDLER_THREAD_VIRTUAL.set(null);
 		}
@@ -361,8 +371,7 @@ public class HttpServerLifecycleTests {
 	void requestHandlerDefaultsAndValidationRemainTransportLocal() {
 		HttpServer concurrency = HttpServer.withPort(0).concurrency(3).build();
 		DefaultHttpServer defaults = (DefaultHttpServer) concurrency;
-		int expectedConcurrency = Boolean.TRUE.equals(
-				Utilities.virtualThreadsAvailable()) ? 48 : 3;
+		int expectedConcurrency = 48;
 		Assertions.assertEquals(expectedConcurrency,
 				defaults.getRequestHandlerConcurrency());
 		Assertions.assertEquals(expectedConcurrency * 64,
@@ -494,7 +503,7 @@ public class HttpServerLifecycleTests {
 		@NonNull
 		public String thread() {
 			requireNonNull(HANDLER_THREAD_VIRTUAL.get())
-					.set(currentThreadIsVirtual());
+					.set(Thread.currentThread().isVirtual());
 			return "ok";
 		}
 	}
@@ -525,19 +534,6 @@ public class HttpServerLifecycleTests {
 				@NonNull StartupContext startupContext) {
 			return context.attachTransparentDelegate(this.delegate,
 					context.getAdmissionFencedRequestHandler());
-		}
-	}
-
-	private static boolean currentThreadIsVirtual() {
-		try {
-			Method isVirtual = Thread.class.getMethod("isVirtual");
-			return Boolean.TRUE.equals(isVirtual.invoke(Thread.currentThread()));
-		} catch (NoSuchMethodException ignored) {
-			return false;
-		} catch (ReflectiveOperationException exception) {
-			throw new AssertionError(
-					"Unable to determine whether current thread is virtual",
-					exception);
 		}
 	}
 

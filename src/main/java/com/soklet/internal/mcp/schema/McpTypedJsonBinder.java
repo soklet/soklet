@@ -166,7 +166,7 @@ final class McpTypedJsonBinder {
 						McpTypedJsonBindingException.Reason.NON_INTEGER_NUMBER, path);
 			try {
 				// One division, rather than stripping every trailing zero separately
-				// on JDK 17/21. The scale is bounded by the original precision here.
+				// on JDK 21. The scale is bounded by the original precision here.
 				normalized = value.setScale(0, RoundingMode.UNNECESSARY);
 			} catch (ArithmeticException exception) {
 				throw failure(McpTypedJsonBindingException.Operation.FROM_JSON,

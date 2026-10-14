@@ -4412,7 +4412,7 @@ public final class McpServerRuntimeBridge {
 	}
 
 	@NonNull
-	private static McpWireResult invokeTool(@NonNull ToolPlan toolPlan,
+	private static McpApplicationDispatchOutcome invokeTool(@NonNull ToolPlan toolPlan,
 			@NonNull McpInputRequestPlan inputRequestPlan,
 			@NonNull McpApplicationInvocation invocation,
 			@NonNull McpEndpoint publicEndpoint,
@@ -4452,45 +4452,47 @@ public final class McpServerRuntimeBridge {
 				toolPlan.invoker().invoke(toolInvocation),
 				"The MCP tool invoker returned null.");
 
-		if (result instanceof ToolInvocationResult.InvalidInput)
-			throw new McpInvalidApplicationInputException();
-		if (result instanceof ToolInvocationResult.JsonRpcError error)
-			throw new McpApplicationJsonRpcException(toInternal(error));
-		if (result instanceof ToolInvocationResult.TaskCapabilityRequired)
-			throw new McpProtocolJsonRpcException(
-					McpJsonRpcError.missingRequiredClientExtension(
-							TASKS_EXTENSION_IDENTIFIER));
-		if (result instanceof ToolInvocationResult.TaskCreated taskCreated)
-			return taskResult(taskCreated.taskSnapshot(), true);
-		if (result instanceof ToolInvocationResult.InputRequired inputRequired)
-			return inputRequiredResult(inputRequired.result(),
-					inputRequestPlan,
-					toolPlan.requestStateMode(), request.method(),
-					requestMetadata.clientCapabilities(), invocation,
-					publicEndpoint, requestStateRuntime);
+		return switch (result) {
+			case ToolInvocationResult.InvalidInput ignored ->
+					McpApplicationDispatchOutcome.invalidInput();
+			case ToolInvocationResult.JsonRpcError error ->
+					McpApplicationDispatchOutcome.applicationError(toInternal(error));
+			case ToolInvocationResult.TaskCapabilityRequired ignored ->
+					McpApplicationDispatchOutcome.protocolError(
+							McpJsonRpcError.missingRequiredClientExtension(
+									TASKS_EXTENSION_IDENTIFIER));
+			case ToolInvocationResult.TaskCreated taskCreated ->
+					McpApplicationDispatchOutcome.completed(
+							taskResult(taskCreated.taskSnapshot(), true));
+			case ToolInvocationResult.InputRequired inputRequired ->
+					inputRequiredResult(inputRequired.result(), inputRequestPlan,
+							toolPlan.requestStateMode(), request.method(),
+							requestMetadata.clientCapabilities(), invocation,
+							publicEndpoint, requestStateRuntime);
+			case ToolInvocationResult.Complete complete ->
+					McpApplicationDispatchOutcome.completed(toolResult(toolPlan,
+							(com.soklet.internal.mcp.protocol.McpJsonObject)
+									toInternal(complete.resultFields()),
+							(com.soklet.internal.mcp.protocol.McpJsonObject)
+									toInternal(complete.metadata())));
+			case ToolInvocationResult.Structured structured -> {
+				Map<String, com.soklet.internal.mcp.protocol.McpJsonValue> fields =
+						new LinkedHashMap<>();
+				fields.put("content",
+						new com.soklet.internal.mcp.protocol.McpJsonArray(List.of()));
+				fields.put("structuredContent", toInternal(structured.structuredContent()));
+				yield McpApplicationDispatchOutcome.completed(toolResult(toolPlan,
+						new com.soklet.internal.mcp.protocol.McpJsonObject(fields),
+						(com.soklet.internal.mcp.protocol.McpJsonObject)
+								toInternal(structured.metadata())));
+			}
+		};
+	}
 
-		com.soklet.internal.mcp.protocol.McpJsonObject resultFields;
-		com.soklet.internal.mcp.protocol.McpJsonObject resultMetadata;
-		if (result instanceof ToolInvocationResult.Complete complete) {
-			resultFields = (com.soklet.internal.mcp.protocol.McpJsonObject)
-					toInternal(complete.resultFields());
-			resultMetadata = (com.soklet.internal.mcp.protocol.McpJsonObject)
-					toInternal(complete.metadata());
-		} else if (result instanceof ToolInvocationResult.Structured structured) {
-			com.soklet.internal.mcp.protocol.McpJsonValue structuredContent =
-					toInternal(structured.structuredContent());
-			Map<String, com.soklet.internal.mcp.protocol.McpJsonValue> fields =
-					new LinkedHashMap<>();
-			fields.put("content",
-					new com.soklet.internal.mcp.protocol.McpJsonArray(List.of()));
-			fields.put("structuredContent", structuredContent);
-			resultFields = new com.soklet.internal.mcp.protocol.McpJsonObject(fields);
-			resultMetadata = (com.soklet.internal.mcp.protocol.McpJsonObject)
-					toInternal(structured.metadata());
-		} else {
-			throw new IllegalArgumentException("Unsupported MCP tool invocation result.");
-		}
-
+	@NonNull
+	private static McpWireResult toolResult(@NonNull ToolPlan toolPlan,
+			com.soklet.internal.mcp.protocol.@NonNull McpJsonObject resultFields,
+			com.soklet.internal.mcp.protocol.@NonNull McpJsonObject resultMetadata) {
 		McpResultMetadata metadata = new McpResultMetadata(
 				Optional.empty(), resultMetadata);
 		Optional<McpResultMetadata> optionalMetadata = metadata.isEmpty()
@@ -4508,11 +4510,14 @@ public final class McpServerRuntimeBridge {
 	}
 
 	@NonNull
-	private static McpWireResult invokeTaskGet(
+	private static McpApplicationDispatchOutcome invokeTaskGet(
 			@NonNull TaskManagerAdapter taskManagerAdapter,
 			@NonNull Optional<@NonNull CatalogAccessAdapter> catalogAccessAdapter,
 			@NonNull McpApplicationInvocation invocation) throws Exception {
-		String taskId = taskId(invocation.request());
+		Optional<String> validatedTaskId = taskId(invocation.request());
+		if (validatedTaskId.isEmpty())
+			return McpApplicationDispatchOutcome.invalidInput();
+		String taskId = validatedTaskId.orElseThrow();
 		Optional<CatalogAccessSession> catalogAccessView;
 		if (requireNonNull(catalogAccessAdapter).isEmpty()) {
 			catalogAccessView = Optional.empty();
@@ -4534,20 +4539,22 @@ public final class McpServerRuntimeBridge {
 						taskId, catalogAccessView),
 				"The MCP task manager adapter returned null.");
 		if (taskSnapshot.isEmpty())
-			throw new McpInvalidApplicationInputException();
+			return McpApplicationDispatchOutcome.invalidInput();
 		TaskSnapshot snapshot = taskSnapshot.orElseThrow();
-		requireTaskInputCapabilities(snapshot,
+		Optional<McpJsonRpcError> capabilityError = taskInputCapabilityError(snapshot,
 				invocation.request().params().metadata().clientCapabilities());
-		return taskResult(snapshot, false);
+		if (capabilityError.isPresent())
+			return McpApplicationDispatchOutcome.protocolError(capabilityError.orElseThrow());
+		return McpApplicationDispatchOutcome.completed(taskResult(snapshot, false));
 	}
 
-	static void requireTaskInputCapabilities(
+	@NonNull
+	static Optional<@NonNull McpJsonRpcError> taskInputCapabilityError(
 			@NonNull TaskSnapshot taskSnapshot,
-			@NonNull McpClientCapabilities clientCapabilities)
-			throws McpProtocolJsonRpcException {
+			@NonNull McpClientCapabilities clientCapabilities) {
 		McpTask task = requireNonNull(taskSnapshot).task();
 		if (task.getTaskStatus() != com.soklet.McpTaskStatus.INPUT_REQUIRED)
-			return;
+			return Optional.empty();
 		Set<McpClientCapabilityRequirement> missingCapabilities =
 				new LinkedHashSet<>();
 		for (McpInputRequest inputRequest : task.getInputRequests().values()) {
@@ -4559,21 +4566,25 @@ public final class McpServerRuntimeBridge {
 					missingCapabilities.add(capability);
 		}
 		if (!missingCapabilities.isEmpty())
-			throw new McpProtocolJsonRpcException(
+			return Optional.of(
 					McpJsonRpcError.missingRequiredClientCapabilities(
 							missingCapabilities));
+		return Optional.empty();
 	}
 
 	@NonNull
-	private static McpWireResult invokeTaskUpdate(
+	private static McpApplicationDispatchOutcome invokeTaskUpdate(
 			@NonNull TaskManagerAdapter taskManagerAdapter,
 			@NonNull McpApplicationInvocation invocation) throws Exception {
-		String taskId = taskId(invocation.request());
+		Optional<String> validatedTaskId = taskId(invocation.request());
+		if (validatedTaskId.isEmpty())
+			return McpApplicationDispatchOutcome.invalidInput();
+		String taskId = validatedTaskId.orElseThrow();
 		com.soklet.internal.mcp.protocol.McpJsonValue inputResponsesValue =
 				invocation.request().params().fields().members().get("inputResponses");
 		if (!(inputResponsesValue
 				instanceof com.soklet.internal.mcp.protocol.McpJsonObject inputResponses))
-			throw new McpInvalidApplicationInputException();
+			return McpApplicationDispatchOutcome.invalidInput();
 		McpRequestContext requestContext = requirePublicRequestContext(invocation);
 		McpInputResponses publicInputResponses = requestContext.getInputResponses();
 		if (!publicInputResponses.asMap().equals(
@@ -4584,31 +4595,33 @@ public final class McpServerRuntimeBridge {
 			taskManagerAdapter.updateTask(requestContext, taskId,
 					publicInputResponses);
 		} catch (McpTaskNotFoundException exception) {
-			throw new McpInvalidApplicationInputException();
+			return McpApplicationDispatchOutcome.invalidInput();
 		}
-		return McpWireResult.complete(
-				com.soklet.internal.mcp.protocol.McpJsonObject.empty());
+		return McpApplicationDispatchOutcome.completed(McpWireResult.complete(
+				com.soklet.internal.mcp.protocol.McpJsonObject.empty()));
 	}
 
 	@NonNull
-	private static McpWireResult invokeTaskCancel(
+	private static McpApplicationDispatchOutcome invokeTaskCancel(
 			@NonNull TaskManagerAdapter taskManagerAdapter,
 			@NonNull McpApplicationInvocation invocation) throws Exception {
-		String taskId = taskId(invocation.request());
+		Optional<String> validatedTaskId = taskId(invocation.request());
+		if (validatedTaskId.isEmpty())
+			return McpApplicationDispatchOutcome.invalidInput();
+		String taskId = validatedTaskId.orElseThrow();
 		try {
 			taskManagerAdapter.requestTaskCancelation(
 					requirePublicRequestContext(invocation), taskId);
 		} catch (McpTaskNotFoundException exception) {
-			throw new McpInvalidApplicationInputException();
+			return McpApplicationDispatchOutcome.invalidInput();
 		}
-		return McpWireResult.complete(
-				com.soklet.internal.mcp.protocol.McpJsonObject.empty());
+		return McpApplicationDispatchOutcome.completed(McpWireResult.complete(
+				com.soklet.internal.mcp.protocol.McpJsonObject.empty()));
 	}
 
 	@NonNull
-	private static String taskId(
-			McpJsonRpcMessage.@NonNull Request request) throws
-			McpInvalidApplicationInputException {
+	private static Optional<@NonNull String> taskId(
+			McpJsonRpcMessage.@NonNull Request request) {
 		com.soklet.internal.mcp.protocol.McpJsonValue taskIdValue =
 				requireNonNull(request).params().fields().members().get("taskId");
 		if (!(taskIdValue
@@ -4616,8 +4629,8 @@ public final class McpServerRuntimeBridge {
 				|| string.value().isBlank()
 				|| string.value().indexOf('\r') >= 0
 				|| string.value().indexOf('\n') >= 0)
-			throw new McpInvalidApplicationInputException();
-		return string.value();
+			return Optional.empty();
+		return Optional.of(string.value());
 	}
 
 	@NonNull
@@ -4848,7 +4861,7 @@ public final class McpServerRuntimeBridge {
 	}
 
 	@NonNull
-	private static McpWireResult invokeCompletion(
+	private static McpApplicationDispatchOutcome invokeCompletion(
 			@NonNull CompletionPlan completionPlan,
 			@NonNull McpApplicationInvocation invocation,
 			@NonNull McpEndpoint publicEndpoint,
@@ -4873,9 +4886,16 @@ public final class McpServerRuntimeBridge {
 				Optional.empty(), invocation.selectedLocale(),
 				invocation.catalogAccessView().flatMap(
 						CatalogAccessSession::localizationContext));
-		com.soklet.McpArgumentCompletionResult result = requireNonNull(completionPlan.invoker().invoke(
-				new CompletionInvocation(base, argumentName, argumentValue, contextArguments)),
-				"The MCP Completion invoker returned null.");
+		com.soklet.McpArgumentCompletionResult result;
+		try {
+			result = requireNonNull(completionPlan.invoker().invoke(
+					new CompletionInvocation(base, argumentName, argumentValue, contextArguments)),
+					"The MCP Completion invoker returned null.");
+		} catch (McpApplicationJsonRpcException exception) {
+			// The Completion callback retains its exception-compatible signature;
+			// only the exact public handler boundary creates this trusted signal.
+			return McpApplicationDispatchOutcome.applicationError(exception.error());
+		}
 		List<com.soklet.internal.mcp.protocol.McpJsonValue> values =
 				result.getValues().stream()
 						.map(com.soklet.internal.mcp.protocol.McpJsonString::new)
@@ -4896,13 +4916,13 @@ public final class McpServerRuntimeBridge {
 						toInternal(result.getMetadata());
 		McpResultMetadata resultMetadata =
 				new McpResultMetadata(Optional.empty(), metadata);
-		return McpWireResult.complete(
+		return McpApplicationDispatchOutcome.completed(McpWireResult.complete(
 				new com.soklet.internal.mcp.protocol.McpJsonObject(resultFields),
 				resultMetadata.isEmpty() ? Optional.empty()
-						: Optional.of(resultMetadata));
+						: Optional.of(resultMetadata)));
 	}
 
-	private static McpWireResult invokeSkills(@NonNull SkillsPlan plan,
+	private static McpApplicationDispatchOutcome invokeSkills(@NonNull SkillsPlan plan,
 			@NonNull McpApplicationInvocation invocation, @NonNull McpEndpoint publicEndpoint) throws Exception {
 		McpJsonRpcMessage.Request request = invocation.request();
 		McpRequestMetadata metadata = request.params().metadata();
@@ -4926,18 +4946,21 @@ public final class McpServerRuntimeBridge {
 				invocation.pastDeadline(), Optional.empty(), invocation.selectedLocale(), Optional.empty());
 		ResourceListInvocationResult result = requireNonNull(plan.invoker().invoke(
 				new SkillsInvocation(base, cursor, uri)), "The MCP Skills invoker returned null.");
-		if (result instanceof ResourceListInvocationResult.JsonRpcError error)
-			throw new McpApplicationJsonRpcException(toInternal(error));
-		if (!(result instanceof ResourceListInvocationResult.Complete complete))
-			throw new IllegalArgumentException("Unsupported MCP Skills invocation result.");
-		McpJsonValue nextCursor = complete.resultFields().getMembers().get("nextCursor");
-		if (nextCursor != null && (!(nextCursor instanceof McpJsonString string)
-				|| !McpCursorValidator.fitsWithinUtf8ByteLimit(string.getValue(), plan.maximumCursorSizeInBytes())))
-			throw new IllegalArgumentException("Invalid MCP Skills continuation cursor.");
-		return completeResult(complete.resultFields(), complete.metadata());
+		return switch (result) {
+			case ResourceListInvocationResult.JsonRpcError error ->
+					McpApplicationDispatchOutcome.applicationError(toInternal(error));
+			case ResourceListInvocationResult.Complete complete -> {
+				McpJsonValue nextCursor = complete.resultFields().getMembers().get("nextCursor");
+				if (nextCursor != null && (!(nextCursor instanceof McpJsonString string)
+						|| !McpCursorValidator.fitsWithinUtf8ByteLimit(string.getValue(), plan.maximumCursorSizeInBytes())))
+					throw new IllegalArgumentException("Invalid MCP Skills continuation cursor.");
+				yield McpApplicationDispatchOutcome.completed(
+						completeResult(complete.resultFields(), complete.metadata()));
+			}
+		};
 	}
 
-	private static McpWireResult invokePrompt(@NonNull PromptPlan promptPlan,
+	private static McpApplicationDispatchOutcome invokePrompt(@NonNull PromptPlan promptPlan,
 			@NonNull McpInputRequestPlan inputRequestPlan,
 			@NonNull McpApplicationInvocation invocation,
 			@NonNull McpEndpoint publicEndpoint,
@@ -4977,34 +5000,24 @@ public final class McpServerRuntimeBridge {
 				promptPlan.invoker().invoke(promptInvocation),
 				"The MCP prompt invoker returned null.");
 
-		if (result instanceof PromptInvocationResult.InvalidInput)
-			throw new McpInvalidApplicationInputException();
-		if (result instanceof PromptInvocationResult.JsonRpcError error)
-			throw new McpApplicationJsonRpcException(toInternal(error));
-		if (result instanceof PromptInvocationResult.InputRequired inputRequired)
-			return inputRequiredResult(inputRequired.result(),
-					inputRequestPlan,
-					promptPlan.requestStateMode(), request.method(),
-					requestMetadata.clientCapabilities(), invocation,
-					publicEndpoint, requestStateRuntime);
-		if (!(result instanceof PromptInvocationResult.Complete complete))
-			throw new IllegalArgumentException(
-					"Unsupported MCP prompt invocation result.");
-
-		com.soklet.internal.mcp.protocol.McpJsonObject resultFields =
-				(com.soklet.internal.mcp.protocol.McpJsonObject)
-						toInternal(complete.resultFields());
-		com.soklet.internal.mcp.protocol.McpJsonObject resultMetadata =
-				(com.soklet.internal.mcp.protocol.McpJsonObject)
-						toInternal(complete.metadata());
-		McpResultMetadata metadata = new McpResultMetadata(
-				Optional.empty(), resultMetadata);
-		return McpWireResult.complete(resultFields,
-				metadata.isEmpty() ? Optional.empty() : Optional.of(metadata));
+		return switch (result) {
+			case PromptInvocationResult.InvalidInput ignored ->
+					McpApplicationDispatchOutcome.invalidInput();
+			case PromptInvocationResult.JsonRpcError error ->
+					McpApplicationDispatchOutcome.applicationError(toInternal(error));
+			case PromptInvocationResult.InputRequired inputRequired ->
+					inputRequiredResult(inputRequired.result(), inputRequestPlan,
+							promptPlan.requestStateMode(), request.method(),
+							requestMetadata.clientCapabilities(), invocation,
+							publicEndpoint, requestStateRuntime);
+			case PromptInvocationResult.Complete complete ->
+					McpApplicationDispatchOutcome.completed(
+							completeResult(complete.resultFields(), complete.metadata()));
+		};
 	}
 
 	@NonNull
-	private static McpWireResult invokeResource(@NonNull ResourcePlan resourcePlan,
+	private static McpApplicationDispatchOutcome invokeResource(@NonNull ResourcePlan resourcePlan,
 			@NonNull McpInputRequestPlan inputRequestPlan,
 			@NonNull McpApplicationResourceReadInvocation internalInvocation,
 			@NonNull McpEndpoint publicEndpoint,
@@ -5038,35 +5051,34 @@ public final class McpServerRuntimeBridge {
 				resourcePlan.invoker().invoke(resourceInvocation),
 				"The MCP resource invoker returned null.");
 
-		if (result instanceof ResourceInvocationResult.InvalidInput)
-			throw new McpInvalidApplicationInputException();
-		if (result instanceof ResourceInvocationResult.ResourceNotFound missing) {
-			McpJsonRpcError canonicalError = new McpJsonRpcError(
-					McpJsonRpcError.INVALID_PARAMS, "Resource not found",
-					Optional.of(new com.soklet.internal.mcp.protocol.McpJsonObject(Map.of(
-							"uri", new com.soklet.internal.mcp.protocol.McpJsonString(
-									missing.resourceUri().toString())))));
-			throw new McpApplicationJsonRpcException(invocation.protocolProfile()
-					.renderFrameworkError(McpProfileErrorKind.RESOURCE_NOT_FOUND,
-							canonicalError));
-		}
-		if (result instanceof ResourceInvocationResult.JsonRpcError error)
-			throw new McpApplicationJsonRpcException(toInternal(error));
-		if (result instanceof ResourceInvocationResult.InputRequired inputRequired)
-			return inputRequiredResult(inputRequired.result(),
-					inputRequestPlan,
-					resourcePlan.requestStateMode(), request.method(),
-					requestMetadata.clientCapabilities(), invocation,
-					publicEndpoint, requestStateRuntime);
-		if (!(result instanceof ResourceInvocationResult.Complete complete))
-			throw new IllegalArgumentException(
-					"Unsupported MCP resource invocation result.");
-
-		return completeResult(complete.resultFields(), complete.metadata());
+		return switch (result) {
+			case ResourceInvocationResult.InvalidInput ignored ->
+					McpApplicationDispatchOutcome.invalidInput();
+			case ResourceInvocationResult.ResourceNotFound missing -> {
+				McpJsonRpcError canonicalError = new McpJsonRpcError(
+						McpJsonRpcError.INVALID_PARAMS, "Resource not found",
+						Optional.of(new com.soklet.internal.mcp.protocol.McpJsonObject(Map.of(
+								"uri", new com.soklet.internal.mcp.protocol.McpJsonString(
+										missing.resourceUri().toString())))));
+				yield McpApplicationDispatchOutcome.applicationError(invocation.protocolProfile()
+						.renderFrameworkError(McpProfileErrorKind.RESOURCE_NOT_FOUND,
+								canonicalError));
+			}
+			case ResourceInvocationResult.JsonRpcError error ->
+					McpApplicationDispatchOutcome.applicationError(toInternal(error));
+			case ResourceInvocationResult.InputRequired inputRequired ->
+					inputRequiredResult(inputRequired.result(), inputRequestPlan,
+							resourcePlan.requestStateMode(), request.method(),
+							requestMetadata.clientCapabilities(), invocation,
+							publicEndpoint, requestStateRuntime);
+			case ResourceInvocationResult.Complete complete ->
+					McpApplicationDispatchOutcome.completed(
+							completeResult(complete.resultFields(), complete.metadata()));
+		};
 	}
 
 	@NonNull
-	private static McpWireResult invokeResourceList(
+	private static McpApplicationDispatchOutcome invokeResourceList(
 			@NonNull ResourceListPlan resourceListPlan,
 			@NonNull McpApplicationResourceListInvocation internalInvocation,
 			@NonNull McpEndpoint publicEndpoint) throws Exception {
@@ -5104,13 +5116,13 @@ public final class McpServerRuntimeBridge {
 				resourceListPlan.invoker().orElseThrow().invoke(listInvocation),
 				"The MCP resource-list invoker returned null.");
 
-		if (result instanceof ResourceListInvocationResult.JsonRpcError error)
-			throw new McpApplicationJsonRpcException(toInternal(error));
-		if (!(result instanceof ResourceListInvocationResult.Complete complete))
-			throw new IllegalArgumentException(
-					"Unsupported MCP resource-list invocation result.");
-
-		return completeResult(complete.resultFields(), complete.metadata());
+		return switch (result) {
+			case ResourceListInvocationResult.JsonRpcError error ->
+					McpApplicationDispatchOutcome.applicationError(toInternal(error));
+			case ResourceListInvocationResult.Complete complete ->
+					McpApplicationDispatchOutcome.completed(
+							completeResult(complete.resultFields(), complete.metadata()));
+		};
 	}
 
 	@NonNull
@@ -5129,7 +5141,7 @@ public final class McpServerRuntimeBridge {
 	}
 
 	@NonNull
-	private static McpWireResult inputRequiredResult(
+	private static McpApplicationDispatchOutcome inputRequiredResult(
 			@NonNull McpInputRequiredResult publicResult,
 			@NonNull McpInputRequestPlan inputRequestPlan,
 			@NonNull McpRequestStateMode requestStateMode,
@@ -5138,8 +5150,7 @@ public final class McpServerRuntimeBridge {
 			@NonNull McpApplicationInvocation invocation,
 			@NonNull McpEndpoint publicEndpoint,
 			@NonNull McpFrameworkRequestStateRuntime requestStateRuntime)
-			throws McpProtocolJsonRpcException,
-			McpRequestStateUnavailableException {
+			throws McpRequestStateUnavailableException {
 		requireNonNull(publicResult);
 		requireNonNull(inputRequestPlan);
 		requireNonNull(requestStateMode);
@@ -5165,7 +5176,7 @@ public final class McpServerRuntimeBridge {
 		}
 
 		if (!missingCapabilities.isEmpty())
-			throw new McpProtocolJsonRpcException(
+			return McpApplicationDispatchOutcome.protocolError(
 					McpJsonRpcError.missingRequiredClientCapabilities(
 							missingCapabilities));
 
@@ -5232,12 +5243,12 @@ public final class McpServerRuntimeBridge {
 			}
 		}
 
-		return McpWireResult.inputRequired(clientRequestMethod,
+		return McpApplicationDispatchOutcome.completed(McpWireResult.inputRequired(clientRequestMethod,
 				publicResult.getInputRequests().isEmpty()
 						? Optional.empty() : Optional.of(requests.build()),
 				protectedRequestState,
 				metadata.isEmpty() ? Optional.empty() : Optional.of(metadata),
-				com.soklet.internal.mcp.protocol.McpJsonObject.empty());
+				com.soklet.internal.mcp.protocol.McpJsonObject.empty()));
 	}
 
 	@NonNull

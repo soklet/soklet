@@ -271,7 +271,7 @@ function verifyFileDigest(path, expected, label) {
 function verifyToolchains(contract, inputRoot, javaPath) {
   for (const toolchain of contract.toolchains) {
     let path;
-    if (toolchain.artifact === 'corretto-17.0.20.8.1-linux-x64.tar.gz') {
+    if (toolchain.artifact === 'corretto-21.0.12.9.1-linux-x64.tar.gz') {
       const settings = run(javaPath, ['-XshowSettings:properties', '-version']);
       if (!settings.includes('java.vendor = Amazon.com Inc.')
           || !settings.includes(`java.vendor.version = Corretto-${toolchain.version}`)) {
@@ -302,7 +302,7 @@ export function summarizeJmhResults(results, {
   benchmarks,
   configuration,
   expectedForks,
-  expectedJdkVersion = '17.0.20',
+  expectedJdkVersion = '21.0.12.1',
 }) {
   if (!Array.isArray(results) || results.length !== benchmarks.length)
     fail('JMH JSON has a missing or extra benchmark result.');
@@ -420,9 +420,9 @@ function configurationFor(contract) {
 function jdkVersionFor(contract) {
   const toolchain = contract.toolchains.find(({ artifact }) =>
     artifact.startsWith('corretto-'));
-  if (toolchain === undefined || !/^17\.0\.20\./u.test(toolchain.version))
+  if (toolchain === undefined || toolchain.version !== '21.0.12.9.1')
     fail('MCP benchmark contract has an unsupported JDK pin.');
-  return toolchain.version.split('.').slice(0, 3).join('.');
+  return '21.0.12.1';
 }
 
 function normalizedJsonRun(artifact, summary, configuration) {

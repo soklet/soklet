@@ -77,7 +77,7 @@ jobs:
       security-events: write
 
   release-scans:
-    name: Aggregate Release Scans (JDK 17 artifact, JDK 21 analysis)
+    name: Aggregate Release Scans (JDK 21 artifact, JDK 21 analysis)
     if: inputs.phase == 'produce'
     needs: release-scans-codeql
     runs-on: ubuntu-24.04
@@ -127,7 +127,7 @@ jobs:
           coreJdk21 "${RUNNER_TEMP}" "${GITHUB_PATH}" "${GITHUB_ENV}"
           "${RUNNER_TEMP}/release-scans-java-distribution.txt"
 
-      - name: Install checksum-pinned Corretto 17 for canonical packaging
+      - name: Install checksum-pinned Corretto 21 for canonical packaging
         shell: bash
         run: >-
           bash release/scripts/install-pinned-corretto-linux-x64.sh
@@ -199,7 +199,7 @@ jobs:
             ${{ runner.temp }}/release-scans-maven-distribution.txt
 
   mcp-benchmarks:
-    name: MCP Release Benchmarks (JDK 17)
+    name: MCP Release Benchmarks (JDK 21)
     if: inputs.phase == 'produce'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -238,7 +238,7 @@ jobs:
           "${RUNNER_TEMP}" "${GITHUB_PATH}"
           "${RUNNER_TEMP}/mcp-benchmark-node-distribution.txt"
 
-      - name: Install checksum-pinned Corretto 17
+      - name: Install checksum-pinned Corretto 21
         shell: bash
         run: >-
           bash release/scripts/install-pinned-corretto-linux-x64.sh
@@ -301,7 +301,7 @@ jobs:
             ${{ runner.temp }}/mcp-benchmark-maven-distribution.txt
 
   mcp-benchmarks-finalize:
-    name: Finalize Reviewed MCP Benchmarks (JDK 17)
+    name: Finalize Reviewed MCP Benchmarks (JDK 21)
     if: inputs.phase == 'finalize-benchmark'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -357,7 +357,7 @@ jobs:
           --benchmark-draft-run-id "${{ inputs.benchmark_draft_run_id }}"
           --benchmark-draft-artifact-name "${{ inputs.benchmark_draft_artifact_name }}"
 
-      - name: Install checksum-pinned Corretto 17
+      - name: Install checksum-pinned Corretto 21
         shell: bash
         run: >-
           bash release/scripts/install-pinned-corretto-linux-x64.sh
@@ -532,7 +532,7 @@ jobs:
           coreJdk21 "${RUNNER_TEMP}" "${GITHUB_PATH}" "${GITHUB_ENV}"
           "${RUNNER_TEMP}/release-validation-core-jdk-21-distribution.txt"
 
-      - name: Install checksum-pinned Corretto 17 for candidate validation
+      - name: Install checksum-pinned Corretto 21 for candidate validation
         shell: bash
         run: >-
           bash release/scripts/install-pinned-corretto-linux-x64.sh

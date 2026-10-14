@@ -108,15 +108,12 @@ class HeaderLocaleTests {
 			Files.writeString(file, "abcdef", StandardCharsets.UTF_8);
 			Files.setLastModifiedTime(file, FileTime.from(FILE_MODIFIED));
 			LocaleResource.file = file;
-			LocaleResource.staticFiles = StaticFiles.withRoot(directory).build();
+			LocaleResource.staticFiles = StaticFiles.withRoot(directory).trustedImmutableRoot(true).build();
 			Assertions.assertAll("Protocol output under " + args[0],
 					() -> assertFileValues(file),
 					HeaderLocaleTests::assertCookieValues,
 					HeaderLocaleTests::assertHttpWire,
-					() -> {
-						if (Runtime.version().feature() >= 21)
-							assertSseWire();
-					});
+					() -> assertSseWire());
 		} finally {
 			LocaleResource.file = null;
 			LocaleResource.staticFiles = null;

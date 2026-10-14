@@ -83,6 +83,18 @@ const REVIEWED_EXISTING_DOMAIN_FIELDS = Object.freeze([
     owner: 'com.soklet.Soklet.DefaultSimulator',
     rationale: 'Existing rejected simulation lifecycle proof handle; it is not an MCP wire session or future transport state.',
   },
+  {
+    field: 'unsupportedSessionOperation',
+    file: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java',
+    owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.OperationValidationMetadata',
+    rationale: 'Immutable per-call snapshot of the existing operation-validation boolean, consumed after admission/rate/session fencing; no retained session handle, storage, or replay state.',
+  },
+  {
+    field: 'unsupportedSessionOperation',
+    file: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java',
+    owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.OperationValidationState',
+    rationale: 'Helper-local replacement for the existing processRequestSafely validation boolean; one synchronous validation call builds an immutable snapshot without retaining transport/session state.',
+  },
 ]);
 const REVIEWED_EXISTING_DOMAIN_TYPES = Object.freeze([
   {
@@ -446,6 +458,8 @@ const CHARACTERIZATIONS = Object.freeze([
       { owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#offerSubscriptionEvent', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java' },
       { owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#scheduleResourceNotification', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java' },
       { owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#projectResourceNotification', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java' },
+      { owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#projectResourceNotificationWithMetricSequence', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java' },
+      { owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#useMetricSequence', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java' },
       { owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#refreshResourceNotificationAuthorityWhileLocked', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java' },
       { owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#resourceNotificationWriteAllowed', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java' },
       { owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime#processRequestSafely::<anonymous McpApplicationResponseWriter>#writeNotification', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java' },
@@ -1373,9 +1387,21 @@ function verifyCharacterizationSources(root, sourceFiles) {
   requireStructural(scheduleResource,
     /processor\s*\.\s*executeTaskNotificationProjection\s*\(\s*new\s+TaskNotificationProjectionJob\s*\(\s*resourceProjectionSchedulerOwner\s*,\s*this\s*::\s*projectResourceNotification/u,
     'resource notifications must use the bounded projection scheduler');
-  const projectResource = oneMethod(runtime.lexed, runtimePath,
+  const projectResourceScope = oneMethod(runtime.lexed, runtimePath,
     'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl',
     'projectResourceNotification');
+  requireStructural(projectResourceScope,
+    /^\s*try\s*\(\s*McpApplicationExecutionObserver\s*\.\s*MetricScope\s+ignored\s*=\s*useMetricSequence\s*\(\s*\)\s*\)\s*\{\s*projectResourceNotificationWithMetricSequence\s*\(\s*\)\s*;\s*\}\s*$/u,
+    'resource projection must delegate exactly once within its request metric sequence scope');
+  const useMetricSequence = oneMethod(runtime.lexed, runtimePath,
+    'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl',
+    'useMetricSequence');
+  requireStructural(useMetricSequence,
+    /^\s*return\s+applicationExecutionObserver\s*\.\s*useMetricSequence\s*\(\s*this\s*\.\s*metricSequence\s*\)\s*;\s*$/u,
+    'request metric scope must bind the control\'s retained sequence');
+  const projectResource = oneMethod(runtime.lexed, runtimePath,
+    'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl',
+    'projectResourceNotificationWithMetricSequence');
   requireExactSimpleAssignments(projectResource, 'stream',
     ['requireNonNull(responseStream)'],
     'projectResourceNotification must use the installed responseStream');

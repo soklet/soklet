@@ -206,7 +206,12 @@ public final class AppsFixtureContractTest {
 			Capture result = call(simulator, tool,
 					"{\"tenant\":\"contract-attacker\",\"locale\":\"ar\",\"subject\":\"attacker\"}",
 					APPS, TOKEN_EN);
-			applicationError(result);
+			success(result);
+			contains(result.body(), "\"isError\":true", "Modern input validation must return a tool error result.");
+			equal("Tool request failed.", stringField(result.body(), "text"),
+					"The sanitizer must replace error text without requiring structured catalog data.");
+			absent(result.body(), "contract-attacker", "Unexpected identity arguments must not enter the error result.");
+			absent(result.body(), "example/private", "The sanitizer must remove private error metadata.");
 			absent(result.body(), "structuredContent", "Unexpected arguments must not produce tool data.");
 		}
 		assertToolResult(call(simulator, AppsFixture.TOOL, "{}", APPS, TOKEN_EN), "en-US", "ltr", TENANT_A);

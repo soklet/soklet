@@ -1,10 +1,39 @@
 # Apps-disabled real-host negative capability profile
 
 This separate experimental profile requests both Apps and Skills OFF on the
-same exact candidate, static shell and isolated auth-patched Inspector used by
-`../apps-patched-host`. The wire, DOM and server controls must independently
+candidate, static shell and selected Inspector mode used by
+`../apps-patched-host`: the reviewed unmodified upstream source build or the
+historical isolated auth patch. The wire, DOM and server controls must independently
 confirm the boundary; configuration alone is not evidence. Existing positive,
 ordinary Inspector, auth and original failed-host profiles remain unchanged.
+
+## Unmodified upstream source mode
+
+Pass `--inspector-build /absolute/prepared-inspector-build` to run the reviewed
+unmodified upstream source commit `1974465ccb5454a5110e609e4140171fa360a544`.
+Its source version is `2.10.1`; this is an **unreleased upstream source build**,
+not an npm release or the historical local auth patch. Prepare and verify it
+with `../inspector/upstream-build.mjs` before starting this harness.
+
+In this mode, `--dependencies` supplies the App-shell SDK installation only,
+and `--original-dependencies` may be omitted. Its package and lockfile pins are
+verified; its installed tree is recorded and rechecked for changes. It does not
+supply the running Inspector. The source build supplies the actual launcher
+and web files, and its build receipt and complete tree are verified before
+and after the run. Browser, shell, candidate JAR/POM, compiled fixture, and
+harness source identities are also rechecked. The candidate's actual JAR SHA-256 is recorded and rechecked, and its
+embedded POM must match the supplied POM. Public-API compilation and dependency
+audits remain mandatory. The shell's exact prior hash and build receipt remain
+required; this mode does not rebuild or change the shell.
+
+Source-mode receipts use an `upstream-source-apps-*` profile and explicitly
+record `sourceIdentityVerified: true`, `patchIdentityVerified: false`, and
+`UNRELEASED_UPSTREAM_SOURCE_BUILD`. All existing trace, authentication, Origin,
+DOM, observation, cleanup, and profile-specific security assertions still apply.
+A passing experiment remains local development evidence, with
+`fullHostQualification: false` and `releaseCandidateEvidence: false`.
+Omitting `--inspector-build` preserves the historical patched-host mode,
+including its original candidate and patch identity checks and receipts.
 
 ## Negotiation is not authorization
 
@@ -35,7 +64,7 @@ UI origin authorization, revocation or any browser action. Wrong/right direct
 credential checks remain separate, too. Only browser-originated requests pass
 through the OFF host trace.
 
-## Reproduce
+## Reproduce the upstream source mode
 
 Use explicit existing inputs and a new work directory with an existing parent:
 
@@ -46,17 +75,23 @@ node verification/interoperability/apps-disabled-host/run.mjs \
   --candidate-pom /path/to/original-candidate-pom.xml \
   --java /path/to/jdk/bin/java \
   --shell /path/to/catalog-shell.html \
-  --original-dependencies /path/to/original-installation \
-  --dependencies /path/to/final-patched-installation \
+  --inspector-build /path/to/prepared-inspector-build \
+  --dependencies /path/to/pinned-shell-dependencies \
   --browser '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
   --work-dir /path/to/new-results
 ```
 
-The adjacent shell `.receipt.json` is mandatory. The original dependency pin,
-single-file patch recipe, exact previously retained candidate/shell/patch
-identities and independent copy inodes are verified before and after the run.
-The browser build is recorded/rechecked. No install, repin, upstream write,
-production edit or change to the shared original installation is performed.
+The adjacent shell `.receipt.json` is mandatory. Source mode records and
+rechecks the supplied candidate JAR/POM while retaining the exact shell identity.
+The browser build is recorded and rechecked.
+
+For historical patched-host reproduction, omit `--inspector-build`, supply
+`--original-dependencies /path/to/original-installation`, and point
+`--dependencies` at the prepared final patched installation. Use the historical
+experiment's pinned candidate JAR and matching POM. That mode retains its
+original dependency pin, single-file patch recipe, exact candidate/shell/patch
+identities, and independent copy-inode checks before and after the run. Neither
+mode installs packages, changes production code, or modifies the host installation.
 
 ## Fail-closed success requirements
 

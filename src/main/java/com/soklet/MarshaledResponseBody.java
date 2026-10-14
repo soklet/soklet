@@ -147,13 +147,13 @@ public sealed interface MarshaledResponseBody permits MarshaledResponseBody.Byte
 	}
 
 	/**
-	 * A no-follow static-file body whose path is reopened relative to a pinned directory.
+	 * A static-file body acquired under the helper's trusted immutable-root contract.
 	 * Soklet creates these descriptors for {@link StaticFiles}; an application cannot construct one
 	 * directly. The opened channel is owned by the transport for the duration of delivery.
 	 * <p>
 	 * Custom transports must use {@link #openChannel()}, apply {@link #getOffset()} and {@link #getCount()},
 	 * and close the channel after delivery or failure. A transport that cannot handle this descriptor
-	 * must reject it; converting it to an ordinary path-backed body loses its secure-open policy.
+	 * must reject it; opening the path separately loses the helper's root and file validation.
 	 */
 	@ThreadSafe
 	final class SecureFile implements MarshaledResponseBody {
@@ -179,11 +179,12 @@ public sealed interface MarshaledResponseBody permits MarshaledResponseBody.Byte
 		}
 
 		/**
-		 * Opens the approved path beneath the pinned root without following symbolic links.
+		 * Opens the approved file after validating the captured root and expected file metadata.
+		 * The immutable-root contract of {@link StaticFiles} applies to every acquisition.
 		 * The caller must close the returned channel.
 		 *
 		 * @return an open channel for the response body
-		 * @throws IOException if the path changed or secure traversal fails
+		 * @throws IOException if a change is detected or acquisition fails
 		 */
 		public @NonNull SeekableByteChannel openChannel() throws IOException {
 			return root.open(path, fileKey, expectedSize, expectedModifiedTime);

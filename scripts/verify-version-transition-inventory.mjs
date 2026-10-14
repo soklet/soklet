@@ -35,6 +35,7 @@ export const PENDING_CURRENT_STAGE_PATHS = Object.freeze([
   'src/main/java/com/soklet/McpAppResourceMetadata.java',
   'src/main/java/com/soklet/McpAppToolMetadata.java',
   'src/test/java/com/soklet/HeaderLocaleTests.java',
+  'src/test/java/com/soklet/McpRequestMetricOrderingTests.java',
   'src/test/java/com/soklet/McpSubscriptionCatalogProjectionPublicRuntimeTests.java',
   'src/test/java/com/soklet/McpSubscriptionServerConfigurationTests.java',
   'src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionAuthorizationPublicRuntimeTests.java',
@@ -52,7 +53,7 @@ export const PENDING_CURRENT_STAGE_PATHS = Object.freeze([
   'verification/consumer-build/settings.gradle',
   'verification/consumer-build/src/main/java/example/ConsumerEndpoints.java',
   'verification/consumer-build/src/main/java/example/ConsumerSmoke.java',
-  'verification/consumer-build/src/sse/java/example/ConsumerSseEndpoints.java',
+  'verification/consumer-build/src/main/java/example/ConsumerSseEndpoints.java',
   'verification/consumer-build/tools/ConsumerJarMutation.java',
   'verification/consumer-build/verify.mjs',
   'verification/interoperability/inspector/package-lock.json',
@@ -152,7 +153,7 @@ const CURRENT_STAGE_FIELDS = Object.freeze([
 ]);
 const CURRENT_STAGE_NAME = 'post-u7';
 export const EXPECTED_CURRENT_STAGE_CENSUS_SHA256 =
-  'd52ca933ee84e19c871ee2885f0b3b08604e88d3a41293ee6fe8e6578068ec0f';
+  'c5a996a54acf9f0315a925bf680e12c4e2d70838a7a44f1ccd40f132bb39c652';
 export const EXPECTED_BASELINE_GOVERNANCE_SHA256 =
   '862417a75ee2b8aa4c04eff14713b47eedc22060319ef4f369e4ad6beff10afb';
 // These historical checkpoint paragraphs were removed from reader guides.

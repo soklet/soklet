@@ -455,7 +455,7 @@ public class McpAnnotationProcessorValidationTests {
 					compiler.getStandardFileManager(null, null,
 							StandardCharsets.UTF_8)) {
 			JavaCompiler.CompilationTask baseTask = compiler.getTask(null,
-					fileManager, null, List.of("--release", "17", "-proc:none",
+					fileManager, null, List.of("--release", "21", "-proc:none",
 							"-classpath", System.getProperty("java.class.path"),
 							"-d", baseClasses.toString()), null,
 					fileManager.getJavaFileObjects(baseSource, intermediateSource));
@@ -469,7 +469,7 @@ public class McpAnnotationProcessorValidationTests {
 			String classpath = baseClasses + System.getProperty("path.separator")
 					+ System.getProperty("java.class.path");
 			JavaCompiler.CompilationTask endpointTask = compiler.getTask(null,
-					fileManager, diagnostics, List.of("--release", "17",
+					fileManager, diagnostics, List.of("--release", "21",
 							"-Asoklet.cacheMode=none", "-classpath", classpath,
 							"-d", endpointClasses.toString(), "-s",
 							generated.toString()), null,
@@ -1869,7 +1869,7 @@ public class McpAnnotationProcessorValidationTests {
 		try (StandardJavaFileManager fileManager = compiler.getStandardFileManager(
 				diagnostics, null, StandardCharsets.UTF_8)) {
 			JavaCompiler.CompilationTask task = compiler.getTask(null, fileManager,
-					diagnostics, List.of("--release", "17", "-parameters",
+					diagnostics, List.of("--release", "21", "-parameters",
 						"-Asoklet.cacheMode=none", "-classpath",
 						System.getProperty("java.class.path"), "-d",
 						classDirectory.toString(), "-s",

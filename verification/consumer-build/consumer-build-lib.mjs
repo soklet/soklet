@@ -21,14 +21,14 @@ export function parseArguments(args) {
 export function javaFeatureVersion(versionOutput) {
   const match = versionOutput.match(/(?:openjdk|java) version "([0-9]+)(?:[.\-+" ])/u);
   const feature = Number(match?.[1]);
-  if (!Number.isSafeInteger(feature) || feature < 17)
-    throw new Error('Consumer runtime must report Java 17 or newer');
+  if (!Number.isSafeInteger(feature) || feature < 21)
+    throw new Error('Consumer runtime must report Java 21 or newer');
   return feature;
 }
 
 export function materializeFixture(source, fixture, feature) {
-  if (!Number.isSafeInteger(feature) || feature < 17)
-    throw new Error('Consumer source selection requires Java 17 or newer');
+  if (!Number.isSafeInteger(feature) || feature < 21)
+    throw new Error('Consumer source selection requires Java 21 or newer');
   if (existsSync(fixture))
     throw new Error('Fixture directory must not already exist');
   mkdirSync(fixture, { recursive: true });
@@ -36,13 +36,13 @@ export function materializeFixture(source, fixture, feature) {
     cpSync(join(source, name), join(fixture, name));
   const javaSources = join(fixture, 'src/main/java');
   cpSync(join(source, 'src/main/java'), javaSources, { recursive: true });
-  if (feature >= 21)
-    cpSync(join(source, 'src/sse/java'), javaSources, { recursive: true });
-  return feature >= 21 ? 'HTTP_MCP_SSE' : 'HTTP_MCP';
+  return 'HTTP_MCP_SSE';
 }
 
 export function requirePositiveOutput(output, feature) {
-  const expected = `Consumer HTTP/MCP${feature >= 21 ? '/SSE' : ''}`
+  if (!Number.isSafeInteger(feature) || feature < 21)
+    throw new Error('Consumer runtime must report Java 21 or newer');
+  const expected = 'Consumer HTTP/MCP/SSE'
     + ` packaged routing passed on Java ${feature}`;
   if (output.split(/\r?\n/u).filter(line => line.startsWith('Consumer ')).join('\n') !== expected)
     throw new Error(`Packaged consumer did not report the exact routing success: ${output}`);

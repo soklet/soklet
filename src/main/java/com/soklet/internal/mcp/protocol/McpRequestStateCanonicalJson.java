@@ -151,7 +151,7 @@ final class McpRequestStateCanonicalJson {
 	private static BigDecimal normalizeNumber(@NonNull BigDecimal value) {
 		if (value.signum() == 0)
 			return BigDecimal.ZERO;
-		// JDK 17/21 stripTrailingZeros divides a large coefficient once per
+		// JDK 21 stripTrailingZeros divides a large coefficient once per
 		// trailing decimal zero. The wire already bounds the coefficient length;
 		// scan its digits and reconstruct it once instead of repeatedly dividing.
 		String coefficient = value.unscaledValue().toString();

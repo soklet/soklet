@@ -155,7 +155,7 @@ public class McpRequestPolicyTests {
 		McpApplicationRequestInterceptor interceptor =
 				new McpApplicationRequestInterceptor() {
 					@Override
-					public McpWireResult intercept(McpApplicationInvocation invocation,
+					public McpApplicationDispatchOutcome intercept(McpApplicationInvocation invocation,
 							McpApplicationHandlerInvocation continuation)
 							throws Exception {
 						return continuation.invoke();

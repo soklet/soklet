@@ -310,14 +310,14 @@ function writeSyntheticInputs(root) {
       version: '21.0.12.1',
     },
     java: {
-      archive: 'amazon-corretto-17.0.20.8.1-linux-x64.tar.gz',
+      archive: 'amazon-corretto-21.0.12.9.1-linux-x64.tar.gz',
       archiveSha256: '3'.repeat(64),
       distribution: 'corretto',
       distributionUrl:
-        'https://corretto.aws/downloads/resources/17.0.20.8.1/amazon-corretto-17.0.20.8.1-linux-x64.tar.gz',
-      runtimeVersion: '17.0.20+8-LTS',
-      vendorVersion: 'Corretto-17.0.20.8.1',
-      version: '17.0.20',
+        'https://corretto.aws/downloads/resources/21.0.12.9.1/amazon-corretto-21.0.12.9.1-linux-x64.tar.gz',
+      runtimeVersion: '21.0.12.1+9-LTS',
+      vendorVersion: 'Corretto-21.0.12.9.1',
+      version: '21.0.12.1',
     },
     javadocJava: {
       archive: 'amazon-corretto-26.0.2.11.1-linux-x64.tar.gz',

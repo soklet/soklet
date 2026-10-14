@@ -5,6 +5,7 @@ import { adjudicateHost, completedHostChecks, fixtureControl, parseHostArguments
   REVOCATION_SUCCESS, REVOCATION_HOST_BLOCKED, PERMISSIONS_PROFILE,
   PERMISSIONS_SUCCESS, PERMISSIONS_HOST_BLOCKED, expectedRevocationOAuthFallback,
   validateExperimentPins } from './run.mjs';
+import { sourceProfile, validateSourceExperimentPins } from './run.mjs';
 
 test('experimental host arguments require all eight unique explicit inputs', () => {
   const args = ['--candidate-jar', 'a', '--candidate-pom', 'b', '--java', 'c', '--shell', 'd',
@@ -177,4 +178,73 @@ test('current candidate, shell and auth-patched runtime are exact experiment ide
     [{...provenance,patchedTree:{...provenance.patchedTree,sha256:'0'.repeat(64)}},candidate,shell],
     [provenance,{jarSha256:'0'.repeat(64)},shell],[provenance,candidate,{sha256:'0'.repeat(64)}]])
     assert.throws(()=>validateExperimentPins(p,c,s),/APPS_HOST_EXPERIMENT_PIN/);
+});
+
+
+test('upstream source mode is explicit and keeps all required candidate and shell inputs', () => {
+  const args = ['--candidate-jar', 'a', '--candidate-pom', 'b', '--java', 'c', '--shell', 'd',
+    '--dependencies', 'e', '--browser', 'f', '--work-dir', 'g', '--inspector-build', 'source'];
+  assert.equal(parseHostArguments(args)['--inspector-build'], 'source');
+  assert.equal(parseHostArguments([...args, '--original-dependencies', 'legacy'])['--inspector-build'], 'source');
+  for (const invalid of [args.slice(0, -2), args.slice(2), [...args, '--inspector-build', 'duplicate'],
+    [...args.slice(0, -1), ''], [...args, '--profile'], [...args, '--unknown', 'value']])
+    assert.throws(() => parseHostArguments(invalid), /APPS_HOST_ARGUMENTS/);
+});
+
+test('unreleased upstream source receipts cannot claim patched or released host verification', () => {
+  const source = {...complete(), profile: sourceProfile(PROFILE),
+    hostMode: 'UNRELEASED_UPSTREAM_SOURCE_BUILD', sourceIdentityVerified: true,
+    patchIdentityVerified: false, upstreamBuildReceiptSha256: 'a'.repeat(64),
+    target: {name: '@modelcontextprotocol/inspector', version: '2.10.1',
+      commit: '1974465ccb5454a5110e609e4140171fa360a544', distribution: 'UNRELEASED_UPSTREAM_SOURCE_BUILD'}};
+  assert.equal(completedHostChecks(source), true);
+  assert.equal(adjudicateHost(source, []), SUCCESS);
+  for (const change of [{sourceIdentityVerified: false}, {sourceIdentityVerified: 'true'},
+    {patchIdentityVerified: true}, {patchIdentityVerified: undefined}, {hostMode: undefined},
+    {hostMode: 'RELEASED_PACKAGE'}, {profile: PROFILE}, {fullHostQualification: true},
+    {releaseCandidateEvidence: true}, {upstreamBuildReceiptSha256: undefined},
+    {upstreamBuildReceiptSha256: 'invalid'}])
+    assert.equal(adjudicateHost({...source, ...change}, []), 'FAILED');
+  for (const change of [{name: 'other'}, {version: '2.7.0'}, {commit: '0'.repeat(40)},
+    {distribution: 'RELEASED_PACKAGE'}])
+    assert.equal(adjudicateHost({...source, target: {...source.target, ...change}}, []), 'FAILED');
+  for (const change of [{sourceIdentityVerified: true}, {hostMode: 'RELEASED_PACKAGE'},
+    {profile: sourceProfile(PROFILE)}])
+    assert.equal(adjudicateHost({...complete(), ...change}, []), 'FAILED');
+  assert.equal(adjudicateHost({...source, inputsUnchanged: false}, []), 'FAILED');
+  assert.equal(adjudicateHost(source, [{code: 'APPS_AUTH_REQUIRED'}]), 'FAILED');
+});
+
+test('explicit source mode records a fresh candidate while retaining the exact shell identity', () => {
+  const candidate = {jarSha256: '96e5eb86c17cfae3cbd7867bbbdaf480ef22e8ae48dfbdc0b812371bfa0c6145'};
+  const shell = {sha256: '3229c8e0a9ee17dcbb2030040fac282b172715588c7b25963275529c0b650f60'};
+  assert.doesNotThrow(() => validateSourceExperimentPins(candidate, shell));
+  for (const bad of [undefined, null, {jarSha256: ''}, {jarSha256: 'A'.repeat(64)}, {jarSha256: 'a'.repeat(63)}])
+    assert.throws(() => validateSourceExperimentPins(bad, shell), /APPS_HOST_EXPERIMENT_PIN/);
+  for (const bad of [undefined, null, {sha256: '0'.repeat(64)}])
+    assert.throws(() => validateSourceExperimentPins(candidate, bad), /APPS_HOST_EXPERIMENT_PIN/);
+});
+
+test('upstream source profiles retain transition, revocation and permission adjudication', () => {
+  const source = {...complete(), hostMode: 'UNRELEASED_UPSTREAM_SOURCE_BUILD',
+    sourceIdentityVerified: true, patchIdentityVerified: false, upstreamBuildReceiptSha256: 'a'.repeat(64),
+    target: {name: '@modelcontextprotocol/inspector', version: '2.10.1',
+      commit: '1974465ccb5454a5110e609e4140171fa360a544', distribution: 'UNRELEASED_UPSTREAM_SOURCE_BUILD'}};
+  const cases = [
+    [{profile: sourceProfile(TRANSITION_PROFILE), initialTraceCount: 12,
+      transitions: {betaRenderedInSameApp: true, previousTenantCleared: true,
+        denialClearedView: true, deniedViewRequiresReopen: true}}, TRANSITION_SUCCESS],
+    [{profile: sourceProfile(REVOCATION_PROFILE), initialTraceCount: 12,
+      revocation: {revokedRefreshClickedViaDom: true, revokedViewCleared: true,
+        revokedViewRequiresReopen: true}}, REVOCATION_SUCCESS],
+    [{profile: sourceProfile(PERMISSIONS_PROFILE), permissions: {policyApiPresent: true,
+      mainPolicyAllowsGeolocation: true, sandboxPolicyAllowsGeolocation: true,
+      outerSandboxLocated: true, outerSandboxGrantsGeolocation: true,
+      declaredGeolocationEffective: true, undeclaredCameraDenied: true,
+      undeclaredMicrophoneDenied: true, undeclaredClipboardWriteDenied: true}}, PERMISSIONS_SUCCESS]
+  ];
+  for (const [facts, expected] of cases) {
+    assert.equal(adjudicateHost({...source, ...facts}, []), expected);
+    assert.equal(adjudicateHost({...source, ...facts, observationWindowCompleted: false}, []), 'FAILED');
+  }
 });

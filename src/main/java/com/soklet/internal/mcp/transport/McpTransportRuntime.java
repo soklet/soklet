@@ -176,9 +176,6 @@ final class McpTransportRuntime implements AutoCloseable {
 		this.clock = requireNonNull(clock);
 		this.timerCycleProbe = requireNonNull(timerCycleProbe);
 
-		if (!configuration.threadStrategy().supported())
-			throw new IllegalStateException("Requested MCP handler thread strategy is not available.");
-
 		this.handlerExecutor = configuration.threadStrategy().createExecutor(
 				configuration.handlerConcurrency(),
 				"soklet-mcp-handler-",

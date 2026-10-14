@@ -81,6 +81,7 @@ final class McpApplicationHandlerDispatcher {
 		private final Consumer<@NonNull Throwable> cancellationObserver;
 		@NonNull
 		private final Runnable physicalExitObserver;
+		private final McpApplicationExecutionObserver.@Nullable MetricSequence metricSequence;
 		@NonNull
 		private final AtomicBoolean physicalExitDelivered;
 		@NonNull
@@ -98,6 +99,7 @@ final class McpApplicationHandlerDispatcher {
 			this.failureObserver = requireNonNull(failureObserver);
 			this.cancellationObserver = requireNonNull(cancellationObserver);
 			this.physicalExitObserver = requireNonNull(physicalExitObserver);
+			this.metricSequence = captureMetricSequence();
 			this.physicalExitDelivered = new AtomicBoolean();
 			this.interruptLock = new Object();
 			this.state = TicketState.NEW;
@@ -231,7 +233,7 @@ final class McpApplicationHandlerDispatcher {
 				ticket.state = TicketState.DISPATCHED;
 				activeTickets.add(ticket);
 				activeSlots++;
-				recordHandlerExecutionStarted();
+				recordHandlerExecutionStarted(ticket);
 				maximumObservedActiveSlots = Math.max(maximumObservedActiveSlots,
 						activeSlots);
 				ticketToDispatch = ticket;
@@ -243,13 +245,13 @@ final class McpApplicationHandlerDispatcher {
 				if (activeSlots < concurrency) ticketToDispatch = promoteNextLocked();
 				ticket.state = TicketState.QUEUED;
 				queue.add(ticket);
-				recordHandlerQueued();
+				recordHandlerQueued(ticket);
 				maximumObservedQueueDepth = Math.max(maximumObservedQueueDepth,
 						queue.size());
 				admission = Admission.QUEUED;
 			} else {
 				ticket.state = TicketState.REJECTED;
-				recordHandlerCapacityRejected();
+				recordHandlerCapacityRejected(ticket);
 				admission = Admission.REJECTED;
 			}
 		}
@@ -276,7 +278,7 @@ final class McpApplicationHandlerDispatcher {
 							"Queued ticket is absent from the queue.");
 
 				ticket.state = TicketState.CANCELED;
-				recordHandlerDequeued();
+				recordHandlerDequeued(ticket);
 				dequeued = true;
 				canceled = true;
 			} else {
@@ -307,7 +309,7 @@ final class McpApplicationHandlerDispatcher {
 
 			for (Ticket ticket : canceledTickets) {
 				ticket.state = TicketState.CANCELED;
-				recordHandlerDequeued();
+				recordHandlerDequeued(ticket);
 			}
 		}
 
@@ -340,7 +342,7 @@ final class McpApplicationHandlerDispatcher {
 
 			for (Ticket ticket : canceledTickets) {
 				ticket.state = TicketState.CANCELED;
-				recordHandlerDequeued();
+				recordHandlerDequeued(ticket);
 			}
 			dispatchedTickets = new ArrayList<>(activeTickets);
 		}
@@ -428,7 +430,7 @@ final class McpApplicationHandlerDispatcher {
 			}
 
 			Ticket next;
-			try {
+			try (var scope = ticketMetricScope(ticket)) {
 				ticket.work.run();
 			} catch (InterruptedException exception) {
 				Thread.currentThread().interrupt();
@@ -463,7 +465,7 @@ final class McpApplicationHandlerDispatcher {
 				throw new IllegalStateException(
 						"An exiting handler is absent from the active ticket set.");
 			activeSlots--;
-			recordHandlerExecutionFinished();
+			recordHandlerExecutionFinished(ticket);
 			next = promoteNextLocked();
 		}
 
@@ -485,9 +487,9 @@ final class McpApplicationHandlerDispatcher {
 				throw new IllegalStateException(
 						"A rejected handler is absent from the active ticket set.");
 			activeSlots--;
-			recordHandlerExecutionFinished();
+			recordHandlerExecutionFinished(ticket);
 			if (failure instanceof RejectedExecutionException)
-				recordHandlerCapacityRejected();
+				recordHandlerCapacityRejected(ticket);
 			// Existing physical workers can drain accepted work. If no worker
 			// remains, fail these tickets truthfully rather than leave them waiting
 			// until their deadline or recursively retry a rejecting executor.
@@ -496,8 +498,8 @@ final class McpApplicationHandlerDispatcher {
 					Ticket queued = queue.remove();
 					queued.state = TicketState.REJECTED;
 					stranded.add(queued);
-					recordHandlerDequeued();
-					recordHandlerCapacityRejected();
+					recordHandlerDequeued(queued);
+					recordHandlerCapacityRejected(queued);
 				}
 			}
 		}
@@ -517,47 +519,73 @@ final class McpApplicationHandlerDispatcher {
 		Ticket next = queue.remove();
 		next.state = TicketState.DISPATCHED;
 		activeTickets.add(next);
-		recordHandlerDequeued();
+		recordHandlerDequeued(next);
 		activeSlots++;
-		recordHandlerExecutionStarted();
+		recordHandlerExecutionStarted(next);
 		maximumObservedActiveSlots = Math.max(maximumObservedActiveSlots, activeSlots);
 		return next;
 	}
 
-	private void recordHandlerExecutionStarted() {
+	private McpApplicationExecutionObserver.@Nullable MetricSequence captureMetricSequence() {
 		try {
+			return this.observer.currentMetricSequence();
+		} catch (Throwable ignored) {
+			// Broken observation cannot prevent the application ticket from existing.
+			return null;
+		}
+	}
+
+	private McpApplicationExecutionObserver.@NonNull MetricScope ticketMetricScope(@NonNull Ticket ticket) {
+		McpApplicationExecutionObserver.MetricScope scope;
+		try {
+			scope = this.observer.useMetricSequence(ticket.metricSequence);
+		} catch (Throwable ignored) {
+			// Observation cannot prevent work, cancellation, or physical cleanup.
+			return () -> {};
+		}
+		return () -> {
+			try {
+				scope.close();
+			} catch (Throwable ignored) {
+				// Restoring observation state must not turn successful work into failure.
+			}
+		};
+	}
+
+	private void recordHandlerExecutionStarted(@NonNull Ticket ticket) {
+		try (var scope = ticketMetricScope(ticket)) {
 			this.observer.recordHandlerExecutionStarted();
 		} catch (Throwable ignored) {
 			// Observation must not corrupt dispatcher accounting.
 		}
 	}
 
-	private void recordHandlerExecutionFinished() {
-		try {
+	private void recordHandlerExecutionFinished(@NonNull Ticket ticket) {
+		try (var scope = ticketMetricScope(ticket)) {
 			this.observer.recordHandlerExecutionFinished();
 		} catch (Throwable ignored) {
 			// Observation must not corrupt dispatcher accounting.
 		}
 	}
 
-	private void recordHandlerQueued() {
-		try {
+	private void recordHandlerQueued(@NonNull Ticket ticket) {
+		try (var scope = ticketMetricScope(ticket)) {
 			this.observer.recordHandlerQueued();
 		} catch (Throwable ignored) {
 			// Observation must not corrupt dispatcher accounting.
 		}
 	}
 
-	private void recordHandlerDequeued() {
-		try {
+	private void recordHandlerDequeued(@NonNull Ticket ticket) {
+		try (var scope = ticketMetricScope(ticket)) {
 			this.observer.recordHandlerDequeued();
 		} catch (Throwable ignored) {
 			// Observation must not corrupt dispatcher accounting.
 		}
 	}
 
-	private void recordHandlerCapacityRejected() {
-		try {
+	private void recordHandlerCapacityRejected(@NonNull Ticket ticket) {
+		try (var scope = ticketMetricScope(ticket)) {
 			this.observer.recordHandlerCapacityRejected();
 		} catch (Throwable ignored) {
 			// Observation must not corrupt dispatcher accounting.
@@ -581,7 +609,7 @@ final class McpApplicationHandlerDispatcher {
 	}
 
 	private void notifyFailure(@NonNull Ticket ticket, @NonNull Throwable throwable) {
-		try {
+		try (var scope = ticketMetricScope(ticket)) {
 			ticket.failureObserver.accept(throwable);
 		} catch (Throwable ignored) {
 			// Failure reporting must not corrupt dispatcher accounting or promotion.
@@ -590,7 +618,7 @@ final class McpApplicationHandlerDispatcher {
 
 	private void notifyCancellation(@NonNull Ticket ticket,
 			@NonNull Throwable throwable) {
-		try {
+		try (var scope = ticketMetricScope(ticket)) {
 			ticket.cancellationObserver.accept(throwable);
 		} catch (Throwable ignored) {
 			// Cancellation reporting must not corrupt dispatcher shutdown.
@@ -600,7 +628,7 @@ final class McpApplicationHandlerDispatcher {
 	private void notifyPhysicalExit(@NonNull Ticket ticket) {
 		if (!ticket.physicalExitDelivered.compareAndSet(false, true))
 			return;
-		try {
+		try (var scope = ticketMetricScope(ticket)) {
 			ticket.physicalExitObserver.run();
 		} catch (Throwable ignored) {
 			// Exit reporting must not corrupt accounting or promotion.
