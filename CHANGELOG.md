@@ -376,6 +376,51 @@ maintenance or security fixes afterward. See the explicit
 
 ### Correctness Fixes
 
+- Conditional entity-tag lists, `Accept-Encoding` parameters, and CORS fields
+  accept HTTP space/tab whitespace consistently. Malformed multipart extended
+  parameters now fail with a redacted bad-request error instead of silently
+  corrupting their decoded values.
+- Automatic response compression preserves application-supplied content and
+  representation digests by retaining identity bytes, or returning `406` when
+  the client excludes identity encoding.
+- SSE capacity-response preparation failures now write the failsafe response
+  and retain their original cause. Finite SSE handshake responses reject
+  informational final statuses and release owned channels for suppressed bodies
+  and serialization failures.
+- Buffered file delivery safely retries zero-byte seekable-channel reads without
+  sending unfilled or stale buffer contents.
+- Lifecycle policies reject combined shutdown budgets that exceed the signed
+  nanosecond clock horizon instead of allowing a later phase to expire early.
+- Both servlet adapters recognize URL session identifiers after bare or empty
+  matrix parameters, preserve quoted media-type parameters when managing
+  character encodings, and match `PrintWriter` formatting of null varargs.
+- OpenTelemetry ends spans and releases request state even when a custom stream
+  termination duration overflows its timestamp calculation.
+- Positive sub-millisecond HTTP selector timeouts now wake the transport instead
+  of becoming an indefinite wait. Large accepted HTTP read/write timeout values
+  saturate safely. Transport, startup, shutdown, and cleanup deadlines survive
+  monotonic clock wraparound without losing or extending their time budgets.
+- HTTP response header sorting preserves occurrence order across differently
+  cased names, including raw and structured `Set-Cookie` values. Both servlet
+  adapters also preserve mixed cookie API call order and honor `setHeader`
+  replacement of earlier cookies; Jakarta extension attributes remain intact.
+- Multipart `Content-Disposition` parameter names are case-insensitive while
+  field-name and filename values retain their original case.
+- Empty `If-Match` lists fail their precondition, and empty `If-None-Match`
+  lists retain precedence over date validators. Entity-tag lists ignore a
+  bounded number of empty elements while preserving quoted commas.
+- OpenTelemetry shutdown still ends an SSE span if recording its terminal
+  attribute fails.
+- A late SSE handshake response that loses to timeout now reports a failed
+  write instead of a successful write. Request completion retains the failed
+  attempted response; the SSE handshake timeout callback remains authoritative,
+  including while a custom timeout response is still being prepared.
+- HTTP and SSE responses discarded after timeout release owned file channels
+  without opening lazy body sources or closing borrowed channels. HTTP response
+  ownership distinguishes timeout winners from duplicate handler offers.
+- Both servlet adapters validate array ranges even for zero-length output
+  writes, preserving the standard `OutputStream` contract.
+
 - MCP semantic metric delivery preserves enqueue order for retained records from
   the same request across submission, execution, timeout, and cancellation.
   Deferred acceptance can no longer be overtaken by that request's protocol

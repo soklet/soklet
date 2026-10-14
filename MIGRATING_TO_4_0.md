@@ -233,6 +233,12 @@ Paths, queries, and cookie values use UTF-8. Body and field text use their
 specified charset, falling back to UTF-8 when none is specified. Valid Unicode,
 including an explicitly encoded U+FFFD replacement character, remains accepted.
 
+Extended multipart parameters such as `name*` and `filename*` require complete
+ASCII hexadecimal percent-escapes. Malformed or truncated escapes and raw
+non-ASCII characters in those encoded parameters are rejected instead of
+silently changing the field name or filename. Valid percent-encoded Unicode
+remains supported.
+
 Path and query validation occurs when the request is constructed, including
 query values that a handler never selects. Body, form, cookie, and multipart
 decoding remains lazy. Existing `IllegalRequestException` and
@@ -814,6 +820,12 @@ plan declines compression or selects a rejected encoding and the client
 explicitly forbids `identity`, the server returns `406 Not Acceptable` without
 invoking the provider or codec. Requests without `Accept-Encoding` remain
 uncompressed.
+Otherwise eligible responses carrying `Content-Digest`, `Repr-Digest`,
+`Digest`, or `Content-MD5` retain their original bytes and integrity metadata.
+Soklet skips the compressor for them, while still adding `Vary: Accept-Encoding`
+and returning `406` if the client forbids identity coding. To serve a compressed
+representation with integrity metadata, encode the body and supply its matching
+`Content-Encoding` and digest yourself.
 Streaming, file, file-channel, range, already-encoded,
 transfer-encoded, and bodyless responses remain excluded. The old gzip policy
 ran only after acceptance of gzip had been checked; do not use planning as a
@@ -1028,6 +1040,12 @@ even an idle running listener can produce `INCOMPLETE` because stop calls and
 proof arrive asynchronously. Proof already available at classification can
 still establish completion; zero does not promise an incomplete result in
 every lifecycle state. Use positive budgets for normal deployments.
+
+Each lifecycle timeout must fit in signed 64-bit nanoseconds. The combined
+`startupCancelationTimeout`, `gracefulShutdownTimeout`, and
+`forcedShutdownTimeout` must also fit within `Duration.ofNanos(Long.MAX_VALUE)`
+(about 292 years); `build()` rejects a larger total. `startupTimeout` has an
+independent budget and is not included in that sum.
 
 Review the builder Javadocs before changing the finite startup timeout.
 A normal running shutdown with defaults is bounded

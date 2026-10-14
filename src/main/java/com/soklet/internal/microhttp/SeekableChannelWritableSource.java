@@ -52,9 +52,11 @@ final class SeekableChannelWritableSource implements WritableSource {
 			if (read < 0)
 				throw new ResponseBodySourceException("File ended before the expected response body length was written",
 						new EOFException("Response file was truncated"));
+			// A zero-byte read is legal. Publish an empty buffer so the next
+			// write retries the source instead of sending unfilled or stale bytes.
+			buffer.flip();
 			if (read == 0)
 				return 0;
-			buffer.flip();
 		}
 		int originalLimit = buffer.limit();
 		buffer.limit(buffer.position() + (int) Math.min(maxBytes, buffer.remaining()));

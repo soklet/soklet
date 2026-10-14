@@ -375,7 +375,7 @@ public final class SokletSimulator {
 			StartupBudget exactBudget = requireNonNull(startupBudget);
 			StartupContext context = new StartupContext(this.clock,
 					exactBudget.startupDeadline(),
-					exactBudget::cancellationDeadlineNanos,
+					() -> exactBudget.beginCancellation(this.stateMachine.shutdownIntentNanos()),
 					this.stateMachine::shutdownRequested);
 			runStartupCall("simulator-framework-setup", setupAttempt,
 					() -> requireNonNull(soklet).initializeForSimulator(context,
@@ -498,7 +498,8 @@ public final class SokletSimulator {
 
 		private void ensureStartupDeadline(long startupDeadline)
 				throws TimeoutException {
-			if (this.clock.nanoTime() >= startupDeadline)
+			if (LifecycleDeadlines.remainingNanos(startupDeadline,
+					this.clock.nanoTime()) == 0L)
 				throw new TimeoutException(
 						"Soklet simulator startup deadline was reached");
 		}
@@ -914,10 +915,6 @@ public final class SokletSimulator {
 			return requireNonNull(this.cancellationDeadline.get());
 		}
 
-		private long cancellationDeadlineNanos() {
-			Long deadline = this.cancellationDeadline.get();
-			return deadline == null ? Long.MAX_VALUE : deadline;
-		}
 	}
 
 	@ThreadSafe

@@ -653,9 +653,30 @@ public class SokletSimulatorIsolationTests {
 	}
 
 	@Test
+	public void successfulStartupBeforeWrappedDeadlineRunsTheBody() {
+		AtomicLong now = new AtomicLong(Long.MAX_VALUE - 5L);
+		AtomicInteger bodies = new AtomicInteger();
+		LifecycleWorkers workers = new LifecycleWorkers((name, task) -> task.run());
+		InternalLifecyclePolicy policy = new InternalLifecyclePolicy(
+				Duration.ofNanos(10L), Duration.ofNanos(20L),
+				Duration.ofNanos(30L), Duration.ofNanos(40L));
+		SokletSimulator.run(SimulatorConfig.builder().httpServer()
+				.resourceMethodResolver(resourceMethods())
+				.internalLifecyclePolicy(policy).build(),
+				simulator -> bodies.incrementAndGet(), now::get, workers);
+		Assertions.assertEquals(1, bodies.get());
+	}
+
+	@Test
 	public void blockedFrameworkSetupUsesOneExactStartupAndRollbackSchedule()
 			throws Exception {
-		AtomicLong now = new AtomicLong(100L);
+		blockedFrameworkSetupUsesOneExactStartupAndRollbackSchedule(100L);
+		blockedFrameworkSetupUsesOneExactStartupAndRollbackSchedule(Long.MAX_VALUE - 5L);
+	}
+
+	private void blockedFrameworkSetupUsesOneExactStartupAndRollbackSchedule(long originNanos)
+			throws Exception {
+		AtomicLong now = new AtomicLong(originNanos);
 		CountDownLatch resolverEntered = new CountDownLatch(1);
 		CountDownLatch resolverInterrupted = new CountDownLatch(1);
 		CountDownLatch releaseResolver = new CountDownLatch(1);
@@ -748,7 +769,8 @@ public class SokletSimulatorIsolationTests {
 					thrown.getStartupDisposition());
 			Assertions.assertInstanceOf(java.util.concurrent.TimeoutException.class,
 					thrown.getCause());
-			Assertions.assertEquals(List.of(110L, 130L, 160L, 200L),
+			Assertions.assertEquals(List.of(originNanos + 10L, originNanos + 30L,
+					originNanos + 60L, originNanos + 100L),
 					observedDeadlines);
 			Assertions.assertEquals(0, bodies.get());
 			InternalShutdownResult result = thrown.getInternalShutdownResult();

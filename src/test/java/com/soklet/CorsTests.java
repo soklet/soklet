@@ -34,6 +34,22 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 @ThreadSafe
 public class CorsTests {
+	@Test
+	public void preflightHeaderListsAcceptHttpOptionalWhitespace() {
+		Map<String, List<String>> headers = Map.of("Origin", List.of("\thttps://good.example\t"),
+				"Access-Control-Request-Method", List.of("\tPOST\t"),
+				"Access-Control-Request-Headers", List.of("Authorization,\tX-Custom\t,\t, Content-Type"));
+		Set<String> expected = Set.of("Authorization", "X-Custom", "Content-Type");
+		Assertions.assertEquals("https://good.example", Cors.fromHeaders(HttpMethod.POST, headers).orElseThrow().getOrigin());
+		Assertions.assertEquals(expected, CorsPreflight.fromHeaders(headers).orElseThrow().getAccessControlRequestHeaders());
+		Assertions.assertEquals(expected, Request.withPath(HttpMethod.OPTIONS, "/").headers(headers).build()
+				.getCorsPreflight().orElseThrow().getAccessControlRequestHeaders());
+		List<com.soklet.internal.microhttp.Header> raw = headers.entrySet().stream()
+				.map(entry -> new com.soklet.internal.microhttp.Header(entry.getKey(), entry.getValue().getFirst())).toList();
+		Assertions.assertEquals(expected, Request.withRawUrl(HttpMethod.OPTIONS, "/").microhttpHeaders(raw).build()
+				.getCorsPreflight().orElseThrow().getAccessControlRequestHeaders());
+	}
+
 	private static final String GOOD = "https://good.example";
 	private static final String EVIL = "https://evil.example";
 

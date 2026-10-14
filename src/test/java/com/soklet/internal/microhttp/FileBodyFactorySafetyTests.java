@@ -26,6 +26,7 @@ import java.net.SocketAddress;
 import java.net.SocketOption;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.channels.SeekableByteChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.channels.spi.SelectorProvider;
 import java.nio.charset.StandardCharsets;
@@ -98,6 +99,27 @@ class FileBodyFactorySafetyTests {
     }
 
     @Test
+    void zeroByteSeekableReadsCannotExposeUnfilledOrStaleBufferContent() throws Exception {
+        IntermittentChannel channel = new IntermittentChannel("abcdef");
+        try (RecordingSocketChannel socket = new RecordingSocketChannel();
+             WritableSource source = new SeekableChannelWritableSource(channel, 0L, 6L)) {
+            assertEquals(0L, source.writeTo(socket, 2L));
+            assertEquals("", socket.text());
+            assertEquals(2L, source.writeTo(socket, 2L));
+            assertEquals("ab", socket.text());
+            assertEquals(1L, source.writeTo(socket, 2L));
+            assertEquals("abc", socket.text());
+            assertEquals(0L, source.writeTo(socket, 2L));
+            assertEquals("abc", socket.text());
+            assertEquals(2L, source.writeTo(socket, 2L));
+            assertEquals(1L, source.writeTo(socket, 2L));
+            assertEquals("abcdef", socket.text());
+            assertFalse(source.hasRemaining());
+        }
+        assertFalse(channel.isOpen());
+    }
+
+    @Test
     void bodylessStatusDiscardClosesOwnedFiniteSourcesBeforeDroppingTheirFactory(@TempDir Path directory) throws Exception {
         Path file = directory.resolve("body");
         Files.writeString(file, "x");
@@ -115,6 +137,28 @@ class FileBodyFactorySafetyTests {
                 }
             }
         }
+    }
+
+    private static final class IntermittentChannel implements SeekableByteChannel {
+        private final ByteBuffer contents;
+        private boolean returnZero = true;
+        private boolean open = true;
+        IntermittentChannel(String contents) { this.contents = ByteBuffer.wrap(contents.getBytes(StandardCharsets.US_ASCII)); }
+        @Override public int read(ByteBuffer target) {
+            if (returnZero) { returnZero = false; return 0; }
+            if (!contents.hasRemaining()) return -1;
+            int count = Math.min(3, Math.min(target.remaining(), contents.remaining()));
+            for (int index = 0; index < count; index++) target.put(contents.get());
+            returnZero = true;
+            return count;
+        }
+        @Override public int write(ByteBuffer source) { throw new UnsupportedOperationException(); }
+        @Override public long position() { return contents.position(); }
+        @Override public SeekableByteChannel position(long position) { contents.position(Math.toIntExact(position)); return this; }
+        @Override public long size() { return contents.limit(); }
+        @Override public SeekableByteChannel truncate(long size) { throw new UnsupportedOperationException(); }
+        @Override public boolean isOpen() { return open; }
+        @Override public void close() { open = false; }
     }
 
     private static final class RecordingSocketChannel extends SocketChannel {

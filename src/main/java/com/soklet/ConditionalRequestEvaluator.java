@@ -89,7 +89,9 @@ final class ConditionalRequestEvaluator {
 	}
 
 	private static boolean headerValuePresent(@Nullable String headerValue) {
-		return Utilities.trimAggressivelyToNull(headerValue) != null;
+		// An empty entity-tag list is still a supplied precondition, and still
+		// takes precedence over the corresponding date-based condition.
+		return headerValue != null;
 	}
 
 	@NonNull
@@ -110,10 +112,13 @@ final class ConditionalRequestEvaluator {
 
 	@NonNull
 	private static Optional<EntityTagCondition> entityTagConditionFor(@Nullable String headerValue) {
-		String trimmed = Utilities.trimAggressivelyToNull(headerValue);
-
-		if (trimmed == null)
+		if (headerValue == null)
 			return Optional.empty();
+
+		String trimmed = Utilities.trimHeaderWhitespace(headerValue);
+
+		if (trimmed.isEmpty())
+			return Optional.of(EntityTagCondition.fromEntityTags(List.of()));
 
 		if ("*".equals(trimmed))
 			return Optional.of(EntityTagCondition.wildcardCondition());
@@ -121,7 +126,7 @@ final class ConditionalRequestEvaluator {
 		List<EntityTag> entityTags = new ArrayList<>();
 		List<String> parts = commaSeparatedValues(trimmed).orElse(null);
 
-		if (parts == null || parts.isEmpty() || parts.size() > MAX_ENTITY_TAG_CONDITION_COUNT)
+		if (parts == null)
 			return Optional.empty();
 
 		for (String part : parts) {
@@ -143,6 +148,7 @@ final class ConditionalRequestEvaluator {
 		List<String> values = new ArrayList<>();
 		StringBuilder current = new StringBuilder(value.length());
 		boolean inQuotes = false;
+		int elementCount = 1;
 
 		for (int i = 0; i < value.length(); i++) {
 			char c = value.charAt(i);
@@ -151,12 +157,14 @@ final class ConditionalRequestEvaluator {
 				inQuotes = !inQuotes;
 
 			if (c == ',' && !inQuotes) {
-				String element = Utilities.trimAggressivelyToNull(current.toString());
-
-				if (element == null)
+				// RFC 9110 list parsing ignores a bounded number of empty elements.
+				// Charge empty elements too, so they cannot bypass the parser bound.
+				if (++elementCount > MAX_ENTITY_TAG_CONDITION_COUNT)
 					return Optional.empty();
 
-				values.add(element);
+				String element = Utilities.trimHeaderWhitespace(current.toString());
+				if (!element.isEmpty())
+					values.add(element);
 				current.setLength(0);
 				continue;
 			}
@@ -167,12 +175,10 @@ final class ConditionalRequestEvaluator {
 		if (inQuotes)
 			return Optional.empty();
 
-		String element = Utilities.trimAggressivelyToNull(current.toString());
+		String element = Utilities.trimHeaderWhitespace(current.toString());
 
-		if (element == null)
-			return Optional.empty();
-
-		values.add(element);
+		if (!element.isEmpty())
+			values.add(element);
 		return Optional.of(values);
 	}
 

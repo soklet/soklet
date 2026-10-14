@@ -96,6 +96,41 @@ class LifecyclePolicyTests {
 	}
 
 	@Test
+	void combinedShutdownHorizonMustFitSignedNanoseconds() {
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				LifecyclePolicy.builder()
+						.startupCancelationTimeout(Duration.ofNanos(Long.MAX_VALUE))
+						.gracefulShutdownTimeout(Duration.ofNanos(1L))
+						.forcedShutdownTimeout(Duration.ZERO).build());
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				LifecyclePolicy.builder().startupCancelationTimeout(Duration.ZERO)
+						.gracefulShutdownTimeout(Duration.ofNanos(Long.MAX_VALUE))
+						.forcedShutdownTimeout(Duration.ofNanos(1L)).build());
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				new InternalLifecyclePolicy(Duration.ZERO,
+						Duration.ofNanos(Long.MAX_VALUE), Duration.ofNanos(1L), Duration.ZERO));
+		Assertions.assertThrows(IllegalArgumentException.class, () ->
+				new InternalLifecyclePolicy(Duration.ZERO, Duration.ZERO,
+						Duration.ofNanos(Long.MAX_VALUE), Duration.ofNanos(1L)));
+	}
+
+	@Test
+	void exactMaximumShutdownHorizonAndIndependentStartupBudgetAreAccepted() {
+		LifecyclePolicy policy = LifecyclePolicy.builder()
+				.startupTimeout(Duration.ofNanos(Long.MAX_VALUE))
+				.startupCancelationTimeout(Duration.ofNanos(Long.MAX_VALUE - 2L))
+				.gracefulShutdownTimeout(Duration.ofNanos(1L))
+				.forcedShutdownTimeout(Duration.ofNanos(1L)).build();
+		InternalLifecyclePolicy internal = policy.toInternal();
+		long intent = Long.MAX_VALUE - 5L;
+		long cancellation = LifecycleDeadlines.after(intent, internal.startupCancelationTimeout());
+		long graceful = LifecycleDeadlines.after(cancellation, internal.gracefulShutdownTimeout());
+		long forced = LifecycleDeadlines.after(graceful, internal.forcedShutdownTimeout());
+		Assertions.assertEquals(Long.MAX_VALUE, LifecycleDeadlines.remainingNanos(forced, intent));
+		Assertions.assertEquals(Duration.ofNanos(Long.MAX_VALUE), policy.getStartupTimeout());
+	}
+
+	@Test
 	void policiesUseStructuralEqualityAcrossAllFourTimeouts() {
 		LifecyclePolicy policy = LifecyclePolicy.builder()
 				.startupTimeout(Duration.ofSeconds(1))

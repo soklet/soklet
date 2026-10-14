@@ -29,8 +29,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.soklet.Utilities.trimAggressivelyToEmpty;
-import static com.soklet.Utilities.trimAggressivelyToNull;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
@@ -123,9 +121,9 @@ public final class CorsPreflight {
 		if (originHeaderValues == null || originHeaderValues.size() == 0)
 			return Optional.empty();
 
-		String originHeaderValue = trimAggressivelyToNull(originHeaderValues.stream().findFirst().orElse(null));
+		String originHeaderValue = Utilities.trimHeaderWhitespace(originHeaderValues.getFirst());
 
-		if (originHeaderValue == null)
+		if (originHeaderValue.isEmpty())
 			return Optional.empty();
 
 		List<String> accessControlRequestMethodHeaderValues = normalizedHeaders.get("access-control-request-method");
@@ -135,7 +133,7 @@ public final class CorsPreflight {
 
 		List<HttpMethod> accessControlRequestMethods = accessControlRequestMethodHeaderValues.stream()
 				.filter(headerValue -> {
-					headerValue = trimAggressivelyToEmpty(headerValue);
+					headerValue = Utilities.trimHeaderWhitespace(headerValue);
 
 					try {
 						HttpMethod.valueOf(headerValue);
@@ -144,7 +142,7 @@ public final class CorsPreflight {
 						return false;
 					}
 					})
-					.map((headerValue -> HttpMethod.valueOf(trimAggressivelyToEmpty(headerValue))))
+					.map((headerValue -> HttpMethod.valueOf(Utilities.trimHeaderWhitespace(headerValue))))
 				.toList();
 
 		// Preflights are required to have Access-Control-Request-Method defined
@@ -156,7 +154,7 @@ public final class CorsPreflight {
 				.orElse(List.of())
 				.stream()
 				.flatMap(value -> Arrays.stream(value.split(",")))
-				.map(value -> trimAggressivelyToEmpty(value))
+				.map(value -> Utilities.trimHeaderWhitespace(value))
 				.filter(value -> !value.isEmpty())
 				.collect(Collectors.toCollection(LinkedHashSet::new));
 

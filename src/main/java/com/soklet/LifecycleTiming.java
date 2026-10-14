@@ -118,7 +118,7 @@ final class DeadlineWaiter {
 	}
 }
 
-/** Overflow-safe absolute-deadline arithmetic. */
+/** Wraparound-safe arithmetic for monotonic deadlines within signed nanoseconds. */
 final class LifecycleDeadlines {
 	private LifecycleDeadlines() {
 	}
@@ -135,22 +135,24 @@ final class LifecycleDeadlines {
 			throw new IllegalArgumentException("Lifecycle duration exceeds signed nanoseconds", exception);
 		}
 
-		try {
-			return Math.addExact(nowNanos, durationNanos);
-		} catch (ArithmeticException exception) {
-			return Long.MAX_VALUE;
-		}
+		// nanoTime has an arbitrary origin. Preserve the entire relative budget
+		// across its signed wrap; saturation would shorten the deadline.
+		return nowNanos + durationNanos;
 	}
 
 	static long remainingNanos(long absoluteDeadlineNanos, long nowNanos) {
-		if (nowNanos >= absoluteDeadlineNanos)
-			return 0L;
+		return Math.max(0L, absoluteDeadlineNanos - nowNanos);
+	}
 
-		try {
-			return Math.subtractExact(absoluteDeadlineNanos, nowNanos);
-		} catch (ArithmeticException exception) {
-			return Long.MAX_VALUE;
-		}
+	static void validateShutdownHorizon(@NonNull Duration startupCancelationTimeout,
+			@NonNull Duration gracefulShutdownTimeout, @NonNull Duration forcedShutdownTimeout) {
+		// Each duration has already been checked for a nonnegative, signed-nanosecond value.
+		long afterCancelation = Long.MAX_VALUE - startupCancelationTimeout.toNanos();
+		long gracefulNanos = gracefulShutdownTimeout.toNanos();
+		if (gracefulNanos > afterCancelation
+				|| forcedShutdownTimeout.toNanos() > afterCancelation - gracefulNanos)
+			throw new IllegalArgumentException(
+					"Combined startup cancelation and shutdown timeouts exceed signed nanoseconds");
 	}
 
 	@NonNull
@@ -182,6 +184,8 @@ final class InternalLifecyclePolicy {
 				"gracefulShutdownTimeout");
 		this.forcedShutdownTimeout = validate(forcedShutdownTimeout,
 				"forcedShutdownTimeout");
+		LifecycleDeadlines.validateShutdownHorizon(this.startupCancelationTimeout,
+				this.gracefulShutdownTimeout, this.forcedShutdownTimeout);
 	}
 
 	@NonNull

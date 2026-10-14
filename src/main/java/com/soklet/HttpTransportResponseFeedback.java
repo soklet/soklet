@@ -79,6 +79,7 @@ final class HttpTransportResponseFeedback implements AutoCloseable {
 			boolean recorded = this.feedback.record(outcome);
 			switch (outcome) {
 				case HttpTransportResponseOutcome.Accepted ignored -> {}
+				case HttpTransportResponseOutcome.NotWritten notWritten -> notWritten.rethrowWriteFailure();
 				case HttpTransportResponseOutcome.Replaced replacement -> {
 					// Only the exact Consumer proves which lifecycle owns this channel.
 					// Public wrappers may erase both request and result identities, so
@@ -95,16 +96,20 @@ final class HttpTransportResponseFeedback implements AutoCloseable {
 	private boolean record(@NonNull HttpTransportResponseOutcome outcome) {
 		return switch (outcome) {
 			case HttpTransportResponseOutcome.Accepted ignored -> true;
-			case HttpTransportResponseOutcome.Replaced replacement -> {
-				// The first replacement owns the effective response. A closed channel
-				// cannot retain late feedback; its writer uses the compatibility bridge.
-				HttpTransportResponseOutcome current = this.outcome.get();
-				while (current instanceof HttpTransportResponseOutcome.Accepted
-						&& !this.outcome.compareAndSet(current, replacement))
-					current = this.outcome.get();
-				yield current != null;
-			}
+			case HttpTransportResponseOutcome.Replaced replacement -> recordTerminalOutcome(replacement);
+			case HttpTransportResponseOutcome.NotWritten notWritten -> recordTerminalOutcome(notWritten);
 		};
+	}
+
+	private boolean recordTerminalOutcome(@NonNull HttpTransportResponseOutcome outcome) {
+		// The first terminal outcome owns feedback. A closed channel cannot retain
+		// late feedback; replacements use the bridge, and not-written failures are
+		// always thrown at the Consumer boundary even without a claimed channel.
+		HttpTransportResponseOutcome current = this.outcome.get();
+		while (current instanceof HttpTransportResponseOutcome.Accepted
+				&& !this.outcome.compareAndSet(current, outcome))
+			current = this.outcome.get();
+		return current != null;
 	}
 
 	@NonNull

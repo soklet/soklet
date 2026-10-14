@@ -229,6 +229,27 @@ class SseHandshakeOutcomeRuntimeTests {
 	}
 
 	@Test
+	void capacityMarshalerFailureWritesFailsafeAndPreservesItsCause() throws Exception {
+		IllegalStateException failure = new IllegalStateException("capacity response failed");
+		ResponseMarshaler marshaler = ResponseMarshaler.builder()
+				.serviceUnavailableHandler((request, method) -> { throw failure; }).build();
+		try (Fixture f = started(1, 0, marshaler); Socket held = f.request(HttpMethod.GET, "ok")) {
+			assertTrue(readHead(held).startsWith("HTTP/1.1 200"));
+			await(() -> f.server.getActiveConnectionCount() == 1 && !f.streamEvents.isEmpty());
+			try (Socket rejected = f.request(HttpMethod.GET, "ok")) {
+				String response = readHead(rejected);
+				assertTrue(response.startsWith("HTTP/1.1 500"), response);
+			}
+			await(() -> f.handshakeFailures.size() == 1);
+			assertEquals("INTERNAL_ERROR", f.handshakeFailures.get(0).reason());
+			assertSame(failure, f.handshakeFailures.get(0).cause());
+			assertEquals(2, f.resource.calls.get());
+			assertEquals(1, f.resource.initializers.get());
+			assertEquals(1, f.server.getActiveConnectionCount());
+		}
+	}
+
+	@Test
 	void handlerFailureKeepsItsActualCause() throws Exception {
 		try (Fixture f = started(8, 0, ResponseMarshaler.defaultInstance()); Socket socket = f.request(HttpMethod.GET, "handler")) {
 			assertTrue(readHead(socket).startsWith("HTTP/1.1 500")); await(() -> f.handshakeFailures.size() == 1);

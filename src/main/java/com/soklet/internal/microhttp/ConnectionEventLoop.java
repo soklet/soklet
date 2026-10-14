@@ -1926,7 +1926,7 @@ class ConnectionEventLoop {
             // Interrupts are not this loop's shutdown signal; stop + wakeup is.
             // A stray callback interrupt must not make select spin forever.
             Thread.interrupted();
-            selector.select(options.resolution().toMillis());
+            selector.select(options.selectTimeoutMillis());
             Set<SelectionKey> selectedKeys = selector.selectedKeys();
             Iterator<SelectionKey> it = selectedKeys.iterator();
             while (it.hasNext()) {

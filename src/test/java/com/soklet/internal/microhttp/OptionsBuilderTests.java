@@ -19,7 +19,20 @@ package com.soklet.internal.microhttp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
+
 public class OptionsBuilderTests {
+	@Test
+	public void positiveSelectorDurationsNeverBecomeAnInfiniteWaitOrOverflow() {
+		Assertions.assertEquals(1L, Options.builder().withResolution(Duration.ofNanos(1)).build().selectTimeoutMillis());
+		Assertions.assertEquals(1L, Options.builder().withResolution(Duration.ofMillis(1)).build().selectTimeoutMillis());
+		Assertions.assertEquals(2L, Options.builder().withResolution(Duration.ofNanos(1_000_001)).build().selectTimeoutMillis());
+		Assertions.assertEquals(Long.MAX_VALUE, Options.builder().withResolution(Duration.ofMillis(Long.MAX_VALUE))
+				.build().selectTimeoutMillis());
+		Assertions.assertEquals(Long.MAX_VALUE, Options.builder().withResolution(Duration.ofSeconds(Long.MAX_VALUE))
+				.build().selectTimeoutMillis());
+	}
+
 	@Test
 	public void explicitRequestBodyLimitIsIndependentOfSetterOrder() {
 		Options aggregateThenBody = OptionsBuilder.newBuilder()

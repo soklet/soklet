@@ -89,6 +89,7 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 final class DefaultHttpServer implements HttpServer {
+	private enum ResponseOwner { UNCLAIMED, HANDLER, TIMEOUT }
 	@NonNull
 	private static final String DEFAULT_HOST;
 	@NonNull
@@ -584,7 +585,7 @@ final class DefaultHttpServer implements HttpServer {
 					return;
 				}
 
-				AtomicBoolean responseWritten = new AtomicBoolean(false);
+				AtomicReference<ResponseOwner> responseOwner = new AtomicReference<>(ResponseOwner.UNCLAIMED);
 				AtomicReference<MicrohttpResponse> timeoutResponseRef = new AtomicReference<>();
 				AtomicReference<TimeoutScheduler.ScheduledTask> timeoutFutureRef = new AtomicReference<>();
 				AtomicReference<Thread> handlerThreadRef = new AtomicReference<>();
@@ -598,14 +599,14 @@ final class DefaultHttpServer implements HttpServer {
 						MicrohttpResponse timeoutResponse = rejectionFallback != null ? rejectionFallback : withConnectionClose(
 								provideMicrohttpFailsafeResponse(503, microhttpRequest, new TimeoutException("Request handling timed out")));
 						timeoutResponseRef.set(timeoutResponse);
-						if (!responseWritten.compareAndSet(false, true))
+						if (!responseOwner.compareAndSet(ResponseOwner.UNCLAIMED, ResponseOwner.TIMEOUT))
 							return;
 
 						// The CAS makes the interrupt mutually exclusive with the handler's own finally-clear:
 						// whichever side wins the CAS owns the thread reference. A benign sliver remains where
 						// the handler completes between our CAS and the interrupt() call below — interrupting a
 						// completed handler is acceptable because the timeout response has already been claimed
-						// via responseWritten above. Intentional; do not "fix" by rechecking after the CAS.
+						// via responseOwner above. Intentional; do not "fix" by rechecking after the CAS.
 						Thread handlerThread = handlerThreadRef.get();
 						if (handlerThread != null && handlerThreadRef.compareAndSet(handlerThread, null))
 							handlerThread.interrupt();
@@ -630,7 +631,7 @@ final class DefaultHttpServer implements HttpServer {
 							return;
 						}
 						try {
-							if (responseWritten.get())
+							if (responseOwner.get() != ResponseOwner.UNCLAIMED)
 								return;
 
 							handlerThreadRef.set(Thread.currentThread());
@@ -705,10 +706,17 @@ final class DefaultHttpServer implements HttpServer {
 								requestHandler.handleRequest(requestForResponse, HttpTransportResponseFeedback.fromWriter(feedback, requestResult -> {
 									// Elect response ownership before reserving or submitting an HTTP
 									// stream. A late handler observes the timeout's finite response.
-									if (!responseWritten.compareAndSet(false, true)) {
-										MicrohttpResponse timeoutResponse = timeoutResponseRef.get();
-										if (timeoutResponse != null)
-											return HttpTransportResponseOutcome.replaced(describeFiniteTransportResponse(timeoutResponse), null, null);
+									if (!responseOwner.compareAndSet(ResponseOwner.UNCLAIMED, ResponseOwner.HANDLER)) {
+										if (responseOwner.get() == ResponseOwner.TIMEOUT) {
+											// The timeout snapshot was published before its ownership CAS.
+											// Release only an owned, already-open body; lazy sources must
+											// remain unopened and duplicate handler offers retain ownership.
+											Throwable cleanupFailure = null;
+											try { requestResult.getMarshaledResponse().copy().withoutBody(); }
+											catch (Throwable failure) { cleanupFailure = failure; }
+											return HttpTransportResponseOutcome.replaced(
+													describeFiniteTransportResponse(requireNonNull(timeoutResponseRef.get())), cleanupFailure, null);
+										}
 										throw new RejectedExecutionException("Response ownership has already been claimed.");
 									}
 									cancelTimeout(timeoutFutureRef.getAndSet(null));
@@ -827,7 +835,7 @@ final class DefaultHttpServer implements HttpServer {
 
 								UnparsedRequestReason unparsedReason = request == null ? unparsedReasonForFailure(t) : null;
 								MicrohttpResponse unparsedResponse = null;
-								if (unparsedReason != null && !responseWritten.get()) {
+								if (unparsedReason != null && responseOwner.get() == ResponseOwner.UNCLAIMED) {
 									MicrohttpResponse fallback = unparsedBodylessResponse(failsafeStatusCode);
 									unparsedFallbackResponseRef.set(fallback);
 									UnparsedRequest unparsedRequest = UnparsedRequest
@@ -837,11 +845,11 @@ final class DefaultHttpServer implements HttpServer {
 											.captureTruncated(microhttpRequest.observedWireByteCount() > 0).build();
 									UnparsedRequestResponseSupport.PreparedResponse prepared = UnparsedRequestResponseSupport.marshal(
 											unparsedRequest, this.responseMarshaler, getLifecycleObserver(), this::safelyLog,
-											() -> !responseWritten.get());
+											() -> responseOwner.get() == ResponseOwner.UNCLAIMED);
 									unparsedResponse = prepared == null ? fallback : prepared.response();
 								}
 
-								if (responseWritten.compareAndSet(false, true)) {
+								if (responseOwner.compareAndSet(ResponseOwner.UNCLAIMED, ResponseOwner.HANDLER)) {
 									cancelTimeout(timeoutFutureRef.getAndSet(null));
 									try {
 										microHttpCallback.accept(unparsedResponse != null ? unparsedResponse
@@ -869,7 +877,7 @@ final class DefaultHttpServer implements HttpServer {
 							.throwable(e)
 							.build());
 
-					if (responseWritten.compareAndSet(false, true)) {
+					if (responseOwner.compareAndSet(ResponseOwner.UNCLAIMED, ResponseOwner.HANDLER)) {
 						cancelTimeout(timeoutFutureRef.getAndSet(null));
 						try {
 							microHttpCallback.accept(withConnectionClose(provideMicrohttpFailsafeResponse(503, microhttpRequest, e)));
@@ -1379,17 +1387,13 @@ final class DefaultHttpServer implements HttpServer {
 				headers.add(new Header(name, value));
 		}
 
-		// ResponseCookie headers are split into multiple instances of Set-Cookie.
-		// Force natural ordering for consistent output if the set is not already sorted.
-		List<ResponseCookie> cookies = marshaledResponse.getCookies();
-		List<ResponseCookie> sortedCookies = new ArrayList<>(cookies);
-
-
-		for (ResponseCookie cookie : sortedCookies)
+		// Structured cookies follow raw Set-Cookie values and retain their supplied order.
+		for (ResponseCookie cookie : marshaledResponse.getCookies())
 			headers.add(new Header("Set-Cookie", cookie.toSetCookieHeaderRepresentation()));
 
-		// Force natural order for consistent output
-		headers.sort(Comparator.comparing(Header::name));
+		// Stable, case-insensitive ordering keeps occurrences of the same HTTP field
+		// in their original order, including raw and structured Set-Cookie values.
+		headers.sort(Comparator.comparing(Header::name, String.CASE_INSENSITIVE_ORDER));
 
 		String reasonPhrase = reasonPhraseForStatusCode(marshaledResponse.getStatusCode());
 		StreamingResponseBody streamingResponseBody = marshaledResponse.getStreamingResponseBody().orElse(null);
@@ -1510,7 +1514,11 @@ final class DefaultHttpServer implements HttpServer {
 			// sees the same body as GET without retaining it in lifecycle/log response objects.
 			MarshaledResponse compressionResponse = sameInstance(body, uncompressedBody) ? marshaledResponse
 					: marshaledResponse.copy().body(uncompressedBody).finish();
-			ResponseCompressionPlan plan = requireNonNull(
+			// Integrity fields describe the application's exact representation bytes.
+			// Preserve them by keeping identity, while retaining negotiation below.
+			boolean integrityProtected = hasHeader(headers, "Content-Digest") || hasHeader(headers, "Repr-Digest")
+					|| hasHeader(headers, "Digest") || hasHeader(headers, "Content-MD5");
+			ResponseCompressionPlan plan = integrityProtected ? ResponseCompressionPlan.none() : requireNonNull(
 					getResponseCompressor().plan(compressionRequest, compressionResponse),
 					"Response compressor must not return null.");
 
@@ -1589,7 +1597,7 @@ final class DefaultHttpServer implements HttpServer {
 		}
 		if (preserveUpgrade) result.add(new Header("Connection", close ? "Upgrade, close" : "Upgrade"));
 		else if (close) result.add(new Header("Connection", "close"));
-		result.sort(Comparator.comparing(Header::name));
+		result.sort(Comparator.comparing(Header::name, String.CASE_INSENSITIVE_ORDER));
 		return result;
 	}
 
@@ -1600,7 +1608,7 @@ final class DefaultHttpServer implements HttpServer {
 		if (statusCode == 205) {
 			List<Header> result = new ArrayList<>(headers);
 			result.add(new Header("Content-Length", "0"));
-			result.sort(Comparator.comparing(Header::name));
+			result.sort(Comparator.comparing(Header::name, String.CASE_INSENSITIVE_ORDER));
 			return result;
 		}
 		boolean head = request != null && request.getHttpMethod() == HttpMethod.HEAD;
@@ -1609,7 +1617,7 @@ final class DefaultHttpServer implements HttpServer {
 		if (length == null) return headers;
 		List<Header> result = new ArrayList<>(headers);
 		result.add(new Header("Content-Length", Long.toString(length)));
-		result.sort(Comparator.comparing(Header::name));
+		result.sort(Comparator.comparing(Header::name, String.CASE_INSENSITIVE_ORDER));
 		return result;
 	}
 
@@ -1694,7 +1702,7 @@ final class DefaultHttpServer implements HttpServer {
 		}
 		if (!updated)
 			result.add(new Header("Vary", "Accept-Encoding"));
-		result.sort(Comparator.comparing(Header::name));
+		result.sort(Comparator.comparing(Header::name, String.CASE_INSENSITIVE_ORDER));
 		return result;
 	}
 
@@ -1709,7 +1717,7 @@ final class DefaultHttpServer implements HttpServer {
 					? new Header(header.name(), weakEntityTagHeaderValue(header.value())) : header);
 		}
 		result.add(new Header("Content-Encoding", contentEncoding));
-		result.sort(Comparator.comparing(Header::name));
+		result.sort(Comparator.comparing(Header::name, String.CASE_INSENSITIVE_ORDER));
 		return result;
 	}
 
@@ -2347,23 +2355,23 @@ final class DefaultHttpServer implements HttpServer {
 
 		@NonNull
 		private static Optional<EncodingPreference> fromHeaderValue(@Nullable String headerValue) {
-			String trimmed = Utilities.trimAggressivelyToNull(headerValue);
+			String trimmed = headerValue == null ? "" : Utilities.trimHeaderWhitespace(headerValue);
 
-			if (trimmed == null)
+			if (trimmed.isEmpty())
 				return Optional.empty();
 
 			String[] parts = trimmed.split(";", -1);
-			String coding = Utilities.trimAggressivelyToNull(parts[0]);
+			String coding = Utilities.trimHeaderWhitespace(parts[0]);
 
-			if (coding == null)
+			if (coding.isEmpty())
 				return Optional.empty();
 
 			Integer q = 1000;
 
 			for (int i = 1; i < parts.length; i++) {
-				String part = Utilities.trimAggressivelyToNull(parts[i]);
+				String part = Utilities.trimHeaderWhitespace(parts[i]);
 
-				if (part == null)
+				if (part.isEmpty())
 					continue;
 
 				int equalsIndex = part.indexOf('=');
@@ -2371,7 +2379,7 @@ final class DefaultHttpServer implements HttpServer {
 				if (equalsIndex <= 0)
 					continue;
 
-				String name = Utilities.trimAggressivelyToNull(part.substring(0, equalsIndex));
+				String name = Utilities.trimHeaderWhitespace(part.substring(0, equalsIndex));
 
 				if (!"q".equalsIgnoreCase(name))
 					continue;
@@ -2384,9 +2392,9 @@ final class DefaultHttpServer implements HttpServer {
 
 		@NonNull
 		private static Integer parseQ(@Nullable String value) {
-			String trimmed = Utilities.trimAggressivelyToNull(value);
+			String trimmed = value == null ? "" : Utilities.trimHeaderWhitespace(value);
 
-			if (trimmed == null)
+			if (trimmed.isEmpty())
 				return 0;
 
 			try {

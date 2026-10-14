@@ -921,7 +921,8 @@ final class SokletDirectLifecycle {
 	private void awaitRunningShutdown(
 			@NonNull List<DirectParticipant> participants)
 			throws InterruptedException {
-		long effectivelyInfinite = Long.MAX_VALUE;
+		long effectivelyInfinite = LifecycleDeadlines.after(this.clock.nanoTime(),
+				Duration.ofNanos(Long.MAX_VALUE));
 		this.waiter.await(effectivelyInfinite,
 				() -> this.stateMachine.shutdownRequested()
 						|| participants.stream().anyMatch(participant ->
@@ -1457,7 +1458,8 @@ final class SokletDirectLifecycle {
 	@NonNull
 	private Throwable startupWaitCancelationFailure(long startupDeadline) {
 		StartupOutcomeClaim claim = this.startupOutcome.get();
-		if (claim == null && this.clock.nanoTime() >= startupDeadline) {
+		if (claim == null && LifecycleDeadlines.remainingNanos(startupDeadline,
+				this.clock.nanoTime()) == 0L) {
 			requestShutdownIntent(StartupOutcomeKind.TIMED_OUT);
 			claim = this.startupOutcome.get();
 		}
@@ -1511,7 +1513,8 @@ final class SokletDirectLifecycle {
 		if (electedOutcome == StartupOutcomeKind.CANCELED
 				|| this.stateMachine.shutdownRequested())
 			return InternalStartupDisposition.CANCELED;
-		if (this.clock.nanoTime() >= startupDeadline)
+		if (LifecycleDeadlines.remainingNanos(startupDeadline,
+				this.clock.nanoTime()) == 0L)
 			return InternalStartupDisposition.TIMED_OUT;
 		return InternalStartupDisposition.FAILED;
 	}

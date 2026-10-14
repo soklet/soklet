@@ -364,6 +364,7 @@ public final class Soklet implements AutoCloseable {
 					outcome = compatibilityOutcome;
 				switch (outcome) {
 					case HttpTransportResponseOutcome.Accepted ignored -> {}
+					case HttpTransportResponseOutcome.NotWritten notWritten -> notWritten.rethrowWriteFailure();
 					case HttpTransportResponseOutcome.Replaced replacement -> {
 						marshaledResponseHolder.set(replacement.getMarshaledResponse());
 						requestResultHolder.set(requestResult.copy().marshaledResponse(replacement.getMarshaledResponse())

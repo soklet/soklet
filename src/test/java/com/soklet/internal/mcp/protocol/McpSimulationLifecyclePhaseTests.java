@@ -81,6 +81,50 @@ public class McpSimulationLifecyclePhaseTests {
 	}
 
 	@Test
+	public void simulationDrainDeadlinePreservesBudgetAcrossMonotonicClockWrap()
+			throws Exception {
+		CountDownLatch entered = new CountDownLatch(1);
+		CountDownLatch release = new CountDownLatch(1);
+		McpHttpServerRuntime runtime = runtime(invocation -> {
+			entered.countDown();
+			try {
+				release.await();
+			} catch (InterruptedException exception) {
+				Thread.currentThread().interrupt();
+			}
+			return McpApplicationDispatchOutcome.completed(McpWireResult.complete(McpJsonObject.empty()));
+		});
+
+		try (runtime;
+				McpHttpServerRuntime.SimulationSession session = runtime.openSimulationSession();
+				McpSimulation simulation = session.start(toolRequest(),
+						McpSimulationOptions.defaultInstance())) {
+			Assertions.assertTrue(entered.await(5, TimeUnit.SECONDS));
+			session.quiesce();
+			try {
+				AtomicInteger reads = new AtomicInteger();
+				long origin = Long.MAX_VALUE - 5L;
+				long deadline = origin + 10L;
+				Assertions.assertFalse(session.awaitTermination(deadline,
+						() -> reads.getAndIncrement() == 0 ? origin : deadline));
+				Assertions.assertEquals(2, reads.get(),
+						"A deadline after wrap must retain its remaining observation budget");
+				reads.set(0);
+				long expiredDeadline = Long.MAX_VALUE - 1L;
+				Assertions.assertFalse(session.awaitTermination(expiredDeadline,
+						() -> reads.getAndIncrement() == 0
+								? Long.MIN_VALUE + 1L : expiredDeadline));
+				Assertions.assertEquals(1, reads.get(),
+						"A deadline before wrap must remain expired after wrap");
+			} finally {
+				release.countDown();
+			}
+			Assertions.assertTrue(session.awaitTermination(
+					System.nanoTime() + Duration.ofSeconds(5).toNanos(), System::nanoTime));
+		}
+	}
+
+	@Test
 	@Timeout(120)
 	public void graceful_simulation_drain_does_not_interrupt_admitted_handler()
 			throws Exception {

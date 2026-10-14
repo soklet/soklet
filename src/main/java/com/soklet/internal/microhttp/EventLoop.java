@@ -342,7 +342,7 @@ public class EventLoop {
 
     private void doRun() throws IOException {
         while (!stopAccepting.get() && !stopConnections.get()) {
-            selector.select(options.resolution().toMillis());
+            selector.select(options.selectTimeoutMillis());
             Set<SelectionKey> selectedKeys = selector.selectedKeys();
             Iterator<SelectionKey> it = selectedKeys.iterator();
             while (it.hasNext()) {

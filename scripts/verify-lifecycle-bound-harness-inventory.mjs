@@ -126,6 +126,10 @@ const SCOPE_ACTIONS = new Set([
   'RAISE_OUTER_BOUND',
 ]);
 const REQUIRED_EXECUTING_SCOPES = Object.freeze({
+  'src/test/java/com/soklet/HttpDurationBoundaryTests.java': ["submillisecondSelectorTimeoutStillExpiresAStalledRequest","acceptedHugeReadAndWriteTimeoutsDoNotBreakOrdinaryRequests"],
+  'src/test/java/com/soklet/HttpTransportResponseOutcomeTests.java': ["notWrittenFailsDirectAndOpaqueConsumersWithoutClaimingSuccessOrReplacement"],
+  'src/test/java/com/soklet/SseLateResponseOutcomeTests.java': ["lateHandlerDoesNotWaitForBlockedTimeoutMarshalerOrReportItsResponseAsWritten","lateHandlerAfterCustomTimeoutResponseIsWrittenStillReportsWriteFailureOnly","lateSseTimeoutResponseClosesOwnedFileChannel","lateSseTimeoutResponsePreservesBorrowedFileChannel"],
+  'src/test/java/com/soklet/MultipartEdgeCaseTests.java': ["mixedCaseContentDispositionParametersBindToResourceArguments"],
   'src/test/java/com/soklet/McpRequestMetricOrderingTests.java': ["realWorkerCannotOvertakePausedSubmission","realDeadlineCannotOvertakePausedSubmission","realCancellationCannotOvertakePausedSubmission"],
   'src/test/java/com/soklet/internal/mcp/protocol/McpLegacySubscriptionAuthorizationDeadlineTests.java': ["ignoredTimedOutJuneAuthorizationCannotExtendItsLeaseOrOverlapAnotherCallback","ignoredTimedOutNovemberAuthorizationCannotExtendItsLeaseOrOverlapAnotherCallback","expiredQueuedJuneAuthorizationNeverInvokesTheCallback","expiredQueuedNovemberAuthorizationNeverInvokesTheCallback"],
   'src/test/java/com/soklet/SokletDirectLateStartupIntegrationTests.java': [
@@ -365,6 +369,28 @@ function reviewedOrphanFile(path, fileSha256, rows) {
 }
 
 const REVIEWED_SCOPE_TOPOLOGY_OVERRIDES = checkedReviewMap([
+  ...reviewedScopeFile("src/test/java/com/soklet/SseHandshakeOutcomeRuntimeTests.java", "2fb108529ca7bf9df60da8ab4c5ad44ce17a29d3b0b511ae8b0e65d933ea312b", [
+    ["capacityMarshalerFailureWritesFailsafeAndPreservesItsCause","d0f258df0dc03ca2d3931cf01531ca6d17dc7823d7411a0a1ac1c054f0874472",{"phasePolicy":{"startupMillis":10000,"startupCancellationMillis":1000,"gracefulShutdownMillis":300,"forcedShutdownMillis":1000},"controlJoinMillis":16000}],
+  ]),
+  ...reviewedScopeFile("src/test/java/com/soklet/HttpDurationBoundaryTests.java", "46b785baae6dfc3d66566bc36a6c96cf8034a216858650d8c1992499bc312049", [
+    ["submillisecondSelectorTimeoutStillExpiresAStalledRequest","44e5f83840f9d1d187761378e171767d042128f5238b24a9a14ede70bd7617ad",{"controlJoinMillis":6000}],
+    ["acceptedHugeReadAndWriteTimeoutsDoNotBreakOrdinaryRequests","71f93baa216f723f648b55bdccd776d9621a42bff66263e64e6121735eb41eda",{"controlJoinMillis":6000}],
+  ]),
+  ...reviewedScopeFile("src/test/java/com/soklet/HttpTransportResponseOutcomeTests.java", "2309a602bafbee9cba35f38cab834124bddb585215c50ec9ea8bbe0685902c37", [
+    ["notWrittenFailsDirectAndOpaqueConsumersWithoutClaimingSuccessOrReplacement","fe361034515c547896caa90a0fba422313c7ce8dab481ed10816322c6ff12ab3",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1}}],
+  ]),
+  ...reviewedScopeFile("src/test/java/com/soklet/SokletSimulatorIsolationTests.java", "b392560754d5023d4364fc9536018303ec546cbd1e4ccdbae9fa00b1a80712e8", [
+    ["successfulStartupBeforeWrappedDeadlineRunsTheBody","4c6f30e21494af5df3f7298d90a7df72e79fb7f7022f2d25596fad7f6e072986",{"phasePolicy":{"startupMillis":1,"startupCancellationMillis":1,"gracefulShutdownMillis":1,"forcedShutdownMillis":1}}],
+  ]),
+  ...reviewedScopeFile("src/test/java/com/soklet/SseLateResponseOutcomeTests.java", "8f79455f6c6742edcfe92863d295873dd948b3733c8bb9b7c50b7e12b4d4f5c3", [
+    ["lateHandlerDoesNotWaitForBlockedTimeoutMarshalerOrReportItsResponseAsWritten","4ceaf87ae44bbe06afcfa2a326cac89ff294ba8545515562b8f5e1e866420064",{"controlJoinMillis":35000,"controlComposition":"REVIEWED_FOREGROUND_RELEASE"}],
+    ["lateHandlerAfterCustomTimeoutResponseIsWrittenStillReportsWriteFailureOnly","218c13aa51ef6a6c1b7851dcf7a478dd00969f6108dd093b782d5f8b5e8286a4",{"controlJoinMillis":35000,"controlComposition":"REVIEWED_FOREGROUND_RELEASE"}],
+    ["lateSseTimeoutResponseClosesOwnedFileChannel","56448094919f4e520dd93a8bc888872d6defe2e6e219feb0f7e6243bccf12da7",{"controlJoinMillis":35000,"controlComposition":"REVIEWED_FOREGROUND_RELEASE"}],
+    ["lateSseTimeoutResponsePreservesBorrowedFileChannel","56ddb2af9a50576f8ad01aa46773e31d589b36140c9fb84cc46dc3c6d2bdc4f7",{"controlJoinMillis":35000,"controlComposition":"REVIEWED_FOREGROUND_RELEASE"}],
+  ]),
+  ...reviewedScopeFile("src/test/java/com/soklet/internal/mcp/protocol/McpSimulationLifecyclePhaseTests.java", "745d4366596625c484e3b82db19653bf6a0998f6a9b037ad723d47c2c390940c", [
+    ["simulationDrainDeadlinePreservesBudgetAcrossMonotonicClockWrap","0121691b7de2f8e4e002605232631d2dc85611e5f0512cf21bcb9702dc0f4acb",{"controlledLifecycleCoreMillis":5000,"controlJoinMillis":15000,"controlComposition":"REVIEWED_FOREGROUND_RELEASE"}],
+  ]),
   ...reviewedScopeFile("src/test/java/com/soklet/McpRequestMetricOrderingTests.java", "41d8111e220cec7f2044e8611a5fb0bfc90bf915b663a6977b49bae3c8e0574a", [
     ["realWorkerCannotOvertakePausedSubmission","34562f58e792729015c5afdbe91842842c45788a610aa80d8b17072f4c0a4045",{"controlJoinMillis":45000,"controlComposition":"REVIEWED_FOREGROUND_RELEASE"}],
     ["realDeadlineCannotOvertakePausedSubmission","f1e5b305b73ce1d6a19cf31f30866b27f8d86dfc66bf7fece9c11a45bfbad882",{"controlJoinMillis":45000,"controlComposition":"REVIEWED_FOREGROUND_RELEASE"}],
@@ -575,8 +601,8 @@ const REVIEWED_SCOPE_TOPOLOGY_OVERRIDES = checkedReviewMap([
   ...reviewedScopeFile("src/test/java/com/soklet/SokletDirectTerminationPrecedenceTests.java", "fa53b1ea0174a65ed9900203fe2f0f17f05f1dbc8518ca513201c1992c9e58e9", [
     ["ownerShutdownIntentWinsFormerGroupFanoutGap","da9453ddd92e3d10cfe8cb15476bf271efd399c14e41292a2edf1ac54b142ef9",{"phasePolicy":{"forcedShutdownMillis":30000,"gracefulShutdownMillis":30000,"startupCancellationMillis":30000,"startupMillis":5000},"controlledLifecycleCoreMillis":5000}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/SokletSimulatorIsolationTests.java", "e642e15cfe950e209fab840aeead6520b4dae72fa7be5e3017aa352dd2332851", [
-    ["blockedFrameworkSetupUsesOneExactStartupAndRollbackSchedule","3e3b5ad4ea82946356b53bacd01456586c1061d238075018d12ce690f1e41dc1",{"phasePolicy":{"startupMillis":2000,"startupCancellationMillis":1000,"gracefulShutdownMillis":2000,"forcedShutdownMillis":2000}}],
+  ...reviewedScopeFile("src/test/java/com/soklet/SokletSimulatorIsolationTests.java", "b392560754d5023d4364fc9536018303ec546cbd1e4ccdbae9fa00b1a80712e8", [
+    ["blockedFrameworkSetupUsesOneExactStartupAndRollbackSchedule","442ee614d657896f5cc74b540cd579692b71200861966840267bfc61894e3f7f",{"phasePolicy":{"startupMillis":2000,"startupCancellationMillis":1000,"gracefulShutdownMillis":2000,"forcedShutdownMillis":2000}}],
     ["concurrentFreshScopesDoNotCrossDeliverCallbacks","3ed0428c59239dff98ab82c223aa9e17fe9f6552b79d08e56810b98f98f5a1b9",{"generation":{"count":2,"mode":"CONCURRENT_OR_ALTERNATIVE","complete":1,"prior":0,"incomplete":1},"controlJoinMillis":15000,"controlComposition":"REVIEWED_OVERLAP_OR_DUPLICATE"}],
     ["customParameterAndInstanceProvidersAreFreshPerConfiguration","f10665e6611be5b47db4c751ecb9cdebeb9a2001355f48a6088f708f61c9070c",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1}}],
     ["defaultParameterProviderBindsEachFreshConfiguration","ca8d2ec83a0012a1c1474f94d15b80bad7df3cec670935e5f0de423d6e8faabe",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1}}],
@@ -710,6 +736,11 @@ const REVIEWED_SCOPE_TOPOLOGY_OVERRIDES = checkedReviewMap([
 ], 'lifecycle scope topology');
 
 const REVIEWED_PHASE_POLICY_OVERRIDES = checkedReviewMap([
+  // Immutable configuration/arithmetic only: no owner executes; maximum nanos rounded up to ms.
+  ...reviewedPhasePolicyFile("src/test/java/com/soklet/LifecyclePolicyTests.java", "204114c2a9de2fd50c06c9a9f5e56ec8453ddde1aeeb067b9710ca37482e74ce", [
+    ["combinedShutdownHorizonMustFitSignedNanoseconds","9598ffa006367bedcfd662be11c0f6e8e8ad2d0edcf6b6709ae76160125f9edb",{"startupMillis":30000,"startupCancellationMillis":9223372036855,"gracefulShutdownMillis":9223372036855,"forcedShutdownMillis":1}],
+    ["exactMaximumShutdownHorizonAndIndependentStartupBudgetAreAccepted","6c2227dcf46b31bdff82c47e18ec05345b8ade705da35634023cc2030fba10b7",{"startupMillis":9223372036855,"startupCancellationMillis":9223372036855,"gracefulShutdownMillis":1,"forcedShutdownMillis":1}],
+  ]),
   // Private transport-feedback regression helpers install this exact finite policy.
   ...reviewedPhasePolicyFile("src/test/java/com/soklet/HttpTransportResponseFeedbackIsolationTests.java", "65cc104349235e9a006899137f16a610f101e55c1addfc56d4bb542fd4fc8e94", [
     ["nestedAdmissionRejectedHttpWriteCannotReplaceAnIndependentResponse","53c208f59cd08d41743c72b0bdaa8cc3328e6c12032a9ba726273d85a9c37345",{"forcedShutdownMillis":1000,"gracefulShutdownMillis":3000,"startupCancellationMillis":2000,"startupMillis":5000}],
@@ -719,7 +750,7 @@ const REVIEWED_PHASE_POLICY_OVERRIDES = checkedReviewMap([
     ["sseFreshRequestAcrossHandlerAndCallbackThreadHopsRetainsInvalidFramingReplacement","f68aa2973c4ca664a3c019a4e17ee3ad8751ba3a1511108fd83c55f0d7d482ba",{"forcedShutdownMillis":1000,"gracefulShutdownMillis":3000,"startupCancellationMillis":2000,"startupMillis":5000}],
     ["sseNestedFreshRedispatchKeepsReplacementWithInnerRequest","be845b0824b744ada2e517646a4ba4243596cb55d809b61bc4b8aca4dd8db166",{"forcedShutdownMillis":1000,"gracefulShutdownMillis":3000,"startupCancellationMillis":2000,"startupMillis":5000}],
   ]),
-  ...reviewedPhasePolicyFile("src/test/java/com/soklet/LifecyclePolicyTests.java", "1e913492fed46f7dc26e621a325f89e0afe58cbb5f66d63332c2879fa4993143", [
+  ...reviewedPhasePolicyFile("src/test/java/com/soklet/LifecyclePolicyTests.java", "204114c2a9de2fd50c06c9a9f5e56ec8453ddde1aeeb067b9710ca37482e74ce", [
     ["negativeAndNanosecondOverflowingTimeoutsAreRejected","5e09609efbdc80c4bca9d987e57fd31bb400ae72fe94586f3265640c211609fd",{"forcedShutdownMillis":3000,"gracefulShutdownMillis":15000,"startupCancellationMillis":2000,"startupMillis":30000}],
     ["nullRestoresEachBuiltInDefault","70e57c423a1c12469ae46b5767b017a23f583e9bcb790522f57d5a7b305383c3",{"forcedShutdownMillis":3000,"gracefulShutdownMillis":15000,"startupCancellationMillis":2000,"startupMillis":30000}],
     ["policiesUseStructuralEqualityAcrossAllFourTimeouts","854da36425d693c070eb7b6ab139b2f628070d79abacd765f787c75503d4a479",{"forcedShutdownMillis":5000,"gracefulShutdownMillis":5000,"startupCancellationMillis":5000,"startupMillis":5000}],
@@ -988,7 +1019,7 @@ const REVIEWED_CONTROL_OVERRIDES = checkedReviewMap([
   ...reviewedScopeFile("src/test/java/com/soklet/InternalLifecycleCoordinatorForceAttributionTests.java", "5ce844a25c119300e1e38672120d4cbe6b90757dffc96541669e3734688b3daa", [
     ["rejectedForceLaunchDoesNotMakeLateGracefulProofForced","29b47f3ab51cf5d1a673dccc2df1ec38579eb4271181c771087827d5f5eb391c",{"controlComposition":"REVIEWED_FOREGROUND_RELEASE","controlJoinMillis":8000}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/LifecycleFoundationTests.java", "8832c7f43c2ab7472204cd34d669058c8fcc4004ae6248f8d4f34ea2bd83313d", [
+  ...reviewedScopeFile("src/test/java/com/soklet/LifecycleFoundationTests.java", "b0ed8223a9ccf1c9c727b6b0afab9f1cf51e5c5dcfe39c2cd15a37c9007d3dd9", [
     ["blockedLifecycleCallDoesNotPreventAnotherParticipantPhaseSubmission","4206c710a70e1c2a9198e219d085020449c7f653f70586b93c0de2ca47d67666",{"controlComposition":"REVIEWED_FOREGROUND_RELEASE","controlJoinMillis":2000}],
     ["graceExpiryCancelsBlockedQuiesceBeforeSubmittingForce","600ac5c14550d27da74baa83f9b5500ee370b0fb06cc21a9a7381b1338d158d0",{"controlComposition":"REVIEWED_FOREGROUND_RELEASE","controlJoinMillis":0}],
   ]),
@@ -1077,8 +1108,8 @@ const REVIEWED_CONTROL_OVERRIDES = checkedReviewMap([
   ...reviewedScopeFile("src/test/java/com/soklet/SokletMcpLifecycleTests.java", "e523be77c435a8f5a6cd508ced1632007941c07811df3f87c997b21c7dbb7593", [
     ["noncooperativeMcpHandlerFreezesOneResidualOutcomeAcrossLaterCalls","e9d031300b12b7359ee7b01aa72bc4196ef027fa33d95fac863cd248b00f6361",{"controlComposition":"REVIEWED_FOREGROUND_RELEASE","controlJoinMillis":20000}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/SokletSimulatorIsolationTests.java", "e642e15cfe950e209fab840aeead6520b4dae72fa7be5e3017aa352dd2332851", [
-    ["blockedFrameworkSetupUsesOneExactStartupAndRollbackSchedule","3e3b5ad4ea82946356b53bacd01456586c1061d238075018d12ce690f1e41dc1",{"controlComposition":"REVIEWED_FOREGROUND_RELEASE","controlJoinMillis":15000}],
+  ...reviewedScopeFile("src/test/java/com/soklet/SokletSimulatorIsolationTests.java", "b392560754d5023d4364fc9536018303ec546cbd1e4ccdbae9fa00b1a80712e8", [
+    ["blockedFrameworkSetupUsesOneExactStartupAndRollbackSchedule","442ee614d657896f5cc74b540cd579692b71200861966840267bfc61894e3f7f",{"controlComposition":"REVIEWED_FOREGROUND_RELEASE","controlJoinMillis":30000,"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1}}],
     ["concurrentConfigurationReuseLetsExactlyOneRunClaimIt","5579f354b0e00bb9359ba6b607e9e803ea670e7c723448103ae2ab25fd364b9e",{"controlComposition":"REVIEWED_FOREGROUND_RELEASE","controlJoinMillis":25000}],
     ["liveMcpStartQuiescesBeforeCancellationAndCatchesUpToForce","37b14f522e8065b3983c1b55e79f9930e5b4756ed89c67534386cb02e9ee3896",{"controlComposition":"REVIEWED_FOREGROUND_RELEASE","controlJoinMillis":15000}],
   ]),
@@ -1143,7 +1174,7 @@ const REVIEWED_CONTROL_OVERRIDES = checkedReviewMap([
     ["progressEnqueueWinsBeforeMappedErrorTerminal","bc346e059df77c8ec558fb5ff75cc18dfeb0cf6f8a81fdbb59fba6cda0552913",{"controlComposition":"REVIEWED_FOREGROUND_RELEASE","controlJoinMillis":35000}],
     ["mappedErrorTerminalWinsAfterProgressEligibility","ac973dea8b26a499defa252028530323c1dd22286b3bf3a2463ffb99bcf47207",{"controlComposition":"REVIEWED_FOREGROUND_RELEASE","controlJoinMillis":35000}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/internal/mcp/protocol/McpSimulationLifecyclePhaseTests.java", "8fa5f196be4aa15870162f46bfebe8dba080eb7b5a667ec8cb24b40aad6beeec", [
+  ...reviewedScopeFile("src/test/java/com/soklet/internal/mcp/protocol/McpSimulationLifecyclePhaseTests.java", "745d4366596625c484e3b82db19653bf6a0998f6a9b037ad723d47c2c390940c", [
     ["bridge_quiesce_is_idempotent_fences_starts_and_releases_proof","fdf054d18525497fbd18207c4d56949875b199a895d53240cfb524faa791fcde",{"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND","controlJoinMillis":5000}],
     ["graceful_simulation_drain_does_not_interrupt_admitted_handler","ecf88d4c91c2237e9c58bff0fc70bcf473bb6968054cda7e4b2cb31959d8431c",{"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND","controlJoinMillis":20000}],
     ["graceful_simulation_drain_preserves_committed_progress_stream","79c0f19d7df0f14a0baae08257efd2d3ffe5c076c6fe36b53f1863cf3dfc9ead",{"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND","controlJoinMillis":30000}],
@@ -1627,7 +1658,7 @@ const REVIEWED_VERIFICATION_FOLLOWUP_SCOPE_OVERRIDES = checkedReviewMap([
   ...reviewedScopeFile("src/test/java/com/soklet/SseDurationBoundaryTests.java", "357c50066eddfca443a7bd1b121d795cb80a9a025df8fe85de3434f1bf9616cb", [
     ["invalidHeartbeatsFailAtBuildRatherThanDuringAConnection","58b387113e2c317c038103d915f54288f1f80762318bf1b961bcbfb8aa3551be",{"dynamicNodeCount":7}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/SseHandshakeOutcomeRuntimeTests.java", "d2f0b431f74a9e454782103143f4b4d024e869a78d8dc5b6e8d2412396c16c50", [
+  ...reviewedScopeFile("src/test/java/com/soklet/SseHandshakeOutcomeRuntimeTests.java", "2fb108529ca7bf9df60da8ab4c5ad44ce17a29d3b0b511ae8b0e65d933ea312b", [
     ["simulatedInterceptorFramingHeadersCannotActivateAnAcceptedHandshake","668466bb36869bafc87bedf32de2f61b0dfe61d0efef20375c09c338aaec87c5",{"phasePolicy":{"startupMillis":10000,"startupCancellationMillis":1000,"gracefulShutdownMillis":300,"forcedShutdownMillis":1000},"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1}}],
     ["liveInterceptorFramingHeadersCannotActivateAnAcceptedHandshake","54f574a55a070059631bd25fdd54f06d74d650bec2fd3b7401647726a0801204",{"phasePolicy":{"startupMillis":10000,"startupCancellationMillis":1000,"gracefulShutdownMillis":300,"forcedShutdownMillis":1000},"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1},"controlJoinMillis":4000}],
     ["headAndOptionsDoNotConsumeOrRequireStreamCapacity","b12989304ca1e067566a3ec4401fcb1ea447d10ff67dcd75ea71165a590ec408",{"phasePolicy":{"startupMillis":10000,"startupCancellationMillis":1000,"gracefulShutdownMillis":300,"forcedShutdownMillis":1000},"generation":{"count":1,"mode":"SINGLE","complete":1,"prior":0,"incomplete":1},"controlJoinMillis":9000,"controlComposition":"REVIEWED_DYNAMIC_NODE_MAX","dynamicNodeCount":2}],
@@ -1857,7 +1888,7 @@ const REVIEWED_VERIFICATION_FOLLOWUP_SCOPE_OVERRIDES = checkedReviewMap([
     ["bytesBeforeResetDoNotReportServerAcceptanceOrTransportErrors","ce7ebaa825bcc51b15d8b91a9cb5a121c6c88a35094b9e3f492f6cec4a6954d3",{"phasePolicy":{"startupMillis":5000,"startupCancellationMillis":1000,"gracefulShutdownMillis":3000,"forcedShutdownMillis":1000},"controlJoinMillis":37000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
   ]),
   // One Fixture owner; a 2 s connect and 3 s deadline poll. No client body read is attempted; fixture close owns the existing lifecycle stop.
-  ...reviewedScopeFile("src/test/java/com/soklet/SseHandshakeOutcomeRuntimeTests.java", "d2f0b431f74a9e454782103143f4b4d024e869a78d8dc5b6e8d2412396c16c50", [
+  ...reviewedScopeFile("src/test/java/com/soklet/SseHandshakeOutcomeRuntimeTests.java", "2fb108529ca7bf9df60da8ab4c5ad44ce17a29d3b0b511ae8b0e65d933ea312b", [
     ["handshakeWriteDeadlineRemainsATimeoutWithOriginalSocketCause","4828d6afecdd739fef0de81fa5cadcaf7f838ad293bb0d49b4c54c62ebe14745",{"controlJoinMillis":5000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
   ]),
   // The helper marks a manually-created SSE generation ready and never calls server startup. Its only lifecycle wait is default graceful + forced shutdown (15 s + 3 s).
@@ -1895,6 +1926,9 @@ const REVIEWED_SCOPE_OVERRIDES = mergeReviewedScopeOverrideMaps(
   REVIEWED_CONTROL_OVERRIDES);
 
 const REVIEWED_ORPHAN_HELPERS = checkedReviewMap([
+  ...reviewedOrphanFile("src/test/java/com/soklet/SseLateResponseOutcomeTests.java", "8f79455f6c6742edcfe92863d295873dd948b3733c8bb9b7c50b7e12b4d4f5c3", [
+    ["close",196,"47e3307747ae390cfc3353ab8c32982b4e914ac6d6cc64420182fb46e6da94ff",{"path":"src/test/java/com/soklet/SseLateResponseOutcomeTests.java","line":76,"lineSha256":"075868a84d4df075c5e14a292532d708ee77ddc2e2c779d0f07c3bb43b0267f0","rationale":"All four source-bound JUnit scenarios invoke the same exerciseTimeout helper. The helper owns exactly one Fixture with try-with-resources. Fixture.close releases both callback gates and closes the already-counted Soklet owner under its explicit finite lifecycle policy, then verifies termination. It adds no independent lifecycle generation or outer guard."}],
+  ]),
   ...reviewedOrphanFile("src/test/java/com/soklet/CombinedTransportShutdownTests.java", "d78c1c4ee313efb8cf0f02295810c59d8323fe04e07fc83f7bd0ea1adc6e833f", [
     ["openWork",185,"4f0698cd38a5f0ec00ed3fac96aab4a7955a93b4fcf45b5bcac9c6526556f21b",{"path":"src/test/java/com/soklet/CombinedTransportShutdownTests.java","line":49,"lineSha256":"af9b1cc5d3b5a82753738827d031f68e688ef50bbb730401e780eeeed1a8b128","rationale":"The source-bound calling JUnit fixture owns this exact helper through its explicit start/shutdown invocation or try-with-resources cleanup. The helper operates on the same transport/Soklet owner already represented by the caller closure; it introduces no independent generation or synthetic JUnit outer guard. The callable and whole-file hashes bind the ownership and bounded control evidence."}],
     ["close",261,"6b6fb3524306d7e4d11e0e01d0f91238be77086faad56261497c27fae7b2e0d5",{"path":"src/test/java/com/soklet/CombinedTransportShutdownTests.java","line":48,"lineSha256":"d373a7c7b99ff503802098ba0393cad4235712af01a843fd95b1ea1e37a76366","rationale":"The source-bound calling JUnit fixture owns this exact helper through its explicit start/shutdown invocation or try-with-resources cleanup. The helper operates on the same transport/Soklet owner already represented by the caller closure; it introduces no independent generation or synthetic JUnit outer guard. The callable and whole-file hashes bind the ownership and bounded control evidence."}],
@@ -1933,9 +1967,9 @@ const REVIEWED_ORPHAN_HELPERS = checkedReviewMap([
     ["close",299,"55e2c72ca7b684e2dac0fbfd5caa5a8c1952649c66ebc90b98eabe30a0f87cc7",{"path":"src/test/java/com/soklet/internal/mcp/protocol/McpLegacyRpcStatusTests.java","line":68,"lineSha256":"10077cbb7af8d5dcc1724267ebf7274781fad41c7caafea2ce28149bb1249045","rationale":"The source-bound calling JUnit fixture owns this exact helper through its explicit start/shutdown invocation or try-with-resources cleanup. The helper operates on the same transport/Soklet owner already represented by the caller closure; it introduces no independent generation or synthetic JUnit outer guard. The callable and whole-file hashes bind the ownership and bounded control evidence."}],
   ]),
   ...reviewedOrphanFile("src/test/java/com/soklet/InternalTransportEndpointTestCompatibility.java", "89141d7627fc3329742dfe3bb66364fdda2c509291b87cf4094efea180aeb992", [
-    ["attach",31,"1883bfa6fe73fdd47cd502d6daeee8cb86c6860a345a5b7d5e40fe04fa5da300",{"path":"src/main/java/com/soklet/SokletDirectLifecycle.java","line":2512,"lineSha256":"788aa269a8bc65fb1f7f7460a22f1a124dbdda93b52e0fabc3c3a91472897be3","rationale":"The production direct lifecycle invokes the public HTTP endpoint attach contract."}],
+    ["attach",31,"1883bfa6fe73fdd47cd502d6daeee8cb86c6860a345a5b7d5e40fe04fa5da300",{"path":"src/main/java/com/soklet/SokletDirectLifecycle.java","line":2515,"lineSha256":"788aa269a8bc65fb1f7f7460a22f1a124dbdda93b52e0fabc3c3a91472897be3","rationale":"The production direct lifecycle invokes the public HTTP endpoint attach contract."}],
     ["publicRuntime",45,"f360dda2e0fc8a7cb76981a7c6c47b6c79bcbe05f8c841d280de98f75b7164cd",{"path":"src/test/java/com/soklet/InternalTransportEndpointTestCompatibility.java","line":36,"lineSha256":"03c392d1a09359e546d74395faec5a2129994402a1e60e337059b35b43b63281","rationale":"The reviewed HTTP compatibility attach default invokes this adapter helper."}],
-    ["attach",77,"c29b8ee82137d5a63ea9ee192c2f9f63e541ebee1e152ebee2f6b0cb612ef1b8",{"path":"src/main/java/com/soklet/SokletDirectLifecycle.java","line":2512,"lineSha256":"788aa269a8bc65fb1f7f7460a22f1a124dbdda93b52e0fabc3c3a91472897be3","rationale":"The production direct lifecycle invokes the public SSE endpoint attach contract."}],
+    ["attach",77,"c29b8ee82137d5a63ea9ee192c2f9f63e541ebee1e152ebee2f6b0cb612ef1b8",{"path":"src/main/java/com/soklet/SokletDirectLifecycle.java","line":2515,"lineSha256":"788aa269a8bc65fb1f7f7460a22f1a124dbdda93b52e0fabc3c3a91472897be3","rationale":"The production direct lifecycle invokes the public SSE endpoint attach contract."}],
     ["publicRuntime",91,"f360dda2e0fc8a7cb76981a7c6c47b6c79bcbe05f8c841d280de98f75b7164cd",{"path":"src/test/java/com/soklet/InternalTransportEndpointTestCompatibility.java","line":36,"lineSha256":"03c392d1a09359e546d74395faec5a2129994402a1e60e337059b35b43b63281","rationale":"The reviewed HTTP compatibility attach default invokes this adapter helper."}],
   ]),
   ...reviewedOrphanFile("src/test/java/com/soklet/McpAdmissionOrderingPublicRuntimeTests.java", "81e820fb71665a1b83ea6176f4b663500fb8e4196fcbd2057d597f471db9e909", [
@@ -2019,8 +2053,8 @@ const REVIEWED_ORPHAN_HELPERS = checkedReviewMap([
   ...reviewedOrphanFile("src/test/java/com/soklet/SseDurationBoundaryTests.java", "357c50066eddfca443a7bd1b121d795cb80a9a025df8fe85de3434f1bf9616cb", [
     ["close",201,"761d2e3b8dee5e9864302cabbfc074a01d9d15807ec6d947265da6cab874f273",{"path":"src/test/java/com/soklet/SseDurationBoundaryTests.java","line":96,"lineSha256":"1d26e88ab4a917538020b8ad0d57fe21b8ee95650291a19b1f35a18442cba45d","rationale":"The source-bound calling JUnit fixture owns this exact helper through its explicit start/shutdown invocation or try-with-resources cleanup. The helper operates on the same transport/Soklet owner already represented by the caller closure; it introduces no independent generation or synthetic JUnit outer guard. The callable and whole-file hashes bind the ownership and bounded control evidence."}],
   ]),
-  ...reviewedOrphanFile("src/test/java/com/soklet/SseHandshakeOutcomeRuntimeTests.java", "d2f0b431f74a9e454782103143f4b4d024e869a78d8dc5b6e8d2412396c16c50", [
-    ["close",448,"587f393710c8b32159a9fc141befc56d316713e9f0aaae29e9099ca9a111bfe4",{"path":"src/test/java/com/soklet/SseHandshakeOutcomeRuntimeTests.java","line":54,"lineSha256":"d806cd67e53f515d51ac61b18454946ba7685b6b0d99d04372b989d295eef0e2","rationale":"The source-bound calling JUnit fixture owns this exact helper through its explicit start/shutdown invocation or try-with-resources cleanup. The helper operates on the same transport/Soklet owner already represented by the caller closure; it introduces no independent generation or synthetic JUnit outer guard. The callable and whole-file hashes bind the ownership and bounded control evidence."}],
+  ...reviewedOrphanFile("src/test/java/com/soklet/SseHandshakeOutcomeRuntimeTests.java", "2fb108529ca7bf9df60da8ab4c5ad44ce17a29d3b0b511ae8b0e65d933ea312b", [
+    ["close",469,"587f393710c8b32159a9fc141befc56d316713e9f0aaae29e9099ca9a111bfe4",{"path":"src/test/java/com/soklet/SseHandshakeOutcomeRuntimeTests.java","line":54,"lineSha256":"d806cd67e53f515d51ac61b18454946ba7685b6b0d99d04372b989d295eef0e2","rationale":"The source-bound calling JUnit fixture owns this exact helper through its explicit start/shutdown invocation or try-with-resources cleanup. The helper operates on the same transport/Soklet owner already represented by the caller closure; it introduces no independent generation or synthetic JUnit outer guard. The callable and whole-file hashes bind the ownership and bounded control evidence."}],
   ]),
   ...reviewedOrphanFile("src/test/java/com/soklet/SseInitializerRuntimeTests.java", "56e6a559872e91e7448052c9ec1b13eb4497afd2690e9ef4da13b231c5a6be9e", [
     ["start",242,"0c3ee687393877456d2e2fd47677d64daab07587e4bb91e5c2431b55f4bd7b3b",{"path":"src/test/java/com/soklet/SseInitializerRuntimeTests.java","line":59,"lineSha256":"8d7e8eb67bdc2bd8120bf0ef36821961a66d992f7a1142afbef0f2d4f8e3313e","rationale":"Each initializer test directly starts this fixture; its constructor supplies the reviewed 100-millisecond graceful and forced policy."}],
@@ -2058,8 +2092,8 @@ const REVIEWED_ORPHAN_HELPERS = checkedReviewMap([
   ...reviewedOrphanFile("src/test/java/com/soklet/UnparsedRequestAdditionalTransportTests.java", "3960f343ab7618df197411aac26fd30ab0244b897ac48311820a4764011e04a3", [
     ["close",304,"8483658be11af4a9e197a94648b49f9dcc0b8009aa929db1f39ecaaeb2794d5e",{"path":"src/test/java/com/soklet/UnparsedRequestAdditionalTransportTests.java","line":77,"lineSha256":"16a5028a469c057bb6257a235f692e4bb83ce173f2abc1051fb486d777c4a2fa","rationale":"The source-bound calling JUnit fixture owns this exact helper through its explicit start/shutdown invocation or try-with-resources cleanup. The helper operates on the same transport/Soklet owner already represented by the caller closure; it introduces no independent generation or synthetic JUnit outer guard. The callable and whole-file hashes bind the ownership and bounded control evidence."}],
   ]),
-  ...reviewedOrphanFile("src/test/java/com/soklet/HttpTransportResponseOutcomeTests.java", "3b0580273d4bcf2e8e762777ea530011ce8cd9fada44177a214d359a08769bf5", [
-    ["close",552,"496f77a84a3a14de422c047cda06988c45dcb9d376331caa02ca74a02cf9a001",{"path":"src/test/java/com/soklet/HttpTransportResponseOutcomeTests.java","line":48,"lineSha256":"fc33b406341f3341bfcd83d8fed65df7d87df8115dd752032d957a5c21e4699d","rationale":"Each calling JUnit scope owns this exact Fixture with try-with-resources. Fixture.close closes the same Soklet owner constructed and started by that fixture under its explicit finite lifecycle policy. It introduces no independent generation or synthetic outer guard."}],
+  ...reviewedOrphanFile("src/test/java/com/soklet/HttpTransportResponseOutcomeTests.java", "2309a602bafbee9cba35f38cab834124bddb585215c50ec9ea8bbe0685902c37", [
+    ["close",615,"496f77a84a3a14de422c047cda06988c45dcb9d376331caa02ca74a02cf9a001",{"path":"src/test/java/com/soklet/HttpTransportResponseOutcomeTests.java","line":80,"lineSha256":"fc33b406341f3341bfcd83d8fed65df7d87df8115dd752032d957a5c21e4699d","rationale":"Each calling JUnit scope owns this exact Fixture with try-with-resources. Fixture.close closes the same Soklet owner constructed and started by that fixture under its explicit finite lifecycle policy. It introduces no independent generation or synthetic outer guard."}],
   ]),
 ], 'orphan lifecycle helper');
 

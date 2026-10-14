@@ -458,7 +458,7 @@ final class SokletApplicationFinalization {
 			actionFailure = failure;
 		} finally {
 			long completionNanos = this.clock.nanoTime();
-			if (completionNanos > deadlineNanos) {
+			if (completionNanos - deadlineNanos > 0L) {
 				this.cleanupWorkerFinished.set(true);
 				publishCleanupTimeout(timeout);
 			} else {

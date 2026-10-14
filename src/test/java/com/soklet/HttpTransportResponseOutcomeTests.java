@@ -44,6 +44,38 @@ import static org.junit.jupiter.api.Assertions.*;
 @Timeout(60)
 class HttpTransportResponseOutcomeTests {
 	@Test
+	void notWrittenFailsDirectAndOpaqueConsumersWithoutClaimingSuccessOrReplacement() {
+		for (boolean opaque : List.of(false, true)) {
+			try (Fixture fixture = new Fixture(RequestInterceptor.defaultInstance())) {
+				AtomicInteger afterWrite = new AtomicInteger();
+				fixture.dispatch("/outcome", feedback -> {
+					Consumer<HttpRequestResult> writer = HttpTransportResponseFeedback.fromWriter(feedback,
+							result -> HttpTransportResponseOutcome.notWritten());
+					return opaque ? result -> { writer.accept(result); afterWrite.incrementAndGet(); } : writer;
+				});
+				Throwable failure = assertInstanceOf(java.util.concurrent.RejectedExecutionException.class,
+						fixture.observation.writeFailures.get("/outcome"));
+				assertSame(failure, fixture.metricWriteFailures.get("/outcome"));
+				assertEquals(List.of(failure), fixture.observation.failures.get("/outcome"));
+				assertEquals(200, fixture.observation.finished.get("/outcome").getStatusCode());
+				assertFalse(fixture.observation.written.containsKey("/outcome"));
+				assertEquals(0, afterWrite.get());
+			}
+		}
+	}
+
+	@Test
+	void notWrittenAfterFeedbackCloseStillThrowsItsFailureWithoutTheReplacementBridge() {
+		HttpTransportResponseFeedback feedback = HttpTransportResponseFeedback.create();
+		feedback.close();
+		var writer = HttpTransportResponseFeedback.fromWriter(feedback,
+				result -> HttpTransportResponseOutcome.notWritten());
+		assertThrows(java.util.concurrent.RejectedExecutionException.class,
+				() -> writer.accept(HttpRequestResult.fromMarshaledResponse(response(200))));
+		assertInstanceOf(HttpTransportResponseOutcome.Accepted.class, feedback.finish());
+	}
+
+	@Test
 	void freshResultDecoratorRetainsReplacementAndNextDeliveryStartsClean() {
 		try (Fixture fixture = new Fixture(RequestInterceptor.defaultInstance())) {
 			fixture.dispatch("/outcome", feedback -> result -> HttpTransportResponseFeedback.fromWriter(feedback, ignored ->
@@ -203,7 +235,31 @@ class HttpTransportResponseOutcomeTests {
 		assertNonJoinedReplacement(true, true);
 	}
 
+	@Test
+	void lateHttpTimeoutResponseClosesOwnedFileChannel() throws Exception { assertLateHttpBodyOwnership(true); }
+
+	@Test
+	void lateHttpTimeoutResponsePreservesBorrowedFileChannel() throws Exception { assertLateHttpBodyOwnership(false); }
+
+	private static void assertLateHttpBodyOwnership(boolean owned) throws Exception {
+		var path = java.nio.file.Files.createTempFile("soklet-late-http-", ".txt");
+		try {
+			java.nio.file.Files.writeString(path, "discarded");
+			try (var channel = java.nio.channels.FileChannel.open(path, java.nio.file.StandardOpenOption.READ)) {
+				MarshaledResponse late = MarshaledResponse.withStatusCode(200).body(channel, 0L, 9L, owned).build();
+				assertNonJoinedReplacement(true, true, late);
+				assertEquals(!owned, channel.isOpen(), "Only an owned suppressed channel must close");
+			}
+		} finally {
+			java.nio.file.Files.deleteIfExists(path);
+		}
+	}
+
 	private static void assertNonJoinedReplacement(boolean claimBeforeReturn, boolean timeout) throws Exception {
+		assertNonJoinedReplacement(claimBeforeReturn, timeout, null);
+	}
+
+	private static void assertNonJoinedReplacement(boolean claimBeforeReturn, boolean timeout, MarshaledResponse lateResponse) throws Exception {
 		CountDownLatch dispatchFinished = new CountDownLatch(1);
 		CountDownLatch resourceEntered = new CountDownLatch(1);
 		CountDownLatch releaseResource = new CountDownLatch(1);
@@ -236,7 +292,14 @@ class HttpTransportResponseOutcomeTests {
 			AtomicInteger statusInMetrics = new AtomicInteger();
 			String path = timeout ? "/outcome" : "/stream";
 			int expected = timeout ? 503 : 505;
-			try (Soklet soklet = Soklet.fromConfig(config(decorator, observation, resource).metricsCollector(new MetricsCollector() {
+			try (Soklet soklet = Soklet.fromConfig(config(decorator, observation, resource)
+					.requestInterceptor(new RequestInterceptor() {
+						@Override public void interceptRequest(ServerType type, Request request, ResourceMethod method,
+								Function<Request, MarshaledResponse> generator, Consumer<MarshaledResponse> writer) {
+							MarshaledResponse generated = generator.apply(request);
+							writer.accept(lateResponse == null ? generated : lateResponse);
+						}
+					}).metricsCollector(new MetricsCollector() {
 				@Override public void didWriteResponse(ServerType type, Request request, ResourceMethod method,
 						MarshaledResponse response, Duration duration) { statusInMetrics.set(response.getStatusCode()); }
 			}).build())) {

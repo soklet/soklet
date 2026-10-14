@@ -2,9 +2,15 @@ package com.soklet;
 
 import com.soklet.exception.IllegalRequestException;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -119,6 +125,41 @@ class SseFramingTests {
         Method serializer = DefaultSseServer.class.getDeclaredMethod("createHandshakeHttpResponse", HttpRequestResult.class);
         serializer.setAccessible(true);
         return new String((byte[]) serializer.invoke(server, result), StandardCharsets.ISO_8859_1);
+    }
+
+    @Test
+    void finiteHandshakeResponsesRejectInformationalStatusCodes() throws Exception {
+        DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0).build();
+        for (int status : List.of(100, 101, 199)) {
+            InvocationTargetException failure = assertThrows(InvocationTargetException.class, () -> serialize(server,
+                    HttpRequestResult.withMarshaledResponse(MarshaledResponse.fromStatusCode(status)).build()));
+            assertInstanceOf(IllegalStateException.class, failure.getCause());
+        }
+    }
+
+    @Test
+    void suppressedHandshakeBodiesReleaseOnlyOwnedChannels(@TempDir Path directory) throws Exception {
+        Path file = Files.writeString(directory.resolve("response.txt"), "unused");
+        DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0).build();
+        Method serializer = DefaultSseServer.class.getDeclaredMethod("createHandshakeHttpResponse", HttpRequestResult.class, boolean.class);
+        serializer.setAccessible(true);
+        for (int status : List.of(100, 204, 205, 304, 403)) {
+            for (boolean owned : List.of(true, false)) {
+                try (FileChannel channel = FileChannel.open(file, StandardOpenOption.READ)) {
+                    MarshaledResponse response = MarshaledResponse.withStatusCode(status).body(channel, 0L, 6L, owned).build();
+                    if (status == 100) {
+                        InvocationTargetException failure = assertThrows(InvocationTargetException.class, () -> serializer.invoke(server,
+                                HttpRequestResult.withMarshaledResponse(response).build(), false));
+                        assertInstanceOf(IllegalStateException.class, failure.getCause());
+                    } else {
+                        String wire = new String((byte[]) serializer.invoke(server,
+                                HttpRequestResult.withMarshaledResponse(response).build(), status == 403), StandardCharsets.ISO_8859_1);
+                        assertTrue(wire.endsWith("\r\n\r\n"), wire);
+                    }
+                    assertEquals(!owned, channel.isOpen(), "status=" + status + ", owned=" + owned);
+                }
+            }
+        }
     }
 
     private static Map<String, List<String>> headers(String wire) {

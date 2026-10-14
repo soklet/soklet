@@ -1350,7 +1350,7 @@ public final class Request {
 		Set<String> accessControlRequestHeaders = headers.get("Access-Control-Request-Headers").orElse(List.of())
 				.stream()
 				.flatMap(value -> Arrays.stream(value.split(",")))
-				.map(Utilities::trimAggressivelyToEmpty)
+				.map(Utilities::trimHeaderWhitespace)
 				.filter(value -> !value.isEmpty())
 				.collect(Collectors.toCollection(LinkedHashSet::new));
 

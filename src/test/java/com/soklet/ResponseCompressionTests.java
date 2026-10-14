@@ -21,6 +21,66 @@ import java.util.zip.GZIPInputStream;
 
 public class ResponseCompressionTests {
 	@Test
+	public void contentCodingPreferencesAcceptHttpOptionalWhitespace() {
+		byte[] body = "compressible response".getBytes(StandardCharsets.UTF_8);
+		DefaultHttpServer server = server(ResponseCompressor.fromDefaultsWithMinimumBodySizeInBytes(0));
+		for (String value : List.of("gzip;\tq=0", "*;q=1,\tgzip;q=0", "br,\tgzip\t;\tq=0")) {
+			for (Request request : requestsAccepting(value)) {
+				MicrohttpResponse result = server.toMicrohttpResponse(request, null, response(body));
+				Assertions.assertFalse(result.hasHeader("Content-Encoding"), value);
+				Assertions.assertArrayEquals(body, result.body());
+			}
+		}
+		for (Request request : requestsAccepting("br,\tgzip\t;\tq=1"))
+			Assertions.assertEquals("gzip", headerValue(server.toMicrohttpResponse(request, null, response(body)), "Content-Encoding"));
+	}
+
+	@Test
+	public void integrityHeadersPreserveOriginalBytesAndStillNegotiateIdentity() throws Exception {
+		byte[] body = "integrity protected content".repeat(100).getBytes(StandardCharsets.UTF_8);
+		String digest = "sha-256=:" + java.util.Base64.getEncoder().encodeToString(
+				java.security.MessageDigest.getInstance("SHA-256").digest(body)) + ":";
+		DefaultHttpServer server = server((request, response) -> {
+			throw new AssertionError("Integrity-protected responses must not invoke the compression planner");
+		});
+		for (String name : List.of("Content-Digest", "rEpR-dIgEsT", "Digest", "Content-MD5")) {
+			MarshaledResponse original = response(body).copy().headers(headers -> headers.put(name, List.of(digest))).finish();
+			MicrohttpResponse result = server.toMicrohttpResponse(requestAccepting("gzip"), null, original);
+			Assertions.assertEquals(200, result.status());
+			Assertions.assertFalse(result.hasHeader("Content-Encoding"));
+			Assertions.assertEquals(digest, headerValue(result, name));
+			Assertions.assertArrayEquals(body, result.body());
+			Assertions.assertEquals("Accept-Encoding", headerValue(result, "Vary"));
+			MicrohttpResponse rejected = server.toMicrohttpResponse(requestAccepting("gzip, identity;q=0"), null, original);
+			Assertions.assertEquals(406, rejected.status());
+			Assertions.assertFalse(rejected.hasHeader(name));
+			Assertions.assertEquals(0, rejected.body().length);
+		}
+	}
+
+	@Test
+	public void headIntegrityMetadataDoesNotInvokeCompressionOrWriteBody() throws Exception {
+		byte[] body = "head representation".getBytes(StandardCharsets.UTF_8);
+		String digest = "sha-256=:" + java.util.Base64.getEncoder().encodeToString(
+				java.security.MessageDigest.getInstance("SHA-256").digest(body)) + ":";
+		DefaultHttpServer server = server((request, response) -> {
+			throw new AssertionError("HEAD must retain the protected representation without compression");
+		});
+		MarshaledResponse original = response(body).copy().headers(headers -> headers.put("Repr-Digest", List.of(digest))).finish();
+		Request request = Request.withPath(HttpMethod.HEAD, "/compression").headers(Map.of("Accept-Encoding", List.of("gzip"))).build();
+		var method = DefaultHttpServer.class.getDeclaredMethod("toMicrohttpResponse", Request.class, ResourceMethod.class,
+				MarshaledResponse.class, MarshaledResponseBody.class, Long.class, java.util.function.BooleanSupplier.class,
+				HttpResponseStreamObservation.class);
+		method.setAccessible(true);
+		MicrohttpResponse result = (MicrohttpResponse) method.invoke(server, request, null, original.copy().withoutBody().finish(),
+				original.getBody().orElseThrow(), (long) body.length, (java.util.function.BooleanSupplier) () -> false, null);
+		Assertions.assertEquals(0, result.body().length);
+		Assertions.assertFalse(result.hasHeader("Content-Encoding"));
+		Assertions.assertEquals(digest, headerValue(result, "Repr-Digest"));
+		Assertions.assertEquals(Integer.toString(body.length), headerValue(result, "Content-Length"));
+	}
+
+	@Test
 	public void gzipCodecCompressesOnlyRemainingBytesWithoutChangingBufferCursor() throws IOException {
 		byte[] body = "only the selected bytes".getBytes(StandardCharsets.UTF_8);
 		ByteBuffer buffer = ByteBuffer.allocateDirect(body.length + 12);

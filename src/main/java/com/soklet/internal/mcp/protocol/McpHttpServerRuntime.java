@@ -1343,8 +1343,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		SimulationGeneration requiredGeneration = requireNonNull(generation);
 		boolean interrupted = Thread.interrupted();
 		Throwable forceFailure = null;
-		long deadline = saturatingAdd(System.nanoTime(),
-				transportConfiguration.shutdownTimeout().toNanos());
+		long deadline = System.nanoTime()
+				+ transportConfiguration.shutdownTimeout().toNanos();
 		try {
 			try {
 				forceSimulationGenerationForCompatibility(requiredGeneration);
@@ -2996,7 +2996,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	}
 
 	private long earlierDeadline(long first, long second) {
-		return remainingUntil(first) <= remainingUntil(second) ? first : second;
+		long now = System.nanoTime();
+		return remainingUntil(first, now) <= remainingUntil(second, now) ? first : second;
 	}
 
 	@NonNull
@@ -3089,10 +3090,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	}
 
 	private long remainingUntil(long absoluteDeadlineNanos, long now) {
-		long remaining = absoluteDeadlineNanos - now;
-		if (((absoluteDeadlineNanos ^ now) & (absoluteDeadlineNanos ^ remaining)) < 0)
-			return absoluteDeadlineNanos >= now ? Long.MAX_VALUE : 0L;
-		return Math.max(0L, remaining);
+		return Math.max(0L, absoluteDeadlineNanos - now);
 	}
 
 	void stop() {
@@ -3340,12 +3338,6 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				TimeUnit.NANOSECONDS.timedWait(subscriptionLock, remainingNanos);
 			}
 		}
-	}
-
-	private long saturatingAdd(long left, long right) {
-		long result = left + right;
-		return ((left ^ result) & (right ^ result)) < 0
-				? Long.MAX_VALUE : result;
 	}
 
 	boolean isStarted() {

@@ -66,7 +66,7 @@ class LifecycleFoundationTests {
 
 	@Test
 	void deadlineArithmeticAndContextSnapshotsClampAndNeverOverflow() {
-		Assertions.assertEquals(Long.MAX_VALUE,
+		Assertions.assertEquals(Long.MIN_VALUE,
 				LifecycleDeadlines.after(Long.MAX_VALUE - 1L, Duration.ofNanos(2L)));
 		Assertions.assertEquals(0L, LifecycleDeadlines.remainingNanos(5L, 6L));
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
@@ -94,6 +94,36 @@ class LifecycleFoundationTests {
 				shutdown.getShutdownPhase());
 		Assertions.assertEquals(Duration.ofNanos(10L),
 				shutdown.getRemainingTime());
+	}
+
+	@Test
+	void deadlinesAndContextBudgetsSurviveMonotonicClockWraparound()
+			throws Exception {
+		AtomicLong now = new AtomicLong(Long.MAX_VALUE - 5L);
+		long deadline = LifecycleDeadlines.after(now.get(), Duration.ofNanos(10L));
+		Assertions.assertEquals(Long.MIN_VALUE + 4L, deadline);
+		StartupContext startup = new StartupContext(now::get, deadline,
+				deadline, () -> false);
+		ShutdownContext shutdown = new ShutdownContext(ShutdownPhase.GRACEFUL,
+				now::get, deadline);
+		List<Long> remainingBudgets = new ArrayList<>();
+		DeadlineWaiter waiter = new DeadlineWaiter(now::get, (monitor, remaining) -> {
+			remainingBudgets.add(remaining);
+			Assertions.assertEquals(Duration.ofNanos(remaining), startup.getRemainingTime());
+			Assertions.assertEquals(Duration.ofNanos(remaining), shutdown.getRemainingTime());
+			now.addAndGet(Math.min(6L, remaining));
+		});
+
+		Assertions.assertEquals(DeadlineWaiter.Outcome.DEADLINE_REACHED,
+				waiter.await(deadline, () -> false));
+		Assertions.assertEquals(List.of(10L, 4L), remainingBudgets);
+		Assertions.assertEquals(Duration.ZERO, startup.getRemainingTime());
+		Assertions.assertEquals(Duration.ZERO, shutdown.getRemainingTime());
+		Assertions.assertEquals(0L, LifecycleDeadlines.remainingNanos(
+				Long.MAX_VALUE - 1L, Long.MIN_VALUE + 1L));
+		Assertions.assertEquals(Long.MAX_VALUE, LifecycleDeadlines.remainingNanos(
+				LifecycleDeadlines.after(Long.MIN_VALUE,
+						Duration.ofNanos(Long.MAX_VALUE)), Long.MIN_VALUE));
 	}
 
 	@Test

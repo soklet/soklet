@@ -21,13 +21,14 @@ import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Optional;
+import java.util.concurrent.RejectedExecutionException;
 
 import static java.util.Objects.requireNonNull;
 
 /** Internal result of offering a logical response to an HTTP or simulated transport. */
 @ThreadSafe
 abstract sealed class HttpTransportResponseOutcome permits HttpTransportResponseOutcome.Accepted,
-		HttpTransportResponseOutcome.Replaced {
+		HttpTransportResponseOutcome.Replaced, HttpTransportResponseOutcome.NotWritten {
 	private HttpTransportResponseOutcome() {}
 
 	@NonNull
@@ -39,6 +40,23 @@ abstract sealed class HttpTransportResponseOutcome permits HttpTransportResponse
 	static Replaced replaced(@NonNull MarshaledResponse marshaledResponse,
 			@Nullable Throwable preparationFailure, @Nullable Throwable writeFailure) {
 		return new Replaced(marshaledResponse, preparationFailure, writeFailure);
+	}
+
+	@NonNull
+	static NotWritten notWritten() {
+		return new NotWritten();
+	}
+
+	/** The offered response lost transport ownership; no replacement response is implied. */
+	static final class NotWritten extends HttpTransportResponseOutcome {
+		private final RejectedExecutionException writeFailure = new RejectedExecutionException(
+				"HTTP response was not written because response ownership has already been claimed.");
+
+		private NotWritten() {}
+
+		void rethrowWriteFailure() {
+			throw this.writeFailure;
+		}
 	}
 
 	static final class Accepted extends HttpTransportResponseOutcome {

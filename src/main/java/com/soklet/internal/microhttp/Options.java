@@ -25,6 +25,19 @@ public record Options(String host, int port, boolean reuseAddr, boolean reusePor
                 List.of(), 0, 64 * 1024);
     }
 
+    long selectTimeoutMillis() {
+        // Selector.select(0) waits indefinitely; a positive submillisecond
+        // duration must still wake the loop to process request/write deadlines.
+        if (resolution.isZero()) return 0L;
+        try {
+            long millis = resolution.toMillis();
+            return resolution.toNanosPart() % 1_000_000 != 0 && millis < Long.MAX_VALUE
+                    ? millis + 1L : millis;
+        } catch (ArithmeticException overflow) {
+            return Long.MAX_VALUE;
+        }
+    }
+
     public static OptionsBuilder builder() {
         return OptionsBuilder.newBuilder();
     }

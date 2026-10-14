@@ -18,6 +18,7 @@ import java.util.TreeSet;
 class Scheduler {
 
     private final Clock clock;
+    private final long clockOrigin;
     private final SortedSet<Task> tasks;
     private long counter;
 
@@ -27,6 +28,7 @@ class Scheduler {
 
     Scheduler(Clock clock) {
         this.clock = clock;
+        this.clockOrigin = clock.nanoTime();
         this.tasks = new TreeSet<>(Comparator.comparing((Task t) -> t.time).thenComparing(t -> t.id));
     }
 
@@ -35,13 +37,23 @@ class Scheduler {
     }
 
     Cancelable schedule(Runnable task, Duration duration) {
-        Task t = new Task(task, clock.nanoTime() + duration.toNanos(), counter++);
+        if (duration.isNegative())
+            throw new IllegalArgumentException("Scheduled duration must not be negative");
+        long delay;
+        try {
+            delay = duration.toNanos();
+        } catch (ArithmeticException overflow) {
+            delay = Long.MAX_VALUE;
+        }
+        long now = elapsedNanos();
+        long deadline = delay > Long.MAX_VALUE - now ? Long.MAX_VALUE : now + delay;
+        Task t = new Task(task, deadline, counter++);
         tasks.add(t);
         return t;
     }
 
 	    List<Runnable> expired() {
-	        long time = clock.nanoTime();
+	        long time = elapsedNanos();
 	        List<Runnable> result = new ArrayList<>();
 	        Iterator<Task> it = tasks.iterator();
 	        while (it.hasNext()) {
@@ -53,6 +65,14 @@ class Scheduler {
 	            it.remove();
 	        }
         return result;
+    }
+
+    private long elapsedNanos() {
+        // Order deadlines relative to this scheduler's creation, rather than the
+        // arbitrary signed nanoTime origin. Subtraction preserves short elapsed
+        // intervals across the clock's signed wrap. As with nanoTime deltas, the
+        // scheduler lifetime must remain below the signed-nanosecond horizon.
+        return clock.nanoTime() - clockOrigin;
     }
 
     class Task implements Cancelable {

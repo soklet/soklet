@@ -35,6 +35,19 @@ import java.util.stream.IntStream;
  */
 @ThreadSafe
 public class ConditionalRequestsTests {
+	@Test
+	public void entityTagListsAcceptHttpOptionalWhitespace() {
+		for (String value : List.of("\"v1\",\t\"other\"", "\"other\"\t,\tW/\"v1\"", ",\t,\t\"v1\"\t,")) {
+			Request request = request(HttpMethod.GET, Map.of("If-None-Match", List.of(value)));
+			Assertions.assertEquals(304, ConditionalRequests.responseFor(request, ENTITY_TAG, LAST_MODIFIED)
+					.orElseThrow().getStatusCode(), value);
+		}
+		Request matching = request(HttpMethod.PUT, Map.of("If-Match", List.of("\"v1\",\t\"other\"")));
+		Assertions.assertTrue(ConditionalRequests.responseFor(matching, ENTITY_TAG, LAST_MODIFIED).isEmpty());
+		Request empty = request(HttpMethod.PUT, Map.of("If-None-Match", List.of(",\t,\t")));
+		Assertions.assertTrue(ConditionalRequests.responseFor(empty, ENTITY_TAG, LAST_MODIFIED).isEmpty());
+	}
+
 	private static final EntityTag ENTITY_TAG = EntityTag.fromStrongValue("v1");
 	private static final Instant LAST_MODIFIED = Instant.parse("2026-05-04T01:02:03.456Z");
 	private static final String LAST_MODIFIED_HEADER_VALUE = "Mon, 04 May 2026 01:02:03 GMT";
@@ -78,6 +91,42 @@ public class ConditionalRequestsTests {
 				ConditionalRequests.validatorHeaders(ENTITY_TAG, LAST_MODIFIED, Map.of("Content-Length", List.of("0"))));
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
 				ConditionalRequests.validatorHeaders(ENTITY_TAG, LAST_MODIFIED, Map.of("Transfer-Encoding", List.of("chunked"))));
+	}
+
+	@Test
+	public void emptyIfMatchDoesNotBypassThePrecondition() {
+		for (String value : List.of("", " ", ",", " , , ")) {
+			Request request = request(HttpMethod.PUT, Map.of("If-Match", List.of(value)));
+			Assertions.assertEquals(412, ConditionalRequests.responseFor(request, ENTITY_TAG, LAST_MODIFIED)
+					.orElseThrow().getStatusCode(), value);
+		}
+	}
+
+	@Test
+	public void emptyIfNoneMatchSuppressesDateFallbackWithoutBlockingMutations() {
+		for (String value : List.of("", " ", ",", " , , ")) {
+			for (HttpMethod method : List.of(HttpMethod.GET, HttpMethod.HEAD, HttpMethod.PUT)) {
+				Request request = request(method, Map.of("If-None-Match", List.of(value),
+						"If-Modified-Since", List.of(HttpDate.toHeaderValue(LAST_MODIFIED))));
+				Assertions.assertTrue(ConditionalRequests.responseFor(request, ENTITY_TAG, LAST_MODIFIED).isEmpty(),
+						method + " " + value);
+			}
+		}
+	}
+
+	@Test
+	public void entityTagListsIgnoreBoundedEmptyElementsAndPreserveQuotedCommas() {
+		for (String value : List.of(", \"v1\", ,", "\"other,tag\",, \"v1\"", ",,\"v1\"")) {
+			Request matching = request(HttpMethod.PUT, Map.of("If-Match", List.of(value)));
+			Assertions.assertTrue(ConditionalRequests.responseFor(matching, ENTITY_TAG, LAST_MODIFIED).isEmpty(), value);
+			Request cached = request(HttpMethod.GET, Map.of("If-None-Match", List.of(value)));
+			Assertions.assertEquals(304, ConditionalRequests.responseFor(cached, ENTITY_TAG, LAST_MODIFIED)
+					.orElseThrow().getStatusCode(), value);
+		}
+		Request excessive = request(HttpMethod.PUT,
+				Map.of("If-Match", List.of(",".repeat(256) + "\"v1\"")));
+		Assertions.assertEquals(412, ConditionalRequests.responseFor(excessive, ENTITY_TAG, LAST_MODIFIED)
+				.orElseThrow().getStatusCode());
 	}
 
 	@Test

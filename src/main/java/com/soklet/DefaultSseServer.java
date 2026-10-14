@@ -2164,8 +2164,17 @@ final class DefaultSseServer implements SseServer {
 				InetSocketAddress remoteAddressSnapshotForHandler = remoteAddress;
 				requiredRequestHandler().handleRequest(requestForHandler, HttpTransportResponseFeedback.fromWriter(feedback, (@NonNull HttpRequestResult requestResult) -> {
 					if (!handshakeResponseOwner.compareAndSet(
-							HandshakeResponseOwner.UNCLAIMED, HandshakeResponseOwner.HANDLER))
-						return HttpTransportResponseOutcome.accepted();
+							HandshakeResponseOwner.UNCLAIMED, HandshakeResponseOwner.HANDLER)) {
+						HandshakeResponseOwner owner = handshakeResponseOwner.get();
+						if (owner == HandshakeResponseOwner.TIMEOUT || owner == HandshakeResponseOwner.QUIESCE)
+							// Discard only owned, already-open bodies. Do not open a lazy
+							// source or close a body belonging to a duplicate handler offer.
+							requestResult.getMarshaledResponse().copy().withoutBody();
+						// A timeout's own handshake callback is authoritative. Its custom
+						// response may still be in preparation, so neither wait for it nor
+						// describe the late handler's suppressed response as written.
+						return HttpTransportResponseOutcome.notWritten();
+					}
 
 					cancelTimeout(handshakeContext.handshakeTimeoutFutureRef.getAndSet(null));
 					Throwable requestHandlingFailure = requestResult.getRequestHandlingFailure().orElse(null);
@@ -2179,42 +2188,42 @@ final class DefaultSseServer implements SseServer {
 
 					HttpRequestResult effectiveRequestResult = requestResult;
 
-					// Store a reference to the accepted handshake if we have it and there is capacity
-					if (sseHandshakeResult != null && sseHandshakeResult instanceof SseHandshakeResult.Accepted accepted) {
-						StreamLifecycleCoordinator coordinator = this.streamLifecycleCoordinator;
-						StreamLifecycleCoordinator.Reservation reservation = coordinator == null
-								? null : coordinator.tryReserve();
-						if (reservation != null && reserveConnectionSlot()) {
-							connectionSlotReserved.set(true);
-							pendingReservation.set(reservation);
-							handshakeWork.set(reservation.retainWork());
-							handshakeAcceptedReference.set(accepted);
-						} else {
-							boolean shuttingDown = isStopping();
-							handshakeFailureReason.set(shuttingDown ? SseConnection.HandshakeFailureReason.HANDSHAKE_REJECTED
-									: SseConnection.HandshakeFailureReason.CAPACITY_EXCEEDED);
-							if (reservation != null)
-								reservation.abandon();
-							if (!shuttingDown && acceptanceFinalized.compareAndSet(false, true))
-								notifyDidFailToAcceptConnection(remoteAddressSnapshotForHandler, ConnectionRejectionReason.MAX_CONNECTIONS, null);
-
-							if (!shuttingDown)
-								safelyLog(LogEvent.with(LogEventType.SSE_SERVER_CONNECTION_REJECTED,
-										"Rejecting request: SSE connection or lifecycle capacity reached").build());
-
-							MarshaledResponse response = requiredResponseMarshaler().forServiceUnavailable(requestForHandler, requestResult.getResourceMethod().orElse(null));
-
-							effectiveRequestResult = requestResult.copy()
-									.marshaledResponse(response)
-									.sseHandshakeResult(null)
-									.finish();
-						}
-					}
-
 					byte[] handshakeHttpResponse;
 					Throwable preparationFailure = null;
 
 					try {
+						// Store a reference to the accepted handshake if we have it and there is capacity
+						if (sseHandshakeResult != null && sseHandshakeResult instanceof SseHandshakeResult.Accepted accepted) {
+							StreamLifecycleCoordinator coordinator = this.streamLifecycleCoordinator;
+							StreamLifecycleCoordinator.Reservation reservation = coordinator == null
+									? null : coordinator.tryReserve();
+							if (reservation != null && reserveConnectionSlot()) {
+								connectionSlotReserved.set(true);
+								pendingReservation.set(reservation);
+								handshakeWork.set(reservation.retainWork());
+								handshakeAcceptedReference.set(accepted);
+							} else {
+								boolean shuttingDown = isStopping();
+								handshakeFailureReason.set(shuttingDown ? SseConnection.HandshakeFailureReason.HANDSHAKE_REJECTED
+										: SseConnection.HandshakeFailureReason.CAPACITY_EXCEEDED);
+								if (reservation != null)
+									reservation.abandon();
+								if (!shuttingDown && acceptanceFinalized.compareAndSet(false, true))
+									notifyDidFailToAcceptConnection(remoteAddressSnapshotForHandler, ConnectionRejectionReason.MAX_CONNECTIONS, null);
+
+								if (!shuttingDown)
+									safelyLog(LogEvent.with(LogEventType.SSE_SERVER_CONNECTION_REJECTED,
+											"Rejecting request: SSE connection or lifecycle capacity reached").build());
+
+								MarshaledResponse response = requiredResponseMarshaler().forServiceUnavailable(requestForHandler, requestResult.getResourceMethod().orElse(null));
+
+								effectiveRequestResult = requestResult.copy()
+										.marshaledResponse(response)
+										.sseHandshakeResult(null)
+										.finish();
+							}
+						}
+
 						handshakeHttpResponse = createHandshakeHttpResponse(effectiveRequestResult,
 								requestForHandler.getHttpMethod() == HttpMethod.HEAD);
 						SseHandshakeResult.Accepted accepted = handshakeAcceptedReference.get();
@@ -3042,14 +3051,18 @@ final class DefaultSseServer implements SseServer {
 
 		MarshaledResponse marshaledResponse = requestResult.getMarshaledResponse();
 		SseHandshakeResult sseHandshakeResult = requestResult.getSseHandshakeResult().orElse(null);
-		if (!(sseHandshakeResult instanceof SseHandshakeResult.Accepted) && marshaledResponse.isStreaming())
-			throw new IllegalArgumentException("SSE handshake rejection responses require a finite body");
 		boolean hasDate = !marshaledResponse.getHeaders().getOrDefault("Date", List.of()).isEmpty();
+		boolean bodyMaterializationStarted = false;
+		byte[] serializedResponse;
 
 		// Shared buffer for building the header section
 		try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream(1024);
 				 OutputStreamWriter outputStreamWriter = new OutputStreamWriter(outputStream, StandardCharsets.ISO_8859_1);
 				 PrintWriter printWriter = new PrintWriter(outputStreamWriter, false)) {
+			if (marshaledResponse.getStatusCode() < 200 || marshaledResponse.getStatusCode() > 599)
+				throw new IllegalStateException("Final HTTP response status code must be between 200 and 599.");
+			if (!(sseHandshakeResult instanceof SseHandshakeResult.Accepted) && marshaledResponse.isStreaming())
+				throw new IllegalArgumentException("SSE handshake rejection responses require a finite body");
 
 			if (sseHandshakeResult instanceof SseHandshakeResult.Accepted accepted) {
 				final Set<String> APPLICATION_FORBIDDEN_LOWERCASE_HEADER_NAMES = Set.of(
@@ -3104,7 +3117,7 @@ final class DefaultSseServer implements SseServer {
 				printWriter.flush();
 
 				// No body for SSE handshakes
-				return outputStream.toByteArray();
+				serializedResponse = outputStream.toByteArray();
 			} else if (sseHandshakeResult == null || sseHandshakeResult instanceof SseHandshakeResult.Rejected) {
 				// Status line
 				int statusCode = marshaledResponse.getStatusCode();
@@ -3150,6 +3163,9 @@ final class DefaultSseServer implements SseServer {
 					printWriter.printf("Set-Cookie: %s\r\n", cookie.toSetCookieHeaderRepresentation());
 
 				boolean bodyAllowed = !headRequest && statusCode >= 200 && statusCode != 204 && statusCode != 205 && statusCode != 304;
+				// Materialization closes owned channels even when reading fails. All
+				// other exits below release an unconsumed owned body.
+				bodyMaterializationStarted = bodyAllowed;
 				byte[] body = bodyAllowed ? marshaledResponse.bodyBytesOrNull() : null;
 				int bodyLength = (body == null ? 0 : body.length);
 
@@ -3170,11 +3186,24 @@ final class DefaultSseServer implements SseServer {
 				if (body != null && body.length > 0)
 					outputStream.write(body);
 
-				return outputStream.toByteArray();
+				serializedResponse = outputStream.toByteArray();
 			} else {
 				throw new IllegalStateException(format("Unsupported %s: %s", SseHandshakeResult.class.getSimpleName(), sseHandshakeResult));
 			}
+		} catch (IOException | RuntimeException | Error failure) {
+			if (!bodyMaterializationStarted) {
+				try {
+					marshaledResponse.copy().withoutBody();
+				} catch (RuntimeException | Error cleanupFailure) {
+					if (!sameInstance(failure, cleanupFailure))
+						failure.addSuppressed(cleanupFailure);
+				}
+			}
+			throw failure;
 		}
+		if (!bodyMaterializationStarted)
+			marshaledResponse.copy().withoutBody();
+		return serializedResponse;
 	}
 
 	@NonNull

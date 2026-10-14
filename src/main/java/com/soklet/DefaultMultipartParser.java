@@ -174,8 +174,12 @@ final class DefaultMultipartParser implements MultipartParser {
 				String contentDisposition = trimAggressivelyToNull(headers.get("Content-Disposition"));
 				Map<String, String> contentDispositionFields = Map.of();
 
-				if (contentDisposition != null)
-					contentDispositionFields = new ParameterParser().parse(contentDisposition, ';');
+				if (contentDisposition != null) {
+					ParameterParser parser = new ParameterParser();
+					// MIME parameter names are case-insensitive; field names and filenames are not.
+					parser.setLowerCaseNames(true);
+					contentDispositionFields = parser.parse(contentDisposition, ';');
+				}
 
 				String name = trimAggressivelyToNull(contentDispositionFields.get("name"));
 
@@ -2002,31 +2006,6 @@ final class DefaultMultipartParser implements MultipartParser {
 	protected final class RFC2231Utils {
 
 		/**
-		 * The Hexadecimal values char array.
-		 */
-		private static final char[] HEX_DIGITS = "0123456789ABCDEF".toCharArray();
-		/**
-		 * The Hexadecimal representation of 127.
-		 */
-		private static final byte MASK = 0x7f;
-		/**
-		 * The Hexadecimal representation of 128.
-		 */
-		private static final int MASK_128 = 0x80;
-		/**
-		 * The Hexadecimal decode value.
-		 */
-		private static final byte[] HEX_DECODE = new byte[MASK_128];
-
-		// create a ASCII decoded array of Hexadecimal values
-		static {
-			for (var i = 0; i < HEX_DIGITS.length; i++) {
-				HEX_DECODE[HEX_DIGITS[i]] = (byte) i;
-				HEX_DECODE[Character.toLowerCase(HEX_DIGITS[i])] = (byte) i;
-			}
-		}
-
-		/**
 		 * Decodes a string of text obtained from a HTTP header as per RFC 2231
 		 *
 		 * <b>Eg 1.</b> {@code us-ascii'en-us'This%20is%20%2A%2A%2Afun%2A%2A%2A} will be decoded to {@code This is ***fun***}
@@ -2067,13 +2046,18 @@ final class DefaultMultipartParser implements MultipartParser {
 			for (var i = 0; i < text.length(); ) {
 				final var c = text.charAt(i++);
 				if (c == '%') {
-					if (i > text.length() - 2) {
-						break; // unterminated sequence
-					}
-					final var b1 = HEX_DECODE[text.charAt(i++) & MASK];
-					final var b2 = HEX_DECODE[text.charAt(i++) & MASK];
+					if (i > text.length() - 2)
+						throw new IllegalRequestBodyException("Invalid encoding in multipart parameter.");
+					char first = text.charAt(i++);
+					char second = text.charAt(i++);
+					int b1 = Character.digit(first, 16);
+					int b2 = Character.digit(second, 16);
+					if (first > 0x7f || second > 0x7f || b1 < 0 || b2 < 0)
+						throw new IllegalRequestBodyException("Invalid encoding in multipart parameter.");
 					out.write(b1 << shift | b2);
 				} else {
+					if (c > 0x7f)
+						throw new IllegalRequestBodyException("Invalid encoding in multipart parameter.");
 					out.write((byte) c);
 				}
 			}

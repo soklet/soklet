@@ -29,7 +29,10 @@ import javax.annotation.concurrent.ThreadSafe;
  * <p>
  * Soklet retains HTTP protocol checks, content-coding negotiation, and response-header handling.
  * Streaming, file, file-channel, ranged, already-encoded, transfer-encoded, and otherwise ineligible
- * responses are not compressed. The selected codec's coding is checked against {@code Accept-Encoding}
+ * responses are not compressed. Otherwise eligible responses carrying {@code Content-Digest}, {@code Repr-Digest},
+ * {@code Digest}, or {@code Content-MD5} also retain their original bytes so application integrity
+ * metadata remains valid; if identity coding is excluded, negotiation returns 406.
+ * The selected codec's coding is checked against {@code Accept-Encoding}
  * after planning; a plan does not force a coding the client cannot accept. Selecting one codec does not
  * register alternative codecs or provide automatic fallback to another compression format.
  * <p>

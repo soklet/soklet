@@ -573,41 +573,64 @@ class SokletApplicationFinalizationTests {
 	}
 
 	@Test
+	void cleanupCanFinishBeforeItsWrappedDeadline() {
+		long originNanos = Long.MAX_VALUE - 10L;
+		FakeClock clock = new FakeClock(originNanos);
+		LifecycleWorkers workers = new LifecycleWorkers((name, task) -> task.run());
+		Fixture fixture = fixture(clock, workers,
+				cleanup(Duration.ofNanos(20L), result -> { }), snapshot -> { });
+		fixture.finalization().publishCoreSnapshot(
+				new InternalLifecycleCoreSnapshot(notStarted(), originNanos));
+		Assertions.assertEquals(InternalShutdownCleanupDisposition.SUCCEEDED,
+				fixture.finalization().awaitCompletion().cleanupOutcome().disposition());
+	}
+
+	@Test
 	void cleanupCompletionAtTheDeadlineCanWinTheBoundaryCas() {
-		FakeClock clock = new FakeClock(800L);
+		cleanupCompletionAtTheDeadlineCanWinTheBoundaryCas(800L);
+		cleanupCompletionAtTheDeadlineCanWinTheBoundaryCas(Long.MAX_VALUE - 10L);
+	}
+
+	private void cleanupCompletionAtTheDeadlineCanWinTheBoundaryCas(long originNanos) {
+		FakeClock clock = new FakeClock(originNanos);
 		AtomicReference<SokletApplicationTerminalSnapshot> report =
 				new AtomicReference<>();
 		LifecycleWorkers workers = new LifecycleWorkers((name, task) -> task.run());
 		Fixture fixture = fixture(clock, workers,
 				cleanup(Duration.ofNanos(20L),
-						result -> clock.set(820L)),
+						result -> clock.set(originNanos + 20L)),
 				report::set);
 		fixture.finalization().publishCoreSnapshot(
-				new InternalLifecycleCoreSnapshot(notStarted(), 800L));
+				new InternalLifecycleCoreSnapshot(notStarted(), originNanos));
 
 		SokletApplicationFinalization.AwaitResult joined =
 				fixture.finalization().awaitCompletion();
 		Assertions.assertEquals(InternalShutdownCleanupDisposition.SUCCEEDED,
 				joined.cleanupOutcome().disposition());
-		Assertions.assertEquals(820L,
+		Assertions.assertEquals(originNanos + 20L,
 				joined.cleanupOutcome().publicationNanos());
 		Assertions.assertTrue(joined.cleanupOutcome().failure().isEmpty());
-		Assertions.assertEquals(LifecycleDeadlines.after(820L, REPORTER_TIMEOUT),
+		Assertions.assertEquals(LifecycleDeadlines.after(originNanos + 20L, REPORTER_TIMEOUT),
 				report.get().reporterDeadlineNanos());
 	}
 
 	@Test
 	void cleanupCompletionAfterTheDeadlineCannotPublishSuccess() {
-		FakeClock clock = new FakeClock(850L);
+		cleanupCompletionAfterTheDeadlineCannotPublishSuccess(850L);
+		cleanupCompletionAfterTheDeadlineCannotPublishSuccess(Long.MAX_VALUE - 10L);
+	}
+
+	private void cleanupCompletionAfterTheDeadlineCannotPublishSuccess(long originNanos) {
+		FakeClock clock = new FakeClock(originNanos);
 		AtomicInteger cleanupCalls = new AtomicInteger();
 		LifecycleWorkers workers = new LifecycleWorkers((name, task) -> task.run());
 		Fixture fixture = fixture(clock, workers,
 				cleanup(Duration.ofNanos(20L), result -> {
 					cleanupCalls.incrementAndGet();
-					clock.set(871L);
+					clock.set(originNanos + 21L);
 				}), snapshot -> { });
 		fixture.finalization().publishCoreSnapshot(
-				new InternalLifecycleCoreSnapshot(notStarted(), 850L));
+				new InternalLifecycleCoreSnapshot(notStarted(), originNanos));
 
 		InternalShutdownCleanupOutcome outcome = fixture.finalization()
 				.awaitCompletion().cleanupOutcome();

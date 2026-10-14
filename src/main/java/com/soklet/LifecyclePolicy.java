@@ -34,6 +34,12 @@ import static java.util.Objects.requireNonNull;
  * startup, startup cancelation, graceful drain or forced termination proof.
  * Use positive budgets for normal operation; shutdown completion depends on
  * physical termination evidence, not merely requesting interruption.
+ * <p>
+ * Each timeout and the sum of startup cancelation, graceful shutdown, and
+ * forced shutdown timeouts must fit in signed 64-bit nanoseconds. These three
+ * phases share one shutdown-intent origin; startup has its own independent
+ * budget. The combined bound keeps monotonic deadline comparisons valid even
+ * when the clock wraps.
  */
 @ThreadSafe
 public final class LifecyclePolicy {
@@ -73,6 +79,8 @@ public final class LifecyclePolicy {
 		this.forcedShutdownTimeout = validate(
 				exactBuilder.forcedShutdownTimeout,
 				"forcedShutdownTimeout");
+		LifecycleDeadlines.validateShutdownHorizon(this.startupCancelationTimeout,
+				this.gracefulShutdownTimeout, this.forcedShutdownTimeout);
 	}
 
 	/** @return the shared default lifecycle policy */
@@ -293,7 +301,11 @@ public final class LifecyclePolicy {
 			return this;
 		}
 
-		/** @return immutable lifecycle policy */
+		/**
+		 * @return immutable lifecycle policy
+		 * @throws IllegalArgumentException if the combined startup-cancelation,
+		 * graceful-shutdown, and forced-shutdown budget exceeds signed nanoseconds
+		 */
 		@NonNull
 		public LifecyclePolicy build() {
 			return new LifecyclePolicy(this);

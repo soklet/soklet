@@ -12667,6 +12667,33 @@
           "sink": "RequestException.MissingRequestHeaderException"
         },
         {
+          "file": "src/main/java/com/soklet/DefaultMultipartParser.java",
+          "key": "PRIV-MATCH-006:src/main/java/com/soklet/DefaultMultipartParser.java#com.soklet.DefaultMultipartParser.RFC2231Utils#fromHex(String)->RequestException.IllegalRequestBodyException@1",
+          "matcherRuleId": "PRIV-MATCH-006",
+          "member": "fromHex(String)",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultMultipartParser.RFC2231Utils",
+          "sink": "RequestException.IllegalRequestBodyException"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultMultipartParser.java",
+          "key": "PRIV-MATCH-006:src/main/java/com/soklet/DefaultMultipartParser.java#com.soklet.DefaultMultipartParser.RFC2231Utils#fromHex(String)->RequestException.IllegalRequestBodyException@2",
+          "matcherRuleId": "PRIV-MATCH-006",
+          "member": "fromHex(String)",
+          "occurrence": 2,
+          "owner": "com.soklet.DefaultMultipartParser.RFC2231Utils",
+          "sink": "RequestException.IllegalRequestBodyException"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultMultipartParser.java",
+          "key": "PRIV-MATCH-006:src/main/java/com/soklet/DefaultMultipartParser.java#com.soklet.DefaultMultipartParser.RFC2231Utils#fromHex(String)->RequestException.IllegalRequestBodyException@3",
+          "matcherRuleId": "PRIV-MATCH-006",
+          "member": "fromHex(String)",
+          "occurrence": 3,
+          "owner": "com.soklet.DefaultMultipartParser.RFC2231Utils",
+          "sink": "RequestException.IllegalRequestBodyException"
+        },
+        {
           "file": "src/main/java/com/soklet/DefaultRequestBodyMarshaler.java",
           "key": "PRIV-MATCH-006:src/main/java/com/soklet/DefaultRequestBodyMarshaler.java#com.soklet.DefaultRequestBodyMarshaler#marshalRequestBody(Request,ResourceMethod,Parameter,Type)->RequestException.IllegalRequestBodyException@1",
           "matcherRuleId": "PRIV-MATCH-006",
@@ -38661,6 +38688,33 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultMultipartParser.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMultipartParser.java#com.soklet.DefaultMultipartParser.RFC2231Utils#fromHex(String)->Throwable.IllegalRequestBodyException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "fromHex(String)",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultMultipartParser.RFC2231Utils",
+          "sink": "Throwable.IllegalRequestBodyException"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultMultipartParser.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMultipartParser.java#com.soklet.DefaultMultipartParser.RFC2231Utils#fromHex(String)->Throwable.IllegalRequestBodyException@2",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "fromHex(String)",
+          "occurrence": 2,
+          "owner": "com.soklet.DefaultMultipartParser.RFC2231Utils",
+          "sink": "Throwable.IllegalRequestBodyException"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultMultipartParser.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMultipartParser.java#com.soklet.DefaultMultipartParser.RFC2231Utils#fromHex(String)->Throwable.IllegalRequestBodyException@3",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "fromHex(String)",
+          "occurrence": 3,
+          "owner": "com.soklet.DefaultMultipartParser.RFC2231Utils",
+          "sink": "Throwable.IllegalRequestBodyException"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultMultipartParser.java",
           "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMultipartParser.java#com.soklet.DefaultMultipartParser.Streams#checkFileName(String)->Throwable.InvalidFileNameException@1",
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "checkFileName(String)",
@@ -39241,6 +39295,15 @@
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "createHandshakeHttpResponse(HttpRequestResult,boolean)",
           "occurrence": 1,
+          "owner": "com.soklet.DefaultSseServer",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultSseServer.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultSseServer.java#com.soklet.DefaultSseServer#createHandshakeHttpResponse(HttpRequestResult,boolean)->Throwable.IllegalStateException@2",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "createHandshakeHttpResponse(HttpRequestResult,boolean)",
+          "occurrence": 2,
           "owner": "com.soklet.DefaultSseServer",
           "sink": "Throwable.IllegalStateException"
         },
@@ -40002,6 +40065,15 @@
         },
         {
           "file": "src/main/java/com/soklet/HttpTransportResponseOutcome.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/HttpTransportResponseOutcome.java#com.soklet.HttpTransportResponseOutcome.NotWritten#$typeInitializer()->Throwable.RejectedExecutionException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "$typeInitializer()",
+          "occurrence": 1,
+          "owner": "com.soklet.HttpTransportResponseOutcome.NotWritten",
+          "sink": "Throwable.RejectedExecutionException"
+        },
+        {
+          "file": "src/main/java/com/soklet/HttpTransportResponseOutcome.java",
           "key": "PRIV-MATCH-011:src/main/java/com/soklet/HttpTransportResponseOutcome.java#com.soklet.HttpTransportResponseOutcome.Replaced#rethrowWriteFailure()->Throwable.IllegalStateException@1",
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "rethrowWriteFailure()",
@@ -40483,6 +40555,15 @@
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "after(long,Duration)",
           "occurrence": 2,
+          "owner": "com.soklet.LifecycleDeadlines",
+          "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/LifecycleTiming.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/LifecycleTiming.java#com.soklet.LifecycleDeadlines#validateShutdownHorizon(Duration,Duration,Duration)->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "validateShutdownHorizon(Duration,Duration,Duration)",
+          "occurrence": 1,
           "owner": "com.soklet.LifecycleDeadlines",
           "sink": "Throwable.IllegalArgumentException"
         },
@@ -52986,6 +53067,15 @@
           "occurrence": 3,
           "owner": "com.soklet.internal.microhttp.RequestParser",
           "sink": "Throwable.MalformedRequestException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/microhttp/Scheduler.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/microhttp/Scheduler.java#com.soklet.internal.microhttp.Scheduler#schedule(Runnable,Duration)->Throwable.IllegalArgumentException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "schedule(Runnable,Duration)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.microhttp.Scheduler",
+          "sink": "Throwable.IllegalArgumentException"
         },
         {
           "file": "src/main/java/com/soklet/internal/microhttp/SeekableChannelWritableSource.java",

@@ -36,6 +36,60 @@ import java.util.Set;
 @ThreadSafe
 public class MultipartEdgeCaseTests {
 	@Test
+	public void malformedExtendedMultipartParametersAreRejectedWithoutRetainingInput() {
+		for (String value : List.of("secret%", "secret%2", "secret%GG", "secret%0z", "secret%ＦＦ", "secreté")) {
+			for (String parameter : List.of("name*=UTF-8''" + value, "name=\"a\"; filename*=UTF-8''" + value)) {
+				Request request = Request.withPath(HttpMethod.POST, "/upload")
+						.headers(Map.of("Content-Type", List.of("multipart/form-data; boundary=parameter-case")))
+						.body(multipartBodyWithContentDisposition("parameter-case", "form-data; " + parameter))
+						.build();
+				IllegalRequestBodyException failure = Assertions.assertThrows(IllegalRequestBodyException.class, request::getMultipartFields);
+				Assertions.assertEquals("Invalid encoding in multipart parameter.", failure.getMessage());
+				Assertions.assertNull(failure.getCause());
+			}
+		}
+	}
+
+	@Test
+	public void validExtendedMultipartParametersRetainUnicodeAndEscapedAscii() {
+		Request request = Request.withPath(HttpMethod.POST, "/upload")
+				.headers(Map.of("Content-Type", List.of("multipart/form-data; boundary=parameter-case")))
+				.body(multipartBodyWithContentDisposition("parameter-case", "form-data; name*=UTF-8''%C3%A9; filename*=UTF-8''a%2b%25%20%C3%A9.txt"))
+				.build();
+		Assertions.assertEquals(Optional.of("a+% é.txt"), request.getMultipartFields().get("é").getFirst().getFilename());
+	}
+
+	@Test
+	public void contentDispositionParameterNamesAreCaseInsensitiveAndValuesRetainCase() {
+		for (String disposition : List.of(
+				"form-data; NAME=\"MixedCaseField\"; FILENAME=\"MixedCase.TXT\"",
+				"form-data; name=\"MixedCaseField\"; FiLeNaMe=\"MixedCase.TXT\"")) {
+			Request request = Request.withPath(HttpMethod.POST, "/upload")
+					.headers(Map.of("Content-Type", List.of("multipart/form-data; boundary=parameter-case")))
+					.body(multipartBodyWithContentDisposition("parameter-case", disposition)).build();
+			Map<String, List<MultipartField>> fields = request.getMultipartFields();
+			Assertions.assertEquals(Set.of("MixedCaseField"), fields.keySet());
+			MultipartField field = fields.get("MixedCaseField").getFirst();
+			Assertions.assertEquals("MixedCaseField", field.getName());
+			Assertions.assertEquals(Optional.of("MixedCase.TXT"), field.getFilename());
+			Assertions.assertEquals(Optional.of("1"), field.getDataAsString());
+		}
+	}
+
+	@Test
+	public void mixedCaseContentDispositionParametersBindToResourceArguments() {
+		SokletSimulator.run(SimulatorConfig.builder().httpServer()
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(UploadResource.class)))
+				.build(), simulator -> {
+			Request request = Request.withPath(HttpMethod.POST, "/upload-commas")
+					.headers(Map.of("Content-Type", List.of("multipart/form-data; boundary=parameter-case")))
+					.body(multipartBodyWithContentDisposition("parameter-case", "form-data; NaMe=\"a\""))
+					.build();
+			Assertions.assertEquals(204, simulator.performHttpRequest(request).getMarshaledResponse().getStatusCode());
+		});
+	}
+
+	@Test
 	public void copierSeparatesContentTypeAndCharsetIncludingNull() {
 		MultipartField field = MultipartField.withName("field")
 				.contentType("text/plain").charset(StandardCharsets.UTF_8).build();
@@ -107,7 +161,7 @@ public class MultipartEdgeCaseTests {
 				+ "\r\n"
 				+ "1\r\n"
 				+ "--" + boundary + "--\r\n";
-		return body.getBytes(StandardCharsets.US_ASCII);
+		return body.getBytes(StandardCharsets.UTF_8);
 	}
 
 	@Test

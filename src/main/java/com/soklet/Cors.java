@@ -26,7 +26,6 @@ import java.util.Objects;
 import java.util.Optional;
 
 import static com.soklet.Utilities.trimAggressivelyToEmpty;
-import static com.soklet.Utilities.trimAggressivelyToNull;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -90,9 +89,9 @@ public static Cors fromOrigin(@NonNull HttpMethod httpMethod,
 		if (originHeaderValues == null || originHeaderValues.size() == 0)
 			return Optional.empty();
 
-		String originHeaderValue = trimAggressivelyToNull(originHeaderValues.stream().findFirst().orElse(null));
+		String originHeaderValue = Utilities.trimHeaderWhitespace(originHeaderValues.getFirst());
 
-		if (originHeaderValue == null)
+		if (originHeaderValue.isEmpty())
 			return Optional.empty();
 
 		return Optional.of(new Cors(httpMethod, originHeaderValue));
