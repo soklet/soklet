@@ -303,7 +303,7 @@ public class StaticFilesTests {
 		Assertions.assertTrue(failedHeadPreconditionResponse.getBody().isEmpty());
 		MarshaledResponse marshaledFailedHeadPreconditionResponse = DefaultResponseMarshaler.defaultInstance().forHead(failedHeadPreconditionRequest, failedHeadPreconditionResponse);
 		Assertions.assertTrue(marshaledFailedHeadPreconditionResponse.getBody().isEmpty());
-		Assertions.assertEquals(List.of("0"), marshaledFailedHeadPreconditionResponse.getHeaders().get("Content-Length"));
+		Assertions.assertFalse(marshaledFailedHeadPreconditionResponse.getHeaders().containsKey("Content-Length"));
 
 		Request headRequest = Request.fromPath(HttpMethod.HEAD, "/example.txt");
 		MarshaledResponse headGetEquivalent = fileBuilder(file, headRequest).build();

@@ -11955,6 +11955,15 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						if (asynchronous && subscriptionRegistration != null) {
 							SubscriptionRegistration current =
 									subscriptionRegistration;
+							if (check.kind() == SubscriptionAuthorizationCheckKind.RENEWAL
+									&& (applicationContextChanged
+											|| !current.filter().acceptedTaskIds()
+													.equals(result.acceptedTaskIds()))) {
+								// Reconciliation fenced old offers when it began. A renewal
+								// needs a new transport generation only when its authority
+								// changes; unchanged grants preserve in-flight offers.
+								subscriptionAuthorizationGeneration++;
+							}
 							if (check.kind()
 									== SubscriptionAuthorizationCheckKind.RECONCILIATION
 									|| applicationContextChanged)
@@ -13568,7 +13577,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 											projection.state(), snapshot, deliveryState);
 							if (deliver) {
 								delivery = new TaskNotificationDelivery(
-										terminalSnapshot, deliveryState, check.authorizationGeneration());
+										terminalSnapshot, deliveryState, check.authorizationGeneration(),
+										check.authorizationRevision());
 								projection.state().delivery = delivery;
 							}
 						}
@@ -13582,7 +13592,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 							result = stream.offerGuardedCoalescingMessage(notification, new Object(),
 									() -> (!offerPending.getAndSet(false)
 											|| applicationClock.nanoTime() - check.deadlineNanos() < 0L)
-											&& resourceNotificationWriteAllowed(stream, reservedDelivery.authorizationGeneration()),
+										&& taskNotificationWriteAllowed(stream, reservedDelivery.authorizationGeneration(),
+												reservedDelivery.authorizationRevision()),
 									() -> taskNotificationWritten(projection, reservedDelivery),
 									() -> taskNotificationReleased(projection, reservedDelivery)).orElse(null);
 						}
@@ -13663,7 +13674,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				// Retain its replacement projection in either ordering.
 				if (taskNotificationProjectionOwnerActiveWhileLocked()
 						&& subscriptionAuthorizationAllowsDeliveryWhileLocked()
-						&& delivery.authorizationGeneration() != subscriptionAuthorizationGeneration
+						&& (delivery.authorizationGeneration() != subscriptionAuthorizationGeneration
+								|| delivery.authorizationRevision() != catalogAuthorizationRevision)
 						&& requireNonNull(subscriptionRegistration).filter().containsTask(projection.taskId()))
 					submit = taskNotificationProjectionQueue.request(projection.taskId());
 			}
@@ -13851,7 +13863,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			long expiry = subscriptionRuntimeConfiguration.authorizer().isEmpty()
 					? deadlineNanos : minimumDeadline(now, deadlineNanos, subscriptionAuthorizationExpiryNanos);
 			resourceNotificationAuthority = new ResourceNotificationAuthority(
-					requireNonNull(responseStream), subscriptionAuthorizationGeneration, expiry);
+					requireNonNull(responseStream), subscriptionAuthorizationGeneration,
+					catalogAuthorizationRevision, expiry);
 		}
 
 		/** Socket guards must not acquire the owner lock under the channel lock. */
@@ -13862,8 +13875,18 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					&& applicationClock.nanoTime() - authority.deadlineNanos() < 0L;
 		}
 
+		/** Task status carries projection data, so every accepted renewal rechecks it. */
+		private boolean taskNotificationWriteAllowed(@NonNull McpRequestSseStream stream,
+				long generation, long revision) {
+			ResourceNotificationAuthority authority = resourceNotificationAuthority;
+			return authority != null && sameInstance(authority.stream(), requireNonNull(stream))
+					&& authority.generation() == generation
+					&& authority.revision() == revision
+					&& applicationClock.nanoTime() - authority.deadlineNanos() < 0L;
+		}
+
 		private record ResourceNotificationAuthority(@NonNull McpRequestSseStream stream,
-				long generation, long deadlineNanos) {
+				long generation, long revision, long deadlineNanos) {
 		}
 
 		private void releaseResourceNotification(@NonNull Object key, @NonNull Object delivery) {
@@ -16074,7 +16097,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	}
 
 	private record TaskNotificationDelivery(boolean terminalSnapshot,
-			@Nullable TaskNotificationDeliveryState state, long authorizationGeneration) {
+			@Nullable TaskNotificationDeliveryState state, long authorizationGeneration,
+			long authorizationRevision) {
 	}
 
 	private record CatalogProjectionCheck(

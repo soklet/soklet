@@ -2303,6 +2303,11 @@ final class DefaultSseServer implements SseServer {
 							channelLock.unlock();
 						}
 						acceptedResponseWritten.set(handshakeAcceptedReference.get() != null);
+						if (acceptedResponseWritten.get())
+							// Initialization can block in application code. Observe peer closure
+							// as soon as accepted headers are delivered so cancelation can
+							// interrupt it, or prevent a not-yet-entered initializer entirely.
+							startClientDisconnectMonitor(requireNonNull(pendingConnection.get()));
 					} catch (Throwable t) {
 						Throwable failureCause = socketFailureCause(t);
 						boolean routineClose = isRemoteClose(t) || t instanceof HandshakeWriterStoppedException;
@@ -2663,6 +2668,7 @@ final class DefaultSseServer implements SseServer {
 	}
 
 	private void startClientDisconnectMonitor(DefaultSseConnection connection) {
+		if (!connection.disconnectMonitorStarted.compareAndSet(false, true)) return;
 		StreamLifecycleCoordinator.Reservation.Work work = connection.lifecycle.retainWork();
 		if (work == null) return;
 		try {
@@ -3611,6 +3617,7 @@ final class DefaultSseServer implements SseServer {
 		private final SseConnectionSnapshot snapshot;
 		private final AtomicBoolean establishmentNotified = new AtomicBoolean();
 		private final AtomicBoolean terminationNotified = new AtomicBoolean();
+		private final AtomicBoolean disconnectMonitorStarted = new AtomicBoolean();
 		private final ManagedSseLifecycle lifecycle;
 
 		@ThreadSafe
@@ -4247,6 +4254,7 @@ final class DefaultSseServer implements SseServer {
 				CharBuffer charBuffer = CharBuffer.allocate(getRequestReadBufferSizeInBytes());
 
 				StringBuilder requestBuilder = new StringBuilder();
+				HandshakeHeaderScanner headerScanner = new HandshakeHeaderScanner();
 				boolean headersComplete = false;
 
 				while (!headersComplete) {
@@ -4282,7 +4290,7 @@ final class DefaultSseServer implements SseServer {
 					// the rest of the buffer for the next socket read.
 					buffer.compact();
 
-					int end = endOfHeaders(requestBuilder);
+					int end = headerScanner.scan(requestBuilder);
 					int attributedLength = end == -1 ? requestBuilder.length() : end;
 					requestCapture.record(requestBuilder, attributedLength);
 
@@ -4303,12 +4311,11 @@ final class DefaultSseServer implements SseServer {
 					// Stop at the first complete CRLFCRLF or LFLF header terminator.
 					// IMPORTANT: we may have read beyond the header terminator in the same read(),
 					// so truncate to exactly the end of headers.
+					if (headerScanner.headerSectionLength() > getMaximumHeadersSizeInBytes())
+						throw new RequestHeadersTooLargeIOException(format("Request headers too large (exceeded %d bytes)", getMaximumHeadersSizeInBytes()));
 					if (end != -1) {
-						rejectHeadersTooLarge(requestBuilder, end);
 						requestBuilder.setLength(end);
 						headersComplete = true;
-					} else {
-						rejectHeadersTooLarge(requestBuilder, requestBuilder.length());
 					}
 				}
 
@@ -4370,14 +4377,39 @@ final class DefaultSseServer implements SseServer {
 		return true;
 	}
 
-	private void rejectHeadersTooLarge(@NonNull CharSequence rawRequest,
-																		 int endExclusive) throws IOException {
-		requireNonNull(rawRequest);
+	/** Incremental boundary detection for an append-only ISO-8859-1 request buffer. */
+	static final class HandshakeHeaderScanner {
+		private int scannedLength;
+		private int requestLineEnd = -1;
+		private boolean requestLineEndedWithCarriageReturn;
+		private int headerEnd = -1;
 
-		if (headerSectionLengthInBytes(rawRequest, endExclusive) <= getMaximumHeadersSizeInBytes())
-			return;
+		int scan(CharSequence request) {
+			if (this.headerEnd != -1)
+				return this.headerEnd;
+			for (int index = this.scannedLength; index < request.length(); index++) {
+				char character = request.charAt(index);
+				this.scannedLength = index + 1;
+				if (this.requestLineEndedWithCarriageReturn) {
+					if (character == '\n') this.requestLineEnd++;
+					this.requestLineEndedWithCarriageReturn = false;
+				} else if (this.requestLineEnd == -1 && (character == '\r' || character == '\n')) {
+					this.requestLineEnd = index + 1;
+					this.requestLineEndedWithCarriageReturn = character == '\r';
+				}
+				if (character == '\n' && ((index > 0 && request.charAt(index - 1) == '\n')
+						|| (index > 2 && request.charAt(index - 1) == '\r'
+						&& request.charAt(index - 2) == '\n' && request.charAt(index - 3) == '\r'))) {
+					this.headerEnd = index + 1;
+					return this.headerEnd;
+				}
+			}
+			return -1;
+		}
 
-		throw new RequestHeadersTooLargeIOException(format("Request headers too large (exceeded %d bytes)", getMaximumHeadersSizeInBytes()));
+		int headerSectionLength() {
+			return this.requestLineEnd == -1 ? 0 : this.scannedLength - this.requestLineEnd;
+		}
 	}
 
 	private static int endOfHeaders(@NonNull CharSequence rawRequest) {

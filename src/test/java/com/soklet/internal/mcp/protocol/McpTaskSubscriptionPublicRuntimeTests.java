@@ -348,6 +348,79 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 		}
 	}
 
+	@Test
+	public void renewalRechecksPendingTaskResultWhenCatalogAccessChangesUnderSameContext() throws Exception {
+		ScriptedTaskManager manager = new ScriptedTaskManager();
+		AtomicBoolean visible = new AtomicBoolean(true);
+		AtomicInteger grants = new AtomicInteger();
+		AtomicInteger offers = new AtomicInteger();
+		CountDownLatch entered = new CountDownLatch(1);
+		CountDownLatch release = new CountDownLatch(1);
+		CountDownLatch renewed = new CountDownLatch(1);
+		Object applicationContext = new Object();
+		McpRequestSseStream.setTestHooks(new McpRequestSseStream.TestHooks() {
+			@Override public void beforeTerminalReservation() {}
+			@Override public void beforeCoalescingMessageOffer() {
+				if (offers.incrementAndGet() == 1) {
+					entered.countDown();
+					awaitIgnoringInterrupts(release);
+				}
+			}
+		});
+		McpServer server = serverBuilder(manager, new AtomicInteger())
+				.subscriptionAuthorizer((authorizationContext, features) -> {
+					grants.incrementAndGet();
+					return McpSubscriptionAuthorization.Allowed
+							.withValidUntil(Instant.now().plusSeconds(300))
+							.applicationContext(applicationContext).build();
+				})
+				.maximumSubscriptionAuthorizationDuration(Duration.ofSeconds(4))
+				.catalogAccessPolicy(McpCatalogAccessPolicy.fromEvaluators(
+						(requestContext, tool, features) -> visible.get(),
+						(requestContext, prompt, features) -> true))
+				.build();
+		MetricsCollector metrics = new MetricsCollector() {
+			@Override public void didRecordMcpMetricsEvent(McpMetricsEvent event) {
+				if (event instanceof McpMetricsEvent.SubscriptionMaintenance maintenance
+						&& maintenance.getWork() == McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION
+						&& maintenance.getOutcome() == McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED
+						&& grants.get() >= 2) renewed.countDown();
+			}
+		};
+		Soklet soklet = managedSoklet(server, metrics);
+		McpChunkedHttpClient client = null;
+		try {
+			soklet.start();
+			int port = boundPort(server);
+			seedTask(port, "renewal-hidden", ALPHA);
+			seedTask(port, "renewal-peer", ALPHA);
+			client = listen(port, "\"renewal-policy\"", ALPHA, true,
+					taskIdsFilter(List.of("renewal-hidden", "renewal-peer")));
+			assertSseHead(client.readHead());
+			Assertions.assertEquals(acknowledgment("\"renewal-policy\"",
+					List.of("renewal-hidden", "renewal-peer")), client.readChunkText());
+			manager.resetFindInvocations();
+			manager.replaceTask(completedTask(manager.requireTask("renewal-hidden")));
+			manager.publishTaskChanged("renewal-hidden");
+			Assertions.assertTrue(entered.await(5, TimeUnit.SECONDS));
+			visible.set(false);
+			Assertions.assertTrue(renewed.await(5, TimeUnit.SECONDS),
+					"The same-context renewal did not complete.");
+			release.countDown();
+			manager.awaitFindCompletions("renewal-hidden", 3);
+			visible.set(true);
+			manager.publishTaskChanged("renewal-peer");
+			Assertions.assertEquals(workingNotification("\"renewal-policy\"", "renewal-peer"),
+					client.readChunkText(),
+					"A queued task result must be checked under the renewed access decision.");
+		} finally {
+			release.countDown();
+			McpRequestSseStream.setTestHooks(null);
+			if (client != null) client.closeWithReset();
+			soklet.close();
+		}
+	}
+
 	private static void awaitIgnoringInterrupts(CountDownLatch latch) {
 		boolean interrupted = false;
 		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);

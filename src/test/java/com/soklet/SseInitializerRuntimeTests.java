@@ -157,6 +157,139 @@ public class SseInitializerRuntimeTests {
 	}
 
 	@Test
+	public void finDuringInitializerInterruptsItAndRetainsCapacityUntilExit() throws Exception {
+		assertDisconnectDuringInitializer(false, false);
+	}
+
+	@Test
+	public void resetDuringInitializerInterruptsItAndRetainsCapacityUntilExit() throws Exception {
+		assertDisconnectDuringInitializer(true, false);
+	}
+
+	@Test
+	public void finDuringInitializerDoesNotDependOnQueuedWriterExecutor() throws Exception {
+		assertDisconnectDuringInitializer(false, true);
+	}
+
+	@Test
+	public void resetDuringInitializerDoesNotDependOnQueuedWriterExecutor() throws Exception {
+		assertDisconnectDuringInitializer(true, true);
+	}
+
+	private static void assertDisconnectDuringInitializer(boolean reset, boolean queuedWriter) throws Exception {
+		CountDownLatch entered = new CountDownLatch(1);
+		CountDownLatch interrupted = new CountDownLatch(1);
+		CountDownLatch release = new CountDownLatch(1);
+		AtomicReference<StreamTerminationReason> reason = new AtomicReference<>();
+		try (Fixture fixture = new Fixture(1, queuedWriter ? new QueuedExecutor() : null,
+				Duration.ofHours(1), new LifecycleObserver() {
+			@Override public void didReceiveLogEvent(@NonNull LogEvent event) {}
+			@Override public void didTerminateSseConnection(SseConnection connection, StreamTermination termination) {
+				reason.set(termination.getReason());
+			}
+		})) {
+			fixture.initializer("disconnect-initializer", ignored -> {
+				entered.countDown();
+				try {
+					release.await();
+				} catch (InterruptedException failure) {
+					interrupted.countDown();
+					// Logical cancelation must not release the capacity while this
+					// deliberately delayed physical initializer still owns work.
+					awaitUninterruptibly(release);
+					throw failure;
+				}
+			});
+			fixture.start();
+			try {
+				try (Socket socket = fixture.request("disconnect-initializer")) {
+					assertStatus(socket, 200);
+					await(entered);
+					if (reset) socket.setSoLinger(true, 0);
+				}
+				await(interrupted);
+				Assertions.assertEquals(1, fixture.coordinator().snapshot().reservations());
+				Assertions.assertEquals(1, fixture.coordinator().snapshot().runningProducers());
+				Assertions.assertEquals(1, fixture.server.getActiveConnectionCount());
+				try (Socket rejected = fixture.request("disconnect-initializer")) {
+					assertStatus(rejected, 503);
+				}
+			} finally {
+				release.countDown();
+			}
+			eventually(() -> fixture.coordinator().snapshot().reservations() == 0);
+			Assertions.assertEquals(0, fixture.server.getActiveConnectionCount());
+			Assertions.assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED, reason.get());
+			Assertions.assertTrue(fixture.server.getGlobalConnections().isEmpty());
+		}
+	}
+
+	@Test
+	public void disconnectBeforeInitializerEntrySuppressesApplicationInitialization() throws Exception {
+		CountDownLatch observing = new CountDownLatch(1);
+		CountDownLatch releaseObserver = new CountDownLatch(1);
+		AtomicInteger initialized = new AtomicInteger();
+		AtomicReference<StreamTerminationReason> reason = new AtomicReference<>();
+		try (Fixture fixture = new Fixture(1, null, Duration.ofHours(1), new LifecycleObserver() {
+			@Override public void didReceiveLogEvent(@NonNull LogEvent event) {}
+			@Override public void willEstablishSseConnection(Request request, ResourceMethod resourceMethod) {
+				observing.countDown();
+				awaitUninterruptibly(releaseObserver);
+			}
+			@Override public void didTerminateSseConnection(SseConnection connection, StreamTermination termination) {
+				reason.set(termination.getReason());
+			}
+		})) {
+			fixture.initializer("before-initializer", ignored -> initialized.incrementAndGet());
+			fixture.start();
+			try {
+				try (Socket socket = fixture.request("before-initializer")) {
+					assertStatus(socket, 200);
+					await(observing);
+					Assertions.assertEquals(2, fixture.coordinator().snapshot().retainedWork());
+				}
+				// The monitor exits, while the handshake callback remains physically
+				// accounted for and cannot enter the canceled initializer afterward.
+				eventually(() -> fixture.coordinator().snapshot().retainedWork() == 1);
+				Assertions.assertEquals(1, fixture.coordinator().snapshot().reservations());
+			} finally {
+				releaseObserver.countDown();
+			}
+			eventually(() -> fixture.coordinator().snapshot().reservations() == 0);
+			Assertions.assertEquals(0, initialized.get());
+			Assertions.assertEquals(0, fixture.server.getActiveConnectionCount());
+			Assertions.assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED, reason.get());
+		}
+	}
+
+	@Test
+	public void shutdownInterruptsCooperativeInitializerWithEarlyDisconnectMonitor() throws Exception {
+		CountDownLatch entered = new CountDownLatch(1);
+		CountDownLatch interrupted = new CountDownLatch(1);
+		try (Fixture fixture = new Fixture(1, null)) {
+			fixture.initializer("shutdown-initializer", ignored -> {
+				entered.countDown();
+				try {
+					new CountDownLatch(1).await();
+				} catch (InterruptedException failure) {
+					interrupted.countDown();
+					throw failure;
+				}
+			});
+			fixture.start();
+			StreamLifecycleCoordinator coordinator = fixture.coordinator();
+			try (Socket socket = fixture.request("shutdown-initializer")) {
+				assertStatus(socket, 200);
+				await(entered);
+				Assertions.assertTrue(fixture.soklet.shutdown().toCompletableFuture().get(3, SECONDS).isComplete());
+				await(interrupted);
+				Assertions.assertTrue(coordinator.isTerminated());
+				Assertions.assertEquals(0, coordinator.snapshot().retainedWork());
+			}
+		}
+	}
+
+	@Test
 	public void rejectedConnectionExecutorReleasesAdmission() throws Exception {
 		try (Fixture fixture = new Fixture(1, new RejectingExecutor())) {
 			fixture.initializer("rejected", ignored -> {});

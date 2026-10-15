@@ -161,6 +161,56 @@ public class McpSubscriptionResourceCatchUpPublicRuntimeTests {
 		} finally { releaseOffer.countDown(); owner.close(); }
 	}
 
+	@Test
+	public void renewalChangingApplicationContextReprojectsPendingResourceOffer() throws Exception {
+		CountDownLatch offerEntered = new CountDownLatch(1);
+		CountDownLatch releaseOffer = new CountDownLatch(1);
+		CountDownLatch renewed = new CountDownLatch(1);
+		AtomicInteger offers = new AtomicInteger();
+		AtomicInteger authorizations = new AtomicInteger();
+		Object firstContext = new Object();
+		Object renewedContext = new Object();
+		McpRequestSseStream.setTestHooks(new McpRequestSseStream.TestHooks() {
+			@Override public void beforeTerminalReservation() {}
+			@Override public void beforeCoalescingMessageOffer() {
+				if (offers.incrementAndGet() == 1) {
+					offerEntered.countDown();
+					await(releaseOffer);
+				}
+			}
+		});
+		McpSubscriptionEventPublisher publisher = McpSubscriptionEventPublisher.fromInMemoryDefaults();
+		McpServer server = server(publisher, (authorizationContext, invocationFeatures) -> {
+			Object context = authorizations.incrementAndGet() == 1
+					? firstContext : renewedContext;
+			return McpSubscriptionAuthorization.Allowed
+					.withValidUntil(Instant.now().plusSeconds(300))
+					.applicationContext(context).build();
+		}, Duration.ofSeconds(4));
+		MetricsCollector metrics = new MetricsCollector() {
+			@Override public void didRecordMcpMetricsEvent(McpMetricsEvent event) {
+				if (event instanceof McpMetricsEvent.SubscriptionMaintenance maintenance
+						&& maintenance.getWork() == McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION
+						&& maintenance.getOutcome() == McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED
+						&& authorizations.get() >= 2) renewed.countDown();
+			}
+		};
+		Soklet owner = managed(server, metrics);
+		try {
+			owner.start();
+			try (McpChunkedHttpClient client = listen(server)) {
+				assertAcknowledged(client);
+				publisher.publishResourceUpdated(RESOURCE);
+				await(offerEntered);
+				await(renewed);
+				releaseOffer.countDown();
+				Assertions.assertEquals(resourceUpdated(), client.readChunkText());
+				Assertions.assertEquals(2, offers.get(),
+						"A frame prepared under the old application context must be suppressed and reprojected.");
+			}
+		} finally { releaseOffer.countDown(); owner.close(); }
+	}
+
 	private static McpServer server(McpSubscriptionEventPublisher publisher,
 			McpSubscriptionAuthorizer authorizer, Duration authorizationDuration) {
 		McpSubscriptionConfig subscriptions = McpSubscriptionConfig

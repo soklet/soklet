@@ -52,6 +52,22 @@ class RequestParserHardeningTests {
     }
 
     @Test
+    void http10HostIsOptionalButMustBeValidAndUniqueWhenPresent() {
+        for (String headers : List.of("", "Host: example.test\r\n")) {
+            ByteTokenizer tokenizer = new ByteTokenizer();
+            add(tokenizer, "GET / HTTP/1.0\r\n" + headers + "\r\n");
+            assertTrue(new RequestParser(tokenizer).parse(), headers);
+        }
+
+        for (String headers : List.of("Host: first.test\r\nHost: second.test\r\n",
+                "Host: bad host\r\n", "Host: \r\n")) {
+            ByteTokenizer tokenizer = new ByteTokenizer();
+            add(tokenizer, "GET / HTTP/1.0\r\n" + headers + "\r\n");
+            assertThrows(MalformedRequestException.class, new RequestParser(tokenizer)::parse, headers);
+        }
+    }
+
+    @Test
     void transferEncodingRejectsParametersWithoutDiscardingMalformedSuffixes() {
         for (String coding : List.of("chunked;foo=bar", "chunked;", "chunked;foo=\"unterminated",
                 "chunked;garbage @", "CHUNKED \t; foo=bar", "chunked;foo=\"a,b\"")) {

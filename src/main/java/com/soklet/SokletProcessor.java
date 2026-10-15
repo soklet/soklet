@@ -3768,8 +3768,7 @@ public final class SokletProcessor extends AbstractProcessor {
 							|| characterType == Character.SURROGATE)
 						literal.append(String.format(Locale.ROOT, "\\u%04X",
 								(int) character));
-					else if (character < 32
-							|| character >= 127 && character <= 159)
+						else if (character < 32)
 						literal.append('\\').append(String.format("%03o",
 								(int) character));
 					else

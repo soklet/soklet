@@ -23,7 +23,7 @@ import java.net.InetAddress;
 import java.util.Optional;
 
 /**
- * Validates HTTP/1.1 Host header values against RFC 3986 uri-host grammar.
+ * Validates HTTP Host header values against RFC 3986 uri-host grammar.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

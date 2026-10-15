@@ -470,14 +470,15 @@ class RequestParser {
     }
 
     private void validateHostHeaderIfRequired() {
-        if (version == null || !version.equalsIgnoreCase("HTTP/1.1")) {
+        if (hostHeaderCount == 0) {
+            if (version != null && version.equalsIgnoreCase("HTTP/1.1")) {
+                throw new MalformedRequestException("missing host header");
+            }
             return;
         }
 
-        if (hostHeaderCount == 0) {
-            throw new MalformedRequestException("missing host header");
-        }
-
+        // HTTP/1.0 does not require Host, but a supplied authority must still be
+        // unambiguous and valid before application code or origin resolution uses it.
         if (hostHeaderCount > 1) {
             throw new MalformedRequestException("multiple host headers");
         }
