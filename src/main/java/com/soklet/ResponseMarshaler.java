@@ -308,9 +308,10 @@ public interface ResponseMarshaler {
 	 * <p>
 	 * For an implicit {@code HEAD} match, the input is the equivalent {@code GET} method's marshaled response.
 	 * For an explicit {@link com.soklet.annotation.HEAD} method, the input is that method's own marshaled response.
-	 * The default implementation removes the body and computes {@code Content-Length} from its length,
-	 * or omits it for a streaming body. A custom {@link Builder.HeadHandler} can preserve a valid application
-	 * representation length for an empty body; a {@link Builder.PostProcessor} can also set the final header.
+	 * The default implementation removes the body and derives {@code Content-Length} from an actual finite
+	 * representation body. For an already bodyless response it preserves a valid application-supplied length,
+	 * or omits the header when unknown. It omits length for streaming bodies, never generates it for {@code 304},
+	 * and enforces the bodyless status restrictions for {@code 1xx}, {@code 204} and {@code 205}.
 	 * <p>
 	 * Detailed documentation is available at <a href="https://www.soklet.com/docs/response-writing#http-head">https://www.soklet.com/docs/response-writing#http-head</a>.
 	 *

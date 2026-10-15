@@ -67,6 +67,8 @@ public final class HttpRequestResult {
 	@Nullable
 	private final Throwable requestHandlingFailure;
 	@Nullable private final HttpResponseStreamObservation responseStreamObservation;
+	// Effective request after interceptor routing, retained only for SSE transport activation.
+	@Nullable private final Request effectiveSseRequest;
 
 	/**
 	 * Acquires a builder for {@link HttpRequestResult} instances.
@@ -113,6 +115,7 @@ public final class HttpRequestResult {
 		this.headResponseBodyLength = builder.headResponseBodyLength;
 		this.requestHandlingFailure = builder.requestHandlingFailure;
 		this.responseStreamObservation = builder.responseStreamObservation;
+		this.effectiveSseRequest = builder.effectiveSseRequest;
 	}
 
 	@Override
@@ -221,6 +224,8 @@ public final class HttpRequestResult {
 
 	@Nullable HttpResponseStreamObservation getResponseStreamObservation() { return this.responseStreamObservation; }
 
+	@NonNull Optional<Request> getEffectiveSseRequest() { return Optional.ofNullable(this.effectiveSseRequest); }
+
 	/**
 	 * Returns the logical SSE handshake result, if request processing produced one.
 	 * <p>
@@ -273,6 +278,7 @@ public final class HttpRequestResult {
 		@Nullable
 		private Throwable requestHandlingFailure;
 		@Nullable private HttpResponseStreamObservation responseStreamObservation;
+		@Nullable private Request effectiveSseRequest;
 
 		protected Builder(@NonNull MarshaledResponse marshaledResponse) {
 			requireNonNull(marshaledResponse);
@@ -349,6 +355,11 @@ public final class HttpRequestResult {
 			return this;
 		}
 
+		@NonNull Builder effectiveSseRequest(@Nullable Request request) {
+			this.effectiveSseRequest = request;
+			return this;
+		}
+
 		@NonNull Builder responseStreamObservation(@Nullable HttpResponseStreamObservation observation) {
 			this.responseStreamObservation = observation;
 			return this;
@@ -383,7 +394,8 @@ public final class HttpRequestResult {
 					.headResponseCompressionBody(requestResult.getHeadResponseCompressionBody().orElse(null))
 					.headResponseBodyLength(requestResult.getHeadResponseBodyLength().orElse(null))
 					.requestHandlingFailure(requestResult.getRequestHandlingFailure().orElse(null))
-					.responseStreamObservation(requestResult.getResponseStreamObservation());
+					.responseStreamObservation(requestResult.getResponseStreamObservation())
+					.effectiveSseRequest(requestResult.getEffectiveSseRequest().orElse(null));
 		}
 
 		@NonNull
@@ -432,6 +444,11 @@ public final class HttpRequestResult {
 		@NonNull
 		Copier requestHandlingFailure(@Nullable Throwable requestHandlingFailure) {
 			this.builder.requestHandlingFailure(requestHandlingFailure);
+			return this;
+		}
+
+		@NonNull Copier effectiveSseRequest(@Nullable Request request) {
+			this.builder.effectiveSseRequest(request);
 			return this;
 		}
 

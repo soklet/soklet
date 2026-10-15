@@ -19,7 +19,6 @@ package com.soklet.converter;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
-import javax.annotation.concurrent.ThreadSafe;
 import java.lang.reflect.Array;
 import java.lang.reflect.GenericArrayType;
 import java.lang.reflect.ParameterizedType;
@@ -42,9 +41,13 @@ import static java.util.Objects.requireNonNull;
 /**
  * Convenience superclass which provides default implementations of {@link ValueConverter} methods.
  *
+ * <p>
+ * <strong>Thread safety:</strong> The base implementation is threadsafe. Subclasses must preserve this contract.
+ * This extendable base documents its contract without an inherited jsr305 annotation,
+ * so subclasses can be compiled with the Soklet annotation processor alone.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@ThreadSafe
 public abstract class AbstractValueConverter<F, T> implements ValueConverter<F, T> {
 	@NonNull
 	private final Type fromType;

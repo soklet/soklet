@@ -49,6 +49,8 @@ import java.util.function.Function;
  * </ul>
  * <p>
  * LRU ordering is approximate under high contention (read events may be overwritten).
+ * Writers apply backpressure when maintenance is needed; concurrent in-progress writes may
+ * temporarily exceed the capacity, but cannot build an unbounded maintenance backlog.
  *
  * @param <K> key type
  * @param <V> value type
@@ -358,10 +360,10 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 			for (int i = 0; i < READ_BUFFER_SIZE; i++)
 				readBuffer.set(i, null);
 
-			// Drain (discard) pending write tasks safely and keep the counter sane
-			WriteTask<K, V> task;
-			while ((task = writeBuffer.poll()) != null)
-				writeBufferSize.decrementAndGet();
+			// Preserve writes that became visible after map.clear(). Stale tasks are
+			// ignored by promotion's map-identity check; discarding the queue would
+			// leave concurrent insertions permanently absent from the eviction list.
+			drainWriteBufferLocked();
 
 			// No eviction callbacks on clear (Map.clear semantics)
 			// (evicted remains empty)
@@ -432,10 +434,11 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 		int pending = writeBufferSize.incrementAndGet();
 		writeBuffer.offer(task);
 
-		// If we're over capacity, trigger maintenance immediately.
-		// Also trigger when the write backlog is getting large.
+		// Backpressure is required here: tryLock-only maintenance lets producers
+		// outpace the drainer indefinitely, preventing it from reaching eviction.
+		// Blocking at the backlog threshold also bounds replacement/removal tasks.
 		if (pending >= WRITE_BUFFER_DRAIN_THRESHOLD || map.size() > capacity)
-			tryMaintenance();
+			forceMaintenance();
 	}
 
 	private void retire(@NonNull Node<K, V> node) {
@@ -573,6 +576,10 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	private void promoteToHeadLocked(@NonNull Node<K, V> node) {
 		if (node.state != ALIVE)
 			return;
+		if (map.get(node.key) != node) {
+			unlinkNodeLocked(node);
+			return;
+		}
 
 		// Already MRU?
 		if (node.prev == head)

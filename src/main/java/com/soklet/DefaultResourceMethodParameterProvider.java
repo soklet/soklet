@@ -288,7 +288,9 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 				if (!requestBodyOptional && requestBodyObject == null)
 					throw new MissingRequestBodyException("Request body is required for this resource, but it was marshaled to null");
 
-				return requestBodyObject;
+				return requestBodyObject == null
+						? defaultValueForType(requestBodyType).orElse(null)
+						: requestBodyObject;
 			}
 		}
 
@@ -596,7 +598,8 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 				List<MultipartField> multipartFields = entry.getValue();
 
 				for (MultipartField matchingMultipartField : multipartFields) {
-					values.add(matchingMultipartField.getDataAsString().orElse(null));
+					// Binary targets must not be decoded as text; the metadata converter decodes only when needed.
+					values.add(null);
 					valuesMetadata.add(matchingMultipartField);
 				}
 			}
@@ -663,7 +666,9 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 					T valueMetadatum = valuesMetadata.get(i);
 
 					try {
-						results.add(activeValueMetadatumConverter.convert(valueMetadatum, toType, valueConverter));
+						Object converted = activeValueMetadatumConverter.convert(valueMetadatum, toType, valueConverter);
+						if (converted != null)
+							results.add(converted);
 					} catch (ValueConversionException e) {
 						throw illegalExceptionProvider.provide(
 								format("A %s could not be converted to the resource method parameter type.",
@@ -679,7 +684,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 					if (value != null && trimAggressivelyToNull(value) != null)
 						try {
 							Optional<Object> valueConverterResult = activeValueConverter.convert(value);
-							results.add(requireNonNullElse(valueConverterResult, Optional.empty()).orElse(null));
+							requireNonNullElse(valueConverterResult, Optional.empty()).ifPresent(results::add);
 						} catch (ValueConversionException e) {
 							throw illegalExceptionProvider.provide(
 									format("A %s could not be converted to the resource method parameter type.",
@@ -765,6 +770,10 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 								parameterDescription), e, parameterName, value,
 						valuesMetadata.size() > 0 ? valuesMetadata.get(0) : null);
 			}
+			if (required && result == null)
+				throw missingExceptionProvider.provide(
+						format("A required %s did not produce a value.", parameterDescription),
+						parameterName);
 		}
 
 		return parameterType.isWrappedInOptional() ? Optional.ofNullable(result) : result;

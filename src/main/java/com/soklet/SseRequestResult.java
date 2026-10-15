@@ -97,14 +97,14 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 				Soklet.@NonNull MockSseServer server,
 				StreamLifecycleCoordinator.@NonNull Reservation reservation) {
 			this.sseHandshakeResult = requireNonNull(sseHandshakeResult);
-			this.request = requireNonNull(request);
-			this.requestResult = requireNonNull(requestResult);
+			this.request = requireNonNull(requestResult).getEffectiveSseRequest().orElse(requireNonNull(request));
+			this.requestResult = requestResult;
 			this.server = requireNonNull(server);
 			this.reservation = requireNonNull(reservation);
-			this.connectionSnapshot = new SimulatedSseConnection(request,
+			this.connectionSnapshot = new SimulatedSseConnection(this.request,
 					requestResult.getResourceMethod().orElseThrow(), Instant.now(),
 					sseHandshakeResult.getClientContext().orElse(null));
-			this.unicaster = new MockSseUnicaster(request,
+			this.unicaster = new MockSseUnicaster(this.request,
 					event -> enqueue(this.events, event, false), comment -> enqueue(this.comments, comment, false));
 			// Binding may immediately publish a shutdown elected before construction.
 			// Terminal observation waits for initialize() before reading this lifecycle.

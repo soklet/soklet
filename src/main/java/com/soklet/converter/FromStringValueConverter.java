@@ -16,8 +16,6 @@
 
 package com.soklet.converter;
 
-import javax.annotation.concurrent.ThreadSafe;
-
 /**
  * Convenience superclass which provides default implementations of {@link ValueConverter} methods that convert from {@link String} to other types.
  * <p>
@@ -42,9 +40,13 @@ import javax.annotation.concurrent.ThreadSafe;
  * };}</pre>
  * See detailed documentation at <a href="https://www.soklet.com/docs/value-conversions#custom-conversions">https://www.soklet.com/docs/value-conversions#custom-conversions</a>.
  *
+ * <p>
+ * <strong>Thread safety:</strong> The base implementation is threadsafe. Subclasses must preserve this contract.
+ * This extendable base documents its contract without an inherited jsr305 annotation,
+ * so subclasses can be compiled with the Soklet annotation processor alone.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@ThreadSafe
 public abstract class FromStringValueConverter<T> extends AbstractValueConverter<String, T> {
 	/**
 	 * Ensures that the 'from' type of this converter is {@link String}.

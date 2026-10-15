@@ -19,7 +19,6 @@ package com.soklet.converter;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
-import javax.annotation.concurrent.NotThreadSafe;
 import java.lang.reflect.Type;
 import java.util.Optional;
 
@@ -31,9 +30,13 @@ import static java.util.Objects.requireNonNull;
  * For example, a {@link ValueConverter} for 'from' type {@link String} and 'to' type {@link Integer}
  * might throw this exception if the 'from' value is {@code "abc"}.
  *
+ * <p>
+ * <strong>Thread safety:</strong> Instances are not threadsafe.
+ * This extendable base documents its contract without an inherited jsr305 annotation,
+ * so subclasses can be compiled with the Soklet annotation processor alone.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@NotThreadSafe
 public class ValueConversionException extends Exception {
 	@NonNull
 	private final Type fromType;

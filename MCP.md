@@ -691,16 +691,29 @@ silently removes those modules' endpoints from classpath discovery; having one
 surviving index does not prove the catalog is complete. A service-file merger
 alone does not handle this Soklet-specific resource.
 
-For Maven Shade, add this transformer inside the plugin's
+For Maven Shade, add these transformers inside the plugin's
 `<configuration><transformers>` element:
 
 ```xml
+<transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+  <resource>META-INF/soklet/resource-method-lookup-table</resource>
+</transformer>
 <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
   <resource>META-INF/soklet/mcp-endpoint-descriptor-providers</resource>
 </transformer>
 ```
 
-For other packaging tools, configure concatenation for the same exact path.
+For Gradle Shadow, append both indexes:
+
+```groovy
+tasks.named('shadowJar') {
+  append 'META-INF/soklet/resource-method-lookup-table'
+  append 'META-INF/soklet/mcp-endpoint-descriptor-providers'
+}
+```
+
+
+For other packaging tools, configure concatenation for the both exact paths.
 Check that the packaged index contains every expected provider and that the
 packaged application exposes every configured endpoint. See the
 [Maven Shade resource transformer documentation](https://maven.apache.org/plugins/maven-shade-plugin/examples/resource-transformers.html).
@@ -3655,3 +3668,13 @@ Soklet does not implement an OAuth authorization server or Dynamic Client
 Registration. The deprecated standalone legacy HTTP+SSE
 transport is unsupported. Soklet's MCP SSE response streams belong to its
 Streamable HTTP transport and do not enable that deprecated transport.
+
+MCP requires HTTP/1.1 between the proxy and Soklet; HTTP/1.0 receives 505.
+For nginx, configure `proxy_http_version 1.1` and disable proxy buffering for
+SSE responses with `proxy_buffering off`.
+
+MCP media negotiation requires parameter-free `application/json` and
+`text/event-stream` Accept ranges (apart from `q`). A range with `charset`
+or another media parameter does not match. JSON Content-Type accepts its
+supported charset parameter; trailing empty parameters such as
+`application/json;` are rejected with 415.

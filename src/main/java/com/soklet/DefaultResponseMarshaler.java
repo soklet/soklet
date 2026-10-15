@@ -407,12 +407,16 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 					.withoutStreamingResponseBody()
 					.cookies(getMethodMarshaledResponse.getCookies());
 
-			if (getMethodMarshaledResponse.isStreaming()) {
-				// Streaming response length is not known up front, so do not advertise a misleading Content-Length.
+			int statusCode = getMethodMarshaledResponse.getStatusCode();
+			if (statusCode < 200 || statusCode == 204 || getMethodMarshaledResponse.isStreaming()) {
+				// These statuses forbid Content-Length; streaming representations have no known length.
 				responseCopier.headers((mutableHeaders) -> mutableHeaders.remove("Content-Length"));
-			} else {
-				// A HEAD can never write a response body, but we explicitly set Content-Length so the client knows
-				// how long the GET response would have been.
+			} else if (statusCode == 205) {
+				responseCopier.headers((mutableHeaders) -> mutableHeaders.put("Content-Length", List.of("0")));
+			} else if (statusCode != 304 && getMethodMarshaledResponse.getBody().isPresent()) {
+				// An actual GET body establishes its representation length, including an explicitly empty body.
+				// An already bodyless HEAD response can supply that length itself; absence means unknown.
+				// A 304 never establishes a representation length from its absent response body.
 				responseCopier.headers((mutableHeaders) ->
 						mutableHeaders.put("Content-Length", List.of(String.valueOf(getMethodMarshaledResponse.getBodyLength()))));
 			}

@@ -19,7 +19,6 @@ package com.soklet;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
-import javax.annotation.concurrent.NotThreadSafe;
 import java.io.IOException;
 import java.util.Optional;
 
@@ -29,9 +28,13 @@ import static java.util.Objects.requireNonNull;
 /**
  * Thrown when a response stream has been canceled.
  *
+ * <p>
+ * <strong>Thread safety:</strong> Instances are not threadsafe.
+ * This extendable base documents its contract without an inherited jsr305 annotation,
+ * so subclasses can be compiled with the Soklet annotation processor alone.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@NotThreadSafe
 public class StreamingResponseCanceledException extends IOException {
 	private static final long serialVersionUID = 1L;
 

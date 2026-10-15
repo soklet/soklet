@@ -80,8 +80,7 @@ class SecureStaticFileAccessTests {
         Path replacement = Files.writeString(directory.resolve("replacement.txt"), "secret");
         Files.setLastModifiedTime(replacement, expected.lastModifiedTime());
         Files.move(replacement, asset, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-        assertThrows(IOException.class, () -> access.open(asset, expected.fileKey(),
-                expected.size(), expected.lastModifiedTime()));
+        assertThrows(IOException.class, () -> access.open(asset, expected));
     }
 
     @Test
@@ -95,8 +94,7 @@ class SecureStaticFileAccessTests {
         Files.createSymbolicLink(root.resolve("child"), outside);
         for (Path path : List.of(root, root.resolve("asset.txt"), root.resolve("child/asset.txt"),
                 outside.resolve("asset.txt"), root.resolve("../outside/asset.txt"))) {
-            assertThrows(IOException.class, () -> access.open(path, expected.fileKey(),
-                    expected.size(), expected.lastModifiedTime()), path.toString());
+            assertThrows(IOException.class, () -> access.open(path, expected), path.toString());
         }
     }
 
@@ -109,8 +107,7 @@ class SecureStaticFileAccessTests {
         Files.move(root, directory.resolve("old-public"));
         Files.createDirectory(root);
         Files.writeString(root.resolve("asset.txt"), "secret");
-        assertThrows(IOException.class, () -> access.open(asset, expected.fileKey(),
-                expected.size(), expected.lastModifiedTime()));
+        assertThrows(IOException.class, () -> access.open(asset, expected));
     }
 
     @Test
@@ -175,7 +172,7 @@ class SecureStaticFileAccessTests {
     void directoryCannotPassRegularFileIdentityCheck(@TempDir Path root) throws Exception {
         BasicFileAttributes attributes = Files.readAttributes(root, BasicFileAttributes.class);
         assertThrows(IOException.class, () -> SecureStaticFileRoot.checkIdentity(attributes,
-                attributes.fileKey(), attributes.size(), attributes.lastModifiedTime()));
+                attributes));
     }
 
     @Test

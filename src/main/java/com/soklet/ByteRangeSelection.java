@@ -183,8 +183,10 @@ public final class ByteRangeSelection {
 		if (suffixLength.equals(BIG_INTEGER_ZERO))
 			return unsatisfiable();
 
+		// A positive suffix is satisfiable even for an empty representation.
+		// There is no nonempty byte interval to send, so ignore this range form.
 		if (representationLength == 0)
-			return unsatisfiable();
+			return unsupported();
 
 		BigInteger selectedLength = suffixLength.min(representationLengthAsBigInteger);
 		BigInteger start = representationLengthAsBigInteger.subtract(selectedLength);

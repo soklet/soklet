@@ -517,7 +517,7 @@ public interface SseServer {
 
 		/**
 		 * Sets the initial active-broadcaster registry capacity. This is an
-		 * allocation hint, not a maximum number of broadcaster routes. Passing
+		 * allocation hint, not a maximum number of broadcaster routes, and must be greater than zero. Passing
 		 * {@code null} restores the built-in default of 1,024 entries.
 		 *
 		 * @param broadcasterCacheCapacity broadcaster registry initial capacity, or
@@ -531,7 +531,7 @@ public interface SseServer {
 		}
 
 		/**
-		 * Sets the Resource Path declaration cache capacity. Passing {@code null}
+		 * Sets the Resource Path declaration cache capacity, which must be greater than zero. Passing {@code null}
 		 * restores the built-in default of 8,192 entries.
 		 *
 		 * @param resourcePathCacheCapacity Resource Path cache capacity, or

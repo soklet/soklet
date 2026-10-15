@@ -143,7 +143,7 @@ class McpLocalizationAdversarialTests {
 					+ UNIQUE_TAG_FLOOD_WAIT.toNanos();
 			for (int index = 0; index < floodSize; ++index)
 				awaitBody(simulator, request("flood-" + index, "server/discover",
-						null, "", Set.of("xx-" + String.format("%03d", index))),
+						null, "", Set.of("xx-" + String.format(java.util.Locale.ROOT, "%03d", index))),
 						deadline);
 		});
 

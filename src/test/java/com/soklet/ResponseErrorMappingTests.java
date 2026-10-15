@@ -136,9 +136,8 @@ public class ResponseErrorMappingTests {
 						Assertions.assertEquals(status, response.getStatusCode(), context);
 						Assertions.assertTrue(response.getBody().isEmpty(), context);
 						Assertions.assertEquals(0L, response.getBodyLength(), context);
-						if (status != 304 || request.getHttpMethod() != HttpMethod.HEAD)
-							Assertions.assertEquals(status == 205 ? java.util.List.of("0") : null,
-									response.getHeaders().get("Content-Length"), context);
+						Assertions.assertEquals(status == 205 ? java.util.List.of("0") : null,
+								response.getHeaders().get("Content-Length"), context);
 					}
 				}
 			}

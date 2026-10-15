@@ -10659,7 +10659,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			if (policy != null && policy.isActive()) policy.cancel(reason);
 			if (current != null) {
 				if (reason != StreamTerminationReason.BACKPRESSURE && offered && current.completeWithoutMessage()) return;
-				current.close(reason, cause);
+				// An unfinished chunked response must abort its connection. Merely
+				// closing the producer leaves the HTTP writer waiting for another request.
+				current.fail(reason, cause);
 			} else if (offered) terminated(reason, null, cause);
 		}
 		void terminated(StreamTerminationReason reason, @Nullable McpStreamTerminationReason exact,
@@ -10701,7 +10703,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				current = stream;
 				finishClose = closing && now - closeDeadlineNanos >= 0L;
 			}
-			if (finishClose) { requireNonNull(current).close(StreamTerminationReason.RESPONSE_TIMEOUT, null); return; }
+			if (finishClose) { requireNonNull(current).fail(StreamTerminationReason.RESPONSE_TIMEOUT, null); return; }
 			if (current != null && !closing) {
 				if (current.failIfWriteIdleExpired(now, transportConfiguration.responseWriteIdleTimeout().toNanos(),
 						StreamTerminationReason.RESPONSE_IDLE_TIMEOUT, null)) return;

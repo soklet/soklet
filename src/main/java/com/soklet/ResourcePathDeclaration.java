@@ -292,9 +292,15 @@ public static ResourcePathDeclaration fromPath(@NonNull String path) {
 
 	@NonNull
 	static String normalizePath(@NonNull String path) {
+		return normalizePath(path, true);
+	}
+
+	@NonNull
+	static String normalizePath(@NonNull String path, boolean trimDeclaration) {
 		requireNonNull(path);
 
-		path = trimAggressivelyToEmpty(path);
+		if (trimDeclaration)
+			path = trimAggressivelyToEmpty(path);
 
 		if (path.length() == 0)
 			return "/";

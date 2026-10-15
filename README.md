@@ -638,8 +638,10 @@ setting. Upload directories and attacker-writable trees are unsupported.
 Delivery uses public NIO APIs, preferring `SecureDirectoryStream` where available
 and checked pathname access otherwise, including macOS Java 21 and Windows.
 There is no architecture allowlist, private JDK access, `jdk.unsupported`
-dependency, or retained directory descriptor. Providers must expose stable file
-identities and support no-follow file opens. Observed path, identity, size, or
+dependency, or retained directory descriptor. Providers must support no-follow
+file opens. When file keys are unavailable, identity checks compare creation
+time, size, and modification time; replacement with identical metadata cannot
+be detected. Observed path, identity, size, or
 modification-time changes fail closed; these checks cannot make a mutable tree
 safe. Public Java APIs cannot inspect an opened regular file's identity.
 
@@ -773,8 +775,6 @@ SSE endpoints are declared with [`@SseEventSource`](https://javadoc.soklet.com/c
 [`SseServer`](https://javadoc.soklet.com/com/soklet/SseServer.html) port (separate from your standard HTTP server port).
 
 ```java
-public record ChatMessage(String message) {}
-
 public class ChatResource {
   @SseEventSource("/chat")
   public SseHandshakeResult chat() {
@@ -788,10 +788,10 @@ public class ChatResource {
   }
 
   @POST("/chat")
-  public void postMessage(@RequestBody ChatMessage message,
+  public void postMessage(@RequestBody String message,
                           SseServer sseServer) {
     SseEvent event = SseEvent.withEvent("message")
-      .data(message.message())
+      .data(message)
       .build();
     sseServer.acquireBroadcaster(ResourcePath.fromPath("/chat"))
       .ifPresent(broadcaster -> broadcaster.broadcastEvent(event));

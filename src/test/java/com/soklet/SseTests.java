@@ -1368,6 +1368,138 @@ public class SseTests {
 
 	@Test
 	@Timeout(value = 60, unit = SECONDS)
+	public void completedSseWriteIgnoresAnAlreadySelectedTimeoutCallback() throws Exception {
+		assertSseWriteDeadlineRace(false);
+	}
+
+	@Test
+	@Timeout(value = 60, unit = SECONDS)
+	public void sseWriteTimeoutWinsEvenIfTheLastSocketWriteReturnsSuccessfully() throws Exception {
+		assertSseWriteDeadlineRace(true);
+	}
+
+	private void assertSseWriteDeadlineRace(boolean timeoutWins) throws Exception {
+		CountDownLatch releaseScheduler = new CountDownLatch(1);
+		TimeoutScheduler scheduler = new TimeoutScheduler(task -> new Thread(() -> {
+			try {
+				releaseScheduler.await();
+			} catch (InterruptedException interrupted) {
+				Thread.currentThread().interrupt();
+			}
+			task.run();
+		}, "sse-stale-write-timeout-test"));
+		Field pendingField = TimeoutScheduler.class.getDeclaredField("pendingTasks");
+		pendingField.setAccessible(true);
+		@SuppressWarnings("unchecked")
+		java.util.concurrent.ConcurrentLinkedQueue<TimeoutScheduler.ScheduledTask> pending =
+				(java.util.concurrent.ConcurrentLinkedQueue<TimeoutScheduler.ScheduledTask>) pendingField.get(scheduler);
+		Field callbackField = TimeoutScheduler.ScheduledTask.class.getDeclaredField("task");
+		callbackField.setAccessible(true);
+		AtomicReference<Runnable> selectedDeadline = new AtomicReference<>();
+		AtomicBoolean openAfterStaleDeadline = new AtomicBoolean();
+		AtomicInteger delivered = new AtomicInteger();
+		AtomicReference<StreamTermination> termination = new AtomicReference<>();
+		List<Throwable> writeFailures = new ArrayList<>();
+		PartialWriteSocketChannel channel = new PartialWriteSocketChannel(Integer.MAX_VALUE) {
+			@Override public int write(ByteBuffer bytes) throws IOException {
+				if (!isOpen()) throw new ClosedChannelException();
+				// Model a scheduler that has selected this deadline, then pauses
+				// before entering the callback while the write finishes.
+				if (selectedDeadline.get() == null) {
+					try {
+						selectedDeadline.set((Runnable) callbackField.get(requireNonNull(pending.poll())));
+						if (timeoutWins) selectedDeadline.get().run();
+					} catch (IllegalAccessException failure) {
+						throw new IOException(failure);
+					}
+				}
+				// A socket write may finish concurrently with the winning close.
+				return super.write(bytes);
+			}
+		};
+		LifecycleObserver observer = new LifecycleObserver() {
+			@Override public void didReceiveLogEvent(LogEvent event) { /* no-op */ }
+			@Override public void didWriteSseEvent(SseConnection connection, SseEvent event, Duration duration) {
+				if (delivered.incrementAndGet() == 1) {
+					requireNonNull(selectedDeadline.get()).run();
+					openAfterStaleDeadline.set(channel.isOpen());
+				}
+			}
+			@Override public void didFailToWriteSseEvent(SseConnection connection, SseEvent event,
+					Duration duration, Throwable failure) { writeFailures.add(failure); }
+			@Override public void didTerminateSseConnection(SseConnection connection, StreamTermination result) {
+				termination.set(result);
+			}
+		};
+		ResourceMethodResolver resolver = ResourceMethodResolver.fromClasses(Set.of(AcceptingSseResource.class));
+		DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0)
+				.writeTimeout(Duration.ofSeconds(30)).verifyConnectionOnceEstablished(false).build();
+		server.initialize(SokletConfig.forSimulatorTesting().lifecycleObserver(observer)
+				.resourceMethodResolver(resolver).build(), (request, consumer) -> { /* no-op */ });
+		Field schedulerField = DefaultSseServer.class.getDeclaredField("requestHandlerTimeoutScheduler");
+		schedulerField.setAccessible(true);
+		schedulerField.set(server, scheduler);
+		StreamLifecycleCoordinator coordinator = new StreamLifecycleCoordinator(1, 1,
+				Duration.ofSeconds(1), ignored -> {});
+		try {
+			Request request = Request.fromPath(HttpMethod.GET, "/sse/write-timeout");
+			ResourceMethod method = resolver.resourceMethodForRequest(request, ServerType.SSE).orElseThrow();
+			Class<?> connectionClass = Class.forName("com.soklet.DefaultSseServer$DefaultSseConnection");
+			Constructor<?> constructor = connectionClass.getDeclaredConstructor(Request.class, ResourceMethod.class,
+					Object.class, Integer.class, SocketChannel.class, StreamLifecycleCoordinator.Reservation.class);
+			constructor.setAccessible(true);
+			Object connection = constructor.newInstance(request, method, null, 4, channel, coordinator.tryReserve());
+			Method register = DefaultSseServer.class.getDeclaredMethod("registerConnectionWithBroadcaster",
+					ResourcePath.class, ResourceMethod.class, connectionClass);
+			register.setAccessible(true);
+			Object broadcaster = register.invoke(server, request.getResourcePath(), method, connection);
+			Method getQueue = connectionClass.getDeclaredMethod("getWriteQueue");
+			getQueue.setAccessible(true);
+			@SuppressWarnings("unchecked")
+			BlockingQueue<Object> queue = (BlockingQueue<Object>) getQueue.invoke(connection);
+			Class<?> payloadClass = Class.forName("com.soklet.DefaultSseServer$DefaultSseConnection$PreSerializedPayload");
+			Class<?> elementClass = Class.forName("com.soklet.DefaultSseServer$DefaultSseConnection$WriteQueueElement");
+			Method serialize = DefaultSseServer.class.getDeclaredMethod("preSerializeSseEvent", SseEvent.class);
+			serialize.setAccessible(true);
+			Method element = elementClass.getDeclaredMethod("withPreSerializedPayload", payloadClass, long.class);
+			element.setAccessible(true);
+			for (String data : List.of("first", "second"))
+				Assertions.assertTrue(queue.offer(element.invoke(null,
+						serialize.invoke(null, SseEvent.withData(data).build()), System.nanoTime())));
+			Method poison = elementClass.getDeclaredMethod("poisonPill");
+			poison.setAccessible(true);
+			Assertions.assertTrue(queue.offer(poison.invoke(null)));
+			Class<?> broadcasterClass = Class.forName("com.soklet.DefaultSseServer$DefaultSseBroadcaster");
+			Class<?> registrationClass = Class.forName("com.soklet.DefaultSseServer$ClientSocketChannelRegistration");
+			Constructor<?> registration = registrationClass.getDeclaredConstructor(connectionClass, broadcasterClass,
+					int.class, boolean.class);
+			registration.setAccessible(true);
+			Method process = DefaultSseServer.class.getDeclaredMethod("processEstablishedConnection", registrationClass, java.util.concurrent.locks.ReentrantLock.class);
+			process.setAccessible(true);
+			process.invoke(server, registration.newInstance(connection, broadcaster, 0, false), new java.util.concurrent.locks.ReentrantLock());
+			if (timeoutWins) {
+				Assertions.assertEquals(0, delivered.get());
+				Assertions.assertEquals(1, writeFailures.size());
+				Assertions.assertInstanceOf(SocketTimeoutException.class, writeFailures.get(0));
+				Assertions.assertEquals(StreamTerminationReason.WRITE_FAILED, termination.get().getReason());
+				Assertions.assertSame(writeFailures.get(0), termination.get().getCause().orElseThrow());
+			} else {
+				Assertions.assertTrue(openAfterStaleDeadline.get(), "A finished write's deadline must not close the connection");
+				Assertions.assertEquals(2, delivered.get(), "The next event must still be deliverable");
+				Assertions.assertTrue(writeFailures.isEmpty(), writeFailures.toString());
+			}
+		} finally {
+			coordinator.force();
+			Assertions.assertTrue(coordinator.awaitTermination(System.nanoTime() + SECONDS.toNanos(2)));
+			channel.close();
+			scheduler.shutdownNow();
+			releaseScheduler.countDown();
+			Assertions.assertTrue(scheduler.awaitTermination(2, SECONDS));
+		}
+	}
+
+	@Test
+	@Timeout(value = 60, unit = SECONDS)
 	public void sseWriteTimeoutClosesConnectionAndRecordsTransportFailure() throws Exception {
 		WriteTimeoutLifecycle lifecycle = new WriteTimeoutLifecycle();
 		DefaultMetricsCollector metricsCollector = DefaultMetricsCollector.defaultInstance();
@@ -1437,12 +1569,12 @@ public class SseTests {
 		registrationConstructor.setAccessible(true);
 		Object registration = registrationConstructor.newInstance(
 				connection, broadcaster, 0, false);
-		Method processMethod = DefaultSseServer.class.getDeclaredMethod("processEstablishedConnection", registrationClass, Object.class);
+		Method processMethod = DefaultSseServer.class.getDeclaredMethod("processEstablishedConnection", registrationClass, java.util.concurrent.locks.ReentrantLock.class);
 		processMethod.setAccessible(true);
 		AtomicReference<Throwable> processingFailure = new AtomicReference<>();
 		Thread processingThread = new Thread(() -> {
 			try {
-				processMethod.invoke(server, registration, new Object());
+				processMethod.invoke(server, registration, new java.util.concurrent.locks.ReentrantLock());
 			} catch (InvocationTargetException e) {
 				processingFailure.set(e.getCause());
 			} catch (Throwable t) {

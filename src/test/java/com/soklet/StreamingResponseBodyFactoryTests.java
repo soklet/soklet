@@ -39,6 +39,18 @@ import java.util.concurrent.atomic.AtomicInteger;
 @ThreadSafe
 public class StreamingResponseBodyFactoryTests {
 	@Test
+	public void readerResponseRejectsDecodeOnlyCharsetBeforeOpeningSource() {
+		var charset = java.nio.charset.Charset.forName("ISO-2022-CN");
+		AtomicInteger opens = new AtomicInteger();
+		Assertions.assertFalse(charset.canEncode());
+		Assertions.assertThrows(IllegalArgumentException.class, () -> StreamingResponseBody.fromReader(() -> {
+			opens.incrementAndGet();
+			return new java.io.StringReader("text");
+		}, charset));
+		Assertions.assertEquals(0, opens.get());
+	}
+
+	@Test
 	public void checked_input_stream_factory_is_lazy_and_reusable(@TempDir Path directory) throws Exception {
 		Path sourcePath = Files.writeString(directory.resolve("source.txt"), "response", StandardCharsets.UTF_8);
 		CheckedFileSources checkedFileSources = new CheckedFileSources(sourcePath);

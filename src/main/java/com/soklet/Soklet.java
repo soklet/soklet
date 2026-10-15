@@ -340,6 +340,8 @@ public final class Soklet implements AutoCloseable {
 		if (feedback != null)
 			feedback.claimLifecycleConsumer();
 		Consumer<HttpRequestResult> transportResultConsumer = requestResult -> {
+			if (serverType == ServerType.SSE)
+				requestResult = requestResult.copy().effectiveSseRequest(requestHolder.get()).finish();
 			if (serverType == ServerType.HTTP)
 				requestResult = requestResult.copy().responseStreamObservation(streamObservation).finish();
 			Throwable requestHandlingFailure = requestHandlingFailureHolder.get();
@@ -401,6 +403,30 @@ public final class Soklet implements AutoCloseable {
 			}
 		};
 
+		AtomicBoolean didStartRequestHandling = new AtomicBoolean();
+		Runnable startRequestHandling = () -> {
+			if (!didStartRequestHandling.compareAndSet(false, true))
+				return;
+
+			try {
+				lifecycleObserver.didStartRequestHandling(serverType, request, resourceMethodHolder.get());
+			} catch (Throwable t) {
+				safelyLog.accept(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_START_REQUEST_HANDLING_FAILED,
+								format("An exception occurred while invoking %s::didStartRequestHandling",
+										LifecycleObserver.class.getSimpleName()))
+						.throwable(t)
+						.request(requestHolder.get())
+						.resourceMethod(resourceMethodHolder.get())
+						.build());
+
+				throwables.add(t);
+			}
+
+			safelyCollectMetrics.accept(
+					format("An exception occurred while invoking %s::didStartRequestHandling", MetricsCollector.class.getSimpleName()),
+					(metricsInvocation) -> metricsInvocation.didStartRequestHandling(serverType, request, resourceMethodHolder.get()));
+		};
+
 		requestHolder.set(request);
 
 		try {
@@ -427,23 +453,7 @@ public final class Soklet implements AutoCloseable {
 					resourceMethodHolder.set(null);
 				}
 
-				try {
-					lifecycleObserver.didStartRequestHandling(serverType, request, resourceMethodHolder.get());
-				} catch (Throwable t) {
-					safelyLog.accept(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_START_REQUEST_HANDLING_FAILED,
-									format("An exception occurred while invoking %s::didStartRequestHandling",
-											LifecycleObserver.class.getSimpleName()))
-							.throwable(t)
-							.request(requestHolder.get())
-							.resourceMethod(resourceMethodHolder.get())
-							.build());
-
-					throwables.add(t);
-				}
-
-				safelyCollectMetrics.accept(
-						format("An exception occurred while invoking %s::didStartRequestHandling", MetricsCollector.class.getSimpleName()),
-						(metricsInvocation) -> metricsInvocation.didStartRequestHandling(serverType, request, resourceMethodHolder.get()));
+				startRequestHandling.run();
 
 				try {
 					AtomicBoolean didInvokeMarshaledResponseConsumer = new AtomicBoolean(false);
@@ -471,7 +481,7 @@ public final class Soklet implements AutoCloseable {
 										.filter(body -> body instanceof MarshaledResponseBody.Bytes
 												|| body instanceof MarshaledResponseBody.ByteBuffer).orElse(null);
 								requestResult = requestResult.copy().headResponseCompressionBody(compressionBody)
-										.headResponseBodyLength(originalMarshaledResponse.isStreaming() ? null : originalMarshaledResponse.getBodyLength()).finish();
+										.headResponseBodyLength(originalMarshaledResponse.getBody().map(MarshaledResponseBody::getLength).orElse(null)).finish();
 								requestResultHolder.set(requestResult);
 							}
 
@@ -711,6 +721,9 @@ public final class Soklet implements AutoCloseable {
 					.marshaledResponse(marshaledResponseHolder.get())
 					.build());
 
+			// Wrapping can fail before dispatch; keep start/finish callbacks paired for observers and metrics.
+			startRequestHandling.run();
+
 			requestResultHolder.updateAndGet(result -> result == null ? null
 					: result.copy().headResponseCompressionBody(null).headResponseBodyLength(null).finish());
 
@@ -876,8 +889,8 @@ public final class Soklet implements AutoCloseable {
 		if (isOptionsSplat(request.getResourcePath()))
 			return HttpRequestResult.withMarshaledResponse(responseMarshaler.forOptionsSplat(request)).build();
 
-		// No resource method was found for this HTTP method and path.
-		if (resourceMethod == null) {
+		// CORS preflight authorization precedes explicit OPTIONS handlers too.
+		if (resourceMethod == null || corsPreflight != null) {
 			// If this was an OPTIONS request, do special processing.
 			// If not, figure out if we should return a 404 or 405.
 			if (request.getHttpMethod() == HttpMethod.OPTIONS) {
@@ -931,9 +944,14 @@ public final class Soklet implements AutoCloseable {
 
 				if (headGetResourceMethod != null)
 					resourceMethod = headGetResourceMethod;
-				else
-					return HttpRequestResult.withMarshaledResponse(responseMarshaler.forNotFound(request))
-							.build();
+				else {
+					Map<HttpMethod, ResourceMethod> otherMethods = resolveMatchingResourceMethodsByHttpMethod(
+							request, resourceMethodResolver, serverType);
+					boolean resourceExists = otherMethods.keySet().stream().anyMatch(method -> method != HttpMethod.OPTIONS);
+					return HttpRequestResult.withMarshaledResponse(resourceExists
+							? responseMarshaler.forMethodNotAllowed(request, allowedHttpMethodsForResponse(otherMethods, true, serverType))
+							: responseMarshaler.forNotFound(request)).build();
+				}
 			} else {
 				// Not an OPTIONS request, so it's possible we have a 405. See if other HTTP methods match...
 				Map<HttpMethod, ResourceMethod> otherMatchingResourceMethodsByHttpMethod = resolveMatchingResourceMethodsByHttpMethod(request, resourceMethodResolver, serverType);
@@ -1181,7 +1199,7 @@ public final class Soklet implements AutoCloseable {
 		enforceMarshaledResponseStatusCode(marshaledResponse, false);
 		if (isBodylessStatusCode(marshaledResponse.getStatusCode())) {
 			int statusCode = marshaledResponse.getStatusCode();
-			marshaledResponse = marshaledResponse.copy().withoutBody().headers(headers -> {
+			marshaledResponse = marshaledResponse.copy().withoutBody().withoutStreamingResponseBody().headers(headers -> {
 				headers.remove("Transfer-Encoding");
 				if (statusCode == 205)
 					headers.put("Content-Length", List.of("0"));
@@ -1277,7 +1295,7 @@ public final class Soklet implements AutoCloseable {
 
 		for (HttpMethod httpMethod : HttpMethod.values()) {
 			// Make a quick copy of the request to see if other paths match
-			Request otherRequest = Request.withPath(httpMethod, request.getPath()).build();
+			Request otherRequest = request.copy().httpMethod(httpMethod).finish();
 			ResourceMethod resourceMethod =
 					validateResolvedResourceMethod(resourceMethodResolver
 							.resourceMethodForRequest(otherRequest, serverType)
@@ -1873,8 +1891,7 @@ public final class Soklet implements AutoCloseable {
 			try {
 				requestHandler.handleRequest(request, HttpTransportResponseFeedback.fromWriter(feedback, requestResult -> {
 					// Simulated responses do not run transport compression or retain its private HEAD input.
-					HttpRequestResult result = requestResult.getHeadResponseCompressionBody().isEmpty() ? requestResult
-							: requestResult.copy().headResponseCompressionBody(null).finish();
+					HttpRequestResult result = projectSimulatedHttpResponse(request, requestResult);
 					if (result.getMarshaledResponse().isStreaming()) {
 						Instant streamEstablishedAt = Instant.now();
 						long streamEstablishedNanos = System.nanoTime();
@@ -1924,6 +1941,24 @@ public final class Soklet implements AutoCloseable {
 				StreamLifecycleCoordinator.Reservation reservation = reservationHolder.get();
 				if (reservation != null) reservation.complete();
 			}
+		}
+
+		private static HttpRequestResult projectSimulatedHttpResponse(Request request, HttpRequestResult result) {
+			MarshaledResponse response = normalizeBodylessMarshaledResponse(request, result.getMarshaledResponse());
+			boolean head = request.getHttpMethod() == HttpMethod.HEAD;
+			int status = response.getStatusCode();
+			if (!response.isStreaming() && status != 204 && status != 304) {
+				boolean hasLength = response.getHeaders().containsKey("Content-Length");
+				Long length = head && response.getBody().isEmpty()
+						? result.getHeadResponseBodyLength().orElse(null) : response.getBodyLength();
+				if (!hasLength && length != null)
+					response = response.copy().headers(headers -> headers.put("Content-Length", List.of(Long.toString(length)))).finish();
+			}
+			// The transport suppresses HEAD bytes even when an interceptor or custom
+			// HeadHandler leaves a body. Never execute a suppressed stream producer.
+			if (head)
+				response = response.copy().withoutBody().withoutStreamingResponseBody().finish();
+			return result.copy().marshaledResponse(response).headResponseCompressionBody(null).finish();
 		}
 
 		@NonNull

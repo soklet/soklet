@@ -86,10 +86,11 @@ If a build shades or repackages classes, preserve the generated Soklet endpoint
 provider classes and concatenate every input
 `META-INF/soklet/mcp-endpoint-descriptor-providers` index. Keeping only one
 module's index silently omits endpoints from the others. With Maven Shade,
-configure an `AppendingTransformer` for that exact resource; merging only
+configure an `AppendingTransformer` for each of that resource and
+`META-INF/soklet/resource-method-lookup-table` (the HTTP/SSE route index); merging only
 `META-INF/services` does not merge this index. See the
 [endpoint reference](MCP.md#annotations) for the transformer
-configuration. Named Java modules must open or
+configuration and Gradle Shadow equivalents. Named Java modules must open or
 export the endpoint package to Soklet; a package containing a non-public record
 used for runtime conversion must be open to Soklet.
 

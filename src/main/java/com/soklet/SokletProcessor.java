@@ -3761,7 +3761,8 @@ public final class SokletProcessor extends AbstractProcessor {
 				case '\r' -> literal.append("\\r");
 				default -> {
 					int characterType = Character.getType(character);
-					if (characterType == Character.FORMAT
+					if (character >= 127
+							|| characterType == Character.FORMAT
 							|| characterType == Character.LINE_SEPARATOR
 							|| characterType == Character.PARAGRAPH_SEPARATOR
 							|| characterType == Character.SURROGATE)

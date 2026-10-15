@@ -19,7 +19,6 @@ package com.soklet.converter;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
-import javax.annotation.concurrent.ThreadSafe;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.Objects;
@@ -38,11 +37,15 @@ import static java.lang.String.format;
  * href="http://gafter.blogspot.com/2006/12/super-type-tokens.html">http://gafter.blogspot.com/2006/12/super-type-
  * tokens.html</a> for more details.
  *
+ * <p>
+ * <strong>Thread safety:</strong> The base implementation is threadsafe. Subclasses must preserve this contract.
+ * This extendable base documents its contract without an inherited jsr305 annotation,
+ * so subclasses can be compiled with the Soklet annotation processor alone.
+ *
  * @author Neal Gafter
  * @author Bob Lee
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@ThreadSafe
 public abstract class TypeReference<T> {
 	@NonNull
 	private final Type type;

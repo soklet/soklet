@@ -161,7 +161,7 @@ public class McpDeferredTaskOutputSafetyTests {
 					SanitizerMode.THROW, SanitizerMode.DEPTH_LIMIT,
 					SanitizerMode.NODE_LIMIT, SanitizerMode.SIZE_LIMIT)) {
 				sanitizerMode.set(mode);
-				String requestId = mode.name().toLowerCase();
+				String requestId = mode.name().toLowerCase(java.util.Locale.ROOT);
 				HttpResponse<String> response = getTask(port, requestId);
 				assertFixedInternalError(response, requestId);
 				for (String canary : List.of(ORIGINAL_CANARY,
@@ -508,14 +508,14 @@ public class McpDeferredTaskOutputSafetyTests {
 					localizationProviderInvocations.set(0);
 					localizationMode.set(providerMode);
 
-					String requestId = status.name().toLowerCase() + "-"
-							+ providerMode.name().toLowerCase();
+					String requestId = status.name().toLowerCase(java.util.Locale.ROOT) + "-"
+							+ providerMode.name().toLowerCase(java.util.Locale.ROOT);
 					HttpResponse<String> response = getTask(port, requestId);
 					assertSuccess(response);
 					assertContains(response.body(), "\"taskId\":\"" + TASK_ID
 							+ "\"");
 					assertContains(response.body(), "\"status\":\""
-							+ status.name().toLowerCase() + "\"");
+							+ status.name().toLowerCase(java.util.Locale.ROOT) + "\"");
 					Assertions.assertEquals(1, taskManager.findInvocations.get(),
 							"Task ownership must remain manager-governed for "
 									+ requestId + ".");

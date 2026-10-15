@@ -67,6 +67,17 @@ class PublicApiContractTests {
 	private static final String THREAD_SAFE = ThreadSafe.class.getName();
 	private static final String NOT_THREAD_SAFE = NotThreadSafe.class.getName();
 	private static final String IMMUTABLE = Immutable.class.getName();
+	// Inherited jsr305 annotations on these extension points force consumers to
+	// supply a provided-only dependency during annotation processing. Require the
+	// explicit source documentation instead; consumer compilation is tested too.
+	private static final Set<String> DOCUMENTED_BASE_CLASS_CONTRACTS = Set.of(
+			"com.soklet.StreamingResponseCanceledException",
+			"com.soklet.converter.AbstractValueConverter",
+			"com.soklet.converter.FromStringValueConverter",
+			"com.soklet.converter.TypeReference",
+			"com.soklet.converter.ValueConversionException",
+			"com.soklet.exception.BadRequestException");
+
 	private static final Set<String> EXPORTED_PACKAGES = Set.of(
 			"com.soklet",
 			"com.soklet.annotation",
@@ -122,7 +133,14 @@ class PublicApiContractTests {
 						.sorted().toList();
 				boolean markerExempt = type.getKind() == ElementKind.ENUM
 						|| type.getKind() == ElementKind.ANNOTATION_TYPE;
-				if ((!markerExempt && actual.size() != 1)
+				boolean documentedBase = DOCUMENTED_BASE_CLASS_CONTRACTS.contains(binaryName);
+				if (documentedBase) {
+					String documentation = elements.getDocComment(type);
+					if (!actual.isEmpty() || documentation == null
+							|| !documentation.contains("<strong>Thread safety:</strong>"))
+						mismatches.add(binaryName + " must document thread safety without an inherited jsr305 marker");
+				}
+				if ((!markerExempt && !documentedBase && actual.size() != 1)
 						|| (markerExempt && actual.size() > 1))
 					mismatches.add(binaryName + (markerExempt
 							? " has conflicting thread-safety markers "

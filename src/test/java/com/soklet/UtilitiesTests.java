@@ -48,6 +48,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @ThreadSafe
 public class UtilitiesTests {
 	@Test
+	public void aggressiveTrimPreservesSeparatorSemanticsInLinearTime() {
+		String separators = " \u00a0\u1680\u2000\u2028\u2029\u202f\u205f\u3000";
+		assertEquals("text", Utilities.trimAggressively(separators + "text" + separators));
+		assertEquals("", Utilities.trimAggressively(separators));
+		assertEquals("\ttext\r\n", Utilities.trimAggressively(" \ttext\r\n "));
+		Assertions.assertNull(Utilities.trimAggressively(null));
+		Assertions.assertTimeout(java.time.Duration.ofSeconds(5), () -> {
+			String input = "x" + " ".repeat(1_000_000) + "y";
+			assertEquals(input, Utilities.trimAggressively(input));
+			assertEquals("x", Utilities.trimAggressively(" ".repeat(1_000_000) + "x" + " ".repeat(1_000_000)));
+		});
+	}
+
+	@Test
 	public void extractPathFromUrl() {
 		assertEquals("/", Utilities.extractPathFromUrl("https://www.google.com/", true));
 		assertEquals("/", Utilities.extractPathFromUrl("https://www.google.com", true));

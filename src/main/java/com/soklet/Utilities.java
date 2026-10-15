@@ -70,23 +70,10 @@ import static java.util.Objects.requireNonNull;
 public final class Utilities {
 	private static final byte @NonNull [] EMPTY_BYTE_ARRAY;
 	@NonNull
-	private static final Pattern HEAD_WHITESPACE_PATTERN;
-	@NonNull
-	private static final Pattern TAIL_WHITESPACE_PATTERN;
-	@NonNull
 	private static final Pattern HEADER_PERCENT_ENCODING_PATTERN;
 
 	static {
 		EMPTY_BYTE_ARRAY = new byte[0];
-
-		// See https://www.regular-expressions.info/unicode.html
-		// \p{Z} or \p{Separator}: Unicode space-separator characters.
-		//
-		// First pattern matches those separator characters at the head of a string, second matches the same for tail.
-		// Useful for a "stronger" trim() function, which is almost always what we want in a web context
-		// with user-supplied input.
-		HEAD_WHITESPACE_PATTERN = Pattern.compile("^(\\p{Z})+");
-		TAIL_WHITESPACE_PATTERN = Pattern.compile("(\\p{Z})+$");
 
 		HEADER_PERCENT_ENCODING_PATTERN = Pattern.compile("%([0-9A-Fa-f]{2})");
 	}
@@ -187,10 +174,24 @@ public final class Utilities {
 		requireNonNull(queryFormat);
 		requireNonNull(charset);
 
+		return extractQueryParametersFromQuery(query, queryFormat, charset, Integer.MAX_VALUE);
+	}
+
+	@NonNull
+	static Map<@NonNull String, @NonNull List<@NonNull String>> extractQueryParametersFromQuery(
+			@NonNull String query, @NonNull QueryFormat queryFormat, @NonNull Charset charset, int maximumPairs) {
 		Map<String, List<String>> queryParameters = new LinkedHashMap<>();
-		for (String pair : query.split("&", -1)) {
+		int pairCount = 0;
+		for (int start = 0; start < query.length();) {
+			int end = query.indexOf('&', start);
+			if (end == -1)
+				end = query.length();
+			String pair = query.substring(start, end);
+			start = end + 1;
 			if (pair.isEmpty())
 				continue;
+			if (++pairCount > maximumPairs)
+				throw new IllegalRequestException("Too many form parameters.");
 
 			int separator = pair.indexOf('=');
 			String rawName = separator == -1 ? pair : pair.substring(0, separator);
@@ -888,7 +889,7 @@ public final class Utilities {
 		requireNonNull(acceptLanguageHeaderValue);
 
 		try {
-			List<LanguageRange> languageRanges = LanguageRange.parse(acceptLanguageHeaderValue);
+			List<LanguageRange> languageRanges = extractLanguageRangesFromAcceptLanguageHeaderValue(acceptLanguageHeaderValue);
 			List<Locale> locales = new ArrayList<>(languageRanges.size());
 
 			for (LanguageRange languageRange : languageRanges) {
@@ -925,6 +926,18 @@ public final class Utilities {
 		} catch (Exception ignored) {
 			return List.of();
 		}
+	}
+
+	@NonNull
+	static List<@NonNull LanguageRange> extractLanguageRangesFromAcceptLanguageHeaderValue(@NonNull String value) {
+		// Bound the quadratic JDK parser before it sees attacker-controlled input.
+		if (value.length() > 4_096)
+			return List.of();
+		int ranges = 1;
+		for (int index = 0; index < value.length(); index++)
+			if (value.charAt(index) == ',' && ++ranges > 32)
+				return List.of();
+		return List.copyOf(LanguageRange.parse(value));
 	}
 
 	/**
@@ -1826,14 +1839,13 @@ public final class Utilities {
 		if (string == null)
 			return null;
 
-		string = HEAD_WHITESPACE_PATTERN.matcher(string).replaceAll("");
-
-		if (string.length() == 0)
-			return string;
-
-		string = TAIL_WHITESPACE_PATTERN.matcher(string).replaceAll("");
-
-		return string;
+		int start = 0;
+		int end = string.length();
+		while (start < end && Character.isSpaceChar(string.charAt(start)))
+			start++;
+		while (end > start && Character.isSpaceChar(string.charAt(end - 1)))
+			end--;
+		return start == 0 && end == string.length() ? string : string.substring(start, end);
 	}
 
 	/**

@@ -365,7 +365,7 @@ class McpLocalizationPreferenceTests {
 	private static String distinctRanges(int count) {
 		// Region subtags keep every range distinct and free of alias expansion.
 		return IntStream.range(0, count)
-				.mapToObj(index -> String.format("en-%03d", index))
+				.mapToObj(index -> String.format(java.util.Locale.ROOT, "en-%03d", index))
 				.collect(Collectors.joining(","));
 	}
 

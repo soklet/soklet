@@ -320,7 +320,7 @@ public final class Request {
 		// If we use PathBuilder, use its path directly.
 		// If we use RawBuilder, parse and decode its path.
 		if (pathBuilder != null) {
-			path = trimAggressivelyToEmpty(pathBuilder.path);
+			path = pathBuilder.path;
 
 			// Validate path
 			if (!path.startsWith("/") && !path.equals("*"))
@@ -643,7 +643,9 @@ public final class Request {
 	 *
 	 * @return the request's form parameters
 	 * @throws IllegalRequestBodyException if the raw body is invalid for its selected charset
-	 * @throws IllegalRequestException if a form component contains malformed percent-encoding or text invalid for its selected charset
+	 * At most 1,000 nonempty form pairs are accepted, including repeated names.
+	 *
+	 * @throws IllegalRequestException if there are more than 1,000 pairs, or a form component contains malformed percent-encoding or text invalid for its selected charset
 	 */
 	@NonNull
 	public Map<@NonNull String, @NonNull List<@NonNull String>> getFormParameters() {
@@ -657,7 +659,7 @@ public final class Request {
 				if (result == null) {
 					if (this.body != null && this.contentType != null && this.contentType.equalsIgnoreCase("application/x-www-form-urlencoded")) {
 						String bodyAsString = getBodyAsString().orElse("");
-						result = Collections.unmodifiableMap(Utilities.extractQueryParametersFromQuery(bodyAsString, QueryFormat.X_WWW_FORM_URLENCODED, getCharset().orElse(DEFAULT_CHARSET)));
+						result = Utilities.extractQueryParametersFromQuery(bodyAsString, QueryFormat.X_WWW_FORM_URLENCODED, getCharset().orElse(DEFAULT_CHARSET), 1_000);
 					} else {
 						result = Map.of();
 					}
@@ -959,7 +961,8 @@ public final class Request {
 	 * <p>
 	 * This method is threadsafe.
 	 * <p>
-	 * Malformed combined {@code Accept-Language} input produces an empty list.
+	 * Malformed combined {@code Accept-Language} input produces an empty list. Input exceeding
+	 * 4,096 characters or 32 comma-separated ranges also produces an empty list.
 	 * <p>
 	 * See {@link #getLanguageRanges()} for a variant that pulls {@link LanguageRange} values.
 	 *
@@ -1012,7 +1015,8 @@ public final class Request {
 	 * <p>
 	 * This method is threadsafe.
 	 * <p>
-	 * Malformed combined {@code Accept-Language} input produces an empty list.
+	 * Malformed combined {@code Accept-Language} input produces an empty list. Input exceeding
+	 * 4,096 characters or 32 comma-separated ranges also produces an empty list.
 	 * <p>
 	 * See {@link #getLocales()} for a variant that pulls {@link Locale} values.
 	 *
@@ -1038,7 +1042,7 @@ public final class Request {
 								.collect(Collectors.joining(","));
 
 						try {
-							result = Collections.unmodifiableList(LanguageRange.parse(acceptLanguageHeaderValue));
+							result = Utilities.extractLanguageRangesFromAcceptLanguageHeaderValue(acceptLanguageHeaderValue);
 						} catch (Exception ignored) {
 							// Malformed Accept-Language header; ignore it
 							result = List.of();

@@ -67,10 +67,9 @@ import static java.util.Objects.requireNonNull;
  * {@code 599}. For finite responses it owns {@code Connection}, {@code Content-Length} and
  * {@code Transfer-Encoding} framing and removes other hop-by-hop and Connection-nominated fields.
  * A valid explicit length supplied by final HEAD marshaling is preserved when its status allows it.
- * The default HEAD marshaler computes that length from the body, including for explicit HEAD
- * resource methods; a bodyless explicit HEAD method can use a custom
- * {@link ResponseMarshaler.Builder.HeadHandler} or final {@link ResponseMarshaler.Builder.PostProcessor}
- * to advertise a nonzero length. A validated {@code 426}
+ * The default HEAD marshaler derives length from a supplied GET body, preserves an explicit length
+ * on an already bodyless HEAD response, and omits length when unknown. It does not invent a length
+ * for {@code 304} responses. A validated {@code 426}
  * response may advertise {@code Upgrade}. For the JDK's standard file-channel implementation,
  * file-backed delivery passes the real socket to
  * {@link FileChannel#transferTo(long, long, java.nio.channels.WritableByteChannel)}, allowing

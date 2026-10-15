@@ -19,6 +19,27 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class SseFramingTests {
     @Test
+    void requestMethodsRetainTheirCaseSensitiveMeaning() throws Exception {
+        DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0).build();
+        for (String method : List.of("get", "gEt", "options", "Options", "head"))
+            assertThrows(IllegalRequestException.class, () -> server.parseRequest(
+                    method + " /events HTTP/1.1\r\nHost: localhost\r\n\r\n", null), method);
+        for (HttpMethod method : List.of(HttpMethod.GET, HttpMethod.OPTIONS, HttpMethod.HEAD))
+            assertEquals(method, server.parseRequest(method + " /events HTTP/1.1\r\nHost: localhost\r\n\r\n",
+                    null).getHttpMethod());
+    }
+
+    @Test
+    void oversizedRequestAttributionDoesNotRewriteMethodCase() {
+        DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0).build();
+        for (String method : List.of("get", "gEt", "options", "Options", "head"))
+            assertTrue(server.parseTooLargeRequestForRawRequest(
+                    method + " /events HTTP/1.1\r\nHost: localhost\r\n\r\n").isEmpty(), method);
+        for (HttpMethod method : List.of(HttpMethod.GET, HttpMethod.OPTIONS, HttpMethod.HEAD))
+            assertEquals(method, server.parseTooLargeRequestForRawRequest(
+                    method + " /events HTTP/1.1\r\nHost: localhost\r\n\r\n").orElseThrow().getHttpMethod());
+    }
+    @Test
     void oversizedTargetAttributionLeavesMalformedTargetsUnparsed() {
         DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0).build();
         for (String target : List.of("/ev%zzents", "http://[bad/events", "*"))

@@ -191,7 +191,7 @@ public class McpRequestStateSelectedLocaleCodecTests {
 		StringBuilder tag = new StringBuilder("en-x");
 
 		for (int index = 0; index < 27; ++index)
-			tag.append(String.format("-sub%05d", index));
+			tag.append(String.format(java.util.Locale.ROOT, "-sub%05d", index));
 
 		tag.append("-last678");
 		String value = tag.toString();

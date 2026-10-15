@@ -18,14 +18,16 @@ package com.soklet.exception;
 
 import org.jspecify.annotations.Nullable;
 
-import javax.annotation.concurrent.NotThreadSafe;
-
 /**
  * Abstract superclass for exceptions that would normally result in an HTTP 400 (Bad Request) status code.
  *
+ * <p>
+ * <strong>Thread safety:</strong> Instances are not threadsafe.
+ * This extendable base documents its contract without an inherited jsr305 annotation,
+ * so subclasses can be compiled with the Soklet annotation processor alone.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
-@NotThreadSafe
 public abstract class BadRequestException extends RuntimeException {
 	public BadRequestException(@Nullable String message) {
 		super(message);

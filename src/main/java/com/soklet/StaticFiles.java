@@ -28,6 +28,10 @@ import java.nio.channels.Channels;
 import java.nio.channels.SeekableByteChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.FileSystemException;
+import java.nio.file.AccessDeniedException;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.NotDirectoryException;
 import java.nio.file.InvalidPathException;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -54,9 +58,9 @@ import static java.util.Objects.requireNonNull;
  * other attacker-writable trees are not supported.
  * <p>
  * Delivery uses public NIO APIs, with {@link java.nio.file.SecureDirectoryStream} where available
- * and a checked pathname fallback otherwise (including macOS Java 21 and Windows). Stable file
- * identities are required. Checks reject observed changes; they do not make concurrent mutation
- * safe. Public Java APIs cannot bind regular-file attributes to an opened channel, and copying
+ * and a checked pathname fallback otherwise (including macOS Java 21 and Windows). Providers
+ * without file keys use creation time, size, and modification time to detect observed replacement.
+ * Checks reject observed changes; they do not make concurrent mutation safe. Public Java APIs cannot bind regular-file attributes to an opened channel, and copying
  * bytes does not close that identity race. No JDK internals, native-access flags, or retained
  * directory descriptors are used.
  * <p>
@@ -186,6 +190,8 @@ public final class StaticFiles {
 	 * @param relativePath the root-relative file path
 	 * @param request the incoming request
 	 * @return the marshaled response, if a static file was resolved
+	 * @throws UncheckedIOException if filesystem access fails for a reason other than a missing,
+	 *         inaccessible, or changed file
 	 */
 	@NonNull
 	public Optional<@NonNull MarshaledResponse> marshaledResponseFor(@NonNull String relativePath,
@@ -206,13 +212,12 @@ public final class StaticFiles {
 		// Path resolution can race a rename of an ancestor. Check the selected
 		// object against the captured root before any application resolver sees its
 		// metadata. These checks supplement the required immutable-root contract.
-		if (attributes.fileKey() == null)
-			return Optional.empty();
-		try (SeekableByteChannel ignored = secureRoot.open(file,
-					attributes.fileKey(), attributes.size(), attributes.lastModifiedTime())) {
+		try (SeekableByteChannel ignored = secureRoot.open(file, attributes)) {
 			// The selected path still matches its expected identity and containment.
-		} catch (IOException | UnsupportedOperationException failure) {
+		} catch (UnsupportedOperationException failure) {
 			return Optional.empty();
+		} catch (IOException failure) {
+			return unresolvedFile(failure);
 		}
 		Access access = requireNonNull(getAccessResolver().accessFor(file, attributes), "accessResolver returned null; return Access.ALLOW, Access.DENY, or Access.HIDE.");
 
@@ -227,11 +232,12 @@ public final class StaticFiles {
 		if (getEntityTagResolver() == ContentHashEntityTagResolver.defaultInstance()) {
 			// The built-in content hash must read the same approved object class as
 			// delivery. In particular, do not follow a link swapped in by a resolver.
-			try (SeekableByteChannel channel = secureRoot.open(file,
-					attributes.fileKey(), attributes.size(), attributes.lastModifiedTime())) {
+			try (SeekableByteChannel channel = secureRoot.open(file, attributes)) {
 				entityTag = ContentHashEntityTagResolver.entityTagFor(channel);
-			} catch (IOException | UnsupportedOperationException failure) {
+			} catch (UnsupportedOperationException failure) {
 				return Optional.empty();
+			} catch (IOException failure) {
+				return unresolvedFile(failure);
 			}
 		} else {
 			entityTag = requireNonNull(getEntityTagResolver().entityTagFor(file, attributes),
@@ -252,11 +258,12 @@ public final class StaticFiles {
 		if (current == null || !current.path().equals(file)
 				|| !sameFileIdentity(attributes, current.attributes()))
 			return Optional.empty();
-		try (SeekableByteChannel ignored = secureRoot.open(file,
-				attributes.fileKey(), attributes.size(), attributes.lastModifiedTime())) {
+		try (SeekableByteChannel ignored = secureRoot.open(file, attributes)) {
 			// Bodyless responses need the same post-resolver validation as body responses.
-		} catch (IOException | UnsupportedOperationException failure) {
+		} catch (UnsupportedOperationException failure) {
 			return Optional.empty();
+		} catch (IOException failure) {
+			return unresolvedFile(failure);
 		}
 
 		MarshaledResponse response = MarshaledResponse.withFile(file, request, attributes)
@@ -388,7 +395,13 @@ public final class StaticFiles {
 			return Optional.empty();
 		candidate = canonicalCandidate;
 
-		if (Files.isDirectory(candidate, LinkOption.NOFOLLOW_LINKS)) {
+		BasicFileAttributes attributes;
+		try {
+			attributes = Files.readAttributes(candidate, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+		} catch (IOException failure) {
+			return unresolvedFile(failure);
+		}
+		if (attributes.isDirectory()) {
 			for (String indexFileName : getIndexFileNames()) {
 				Path indexCandidate = canonicalNoFollowPath(candidate.resolve(indexFileName).normalize()).orElse(null);
 
@@ -423,25 +436,49 @@ public final class StaticFiles {
 			return Files.isSymbolicLink(this.noFollowRoot) || hasSymlinkComponent(candidate)
 					|| hasSymlinkComponent(canonical) ? Optional.empty() : Optional.of(canonical);
 		} catch (IOException e) {
-			return Optional.empty();
+			return unresolvedFile(e, candidate);
 		}
 	}
 
+	private <T> Optional<T> unresolvedFile(IOException failure, Path candidate) {
+		// The Unix provider reports ENOTDIR as a generic FileSystemException.
+		// Inspect existing ancestors rather than relying on localized reason text.
+		if (failure instanceof FileSystemException) {
+			for (Path parent = candidate.getParent(); parent != null && parent.startsWith(getResolutionRoot());
+					parent = parent.getParent()) {
+				try {
+					if (!Files.readAttributes(parent, BasicFileAttributes.class).isDirectory())
+						return Optional.empty();
+				} catch (NoSuchFileException | NotDirectoryException missing) {
+					return Optional.empty();
+				} catch (IOException ignored) {
+					// Preserve the original acquisition failure when this probe also fails.
+				}
+			}
+		}
+		return unresolvedFile(failure);
+	}
+
+	private static <T> Optional<T> unresolvedFile(IOException failure) {
+		if (failure instanceof NoSuchFileException || failure instanceof NotDirectoryException
+				|| failure instanceof AccessDeniedException || failure instanceof SecureStaticFileRoot.FileChangedException)
+			return Optional.empty();
+		throw new UncheckedIOException("Unable to acquire static file.", failure);
+	}
+
 	private static boolean sameFileIdentity(@NonNull BasicFileAttributes first, @NonNull BasicFileAttributes second) {
-		return first.fileKey() == null ? second.fileKey() == null : first.fileKey().equals(second.fileKey());
+		return SecureStaticFileRoot.sameIdentity(first, second);
 	}
 
 	@NonNull
 	private Optional<ResolvedFile> noFollowRegularFile(@NonNull Path candidate) {
 		requireNonNull(candidate);
 
-		if (!Files.isRegularFile(candidate, LinkOption.NOFOLLOW_LINKS) || !Files.isReadable(candidate))
-			return Optional.empty();
-
 		try {
-			return Optional.of(new ResolvedFile(candidate, Files.readAttributes(candidate, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS)));
+			BasicFileAttributes attributes = Files.readAttributes(candidate, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+			return attributes.isRegularFile() ? Optional.of(new ResolvedFile(candidate, attributes)) : Optional.empty();
 		} catch (IOException e) {
-			return Optional.empty();
+			return unresolvedFile(e, candidate);
 		}
 	}
 
@@ -454,13 +491,19 @@ public final class StaticFiles {
 		try {
 			realCandidate = candidate.toRealPath();
 		} catch (IOException e) {
-			return Optional.empty();
+			return unresolvedFile(e, candidate);
 		}
 
 		if (!realCandidate.startsWith(this.followRoot))
 			return Optional.empty();
 
-		if (Files.isDirectory(realCandidate)) {
+		BasicFileAttributes attributes;
+		try {
+			attributes = Files.readAttributes(realCandidate, BasicFileAttributes.class);
+		} catch (IOException failure) {
+			return unresolvedFile(failure);
+		}
+		if (attributes.isDirectory()) {
 			for (String indexFileName : getIndexFileNames()) {
 				Path indexCandidate = realCandidate.resolve(indexFileName).normalize();
 
@@ -483,18 +526,16 @@ public final class StaticFiles {
 	private Optional<ResolvedFile> followedRegularFile(@NonNull Path candidate) {
 		requireNonNull(candidate);
 
-		if (!Files.isRegularFile(candidate) || !Files.isReadable(candidate))
-			return Optional.empty();
-
 		try {
 			Path realCandidate = candidate.toRealPath();
 
 			if (!realCandidate.startsWith(this.followRoot))
 				return Optional.empty();
 
-			return Optional.of(new ResolvedFile(realCandidate, Files.readAttributes(realCandidate, BasicFileAttributes.class)));
+			BasicFileAttributes attributes = Files.readAttributes(realCandidate, BasicFileAttributes.class);
+			return attributes.isRegularFile() ? Optional.of(new ResolvedFile(realCandidate, attributes)) : Optional.empty();
 		} catch (IOException e) {
-			return Optional.empty();
+			return unresolvedFile(e, candidate);
 		}
 	}
 

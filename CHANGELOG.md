@@ -4,6 +4,13 @@
 
 ### Breaking Changes
 
+- **Bounded request parsing:** default `BigInteger`, `BigDecimal`, and `Number`
+  converters accept at most 4,096 trimmed characters. URL-encoded forms accept
+  at most 1,000 nonempty pairs, including repeated names. Excess values produce
+  HTTP 400 when bound or parsed. Locale helpers ignore combined Accept-Language
+  values exceeding 4,096 characters or 32 ranges. Runtime paths preserve
+  trailing Unicode spaces as path data rather than routing to a trimmed route.
+
 - **Java 21 minimum:** Soklet and its Servlet and OpenTelemetry adapters now
   require Java 21 or newer to compile and run. Default virtual-thread executors
   use the standard JDK APIs directly; Java 17 compatibility fallbacks are removed.
@@ -21,9 +28,10 @@
 - **Finite response framing:** the built-in HTTP transport owns framing and
   removes application hop-by-hop headers. Valid bodyless HEAD representation
   lengths supplied by final HEAD marshaling and validated `426` Upgrade
-  advertisements are preserved. The default HEAD marshaler computes length
-  from the body; bodyless explicit HEAD methods can use a custom `HeadHandler`
-  or final `PostProcessor` to advertise nonzero lengths. Ordinary
+  advertisements are preserved. The default HEAD marshaler derives length
+  from a supplied representation body, preserves a prepared bodyless HEAD
+  response's explicit length, and omits unknown lengths. Conditional HEAD
+  `304` responses no longer acquire an invented zero length. Ordinary
   final statuses must be `200`–`599`, and the default marshaler rejects a
   `StreamingResponseBody` in `Response.body(...)`. Use a marshaled streaming
   response. Expected typed streaming cancelation is quiet; independent failures
@@ -376,6 +384,38 @@ maintenance or security fixes afterward. See the explicit
 
 ### Correctness Fixes
 
+- Detect closed SSE peers promptly, register rewritten SSE paths, and avoid
+  blocking handshake I/O under monitors on Java 21. Abort unfinished legacy MCP
+  notification streams when pressure or a grace deadline terminates them.
+- Support static-file providers without file keys using metadata snapshots under
+  the immutable-root contract; propagate transient filesystem failures rather
+  than treating them as absent assets. Clamp future Last-Modified timestamps.
+- Keep concurrent LRU maintenance bounded and preserve eviction tracking across
+  concurrent clear/put operations. Correct CORS preflight dispatch, HEAD method
+  discovery, and simulator HEAD/bodyless response projection.
+
+- Preserve binary multipart uploads without eager text decoding; skip empty
+  converter results in list bindings and reject required lists with no values.
+- Replace aggressive whitespace regex trimming with a linear scan and coalesce
+  tiny HTTP chunk payloads to bound retained fragment overhead.
+- Pair lifecycle start/finish callbacks and record HTTP metrics when request
+  wrapping fails before dispatch.
+- Preserve HTTP annotation method/path pairs during runtime discovery; reject
+  malformed packaged route indexes with their URL and line number.
+- Allow named subclasses of common public base classes without a jsr305
+  classpath dependency, and emit ASCII generated MCP source for legacy encodings.
+
+
+
+- Established SSE writes now arbitrate completion against their timeout callback,
+  so a stale callback cannot close a healthy connection after a successful write.
+  SSE request methods are case-sensitive, matching ordinary HTTP handling.
+- Empty conversion results cannot inject null into required scalar query, form,
+  header, or cookie bindings. Optional primitive request bodies use their Java
+  default when marshaling returns no value; malformed bodies still fail with 400.
+- Both servlet adapters safely snapshot concurrently changed default character
+  encodings. OpenTelemetry HTTP/SSE metrics accept large custom durations without
+  overflowing nanosecond conversion or dropping the measurement.
 - Conditional entity-tag lists, `Accept-Encoding` parameters, and CORS fields
   accept HTTP space/tab whitespace consistently. Malformed multipart extended
   parameters now fail with a redacted bad-request error instead of silently

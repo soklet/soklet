@@ -161,9 +161,7 @@ public sealed interface MarshaledResponseBody permits MarshaledResponseBody.Byte
 		private final Path path;
 		private final Long offset;
 		private final Long count;
-		private final Object fileKey;
-		private final long expectedSize;
-		private final java.nio.file.attribute.FileTime expectedModifiedTime;
+		private final BasicFileAttributes attributes;
 
 		SecureFile(SecureStaticFileRoot root, Path path, Long offset, Long count,
 				BasicFileAttributes attributes) {
@@ -171,10 +169,7 @@ public sealed interface MarshaledResponseBody permits MarshaledResponseBody.Byte
 			this.path = requireNonNull(path);
 			this.offset = requireNonNull(offset);
 			this.count = requireNonNull(count);
-			this.fileKey = requireNonNull(attributes.fileKey(),
-					"Secure static-file delivery requires a stable file identity.");
-			this.expectedSize = attributes.size();
-			this.expectedModifiedTime = attributes.lastModifiedTime();
+			this.attributes = requireNonNull(attributes);
 			validateOffsetAndCount(offset, count);
 		}
 
@@ -187,7 +182,7 @@ public sealed interface MarshaledResponseBody permits MarshaledResponseBody.Byte
 		 * @throws IOException if a change is detected or acquisition fails
 		 */
 		public @NonNull SeekableByteChannel openChannel() throws IOException {
-			return root.open(path, fileKey, expectedSize, expectedModifiedTime);
+			return root.open(path, attributes);
 		}
 
 		/** @return the zero-based starting byte offset */

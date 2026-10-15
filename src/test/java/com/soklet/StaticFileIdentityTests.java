@@ -4,9 +4,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
-import java.nio.file.FileSystems;
 import java.nio.file.Path;
-import java.net.URI;
+import java.time.Instant;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -18,18 +17,41 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class StaticFileIdentityTests {
     @Test
-    void bothSymlinkModesFailClosedOnProviderWithoutStableIdentity(@TempDir Path directory) throws Exception {
-        Path archive = directory.resolve("assets.zip");
-        try (var fileSystem = FileSystems.newFileSystem(URI.create("jar:" + archive.toUri()),
-                Map.of("create", "true"))) {
-            Path root = Files.createDirectory(fileSystem.getPath("/public"));
-            Files.writeString(root.resolve("asset.txt"), "public");
-            for (boolean followSymlinks : List.of(false, true)) {
-                java.io.UncheckedIOException failure = assertThrows(java.io.UncheckedIOException.class,
-                        () -> StaticFiles.withRoot(root).trustedImmutableRoot(true).followSymlinks(followSymlinks).build());
-                assertTrue(failure.getCause().getMessage().contains("stable directory identity"));
-            }
+    void bothSymlinkModesServeProvidersWithoutFileKeys(@TempDir Path directory) throws Exception {
+        StaticFileIoFailureTests.Provider provider = new StaticFileIoFailureTests.Provider(directory);
+        provider.nullFileKeys = true;
+        Path root = provider.wrap(Files.createDirectory(directory.resolve("public")));
+        Files.writeString(root.resolve("asset.txt"), "public");
+        Files.createDirectory(root.resolve("nested"));
+        Files.writeString(root.resolve("nested/index.html"), "index");
+        assertNull(Files.readAttributes(root, java.nio.file.attribute.BasicFileAttributes.class).fileKey());
+        for (boolean followSymlinks : List.of(false, true)) {
+            StaticFiles files = StaticFiles.withRoot(root).trustedImmutableRoot(true)
+                    .followSymlinks(followSymlinks).indexFileNames(List.of("index.html")).build();
+            MarshaledResponse response = files.marshaledResponseFor("asset.txt", request("asset.txt")).orElseThrow();
+            assertInstanceOf(MarshaledResponseBody.SecureFile.class, response.getBody().orElseThrow());
+            assertEquals("public", new String(response.bodyBytesOrEmpty(), StandardCharsets.UTF_8));
+            assertEquals("index", new String(files.marshaledResponseFor("nested", request("nested"))
+                    .orElseThrow().bodyBytesOrEmpty(), StandardCharsets.UTF_8));
+            assertTrue(files.marshaledResponseFor("missing.txt", request("missing.txt")).isEmpty());
+            assertTrue(files.marshaledResponseFor("../outside.txt", request("../outside.txt")).isEmpty());
+            MarshaledResponse ranged = files.marshaledResponseFor("asset.txt", Request.withPath(HttpMethod.GET, "/asset.txt")
+                    .headers(Map.of("Range", List.of("bytes=1-3"))).build()).orElseThrow();
+            assertEquals(206, ranged.getStatusCode());
+            assertEquals("ubl", new String(ranged.bodyBytesOrEmpty(), StandardCharsets.UTF_8));
         }
+    }
+
+    @Test
+    void missingFileKeysStillDetectMetadataChangesBeforeDelivery(@TempDir Path directory) throws Exception {
+        StaticFileIoFailureTests.Provider provider = new StaticFileIoFailureTests.Provider(directory);
+        provider.nullFileKeys = true;
+        Path root = provider.wrap(Files.createDirectory(directory.resolve("public")));
+        Path asset = Files.writeString(root.resolve("asset.txt"), "public");
+        StaticFiles files = StaticFiles.withRoot(root).trustedImmutableRoot(true).build();
+        MarshaledResponse response = files.marshaledResponseFor("asset.txt", request("asset.txt")).orElseThrow();
+        Files.setLastModifiedTime(asset, java.nio.file.attribute.FileTime.from(Instant.now().plusSeconds(60)));
+        assertThrows(java.io.UncheckedIOException.class, response::bodyBytesOrEmpty);
     }
 
     @Test

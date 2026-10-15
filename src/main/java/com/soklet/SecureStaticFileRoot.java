@@ -48,7 +48,7 @@ final class SecureStaticFileRoot {
 	private final Path configuredRoot;
 	private final Path declaredRoot;
 	private final Path resolvedRoot;
-	private final Object rootFileKey;
+	private final DirectoryIdentity rootIdentity;
 	private final boolean secureDirectoryStreams;
 
 	SecureStaticFileRoot(Path configuredRoot) {
@@ -61,7 +61,7 @@ final class SecureStaticFileRoot {
 		try {
 			BasicFileAttributes expected = attributes(this.configuredRoot);
 			checkDirectory(expected);
-			this.rootFileKey = expected.fileKey();
+			this.rootIdentity = DirectoryIdentity.from(expected);
 			this.resolvedRoot = this.configuredRoot.toRealPath();
 			checkRoot();
 			// Probe the provider through its public API. Opening the resolved root
@@ -70,7 +70,7 @@ final class SecureStaticFileRoot {
 			try (DirectoryStream<Path> directory = Files.newDirectoryStream(this.resolvedRoot)) {
 				secureDirectoryStreams = directory instanceof SecureDirectoryStream<?>;
 				if (directory instanceof SecureDirectoryStream<Path> secureDirectory)
-					checkDirectoryIdentity(directoryAttributes(secureDirectory), this.rootFileKey);
+					checkDirectoryIdentity(directoryAttributes(secureDirectory), this.rootIdentity);
 			} catch (AccessDeniedException unlistableDirectory) {
 				// A searchable directory can contain readable files without being
 				// listable. The immutable-tree contract also permits path-based opens.
@@ -83,37 +83,36 @@ final class SecureStaticFileRoot {
 		}
 	}
 
-	SeekableByteChannel open(Path file, Object expectedFileKey, long expectedSize,
-			FileTime expectedModifiedTime) throws IOException {
+	SeekableByteChannel open(Path file, BasicFileAttributes expected) throws IOException {
 		requireNonNull(file);
 		if (!sameInstance(file.getFileSystem(), this.configuredRoot.getFileSystem()) || !file.isAbsolute()
 				|| !file.equals(file.normalize()) || !file.startsWith(this.configuredRoot))
-			throw new IOException("Static file path does not name a file under the root.");
+			throw new FileChangedException("Static file path does not name a file under the root.");
 		Path relative = this.configuredRoot.relativize(file);
 		for (Path component : relative) {
 			String name = component.toString();
 			if (name.isEmpty() || name.equals(".") || name.equals(".."))
-				throw new IOException("Unsafe static file path component.");
+				throw new FileChangedException("Unsafe static file path component.");
 		}
 
 		checkRoot();
-		List<Object> directoryKeys = directoryKeys(relative);
+		List<DirectoryIdentity> directoryKeys = directoryKeys(relative);
 		SeekableByteChannel channel = null;
 		try {
 			if (this.secureDirectoryStreams) {
 				try {
-					channel = openSecure(relative, directoryKeys, expectedFileKey, expectedSize, expectedModifiedTime);
+					channel = openSecure(relative, directoryKeys, expected);
 				} catch (AccessDeniedException unlistableDirectory) {
 					// Directory streams require listing permission; opening a known
 					// file only needs search permission on its ancestor directories.
 					// Public file opens still enforce the file's own read permissions.
-					channel = openTrustedPath(relative, expectedFileKey, expectedSize, expectedModifiedTime);
+					channel = openTrustedPath(relative, expected);
 				}
 			} else {
-				channel = openTrustedPath(relative, expectedFileKey, expectedSize, expectedModifiedTime);
+				channel = openTrustedPath(relative, expected);
 			}
 			if (!directoryKeys.equals(directoryKeys(relative)))
-				throw new IOException("Static file directory changed after authorization.");
+				throw new FileChangedException("Static file directory changed after authorization.");
 			checkRoot();
 			return channel;
 		} catch (IOException | RuntimeException | Error failure) {
@@ -122,16 +121,16 @@ final class SecureStaticFileRoot {
 		}
 	}
 
-	private SeekableByteChannel openSecure(Path relative, List<Object> directoryKeys,
-			Object expectedFileKey, long expectedSize, FileTime expectedModifiedTime) throws IOException {
+	private SeekableByteChannel openSecure(Path relative, List<DirectoryIdentity> directoryKeys,
+			BasicFileAttributes expected) throws IOException {
 		SeekableByteChannel channel = null;
 		try (DirectoryStream<Path> root = Files.newDirectoryStream(this.resolvedRoot)) {
 			if (!(root instanceof SecureDirectoryStream<Path> secureRoot))
-				throw new IOException("Filesystem no longer provides secure directory traversal.");
+				throw new FileChangedException("Filesystem no longer provides secure directory traversal.");
 			SecureDirectoryStream<Path> directory = secureRoot;
 			boolean ownsDirectory = false;
 			try {
-				checkDirectoryIdentity(directoryAttributes(directory), this.rootFileKey);
+				checkDirectoryIdentity(directoryAttributes(directory), this.rootIdentity);
 				for (int index = 0; index < relative.getNameCount() - 1; index++) {
 					SecureDirectoryStream<Path> next = directory.newDirectoryStream(relative.getName(index),
 							LinkOption.NOFOLLOW_LINKS);
@@ -152,12 +151,12 @@ final class SecureStaticFileRoot {
 				Path name = relative.getName(relative.getNameCount() - 1);
 				BasicFileAttributeView view = directory.getFileAttributeView(name, BasicFileAttributeView.class,
 						LinkOption.NOFOLLOW_LINKS);
-				checkIdentity(view.readAttributes(), expectedFileKey, expectedSize, expectedModifiedTime);
+				checkIdentity(view.readAttributes(), expected);
 				channel = directory.newByteChannel(name, Set.of(StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS));
 				// The view is relative to the directory but remains name-based, not
 				// bound to channel. Immutability is required even with this provider.
-				checkIdentity(view.readAttributes(), expectedFileKey, expectedSize, expectedModifiedTime);
-				checkSize(channel, expectedSize);
+				checkIdentity(view.readAttributes(), expected);
+				checkSize(channel, expected.size());
 				if (ownsDirectory) {
 					SecureDirectoryStream<Path> previous = directory;
 					directory = null;
@@ -176,18 +175,17 @@ final class SecureStaticFileRoot {
 		}
 	}
 
-	private SeekableByteChannel openTrustedPath(Path relative, Object expectedFileKey,
-			long expectedSize, FileTime expectedModifiedTime) throws IOException {
+	private SeekableByteChannel openTrustedPath(Path relative, BasicFileAttributes expected) throws IOException {
 		Path file = this.resolvedRoot.resolve(relative);
-		checkIdentity(attributes(file), expectedFileKey, expectedSize, expectedModifiedTime);
+		checkIdentity(attributes(file), expected);
 		// Providers without SecureDirectoryStream (including macOS JDK 21) use
 		// path checks under the explicit immutable-tree contract. No directory
 		// listing is needed here, so searchable nested directories remain usable.
 		SeekableByteChannel channel = Files.newByteChannel(file,
 				Set.of(StandardOpenOption.READ, LinkOption.NOFOLLOW_LINKS));
 		try {
-			checkIdentity(attributes(file), expectedFileKey, expectedSize, expectedModifiedTime);
-			checkSize(channel, expectedSize);
+			checkIdentity(attributes(file), expected);
+			checkSize(channel, expected.size());
 			return channel;
 		} catch (IOException | RuntimeException | Error failure) {
 			closeOnFailure(channel, failure);
@@ -196,21 +194,22 @@ final class SecureStaticFileRoot {
 	}
 
 	private void checkRoot() throws IOException {
-		checkDirectoryIdentity(attributes(this.configuredRoot), this.rootFileKey);
-		checkDirectoryIdentity(attributes(this.resolvedRoot), this.rootFileKey);
-		if (!this.configuredRoot.toRealPath().equals(this.resolvedRoot)
+		checkDirectoryIdentity(attributes(this.configuredRoot), this.rootIdentity);
+		checkDirectoryIdentity(attributes(this.resolvedRoot), this.rootIdentity);
+		if (!Files.isSameFile(this.configuredRoot, this.resolvedRoot)
+				|| !this.configuredRoot.toRealPath().equals(this.resolvedRoot)
 				|| !this.declaredRoot.toRealPath().equals(this.resolvedRoot))
-			throw new IOException("Static file root changed; rebuild the static-file helper.");
+			throw new FileChangedException("Static file root changed; rebuild the static-file helper.");
 	}
 
-	private List<Object> directoryKeys(Path relative) throws IOException {
-		List<Object> keys = new ArrayList<>(relative.getNameCount() - 1);
+	private List<DirectoryIdentity> directoryKeys(Path relative) throws IOException {
+		List<DirectoryIdentity> keys = new ArrayList<>(relative.getNameCount() - 1);
 		Path current = this.resolvedRoot;
 		for (int index = 0; index < relative.getNameCount() - 1; index++) {
 			current = current.resolve(relative.getName(index));
 			BasicFileAttributes attributes = attributes(current);
 			checkDirectory(attributes);
-			keys.add(attributes.fileKey());
+			keys.add(DirectoryIdentity.from(attributes));
 		}
 		return keys;
 	}
@@ -224,27 +223,51 @@ final class SecureStaticFileRoot {
 	}
 
 	private static void checkDirectory(BasicFileAttributes attributes) throws IOException {
-		if (!attributes.isDirectory() || attributes.fileKey() == null)
-			throw new IOException("Static file traversal requires a stable directory identity.");
+		if (!attributes.isDirectory())
+			throw new FileChangedException("Static file traversal requires a directory.");
 	}
 
-	private static void checkDirectoryIdentity(BasicFileAttributes attributes, Object expectedFileKey) throws IOException {
+	private static void checkDirectoryIdentity(BasicFileAttributes attributes, DirectoryIdentity expected) throws IOException {
 		checkDirectory(attributes);
-		if (!expectedFileKey.equals(attributes.fileKey()))
-			throw new IOException("Static file directory changed after authorization.");
+		if (!expected.equals(DirectoryIdentity.from(attributes)))
+			throw new FileChangedException("Static file directory changed after authorization.");
 	}
 
-	static void checkIdentity(BasicFileAttributes current, Object expectedFileKey, long expectedSize,
-			FileTime expectedModifiedTime) throws IOException {
-		if (!current.isRegularFile() || expectedFileKey == null || !expectedFileKey.equals(current.fileKey())
-				|| current.size() != expectedSize
-				|| !expectedModifiedTime.equals(current.lastModifiedTime()))
-			throw new IOException("Static file changed after authorization.");
+	static boolean sameIdentity(BasicFileAttributes current, BasicFileAttributes expected) {
+		Object expectedKey = expected.fileKey();
+		return java.util.Objects.equals(expectedKey, current.fileKey())
+				&& (expectedKey != null || expected.creationTime().equals(current.creationTime()))
+				&& current.size() == expected.size()
+				&& expected.lastModifiedTime().equals(current.lastModifiedTime());
+	}
+
+	static void checkIdentity(BasicFileAttributes current, BasicFileAttributes expected) throws IOException {
+		if (!current.isRegularFile() || !sameIdentity(current, expected))
+			throw new FileChangedException("Static file changed after authorization.");
+	}
+
+	// Some public providers, including Windows, expose no file key. The immutable-tree
+	// contract still applies; compare all available metadata to detect observed changes.
+	// These snapshots cannot exclude replacement with identical metadata.
+	private record DirectoryIdentity(@Nullable Object fileKey, @Nullable FileTime creationTime,
+			long size, @Nullable FileTime modifiedTime) {
+		static DirectoryIdentity from(BasicFileAttributes attributes) {
+			Object key = attributes.fileKey();
+			return key == null
+					? new DirectoryIdentity(null, attributes.creationTime(), attributes.size(), attributes.lastModifiedTime())
+					: new DirectoryIdentity(key, null, 0, null);
+		}
+	}
+
+	static final class FileChangedException extends IOException {
+		FileChangedException(String message) {
+			super(message);
+		}
 	}
 
 	private static void checkSize(SeekableByteChannel channel, long expectedSize) throws IOException {
 		if (channel.size() != expectedSize)
-			throw new IOException("Static file size changed after authorization.");
+			throw new FileChangedException("Static file size changed after authorization.");
 	}
 
 	private static void closeOnFailure(@Nullable AutoCloseable resource, Throwable failure) {

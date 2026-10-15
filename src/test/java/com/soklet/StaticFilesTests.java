@@ -58,6 +58,46 @@ import java.util.concurrent.atomic.AtomicReference;
 @ThreadSafe
 public class StaticFilesTests {
 	@Test
+	void futureLastModifiedIsClampedForHeadersAndPreconditions(@TempDir Path root) throws Exception {
+		Path file = Files.writeString(root.resolve("future.txt"), "future");
+		Instant before = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
+		Instant future = before.plusSeconds(3600);
+		Files.setLastModifiedTime(file, java.nio.file.attribute.FileTime.from(future));
+		Request request = Request.fromPath(HttpMethod.GET, "/future.txt");
+		for (MarshaledResponse response : List.of(
+				MarshaledResponse.withFile(file, request).lastModified(future).build(),
+				StaticFiles.withRoot(root).trustedImmutableRoot(true).build()
+						.marshaledResponseFor("future.txt", request).orElseThrow())) {
+			Instant emitted = HttpDate.fromHeaderValue(response.getHeaders().get("Last-Modified").get(0)).orElseThrow();
+			Assertions.assertFalse(emitted.isBefore(before));
+			Assertions.assertFalse(emitted.isAfter(Instant.now()));
+		}
+		Request conditional = Request.withPath(HttpMethod.GET, "/future.txt")
+				.headers(Map.of("If-Modified-Since", List.of(HttpDate.toHeaderValue(before.plusSeconds(60)))))
+				.build();
+		Assertions.assertEquals(304, MarshaledResponse.withFile(file, conditional).lastModified(future).build().getStatusCode());
+		Assertions.assertEquals(304, StaticFiles.withRoot(root).trustedImmutableRoot(true)
+				.entityTagResolver(StaticFiles.EntityTagResolver.disabledInstance()).build()
+				.marshaledResponseFor("future.txt", conditional).orElseThrow().getStatusCode());
+	}
+
+	@Test
+	void positiveSuffixRangesOnEmptyFilesAreIgnored(@TempDir Path root) throws Exception {
+		Path file = Files.createFile(root.resolve("empty.txt"));
+		for (String range : List.of("bytes=-1", "bytes=-5", "bytes=-999999999999999999999999999999")) {
+			Assertions.assertEquals(ByteRangeSelectionType.UNSUPPORTED, ByteRangeSelection.fromHeaderValue(range, 0L).getType());
+			Request request = Request.withPath(HttpMethod.GET, "/empty.txt").headers(Map.of("Range", List.of(range))).build();
+			for (MarshaledResponse response : List.of(MarshaledResponse.withFile(file, request).build(),
+					StaticFiles.withRoot(root).trustedImmutableRoot(true).build().marshaledResponseFor("empty.txt", request).orElseThrow())) {
+				Assertions.assertEquals(200, response.getStatusCode());
+				Assertions.assertFalse(response.getHeaders().containsKey("Content-Range"));
+				Assertions.assertArrayEquals(new byte[0], response.bodyBytesOrEmpty());
+			}
+		}
+		Assertions.assertEquals(ByteRangeSelectionType.UNSATISFIABLE, ByteRangeSelection.fromHeaderValue("bytes=-0", 0L).getType());
+	}
+
+	@Test
 	public void entityTagsParseAndCompare() {
 		EntityTag strong = EntityTag.fromHeaderValue("\"abc123\"").orElseThrow();
 		EntityTag weak = EntityTag.fromHeaderValue("W/\"abc123\"").orElseThrow();

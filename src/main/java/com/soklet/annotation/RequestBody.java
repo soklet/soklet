@@ -34,7 +34,9 @@ public @interface RequestBody {
 	/**
 	 * Is this HTTP request body optional or required?
 	 *
-	 * An absent optional body bound to a primitive uses its Java default value.
+	 * An optional body bound to a primitive uses its Java default value when the body
+	 * is absent or the request body marshaler returns no value. Malformed bodies
+	 * still fail conversion.
 	 *
 	 * @return {@code true} if optional, {@code false} if required
 	 */

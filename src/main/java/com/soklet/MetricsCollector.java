@@ -3404,6 +3404,9 @@ public interface MetricsCollector {
 	 * <p>
 	 * This method is guaranteed to return a new instance.
 	 *
+	 * Each aggregate map retains at most 8,192 keys in approximate least-recently-used order.
+	 * Evicted keys restart their cumulative counts from zero on the next observation.
+	 *
 	 * @return a {@code MetricsCollector} with default settings
 	 */
 	@NonNull

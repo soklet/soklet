@@ -45,6 +45,9 @@ import static java.lang.String.format;
 /**
  * Non-instantiable utility class that exists to vend a set of default {@link ValueConverter} instances via {@link #defaultValueConverters()}.
  * <p>
+ * The default {@link BigInteger}, {@link BigDecimal}, and {@link Number} converters reject
+ * inputs longer than 4,096 characters after trimming.
+ * <p>
  * Default converters are documented at <a href="https://www.soklet.com/docs/value-conversions#default-conversions">https://www.soklet.com/docs/value-conversions#default-conversions</a>.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -245,6 +248,11 @@ public final class ValueConverters {
 
 	// Nonprimitives
 
+	private static void validateNumericInputLength(@NonNull String value) {
+		if (value.length() > 4_096)
+			throw new IllegalArgumentException("Numeric input must not exceed 4096 characters.");
+	}
+
 	@ThreadSafe
 	private static final class StringToBigIntegerValueConverter extends FromStringValueConverter<BigInteger> {
 		@Override
@@ -253,6 +261,7 @@ public final class ValueConverters {
 			if (from == null)
 				return Optional.empty();
 
+			validateNumericInputLength(from);
 			return Optional.of(new BigInteger(from));
 		}
 	}
@@ -265,6 +274,7 @@ public final class ValueConverters {
 			if (from == null)
 				return Optional.empty();
 
+			validateNumericInputLength(from);
 			return Optional.of(new BigDecimal(from));
 		}
 	}
@@ -277,6 +287,7 @@ public final class ValueConverters {
 			if (from == null)
 				return Optional.empty();
 
+			validateNumericInputLength(from);
 			return Optional.of(new BigDecimal(from));
 		}
 	}

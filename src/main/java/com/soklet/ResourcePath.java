@@ -86,7 +86,7 @@ public static ResourcePath fromPath(@NonNull String path) {
 
 	private ResourcePath(@NonNull String path) {
 		requireNonNull(path);
-		this.path = ResourcePathDeclaration.normalizePath(path);
+		this.path = ResourcePathDeclaration.normalizePath(path, false);
 		this.components = unmodifiableList(extractComponents(this.path));
 	}
 

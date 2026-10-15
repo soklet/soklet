@@ -94,7 +94,8 @@ final class FileResponse {
 		this.contentType = builder.contentType;
 		this.contentEncoding = builder.contentEncoding;
 		this.entityTag = builder.entityTag;
-		this.lastModified = builder.lastModified;
+		Instant now = Instant.now();
+		this.lastModified = builder.lastModified != null && builder.lastModified.isAfter(now) ? now : builder.lastModified;
 		this.cacheControl = builder.cacheControl;
 		this.headers = copyHeaders(builder.headers == null ? Map.of() : builder.headers);
 		this.rangeRequests = builder.rangeRequests == null ? true : builder.rangeRequests;

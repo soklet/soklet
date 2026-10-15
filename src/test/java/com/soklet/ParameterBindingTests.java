@@ -17,6 +17,7 @@
 package com.soklet;
 
 import com.soklet.annotation.GET;
+import com.soklet.annotation.FormParameter;
 import com.soklet.annotation.POST;
 import com.soklet.annotation.PathParameter;
 import com.soklet.annotation.QueryParameter;
@@ -46,6 +47,59 @@ import java.util.Set;
  */
 @ThreadSafe
 public class ParameterBindingTests {
+	@Test
+	void emptyOptionalPrimitiveBodyConversionsUseJavaDefaults() {
+		SokletSimulator.run(SimulatorConfig.builder().httpServer()
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(EmptyConversionResource.class)))
+				.build(), simulator -> {
+			for (String body : List.of("", "   ", "\u00a0")) {
+				HttpRequestResult result = simulator.performHttpRequest(Request.withPath(HttpMethod.POST, "/empty/body")
+						.body(body.getBytes(StandardCharsets.UTF_8)).build());
+				Assertions.assertEquals(200, result.getMarshaledResponse().getStatusCode());
+				Assertions.assertEquals("0", responseBody(result));
+			}
+			Assertions.assertEquals(400, simulator.performHttpRequest(Request.withPath(HttpMethod.POST, "/empty/body")
+					.body("invalid".getBytes(StandardCharsets.UTF_8)).build()).getMarshaledResponse().getStatusCode());
+		});
+	}
+
+	@Test
+	void customEmptyConversionsRespectRequiredAndOptionalBindings() {
+		ValueConverter<String, Integer> emptyConverter = new ValueConverter<>() {
+			@Override public Type getFromType() { return String.class; }
+			@Override public Type getToType() { return Integer.class; }
+			@Override public Optional<Integer> convert(String from) { return Optional.empty(); }
+		};
+		SokletSimulator.run(SimulatorConfig.builder().httpServer()
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(EmptyConversionResource.class)))
+				.valueConverterRegistry(ValueConverterRegistry.fromDefaultsSupplementedBy(Set.of(emptyConverter)))
+				.build(), simulator -> {
+			for (Request request : List.of(
+					Request.withRawUrl(HttpMethod.GET, "/empty/query?value=present").build(),
+					Request.withRawUrl(HttpMethod.GET, "/empty/primitive?value=present").build(),
+					Request.withPath(HttpMethod.POST, "/empty/form").headers(Map.of("Content-Type", List.of("application/x-www-form-urlencoded")))
+							.body("value=present".getBytes(StandardCharsets.UTF_8)).build(),
+					Request.withPath(HttpMethod.GET, "/empty/header").headers(Map.of("X-Value", List.of("present"))).build(),
+					Request.withPath(HttpMethod.GET, "/empty/cookie").headers(Map.of("Cookie", List.of("value=present"))).build(),
+					Request.withPath(HttpMethod.POST, "/empty/required-body").body("present".getBytes(StandardCharsets.UTF_8)).build()))
+				Assertions.assertEquals(400, simulator.performHttpRequest(request).getMarshaledResponse().getStatusCode(), request.getPath());
+			Assertions.assertEquals("empty", responseBody(simulator.performHttpRequest(Request.withRawUrl(HttpMethod.GET, "/empty/optional?value=present").build())));
+			Assertions.assertEquals("0", responseBody(simulator.performHttpRequest(Request.withPath(HttpMethod.POST, "/empty/body")
+					.body("present".getBytes(StandardCharsets.UTF_8)).build())));
+		});
+	}
+
+	public static class EmptyConversionResource {
+		@POST("/empty/body") public String optionalBody(@RequestBody(optional = true) int value) { return String.valueOf(value); }
+		@POST("/empty/required-body") public String requiredBody(@RequestBody int value) { return String.valueOf(value); }
+		@GET("/empty/query") public String query(@QueryParameter(name = "value") Integer value) { return String.valueOf(value); }
+		@GET("/empty/primitive") public String primitive(@QueryParameter(name = "value") int value) { return String.valueOf(value); }
+		@POST("/empty/form") public String form(@FormParameter(name = "value") Integer value) { return String.valueOf(value); }
+		@GET("/empty/header") public String header(@RequestHeader(name = "X-Value") Integer value) { return String.valueOf(value); }
+		@GET("/empty/cookie") public String cookie(@RequestCookie(name = "value") Integer value) { return String.valueOf(value); }
+		@GET("/empty/optional") public String optional(@QueryParameter(name = "value") Optional<Integer> value) { return value.map(Object::toString).orElse("empty"); }
+	}
+
 	@Test
 	public void required_and_optional_query_parameters() {
 		SokletSimulator.run(SimulatorConfig.builder().httpServer().sseServer()

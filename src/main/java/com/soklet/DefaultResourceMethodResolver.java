@@ -529,11 +529,17 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 					URL url = resources.nextElement();
 					try (var in = url.openStream();
 							 var br = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
+						int lineNumber = 0;
 						for (String line; (line = br.readLine()) != null; ) {
+							lineNumber++;
 							line = line.trim();
 							if (line.isBlank() || line.startsWith("#")) continue;
-							ResourceMethodDeclaration r = parseLine(line);
-							if (r != null) out.add(r);
+							try {
+								out.add(parseLine(line));
+							} catch (RuntimeException exception) {
+								throw new IllegalStateException("Malformed Soklet Resource Method lookup table at "
+										+ url + ":" + lineNumber, exception);
+							}
 						}
 					}
 				}
@@ -550,13 +556,16 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 
 		// Line format written by SokletProcessor:
 		// METHOD|b64(path)|b64(class)|b64(method)|b64(param1;param2;...)|sseEventSource
-		@Nullable
+		@NonNull
 		private static ResourceMethodDeclaration parseLine(@NonNull String line) {
 			requireNonNull(line);
 
 			String[] parts = line.split("\\|", -1);
 
-			if (parts.length != 6) return null;
+			if (parts.length != 6)
+				throw new IllegalArgumentException("Expected six route-index fields.");
+			if (!parts[5].equals("true") && !parts[5].equals("false"))
+				throw new IllegalArgumentException("Invalid SSE flag in route index.");
 
 			HttpMethod http = HttpMethod.valueOf(parts[0]);
 
@@ -662,6 +671,8 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 					continue;
 
 				for (HttpMethodResourcePathDeclaration httpMethodResourcePathDeclaration : httpMethodResourcePathDeclarations) {
+					if (httpMethodResourcePathDeclaration.getHttpMethod() != httpMethod)
+						continue;
 					ResourcePathDeclaration resourcePathDeclaration = httpMethodResourcePathDeclaration.getResourcePathDeclaration();
 					Boolean sseEventSource = httpMethodResourcePathDeclaration.isSseEventSource();
 

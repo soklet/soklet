@@ -289,9 +289,11 @@ The built-in HTTP transport owns finite-response framing. It recomputes
 controls `Connection` itself. A valid single decimal `Content-Length` on a
 bodyless HEAD response supplied by final HEAD marshaling is preserved as
 representation metadata when the status allows it. The default HEAD marshaler
-computes that length from the response body, even for an explicit `@HEAD`
-method. A bodyless explicit `@HEAD` method can use a custom `HeadHandler` or
-final `PostProcessor` to advertise a nonzero representation length. `Upgrade` and
+derives that length from an actual finite representation body. A bodyless explicit
+`@HEAD` method can supply its known representation length directly; no custom
+marshaler is required. When that length is unknown, omit `Content-Length` and the
+default pipeline leaves it absent. A `304` never acquires a length from its absent
+body. `Upgrade` and
 `Connection: Upgrade` are retained only for a validated `426 Upgrade Required`
 advertisement; other ordinary responses cannot initiate protocol switching.
 Final ordinary responses require a status from `200` through `599`; returning
@@ -1623,6 +1625,11 @@ and return the appropriate response, such as 404 for a missing file.
 a reference type. Replace optional primitives such as `int` with `Integer` or
 `Optional<Integer>`. Required primitives remain supported. An absent optional
 `@RequestBody` keeps its existing Java primitive default (`0`, `false`, etc.).
+That default also applies when its body marshaler returns no value, including
+blank numeric bodies handled by the default converter. Malformed bodies still
+fail with 400. Required scalar query, form, header and cookie bindings likewise
+fail with 400 when a converter returns no value; handlers never receive null
+for those required bindings.
 The processor reports these mistakes on the parameter; the default runtime
 parameter provider also checks explicitly registered declarations during setup,
 before instance acquisition for dynamically resolved methods, and before direct
@@ -1984,8 +1991,10 @@ construct a new helper after prior responses have finished.
 Public NIO replaces the private JDK/Unsafe bridge. `SecureDirectoryStream` is
 used where available, with checked pathname access otherwise, including on
 macOS Java 21 and Windows. No architecture allowlist, native-access flags, or
-`jdk.unsupported` module is required. Providers without stable file identities
-or no-follow opens fail closed. No directory handle is retained by the helper,
+`jdk.unsupported` module is required. Providers without file keys use creation
+time, size, and modification-time snapshots; replacing an object with identical
+metadata cannot be detected. Providers without no-follow opens fail closed.
+No directory handle is retained by the helper,
 so constructing helpers repeatedly does not accumulate descriptors until GC.
 Observed root/file identity, size, modification-time, or containment changes
 are rejected. These are checks for observed changes, not protection against an
@@ -2085,3 +2094,24 @@ Lifecycle completion stages are handed off to isolated completion execution.
 `awaitShutdown` waits for lifecycle classification and does not wait for arbitrary
 dependents of the public stage. Join the stage explicitly when its completion
 publication or your dependent action is required. Keep dependent actions bounded.
+
+## Final request parsing and routing bounds
+
+The default `String` converters for `BigInteger`, `BigDecimal`, and `Number`
+reject values longer than 4,096 characters after trimming. Register a custom
+converter when your application deliberately supports larger values.
+URL-encoded form parsing rejects more than 1,000 nonempty name/value pairs,
+counting repeated names. Both failures surface as HTTP 400 during normal binding.
+Accept-Language helpers return an empty list above 4,096 combined characters or
+32 ranges. These limits bound CPU and memory consumed by untrusted input.
+
+Runtime paths retain trailing Unicode separators as data: `/admin%20` no longer
+resolves to a declaration for `/admin`. Both raw requests and simulator copies
+preserve the same decoded path. Declaration whitespace continues to be trimmed.
+
+A converter returning `Optional.empty()` contributes no element to a bound list.
+A required list with no converted elements fails with HTTP 400.
+
+MCP Accept ranges with media parameters other than `q` do not match the JSON or
+SSE representations. Empty trailing Content-Type parameters are rejected.
+Configure reverse proxies to use HTTP/1.1 for the MCP upstream.

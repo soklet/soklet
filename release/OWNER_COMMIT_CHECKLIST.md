@@ -84,6 +84,18 @@ Main-website content is outside those release inputs. Keep the 4.0.0 changelog
 header `Unreleased` until the owner's tagging step. If that step changes the
 tracked release notes or date, include those bytes in a newly accepted candidate
 before promotion; do not edit an already accepted source tree during promotion.
+Changing the changelog header or date also changes the version-transition census.
+Regenerate `release/version-transition-inventory.json` from the final reviewed
+bytes and run `node scripts/verify-version-transition-inventory.mjs --stage final`
+before creating the candidate commit. Review inventory differences together with
+the release-note change.
+
+Before freezing a candidate, inspect every `approvedAt`/`expiresAt` in
+`release/release-scan-exceptions.json`. The September 16 approvals expire
+2026-10-16 at 14:26:19 UTC. Obtain fresh owner approval for any renewed exception,
+keep each lifetime within 30 days, and include the approved registry in the
+candidate. An agent must not manufacture owner approval by advancing timestamps.
+
 
 ## Load-bearing new files in the September 13–14 handoff
 

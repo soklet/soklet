@@ -271,6 +271,8 @@ public sealed interface StreamingResponseBody permits StreamingResponseBody.Publ
 
 			this.readerFactory = builder.readerFactory;
 			this.charset = builder.charset;
+			if (!this.charset.canEncode())
+				throw new IllegalArgumentException("Reader response charset must support encoding.");
 			this.bufferSizeInCharacters = builder.bufferSizeInCharacters == null
 					? DEFAULT_READER_BUFFER_SIZE_IN_CHARACTERS
 					: builder.bufferSizeInCharacters;
