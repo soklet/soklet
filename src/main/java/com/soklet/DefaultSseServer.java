@@ -50,6 +50,7 @@ import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CodingErrorAction;
+import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -2737,6 +2738,15 @@ final class DefaultSseServer implements SseServer {
 				(metricsCollector) -> metricsCollector.didEstablishSseConnection(connectionSnapshot));
 	}
 
+	private record SseWriteOutcome(@Nullable SocketTimeoutException timeoutFailure) {
+		private static final SseWriteOutcome COMPLETED = new SseWriteOutcome(null);
+
+		private static SseWriteOutcome completed() { return COMPLETED; }
+		private static SseWriteOutcome timedOut() {
+			return new SseWriteOutcome(new SocketTimeoutException("SSE write timed out"));
+		}
+	}
+
 	private void processEstablishedConnection(@NonNull ClientSocketChannelRegistration registration,
 																						@NonNull ReentrantLock channelLock) {
 		requireNonNull(registration);
@@ -2856,19 +2866,19 @@ final class DefaultSseServer implements SseServer {
 
 				long writeStartedNanos = System.nanoTime();
 				Throwable writeThrowable = null;
-				AtomicInteger writeOutcome = new AtomicInteger(0); // active, finished, timed out
+				AtomicReference<SseWriteOutcome> writeOutcome = new AtomicReference<>();
 				TimeoutScheduler.ScheduledTask writeTimeoutTask = null;
 
 				if (!getWriteTimeout().isZero() && requestHandlerTimeoutScheduler != null && !requestHandlerTimeoutScheduler.isShutdown()) {
 					writeTimeoutTask = requestHandlerTimeoutScheduler.schedule(() -> {
 						// Canceling a task cannot retract a callback already selected by
 						// the scheduler. Only the winning deadline may close this socket.
-						if (!writeOutcome.compareAndSet(0, 2)) return;
-						try {
-							clientSocketChannel.close();
-						} catch (IOException ignored) {
-							// Nothing to do
-						}
+						if (writeOutcome.get() != null) return;
+						SseWriteOutcome timedOut = SseWriteOutcome.timedOut();
+						if (!writeOutcome.compareAndSet(null, timedOut)) return;
+						// Elect the timeout before closing the socket. The concurrent
+						// peer-close reader must not reclassify our close as a disconnect.
+						terminateAfterWriteFailure(sseConnection, requireNonNull(timedOut.timeoutFailure()));
 					}, getWriteTimeout());
 				}
 
@@ -2879,11 +2889,12 @@ final class DefaultSseServer implements SseServer {
 				} catch (Throwable t) {
 					writeThrowable = t;
 				} finally {
-					writeOutcome.compareAndSet(0, 1);
+					writeOutcome.compareAndSet(null, SseWriteOutcome.completed());
 					cancelTimeout(writeTimeoutTask);
-					if (writeOutcome.get() == 2
+					SocketTimeoutException timeoutFailure = requireNonNull(writeOutcome.get()).timeoutFailure();
+					if (timeoutFailure != null
 							&& (writeThrowable == null || socketFailureCause(writeThrowable) instanceof ClosedChannelException)) {
-						writeThrowable = new SocketTimeoutException("SSE write timed out");
+						writeThrowable = timeoutFailure;
 					}
 
 					Duration writeDuration = Duration.ofNanos(Math.max(0L,
@@ -3030,19 +3041,6 @@ final class DefaultSseServer implements SseServer {
 		ResourceMethod connectionResourceMethod = connectionSnapshot.getResourceMethod();
 		SocketChannel clientSocketChannel = sseConnection.getSocketChannel();
 
-		try {
-			channelLock.lock();
-			try {
-				clientSocketChannel.close();
-			} finally {
-				channelLock.unlock();
-			}
-		} catch (Exception exception) {
-			safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unable to close Server-Sent Event connection socket channel")
-					.throwable(exception)
-					.build());
-		}
-
 		StreamTerminationReason terminationReason =
 				sseConnection.getTerminationReason().orElse(null);
 
@@ -3060,6 +3058,20 @@ final class DefaultSseServer implements SseServer {
 		}
 
 		sseConnection.lifecycle.terminate(terminationReason, socketFailureCause(throwable));
+		// Publish the outcome before the fallback close wakes the peer-close reader.
+		try {
+			channelLock.lock();
+			try {
+				clientSocketChannel.close();
+			} finally {
+				channelLock.unlock();
+			}
+		} catch (Exception exception) {
+			safelyLog(LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Unable to close Server-Sent Event connection socket channel")
+					.throwable(exception)
+					.build());
+		}
+
 		StreamTermination electedTermination = sseConnection.lifecycle.termination().orElseThrow();
 		StreamTerminationReason effectiveTerminationReason = electedTermination.getReason();
 		Throwable terminationThrowable = electedTermination.getCause().orElse(null);
@@ -4001,39 +4013,13 @@ final class DefaultSseServer implements SseServer {
 
 			// First line: request line
 			if (requestBuilder == null) {
-				String line = trimAggressivelyToNull(rawLine);
-				if (line == null)
-					continue;
-
-				String[] components = line.trim().split("\\s+", -1);
-				if (components.length != 3)
-					throw new IllegalRequestException(format("Malformed Server-Sent Event request line (%d characters). Expected '<METHOD> <request-target> HTTP/1.1'", line.length()));
-
-				String rawHttpMethod = components[0];
-				String rawUrl = components[1];
-				String rawVersion = components[2];
-
-				requireAsciiToken(rawHttpMethod, "HTTP method");
-				requireAsciiToken(rawUrl, "request target");
-				requireAsciiToken(rawVersion, "HTTP version");
+				ParsedRequestLine parsed = parseRequestLine(rawLine);
+				String rawUrl = parsed.target();
 
 				if (rawUrl.length() > getMaximumRequestTargetLengthInBytes())
 					throw new RequestTargetTooLongIOException(format("Request target exceeds maximum length of %d bytes", getMaximumRequestTargetLengthInBytes()));
 
-				if (!"HTTP/1.1".equalsIgnoreCase(rawVersion))
-					throw new IllegalRequestException(format("Unsupported HTTP version for Server-Sent Event request (%d characters)", rawVersion.length()));
-
-				HttpMethod httpMethod;
-
-				try {
-					// Method tokens are case-sensitive (RFC 9110 section 9.1).
-					httpMethod = HttpMethod.valueOf(rawHttpMethod);
-				} catch (IllegalArgumentException e) {
-					// Enum.valueOf includes the rejected method in its exception message.
-					throw new IllegalRequestException(format("Unable to parse HTTP method in Server-Sent Event request line (%d characters)", rawHttpMethod.length()));
-				}
-
-				requestBuilder = Request.withRawUrl(httpMethod, rawUrl);
+				requestBuilder = Request.withRawUrl(parsed.method(), rawUrl);
 				continue;
 			}
 
@@ -4068,7 +4054,7 @@ final class DefaultSseServer implements SseServer {
 			if ("Expect".equalsIgnoreCase(headerName))
 				throw new IllegalRequestException("Expect header is not supported for Server-Sent Event requests");
 
-			headerLines.add(rawLine);
+			headerLines.add(decodeLastEventIdHeaderLine(rawLine));
 		}
 
 		if (hostHeaderCount == 0)
@@ -4086,13 +4072,79 @@ final class DefaultSseServer implements SseServer {
 				.lifecycleAdmission(outerAdmission).build();
 	}
 
-	private static void requireAsciiToken(@NonNull String value, @NonNull String field) {
-		if (value.isEmpty())
-			throw new IllegalRequestException(format("Missing %s in Server-Sent Event request line", field));
+	private static final class ParsedRequestLine {
+		private final HttpMethod method;
+		private final String target;
 
-		for (int i = 0; i < value.length(); i++) {
-			if (value.charAt(i) > 0x7F)
-				throw new IllegalRequestException(format("Non-ASCII %s in Server-Sent Event request line", field));
+		private ParsedRequestLine(HttpMethod method, String target) {
+			this.method = method;
+			this.target = target;
+		}
+
+		private HttpMethod method() {
+			return method;
+		}
+
+		private String target() {
+			return target;
+		}
+	}
+
+	private static ParsedRequestLine parseRequestLine(@NonNull String line) {
+		int firstSpace = line.indexOf(' ');
+		if (firstSpace <= 0)
+			throw new IllegalRequestException(format("Malformed Server-Sent Event request line (%d characters). Expected '<METHOD> <request-target> HTTP/1.1'", line.length()));
+
+		int targetStart = firstSpace;
+		while (targetStart < line.length() && line.charAt(targetStart) == ' ')
+			targetStart++;
+		int secondSpace = line.indexOf(' ', targetStart);
+		if (secondSpace <= targetStart)
+			throw new IllegalRequestException(format("Malformed Server-Sent Event request line (%d characters). Expected '<METHOD> <request-target> HTTP/1.1'", line.length()));
+
+		int versionStart = secondSpace;
+		while (versionStart < line.length() && line.charAt(versionStart) == ' ')
+			versionStart++;
+		if (!line.substring(versionStart).equals("HTTP/1.1"))
+			throw new IllegalRequestException(format("Malformed Server-Sent Event request line (%d characters). Expected '<METHOD> <request-target> HTTP/1.1'", line.length()));
+
+		String rawMethod = line.substring(0, firstSpace);
+		String rawTarget = line.substring(targetStart, secondSpace);
+		for (int i = 0; i < rawTarget.length(); i++) {
+			char character = rawTarget.charAt(i);
+			if (character < 0x21 || character > 0x7E)
+				throw new IllegalRequestException(format("Illegal request target character at index %d (target length %d)", i, rawTarget.length()));
+		}
+
+		try {
+			// HTTP method tokens are case-sensitive (RFC 9110 section 9.1).
+			return new ParsedRequestLine(HttpMethod.valueOf(rawMethod), rawTarget);
+		} catch (IllegalArgumentException e) {
+			// Enum.valueOf includes the rejected method in its exception message.
+			throw new IllegalRequestException(format("Unable to parse HTTP method in Server-Sent Event request line (%d characters)", rawMethod.length()));
+		}
+	}
+
+	private static String decodeLastEventIdHeaderLine(@NonNull String rawLine) {
+		String headerName = "Last-Event-ID";
+		int nameLength = headerName.length();
+		if (rawLine.length() <= nameLength || rawLine.charAt(nameLength) != ':'
+				|| !rawLine.regionMatches(true, 0, headerName, 0, nameLength))
+			return rawLine;
+
+		// EventSource reconnects encode this specific field as UTF-8. The raw
+		// reader preserves every byte as ISO-8859-1; restore those bytes only here,
+		// after wire-size limits and header framing checks, before map normalization.
+		String rawValue = rawLine.substring(nameLength + 1);
+		for (int i = 0; i < rawValue.length(); i++)
+			if (rawValue.charAt(i) > 0xFF)
+				throw new IllegalRequestException("Invalid byte representation in Last-Event-ID header");
+		try {
+			String decoded = RequestTextDecoder.decode(rawValue.getBytes(StandardCharsets.ISO_8859_1), StandardCharsets.UTF_8);
+			return rawLine.substring(0, nameLength + 1) + decoded;
+		} catch (CharacterCodingException ignored) {
+			// Keep malformed client bytes out of exception causes and diagnostics.
+			throw new IllegalRequestException("Invalid UTF-8 in Last-Event-ID header");
 		}
 	}
 
@@ -4294,6 +4346,12 @@ final class DefaultSseServer implements SseServer {
 					int attributedLength = end == -1 ? requestBuilder.length() : end;
 					requestCapture.record(requestBuilder, attributedLength);
 
+					// A header-only overflow can also exceed the aggregate request limit.
+					// Classify it before the aggregate check so malformed oversized
+					// headers cannot enter application code as a content-too-large request.
+					if (headerScanner.headerSectionLength() > getMaximumHeadersSizeInBytes())
+						throw new RequestHeadersTooLargeIOException(format("Request headers too large (exceeded %d bytes)", getMaximumHeadersSizeInBytes()));
+
 					// Bytes beyond the first header terminator are not this handshake.
 					if (attributedLength > getMaximumRequestSizeInBytes()) {
 						String rawRequest = requestBuilder.toString();
@@ -4311,8 +4369,6 @@ final class DefaultSseServer implements SseServer {
 					// Stop at the first complete CRLFCRLF or LFLF header terminator.
 					// IMPORTANT: we may have read beyond the header terminator in the same read(),
 					// so truncate to exactly the end of headers.
-					if (headerScanner.headerSectionLength() > getMaximumHeadersSizeInBytes())
-						throw new RequestHeadersTooLargeIOException(format("Request headers too large (exceeded %d bytes)", getMaximumHeadersSizeInBytes()));
 					if (end != -1) {
 						requestBuilder.setLength(end);
 						headersComplete = true;
@@ -4497,31 +4553,23 @@ final class DefaultSseServer implements SseServer {
 		}
 
 		if (crLfIndex != -1)
-			firstLine = rawRequest.substring(0, crLfIndex).trim();
+			firstLine = rawRequest.substring(0, crLfIndex);
 
 		// We don't even have a complete first line of the request
 		if (firstLine == null || firstLine.length() == 0)
 			return Optional.empty();
 
-		String[] parts = firstLine.trim().split("\\s+", -1);
-
-		// First line of the request is malformed
-		if (parts.length < 2)
-			return Optional.empty();
-
-		String rawHttpMethod = parts[0];
-
-		HttpMethod httpMethod;
+		ParsedRequestLine parsed;
 
 		try {
-			httpMethod = HttpMethod.valueOf(rawHttpMethod);
-		} catch (IllegalArgumentException e) {
-			// Malformed HTTP method specified
+			parsed = parseRequestLine(firstLine);
+		} catch (IllegalRequestException e) {
+			// Do not attribute a malformed request to an application interceptor.
 			return Optional.empty();
 		}
 
-		String rawUri = parts[1];
-		if (rawUri == null)
+		String rawUri = parsed.target();
+		if (rawUri.length() > getMaximumRequestTargetLengthInBytes())
 			return Optional.empty();
 
 		List<String> rawHeaderLines = new ArrayList<>();
@@ -4549,14 +4597,19 @@ final class DefaultSseServer implements SseServer {
 			if (headerLine.length() == 0)
 				break;
 
-			rawHeaderLines.add(headerLine);
+			try {
+				rawHeaderLines.add(decodeLastEventIdHeaderLine(headerLine));
+			} catch (IllegalRequestException malformedHeader) {
+				// An oversized request with an invalid cursor cannot reach application code.
+				return Optional.empty();
+			}
 			cursor = lineEndIndex + lineSeparatorLength;
 		}
 
 		Map<String, List<String>> headers = Utilities.extractHeadersFromRawHeaderLines(rawHeaderLines);
 
 		try {
-			return Optional.of(Request.withRawUrl(httpMethod, rawUri)
+			return Optional.of(Request.withRawUrl(parsed.method(), rawUri)
 					.idGenerator(getIdGenerator())
 					.headers(headers)
 					.contentTooLarge(true)

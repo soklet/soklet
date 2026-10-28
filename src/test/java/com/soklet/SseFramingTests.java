@@ -30,6 +30,29 @@ class SseFramingTests {
     }
 
     @Test
+    void requestLineRejectsControlCharactersAndNonCanonicalSeparators() {
+        DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0).build();
+        for (String line : List.of(
+                "GET /events/\u001b[31m HTTP/1.1", "GET /events/\u007f HTTP/1.1",
+                "GET\t/events HTTP/1.1", "GET /events\tHTTP/1.1",
+                " GET /events HTTP/1.1",
+                "GET /events HTTP/1.1 ", "GET /events http/1.1",
+                "GET /events HTTP/1.1\u00a0")) {
+            String raw = line + "\r\nHost: localhost\r\n\r\n";
+            assertThrows(IllegalRequestException.class, () -> server.parseRequest(raw, null), line);
+            assertTrue(server.parseTooLargeRequestForRawRequest(raw).isEmpty(), line);
+        }
+    }
+
+    @Test
+    void requestLinePreservesOrdinarySpaceRuns() throws Exception {
+        DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0).build();
+        String raw = "GET   /events   HTTP/1.1\r\nHost: localhost\r\n\r\n";
+        assertEquals("/events", server.parseRequest(raw, null).getPath());
+        assertEquals("/events", server.parseTooLargeRequestForRawRequest(raw).orElseThrow().getPath());
+    }
+
+    @Test
     void oversizedRequestAttributionDoesNotRewriteMethodCase() {
         DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0).build();
         for (String method : List.of("get", "gEt", "options", "Options", "head"))
@@ -42,7 +65,7 @@ class SseFramingTests {
     @Test
     void oversizedTargetAttributionLeavesMalformedTargetsUnparsed() {
         DefaultSseServer server = (DefaultSseServer) SseServer.withPort(0).build();
-        for (String target : List.of("/ev%zzents", "http://[bad/events", "*"))
+        for (String target : List.of("/ev%zzents", "http://[bad/events", "*", "/" + "x".repeat(8_192)))
             assertTrue(server.parseTooLargeRequestForRawRequest("GET " + target
                     + " HTTP/1.1\r\nHost: localhost\r\n\r\n").isEmpty(), target);
         Request attributed = server.parseTooLargeRequestForRawRequest(

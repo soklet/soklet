@@ -43,6 +43,7 @@ final class TimeoutScheduler {
 	private static final Duration DEFAULT_TICK_DURATION = Duration.ofMillis(10);
 	private static final int DEFAULT_TICKS_PER_WHEEL = 1024;
 	private final long tickNanos;
+	private final long startedAtNanos;
 	private final Bucket[] buckets;
 	private final ConcurrentLinkedQueue<ScheduledTask> pendingTasks;
 	private final AtomicBoolean shutdown;
@@ -73,6 +74,7 @@ final class TimeoutScheduler {
 
 		this.pendingTasks = new ConcurrentLinkedQueue<>();
 		this.shutdown = new AtomicBoolean(false);
+		this.startedAtNanos = System.nanoTime();
 		this.workerThread = threadFactory.newThread(this::run);
 		this.workerThread.start();
 	}
@@ -89,7 +91,12 @@ final class TimeoutScheduler {
 		if (this.shutdown.get())
 			throw new RejectedExecutionException("Timeout scheduler is shut down.");
 
-		long deadlineTick = saturatedAdd(this.currentTick, ticksFor(delay));
+		// The worker's completed tick can lag after a pause or a slow cancelation
+		// hook. A newly submitted timeout starts at the current clock position,
+		// not that stale tick, while retaining the wheel's normal tick rounding.
+		long elapsedTicks = Math.max(0L, System.nanoTime() - this.startedAtNanos) / this.tickNanos;
+		long scheduleTick = Math.max(this.currentTick, elapsedTicks);
+		long deadlineTick = saturatedAdd(scheduleTick, ticksFor(delay));
 		ScheduledTask scheduledTask = new ScheduledTask(task, deadlineTick);
 		this.pendingTasks.add(scheduledTask);
 		LockSupport.unpark(this.workerThread);
@@ -151,7 +158,7 @@ final class TimeoutScheduler {
 	}
 
 	private void run() {
-		long nextTickAt = System.nanoTime() + this.tickNanos;
+		long nextTickAt = this.startedAtNanos + this.tickNanos;
 
 		while (!this.shutdown.get()) {
 			long sleepNanos = nextTickAt - System.nanoTime();

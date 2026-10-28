@@ -1010,6 +1010,7 @@ final class DefaultMcpServer implements McpServer {
 		// policy.  Initialize the shared feature carrier only on the first actual
 		// policy/localization use, and memoize both success and failure.
 		class LazyCatalogAccess {
+			private final ReentrantLock initializationLock = new ReentrantLock();
 			private boolean initialized;
 			private @Nullable Throwable failure;
 			private @Nullable McpInvocationFeatures invocationFeatures;
@@ -1018,16 +1019,25 @@ final class DefaultMcpServer implements McpServer {
 					Optional.empty();
 
 			@NonNull
-			synchronized McpInvocationFeatures invocationFeatures() {
-				initialize();
-				return requireNonNull(this.invocationFeatures);
+			McpInvocationFeatures invocationFeatures() {
+				this.initializationLock.lock();
+				try {
+					initialize();
+					return requireNonNull(this.invocationFeatures);
+				} finally {
+					this.initializationLock.unlock();
+				}
 			}
 
 			@NonNull
-			synchronized Optional<@NonNull McpLocalizationContext>
-					localizationContext() {
-				initialize();
-				return this.localizationContext;
+			Optional<@NonNull McpLocalizationContext> localizationContext() {
+				this.initializationLock.lock();
+				try {
+					initialize();
+					return this.localizationContext;
+				} finally {
+					this.initializationLock.unlock();
+				}
 			}
 
 			private void initialize() {
@@ -1451,12 +1461,13 @@ final class DefaultMcpServer implements McpServer {
 		Optional<String> negotiatedLocale = contentLanguageTag(context.getLocale());
 		McpCanonicalLocalizationPlan.ResponsePlan resolvedPlan = responsePlan.orElseThrow();
 		return new McpRuntimeCatalogLocalizer.PageSession() {
-			private final Object cacheLock = new Object();
+			private final ReentrantLock cacheLock = new ReentrantLock();
 			private final Map<McpLocalizableText, McpLocalizationResult> cachedResults = new LinkedHashMap<>();
 			private int distinctLookupCount;
 			private final McpLocalizationContext cachedContext = McpLocalizationContext
 					.withLocale(context.getLocale(), text -> {
-						synchronized (cacheLock) {
+						cacheLock.lock();
+						try {
 							McpLocalizationResult cached = cachedResults.get(text);
 							if (cached != null)
 								return cached;
@@ -1482,6 +1493,8 @@ final class DefaultMcpServer implements McpServer {
 							}
 							cachedResults.put(text, result);
 							return result;
+						} finally {
+							cacheLock.unlock();
 						}
 					}).revision(context.getRevision().orElse(null)).build();
 
@@ -1506,11 +1519,14 @@ final class DefaultMcpServer implements McpServer {
 				Set<McpLocalizableText> retainedTexts = slots.stream()
 						.map(McpCanonicalLocalizationPlan.Slot::text)
 						.collect(java.util.stream.Collectors.toSet());
-				synchronized (cacheLock) {
+				cacheLock.lock();
+				try {
 					// Retries strictly shrink the selected canonical-key prefix.
 					// A dropped owner cannot return, so its translated payload is
 					// released without resetting the response-wide lookup count.
 					cachedResults.keySet().retainAll(retainedTexts);
+				} finally {
+					cacheLock.unlock();
 				}
 				if (slots.isEmpty())
 					return McpRuntimeCatalogLocalizer.Outcome.canonical(input.canonicalDocument());
@@ -1528,9 +1544,25 @@ final class DefaultMcpServer implements McpServer {
 							McpRuntimeCatalogLocalizer.Disposition.CANONICAL,
 							input.canonicalDocument(), contentLanguageTag(outcome.selectedLocale()));
 					case DEFAULT_TEXT, FAIL_REQUEST -> localizationFailure(configuredLocalizer, input);
-					case TOO_LARGE -> new McpRuntimeCatalogLocalizer.Outcome(
-							McpRuntimeCatalogLocalizer.Disposition.RESIZE_PAGE,
-							input.canonicalDocument(), negotiatedLocale);
+					case TOO_LARGE -> {
+						String member = switch (input.responseKind()) {
+							case TOOLS_LIST -> "tools";
+							case PROMPTS_LIST -> "prompts";
+							case RESOURCES_LIST -> "resources";
+							case RESOURCE_TEMPLATES_LIST -> "resourceTemplates";
+							default -> throw new IllegalStateException("Unexpected paged catalog response kind.");
+						};
+						com.soklet.internal.mcp.protocol.McpJsonArray entries =
+								(com.soklet.internal.mcp.protocol.McpJsonArray) requireNonNull(
+										input.canonicalDocument().members().get(member));
+						// An indivisible owner cannot shrink further. Its canonical
+						// page already fits, so apply the configured failure policy
+						// instead of unconditionally failing a default-text fallback.
+						yield entries.values().size() <= 1 ? localizationFailure(configuredLocalizer, input)
+								: new McpRuntimeCatalogLocalizer.Outcome(
+										McpRuntimeCatalogLocalizer.Disposition.RESIZE_PAGE,
+										input.canonicalDocument(), negotiatedLocale);
+					}
 				};
 			}
 		};

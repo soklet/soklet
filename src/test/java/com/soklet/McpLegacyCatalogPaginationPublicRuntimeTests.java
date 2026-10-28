@@ -237,6 +237,96 @@ public class McpLegacyCatalogPaginationPublicRuntimeTests {
 	}
 
 	@Test
+	public void oneOversizedLocalizedDescriptorHonorsTheFailurePolicyAndKeepsContinuationUsable() {
+		McpJsonObject schema = McpJsonObject.fromMembers(Map.of(
+				"type", com.soklet.McpJsonString.fromValue("object"),
+				"title", com.soklet.McpJsonString.fromValue("Schema title"),
+				"description", com.soklet.McpJsonString.fromValue("Schema description"),
+				"properties", McpJsonObject.fromMembers(Map.of("value", McpJsonObject.fromMembers(Map.of(
+						"type", com.soklet.McpJsonString.fromValue("string"),
+						"description", com.soklet.McpJsonString.fromValue("Value description")))))));
+		List<McpToolRegistration<?>> tools = new ArrayList<>();
+		for (int index = 0; index < 2; ++index)
+			tools.add(McpToolRegistration.withName(name(index), LEGACY_SET).inputSchema(schema)
+					.handler((request, args, features) -> { throw new AssertionError("Listing must not invoke tools."); })
+					.title("Canonical title").description("Canonical description").build());
+		McpEndpoint endpoint = McpEndpoint.withPath(PATH,
+				McpImplementation.withNameAndVersion("fallback", "test").build(), LEGACY_SET)
+				.toolRegistrations(tools).build();
+		String translated = "L".repeat(900_000);
+		for (McpLocalizationFailurePolicy policy : McpLocalizationFailurePolicy.values()) {
+			McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH,
+					request -> McpLocalizationContext.withLocale(Locale.FRENCH,
+							text -> McpLocalizationResult.localized(translated)).build())
+					.failurePolicy(policy).build();
+			run(List.of(endpoint), builder -> builder.localizer(localizer), simulator -> {
+				for (McpProtocolVersion version : LEGACY) {
+					Capture first = execute(simulator, request(PATH, version, Kind.TOOLS, null, "fr"));
+					if (policy == McpLocalizationFailurePolicy.FAIL_REQUEST) {
+						assertError(first, -32603);
+						continue;
+					}
+					Page firstPage = page(first, Kind.TOOLS);
+					assertEquals(List.of(name(0)), firstPage.identities());
+					assertNotNull(firstPage.cursor());
+					assertTrue(first.body().contains("Canonical title"), first.body());
+					assertEquals("en", first.contentLanguage());
+					assertFalse(first.body().contains("LLLL"), "Fallback must discard every partial replacement.");
+					Page next = page(execute(simulator,
+							request(PATH, version, Kind.TOOLS, firstPage.cursor(), "fr")), Kind.TOOLS);
+					assertEquals(List.of(name(1)), next.identities());
+					assertNull(next.cursor());
+				}
+			});
+		}
+	}
+
+	@Test
+	public void blockingLocalizationCallbacksDoNotPinVirtualThreadCarriers() throws Exception {
+		McpEndpoint endpoint = catalog(PATH, LEGACY_SET, 1, 0, 0, 0, true, null);
+		AtomicInteger virtualCallbacks = new AtomicInteger();
+		Set<Long> callbackThreads = java.util.concurrent.ConcurrentHashMap.newKeySet();
+		McpLocalizer localizer = McpLocalizer.withFallbackLocale(Locale.ENGLISH, request -> {
+			assertTrue(Thread.currentThread().isVirtual());
+			virtualCallbacks.incrementAndGet();
+			callbackThreads.add(Thread.currentThread().threadId());
+			assertDoesNotThrow(() -> Thread.sleep(50));
+			return McpLocalizationContext.withLocale(Locale.FRENCH, text -> {
+				assertTrue(Thread.currentThread().isVirtual());
+				virtualCallbacks.incrementAndGet();
+				callbackThreads.add(Thread.currentThread().threadId());
+				assertDoesNotThrow(() -> Thread.sleep(50));
+				return McpLocalizationResult.useDefaultText();
+			}).build();
+		}).build();
+		McpCatalogAccessPolicy access = McpCatalogAccessPolicy.fromEvaluators(
+				(context, registration, features) -> true,
+				(context, registration, features) -> true);
+		java.nio.file.Path recordingFile = java.nio.file.Files.createTempFile("soklet-localization-pinning-", ".jfr");
+		try (jdk.jfr.Recording recording = new jdk.jfr.Recording()) {
+			recording.enable("jdk.VirtualThreadPinned").withThreshold(Duration.ofMillis(1)).withStackTrace();
+			recording.start();
+			run(List.of(endpoint), builder -> builder.localizer(localizer).catalogAccessPolicy(access), simulator -> {
+				for (McpProtocolVersion version : LEGACY)
+					assertEquals(expected(Kind.TOOLS, 1),
+							page(execute(simulator, request(PATH, version, Kind.TOOLS, null, "fr")), Kind.TOOLS).identities());
+			});
+			recording.stop();
+			recording.dump(recordingFile);
+			assertEquals(4, virtualCallbacks.get(), "Exercise provider creation and lookup on each legacy revision.");
+			List<jdk.jfr.consumer.RecordedEvent> pinned = jdk.jfr.consumer.RecordingFile.readAllEvents(recordingFile)
+					.stream().filter(event -> event.getEventType().getName().equals("jdk.VirtualThreadPinned"))
+					.filter(event -> event.getThread() != null && callbackThreads.contains(event.getThread().getJavaThreadId()))
+					.filter(event -> event.getStackTrace() != null && event.getStackTrace().getFrames().stream()
+							.anyMatch(frame -> frame.getMethod().getType().getName().startsWith("com.soklet.DefaultMcpServer")))
+					.toList();
+			assertTrue(pinned.isEmpty(), () -> "Application localization callbacks pinned carriers: " + pinned);
+		} finally {
+			java.nio.file.Files.deleteIfExists(recordingFile);
+		}
+	}
+
+	@Test
 	public void cursorScopeFailuresStayNeutralAndEveryContinuationIsFreshlyAdmitted() {
 		McpEndpoint endpoint = catalog(PATH, LEGACY_SET, 3, 3, 0, 0, true, null);
 		McpEndpoint otherPath = catalog("/other", LEGACY_SET, 3, 3, 0, 0, true, null);
@@ -493,7 +583,8 @@ public class McpLegacyCatalogPaginationPublicRuntimeTests {
 			String body = new String(response.getBody().orElseThrow(), StandardCharsets.UTF_8);
 			assertTrue(body.getBytes(StandardCharsets.UTF_8).length <= McpJsonLimits.productionDefaults().maximumOutputBytes());
 			assertTrue(simulation.awaitCompletion(remainingRequestWait()).isPresent());
-			return new Capture(response.getStatusCode(), body);
+			return new Capture(response.getStatusCode(), body,
+					response.getHeaders().getOrDefault("Content-Language", List.of()).stream().findFirst().orElse(null));
 		} catch (InterruptedException exception) {
 			Thread.currentThread().interrupt();
 			throw new AssertionError(exception);
@@ -589,7 +680,7 @@ public class McpLegacyCatalogPaginationPublicRuntimeTests {
 		final String key;
 		Kind(String method, String member, String key) { this.method = method; this.member = member; this.key = key; }
 	}
-	private record Capture(int status, String body) { }
+	private record Capture(int status, String body, String contentLanguage) { }
 	private record Page(List<String> identities, String cursor, Capture capture) { }
 	private record Enumeration(List<String> identities, int pages) { }
 }

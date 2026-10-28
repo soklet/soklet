@@ -462,6 +462,8 @@ const CHARACTERIZATIONS = Object.freeze([
       { owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#useMetricSequence', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java' },
       { owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#refreshResourceNotificationAuthorityWhileLocked', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java' },
       { owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#resourceNotificationWriteAllowed', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java' },
+      { owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#projectTaskNotificationWithMetricSequence', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java' },
+      { owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl#taskNotificationWriteAllowed', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java' },
       { owner: 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime#processRequestSafely::<anonymous McpApplicationResponseWriter>#writeNotification', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java' },
       { owner: 'com.soklet.internal.mcp.protocol.McpApplicationExecution.Exchange#writeNotification', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java' },
       { owner: 'com.soklet.internal.mcp.protocol.McpApplicationExecution.Exchange#runHandler::<anonymous McpApplicationNotificationWriter>#isActive', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java' },
@@ -477,7 +479,7 @@ const CHARACTERIZATIONS = Object.freeze([
       { owner: 'com.soklet.internal.mcp.protocol.McpRequestSseStream.TransportChannel#delegate', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpRequestSseStream.java' },
     ],
     id: 'MCP-TRANSPORT-001',
-    statement: 'Progress and subscription notifications use the request-scoped SSE stream and its single bounded McpOutboundChannel delegate. Modern resource invalidations retain accepted identities, use the bounded projection scheduler, and guard delivery with the installed stream, authorization generation and expiry. Selected legacy POST streams share the finite legacy terminal projection with their immutable simulation JSON snapshots; the default modern encoder is preserved and message frames contain no event IDs or priming fields. Guarded legacy GET invalidations recheck source/GET/grant authority before every socket write; revoked unwritten chunks are purged, partially written chunks fail, and encoded-byte releases run outside the channel lock.',
+    statement: 'Progress and subscription notifications use the request-scoped SSE stream and its single bounded McpOutboundChannel delegate. Modern resource invalidations retain accepted identities, use the bounded projection scheduler, and guard delivery with the installed stream, authorization generation and expiry. Task status frames additionally retain their projection authorization revision so an accepted renewal invalidates previously projected data before socket writes. Selected legacy POST streams share the finite legacy terminal projection with their immutable simulation JSON snapshots; the default modern encoder is preserved and message frames contain no event IDs or priming fields. Guarded legacy GET invalidations recheck source/GET/grant authority before every socket write; revoked unwritten chunks are purged, partially written chunks fail, and encoded-byte releases run outside the channel lock.',
   },
   {
     evidence: [
@@ -1418,14 +1420,32 @@ function verifyCharacterizationSources(root, sourceFiles) {
     /authorizer\s*\(\s*\)\s*\.\s*isEmpty\s*\(\s*\)\s*\?\s*deadlineNanos\s*:\s*minimumDeadline\s*\(\s*now\s*,\s*deadlineNanos\s*,\s*subscriptionAuthorizationExpiryNanos\s*\)/u,
     'resource write authority must expire at the request or authorization deadline');
   requireStructural(refreshResourceAuthority,
-    /new\s+ResourceNotificationAuthority\s*\(\s*requireNonNull\s*\(\s*responseStream\s*\)\s*,\s*subscriptionAuthorizationGeneration\s*,\s*expiry\s*\)/u,
-    'resource write authority must capture its installed stream and generation');
+    /new\s+ResourceNotificationAuthority\s*\(\s*requireNonNull\s*\(\s*responseStream\s*\)\s*,\s*subscriptionAuthorizationGeneration\s*,\s*catalogAuthorizationRevision\s*,\s*expiry\s*\)/u,
+    'resource write authority must capture its installed stream, generation and catalog authorization revision');
   const resourceWriteAllowed = oneMethod(runtime.lexed, runtimePath,
     'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl',
     'resourceNotificationWriteAllowed');
   requireStructural(resourceWriteAllowed,
     /^\s*ResourceNotificationAuthority\s+authority\s*=\s*resourceNotificationAuthority\s*;\s*return\s+authority\s*!=\s*null\s*&&\s*sameInstance\s*\(\s*authority\s*\.\s*stream\s*\(\s*\)\s*,\s*requireNonNull\s*\(\s*stream\s*\)\s*\)\s*&&\s*authority\s*\.\s*generation\s*\(\s*\)\s*==\s*generation\s*&&\s*applicationClock\s*\.\s*nanoTime\s*\(\s*\)\s*-\s*authority\s*\.\s*deadlineNanos\s*\(\s*\)\s*<\s*0L\s*;\s*$/u,
     'resource write guard must require the captured stream, generation and unexpired deadline');
+  const projectTask = oneMethod(runtime.lexed, runtimePath,
+    'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl',
+    'projectTaskNotificationWithMetricSequence');
+  requireExactSimpleAssignments(projectTask, 'stream',
+    ['requireNonNull(responseStream)'],
+    'task projection must use the installed responseStream');
+  requireStructural(projectTask,
+    /new\s+TaskNotificationDelivery\s*\(\s*terminalSnapshot\s*,\s*deliveryState\s*,\s*check\s*\.\s*authorizationGeneration\s*\(\s*\)\s*,\s*check\s*\.\s*authorizationRevision\s*\(\s*\)\s*\)/u,
+    'task delivery must capture its projection authorization generation and revision');
+  requireStructural(projectTask,
+    /stream\s*\.\s*offerGuardedCoalescingMessage\s*\(\s*notification\s*,\s*new\s+Object\s*\(\s*\)\s*,\s*\(\s*\)\s*->\s*\(\s*!\s*offerPending\s*\.\s*getAndSet\s*\(\s*false\s*\)\s*\|\|\s*applicationClock\s*\.\s*nanoTime\s*\(\s*\)\s*-\s*check\s*\.\s*deadlineNanos\s*\(\s*\)\s*<\s*0L\s*\)\s*&&\s*taskNotificationWriteAllowed\s*\(\s*stream\s*,\s*reservedDelivery\s*\.\s*authorizationGeneration\s*\(\s*\)\s*,\s*reservedDelivery\s*\.\s*authorizationRevision\s*\(\s*\)\s*\)/u,
+    'task projection must offer on its installed stream with the admission deadline and captured delivery authorization guard');
+  const taskWriteAllowed = oneMethod(runtime.lexed, runtimePath,
+    'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl',
+    'taskNotificationWriteAllowed');
+  requireStructural(taskWriteAllowed,
+    /^\s*ResourceNotificationAuthority\s+authority\s*=\s*resourceNotificationAuthority\s*;\s*return\s+authority\s*!=\s*null\s*&&\s*sameInstance\s*\(\s*authority\s*\.\s*stream\s*\(\s*\)\s*,\s*requireNonNull\s*\(\s*stream\s*\)\s*\)\s*&&\s*authority\s*\.\s*generation\s*\(\s*\)\s*==\s*generation\s*&&\s*authority\s*\.\s*revision\s*\(\s*\)\s*==\s*revision\s*&&\s*applicationClock\s*\.\s*nanoTime\s*\(\s*\)\s*-\s*authority\s*\.\s*deadlineNanos\s*\(\s*\)\s*<\s*0L\s*;\s*$/u,
+    'task write guard must require the captured stream, generation, revision and unexpired deadline');
   const productionStreamConstructor = oneMethodMatching(request.lexed,
     requestPath, 'com.soklet.internal.mcp.protocol.McpRequestSseStream',
     'McpRequestSseStream', (candidate) =>

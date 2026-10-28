@@ -17,6 +17,7 @@
 package com.soklet.internal.mcp.protocol;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.ByteArrayOutputStream;
@@ -228,9 +229,11 @@ final class McpLevelOneUriTemplate {
 	static final class NormalizedResourceUri {
 		@NonNull
 		private final String value;
+		private final boolean serverAuthority;
 
-		private NormalizedResourceUri(@NonNull String value) {
+		private NormalizedResourceUri(@NonNull String value, boolean serverAuthority) {
 			this.value = requireNonNull(value);
+			this.serverAuthority = serverAuthority;
 		}
 	}
 
@@ -273,10 +276,14 @@ final class McpLevelOneUriTemplate {
 	@NonNull
 	private final String trailingLiteral;
 	private final int minimumWireLength;
+	@Nullable
+	private final McpLevelOneUriTemplate registryAuthorityVariant;
 
 	private McpLevelOneUriTemplate(@NonNull String template,
-			@NonNull List<@NonNull Part> parts) {
+			@NonNull List<@NonNull Part> parts,
+			@Nullable McpLevelOneUriTemplate registryAuthorityVariant) {
 		this.template = requireNonNull(template);
+		this.registryAuthorityVariant = registryAuthorityVariant;
 		this.parts = List.copyOf(requireNonNull(parts));
 		this.overlapAtoms = overlapAtoms(parts);
 		this.leadingLiteral = parts.get(0) instanceof LiteralPart literal
@@ -299,6 +306,7 @@ final class McpLevelOneUriTemplate {
 		List<Part> parts = new ArrayList<>();
 		Set<String> variableNames = new LinkedHashSet<>();
 		StringBuilder expanded = new StringBuilder(template.length());
+		BitSet variablePositions = new BitSet();
 		int literalStart = 0;
 		boolean previousWasVariable = false;
 
@@ -341,6 +349,7 @@ final class McpLevelOneUriTemplate {
 						"A resource URI template may contain at most "
 								+ MAXIMUM_VARIABLE_COUNT + " variables.");
 			parts.add(new VariablePart(variableName));
+			variablePositions.set(expanded.length());
 			expanded.append('x');
 			previousWasVariable = true;
 			index = closing + 1;
@@ -358,29 +367,69 @@ final class McpLevelOneUriTemplate {
 		requireMaximumUtf8Bytes(expanded.toString(),
 				MAXIMUM_TEMPLATE_UTF_8_BYTES,
 				"Expanded resource URI template");
-		String expandedUri = requireValidAbsoluteUri(expanded.toString(),
+		// A letter placeholder makes a variable port look like a registry
+		// authority (and makes an IPv6 port invalid). Numeric port placeholders
+		// let URI identify the actual server-host span before case folding.
+		String expandedUri = requireValidAbsoluteUri(
+				withNumericPortPlaceholders(expanded.toString(), variablePositions),
 				"Expanded resource URI template");
-		String syntaxNormalizedExpandedUri = normalizeRfc3986SyntaxCase(
-				expandedUri);
-		if (!expandedUri.equals(syntaxNormalizedExpandedUri)) {
-			List<Part> syntaxNormalizedParts = new ArrayList<>(parts.size());
-			int expandedIndex = 0;
-			for (Part part : parts) {
-				if (part instanceof LiteralPart literal) {
-					int literalEnd = expandedIndex + literal.value().length();
-					syntaxNormalizedParts.add(new LiteralPart(
-							syntaxNormalizedExpandedUri.substring(expandedIndex,
-									literalEnd)));
-					expandedIndex = literalEnd;
-				} else {
-					syntaxNormalizedParts.add(part);
-					// Variables use the single-character expansion above.
-					++expandedIndex;
-				}
+		List<Part> serverParts = syntaxNormalizedParts(parts,
+				normalizeRfc3986SyntaxCase(expandedUri));
+		List<Part> registryParts = syntaxNormalizedParts(parts,
+				normalizeRfc3986SyntaxCase(expandedUri, false));
+		McpLevelOneUriTemplate registryVariant = serverParts.equals(registryParts)
+				? null : new McpLevelOneUriTemplate(template, registryParts, null);
+		return new McpLevelOneUriTemplate(template, serverParts, registryVariant);
+	}
+
+	@NonNull
+	private static List<@NonNull Part> syntaxNormalizedParts(
+			@NonNull List<@NonNull Part> parts, @NonNull String expanded) {
+		List<Part> normalized = new ArrayList<>(parts.size());
+		int expandedIndex = 0;
+		for (Part part : parts) {
+			if (part instanceof LiteralPart literal) {
+				int literalEnd = expandedIndex + literal.value().length();
+				normalized.add(new LiteralPart(expanded.substring(expandedIndex, literalEnd)));
+				expandedIndex = literalEnd;
+			} else {
+				normalized.add(part);
+				++expandedIndex;
 			}
-			parts = syntaxNormalizedParts;
 		}
-		return new McpLevelOneUriTemplate(template, parts);
+		return normalized;
+	}
+
+	@NonNull
+	private static String withNumericPortPlaceholders(@NonNull String expanded,
+			@NonNull BitSet variablePositions) {
+		int schemeEnd = expanded.indexOf(':');
+		if (schemeEnd < 0 || !expanded.startsWith("//", schemeEnd + 1))
+			return expanded;
+		int authorityStart = schemeEnd + 3;
+		int authorityEnd = authorityStart;
+		while (authorityEnd < expanded.length()
+				&& "/?#".indexOf(expanded.charAt(authorityEnd)) < 0)
+			++authorityEnd;
+		int hostStart = Math.max(authorityStart,
+				expanded.lastIndexOf('@', authorityEnd - 1) + 1);
+		int portColon = expanded.lastIndexOf(':', authorityEnd - 1);
+		if (portColon < hostStart)
+			return expanded;
+		if (hostStart < authorityEnd && expanded.charAt(hostStart) == '[') {
+			int closingBracket = expanded.indexOf(']', hostStart);
+			if (closingBracket < 0 || portColon != closingBracket + 1)
+				return expanded;
+		}
+		StringBuilder numeric = null;
+		for (int index = variablePositions.nextSetBit(portColon + 1);
+				index >= 0 && index < authorityEnd;
+				index = variablePositions.nextSetBit(index + 1)) {
+			if (numeric == null)
+				numeric = new StringBuilder(expanded);
+			numeric.setCharAt(index, '0');
+		}
+		return numeric == null ? expanded : numeric.toString();
 	}
 
 	static void requireResourceTemplateCount(int count) {
@@ -417,6 +466,8 @@ final class McpLevelOneUriTemplate {
 
 	boolean couldMatch(@NonNull NormalizedResourceUri normalized) {
 		requireNonNull(normalized);
+		if (!normalized.serverAuthority && registryAuthorityVariant != null)
+			return registryAuthorityVariant.couldMatch(normalized);
 		String uri = normalized.value;
 		return uri.length() >= minimumWireLength
 				&& (leadingLiteral.isEmpty() || uri.startsWith(leadingLiteral))
@@ -432,6 +483,8 @@ final class McpLevelOneUriTemplate {
 	Optional<@NonNull Map<@NonNull String, @NonNull String>> match(
 			@NonNull PreparedResourceUri prepared) {
 		requireNonNull(prepared);
+		if (!prepared.normalized.serverAuthority && registryAuthorityVariant != null)
+			return registryAuthorityVariant.match(prepared);
 		String uri = prepared.normalized.value;
 		if (!couldMatch(prepared.normalized))
 			return Optional.empty();
@@ -482,8 +535,10 @@ final class McpLevelOneUriTemplate {
 		requireMaximumUtf8Bytes(uri,
 				MAXIMUM_TEMPLATE_ROUTED_RESOURCE_URI_UTF_8_BYTES,
 				"Template-routed resource URI");
+		String percentNormalized = normalizePercentTripletCase(uri);
+		URI parsed = URI.create(percentNormalized);
 		return new NormalizedResourceUri(normalizeRfc3986SyntaxCase(
-				normalizePercentTripletCase(uri)));
+				percentNormalized, parsed, true), parsed.getHost() != null);
 	}
 
 	@NonNull
@@ -509,6 +564,17 @@ final class McpLevelOneUriTemplate {
 			@NonNull OverlapComparisonBudget endpointBudget) {
 		requireNonNull(other);
 		requireNonNull(endpointBudget);
+		if (potentiallyOverlapsParts(other, endpointBudget))
+			return true;
+		if (registryAuthorityVariant == null && other.registryAuthorityVariant == null)
+			return false;
+		McpLevelOneUriTemplate leftRegistry = registryAuthorityVariant == null ? this : registryAuthorityVariant;
+		McpLevelOneUriTemplate rightRegistry = other.registryAuthorityVariant == null ? other : other.registryAuthorityVariant;
+		return leftRegistry.potentiallyOverlapsParts(rightRegistry, endpointBudget);
+	}
+
+	private boolean potentiallyOverlapsParts(@NonNull McpLevelOneUriTemplate other,
+			@NonNull OverlapComparisonBudget endpointBudget) {
 		if (!endpointBudget.chargeState())
 			return true;
 		ArrayDeque<MatchState> pending = new ArrayDeque<>();
@@ -846,8 +912,19 @@ final class McpLevelOneUriTemplate {
 	 */
 	@NonNull
 	private static String normalizeRfc3986SyntaxCase(@NonNull String value) {
+		return normalizeRfc3986SyntaxCase(value, true);
+	}
+
+	@NonNull
+	private static String normalizeRfc3986SyntaxCase(@NonNull String value, boolean normalizeHost) {
+		return normalizeRfc3986SyntaxCase(value, URI.create(value), normalizeHost);
+	}
+
+	@NonNull
+	private static String normalizeRfc3986SyntaxCase(@NonNull String value,
+			@NonNull URI parsed, boolean normalizeHost) {
 		requireNonNull(value);
-		URI parsed = URI.create(value);
+		requireNonNull(parsed);
 		char[] characters = null;
 		int schemeEnd = value.indexOf(':');
 		for (int index = 0; index < schemeEnd; ++index) {
@@ -860,7 +937,7 @@ final class McpLevelOneUriTemplate {
 		}
 
 		String rawAuthority = parsed.getRawAuthority();
-		if (rawAuthority != null && parsed.getHost() != null) {
+		if (normalizeHost && rawAuthority != null && parsed.getHost() != null) {
 			int authorityStart = schemeEnd + 3;
 			String rawUserInfo = parsed.getRawUserInfo();
 			int hostStart = authorityStart

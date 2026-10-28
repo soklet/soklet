@@ -36,7 +36,7 @@ const verifierPath = resolve(projectRoot,
 const temporaryRoot = mkdtempSync(join(tmpdir(),
   'soklet-mcp-transport-dependencies-self-test-'));
 const goldenRoot = resolve(temporaryRoot, 'golden');
-const EXPECTED_CASE_COUNT = 131;
+const EXPECTED_CASE_COUNT = 139;
 let passedCases = 0;
 
 const FIXTURE_SOURCES = Object.freeze([
@@ -890,6 +890,47 @@ try {
         'private boolean resourceNotificationWriteAllowed(',
         'applicationClock.nanoTime() - authority.deadlineNanos() < 0L', 'true'));
     }, /must require the captured stream, generation and unexpired deadline/u);
+
+  expectRejected('write authority must capture the current catalog authorization revision',
+    (root) => {
+      mutateSource(root, RUNTIME, (source) => replaceAfter(source,
+        'private void refreshResourceNotificationAuthorityWhileLocked(',
+        'catalogAuthorizationRevision, expiry)', '0L, expiry)'));
+    }, /must capture its installed stream, generation and catalog authorization revision/u);
+
+  expectRejected('task projection must use the installed response stream',
+    (root) => {
+      mutateSource(root, RUNTIME, (source) => replaceAfter(source,
+        'private void projectTaskNotificationWithMetricSequence(',
+        'stream = requireNonNull(responseStream);', 'stream = newResponseStream();'));
+    }, /task projection must use the installed responseStream/u);
+
+  expectRejected('task delivery must retain its projection authorization revision',
+    (root) => {
+      mutateSource(root, RUNTIME, (source) => replaceAfter(source,
+        'delivery = new TaskNotificationDelivery(',
+        'check.authorizationRevision()', 'catalogAuthorizationRevision'));
+    }, /task delivery must capture its projection authorization generation and revision/u);
+
+  expectRejected('task projection cannot replace its captured revision with current authority',
+    (root) => {
+      mutateSource(root, RUNTIME, (source) => replaceAfter(source,
+        'private void projectTaskNotificationWithMetricSequence(',
+        'reservedDelivery.authorizationRevision()', 'catalogAuthorizationRevision'));
+    }, /task projection must offer on its installed stream with the admission deadline and captured delivery authorization guard/u);
+
+  for (const [label, expression] of [
+    ['stream', 'sameInstance(authority.stream(), requireNonNull(stream))'],
+    ['generation', 'authority.generation() == generation'],
+    ['revision', 'authority.revision() == revision'],
+    ['expiry', 'applicationClock.nanoTime() - authority.deadlineNanos() < 0L'],
+  ]) {
+    expectRejected(`task write authority cannot ignore its ${label}`,
+      (root) => {
+        mutateSource(root, RUNTIME, (source) => replaceAfter(source,
+          'private boolean taskNotificationWriteAllowed(', expression, 'true'));
+      }, /task write guard must require the captured stream, generation, revision and unexpired deadline/u);
+  }
 
   expectRejected('guarded notifications cannot bypass their installed channel guard',
     (root) => {

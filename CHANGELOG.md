@@ -384,6 +384,20 @@ maintenance or security fixes afterward. See the explicit
 
 ### Correctness Fixes
 
+- Start newly scheduled timeouts from the current monotonic clock even when the
+  scheduler is catching up after a pause. Preserve SSE write-timeout and server
+  termination reasons before socket closure wakes the peer-close monitor.
+- Decode SSE reconnect `Last-Event-ID` headers as UTF-8, preserving non-ASCII
+  event IDs and rejecting malformed encodings before dispatch.
+- Match MCP URI templates with variable ports using case-insensitive server
+  hosts, including IPv6, while retaining exact user-info and registry-authority
+  casing. Honor default-text localization fallback when one legacy catalog
+  entry cannot fit after translation.
+- Bound valueless query-parameter scans to each pair, reuse the duplicate-slash
+  pattern only when needed, and avoid an extra response-body copy in both
+  servlet adapters.
+- Avoid pinning Java 21 virtual-thread carriers while application MCP
+  localization providers or text lookups block.
 - Detect closed SSE peers promptly, register rewritten SSE paths, and avoid
   blocking handshake I/O under monitors on Java 21. Abort unfinished legacy MCP
   notification streams when pressure or a grace deadline terminates them.

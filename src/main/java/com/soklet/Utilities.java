@@ -230,8 +230,10 @@ public final class Utilities {
 				pairEnd = query.length();
 
 			if (pairEnd > pairStart) {
-				int separator = query.indexOf('=', pairStart);
-				if (separator == -1 || separator > pairEnd)
+				// Search only this pair: valueless pairs must not repeatedly scan
+				// the entire remaining query looking for a later '='.
+				int separator = query.indexOf('=', pairStart, pairEnd);
+				if (separator == -1)
 					separator = pairEnd;
 
 				String rawName = query.substring(pairStart, separator);

@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static com.soklet.Utilities.trimAggressivelyToEmpty;
@@ -85,6 +86,8 @@ import static java.util.stream.Collectors.toList;
  */
 @ThreadSafe
 public final class ResourcePathDeclaration {
+	@NonNull
+	private static final Pattern DUPLICATE_SLASHES = Pattern.compile("(/)\\1+");
 	@NonNull
 	private final String path;
 	@NonNull
@@ -306,7 +309,8 @@ public static ResourcePathDeclaration fromPath(@NonNull String path) {
 			return "/";
 
 		// Remove any duplicate slashes, e.g. //test///something -> /test/something
-		path = path.replaceAll("(/)\\1+", "$1");
+		if (path.indexOf("//") != -1)
+			path = DUPLICATE_SLASHES.matcher(path).replaceAll("$1");
 
 		if (!path.startsWith("/"))
 			path = format("/%s", path);

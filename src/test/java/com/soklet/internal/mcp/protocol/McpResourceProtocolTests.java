@@ -585,6 +585,39 @@ public class McpResourceProtocolTests {
 	}
 
 	@Test
+	public void variable_ports_preserve_case_insensitive_hosts_and_exact_registry_authorities() {
+		McpLevelOneUriTemplate template = McpLevelOneUriTemplate.parse("HTTP://User:Secret@Example.COM:{port}/Item/{id}");
+		for (String host : List.of("Example.COM", "example.com", "EXAMPLE.COM"))
+			Assertions.assertEquals(Optional.of(Map.of("port", "8080", "id", "Case")),
+					template.match("http://User:Secret@" + host + ":8080/Item/Case"));
+		Assertions.assertTrue(template.match("http://user:Secret@example.com:8080/Item/Case").isEmpty());
+		Assertions.assertTrue(template.match("http://User:Secret@example.com:8080/item/Case").isEmpty());
+		Assertions.assertEquals(Optional.of(Map.of("port", "opaque", "id", "Case")),
+				template.match("http://User:Secret@Example.COM:opaque/Item/Case"));
+		Assertions.assertTrue(template.match("http://User:Secret@example.com:opaque/Item/Case").isEmpty(),
+				"A registry-based authority remains case-sensitive.");
+	}
+
+	@Test
+	public void variable_ports_support_ipv6_and_partial_numeric_port_literals() {
+		Assertions.assertEquals(Optional.of(Map.of("port", "8080", "id", "x")),
+				McpLevelOneUriTemplate.parse("http://[ABCD::1]:{port}/{id}")
+						.match("http://[abcd::1]:8080/x"));
+		Assertions.assertEquals(Optional.of(Map.of("suffix", "80", "id", "x")),
+				McpLevelOneUriTemplate.parse("http://Example.COM:80{suffix}/{id}")
+						.match("http://example.com:8080/x"));
+	}
+
+	@Test
+	public void variable_port_routes_cannot_hide_overlaps_behind_host_case() {
+		McpLevelOneUriTemplate upper = McpLevelOneUriTemplate.parse("http://Example.COM:{port}/x");
+		McpLevelOneUriTemplate lower = McpLevelOneUriTemplate.parse("http://example.com:{other}/x");
+		Assertions.assertTrue(upper.potentiallyOverlaps(lower));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> endpointBuilder().resourceTemplate(upper.template()).resourceTemplate(lower.template()).build());
+	}
+
+	@Test
 	public void overlap_search_accepts_exact_state_budget_and_fails_closed_one_over() {
 		McpLevelOneUriTemplate left = McpLevelOneUriTemplate.parse(
 				"x:{left}" + "a".repeat(252) + "X");

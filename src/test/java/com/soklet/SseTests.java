@@ -1369,16 +1369,28 @@ public class SseTests {
 	@Test
 	@Timeout(value = 60, unit = SECONDS)
 	public void completedSseWriteIgnoresAnAlreadySelectedTimeoutCallback() throws Exception {
-		assertSseWriteDeadlineRace(false);
+		assertSseWriteDeadlineRace(false, false);
 	}
 
 	@Test
 	@Timeout(value = 60, unit = SECONDS)
 	public void sseWriteTimeoutWinsEvenIfTheLastSocketWriteReturnsSuccessfully() throws Exception {
-		assertSseWriteDeadlineRace(true);
+		assertSseWriteDeadlineRace(true, false);
 	}
 
-	private void assertSseWriteDeadlineRace(boolean timeoutWins) throws Exception {
+	@Test
+	@Timeout(value = 60, unit = SECONDS)
+	public void sseWriteTimeoutOwnsTerminationBeforeTheDisconnectMonitorObservesClosure() throws Exception {
+		assertSseWriteDeadlineRace(true, true);
+	}
+
+	@Test
+	@Timeout(value = 60, unit = SECONDS)
+	public void sseWriterTerminationOwnsItsReasonBeforeTheDisconnectMonitorObservesClosure() throws Exception {
+		assertSseWriteDeadlineRace(false, true);
+	}
+
+	private void assertSseWriteDeadlineRace(boolean timeoutWins, boolean monitorClose) throws Exception {
 		CountDownLatch releaseScheduler = new CountDownLatch(1);
 		TimeoutScheduler scheduler = new TimeoutScheduler(task -> new Thread(() -> {
 			try {
@@ -1396,6 +1408,7 @@ public class SseTests {
 		Field callbackField = TimeoutScheduler.ScheduledTask.class.getDeclaredField("task");
 		callbackField.setAccessible(true);
 		AtomicReference<Runnable> selectedDeadline = new AtomicReference<>();
+		AtomicReference<Runnable> closedCallback = new AtomicReference<>();
 		AtomicBoolean openAfterStaleDeadline = new AtomicBoolean();
 		AtomicInteger delivered = new AtomicInteger();
 		AtomicReference<StreamTermination> termination = new AtomicReference<>();
@@ -1415,6 +1428,13 @@ public class SseTests {
 				}
 				// A socket write may finish concurrently with the winning close.
 				return super.write(bytes);
+			}
+			@Override public int read(ByteBuffer bytes) throws IOException {
+				throw new ClosedChannelException();
+			}
+			@Override protected void implCloseSelectableChannel() {
+				Runnable callback = closedCallback.get();
+				if (callback != null) callback.run();
 			}
 		};
 		LifecycleObserver observer = new LifecycleObserver() {
@@ -1449,6 +1469,19 @@ public class SseTests {
 					Object.class, Integer.class, SocketChannel.class, StreamLifecycleCoordinator.Reservation.class);
 			constructor.setAccessible(true);
 			Object connection = constructor.newInstance(request, method, null, 4, channel, coordinator.tryReserve());
+			if (monitorClose) {
+				Method monitor = DefaultSseServer.class.getDeclaredMethod("monitorClientDisconnect", connectionClass);
+				monitor.setAccessible(true);
+				closedCallback.set(() -> {
+					try {
+						// Deterministically give the reader the first turn after close,
+						// before the timed-out writer can publish its failure.
+						monitor.invoke(server, connection);
+					} catch (ReflectiveOperationException failure) {
+						throw new AssertionError(failure);
+					}
+				});
+			}
 			Method register = DefaultSseServer.class.getDeclaredMethod("registerConnectionWithBroadcaster",
 					ResourcePath.class, ResourceMethod.class, connectionClass);
 			register.setAccessible(true);
@@ -1487,6 +1520,9 @@ public class SseTests {
 				Assertions.assertTrue(openAfterStaleDeadline.get(), "A finished write's deadline must not close the connection");
 				Assertions.assertEquals(2, delivered.get(), "The next event must still be deliverable");
 				Assertions.assertTrue(writeFailures.isEmpty(), writeFailures.toString());
+				if (monitorClose)
+					Assertions.assertEquals(StreamTerminationReason.UNKNOWN, termination.get().getReason(),
+							"Framework termination must not become a peer disconnect merely because it closes the socket");
 			}
 		} finally {
 			coordinator.force();
@@ -3132,6 +3168,7 @@ public class SseTests {
 		int ssePort = findFreePort();
 		SokletConfig config = SokletConfig.withSseServer(SseServer.withPort(ssePort)
 						.host("127.0.0.1")
+						.maximumRequestSizeInBytes(64)
 						.maximumHeadersSizeInBytes(19)
 						.build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseBasicHandshakeResource.class)))

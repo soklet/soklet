@@ -38,9 +38,9 @@ jobs:
       JAVA_TOOL_OPTIONS: -Xmx512m -XX:ActiveProcessorCount=2
     steps:
       - name: Check out
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Set up JDK ${{ matrix.jdk }}
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
         with:
           distribution: corretto
           java-version: ${{ matrix.jdk }}
@@ -62,10 +62,10 @@ jobs:
         jdk: ['21', '25']
     steps:
       - name: Check out
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Set up JDK ${{ matrix.jdk }}
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
         with:
           distribution: corretto
           java-version: ${{ matrix.jdk }}
@@ -232,10 +232,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Check out
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
         with:
           distribution: corretto
           java-version: '21'
@@ -246,7 +246,7 @@ jobs:
 
       - name: Upload API-diff evidence
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: api-diff-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: error
@@ -262,10 +262,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Set up JDK 25
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
         with:
           distribution: corretto
           java-version: '25'
@@ -284,10 +284,10 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Check out
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Set up JDK 25
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
         with:
           distribution: corretto
           java-version: '25'
@@ -305,7 +305,7 @@ jobs:
 
       - name: Upload soak smoke evidence
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: soak-smoke-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: error
@@ -323,10 +323,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
         with:
           distribution: corretto
           java-version: '21'
@@ -344,10 +344,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
         with:
           distribution: corretto
           java-version: '21'
@@ -369,12 +369,12 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Check out Soklet
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v6
+        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
         with:
           distribution: corretto
           java-version: '21'
@@ -434,7 +434,7 @@ jobs:
             --project-root "${GITHUB_WORKSPACE}"
 
       - name: Check out pinned official MCP conformance suite
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: modelcontextprotocol/conformance
           ref: a983ba93c91e0bb31d0b6849eeb52f0ad1083107
@@ -512,7 +512,7 @@ jobs:
 
       - name: Upload MCP conformance evidence
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: mcp-conformance-phase-5-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: error

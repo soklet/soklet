@@ -26,6 +26,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -55,6 +56,36 @@ public class TimeoutSchedulerTests {
 					.add(constructor.newInstance((Runnable) overdueRan::countDown, 1L));
 			release.countDown();
 			assertTrue(overdueRan.await(1, TimeUnit.SECONDS), "An overdue timeout must not wait the5.12s wheel rotation");
+		} finally {
+			release.countDown();
+			scheduler.shutdownNow();
+			assertTrue(scheduler.awaitTermination(2, TimeUnit.SECONDS));
+		}
+	}
+
+	@Test
+	public void newlyScheduledDeadlineUsesElapsedTimeWhileTheWorkerCatchesUp() throws Exception {
+		TimeoutScheduler scheduler = newScheduler();
+		CountDownLatch blocked = new CountDownLatch(1), release = new CountDownLatch(1), ran = new CountDownLatch(1);
+		AtomicLong elapsed = new AtomicLong();
+		try {
+			scheduler.schedule(() -> {
+				blocked.countDown();
+				try { release.await(); } catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
+			}, Duration.ofMillis(1));
+			assertTrue(blocked.await(1, TimeUnit.SECONDS));
+			// Keep the scheduler's completed tick behind the monotonic clock.
+			// A task submitted now still owns its full delay, even during catch-up.
+			Thread.sleep(300L);
+			long scheduledAt = System.nanoTime();
+			scheduler.schedule(() -> {
+				elapsed.set(System.nanoTime() - scheduledAt);
+				ran.countDown();
+			}, Duration.ofMillis(200));
+			release.countDown();
+			assertTrue(ran.await(2, TimeUnit.SECONDS));
+			assertTrue(elapsed.get() >= TimeUnit.MILLISECONDS.toNanos(195),
+					"A new 200 ms timeout ran after " + TimeUnit.NANOSECONDS.toMillis(elapsed.get()) + " ms");
 		} finally {
 			release.countDown();
 			scheduler.shutdownNow();
