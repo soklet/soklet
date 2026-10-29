@@ -4,11 +4,27 @@
 
 ### Breaking Changes
 
+- **Multipart input:** malformed or missing opening delimiters now fail with
+  HTTP 400 when parsed. Named HTML entities in filenames remain literal; numeric
+  references retain legacy compatibility with invalid-character checks.
+
+- **MCP body encoding:** unsupported request content codings now receive HTTP
+  415 before JSON parsing or admission. Send uncompressed JSON. Authorized
+  browser clients can read `Retry-After` on rate-limit responses.
+
+- **CORS preflight authorization:** preflight requests always use the configured
+  `CorsAuthorizer`, including when an explicit `@OPTIONS` method matches.
+  The default rejects all origins. Move preflight policy into the authorizer;
+  ordinary `OPTIONS` requests still use explicit handlers.
+
 - **Bounded request parsing:** default `BigInteger`, `BigDecimal`, and `Number`
-  converters accept at most 4,096 trimmed characters. URL-encoded forms accept
+  converters accept at most 4,096 trimmed characters. Decimal conversions also
+  bound absolute scale and adjusted exponent to 4,096; Accept quality values
+  are limited to 16 decoded characters. URL-encoded forms accept
   at most 1,000 nonempty pairs, including repeated names. Excess values produce
   HTTP 400 when bound or parsed. Locale helpers ignore combined Accept-Language
-  values exceeding 4,096 characters or 32 ranges. Runtime paths preserve
+  values exceeding 4,096 characters or 32 comma-separated members, including
+  empty members; empty members within those bounds are ignored. Runtime paths preserve
   trailing Unicode spaces as path data rather than routing to a trimmed route.
 
 - **Java 21 minimum:** Soklet and its Servlet and OpenTelemetry adapters now
@@ -383,6 +399,24 @@ maintenance or security fixes afterward. See the explicit
   [third-party audit](release/THIRD_PARTY_AUDIT.md).
 
 ### Correctness Fixes
+
+- MCP annotation processing shares runtime URI-template validation and rejects
+  malformed UTF-16 metadata during compilation.
+- Built-in transport, MCP, streaming, and simulator callbacks detect attempts
+  to wait for their own lifecycle shutdown. Request shutdown without blocking
+  from callbacks and wait from an independent control thread.
+- MCP shutdown preserves cancellation callbacks that have been claimed but
+  not yet submitted, preventing lost delivery and stranded policy workers.
+- Response hooks and interceptors release owned file channels when processing
+  fails or a replacement abandons the body. Replacements sharing the channel
+  remain usable, borrowed channels stay open, and cleanup preserves the original
+  processing failure.
+- Finite HTTP response write-idle timeouts report `WRITE_FAILED` with a timeout
+  cause, so MCP observation does not mistake them for client cancelation.
+- Typed MCP task argument constructors can block without pinning Java 21
+  virtual-thread carriers; decoded arguments and task origins remain memoized.
+- Both Servlet adapters preserve committed `Content-Type` headers when a writer
+  is obtained later and retain the response encoding selected at commitment.
 
 - Start newly scheduled timeouts from the current monotonic clock even when the
   scheduler is catching up after a pause. Preserve SSE write-timeout and server

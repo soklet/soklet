@@ -2325,8 +2325,6 @@ final class DefaultMetricsCollector implements MetricsCollector {
 				sb.append("\\\\");
 			else if (c == '\n')
 				sb.append("\\n");
-			else if (c == '\r')
-				sb.append("\\r");
 			else if (c == '"')
 				sb.append("\\\"");
 			else

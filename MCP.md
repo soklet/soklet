@@ -713,7 +713,7 @@ tasks.named('shadowJar') {
 ```
 
 
-For other packaging tools, configure concatenation for the both exact paths.
+For other packaging tools, configure concatenation for both exact paths.
 Check that the packaged index contains every expected provider and that the
 packaged application exposes every configured endpoint. See the
 [Maven Shade resource transformer documentation](https://maven.apache.org/plugins/maven-shade-plugin/examples/resource-transformers.html).
@@ -793,7 +793,9 @@ and `Boolean`, and `addNull()` appends JSON `null`. A `Double` must be finite.
 that rule for numeric leaves. `getValue()` retains the supplied `BigDecimal`,
 including its scale; ordinary request parsing and JSON conversion do not
 remove trailing zeros. If scale is meaningful to an application, inspect the
-returned decimal explicitly rather than relying on JSON-value equality.
+returned decimal explicitly rather than relying on JSON-value equality. Hashing
+normalizes the coefficient without expanding exponents or repeatedly dividing
+large numbers to remove trailing zeros; hash codes are not persistence formats.
 
 The five `McpContentBlock` variants expose `getAnnotations()` and
 `getMetadata()` through the common interface. Their equality and hashing cover
@@ -1163,6 +1165,12 @@ Resource URIs and URI templates exclude IPv6 zone identifiers, such as
 `http://[fe80::1%25eth0]/resource`, because these scoped literals are outside
 the RFC 3986 URI grammar. Unscoped IPv6 literals remain supported.
 
+Optional resource MIME types must have valid ASCII type/subtype and parameter
+syntax. Exact and template builders reject malformed values at the setter;
+`@McpResource` declarations reject them during compilation. Controls, non-ASCII
+characters, and duplicate parameter names are rejected. Valid spelling is
+preserved, and omitting the MIME type remains supported.
+
 The same Level 1 routing subset applies to all three supported revisions.
 Simple `{variable}` expansion encodes a slash inside a variable as `%2F`;
 a variable cannot consume a raw `/`. For the template `file:///{path}`:
@@ -1199,6 +1207,13 @@ per request. Overlap validation examines at most 65,536 states per template
 pair and 1,048,576 states per endpoint, failing closed when either limit would
 be exceeded. These fixed limits bound parsing, matching, and pairwise overlap
 validation without introducing a regex engine.
+
+Modern `2026-07-28` reads have a tighter transport limit: the required
+`Mcp-Name` URI mirror is limited to 16,384 decoded UTF-8 bytes, whether sent
+plain or base64-encoded. All HTTP headers must also fit the configured aggregate
+header limit; base64 increases their wire size. Thus a URI can register and be
+listed while exceeding the modern read limit. The two 2025 revisions do not
+require this mirror and retain the routing limits above.
 
 Without a custom list handler, `2026-07-28` returns exact registrations in
 registration order as one page, excludes templates, and rejects every present
@@ -1263,8 +1278,14 @@ or locale, corrupt, unknown, or caller-hidden anchors produce the same neutral
 JSON-RPC `-32602` error. The cursor is unsigned navigation data, not an
 authorization grant: it has no MAC, server-side session, retained translation
 snapshot, or promise of consistent permissions and translations across pages.
-Restart enumeration when the catalog or negotiated locale changes. Verify
-pagination with the client and protocol revision you intend to deploy.
+Restart enumeration when the catalog or negotiated locale changes. Under
+`USE_DEFAULT_TEXT`, failure to create the localization context uses the configured
+fallback locale; recovery can restore a different negotiated locale. Either
+transition can invalidate a legacy cursor even when the client preferences are
+unchanged, returning `-32602`. Restart from the first page without a cursor. A
+text lookup failure after context creation retains the negotiated locale and
+does not by itself cause this cursor mismatch. Verify pagination with the
+client and protocol revision you intend to deploy.
 
 Soklet ships no `file://` mapper. A handler that maps resource URIs to a
 filesystem owns root containment, traversal rejection, canonicalization,
@@ -2064,7 +2085,8 @@ to `McpOperationType.TOOLS_CALL`, not compare the latter to a string literal.
 The built-in `McpRateLimiter.fromInMemoryDefaults()` is a finite, bounded token
 bucket local to one JVM. It is not fleet-wide enforcement. A denial returns
 HTTP 429, `Retry-After`, and MCP error `-31999` for a request; a notification
-has the HTTP status but no JSON-RPC body. The first denial wins and successful
+has the HTTP status but no JSON-RPC body. For an authorized CORS origin, a rate-limit
+response exposes `Retry-After` to browser code. The first denial wins and successful
 charges are never refunded after a later denial, failure, timeout,
 cancellation, or write failure. Refill accounting uses a private monotonic
 clock; there is no public clock or reset/test-mode seam. At the retained
@@ -2428,6 +2450,16 @@ and the subscription's fixed total lifetime. Each callback has the
 queue-inclusive `subscriptionAuthorizationTimeout` (five seconds by default)
 and cooperative cancelation. Renewal rechecks current authority before the
 lease expires; keep-alives and catalog events do not extend a grant.
+
+For an unchanged renewal, return the same application-context object instance
+(or continue omitting it). Identity, not `equals`, determines whether the context
+changed. Use an immutable authority snapshot; replace it when authority changes
+and request reconciliation for prompt revocation. A fresh context instance or
+a changed accepted-task set fences old delivery even if its values compare
+equal. Unwritten task notifications are rechecked after every accepted renewal.
+A partly written frame can finish across an unchanged renewal while its
+authorization generation and lease remain valid; actual revocation still
+stops it and can close the stream mid-frame.
 
 After policy invalidation or recovery, call
 `server.getSubscriptionReconciler().reconcileSubscriptions()` to fence local
@@ -3085,7 +3117,10 @@ to the protocol's negotiation rules.
 
 On `2026-07-28`, every JSON-RPC request carries `Mcp-Method`. Tool calls,
 prompt gets, and resource reads also carry `Mcp-Name`; each header must agree
-with the JSON-RPC method or selected operation. Notifications are exempt from
+with the JSON-RPC method or selected operation. Each decoded mirrored value,
+including `Mcp-Name` and custom `Mcp-Param-*` strings, is limited to 16 KiB of
+UTF-8 bytes, independently of the aggregate HTTP header ceiling. Base64 encoding
+does not increase the decoded-value allowance. Notifications are exempt from
 these modern header requirements. Modern and session-disabled 2025 views ignore
 `MCP-Session-Id`; an explicitly session-enabled 2025 view requires its initialized
 ID on later POSTs. `Last-Event-ID` is ignored at every revision and supplies no
@@ -3105,13 +3140,18 @@ response body.
 
 ## Validation precedence
 
+MCP POST bodies must be uncompressed. An absent `Content-Encoding` or an
+identity-only coding list is accepted; unsupported codings such as `gzip` or `br`
+receive HTTP 415 before JSON parsing or application admission. Soklet does not
+decompress these bodies. Host and Origin policy checks still take precedence.
+
 The `2026-07-28` JSON-RPC request path has 17 ordered groups. The first failure
 wins:
 
 1. connection, header-count, header-size, request-size, and timeout limits;
 2. endpoint routing;
 3. Host authority, followed by Origin prevalidation and CORS authorization;
-4. POST-only HTTP method and `Content-Type`/`Accept` negotiation;
+4. POST-only HTTP method, `Content-Type`/`Accept` negotiation, and supported request content encoding;
 5. strict JSON parsing;
 6. JSON-RPC envelope validation;
 7. required mirrored-header cardinality/form and method agreement, plus name

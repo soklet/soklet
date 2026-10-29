@@ -1922,6 +1922,9 @@ public class MicrohttpInternalTests {
 	@Test
 	public void responseWriteIdleTimeoutClosesNonStreamingResponseWithoutProgress() throws Exception {
 		CountDownLatch stalledWriteAttempted = new CountDownLatch(1);
+		java.util.concurrent.atomic.AtomicInteger terminationCount = new java.util.concurrent.atomic.AtomicInteger();
+		java.util.concurrent.atomic.AtomicReference<com.soklet.StreamTerminationReason> terminationReason = new java.util.concurrent.atomic.AtomicReference<>();
+		java.util.concurrent.atomic.AtomicReference<Throwable> terminationCause = new java.util.concurrent.atomic.AtomicReference<>();
 		Options options = OptionsBuilder.newBuilder()
 				.withPort(0)
 				.withResolution(Duration.ofMillis(10))
@@ -1955,6 +1958,10 @@ public class MicrohttpInternalTests {
 					public void close() {
 						// no-op
 					}
+				}).withBodyTerminationListener((reason, cause) -> {
+					terminationReason.set(reason);
+					terminationCause.set(cause);
+					terminationCount.incrementAndGet();
 				}));
 				return;
 			}
@@ -1975,6 +1982,10 @@ public class MicrohttpInternalTests {
 			Assertions.assertTrue(response.startsWith("HTTP/1.1 200 OK"), response);
 			Assertions.assertTrue(response.endsWith("pong"), response);
 			Assertions.assertTrue(logger.containsFailureEvent("response_write_idle_timeout"), logger.events().toString());
+			Assertions.assertEquals(1, terminationCount.get());
+			Assertions.assertEquals(com.soklet.StreamTerminationReason.WRITE_FAILED, terminationReason.get(),
+					"The server's write deadline is not a client disconnect");
+			Assertions.assertInstanceOf(java.net.SocketTimeoutException.class, terminationCause.get());
 		} finally {
 			eventLoop.stop();
 			eventLoop.join();

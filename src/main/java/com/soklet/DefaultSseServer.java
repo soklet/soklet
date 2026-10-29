@@ -1070,12 +1070,8 @@ final class DefaultSseServer implements SseServer {
 			ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();
 			this.serverSocketChannel = serverSocketChannel;
 
-			try {
-				serverSocketChannel.setOption(StandardSocketOptions.SO_REUSEADDR, true);
-				serverSocketChannel.bind(new InetSocketAddress(getHost(), getPort()));
-			} catch (BindException e) {
-				throw new IllegalStateException(format("Soklet was unable to start the SSE server - port %d is already in use.", getPort()), e);
-			}
+			serverSocketChannel.setOption(StandardSocketOptions.SO_REUSEADDR, true);
+			serverSocketChannel.bind(new InetSocketAddress(getHost(), getPort()));
 
 			this.requestHandlerExecutorService = getRequestHandlerExecutorServiceSupplier().get();
 			this.requestHandlerTimeoutScheduler = new TimeoutScheduler(runnable -> {
@@ -1088,11 +1084,11 @@ final class DefaultSseServer implements SseServer {
 			synchronized (this.handshakeTimeoutDeliveryMonitor) {
 				this.handshakeTimeoutDeliveryClosed = false;
 			}
-			this.streamLifecycleCoordinator = new StreamLifecycleCoordinator(
+			this.streamLifecycleCoordinator = StreamLifecycleCoordinator.withCallbackExecution(
 					getStreamingLifecycleCapacity(), STREAMING_COORDINATOR_CALLBACK_CONCURRENCY,
 					STREAMING_COORDINATOR_CLEANUP_GRACE, failure -> safelyLog(LogEvent.with(
 							LogEventType.SSE_SERVER_INTERNAL_ERROR, "SSE lifecycle cleanup failed")
-							.throwable(failure).build()));
+							.throwable(failure).build()), getLifecycleAdapter()::runCallback);
 			this.stopping = false;
 			getStopPoisonPill().set(false);
 			getGlobalConnections().clear();
@@ -1117,6 +1113,8 @@ final class DefaultSseServer implements SseServer {
 		} catch (IOException e) {
 			if (adapterGeneration != null)
 				getLifecycleAdapter().failedStart(adapterGeneration, e, false);
+			if (e instanceof BindException)
+				throw new IllegalStateException(format("Soklet was unable to start the SSE server - port %d is already in use.", getPort()), e);
 			throw new IllegalStateException("Unable to start SSE server", e);
 		} catch (Error error) {
 			if (adapterGeneration != null) {
@@ -2213,6 +2211,10 @@ final class DefaultSseServer implements SseServer {
 					}
 
 					cancelTimeout(handshakeContext.handshakeTimeoutFutureRef.getAndSet(null));
+					// Failure observers must use the same wrapped request and routed method
+					// as dispatch, including an intentionally unmatched method.
+					handshakeContext.requestRef.set(requestResult.getEffectiveSseRequest().orElse(requestForHandler));
+					handshakeContext.resourceMethodRef.set(requestResult.getResourceMethod().orElse(null));
 					Throwable requestHandlingFailure = requestResult.getRequestHandlingFailure().orElse(null);
 					if (requestHandlingFailure != null) {
 						handshakeFailureReason.set(SseConnection.HandshakeFailureReason.INTERNAL_ERROR);
@@ -2313,7 +2315,8 @@ final class DefaultSseServer implements SseServer {
 						Throwable failureCause = socketFailureCause(t);
 						boolean routineClose = isRemoteClose(t) || t instanceof HandshakeWriterStoppedException;
 						responseWriteFailure = failureCause;
-						handshakeFailureReason.set(SseConnection.HandshakeFailureReason.INTERNAL_ERROR);
+						if (!routineClose || handshakeAcceptedReference.get() != null)
+							handshakeFailureReason.set(SseConnection.HandshakeFailureReason.INTERNAL_ERROR);
 						handshakeFailureCause.set(failureCause);
 						if (pendingConnection.get() != null)
 							terminateAfterWriteFailure(pendingConnection.get(), t);
@@ -2379,13 +2382,15 @@ final class DefaultSseServer implements SseServer {
 					== HandshakeResponseOwner.TIMEOUT)
 				return;
 
+			request = handshakeContext.requestRef.get();
+			resourceMethod = handshakeContext.resourceMethodRef.get();
 			SseHandshakeResult.Accepted handshakeAccepted = handshakeAcceptedReference.get();
 
 			if (handshakeAccepted != null) {
 				DefaultSseConnection acceptedConnection = requireNonNull(pendingConnection.get());
 				request = acceptedConnection.getSnapshot().getRequest();
 				resourceMethod = acceptedConnection.getSnapshot().getResourceMethod();
-				try {
+				try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 					getLifecycleObserver().willEstablishSseConnection(request, resourceMethod);
 				} catch (Throwable t) {
 					safelyLog(LogEvent.with(
@@ -2438,6 +2443,8 @@ final class DefaultSseServer implements SseServer {
 							requireNonNull(handshakeFailureReason.get()), handshakeFailureCause.get());
 			}
 		} catch (Throwable t) {
+			request = handshakeContext.requestRef.get();
+			resourceMethod = handshakeContext.resourceMethodRef.get();
 			DefaultSseConnection connection = pendingConnection.get();
 			if (acceptedResponseWritten.get() && connection != null) {
 				connection.lifecycle.terminate(StreamTerminationReason.INTERNAL_ERROR, t);
@@ -2530,7 +2537,8 @@ final class DefaultSseServer implements SseServer {
 							.observedByteCount(captured.observedLength())
 							.captureTruncated(captured.observedLength() > captured.bytes().length).build(),
 					getResponseMarshaler().orElse(null), getLifecycleObserver(), this::safelyLog,
-					responseConsumer, () -> { /* Channel delivery owns admission retirement. */ });
+					responseConsumer, () -> { /* Channel delivery owns admission retirement. */ },
+					getLifecycleAdapter()::enterCallbackExecution);
 		} finally {
 			if (!accepted && responseQueued.compareAndSet(false, true)) {
 				// No application task was admitted. The existing handshake worker can
@@ -2698,11 +2706,23 @@ final class DefaultSseServer implements SseServer {
 		// Termination closes the channel and releases the read even when no event
 		// is pending. The monitor retains physical lifecycle work until it exits.
 		ByteBuffer discard = ByteBuffer.allocate(1024);
+		long discardedBytes = 0;
 		try {
 			while (connection.lifecycle.isOpen()) {
 				discard.clear();
-				if (readSocket(connection.getSocketChannel(), discard) < 0) {
+				// A peer may half-close or reset; bounded surplus input must not turn
+				// this monitor into an unlimited drain that monopolizes a carrier.
+				discard.limit((int) Math.min(discard.capacity(),
+						(long) getMaximumRequestSizeInBytes() - discardedBytes + 1));
+				int read = readSocket(connection.getSocketChannel(), discard);
+				if (read < 0) {
 					connection.lifecycle.terminate(StreamTerminationReason.CLIENT_DISCONNECTED, null);
+					return;
+				}
+				discardedBytes += read;
+				if (discardedBytes > getMaximumRequestSizeInBytes()) {
+					connection.lifecycle.terminate(StreamTerminationReason.CLIENT_DISCONNECTED,
+							new IOException("SSE peer exceeded the post-handshake input limit"));
 					return;
 				}
 			}
@@ -2720,7 +2740,7 @@ final class DefaultSseServer implements SseServer {
 		Request connectionRequest = connectionSnapshot.getRequest();
 		ResourceMethod connectionResourceMethod = connectionSnapshot.getResourceMethod();
 
-		try {
+		try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 			getLifecycleObserver().didEstablishSseConnection(connectionSnapshot);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(
@@ -2819,7 +2839,7 @@ final class DefaultSseServer implements SseServer {
 				ByteBuffer byteBuffer = ByteBuffer.wrap(payloadBytes);
 
 				if (sseComment != null) {
-					try {
+					try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 						getLifecycleObserver().willWriteSseComment(connectionSnapshot, sseComment);
 					} catch (Throwable t) {
 						safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_WRITE_SSE_COMMENT_FAILED, format("An exception occurred while invoking %s::willWriteSseComment", LifecycleObserver.class.getSimpleName()))
@@ -2835,7 +2855,7 @@ final class DefaultSseServer implements SseServer {
 				}
 
 				if (sseEvent != null) {
-					try {
+					try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 						getLifecycleObserver().willWriteSseEvent(connectionSnapshot, sseEvent);
 					} catch (Throwable t) {
 						safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_WRITE_SSE_FAILED, format("An exception occurred while invoking %s::willWriteSseEvent", LifecycleObserver.class.getSimpleName()))
@@ -2908,7 +2928,7 @@ final class DefaultSseServer implements SseServer {
 
 					if (sseEvent != null) {
 						if (writeThrowableSnapshot != null) {
-							try {
+							try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 								getLifecycleObserver().didFailToWriteSseEvent(connectionSnapshot, sseEvent, writeDuration, writeThrowableSnapshot);
 							} catch (Throwable t) {
 								safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_WRITE_SSE_FAILED, format("An exception occurred while invoking %s::didFailToWriteSseEvent", LifecycleObserver.class.getSimpleName()))
@@ -2929,7 +2949,7 @@ final class DefaultSseServer implements SseServer {
 											payloadByteCountSnapshot,
 											queueDepthSnapshot));
 						} else {
-							try {
+							try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 								getLifecycleObserver().didWriteSseEvent(connectionSnapshot, sseEvent, writeDuration);
 							} catch (Throwable t) {
 								safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_WRITE_SSE_FAILED, format("An exception occurred while invoking %s::didWriteSseEvent", LifecycleObserver.class.getSimpleName()))
@@ -2951,7 +2971,7 @@ final class DefaultSseServer implements SseServer {
 						}
 					} else if (sseComment != null) {
 						if (writeThrowableSnapshot != null) {
-							try {
+							try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 								getLifecycleObserver().didFailToWriteSseComment(connectionSnapshot, sseComment, writeDuration, writeThrowableSnapshot);
 							} catch (Throwable t) {
 								safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_WRITE_SSE_COMMENT_FAILED, format("An exception occurred while invoking %s::didFailToWriteSseComment", LifecycleObserver.class.getSimpleName()))
@@ -2972,7 +2992,7 @@ final class DefaultSseServer implements SseServer {
 											payloadByteCountSnapshot,
 											queueDepthSnapshot));
 						} else {
-							try {
+							try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 								getLifecycleObserver().didWriteSseComment(connectionSnapshot, sseComment, writeDuration);
 							} catch (Throwable t) {
 								safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_WRITE_SSE_COMMENT_FAILED, format("An exception occurred while invoking %s::didWriteSseComment", LifecycleObserver.class.getSimpleName()))
@@ -3080,7 +3100,7 @@ final class DefaultSseServer implements SseServer {
 				.cause(terminationThrowable)
 				.build();
 
-		try {
+		try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 			getLifecycleObserver().willTerminateSseConnection(
 					connectionSnapshot,
 					willTermination);
@@ -3120,7 +3140,7 @@ final class DefaultSseServer implements SseServer {
 				.cause(terminationThrowable)
 				.build();
 
-		try {
+		try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 			getLifecycleObserver().didTerminateSseConnection(
 					connectionSnapshot,
 					didTermination);
@@ -4454,8 +4474,8 @@ final class DefaultSseServer implements SseServer {
 					this.requestLineEndedWithCarriageReturn = character == '\r';
 				}
 				if (character == '\n' && ((index > 0 && request.charAt(index - 1) == '\n')
-						|| (index > 2 && request.charAt(index - 1) == '\r'
-						&& request.charAt(index - 2) == '\n' && request.charAt(index - 3) == '\r'))) {
+						|| (index > 1 && request.charAt(index - 1) == '\r'
+						&& request.charAt(index - 2) == '\n'))) {
 					this.headerEnd = index + 1;
 					return this.headerEnd;
 				}
@@ -4471,11 +4491,11 @@ final class DefaultSseServer implements SseServer {
 	private static int endOfHeaders(@NonNull CharSequence rawRequest) {
 		requireNonNull(rawRequest);
 
-		int crlf = indexOf(rawRequest, "\r\n\r\n");
+		int crlf = indexOf(rawRequest, "\n\r\n");
 		int lf = indexOf(rawRequest, "\n\n");
 		if (crlf == -1)
 			return lf == -1 ? -1 : lf + 2;
-		return lf == -1 ? crlf + 4 : Math.min(crlf + 4, lf + 2);
+		return lf == -1 ? crlf + 3 : Math.min(crlf + 3, lf + 2);
 	}
 
 	private static int headerSectionLengthInBytes(@NonNull CharSequence rawRequest,
@@ -4539,84 +4559,16 @@ final class DefaultSseServer implements SseServer {
 	@NonNull
 	protected Optional<Request> parseTooLargeRequestForRawRequest(@NonNull String rawRequest) {
 		requireNonNull(rawRequest);
-
-		// Supports both relative and absolute paths.
-		// e.g. "GET /index.html HTTP/1.1\r\n" would return "/index.html".
-		// e.g. "GET https://www.soklet.com/index.html HTTP/1.1\r\n" would return "/index.html".
-		String firstLine = null;
-
-		int crLfIndex = rawRequest.indexOf("\r\n");
-		int firstLineSeparatorLength = 2;
-		if (crLfIndex == -1) {
-			crLfIndex = rawRequest.indexOf('\n');
-			firstLineSeparatorLength = 1;
-		}
-
-		if (crLfIndex != -1)
-			firstLine = rawRequest.substring(0, crLfIndex);
-
-		// We don't even have a complete first line of the request
-		if (firstLine == null || firstLine.length() == 0)
+		int lastCompleteLine = rawRequest.lastIndexOf('\n');
+		if (lastCompleteLine < 0)
 			return Optional.empty();
-
-		ParsedRequestLine parsed;
-
 		try {
-			parsed = parseRequestLine(firstLine);
-		} catch (IllegalRequestException e) {
-			// Do not attribute a malformed request to an application interceptor.
-			return Optional.empty();
-		}
-
-		String rawUri = parsed.target();
-		if (rawUri.length() > getMaximumRequestTargetLengthInBytes())
-			return Optional.empty();
-
-		List<String> rawHeaderLines = new ArrayList<>();
-		int headerStartIndex = crLfIndex + firstLineSeparatorLength;
-		int cursor = headerStartIndex;
-
-		while (cursor < rawRequest.length()) {
-			int nextCrLfIndex = rawRequest.indexOf("\r\n", cursor);
-			int nextLfIndex = rawRequest.indexOf('\n', cursor);
-			int lineEndIndex;
-			int lineSeparatorLength;
-
-			if (nextCrLfIndex == -1 && nextLfIndex == -1) {
-				lineEndIndex = rawRequest.length();
-				lineSeparatorLength = 0;
-			} else if (nextCrLfIndex != -1 && (nextLfIndex == -1 || nextCrLfIndex < nextLfIndex)) {
-				lineEndIndex = nextCrLfIndex;
-				lineSeparatorLength = 2;
-			} else {
-				lineEndIndex = nextLfIndex;
-				lineSeparatorLength = 1;
-			}
-
-			String headerLine = rawRequest.substring(cursor, lineEndIndex);
-			if (headerLine.length() == 0)
-				break;
-
-			try {
-				rawHeaderLines.add(decodeLastEventIdHeaderLine(headerLine));
-			} catch (IllegalRequestException malformedHeader) {
-				// An oversized request with an invalid cursor cannot reach application code.
-				return Optional.empty();
-			}
-			cursor = lineEndIndex + lineSeparatorLength;
-		}
-
-		Map<String, List<String>> headers = Utilities.extractHeadersFromRawHeaderLines(rawHeaderLines);
-
-		try {
-			return Optional.of(Request.withRawUrl(parsed.method(), rawUri)
-					.idGenerator(getIdGenerator())
-					.headers(headers)
-					.contentTooLarge(true)
-					.build());
-		} catch (IllegalRequestException malformedTarget) {
-			// This is best-effort attribution of an already oversized request.
-			// Invalid targets retain the unparsed 413 path, not an internal 500.
+			// Attribute only complete, normally validated header lines. In particular,
+			// oversize input must not bypass Host, control-byte or folding checks.
+			String completePrefix = rawRequest.substring(0, lastCompleteLine + 1);
+			return Optional.of(parseRequest(completePrefix + "\r\n", null).copy()
+					.contentTooLarge(true).finish());
+		} catch (IllegalRequestException | RequestHeadersTooLargeIOException | RequestTargetTooLongIOException malformed) {
 			return Optional.empty();
 		}
 	}
@@ -5234,7 +5186,7 @@ final class DefaultSseServer implements SseServer {
 	protected void safelyLog(@NonNull LogEvent logEvent) {
 		requireNonNull(logEvent);
 
-		try {
+		try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 			getLifecycleObserver().didReceiveLogEvent(logEvent);
 		} catch (Throwable throwable) {
 			LifecycleObserverLogFallback.report(throwable);
@@ -5287,7 +5239,7 @@ final class DefaultSseServer implements SseServer {
 	}
 
 	private void notifyWillAcceptConnection(@Nullable InetSocketAddress remoteAddress) {
-		try {
+		try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 			getLifecycleObserver().willAcceptConnection(ServerType.SSE, remoteAddress);
 		} catch (Throwable throwable) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_ACCEPT_CONNECTION_FAILED,
@@ -5305,7 +5257,7 @@ final class DefaultSseServer implements SseServer {
 	}
 
 	private void notifyDidAcceptConnection(@Nullable InetSocketAddress remoteAddress) {
-		try {
+		try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 			getLifecycleObserver().didAcceptConnection(ServerType.SSE, remoteAddress);
 		} catch (Throwable throwable) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_ACCEPT_CONNECTION_FAILED,
@@ -5328,7 +5280,7 @@ final class DefaultSseServer implements SseServer {
 																							 @Nullable Throwable throwable) {
 		requireNonNull(reason);
 
-		try {
+		try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 			getLifecycleObserver().didFailToAcceptConnection(ServerType.SSE, remoteAddress, reason, throwable);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_FAIL_TO_ACCEPT_CONNECTION_FAILED,
@@ -5353,7 +5305,7 @@ final class DefaultSseServer implements SseServer {
 
 	private void notifyWillAcceptRequest(@Nullable InetSocketAddress remoteAddress,
 																			 @Nullable String requestTarget) {
-		try {
+		try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 			getLifecycleObserver().willAcceptRequest(ServerType.SSE, remoteAddress, requestTarget);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_ACCEPT_REQUEST_FAILED,
@@ -5376,7 +5328,7 @@ final class DefaultSseServer implements SseServer {
 
 	private void notifyDidAcceptRequest(@Nullable InetSocketAddress remoteAddress,
 																			@Nullable String requestTarget) {
-		try {
+		try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 			getLifecycleObserver().didAcceptRequest(ServerType.SSE, remoteAddress, requestTarget);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_ACCEPT_REQUEST_FAILED,
@@ -5403,7 +5355,7 @@ final class DefaultSseServer implements SseServer {
 																						@Nullable Throwable throwable) {
 		requireNonNull(reason);
 
-		try {
+		try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 			getLifecycleObserver().didFailToAcceptRequest(ServerType.SSE, remoteAddress, requestTarget, reason, throwable);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_FAIL_TO_ACCEPT_REQUEST_FAILED,
@@ -5430,7 +5382,7 @@ final class DefaultSseServer implements SseServer {
 
 	private void notifyWillReadRequest(@Nullable InetSocketAddress remoteAddress,
 																		 @Nullable String requestTarget) {
-		try {
+		try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 			getLifecycleObserver().willReadRequest(ServerType.SSE, remoteAddress, requestTarget);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_READ_REQUEST_FAILED,
@@ -5453,7 +5405,7 @@ final class DefaultSseServer implements SseServer {
 
 	private void notifyDidReadRequest(@Nullable InetSocketAddress remoteAddress,
 																		@Nullable String requestTarget) {
-		try {
+		try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 			getLifecycleObserver().didReadRequest(ServerType.SSE, remoteAddress, requestTarget);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_READ_REQUEST_FAILED,
@@ -5480,7 +5432,7 @@ final class DefaultSseServer implements SseServer {
 																					@Nullable Throwable throwable) {
 		requireNonNull(reason);
 
-		try {
+		try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 			getLifecycleObserver().didFailToReadRequest(ServerType.SSE, remoteAddress, requestTarget, reason, throwable);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_FAIL_TO_READ_REQUEST_FAILED,
@@ -5522,7 +5474,7 @@ final class DefaultSseServer implements SseServer {
 		requireNonNull(request);
 		requireNonNull(reason);
 
-		try {
+		try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 			getLifecycleObserver().didFailToEstablishSseConnection(request, resourceMethod, reason, throwable);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_ESTABLISH_SSE_CONNECTION_FAILED,
@@ -5559,7 +5511,7 @@ final class DefaultSseServer implements SseServer {
 		if (metricsCollector == null)
 			return;
 
-		try {
+		try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 			metricsConsumer.accept(metricsCollector);
 		} catch (Throwable throwable) {
 			safelyLog(LogEvent.with(LogEventType.METRICS_COLLECTOR_FAILED, message)

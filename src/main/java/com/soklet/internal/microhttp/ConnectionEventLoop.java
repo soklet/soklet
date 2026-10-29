@@ -9,6 +9,7 @@ import org.jspecify.annotations.Nullable;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.net.SocketTimeoutException;
 import java.net.StandardSocketOptions;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedSelectorException;
@@ -1285,6 +1286,14 @@ class ConnectionEventLoop {
                 return;
             }
 
+            if (requestParser.declaredLengthExceedsAggregateLimit(options.maxRequestSize())) {
+                try (TransportFailureObserver.Observation ignored =
+                             beginTransportFailure(TransportFailureReason.REQUEST_TOO_LARGE)) {
+                    respondToRequestTooLarge(RequestTooLargeException.Reason.CONTENT);
+                }
+                return;
+            }
+
             scheduleRequestReadTimeoutForCurrentParserState();
 
             if (requestParser.consumeContinueExpectation()) {
@@ -1597,15 +1606,16 @@ class ConnectionEventLoop {
         }
 
         private void onResponseWriteIdleTimeout() {
+            SocketTimeoutException failure = new SocketTimeoutException("HTTP response write timed out");
             try (TransportFailureObserver.Observation ignored =
                          beginTransportFailure(
                                  TransportFailureReason.RESPONSE_WRITE_IDLE_TIMEOUT)) {
                 if (logger.failureEnabled()) {
-                    logger.logFailure(
+                    logger.logFailure(failure,
                             new LogEntry("event", "response_write_idle_timeout"),
                             new LogEntry("id", id));
                 }
-                failSafeClose();
+                failSafeClose(StreamTerminationReason.WRITE_FAILED, failure);
             }
         }
 

@@ -26,6 +26,8 @@ import java.lang.annotation.Target;
 
 /**
  * Apply to <em>Resource Methods</em> to support the HTTP {@code OPTIONS} method.
+ * CORS preflight requests bypass these methods and use the configured
+ * {@link com.soklet.CorsAuthorizer}; its default rejects all origins.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

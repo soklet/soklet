@@ -698,8 +698,14 @@ public interface HttpServer {
 		}
 
 		/**
-		 * Sets the per-stream producer queue capacity in bytes.
+		 * Sets the maximum queued payload bytes per stream.
 		 * Passing {@code null} restores the built-in default of 1 MiB per stream.
+		 * <p>
+		 * Pending small writes may be coalesced up to the configured chunk size.
+		 * Framing metadata is bounded separately: at most {@code max(16, capacity / 256)}
+		 * payload chunks may be retained, including the chunk currently being written.
+		 * Either limit applies backpressure. These limits exclude producer-owned data
+		 * and are not an exact JVM heap-size guarantee.
 		 *
 		 * @param streamingQueueCapacityInBytes the queue capacity, or {@code null} for the default
 		 * @return this builder

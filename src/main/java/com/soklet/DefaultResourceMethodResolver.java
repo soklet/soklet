@@ -573,7 +573,7 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 			String className = new String(Base64.getDecoder().decode(parts[2]), StandardCharsets.UTF_8);
 			String methodName = new String(Base64.getDecoder().decode(parts[3]), StandardCharsets.UTF_8);
 			String params = new String(Base64.getDecoder().decode(parts[4]), StandardCharsets.UTF_8);
-			String[] paramTypes = params.isBlank() ? new String[0] : params.split(";");
+			String[] paramTypes = ResourceMethodDeclaration.parameterTypesFromIndex(params);
 
 			boolean sse = Boolean.parseBoolean(parts[5]);
 

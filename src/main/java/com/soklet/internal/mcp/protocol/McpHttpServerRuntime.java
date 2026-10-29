@@ -8356,14 +8356,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			@NonNull List<@NonNull Header> corsHeaders,
 			@Nullable McpRequestContext requestContext,
 			@NonNull McpJsonRpcError error) {
-		requireNonNull(retryAfter);
-		if (retryAfter.isNegative())
-			throw new IllegalArgumentException("Retry-After must not be negative.");
-		List<Header> headers = new ArrayList<>(corsHeaders.size() + 1);
-		headers.addAll(corsHeaders);
-		headers.add(new Header(RETRY_AFTER, retryAfterSeconds(retryAfter)));
 		return jsonRpcError(429, "Too Many Requests", Optional.of(requestId),
-				requireNonNull(error), List.copyOf(headers), requestContext);
+				requireNonNull(error), rateLimitHeaders(retryAfter, corsHeaders), requestContext);
 	}
 
 	@NonNull
@@ -8385,13 +8379,24 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	private MicrohttpResponse notificationRateLimited(
 			@NonNull Duration retryAfter,
 			@NonNull List<@NonNull Header> corsHeaders) {
+		return emptyResponse(429, "Too Many Requests", rateLimitHeaders(retryAfter, corsHeaders));
+	}
+
+	@NonNull
+	private List<@NonNull Header> rateLimitHeaders(@NonNull Duration retryAfter,
+			@NonNull List<@NonNull Header> corsHeaders) {
 		requireNonNull(retryAfter);
 		if (retryAfter.isNegative())
 			throw new IllegalArgumentException("Retry-After must not be negative.");
 		List<Header> headers = new ArrayList<>(corsHeaders.size() + 1);
-		headers.addAll(corsHeaders);
+		for (Header header : corsHeaders) {
+			// CORS exposure exists only after an Origin has been authorized. Append
+			// the backoff header only on responses which actually carry it.
+			headers.add(header.name().equalsIgnoreCase("Access-Control-Expose-Headers")
+					? new Header(header.name(), header.value() + ", " + RETRY_AFTER) : header);
+		}
 		headers.add(new Header(RETRY_AFTER, retryAfterSeconds(retryAfter)));
-		return emptyResponse(429, "Too Many Requests", List.copyOf(headers));
+		return List.copyOf(headers);
 	}
 
 	@NonNull
@@ -8703,6 +8708,20 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 		if (contentTypes.size() != 1 || !isJsonContentType(contentTypes.get(0)))
 			return emptyResponse(415, "Unsupported Media Type", corsHeaders);
+
+		// The MCP JSON decoder consumes identity bytes. Never execute a plain body
+		// whose declared coding would make an intermediary interpret it differently.
+		for (String value : headerValues(request, "Content-Encoding")) {
+			for (String coding : value.split(",", -1)) {
+				String token = coding.trim();
+				// HTTP list fields permit empty elements; identity is a compatibility no-op.
+				if (token.isEmpty() || "identity".equalsIgnoreCase(token))
+					continue;
+				List<Header> headers = new ArrayList<>(corsHeaders);
+				headers.add(new Header("Accept-Encoding", "identity"));
+				return emptyResponse(415, "Unsupported Media Type", headers);
+			}
+		}
 
 		if (!acceptsBothResponseTypes(headerValues(request, ACCEPT)))
 			return emptyResponse(406, "Not Acceptable", corsHeaders);
@@ -13594,6 +13613,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 											|| applicationClock.nanoTime() - check.deadlineNanos() < 0L)
 										&& taskNotificationWriteAllowed(stream, reservedDelivery.authorizationGeneration(),
 												reservedDelivery.authorizationRevision()),
+									// A routine renewal rechecks wholly unwritten projections. Once
+									// bytes are visible, retain the frame under the same authority;
+									// generation changes and lease expiry still revoke its remainder.
+									() -> resourceNotificationWriteAllowed(stream, reservedDelivery.authorizationGeneration()),
 									() -> taskNotificationWritten(projection, reservedDelivery),
 									() -> taskNotificationReleased(projection, reservedDelivery)).orElse(null);
 						}
@@ -13875,7 +13898,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					&& applicationClock.nanoTime() - authority.deadlineNanos() < 0L;
 		}
 
-		/** Task status carries projection data, so every accepted renewal rechecks it. */
+		/** Unwritten task status carries projection data that every accepted renewal rechecks. */
 		private boolean taskNotificationWriteAllowed(@NonNull McpRequestSseStream stream,
 				long generation, long revision) {
 			ResourceNotificationAuthority authority = resourceNotificationAuthority;

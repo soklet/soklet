@@ -20,7 +20,6 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
-import java.math.BigInteger;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -34,16 +33,6 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class ByteRangeSelection {
-	@NonNull
-	private static final BigInteger BIG_INTEGER_ZERO;
-	@NonNull
-	private static final BigInteger BIG_INTEGER_ONE;
-
-	static {
-		BIG_INTEGER_ZERO = BigInteger.ZERO;
-		BIG_INTEGER_ONE = BigInteger.ONE;
-	}
-
 	@NonNull
 	private final ByteRangeSelectionType type;
 	@Nullable
@@ -90,12 +79,10 @@ public final class ByteRangeSelection {
 		if (first.isEmpty() && last.isEmpty())
 			return malformed();
 
-		BigInteger representationLengthAsBigInteger = BigInteger.valueOf(representationLength);
-
 		if (first.isEmpty())
-			return suffixSelection(last, representationLength, representationLengthAsBigInteger);
+			return suffixSelection(last, representationLength);
 
-		return explicitSelection(first, last, representationLength, representationLengthAsBigInteger);
+		return explicitSelection(first, last, representationLength);
 	}
 
 	private ByteRangeSelection(@NonNull ByteRangeSelectionType type,
@@ -173,73 +160,68 @@ public final class ByteRangeSelection {
 
 	@NonNull
 	private static ByteRangeSelection suffixSelection(@NonNull String suffixLengthText,
-																										@NonNull Long representationLength,
-																										@NonNull BigInteger representationLengthAsBigInteger) {
-		BigInteger suffixLength = parseNonnegativeInteger(suffixLengthText).orElse(null);
-
+			@NonNull Long representationLength) {
+		DecimalDigits suffixLength = parseNonnegativeInteger(suffixLengthText).orElse(null);
 		if (suffixLength == null)
 			return malformed();
-
-		if (suffixLength.equals(BIG_INTEGER_ZERO))
+		if (suffixLength.value().equals("0"))
 			return unsatisfiable();
-
 		// A positive suffix is satisfiable even for an empty representation.
 		// There is no nonempty byte interval to send, so ignore this range form.
 		if (representationLength == 0)
 			return unsupported();
-
-		BigInteger selectedLength = suffixLength.min(representationLengthAsBigInteger);
-		BigInteger start = representationLengthAsBigInteger.subtract(selectedLength);
-		BigInteger endInclusive = representationLengthAsBigInteger.subtract(BIG_INTEGER_ONE);
-
-		return satisfiable(ByteRange.fromStartAndEndInclusive(start.longValueExact(), endInclusive.longValueExact()));
+		long selectedLength = Math.min(suffixLength.cappedLongValue(), representationLength);
+		return satisfiable(ByteRange.fromStartAndEndInclusive(representationLength - selectedLength, representationLength - 1));
 	}
 
 	@NonNull
 	private static ByteRangeSelection explicitSelection(@NonNull String firstText,
-																										 @NonNull String lastText,
-																										 @NonNull Long representationLength,
-																										 @NonNull BigInteger representationLengthAsBigInteger) {
-		BigInteger first = parseNonnegativeInteger(firstText).orElse(null);
-
+			@NonNull String lastText, @NonNull Long representationLength) {
+		DecimalDigits first = parseNonnegativeInteger(firstText).orElse(null);
 		if (first == null)
 			return malformed();
-
-		BigInteger last = lastText.isEmpty()
-				? null
-				: parseNonnegativeInteger(lastText).orElse(null);
-
+		DecimalDigits last = lastText.isEmpty() ? null : parseNonnegativeInteger(lastText).orElse(null);
 		if (!lastText.isEmpty() && last == null)
 			return malformed();
-
 		if (last != null && first.compareTo(last) > 0)
 			return malformed();
-
-		if (representationLength == 0 || first.compareTo(representationLengthAsBigInteger) >= 0)
+		long start = first.cappedLongValue();
+		if (representationLength == 0 || start >= representationLength)
 			return unsatisfiable();
-
-		BigInteger endInclusive = last == null
-				? representationLengthAsBigInteger.subtract(BIG_INTEGER_ONE)
-				: last.min(representationLengthAsBigInteger.subtract(BIG_INTEGER_ONE));
-
-		return satisfiable(ByteRange.fromStartAndEndInclusive(first.longValueExact(), endInclusive.longValueExact()));
+		long endInclusive = last == null ? representationLength - 1
+				: Math.min(last.cappedLongValue(), representationLength - 1);
+		return satisfiable(ByteRange.fromStartAndEndInclusive(start, endInclusive));
 	}
 
 	@NonNull
-	private static Optional<BigInteger> parseNonnegativeInteger(@NonNull String text) {
+	private static Optional<DecimalDigits> parseNonnegativeInteger(@NonNull String text) {
 		requireNonNull(text);
-
 		if (text.isEmpty())
 			return Optional.empty();
-
 		for (int i = 0; i < text.length(); i++) {
 			char c = text.charAt(i);
-
 			if (c < '0' || c > '9')
 				return Optional.empty();
 		}
+		int significantStart = 0;
+		while (significantStart < text.length() - 1 && text.charAt(significantStart) == '0')
+			significantStart++;
+		return Optional.of(new DecimalDigits(text.substring(significantStart)));
+	}
 
-		return Optional.of(new BigInteger(text));
+	/** Keeps arbitrary-size range ordering exact without constructing arbitrary-precision integers. */
+	private record DecimalDigits(String value) implements Comparable<DecimalDigits> {
+		@Override public int compareTo(DecimalDigits other) {
+			int lengthOrder = Integer.compare(value.length(), other.value.length());
+			return lengthOrder != 0 ? lengthOrder : value.compareTo(other.value);
+		}
+
+		long cappedLongValue() {
+			String maximum = "9223372036854775807";
+			return value.length() > maximum.length()
+					|| (value.length() == maximum.length() && value.compareTo(maximum) > 0)
+					? Long.MAX_VALUE : Long.parseLong(value);
+		}
 	}
 
 	/**

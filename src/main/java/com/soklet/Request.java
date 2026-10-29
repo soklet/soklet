@@ -636,6 +636,7 @@ public final class Request {
 	 * Names and values are not trimmed. A bare name and a name followed by {@code =} each yield one empty value;
 	 * repeated empty values remain separate occurrences. Explicit empty names ({@code =value})
 	 * are retained under {@code ""}; empty separator segments are ignored.
+	 * At most 1,000 nonempty form pairs are accepted, including repeated names.
 	 * <p>
 	 * <em>Note that form parameters have case-sensitive names per the HTTP spec.</em>
 	 * <p>
@@ -643,8 +644,6 @@ public final class Request {
 	 *
 	 * @return the request's form parameters
 	 * @throws IllegalRequestBodyException if the raw body is invalid for its selected charset
-	 * At most 1,000 nonempty form pairs are accepted, including repeated names.
-	 *
 	 * @throws IllegalRequestException if there are more than 1,000 pairs, or a form component contains malformed percent-encoding or text invalid for its selected charset
 	 */
 	@NonNull
@@ -962,7 +961,8 @@ public final class Request {
 	 * This method is threadsafe.
 	 * <p>
 	 * Malformed combined {@code Accept-Language} input produces an empty list. Input exceeding
-	 * 4,096 characters or 32 comma-separated ranges also produces an empty list.
+	 * 4,096 characters or 32 comma-separated members (including empty members) also produces an empty list.
+	 * Empty members within those bounds are ignored.
 	 * <p>
 	 * See {@link #getLanguageRanges()} for a variant that pulls {@link LanguageRange} values.
 	 *
@@ -1016,7 +1016,8 @@ public final class Request {
 	 * This method is threadsafe.
 	 * <p>
 	 * Malformed combined {@code Accept-Language} input produces an empty list. Input exceeding
-	 * 4,096 characters or 32 comma-separated ranges also produces an empty list.
+	 * 4,096 characters or 32 comma-separated members (including empty members) also produces an empty list.
+	 * Empty members within those bounds are ignored.
 	 * <p>
 	 * See {@link #getLocales()} for a variant that pulls {@link Locale} values.
 	 *

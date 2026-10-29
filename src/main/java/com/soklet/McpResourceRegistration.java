@@ -316,11 +316,7 @@ public final class McpResourceRegistration {
 
 	@NonNull
 	private static String requireMimeType(@NonNull String mimeType) {
-		requireNonNull(mimeType);
-		if (mimeType.isBlank())
-			throw new IllegalArgumentException(
-					"MCP resource MIME types must not be blank.");
-		return mimeType;
+		return McpContentValueSupport.requireMimeType(mimeType);
 	}
 
 	@NonNull
@@ -460,9 +456,9 @@ public final class McpResourceRegistration {
 			return this;
 		}
 
-		/** @param mimeType nonblank resource MIME type
+		/** @param mimeType syntactically valid resource MIME type
 		 * @return this builder
-		 * @throws IllegalArgumentException if {@code mimeType} is blank */
+		 * @throws IllegalArgumentException if {@code mimeType} is malformed */
 		@NonNull
 		public ExactBuilder mimeType(@NonNull String mimeType) {
 			this.state.mimeType = requireMimeType(mimeType);
@@ -599,9 +595,9 @@ public final class McpResourceRegistration {
 			return this;
 		}
 
-		/** @param mimeType nonblank resource MIME type
+		/** @param mimeType syntactically valid resource MIME type
 		 * @return this builder
-		 * @throws IllegalArgumentException if {@code mimeType} is blank */
+		 * @throws IllegalArgumentException if {@code mimeType} is malformed */
 		@NonNull
 		public TemplateBuilder mimeType(@NonNull String mimeType) {
 			this.state.mimeType = requireMimeType(mimeType);

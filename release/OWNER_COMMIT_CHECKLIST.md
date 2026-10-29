@@ -85,10 +85,27 @@ header `Unreleased` until the owner's tagging step. If that step changes the
 tracked release notes or date, include those bytes in a newly accepted candidate
 before promotion; do not edit an already accepted source tree during promotion.
 Changing the changelog header or date also changes the version-transition census.
-Regenerate `release/version-transition-inventory.json` from the final reviewed
-bytes and run `node scripts/verify-version-transition-inventory.mjs --stage final`
-before creating the candidate commit. Review inventory differences together with
-the release-note change.
+Reseal the reviewed `currentStage` in `release/version-transition-inventory.json`
+from the final bytes: refresh affected current occurrence locations and masked
+file hashes, then recompute `currentStage.censusSha256`. Update the paired
+`EXPECTED_CURRENT_STAGE_CENSUS_SHA256` constant in
+`scripts/verify-version-transition-inventory.mjs` to that reviewed digest in the
+same change. Preserve the immutable baseline occurrences, their classifications,
+and `EXPECTED_BASELINE_GOVERNANCE_SHA256`; dating the release does not authorize
+reclassifying historical versions. There is no automatic inventory regeneration
+command: the derivation helper requires explicit reviewed mappings, so do not
+replace the existing reviewed census with an unreviewed fresh scan.
+
+Run both checks before creating the candidate commit:
+
+```sh
+node scripts/verify-version-transition-inventory.mjs --stage final
+node scripts/verify-version-transition-inventory-self-test.mjs
+```
+
+Review the inventory and verifier-pin differences together with the release-note
+change. Updating only the inventory will correctly fail the independent-pin
+check.
 
 Before freezing a candidate, inspect every `approvedAt`/`expiresAt` in
 `release/release-scan-exceptions.json`. The September 16 approvals expire

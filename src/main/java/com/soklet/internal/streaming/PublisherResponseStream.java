@@ -43,6 +43,7 @@ public final class PublisherResponseStream implements Flow.Subscriber<ByteBuffer
 	private final Consumer<Throwable> failureConsumer;
 	private final Consumer<Throwable> cleanupFailureConsumer;
 	private final StreamLifecycleCoordinator.@Nullable PublisherWork publisherWork;
+	private final Consumer<Runnable> callbackExecution;
 	private final CountDownLatch completed = new CountDownLatch(1);
 	private final CountDownLatch released = new CountDownLatch(1);
 	private final CountDownLatch cancelCompleted = new CountDownLatch(1);
@@ -66,6 +67,7 @@ public final class PublisherResponseStream implements Flow.Subscriber<ByteBuffer
 		this.beginFinalization = requireNonNull(beginFinalization);
 		this.failureConsumer = requireNonNull(failureConsumer);
 		this.cleanupFailureConsumer = requireNonNull(cleanupFailureConsumer);
+		this.callbackExecution = reservation == null ? Runnable::run : reservation::runProviderCallback;
 		this.publisherWork = reservation == null ? null : reservation.retainPublisher();
 	}
 
@@ -95,7 +97,7 @@ public final class PublisherResponseStream implements Flow.Subscriber<ByteBuffer
 		try (CallbackRegistration registration = this.cancelationToken.onCancel(this::cancelSubscription)) {
 			try {
 				this.cancelationToken.throwIfCanceled();
-				publisher.subscribe(this);
+				this.callbackExecution.accept(() -> publisher.subscribe(this));
 			} catch (Throwable throwable) {
 				// A throwing acquisition must not subsequently deliver a subscription.
 				// If it already supplied one, its existing cleanup remains owned.
@@ -265,7 +267,7 @@ public final class PublisherResponseStream implements Flow.Subscriber<ByteBuffer
 				}
 				// Synchronous onNext requests only mark demandPending. Drain it after
 				// this provider frame returns, rather than recursively calling request.
-				current.request(1L);
+				this.callbackExecution.accept(() -> current.request(1L));
 			}
 		} catch (Throwable throwable) {
 			synchronized (this.lock) {
@@ -290,7 +292,7 @@ public final class PublisherResponseStream implements Flow.Subscriber<ByteBuffer
 			this.enteredCalls++;
 		}
 		try {
-			current.cancel();
+			this.callbackExecution.accept(current::cancel);
 		} catch (Throwable throwable) {
 			this.failure.compareAndSet(null, throwable);
 			this.cleanupFailureConsumer.accept(throwable);
@@ -305,7 +307,7 @@ public final class PublisherResponseStream implements Flow.Subscriber<ByteBuffer
 
 	private void cancelRejectedSubscription(Flow.Subscription rejected) {
 		try {
-			rejected.cancel();
+			this.callbackExecution.accept(rejected::cancel);
 		} catch (Throwable throwable) {
 			this.cleanupFailureConsumer.accept(throwable);
 			throw throwable;

@@ -86,6 +86,7 @@ public final class MediaRange {
 	 * A representation is considered malformed if it lacks a {@code type/subtype} structure, uses invalid
 	 * HTTP tokens for the type, subtype, or parameter names, pairs a wildcard type with a concrete subtype
 	 * (e.g. <code>*&#47;html</code>), or carries an unparseable {@code q} value.
+	 * Quality representations longer than 16 characters are malformed, bounding numeric parsing and normalization.
 	 * Quality values outside {@code [0, 1]} are clamped. The {@code q} weight parameter is recognized at any
 	 * position; if multiple {@code q} parameters are present, all but the first are ignored. All other
 	 * parameters are retained as media-type parameters. Quoted parameter values have their surrounding
@@ -145,6 +146,8 @@ public final class MediaRange {
 				// RFC 9110 directs recipients to process a parameter named "q" as the weight regardless
 				// of its position; when multiple "q" parameters are present, the first wins
 				if (!qualityEncountered) {
+					if (value.length() > 16)
+						return Optional.empty();
 					try {
 						quality = clampQuality(new BigDecimal(value));
 					} catch (NumberFormatException e) {

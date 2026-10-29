@@ -41,6 +41,14 @@ import static java.util.Objects.requireNonNull;
  * StartupContext)}, while the transport remains responsible for the external
  * resources and activity represented by that runtime.
  * <p>
+ * The built-in server treats a peer's input half-close (TCP FIN) as a disconnect,
+ * even when the peer can still read. SSE clients must keep their request side open.
+ * Surplus input after the handshake is discarded only up to the configured maximum
+ * request size; exceeding that budget terminates the connection as
+ * {@link StreamTerminationReason#CLIENT_DISCONNECTED}, with an input-limit cause.
+ * {@code Last-Event-ID} is decoded as UTF-8; malformed UTF-8 is rejected. ASCII
+ * event IDs offer the broadest interoperability with clients and intermediaries.
+ * <p>
  * For example:
  * <pre>{@code // Set up our SSE server
  * SseServer sseServer = SseServer.fromPort(8081);

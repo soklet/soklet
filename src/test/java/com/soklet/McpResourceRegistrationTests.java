@@ -40,6 +40,26 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @ThreadSafe
 class McpResourceRegistrationTests {
 	@Test
+	void exactAndTemplateMimeTypesUseTheSameStructuralValidation() {
+		for (String invalid : List.of("", "not-a-mime", "text/plain; charset",
+				"text/plain; x=1; X=2", "text/plain\r\nX: y", "text/\u2603")) {
+			assertThrows(IllegalArgumentException.class, () -> McpResourceRegistration
+					.withUriAndName(URI.create("catalog://items/42"), "exact", Set.of(McpProtocolVersion.V2026_07_28))
+					.handler(resourceHandler()).mimeType(invalid));
+			assertThrows(IllegalArgumentException.class, () -> McpResourceRegistration
+					.withUriTemplateAndName("catalog://items/{itemId}", "template", Set.of(McpProtocolVersion.V2026_07_28))
+					.handler(resourceHandler()).mimeType(invalid));
+		}
+		String valid = "TEXT / PLAIN ; charset=\"utf-8\"";
+		assertEquals(valid, McpResourceRegistration
+				.withUriAndName(URI.create("catalog://items/42"), "exact", Set.of(McpProtocolVersion.V2026_07_28))
+				.handler(resourceHandler()).mimeType(valid).build().getMimeType().orElseThrow());
+		assertEquals(valid, McpResourceRegistration
+				.withUriTemplateAndName("catalog://items/{itemId}", "template", Set.of(McpProtocolVersion.V2026_07_28))
+				.handler(resourceHandler()).mimeType(valid).build().getMimeType().orElseThrow());
+	}
+
+	@Test
 	void exactRegistrationPreservesItsImmutableDescriptorAndReadPolicy() {
 		URI uri = URI.create("catalog://items/42");
 		McpIcon icon = McpIcon.withSource(

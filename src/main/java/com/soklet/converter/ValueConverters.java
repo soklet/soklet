@@ -46,7 +46,10 @@ import static java.lang.String.format;
  * Non-instantiable utility class that exists to vend a set of default {@link ValueConverter} instances via {@link #defaultValueConverters()}.
  * <p>
  * The default {@link BigInteger}, {@link BigDecimal}, and {@link Number} converters reject
- * inputs longer than 4,096 characters after trimming.
+ * inputs longer than 4,096 characters after trimming. The {@link BigDecimal} and {@link Number}
+ * converters also reject scale or adjusted exponent magnitudes greater than 4,096, where
+ * adjusted exponent is {@code precision() - scale() - 1}. Register a custom converter
+ * when an application requires a wider numeric domain.
  * <p>
  * Default converters are documented at <a href="https://www.soklet.com/docs/value-conversions#default-conversions">https://www.soklet.com/docs/value-conversions#default-conversions</a>.
  *
@@ -253,6 +256,15 @@ public final class ValueConverters {
 			throw new IllegalArgumentException("Numeric input must not exceed 4096 characters.");
 	}
 
+	private static BigDecimal boundedDecimal(@NonNull String value) {
+		validateNumericInputLength(value);
+		BigDecimal decimal = new BigDecimal(value);
+		long adjustedExponent = decimal.precision() - (long) decimal.scale() - 1L;
+		if (Math.abs((long) decimal.scale()) > 4_096L || Math.abs(adjustedExponent) > 4_096L)
+			throw new IllegalArgumentException("Decimal scale and adjusted exponent magnitudes must not exceed 4096.");
+		return decimal;
+	}
+
 	@ThreadSafe
 	private static final class StringToBigIntegerValueConverter extends FromStringValueConverter<BigInteger> {
 		@Override
@@ -274,8 +286,7 @@ public final class ValueConverters {
 			if (from == null)
 				return Optional.empty();
 
-			validateNumericInputLength(from);
-			return Optional.of(new BigDecimal(from));
+			return Optional.of(boundedDecimal(from));
 		}
 	}
 
@@ -287,8 +298,7 @@ public final class ValueConverters {
 			if (from == null)
 				return Optional.empty();
 
-			validateNumericInputLength(from);
-			return Optional.of(new BigDecimal(from));
+			return Optional.of(boundedDecimal(from));
 		}
 	}
 

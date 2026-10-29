@@ -313,6 +313,9 @@ final class SokletDirectTerminationPrecedenceTests {
 					"Fresh close exceptions must retain one synthetic cause");
 			Assertions.assertInstanceOf(IllegalStateException.class,
 					first.getCause());
+			Assertions.assertEquals(0L, now.get(),
+					"An already-proved endpoint must not manufacture grace deadline expiry");
+			Assertions.assertEquals(0, http.forceCalls());
 			Assertions.assertEquals(InternalShutdownDisposition.GRACEFUL,
 					result.disposition());
 			assertParticipant(result, InternalLifecycleComponentType.HTTP,
@@ -583,7 +586,10 @@ final class SokletDirectTerminationPrecedenceTests {
 					if (proofPhase == ProofPhase.GRACEFUL
 							|| proofPhase == ProofPhase.START)
 						terminate();
-					else
+					else if (!proofSignalled.get())
+						// Only unresolved transports need an artificial grace expiry. Once
+						// proof exists, allow this tracked callback to return before the
+						// coordinator classifies it, without manufacturing a force race.
 						advanceBy(context.getRemainingTime());
 				}
 

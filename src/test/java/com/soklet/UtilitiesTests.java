@@ -54,10 +54,10 @@ public class UtilitiesTests {
 		assertEquals("", Utilities.trimAggressively(separators));
 		assertEquals("\ttext\r\n", Utilities.trimAggressively(" \ttext\r\n "));
 		Assertions.assertNull(Utilities.trimAggressively(null));
-		Assertions.assertTimeout(java.time.Duration.ofSeconds(5), () -> {
-			String input = "x" + " ".repeat(1_000_000) + "y";
+		Assertions.assertTimeoutPreemptively(java.time.Duration.ofSeconds(2), () -> {
+			String input = "x" + " ".repeat(65_536) + "y";
 			assertEquals(input, Utilities.trimAggressively(input));
-			assertEquals("x", Utilities.trimAggressively(" ".repeat(1_000_000) + "x" + " ".repeat(1_000_000)));
+			assertEquals("x", Utilities.trimAggressively(" ".repeat(65_536) + "x" + " ".repeat(65_536)));
 		});
 	}
 

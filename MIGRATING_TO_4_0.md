@@ -56,6 +56,15 @@ and [Java 24 release notes](https://www.oracle.com/java/technologies/javase/24-r
 7. Exercise the application through a real loopback listener in addition to
    off-network simulation.
 
+### CORS preflight authorization
+
+CORS preflight requests (`OPTIONS` with `Origin` and
+`Access-Control-Request-Method`) always go through `CorsAuthorizer`, including
+when an explicit `@OPTIONS` method matches. The default authorizer rejects all
+origins; move any preflight authorization from `@OPTIONS` handlers into a
+configured authorizer, such as `CorsAuthorizer.fromWhitelistedOrigins(...)`.
+Ordinary non-preflight `OPTIONS` requests still use explicit resource methods.
+
 ### HTTP values preserve every occurrence
 
 HTTP value collections now use ordered lists instead of sets:
@@ -632,8 +641,10 @@ connection never joins a broadcaster. Its elected reason and cause are
 preserved; it is not reported as an internal connection rejection or a failed
 handshake. Before the accepted response is written, capacity rejection uses
 `SseConnection.HandshakeFailureReason.CAPACITY_EXCEEDED`; processing,
-preparation, and write failures use `INTERNAL_ERROR` with their actual cause.
-Explicit application rejection remains `HANDSHAKE_REJECTED`.
+preparation, and accepted-response write failures use `INTERNAL_ERROR` with their
+actual cause. Explicit application rejection remains `HANDSHAKE_REJECTED`; a
+routine client disconnect during a rejection write preserves its existing
+`HANDSHAKE_REJECTED` or `CAPACITY_EXCEEDED` reason.
 
 `HEAD` on an `@SseEventSource` route now receives a bodyless `405` through
 `ResponseMarshaler.forMethodNotAllowed`. It does not invoke the event source,
@@ -1554,6 +1565,15 @@ a failure is retained and subsequent parameter accessors rethrow it. Set any
 body encoding before reading parameters or the request body, and fix malformed
 input at the caller rather than depending on replacement decoding.
 
+Both adapters accept at most 1,000 nonempty query and form pairs combined,
+including repetitions; parameter access beyond that bound raises
+`IllegalRequestException` (normally HTTP 400). A configured
+`filesystemResourceRoot` must already exist and be a trusted, immutable directory.
+The adapter pins its real path, permits links only within it, and rejects escapes.
+`getResourceAsStream` returns `null` for missing, invalid, or directory resources.
+URLs returned by `getResource` may be opened later, so concurrent tree mutation
+remains outside the supported contract.
+
 Concurrent `setAttribute(name, sameValue)` calls share an in-progress binding
 notification. An ordinary follower waits at most 200 milliseconds; on timeout
 or interruption it returns without a duplicate `valueBound` and may precede
@@ -1570,7 +1590,7 @@ in memory and copy it into a finite response through `toMarshaledResponse()` or
 `toResponse()`. Conversion does not send the response. `flushBuffer()` and writer
 or output-stream flushes affect local commitment, not network delivery;
 `isCommitted()` does not prove that Soklet has sent the response head.
-`setBufferSize(...)` is a local commit threshold, not a body-size or memory cap.
+The default local commit threshold is 1,024 bytes. `setBufferSize(...)` is a local commit threshold, not a body-size or memory cap.
 Capture continues beyond it, and conversion adds body copies. Bound response
 sizes and concurrent captures in the application. Request-size settings and
 native streaming queue limits do not cap this output.
@@ -2098,12 +2118,20 @@ publication or your dependent action is required. Keep dependent actions bounded
 ## Final request parsing and routing bounds
 
 The default `String` converters for `BigInteger`, `BigDecimal`, and `Number`
-reject values longer than 4,096 characters after trimming. Register a custom
-converter when your application deliberately supports larger values.
+reject values longer than 4,096 characters after trimming. `BigDecimal` and
+`Number` also require absolute scale and adjusted exponent (`precision - scale - 1`)
+to be at most 4,096, bounding the arithmetic domain of compact exponential inputs.
+Register a custom converter when your application deliberately supports larger values.
+The first decoded `Accept` quality (`q`) value is limited to 16 characters; a
+longer value makes that media range malformed. Existing first-value and clamping
+behavior remains unchanged.
 URL-encoded form parsing rejects more than 1,000 nonempty name/value pairs,
 counting repeated names. Both failures surface as HTTP 400 during normal binding.
 Accept-Language helpers return an empty list above 4,096 combined characters or
-32 ranges. These limits bound CPU and memory consumed by untrusted input.
+32 comma-separated members, including empty members. Within those bounds, empty
+members are ignored; `en,,fr` preserves both preferences. Malformed nonempty
+ranges still produce an empty list. These limits bound CPU and memory consumed
+by untrusted input.
 
 Runtime paths retain trailing Unicode separators as data: `/admin%20` no longer
 resolves to a declaration for `/admin`. Both raw requests and simulator copies
@@ -2115,3 +2143,21 @@ A required list with no converted elements fails with HTTP 400.
 MCP Accept ranges with media parameters other than `q` do not match the JSON or
 SSE representations. Empty trailing Content-Type parameters are rejected.
 Configure reverse proxies to use HTTP/1.1 for the MCP upstream.
+
+## Final input and callback corrections
+
+- Missing or malformed opening multipart delimiters now fail parsing with HTTP
+  400. Valid space/tab delimiter padding is accepted. Named HTML entities in
+  filenames remain literal; numeric references retain legacy compatibility,
+  with invalid code points, surrogate values, and controls rejected.
+- MCP POST bodies accept absent or identity-only `Content-Encoding`; unsupported
+  codings receive HTTP 415 before JSON parsing or application admission.
+  Authorized CORS rate-limit responses expose `Retry-After` to browser code.
+- MCP annotation processing shares runtime URI-template validation and overlap
+  rules, including scheme/host case normalization and ordinary IPv6 variable
+  ports. Unpaired UTF-16 surrogates in annotation text fail compilation.
+- Built-in transport observer and metric callbacks now reject waits on their
+  own unpublished shutdown result promptly. Request shutdown with `shutdown()`
+  and await it from a separate control thread; keep callbacks nonblocking.
+- Compile each Java module separately. A single `javac` invocation compiling
+  multiple named modules is outside the annotation processor's supported scope.

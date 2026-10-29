@@ -51,6 +51,12 @@ public interface MultipartParser {
 	 * in a supported charset produce {@link com.soklet.exception.IllegalRequestBodyException}.
 	 * Field data remains available as raw bytes; text decoding occurs when
 	 * {@link MultipartField#getDataAsString()} is invoked.
+	 * <p>
+	 * Malformed or missing delimiters in a nonempty body are rejected. Delimiter
+	 * transport padding is accepted. Filenames preserve named HTML entities as
+	 * literal text; decimal and hexadecimal numeric character references are
+	 * decoded for compatibility with legacy form clients, rejecting invalid Unicode
+	 * scalar values and control characters.
 	 *
 	 * @return a {@code MultipartParser} instance
 	 */

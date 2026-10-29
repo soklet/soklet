@@ -265,9 +265,23 @@ public final class McpOutboundChannel {
 			byte @NonNull [] payload, @NonNull Object coalescingKey,
 			@NonNull BooleanSupplier writeAllowed, @NonNull Runnable payloadWritten,
 			@NonNull Runnable payloadReleased) {
+		return offerGuardedCoalescing(payload, coalescingKey, writeAllowed,
+				writeAllowed, payloadWritten, payloadReleased);
+	}
+
+	/**
+	 * Uses the initial guard until the first chunk byte is written, then the
+	 * continuation guard. Both guards have the same nonblocking requirements.
+	 */
+	@NonNull
+	public Optional<@NonNull OfferResult> offerGuardedCoalescing(
+			byte @NonNull [] payload, @NonNull Object coalescingKey,
+			@NonNull BooleanSupplier writeAllowed, @NonNull BooleanSupplier continuationAllowed,
+			@NonNull Runnable payloadWritten, @NonNull Runnable payloadReleased) {
 		requireNonNull(payload);
 		requireNonNull(coalescingKey);
 		requireNonNull(writeAllowed);
+		requireNonNull(continuationAllowed);
 		requireNonNull(payloadWritten);
 		requireNonNull(payloadReleased);
 		boolean retained = false;
@@ -289,7 +303,7 @@ public final class McpOutboundChannel {
 				else if (!hasRegularCapacity(ownedPayload.length))
 					result = Optional.of(OfferResult.FULL);
 				else {
-					addRegularChunk(ownedPayload, coalescingKey, writeAllowed,
+					addRegularChunk(ownedPayload, coalescingKey, writeAllowed, continuationAllowed,
 							payloadWritten, payloadReleased);
 					retained = true;
 					wake = reserveWakeIfNeeded();
@@ -854,13 +868,15 @@ public final class McpOutboundChannel {
 
 	private void addRegularChunk(byte @NonNull [] payload,
 			@Nullable Object coalescingKey) {
-		addRegularChunk(payload, coalescingKey, null, null, null);
+		addRegularChunk(payload, coalescingKey, null, null, null, null);
 	}
 
 	private void addRegularChunk(byte @NonNull [] payload,
 			@Nullable Object coalescingKey, @Nullable BooleanSupplier writeAllowed,
+			@Nullable BooleanSupplier continuationAllowed,
 			@Nullable Runnable payloadWritten, @Nullable Runnable payloadReleased) {
-		Chunk chunk = Chunk.payload(payload, coalescingKey, writeAllowed, payloadWritten, payloadReleased);
+		Chunk chunk = Chunk.payload(payload, coalescingKey, writeAllowed, continuationAllowed,
+				payloadWritten, payloadReleased);
 		chunks.add(chunk);
 		if (coalescingKey != null)
 			pendingCoalescingChunks.put(coalescingKey, chunk);
@@ -986,6 +1002,7 @@ public final class McpOutboundChannel {
 		private final @Nullable Object coalescingKey;
 		private int bufferIndex;
 		private final @Nullable BooleanSupplier writeAllowed;
+		private final @Nullable BooleanSupplier continuationAllowed;
 		private final @Nullable Runnable payloadWritten;
 		private @Nullable Runnable payloadReleased;
 		private boolean hasWrittenBytes;
@@ -994,12 +1011,14 @@ public final class McpOutboundChannel {
 		private Chunk(@NonNull List<@NonNull ByteBuffer> buffers,
 				int regularPayloadBytes, boolean terminal,
 				@Nullable Object coalescingKey, @Nullable BooleanSupplier writeAllowed,
+				@Nullable BooleanSupplier continuationAllowed,
 				@Nullable Runnable payloadWritten, @Nullable Runnable payloadReleased) {
 			this.buffers = requireNonNull(buffers).toArray(ByteBuffer[]::new);
 			this.regularPayloadBytes = regularPayloadBytes;
 			this.terminal = terminal;
 			this.coalescingKey = coalescingKey;
 			this.writeAllowed = writeAllowed;
+			this.continuationAllowed = continuationAllowed;
 			this.payloadWritten = payloadWritten;
 			this.payloadReleased = payloadReleased;
 		}
@@ -1007,21 +1026,22 @@ public final class McpOutboundChannel {
 		@NonNull
 		private static Chunk payload(byte @NonNull [] payload,
 				@Nullable Object coalescingKey, @Nullable BooleanSupplier writeAllowed,
+				@Nullable BooleanSupplier continuationAllowed,
 				@Nullable Runnable payloadWritten, @Nullable Runnable payloadReleased) {
 			return new Chunk(framedPayload(payload), payload.length, false,
-					coalescingKey, writeAllowed, payloadWritten, payloadReleased);
+					coalescingKey, writeAllowed, continuationAllowed, payloadWritten, payloadReleased);
 		}
 
 		@NonNull
 		private static Chunk terminal(byte @NonNull [] payload) {
 			List<@NonNull ByteBuffer> buffers = framedPayload(payload);
 			buffers.add(ByteBuffer.wrap(TERMINAL_CHUNK));
-			return new Chunk(buffers, 0, true, null, null, null, null);
+			return new Chunk(buffers, 0, true, null, null, null, null, null);
 		}
 
 		@NonNull
 		private static Chunk terminalWithoutPayload() {
-			return new Chunk(List.of(ByteBuffer.wrap(TERMINAL_CHUNK)), 0, true, null, null, null, null);
+			return new Chunk(List.of(ByteBuffer.wrap(TERMINAL_CHUNK)), 0, true, null, null, null, null, null);
 		}
 
 		@NonNull
@@ -1084,7 +1104,8 @@ public final class McpOutboundChannel {
 		}
 
 		private boolean isWriteAllowed() {
-			return writeAllowed == null || writeAllowed.getAsBoolean();
+			BooleanSupplier guard = hasWrittenBytes ? continuationAllowed : writeAllowed;
+			return guard == null || guard.getAsBoolean();
 		}
 
 		private void reservePayloadRelease(@NonNull List<@NonNull Runnable> releases) {

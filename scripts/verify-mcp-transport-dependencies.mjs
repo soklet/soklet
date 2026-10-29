@@ -477,9 +477,11 @@ const CHARACTERIZATIONS = Object.freeze([
       { owner: 'com.soklet.internal.mcp.protocol.McpSimulationRuntime#complete', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpSimulationRuntime.java' },
       { owner: 'com.soklet.internal.mcp.protocol.McpRequestSseStream#offerCoalescingMessage', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpRequestSseStream.java' },
       { owner: 'com.soklet.internal.mcp.protocol.McpRequestSseStream.TransportChannel#delegate', path: 'src/main/java/com/soklet/internal/mcp/protocol/McpRequestSseStream.java' },
+      { owner: 'com.soklet.internal.mcp.transport.McpOutboundChannel.Chunk#isWriteAllowed', path: 'src/main/java/com/soklet/internal/mcp/transport/McpOutboundChannel.java' },
+      { owner: 'com.soklet.internal.mcp.transport.McpOutboundChannel.Chunk#writeTo', path: 'src/main/java/com/soklet/internal/mcp/transport/McpOutboundChannel.java' },
     ],
     id: 'MCP-TRANSPORT-001',
-    statement: 'Progress and subscription notifications use the request-scoped SSE stream and its single bounded McpOutboundChannel delegate. Modern resource invalidations retain accepted identities, use the bounded projection scheduler, and guard delivery with the installed stream, authorization generation and expiry. Task status frames additionally retain their projection authorization revision so an accepted renewal invalidates previously projected data before socket writes. Selected legacy POST streams share the finite legacy terminal projection with their immutable simulation JSON snapshots; the default modern encoder is preserved and message frames contain no event IDs or priming fields. Guarded legacy GET invalidations recheck source/GET/grant authority before every socket write; revoked unwritten chunks are purged, partially written chunks fail, and encoded-byte releases run outside the channel lock.',
+    statement: 'Progress and subscription notifications use the request-scoped SSE stream and its single bounded McpOutboundChannel delegate. Modern resource invalidations retain accepted identities, use the bounded projection scheduler, and guard delivery with the installed stream, authorization generation and expiry. Task status frames retain their projection authorization revision until actual socket progress. Once started, they continue only under the captured stream, generation and live lease, so unchanged renewals preserve framing while actual revocation stops the remainder. Selected legacy POST streams share the finite legacy terminal projection with their immutable simulation JSON snapshots; the default modern encoder is preserved and message frames contain no event IDs or priming fields. Guarded legacy GET invalidations recheck source/GET/grant authority before every socket write; revoked unwritten chunks are purged, partially written chunks fail, and encoded-byte releases run outside the channel lock.',
   },
   {
     evidence: [
@@ -1440,6 +1442,9 @@ function verifyCharacterizationSources(root, sourceFiles) {
   requireStructural(projectTask,
     /stream\s*\.\s*offerGuardedCoalescingMessage\s*\(\s*notification\s*,\s*new\s+Object\s*\(\s*\)\s*,\s*\(\s*\)\s*->\s*\(\s*!\s*offerPending\s*\.\s*getAndSet\s*\(\s*false\s*\)\s*\|\|\s*applicationClock\s*\.\s*nanoTime\s*\(\s*\)\s*-\s*check\s*\.\s*deadlineNanos\s*\(\s*\)\s*<\s*0L\s*\)\s*&&\s*taskNotificationWriteAllowed\s*\(\s*stream\s*,\s*reservedDelivery\s*\.\s*authorizationGeneration\s*\(\s*\)\s*,\s*reservedDelivery\s*\.\s*authorizationRevision\s*\(\s*\)\s*\)/u,
     'task projection must offer on its installed stream with the admission deadline and captured delivery authorization guard');
+  requireStructural(projectTask,
+    /reservedDelivery\s*\.\s*authorizationRevision\s*\(\s*\)\s*\)\s*,\s*\(\s*\)\s*->\s*resourceNotificationWriteAllowed\s*\(\s*stream\s*,\s*reservedDelivery\s*\.\s*authorizationGeneration\s*\(\s*\)\s*\)\s*,/u,
+    'started task frames must retain their captured generation and lease guard');
   const taskWriteAllowed = oneMethod(runtime.lexed, runtimePath,
     'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.RequestControl',
     'taskNotificationWriteAllowed');
@@ -1549,10 +1554,11 @@ function verifyCharacterizationSources(root, sourceFiles) {
   const requestGuardedOffer = oneMethodMatching(request.lexed, requestPath,
     'com.soklet.internal.mcp.protocol.McpRequestSseStream',
     'offerGuardedCoalescingMessage', (candidate) =>
-      /\bRunnable\s+payloadWritten\b/u.test(candidate.signatureCode),
+      /\bRunnable\s+payloadWritten\b/u.test(candidate.signatureCode)
+      && /\bBooleanSupplier\s+continuationAllowed\b/u.test(candidate.signatureCode),
     'guarded notification offer with write acknowledgement');
   requireStructural(requestGuardedOffer,
-    /return\s+channel\s*\.\s*offerGuardedCoalescing\s*\(\s*frame\s*,\s*coalescingKey\s*,\s*writeAllowed\s*,\s*payloadWritten\s*,\s*payloadReleased\s*\)\s*;/u,
+    /return\s+channel\s*\.\s*offerGuardedCoalescing\s*\(\s*frame\s*,\s*coalescingKey\s*,\s*writeAllowed\s*,\s*continuationAllowed\s*,\s*payloadWritten\s*,\s*payloadReleased\s*\)\s*;/u,
     'guarded notifications must retain their guard and callbacks on the installed channel');
   const transportType = requestTypes.find((type) =>
     type.owner === 'com.soklet.internal.mcp.protocol.McpRequestSseStream.TransportChannel');
@@ -1602,11 +1608,63 @@ function verifyCharacterizationSources(root, sourceFiles) {
   const transportGuardedOffer = oneMethodMatching(request.lexed, requestPath,
     'com.soklet.internal.mcp.protocol.McpRequestSseStream.TransportChannel',
     'offerGuardedCoalescing', (candidate) =>
-      /\bRunnable\s+payloadWritten\b/u.test(candidate.signatureCode),
+      /\bRunnable\s+payloadWritten\b/u.test(candidate.signatureCode)
+      && /\bBooleanSupplier\s+continuationAllowed\b/u.test(candidate.signatureCode),
     'guarded channel offer with write acknowledgement');
   requireStructural(transportGuardedOffer,
-    /return\s+this\s*\.\s*delegate\s*\.\s*offerGuardedCoalescing\s*\(\s*encodedBytes\s*,\s*coalescingKey\s*,\s*writeAllowed\s*,\s*payloadWritten\s*,\s*payloadReleased\s*\)\s*;/u,
+    /return\s+this\s*\.\s*delegate\s*\.\s*offerGuardedCoalescing\s*\(\s*encodedBytes\s*,\s*coalescingKey\s*,\s*writeAllowed\s*,\s*continuationAllowed\s*,\s*payloadWritten\s*,\s*payloadReleased\s*\)\s*;/u,
     'guarded channel offers must retain their guard and callbacks on the shared delegate');
+  for (const [lexed, path, owner, method, payload] of [
+    [request.lexed, requestPath, 'com.soklet.internal.mcp.protocol.McpRequestSseStream', 'offerGuardedCoalescingMessage', 'message'],
+    [request.lexed, requestPath, 'com.soklet.internal.mcp.protocol.McpRequestSseStream.Channel', 'offerGuardedCoalescing', 'frame'],
+    [request.lexed, requestPath, 'com.soklet.internal.mcp.protocol.McpRequestSseStream.TransportChannel', 'offerGuardedCoalescing', 'frame'],
+    [outbound.lexed, outboundPath, 'com.soklet.internal.mcp.transport.McpOutboundChannel', 'offerGuardedCoalescing', 'payload'],
+  ]) {
+    const compatibilityOffer = oneMethodMatching(lexed, path, owner, method,
+      (candidate) => /\bRunnable\s+payloadWritten\b/u.test(candidate.signatureCode)
+        && !/\bBooleanSupplier\s+continuationAllowed\b/u.test(candidate.signatureCode),
+      'single-guard compatibility offer with write acknowledgement');
+    requireStructural(compatibilityOffer,
+      new RegExp(`^\\s*return\\s+${method}\\s*\\(\\s*${payload}\\s*,\\s*coalescingKey\\s*,\\s*writeAllowed\\s*,\\s*writeAllowed\\s*,\\s*payloadWritten\\s*,\\s*payloadReleased\\s*\\)\\s*;\\s*$`, 'u'),
+      'single-guard compatibility offers must preserve their guard for both write phases');
+  }
+  const outboundGuardedOffer = oneMethodMatching(outbound.lexed, outboundPath,
+    'com.soklet.internal.mcp.transport.McpOutboundChannel', 'offerGuardedCoalescing',
+    (candidate) => /\bBooleanSupplier\s+continuationAllowed\b/u.test(candidate.signatureCode),
+    'outbound offer with separate continuation guard');
+  requireStructural(outboundGuardedOffer,
+    /addRegularChunk\s*\(\s*ownedPayload\s*,\s*coalescingKey\s*,\s*writeAllowed\s*,\s*continuationAllowed\s*,\s*payloadWritten\s*,\s*payloadReleased\s*\)/u,
+    'outbound queued frames must retain both guards and delivery callbacks');
+  const addGuardedChunk = oneMethodMatching(outbound.lexed, outboundPath,
+    'com.soklet.internal.mcp.transport.McpOutboundChannel', 'addRegularChunk',
+    (candidate) => /\bBooleanSupplier\s+continuationAllowed\b/u.test(candidate.signatureCode),
+    'guarded chunk insertion');
+  requireStructural(addGuardedChunk,
+    /Chunk\s*\.\s*payload\s*\(\s*payload\s*,\s*coalescingKey\s*,\s*writeAllowed\s*,\s*continuationAllowed\s*,\s*payloadWritten\s*,\s*payloadReleased\s*\)/u,
+    'guarded chunk insertion must preserve both guards');
+  const chunkPayload = oneMethod(outbound.lexed, outboundPath,
+    'com.soklet.internal.mcp.transport.McpOutboundChannel.Chunk', 'payload');
+  requireStructural(chunkPayload,
+    /return\s+new\s+Chunk\s*\(\s*framedPayload\s*\(\s*payload\s*\)\s*,\s*payload\s*\.\s*length\s*,\s*false\s*,\s*coalescingKey\s*,\s*writeAllowed\s*,\s*continuationAllowed\s*,\s*payloadWritten\s*,\s*payloadReleased\s*\)/u,
+    'chunk construction must preserve both guards');
+  const chunkConstructor = oneMethod(outbound.lexed, outboundPath,
+    'com.soklet.internal.mcp.transport.McpOutboundChannel.Chunk', 'Chunk');
+  requireStructural(chunkConstructor,
+    /this\s*\.\s*writeAllowed\s*=\s*writeAllowed\s*;\s*this\s*\.\s*continuationAllowed\s*=\s*continuationAllowed\s*;/u,
+    'chunk fields must retain the initial and continuation guards');
+  const chunkGuard = oneMethod(outbound.lexed, outboundPath,
+    'com.soklet.internal.mcp.transport.McpOutboundChannel.Chunk', 'isWriteAllowed');
+  requireStructural(chunkGuard,
+    /^\s*BooleanSupplier\s+guard\s*=\s*hasWrittenBytes\s*\?\s*continuationAllowed\s*:\s*writeAllowed\s*;\s*return\s+guard\s*==\s*null\s*\|\|\s*guard\s*\.\s*getAsBoolean\s*\(\s*\)\s*;\s*$/u,
+    'chunk guard selection must switch only after socket progress');
+  const chunkWrite = oneMethod(outbound.lexed, outboundPath,
+    'com.soklet.internal.mcp.transport.McpOutboundChannel.Chunk', 'writeTo');
+  requireStructural(chunkWrite,
+    /if\s*\(\s*!\s*isWriteAllowed\s*\(\s*\)\s*\)\s*\{\s*guardRevoked\s*=\s*true\s*;\s*break\s*;/u,
+    'each chunk socket write must honor its selected guard');
+  requireStructural(chunkWrite,
+    /if\s*\(\s*currentWrite\s*>\s*0L\s*\)\s*hasWrittenBytes\s*=\s*true\s*;/u,
+    'a zero-byte socket write must not activate continuation authority');
   writableFloorParameterNames(writableFloor,
     'WritableSource.writeTo must retain the SocketChannel/long socket floor');
   const outboundWrite = oneMethod(outbound.lexed, outboundPath, 'com.soklet.internal.mcp.transport.McpOutboundChannel.WritableSourceFacade', 'writeTo');

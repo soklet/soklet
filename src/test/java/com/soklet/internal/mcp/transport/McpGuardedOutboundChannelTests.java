@@ -161,6 +161,61 @@ public class McpGuardedOutboundChannelTests {
 	}
 
 	@Test
+	public void renewed_initial_guard_does_not_revoke_a_started_frame_with_valid_continuation() throws Exception {
+		McpOutboundChannel channel = channel(2, 64, new RecordingListener());
+		AtomicBoolean revisionCurrent = new AtomicBoolean(true);
+		AtomicInteger writes = new AtomicInteger(), releases = new AtomicInteger();
+		channel.offerGuardedCoalescing(ascii("task"), "task", revisionCurrent::get,
+				() -> true, writes::incrementAndGet, releases::incrementAndGet);
+		WritableSource source = channel.newWritableSource(); source.start();
+		TestSocketChannel socket = new TestSocketChannel(1);
+		Assertions.assertEquals(1, source.writeTo(socket, 1));
+		revisionCurrent.set(false);
+		Assertions.assertTrue(channel.recheckGuardedFrames());
+		Assertions.assertEquals(1, channel.snapshot().bufferedFrames());
+		source.writeTo(socket, 64);
+		Assertions.assertEquals("4\r\ntask\r\n", new String(socket.writtenBytes(), StandardCharsets.US_ASCII));
+		Assertions.assertEquals(1, writes.get()); Assertions.assertEquals(1, releases.get());
+		source.close();
+	}
+
+	@Test
+	public void initial_guard_remains_required_until_a_socket_write_makes_progress() throws Exception {
+		McpOutboundChannel channel = channel(2, 64, new RecordingListener());
+		AtomicBoolean revisionCurrent = new AtomicBoolean(true);
+		AtomicInteger writes = new AtomicInteger(), releases = new AtomicInteger();
+		channel.offerGuardedCoalescing(ascii("task"), "task", revisionCurrent::get,
+				() -> true, writes::incrementAndGet, releases::incrementAndGet);
+		WritableSource source = channel.newWritableSource(); source.start();
+		Assertions.assertEquals(0, source.writeTo(new TestSocketChannel(0), 64));
+		revisionCurrent.set(false);
+		Assertions.assertTrue(channel.recheckGuardedFrames());
+		Assertions.assertEquals(0, channel.snapshot().bufferedFrames());
+		Assertions.assertEquals(0, writes.get()); Assertions.assertEquals(1, releases.get());
+		source.close();
+	}
+
+	@Test
+	public void revoked_continuation_stops_a_partial_frame_even_if_initial_guard_is_valid() throws Exception {
+		RecordingListener listener = new RecordingListener();
+		McpOutboundChannel channel = channel(2, 64, listener);
+		AtomicBoolean generationCurrent = new AtomicBoolean(true);
+		AtomicInteger writes = new AtomicInteger(), releases = new AtomicInteger();
+		channel.offerGuardedCoalescing(ascii("task"), "task", () -> true,
+				generationCurrent::get, writes::incrementAndGet, releases::incrementAndGet);
+		WritableSource source = channel.newWritableSource(); source.start();
+		TestSocketChannel socket = new TestSocketChannel(1);
+		Assertions.assertEquals(1, source.writeTo(socket, 1));
+		generationCurrent.set(false);
+		Assertions.assertFalse(channel.recheckGuardedFrames());
+		Assertions.assertThrows(IOException.class, () -> source.writeTo(socket, 64));
+		Assertions.assertEquals(1, socket.writtenBytes().length);
+		Assertions.assertEquals(StreamTerminationReason.APPLICATION_CANCELED, listener.reason.get());
+		Assertions.assertEquals(0, writes.get()); Assertions.assertEquals(1, releases.get());
+		source.close();
+	}
+
+	@Test
 	public void rejected_offers_release_once_without_consuming_the_existing_key() throws Exception {
 		RecordingListener listener = new RecordingListener();
 		McpOutboundChannel channel = channel(1, 8, listener);

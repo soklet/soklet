@@ -74,14 +74,18 @@ public final class McpJsonNumber implements McpJsonValue {
 	public int hashCode() {
 		if (this.value.signum() == 0)
 			return 0;
-		// Normalize the coefficient with a zero starting scale. Stripping the
-		// original decimal can underflow an extreme supplied scale; keeping the
-		// combined scale in a long handles every supported BigDecimal value
-		// without rendering or expanding its exponent.
-		BigDecimal coefficient = new BigDecimal(this.value.unscaledValue())
-				.stripTrailingZeros();
-		long normalizedScale = (long) this.value.scale() + coefficient.scale();
-		return 31 * coefficient.unscaledValue().hashCode() + Long.hashCode(normalizedScale);
+		// Trim coefficient text instead of repeatedly dividing a large integer
+		// by ten. Keep the adjusted scale in a long so extreme public decimals
+		// neither underflow nor require exponent expansion.
+		String coefficient = this.value.unscaledValue().toString();
+		int end = coefficient.length();
+		while (coefficient.charAt(end - 1) == '0')
+			--end;
+		int coefficientHash = 0;
+		for (int index = 0; index < end; ++index)
+			coefficientHash = 31 * coefficientHash + coefficient.charAt(index);
+		long normalizedScale = (long) this.value.scale() - (coefficient.length() - end);
+		return 31 * coefficientHash + Long.hashCode(normalizedScale);
 	}
 
 	/** @return redacted diagnostic rendering */

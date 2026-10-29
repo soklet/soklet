@@ -57,6 +57,68 @@ public class McpTasksSimulatorPublicRuntimeTests {
 			McpJsonObject.builder()
 					.put("action", "accept")
 					.build();
+	private static final AtomicInteger blockingArgumentConstructions = new AtomicInteger();
+	private static final AtomicReference<Thread> blockingArgumentThread = new AtomicReference<>();
+
+	@Test
+	public void taskArgumentConstructorsDoNotPinVirtualThreadCarriers() throws Exception {
+		blockingArgumentConstructions.set(0);
+		blockingArgumentThread.set(null);
+		McpInMemoryTaskManager manager = McpTaskManager.fromInMemoryDefaults();
+		McpToolRegistration<BlockingTaskArguments> tool = McpToolRegistration
+				.withName(TOOL_NAME, Set.of(McpProtocolVersion.V2026_07_28))
+				.argumentType(BlockingTaskArguments.class)
+				.handler((context, arguments, features) -> {
+					Assertions.assertEquals("value", arguments.getConvertedArguments().value());
+					McpTaskCreationContext creation = features.getTaskCreationContext().orElseThrow();
+					Assertions.assertSame(creation.getTaskOrigin(), creation.getTaskOrigin());
+					return McpTaskCreatedResult.fromTaskId(manager.createTask(creation).getTaskId());
+				}).build();
+		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH,
+				McpImplementation.withNameAndVersion("task-constructor", "test").build(),
+				Set.of(McpProtocolVersion.V2026_07_28))
+				.taskProtocolVersions(Set.of(McpProtocolVersion.V2026_07_28))
+				.toolRegistrations(List.of(tool)).build();
+		McpServer server = McpServer.withPort(0).host(LOOPBACK).allowedHosts(Set.of(LOOPBACK))
+				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
+				.taskManager(manager).toolRateLimiter(context -> McpRateLimitDecision.allowed()).build();
+		SokletConfig config = SokletConfig.withMcpServer(server)
+				.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(5))
+						.startupCancelationTimeout(Duration.ofSeconds(2)).gracefulShutdownTimeout(Duration.ofSeconds(2))
+						.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).build();
+		java.nio.file.Path recordingFile = java.nio.file.Files.createTempFile("soklet-task-constructor-pinning-", ".jfr");
+		try (jdk.jfr.Recording recording = new jdk.jfr.Recording()) {
+			recording.enable("jdk.VirtualThreadPinned").withThreshold(Duration.ofMillis(1)).withStackTrace();
+			recording.start();
+			SokletSimulator.run(config, simulator -> {
+				String response = performJson(simulator, request("tools/call", TOOL_NAME, "constructor",
+						"\"name\":\"" + TOOL_NAME + "\",\"arguments\":{\"value\":\"value\"}", false));
+				Assertions.assertTrue(response.contains("\"resultType\":\"task\""), response);
+			});
+			recording.stop();
+			recording.dump(recordingFile);
+			Assertions.assertEquals(1, blockingArgumentConstructions.get(), "Decoded arguments must be memoized.");
+			Thread constructorThread = blockingArgumentThread.get();
+			Assertions.assertNotNull(constructorThread);
+			Assertions.assertTrue(constructorThread.isVirtual());
+			List<jdk.jfr.consumer.RecordedEvent> pinned = jdk.jfr.consumer.RecordingFile.readAllEvents(recordingFile)
+					.stream().filter(event -> event.getEventType().getName().equals("jdk.VirtualThreadPinned"))
+					.filter(event -> event.getThread() != null && event.getThread().getJavaThreadId() == constructorThread.threadId())
+					.toList();
+			Assertions.assertTrue(pinned.isEmpty(), () -> "Typed task argument constructor pinned a carrier: " + pinned);
+		} finally {
+			java.nio.file.Files.deleteIfExists(recordingFile);
+		}
+	}
+
+	private record BlockingTaskArguments(@NonNull String value) {
+		private BlockingTaskArguments {
+			blockingArgumentConstructions.incrementAndGet();
+			blockingArgumentThread.set(Thread.currentThread());
+			Assertions.assertDoesNotThrow(() -> Thread.sleep(50));
+		}
+	}
 
 	@Test
 	public void ineligibleTaskReturnIsAnInternalErrorInSimulation()

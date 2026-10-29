@@ -39,6 +39,18 @@ import java.util.Map;
  */
 @ThreadSafe
 public interface McpApplicationExecutionObserver {
+	/** Thread-bound self-wait context for owned application work, independent of metric ordering. */
+	interface LifecycleScope extends AutoCloseable {
+		@Override
+		void close();
+	}
+
+	/** Carries the lifecycle owner into policy and cancellation workers; restores the previous binding on close. */
+	@NonNull
+	default LifecycleScope enterLifecycleExecution() {
+		return () -> {};
+	}
+
 	/** Opaque identity for a provisionally recorded metric transition. */
 	interface PendingMetricRecord {
 	}

@@ -34,6 +34,15 @@ function run(name, body) {
   process.stdout.write(`PASS ${name}\n`);
 }
 
+run('preemptive assertion guards remain in broad discovery without becoming whole-test guards', () => {
+  const census = buildDiscoveryCensus(new Map([
+    ['src/test/java/example/GuardTests.java',
+      'Assertions.assertTimeoutPreemptively(Duration.ofSeconds(2), () -> trim());'],
+  ]));
+  assert.equal(census.candidateCount, 1);
+  assert.deepEqual(census.candidates[0].kinds, ['NAMED_TIMEOUT_CANDIDATE']);
+});
+
 function expectFailure(body, pattern) {
   assert.throws(body, (error) =>
     error instanceof LifecycleBoundHarnessInventoryError

@@ -248,7 +248,7 @@ public final class SokletSimulator {
 					resolved.httpServer().orElse(null),
 					resolved.sseServer().orElse(null),
 					simulatorConfig.getSimulatorOptions(),
-					resolved.mcpServer().orElse(null), dispatchGate);
+					resolved.mcpServer().orElse(null), dispatchGate, executionOwnerToken);
 			Throwable primaryFailure = null;
 			boolean bodyEntered = false;
 			boolean restoreStartupInterrupt = false;

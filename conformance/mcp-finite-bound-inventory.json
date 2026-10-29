@@ -3947,23 +3947,9 @@
         },
         {
           "file": "src/main/java/com/soklet/SokletProcessor.java",
-          "key": "FINITE-MATCH-004:src/main/java/com/soklet/SokletProcessor.java#com.soklet.SokletProcessor#MAXIMUM_MCP_ENDPOINT_RESOURCE_URI_TEMPLATE_OVERLAP_STATES",
-          "matcherRuleId": "FINITE-MATCH-004",
-          "member": "MAXIMUM_MCP_ENDPOINT_RESOURCE_URI_TEMPLATE_OVERLAP_STATES",
-          "owner": "com.soklet.SokletProcessor"
-        },
-        {
-          "file": "src/main/java/com/soklet/SokletProcessor.java",
           "key": "FINITE-MATCH-004:src/main/java/com/soklet/SokletProcessor.java#com.soklet.SokletProcessor#MAXIMUM_MCP_RESOURCE_URI_TEMPLATES",
           "matcherRuleId": "FINITE-MATCH-004",
           "member": "MAXIMUM_MCP_RESOURCE_URI_TEMPLATES",
-          "owner": "com.soklet.SokletProcessor"
-        },
-        {
-          "file": "src/main/java/com/soklet/SokletProcessor.java",
-          "key": "FINITE-MATCH-004:src/main/java/com/soklet/SokletProcessor.java#com.soklet.SokletProcessor#MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_OVERLAP_STATES",
-          "matcherRuleId": "FINITE-MATCH-004",
-          "member": "MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_OVERLAP_STATES",
           "owner": "com.soklet.SokletProcessor"
         },
         {

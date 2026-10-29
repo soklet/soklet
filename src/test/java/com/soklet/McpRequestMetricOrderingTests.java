@@ -36,13 +36,17 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -236,14 +240,17 @@ public class McpRequestMetricOrderingTests {
 		Object runtime = field(bridge.getClass(), "runtime").get(bridge);
 		Field observerField = field(runtime.getClass(), "applicationExecutionObserver");
 		McpApplicationExecutionObserver original = (McpApplicationExecutionObserver) observerField.get(runtime);
-		CountDownLatch submissionPaused = new CountDownLatch(1), releaseSubmission = new CountDownLatch(1);
+		CompletableFuture<Void> submissionPaused = new CompletableFuture<>();
+		CountDownLatch releaseSubmission = new CountDownLatch(1);
 		CountDownLatch workerPaused = new CountDownLatch(1), releaseWorker = new CountDownLatch(1);
 		CountDownLatch rejected = new CountDownLatch(1);
 		AtomicReference<Thread> submitter = new AtomicReference<>();
+		AtomicReference<String> lastObserverCall = new AtomicReference<>("none");
 		AtomicBoolean pauseSubmission = new AtomicBoolean(true), pauseWorker = new AtomicBoolean(!producer.equals("worker"));
 		McpApplicationExecutionObserver intercepted = (McpApplicationExecutionObserver) Proxy.newProxyInstance(
 				McpApplicationExecutionObserver.class.getClassLoader(), new Class<?>[]{McpApplicationExecutionObserver.class},
 				(proxy, method, arguments) -> {
+					lastObserverCall.set(method.getName() + " on " + Thread.currentThread().getName());
 					if (method.getName().equals("recordRequestAccepted")) submitter.set(Thread.currentThread());
 					if (method.getName().equals("useMetricSequence")
 							&& Thread.currentThread().getName().startsWith("soklet-mcp-request-")
@@ -258,7 +265,7 @@ public class McpRequestMetricOrderingTests {
 						MetricDeferral delegate = (MetricDeferral) result;
 						return (MetricDeferral) () -> {
 							if (Thread.currentThread() == submitter.get() && pauseSubmission.compareAndSet(true, false)) {
-								submissionPaused.countDown(); await(releaseSubmission);
+								submissionPaused.complete(null); await(releaseSubmission);
 							}
 							delegate.close();
 						};
@@ -276,9 +283,14 @@ public class McpRequestMetricOrderingTests {
 						.header("MCP-Protocol-Version", "2026-07-28").header("Mcp-Method", "server/discover")
 						.POST(HttpRequest.BodyPublishers.ofString("{")).build();
 				var response = client.sendAsync(request, HttpResponse.BodyHandlers.ofString());
-				assertTrue(submissionPaused.await(5, TimeUnit.SECONDS));
+				awaitSubmission(submissionPaused, response, () ->
+						"producer=" + producer + ", port=" + port + ", acceptedBy=" + submitter.get()
+								+ ", observerInstalled=" + observerInstallation(observerField, runtime, intercepted)
+								+ ", lastObserverCall=" + lastObserverCall.get() + ", workerPaused=" + (workerPaused.getCount() == 0)
+								+ ", events=" + collector.events + submissionThreadSnapshot());
 				if (!producer.equals("worker")) {
-					assertTrue(workerPaused.await(5, TimeUnit.SECONDS));
+					assertTrue(workerPaused.await(5, TimeUnit.SECONDS), () ->
+							"Worker was not intercepted: producer=" + producer + ", lastObserverCall=" + lastObserverCall.get());
 					Map<?, ?> controls = (Map<?, ?>) field(runtime.getClass(), "requestControls").get(runtime);
 					Object control;
 					synchronized (controls) { control = controls.values().iterator().next(); }
@@ -291,6 +303,9 @@ public class McpRequestMetricOrderingTests {
 				original.drainAsynchronously();
 				assertTrue(collector.requestEvents().isEmpty(), collector.events.toString());
 				original.recordConnectionRejected(); original.drainAsynchronously();
+				// A concurrent drainer may already own delivery when drainAsynchronously returns.
+				assertTrue(collector.independentDelivered.await(5, TimeUnit.SECONDS),
+						"Independent transport metrics must still make progress.");
 				assertTrue(collector.events.contains(McpMetricsEvent.connectionRejected()),
 						"Independent transport metrics must still make progress.");
 				releaseWorker.countDown(); releaseSubmission.countDown();
@@ -306,6 +321,80 @@ public class McpRequestMetricOrderingTests {
 				releaseWorker.countDown(); releaseSubmission.countDown(); owner.close();
 			}
 		}
+	}
+
+	/** A completed HTTP exchange before the gate is a prerequisite failure, not a metric-ordering timeout. */
+	private static void awaitSubmission(CompletableFuture<Void> submission,
+			CompletableFuture<HttpResponse<String>> response, Supplier<String> diagnostic) throws InterruptedException {
+		try {
+			CompletableFuture.anyOf(submission, response).get(5, TimeUnit.SECONDS);
+		} catch (ExecutionException failure) {
+			fail("HTTP exchange failed before submission interception: " + diagnostic.get(), failure.getCause());
+		} catch (TimeoutException failure) {
+			fail("Submission interception stalled: HTTP=" + completedResponseDescription(response)
+					+ "; " + diagnostic.get(), failure);
+		}
+		assertTrue(submission.isDone(), () -> "HTTP exchange completed before submission interception: "
+				+ completedResponseDescription(response) + "; " + diagnostic.get());
+	}
+
+	private static String completedResponseDescription(CompletableFuture<HttpResponse<String>> response) {
+		return switch (response.state()) {
+			case RUNNING -> "pending";
+			case CANCELLED -> "cancelled";
+			case FAILED -> response.exceptionNow().toString();
+			case SUCCESS -> "status=" + response.resultNow().statusCode() + ", body=" + response.resultNow().body();
+		};
+	}
+
+	private static String observerInstallation(Field observerField, Object runtime, Object expected) {
+		try {
+			return Boolean.toString(observerField.get(runtime) == expected);
+		} catch (IllegalAccessException failure) {
+			return "unreadable: " + failure;
+		}
+	}
+
+	private static String submissionThreadSnapshot() {
+		StringBuilder snapshot = new StringBuilder("\nMCP transport threads at failure:");
+		// Run only when an assertion fails, before the fixture's finally block releases its gates.
+		for (java.lang.management.ThreadInfo thread : java.lang.management.ManagementFactory
+				.getThreadMXBean().dumpAllThreads(true, true)) {
+			String name = thread.getThreadName();
+			if (name.startsWith("soklet-") || name.equals("connection-event-loop") || name.equals("event-loop")
+					|| name.startsWith("HttpClient-") || name.startsWith("ForkJoinPool.commonPool-worker-")) {
+				snapshot.append('\n').append(thread);
+				for (StackTraceElement frame : thread.getStackTrace()) snapshot.append("\n  ").append(frame);
+			}
+		}
+		return snapshot.toString();
+	}
+
+	@Test
+	public void failedHttpExchangeDoesNotMasqueradeAsSubmissionTimeout() {
+		java.io.IOException failure = new java.io.IOException("Client connection failed");
+		AssertionError assertion = assertTimeout(Duration.ofSeconds(2), () ->
+				assertThrows(AssertionError.class, () -> awaitSubmission(new CompletableFuture<>(),
+						CompletableFuture.failedFuture(failure), () -> "fixture context")));
+		assertSame(failure, assertion.getCause());
+		assertTrue(assertion.getMessage().contains("HTTP exchange failed before submission interception"));
+		assertTrue(assertion.getMessage().contains("fixture context"));
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	public void earlyHttpResponseRetainsStatusInsteadOfMasqueradingAsSubmissionTimeout() {
+		HttpResponse<String> response = (HttpResponse<String>) Proxy.newProxyInstance(HttpResponse.class.getClassLoader(),
+				new Class<?>[]{HttpResponse.class}, (proxy, method, arguments) -> switch (method.getName()) {
+					case "statusCode" -> 503;
+					case "body" -> "Not admitted";
+					default -> throw new UnsupportedOperationException(method.getName());
+				});
+		AssertionError assertion = assertTimeout(Duration.ofSeconds(2), () ->
+				assertThrows(AssertionError.class, () -> awaitSubmission(new CompletableFuture<>(),
+						CompletableFuture.completedFuture(response), () -> "fixture context")));
+		assertTrue(assertion.getMessage().contains("status=503, body=Not admitted"));
+		assertTrue(assertion.getMessage().contains("fixture context"));
 	}
 
 	private static DefaultMcpServer server(MetricsCollector collector) {
@@ -344,7 +433,11 @@ public class McpRequestMetricOrderingTests {
 	}
 	private static final class RecordingCollector implements MetricsCollector {
 		private final List<McpMetricsEvent> events = new CopyOnWriteArrayList<>();
-		@Override public void didRecordMcpMetricsEvent(McpMetricsEvent event) { events.add(event); }
+		private final CountDownLatch independentDelivered = new CountDownLatch(1);
+		@Override public void didRecordMcpMetricsEvent(McpMetricsEvent event) {
+			events.add(event);
+			if (event instanceof McpMetricsEvent.ConnectionRejected) independentDelivered.countDown();
+		}
 		private List<McpMetricsEvent> requestEvents() { return events.stream().filter(event -> event instanceof McpMetricsEvent.RequestAccepted
 				|| event instanceof McpMetricsEvent.ProtocolError || event instanceof McpMetricsEvent.RequestRejected).toList(); }
 	}

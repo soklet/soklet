@@ -421,6 +421,108 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 		}
 	}
 
+	@Test
+	public void routineRenewalPreservesPartiallyWrittenTaskResult() throws Exception {
+		partiallyWrittenTaskResultAcrossRenewal(false);
+	}
+
+	@Test
+	public void changedRenewalRevokesPartiallyWrittenTaskResult() throws Exception {
+		partiallyWrittenTaskResultAcrossRenewal(true);
+	}
+
+	private static void partiallyWrittenTaskResultAcrossRenewal(boolean changeContext) throws Exception {
+		ScriptedTaskManager manager = new ScriptedTaskManager();
+		Object initialContext = new Object(), replacementContext = new Object();
+		CountDownLatch renewalEntered = new CountDownLatch(1);
+		CountDownLatch releaseRenewal = new CountDownLatch(1);
+		CountDownLatch renewed = new CountDownLatch(1);
+		AtomicInteger grants = new AtomicInteger();
+		AtomicReference<McpStreamTerminationReason> closed = new AtomicReference<>();
+		CountDownLatch closedObserved = new CountDownLatch(1);
+		McpServer server = serverBuilder(manager, new AtomicInteger())
+				.subscriptionAuthorizer((context, features) -> {
+					int grant = grants.incrementAndGet();
+					if (grant == 2) {
+						renewalEntered.countDown();
+						Assertions.assertTrue(releaseRenewal.await(5, TimeUnit.SECONDS));
+					}
+					return McpSubscriptionAuthorization.Allowed.withValidUntil(Instant.now().plusSeconds(300))
+							.applicationContext(changeContext && grant > 1 ? replacementContext : initialContext).build();
+				})
+				.maximumSubscriptionAuthorizationDuration(Duration.ofSeconds(4)).build();
+		MetricsCollector metrics = new MetricsCollector() {
+			@Override public void didRecordMcpMetricsEvent(McpMetricsEvent event) {
+				if (event instanceof McpMetricsEvent.SubscriptionMaintenance maintenance
+						&& maintenance.getWork() == McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION
+						&& maintenance.getOutcome() == McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED
+						&& grants.get() >= 2) renewed.countDown();
+				if (event instanceof McpMetricsEvent.SubscriptionClosed ended) {
+					closed.set(ended.getReason());
+					closedObserved.countDown();
+				}
+			}
+		};
+		Soklet soklet = managedSoklet(server, metrics);
+		McpChunkedHttpClient client = null;
+		try {
+			soklet.start();
+			int port = boundPort(server);
+			seedTask(port, "renewal-partial", ALPHA);
+			client = listen(port, "\"renewal-partial\"", ALPHA, true,
+					taskIdsFilter(List.of("renewal-partial")), 1024);
+			assertSseHead(client.readHead());
+			Assertions.assertEquals(acknowledgment("\"renewal-partial\"", List.of("renewal-partial")), client.readChunkText());
+			// Constrain the server's kernel send queue as well as the client window
+			// so the test observes a genuinely partial frame on every platform.
+			Object runtime = field(field(server, "runtimeBridge"), "runtime");
+			Object eventLoop = field(runtime, "eventLoop");
+			for (Object loop : (List<?>) field(eventLoop, "connectionEventLoops")) {
+				java.nio.channels.Selector selector = (java.nio.channels.Selector) field(loop, "selector");
+				for (java.nio.channels.SelectionKey key : selector.keys().toArray(java.nio.channels.SelectionKey[]::new))
+					if (key.channel() instanceof java.nio.channels.SocketChannel socket && socket.isOpen())
+						socket.setOption(java.net.StandardSocketOptions.SO_SNDBUF, 1024);
+			}
+			Object control = subscriptionControl(server);
+			Object channel = field(field(field(control, "responseStream"), "channel"), "delegate");
+			String output = "x".repeat(900_000);
+			manager.replaceTask(completedTask(manager.requireTask("renewal-partial"), output));
+			manager.publishTaskChanged("renewal-partial");
+			long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+			boolean partial = false;
+			while (System.nanoTime() - deadline < 0L) {
+				synchronized (field(channel, "lock")) {
+					Object chunk = field(channel, "currentChunk");
+					if (chunk != null && (boolean) field(chunk, "hasWrittenBytes")) {
+						partial = true;
+						break;
+					}
+				}
+				Thread.sleep(5);
+			}
+			Assertions.assertTrue(partial, "The task frame must be partly written before renewal completes.");
+			Assertions.assertTrue(renewalEntered.await(5, TimeUnit.SECONDS));
+			releaseRenewal.countDown();
+			Assertions.assertTrue(renewed.await(5, TimeUnit.SECONDS));
+			McpChunkedHttpClient reader = client;
+			if (changeContext) {
+				Assertions.assertThrows(java.io.EOFException.class, reader::readChunkText,
+						"A changed grant must stop the remaining bytes of the old result.");
+				Assertions.assertTrue(closedObserved.await(5, TimeUnit.SECONDS));
+				Assertions.assertEquals(McpStreamTerminationReason.REQUEST_CANCELED, closed.get());
+			} else {
+				Assertions.assertEquals(completedNotification("\"renewal-partial\"", "renewal-partial")
+						.replace("completed-output", output), reader.readChunkText());
+				Assertions.assertNull(closed.get(), "An unchanged renewal must preserve the stream.");
+				Assertions.assertEquals(1, server.getDiagnostics().getActiveSubscriptions());
+			}
+		} finally {
+			releaseRenewal.countDown();
+			if (client != null) client.closeWithReset();
+			soklet.close();
+		}
+	}
+
 	private static void awaitIgnoringInterrupts(CountDownLatch latch) {
 		boolean interrupted = false;
 		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);

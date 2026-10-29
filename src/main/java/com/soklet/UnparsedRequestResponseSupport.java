@@ -61,6 +61,17 @@ final class UnparsedRequestResponseSupport {
 						  @Nullable ResponseMarshaler responseMarshaler, @NonNull LifecycleObserver observer,
 						  @NonNull Consumer<LogEvent> logger, @NonNull Consumer<byte[]> responseConsumer,
 						  @NonNull Runnable completion) {
+		return submit(executor, scheduler, timeout, requestSupplier, responseMarshaler, observer,
+				logger, responseConsumer, completion, () -> null);
+	}
+
+	static boolean submit(@Nullable ExecutorService executor, @Nullable TimeoutScheduler scheduler,
+			@NonNull Duration timeout, @NonNull Supplier<UnparsedRequest> requestSupplier,
+			@Nullable ResponseMarshaler responseMarshaler, @NonNull LifecycleObserver observer,
+			@NonNull Consumer<LogEvent> logger, @NonNull Consumer<byte[]> responseConsumer,
+			@NonNull Runnable completion,
+			@NonNull Supplier<LifecycleExecutionContext.@Nullable Scope> callbackExecution) {
+		requireNonNull(callbackExecution);
 		if (executor == null || executor.isShutdown() || scheduler == null || scheduler.isShutdown())
 			return false;
 		AtomicBoolean responseClaimed = new AtomicBoolean();
@@ -83,7 +94,7 @@ final class UnparsedRequestResponseSupport {
 				PreparedResponse prepared = null;
 				try {
 					prepared = marshal(requestSupplier.get(), responseMarshaler, observer, logger,
-							() -> !responseClaimed.get());
+							() -> !responseClaimed.get(), callbackExecution);
 				} catch (Throwable throwable) {
 					if (!responseClaimed.get()) logMarshalingFailure(logger, throwable);
 				}
@@ -122,6 +133,23 @@ final class UnparsedRequestResponseSupport {
 									@NonNull LifecycleObserver observer,
 									@NonNull Consumer<LogEvent> logger,
 									@NonNull BooleanSupplier active) {
+		return marshal(request, responseMarshaler, observer, logger, active, () -> null);
+	}
+
+	@Nullable
+	static PreparedResponse marshal(@NonNull UnparsedRequest request,
+			@Nullable ResponseMarshaler responseMarshaler, @NonNull LifecycleObserver observer,
+			@NonNull Consumer<LogEvent> logger, @NonNull BooleanSupplier active,
+			@NonNull Supplier<LifecycleExecutionContext.@Nullable Scope> callbackExecution) {
+		try (LifecycleExecutionContext.Scope ignored = requireNonNull(callbackExecution).get()) {
+			return marshalWithinCallback(request, responseMarshaler, observer, logger, active);
+		}
+	}
+
+	@Nullable
+	private static PreparedResponse marshalWithinCallback(@NonNull UnparsedRequest request,
+			@Nullable ResponseMarshaler responseMarshaler, @NonNull LifecycleObserver observer,
+			@NonNull Consumer<LogEvent> logger, @NonNull BooleanSupplier active) {
 		if (!active.getAsBoolean()) return null;
 		try { observer.didRejectUnparsedRequest(request); }
 		catch (Throwable throwable) {

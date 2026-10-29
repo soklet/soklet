@@ -153,6 +153,12 @@ class RequestParser {
                 tokenizer.position());
     }
 
+    boolean declaredLengthExceedsAggregateLimit(int aggregateLimit) {
+        // While a fixed-length body is incomplete, position still marks the end
+        // of this request's headers, even after pipelined tokenizer compaction.
+        return state == State.BODY && (long) tokenizer.position() + contentLength > aggregateLimit;
+    }
+
     boolean readingBody() {
         return state == State.BODY
                 || state == State.CHUNK_SIZE

@@ -1365,7 +1365,7 @@ public class McpAnnotationProcessorValidationTests {
 	}
 
 	@Test
-	void rejectsSyntaxEquivalentExactResourceUrisWithoutConflatingTemplates() {
+	void rejectsSyntaxEquivalentExactResourceUrisAndTemplates() {
 		JavaFileObject duplicateExact = JavaFileObjects.forSourceString(
 				"example.EquivalentExactResourceUriEndpoint", """
 						package example;
@@ -1417,7 +1417,9 @@ public class McpAnnotationProcessorValidationTests {
 				.withProcessors(new SokletProcessor())
 				.compile(distinctTemplates);
 
-		assertThat(templateCompilation).succeededWithoutWarnings();
+		assertThat(templateCompilation).failed();
+		assertThat(templateCompilation).hadErrorContaining(
+				"Potentially overlapping MCP resource URI templates");
 	}
 
 	@Test

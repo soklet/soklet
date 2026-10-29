@@ -50,4 +50,41 @@ record ResourceMethodDeclaration(
 		requireNonNull(parameterTypes);
 		requireNonNull(sseEventSource);
 	}
+
+	/** Reads the existing semicolon-delimited index, including reference-array descriptor terminators. */
+	@NonNull
+	static String[] parameterTypesFromIndex(@NonNull String encoded) {
+		requireNonNull(encoded);
+		if (encoded.isEmpty())
+			return new String[0];
+		java.util.List<String> types = new java.util.ArrayList<>();
+		int start = 0;
+		while (start < encoded.length()) {
+			int cursor = start;
+			while (cursor < encoded.length() && encoded.charAt(cursor) == '[')
+				cursor++;
+			int end;
+			if (cursor > start && cursor < encoded.length() && encoded.charAt(cursor) == 'L') {
+				int terminator = encoded.indexOf(';', cursor);
+				if (terminator < 0 || terminator == cursor + 1)
+					throw new IllegalArgumentException("Malformed reference-array parameter in route index.");
+				end = terminator + 1;
+				if (end < encoded.length() && encoded.charAt(end) != ';')
+					throw new IllegalArgumentException("Missing parameter separator in route index.");
+			} else {
+				end = encoded.indexOf(';', start);
+				if (end < 0)
+					end = encoded.length();
+			}
+			if (end == start)
+				throw new IllegalArgumentException("Empty parameter type in route index.");
+			types.add(encoded.substring(start, end));
+			if (end == encoded.length())
+				break;
+			start = end + 1;
+			if (start == encoded.length())
+				throw new IllegalArgumentException("Trailing parameter separator in route index.");
+		}
+		return types.toArray(String[]::new);
+	}
 }

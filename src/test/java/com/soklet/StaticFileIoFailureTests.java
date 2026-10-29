@@ -94,6 +94,51 @@ class StaticFileIoFailureTests {
 
     private static Request request() { return Request.fromPath(HttpMethod.GET, "/asset.txt"); }
 
+    @Test
+    void ordinarySymlinksDoNotHideGenuineIoFailures(@TempDir Path root) throws Exception {
+        Files.writeString(root.resolve("asset.txt"), "public");
+        Files.createSymbolicLink(root.resolve("link"), Path.of("asset.txt"));
+        Provider provider = new Provider(root);
+        StaticFiles files = StaticFiles.withRoot(provider.wrap(root)).trustedImmutableRoot(true).followSymlinks(true).build();
+        IOException expected = new FileSystemException(root.toString(), null, "I/O failure");
+        provider.failure = expected;
+        provider.operation = "realPath";
+        assertSame(expected, assertThrows(UncheckedIOException.class,
+                () -> files.marshaledResponseFor("link", request())).getCause());
+    }
+
+    @Test
+    void unreadableIndexFallsThroughButOtherAccessFailuresPropagate(@TempDir Path root) throws Exception {
+        Files.writeString(root.resolve("index.html"), "unreadable");
+        Files.writeString(root.resolve("index.htm"), "fallback");
+        for (boolean follow : List.of(false, true)) {
+            Provider provider = new Provider(root);
+            provider.deniedReadPath = root.resolve("index.html").toRealPath();
+            StaticFiles files = StaticFiles.withRoot(provider.wrap(root)).trustedImmutableRoot(true)
+                    .followSymlinks(follow).indexFileNames(List.of("index.html", "index.htm")).build();
+            assertEquals("fallback", new String(files.marshaledResponseFor("", request()).orElseThrow().bodyBytesOrEmpty(),
+                    java.nio.charset.StandardCharsets.UTF_8));
+            provider.operation = "checkAccess";
+            provider.failure = new FileSystemException(root.toString(), null, "I/O failure");
+            assertSame(provider.failure, assertThrows(UncheckedIOException.class,
+                    () -> files.marshaledResponseFor("", request())).getCause());
+        }
+    }
+
+    @Test
+    void unsupportedNoFollowIsAnAcquisitionFailureInsteadOfMissing(@TempDir Path root) throws Exception {
+        Files.writeString(root.resolve("asset.txt"), "public");
+        for (RuntimeException unsupported : List.of(new UnsupportedOperationException(), new IllegalArgumentException())) {
+            Provider provider = new Provider(root);
+            StaticFiles files = StaticFiles.withRoot(provider.wrap(root)).trustedImmutableRoot(true).build();
+            provider.noFollowFailure = unsupported;
+            UncheckedIOException failure = assertThrows(UncheckedIOException.class,
+                    () -> files.marshaledResponseFor("asset.txt", request()));
+            assertSame(unsupported, failure.getCause().getCause());
+            assertTrue(failure.getCause().getMessage().contains("no-follow"));
+        }
+    }
+
     // Public-NIO provider fixture: Windows-like null keys/no SecureDirectoryStream,
     // plus deterministic I/O failures without exhausting the test process's descriptors.
     static final class Provider extends FileSystemProvider {
@@ -101,6 +146,8 @@ class StaticFileIoFailureTests {
         private final WrappedFileSystem fileSystem;
         private IOException failure;
         private String operation;
+        private Path deniedReadPath;
+        private RuntimeException noFollowFailure;
         boolean nullFileKeys;
 
         Provider(Path directory) {
@@ -117,6 +164,7 @@ class StaticFileIoFailureTests {
         @Override public FileSystem getFileSystem(URI uri) { return fileSystem; }
         @Override public Path getPath(URI uri) { throw new UnsupportedOperationException(); }
         @Override public SeekableByteChannel newByteChannel(Path path, Set<? extends OpenOption> options, FileAttribute<?>... attrs) throws IOException {
+            if (noFollowFailure != null && options.contains(LinkOption.NOFOLLOW_LINKS)) throw noFollowFailure;
             fail("open"); return Files.newByteChannel(unwrap(path), options, attrs);
         }
         @Override public DirectoryStream<Path> newDirectoryStream(Path path, DirectoryStream.Filter<? super Path> filter) throws IOException {
@@ -139,7 +187,14 @@ class StaticFileIoFailureTests {
         @Override public boolean isSameFile(Path first, Path second) throws IOException { return Files.isSameFile(unwrap(first), unwrap(second)); }
         @Override public boolean isHidden(Path path) throws IOException { return Files.isHidden(unwrap(path)); }
         @Override public FileStore getFileStore(Path path) throws IOException { return Files.getFileStore(unwrap(path)); }
-        @Override public void checkAccess(Path path, AccessMode... modes) throws IOException { delegate.provider().checkAccess(unwrap(path), modes); }
+        @Override public void checkAccess(Path path, AccessMode... modes) throws IOException {
+            fail("checkAccess");
+            if (deniedReadPath != null && unwrap(path).toRealPath().equals(deniedReadPath)
+                    && Arrays.asList(modes).contains(AccessMode.READ))
+                throw new AccessDeniedException(path.toString());
+            delegate.provider().checkAccess(unwrap(path), modes);
+        }
+        @Override public Path readSymbolicLink(Path path) throws IOException { return wrap(Files.readSymbolicLink(unwrap(path))); }
         @Override public <V extends FileAttributeView> V getFileAttributeView(Path path, Class<V> type, LinkOption... options) { return Files.getFileAttributeView(unwrap(path), type, options); }
         @Override public <A extends BasicFileAttributes> A readAttributes(Path path, Class<A> type, LinkOption... options) throws IOException {
             fail("attributes");

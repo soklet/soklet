@@ -544,7 +544,7 @@ public class McpHttpServerNotificationTests {
 						testCase.description());
 				Assertions.assertEquals("Origin", response.head().singleHeader("Vary"),
 						testCase.description());
-				Assertions.assertEquals("WWW-Authenticate",
+				Assertions.assertEquals(testCase.expectedStatus() == 429 ? "WWW-Authenticate, Retry-After" : "WWW-Authenticate",
 						response.head().singleHeader("Access-Control-Expose-Headers"),
 						testCase.description());
 				Assertions.assertEquals("no-store",

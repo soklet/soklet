@@ -1020,6 +1020,19 @@ final class BuiltInTransportLifecycleAdapter {
 		return Optional.ofNullable(this.current.get());
 	}
 
+	/** Marks inline transport callbacks whose return can be needed for termination. */
+	LifecycleExecutionContext.@Nullable Scope enterCallbackExecution() {
+		Generation generation = this.current.get();
+		return generation == null ? null
+				: LifecycleExecutionContext.enter(generation.group.executionOwnerToken());
+	}
+
+	void runCallback(@NonNull Runnable callback) {
+		try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
+			requireNonNull(callback).run();
+		}
+	}
+
 	boolean shutdownInProgress() {
 		Generation generation = this.current.get();
 		return generation != null && generation.shutdownClaimed.get()

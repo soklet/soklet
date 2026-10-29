@@ -194,12 +194,10 @@ final class DefaultMultipartParser implements MultipartParser {
 
 				String filename = trimAggressivelyToNull(contentDispositionFields.get("filename"));
 
-				// For example:
-				// "Screenshot-1.53.26&#8239;PM.png"
-				// becomes
-				// "Screenshot-1.53.26 PM.png"
+				// Retain numeric-reference compatibility for legacy form clients.
+				// Named HTML entities are literal filename text, not multipart encoding.
 				if (filename != null)
-					filename = HTMLUtilities.unescapeHtml(filename);
+					filename = decodeNumericFilenameReferences(filename);
 
 				String contentTypeHeaderValue = trimAggressivelyToNull(headers.get("Content-Type"));
 				String contentType = Utilities.extractContentTypeFromHeaderValue(contentTypeHeaderValue).orElse(null);
@@ -1115,6 +1113,13 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * @throws IOException if there is no more data available.
 		 */
 		public byte readByte() throws IOException {
+			int value = readByteOrEnd();
+			if (value == -1)
+				throw new IOException("No more data is available");
+			return (byte) value;
+		}
+
+		private int readByteOrEnd() throws IOException {
 			// Buffer depleted ?
 			if (head == tail) {
 				head = 0;
@@ -1122,13 +1127,14 @@ final class DefaultMultipartParser implements MultipartParser {
 				tail = input.read(buffer, head, bufSize);
 				if (tail == -1) {
 					// No more data available.
-					throw new IOException("No more data is available");
+					tail = 0;
+					return -1;
 				}
 				if (notifier != null) {
 					notifier.noteBytesRead(tail);
 				}
 			}
-			return buffer[head++];
+			return buffer[head++] & 0xff;
 		}
 
 		/**
@@ -1143,38 +1149,38 @@ final class DefaultMultipartParser implements MultipartParser {
 		 */
 		public boolean readBoundary()
 				throws FileUploadIOException, MalformedStreamException {
-			final byte[] marker = new byte[2];
-			final boolean nextChunk;
-
 			head += boundaryLength;
 			try {
-				marker[0] = readByte();
-				if (marker[0] == LF) {
+				int marker = readByte();
+				boolean closing = marker == '-' && readByte() == '-';
+				if (closing)
+					marker = readByteOrEnd();
+
+				// RFC 2046 transport padding may follow any encapsulation delimiter.
+				while (marker == ' ' || marker == '\t')
+					marker = readByteOrEnd();
+				// A final delimiter needs no epilogue or trailing CRLF.
+				if (closing && marker == -1)
+					return false;
+				if (marker == LF) {
 					// Work around IE5 Mac bug with input type=image.
 					// Because the boundary delimiter, not including the trailing
 					// CRLF, must not appear within any file (RFC 2046, section
 					// 5.1.1), we know the missing CR is due to a buggy browser
 					// rather than a file containing something similar to a
 					// boundary.
-					return true;
+					return !closing;
 				}
 
-				marker[1] = readByte();
-				if (arrayequals(marker, STREAM_TERMINATOR, 2)) {
-					nextChunk = false;
-				} else if (arrayequals(marker, FIELD_SEPARATOR, 2)) {
-					nextChunk = true;
-				} else {
-					throw new MalformedStreamException(
-							"Unexpected characters follow a boundary");
-				}
+				if (marker == CR && readByte() == LF)
+					return !closing;
+				throw new MalformedStreamException("Unexpected characters follow a boundary");
 			} catch (final FileUploadIOException e) {
 				// wraps a SizeException, re-throw as it will be unwrapped later
 				throw e;
 			} catch (final IOException e) {
 				throw new MalformedStreamException("Stream ended unexpectedly");
 			}
-			return nextChunk;
 		}
 
 		/**
@@ -1349,8 +1355,6 @@ final class DefaultMultipartParser implements MultipartParser {
 				// Read boundary - if succeeded, the stream contains an
 				// encapsulation.
 				return readBoundary();
-			} catch (final MalformedStreamException e) {
-				return false;
 			} finally {
 				// Restore delimiter.
 				System.arraycopy(boundary, 0, boundary, 2, boundary.length - 2);
@@ -2436,6 +2440,44 @@ final class DefaultMultipartParser implements MultipartParser {
 	}
 
 	// *** END commons-fileupload source ***
+
+	/** Decodes the numeric-reference subset historically emitted by legacy form clients. */
+	private static String decodeNumericFilenameReferences(String input) {
+		StringBuilder result = null;
+		int copiedThrough = 0;
+		for (int offset = 0; offset < input.length() - 2; offset++) {
+			if (input.charAt(offset) != '&' || input.charAt(offset + 1) != '#')
+				continue;
+			int end = offset + 2;
+			// Preserve the previous bounded lookahead, including leading-zero encodings.
+			while (end < input.length() && end - offset <= 32 && input.charAt(end) != ';')
+				end++;
+			if (end >= input.length() || end - offset > 32)
+				continue;
+			int numberStart = offset + 2;
+			int radix = 10;
+			if (numberStart < end && (input.charAt(numberStart) == 'x' || input.charAt(numberStart) == 'X')) {
+				numberStart++;
+				radix = 16;
+			}
+			int codePoint;
+			try {
+				codePoint = Integer.parseInt(input.substring(numberStart, end), radix);
+			} catch (NumberFormatException ignored) {
+				continue;
+			}
+			if (!Character.isValidCodePoint(codePoint)
+					|| (codePoint >= Character.MIN_SURROGATE && codePoint <= Character.MAX_SURROGATE)
+					|| Character.isISOControl(codePoint))
+				throw new IllegalRequestBodyException("Multipart filename contains an invalid character entity.");
+			if (result == null)
+				result = new StringBuilder(input.length());
+			result.append(input, copiedThrough, offset).appendCodePoint(codePoint);
+			copiedThrough = end + 1;
+			offset = end;
+		}
+		return result == null ? input : result.append(input, copiedThrough, input.length()).toString();
+	}
 
 	// For HTML-Unescaper below, see https://gist.github.com/MarkJeronimus/798c452582e64410db769933ec71cfb7
 

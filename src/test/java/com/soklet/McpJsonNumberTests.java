@@ -126,6 +126,16 @@ class McpJsonNumberTests {
 		assertEquals(number("10E+9998").hashCode(), guarded.hashCode());
 	}
 
+	@Test
+	void largeTrailingZeroCoefficientsKeepScaleIndependentHashes() {
+		for (String prefix : List.of("1", "-7", "123456789")) {
+			BigInteger coefficient = new BigInteger(prefix + "0".repeat(1024));
+			for (int scale : List.of(Integer.MIN_VALUE + 1024, 0, Integer.MAX_VALUE))
+				assertEquivalent(new BigDecimal(coefficient, scale),
+						new BigDecimal(new BigInteger(prefix), scale - 1024));
+		}
+	}
+
 	private static void assertEquivalent(BigDecimal left, BigDecimal right) {
 		assertEquals(0, left.compareTo(right));
 		McpJsonNumber first = McpJsonNumber.fromValue(left);

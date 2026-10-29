@@ -45,11 +45,11 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
-import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
@@ -324,7 +324,7 @@ public final class StreamingMicrohttpResponses {
 		@NonNull
 		private final StateChangeWaiters stateChangeWaiters;
 		@NonNull
-		private final Queue<QueuedChunk> chunks;
+		private final ArrayDeque<QueuedChunk> chunks;
 		@NonNull
 		private final AtomicBoolean started;
 		@NonNull
@@ -347,6 +347,7 @@ public final class StreamingMicrohttpResponses {
 		private boolean closed;
 		private boolean completed;
 		private int queuedPayloadBytes;
+		private int queuedPayloadChunks;
 		private volatile long lastIdleActivityNanos;
 		private boolean timeoutsStopped;
 		@NonNull
@@ -475,6 +476,7 @@ public final class StreamingMicrohttpResponses {
 							throw toIOException(this.failure);
 
 						chunk = this.chunks.poll();
+						if (chunk != null) chunk.prepareForWrite();
 						this.currentChunk = chunk;
 					}
 
@@ -505,8 +507,10 @@ public final class StreamingMicrohttpResponses {
 								fail(StreamTerminationReason.RESPONSE_TIMEOUT, null));
 
 					synchronized (this.lock) {
-						if (chunk.payloadBytes > 0)
+						if (chunk.payloadBytes > 0) {
 							this.queuedPayloadBytes -= chunk.payloadBytes;
+							this.queuedPayloadChunks--;
+						}
 
 						this.currentChunk = null;
 
@@ -1033,6 +1037,18 @@ public final class StreamingMicrohttpResponses {
 				}
 			}
 
+			// Called only under the queue lock. Payload bytes and framing objects have
+			// independent bounds, including the chunk currently owned by the writer.
+			private boolean hasQueueCapacity(int payloadLength) {
+				if ((long) StreamingWritableSource.this.queuedPayloadBytes + payloadLength
+						> StreamingWritableSource.this.queueCapacityInBytes)
+					return false;
+				QueuedChunk tail = StreamingWritableSource.this.chunks.peekLast();
+				return (tail != null && tail.canAppend(payloadLength, StreamingWritableSource.this.chunkSizeInBytes))
+						|| StreamingWritableSource.this.queuedPayloadChunks
+						< Math.max(16, StreamingWritableSource.this.queueCapacityInBytes / 256);
+			}
+
 			private void enqueue(@NonNull byte[] payload, @NonNull ByteBuffer acceptedSource) throws IOException, InterruptedException, StreamingResponseCanceledException {
 				requireNonNull(payload);
 
@@ -1048,9 +1064,14 @@ public final class StreamingMicrohttpResponses {
 							throw new StreamingResponseCanceledException(StreamTerminationReason.CLIENT_DISCONNECTED);
 						if (StreamingWritableSource.this.failure != null)
 							throw toIOException(StreamingWritableSource.this.failure);
-						if ((long) StreamingWritableSource.this.queuedPayloadBytes + payload.length
-								<= StreamingWritableSource.this.queueCapacityInBytes) {
-							StreamingWritableSource.this.chunks.add(QueuedChunk.payload(payload));
+						if (hasQueueCapacity(payload.length)) {
+							QueuedChunk tail = StreamingWritableSource.this.chunks.peekLast();
+							if (tail != null && tail.canAppend(payload.length, StreamingWritableSource.this.chunkSizeInBytes))
+								tail.append(payload, StreamingWritableSource.this.chunkSizeInBytes);
+							else {
+								StreamingWritableSource.this.chunks.add(QueuedChunk.payload(payload));
+								StreamingWritableSource.this.queuedPayloadChunks++;
+							}
 							StreamingWritableSource.this.queuedPayloadBytes += payload.length;
 							// Queue ownership advances the accepted prefix before a wakeup can fail.
 							acceptedSource.position(acceptedSource.position() + payload.length);
@@ -1064,8 +1085,7 @@ public final class StreamingMicrohttpResponses {
 						StreamingWritableSource.this.stateChangeWaiters.awaitWhile(() ->
 								!StreamingWritableSource.this.closed && StreamingWritableSource.this.failure == null
 										&& !StreamingWritableSource.this.cancelationToken.isCanceled()
-										&& (long) StreamingWritableSource.this.queuedPayloadBytes + payload.length
-												> StreamingWritableSource.this.queueCapacityInBytes);
+										&& !hasQueueCapacity(payload.length));
 					} finally {
 						if (StreamingWritableSource.this.reservation != null)
 							StreamingWritableSource.this.reservation.endOutputWait();
@@ -1080,18 +1100,46 @@ public final class StreamingMicrohttpResponses {
 
 	@NotThreadSafe
 	private static final class QueuedChunk {
-		private final ByteBuffer[] buffers;
-		private final int payloadBytes;
+		private ByteBuffer[] buffers;
+		private byte @Nullable [] pendingPayload;
+		private int payloadBytes;
 		private final boolean terminal;
 		private int bufferIndex;
 
 		private static QueuedChunk payload(@NonNull byte[] payload) {
 			requireNonNull(payload);
 
-			byte[] header = format("%x\r\n", payload.length).getBytes(StandardCharsets.US_ASCII);
-			ByteBuffer[] buffers = {ByteBuffer.wrap(header), ByteBuffer.wrap(payload),
+			QueuedChunk chunk = new QueuedChunk(new ByteBuffer[0], payload.length, false);
+			chunk.pendingPayload = payload;
+			return chunk;
+		}
+
+		// A pending deque tail is exclusively owned under the source lock. Once
+		// dequeued, freeze its header and payload before publishing currentChunk.
+		private boolean canAppend(int length, int maximumPayloadBytes) {
+			return !this.terminal && this.buffers.length == 0
+					&& this.payloadBytes <= maximumPayloadBytes - length;
+		}
+
+		private void append(byte[] payload, int maximumPayloadBytes) {
+			byte[] pending = requireNonNull(this.pendingPayload);
+			int required = this.payloadBytes + payload.length;
+			if (required > pending.length) {
+				int capacity = (int) Math.max(required, Math.min((long) maximumPayloadBytes, 2L * pending.length));
+				pending = Arrays.copyOf(pending, capacity);
+				this.pendingPayload = pending;
+			}
+			System.arraycopy(payload, 0, pending, this.payloadBytes, payload.length);
+			this.payloadBytes = required;
+		}
+
+		private void prepareForWrite() {
+			if (this.terminal || this.buffers.length != 0) return;
+			byte[] header = (Integer.toHexString(this.payloadBytes) + "\r\n").getBytes(StandardCharsets.US_ASCII);
+			this.buffers = new ByteBuffer[] {ByteBuffer.wrap(header),
+					ByteBuffer.wrap(requireNonNull(this.pendingPayload), 0, this.payloadBytes),
 					ByteBuffer.wrap(StreamingWritableSource.CRLF)};
-			return new QueuedChunk(buffers, payload.length, false);
+			this.pendingPayload = null;
 		}
 
 		private static QueuedChunk terminal() {
@@ -1109,6 +1157,7 @@ public final class StreamingMicrohttpResponses {
 		private long writeTo(@NonNull SocketChannel socketChannel,
 												 long maxBytes) throws IOException {
 			requireNonNull(socketChannel);
+			prepareForWrite();
 
 			long totalWritten = 0L;
 
@@ -1150,10 +1199,11 @@ public final class StreamingMicrohttpResponses {
 		}
 
 		private int payloadWritten() {
-			return this.terminal ? 0 : this.buffers[1].position();
+			return this.terminal || this.buffers.length == 0 ? 0 : this.buffers[1].position();
 		}
 
 		private boolean isComplete() {
+			if (this.buffers.length == 0) return false;
 			while (this.bufferIndex < this.buffers.length && !this.buffers[this.bufferIndex].hasRemaining())
 				this.bufferIndex++;
 

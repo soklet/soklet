@@ -108,41 +108,79 @@ class HttpResponseStreamEnrollmentTests {
 
 	@Test
 	void rebuildingDecoratorUsesHandoffFallbackWhileDefaultTransportStillCompletesStream() throws Exception {
-		int port;
-		try (ServerSocket reserved = new ServerSocket(0)) { port = reserved.getLocalPort(); }
-		HttpServer delegate = HttpServer.withPort(port).host("127.0.0.1").build();
+		DefaultHttpServer delegate = (DefaultHttpServer) HttpServer.withPort(0).host("127.0.0.1").build();
+		CountDownLatch responseHandedOff = new CountDownLatch(1);
+		CountDownLatch releaseHandling = new CountDownLatch(1);
 		HttpServer decorator = new HttpServer() {
 			@Override public TransportIdentity getTransportIdentity() { return delegate.getTransportIdentity(); }
 			@Override public TransportRuntime attach(HttpTransportAttachmentContext context, StartupContext startup) {
 				RequestHandler upstream = context.getAdmissionFencedRequestHandler();
-				return context.attachTransparentDelegate(delegate, (request, consumer) -> upstream.handleRequest(request,
-						result -> consumer.accept(HttpRequestResult.withMarshaledResponse(result.getMarshaledResponse())
-								.resourceMethod(result.getResourceMethod().orElse(null)).build())));
+				return context.attachTransparentDelegate(delegate, (request, consumer) -> upstream.handleRequest(request, result -> {
+					consumer.accept(HttpRequestResult.withMarshaledResponse(result.getMarshaledResponse())
+							.resourceMethod(result.getResourceMethod().orElse(null)).build());
+					responseHandedOff.countDown();
+					// A rebuilt result intentionally loses enrollment. Force stream termination
+					// to precede handling finish instead of depending on thread scheduling.
+					try {
+						assertTrue(releaseHandling.await(5, TimeUnit.SECONDS), "Test must release the response handoff");
+					} catch (InterruptedException interrupted) {
+						Thread.currentThread().interrupt();
+						throw new IllegalStateException("Response handoff was interrupted", interrupted);
+					}
+				}));
 			}
 		};
 		DefaultMetricsCollector collector = DefaultMetricsCollector.defaultInstance();
 		AtomicInteger prepared = new AtomicInteger();
-		CountDownLatch finished = new CountDownLatch(1);
+		CountDownLatch terminated = new CountDownLatch(1);
+		CountDownLatch handlingFinished = new CountDownLatch(1);
 		LifecycleObserver observer = new LifecycleObserver() {
 			@Override public void didReceiveLogEvent(LogEvent event) { fail(event.getMessage()); }
 			@Override public void willWriteResponseStream(StreamingResponseHandle handle) { prepared.incrementAndGet(); }
 			@Override public void didTerminateResponseStream(StreamingResponseHandle handle, StreamTermination termination) {
-				assertEquals(StreamTerminationReason.COMPLETED, termination.getReason()); finished.countDown();
+				assertEquals(StreamTerminationReason.COMPLETED, termination.getReason()); terminated.countDown();
+			}
+			@Override public void didFinishRequestHandling(ServerType type, Request request, ResourceMethod method,
+					MarshaledResponse response, Duration duration, List<Throwable> throwables) {
+				handlingFinished.countDown();
 			}
 		};
-		try (Soklet soklet = Soklet.fromConfig(config(decorator, collector, observer,
-				new Resource(stream -> stream.write("payload".getBytes(StandardCharsets.US_ASCII)))))) {
-			soklet.start();
-			String wire = exchange(port, "GET", "HTTP/1.1");
-			assertTrue(wire.startsWith("HTTP/1.1 200"), wire);
-			assertTrue(wire.contains("payload"), wire);
-			assertTrue(finished.await(5, TimeUnit.SECONDS));
-			assertEquals(0, prepared.get());
-			MetricsCollector.Snapshot snapshot = collector.snapshot().orElseThrow();
-			assertEquals(0L, snapshot.getActiveRequests());
-			assertEquals(1L, requestCount(snapshot));
-			assertEquals(0D, responseBytes(snapshot));
-			assertTrue(snapshot.getHttpResponseStreamTerminations().isEmpty());
+		Resource resource = new Resource(stream -> stream.write("payload".getBytes(StandardCharsets.US_ASCII)));
+		SokletConfig config = SokletConfig.withHttpServer(decorator)
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Resource.class)))
+				.metricsCollector(collector).lifecycleObserver(observer).instanceProvider(new InstanceProvider() {
+					@Override public <T> T provide(Class<T> type) { return type.cast(resource); }
+				}).lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(2))
+						.startupCancelationTimeout(Duration.ofMillis(200)).gracefulShutdownTimeout(Duration.ofMillis(200))
+						.forcedShutdownTimeout(Duration.ofMillis(200)).build()).build();
+		try (Soklet soklet = Soklet.fromConfig(config)) {
+			try {
+				soklet.start();
+				String wire;
+				try (Socket socket = new Socket()) {
+					socket.connect(new java.net.InetSocketAddress("127.0.0.1", delegate.getEventLoop().orElseThrow().getPort()), 1000);
+					socket.setSoTimeout(5000);
+					socket.getOutputStream().write("GET /enrollment HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+							.getBytes(StandardCharsets.US_ASCII));
+					wire = new String(socket.getInputStream().readAllBytes(), StandardCharsets.US_ASCII);
+				}
+				assertTrue(wire.startsWith("HTTP/1.1 200"), wire);
+				assertTrue(wire.contains("payload"), wire);
+				assertTrue(responseHandedOff.await(5, TimeUnit.SECONDS));
+				assertTrue(terminated.await(5, TimeUnit.SECONDS));
+				assertEquals(0, prepared.get());
+				assertEquals(1L, collector.snapshot().orElseThrow().getActiveRequests(),
+						"Unenrolled stream termination does not finish request handling");
+				releaseHandling.countDown();
+				assertTrue(handlingFinished.await(5, TimeUnit.SECONDS));
+				MetricsCollector.Snapshot snapshot = collector.snapshot().orElseThrow();
+				assertEquals(0L, snapshot.getActiveRequests());
+				assertEquals(1L, requestCount(snapshot));
+				assertEquals(0D, responseBytes(snapshot));
+				assertTrue(snapshot.getHttpResponseStreamTerminations().isEmpty());
+			} finally {
+				releaseHandling.countDown();
+			}
 		}
 	}
 

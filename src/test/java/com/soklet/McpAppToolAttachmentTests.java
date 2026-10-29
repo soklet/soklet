@@ -196,9 +196,7 @@ class McpAppToolAttachmentTests {
 		McpToolRegistration<McpJsonObject> tool = operationBuilder()
 				.appToolMetadata(appMetadata()).build();
 		for (String mime : List.of("text/html", "text/html;profile=MCP-APP",
-				"text/html;profile=mcp-app;charset=utf-8",
-				"text/html;profile=mcp-app;PROFILE=mcp-app",
-				"private-invalid-mime", "text/html;profile=\"private-unclosed")) {
+				"text/html;profile=mcp-app;charset=utf-8")) {
 			IllegalStateException failure = assertThrows(IllegalStateException.class,
 					() -> endpointBuilder().toolRegistrations(java.util.List.of(tool)).resourceRegistrations(java.util.List.of(resource(mime))).build());
 			assertFalse(failure.getMessage().contains("private"));
@@ -278,12 +276,25 @@ class McpAppToolAttachmentTests {
 	}
 
 	@Test
-	void ordinaryResourcesRetainExistingArbitraryNonblankMimeBehavior() {
+	void ordinaryResourcesAcceptValidVendorMimeWithoutAppsRestrictions() {
+		String mime = "application/x-private-vendor; version=4";
+		assertEquals(mime, resource(mime).getMimeType().orElseThrow());
 		assertDoesNotThrow(() -> endpointBuilder().toolRegistrations(java.util.List.of(operationBuilder().build()))
-				.resourceRegistrations(java.util.List.of(resource("private arbitrary legacy mime"))).build());
+				.resourceRegistrations(java.util.List.of(resource(mime))).build());
 		assertDoesNotThrow(() -> endpointBuilder().toolRegistrations(java.util.List.of(operationBuilder().appToolMetadata(
 				McpAppToolMetadata.withProtocolVersions(java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build()).build()))
-				.resourceRegistrations(java.util.List.of(resource("private arbitrary legacy mime"))).build());
+				.resourceRegistrations(java.util.List.of(resource(mime))).build());
+	}
+
+	@Test
+	void malformedResourceMimeIsRejectedBeforeEndpointAttachmentWithoutEchoingConfiguration() {
+		for (String mime : List.of("text/html;profile=mcp-app;PROFILE=mcp-app",
+				"private-invalid-mime", "text/html;profile=\"private-unclosed")) {
+			IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
+					() -> resource(mime));
+			assertFalse(failure.getMessage().contains("private"));
+			assertTrue(failure.getCause() == null);
+		}
 	}
 
 	private static McpAppToolMetadata appMetadata() {

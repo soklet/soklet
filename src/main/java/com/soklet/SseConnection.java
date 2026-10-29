@@ -80,7 +80,10 @@ public interface SseConnection {
 		 */
 		HANDSHAKE_REJECTED,
 		/**
-		 * An unexpected internal error occurred while establishing the SSE connection.
+		 * An unexpected error occurred while establishing the SSE connection, or an
+		 * accepted handshake response could not be written (including a peer disconnect).
+		 * A routine disconnect while writing a rejection preserves its original
+		 * {@link #HANDSHAKE_REJECTED} or {@link #CAPACITY_EXCEEDED} classification.
 		 */
 		INTERNAL_ERROR,
 		/**

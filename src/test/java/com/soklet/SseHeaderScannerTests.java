@@ -52,9 +52,9 @@ class SseHeaderScannerTests {
 		for (int start = 0; start < request.length(); start += fragmentSize) {
 			prefix.append(request, start, Math.min(start + fragmentSize, request.length()));
 			String text = prefix.toString();
-			int crlf = text.indexOf("\r\n\r\n"), lf = text.indexOf("\n\n");
+			int crlf = text.indexOf("\n\r\n"), lf = text.indexOf("\n\n");
 			int expectedEnd = crlf == -1 ? (lf == -1 ? -1 : lf + 2)
-					: (lf == -1 ? crlf + 4 : Math.min(crlf + 4, lf + 2));
+					: (lf == -1 ? crlf + 3 : Math.min(crlf + 3, lf + 2));
 			assertEquals(expectedEnd, scanner.scan(prefix), text);
 			int attributedLength = expectedEnd == -1 ? text.length() : expectedEnd;
 			int requestLineEnd = -1;

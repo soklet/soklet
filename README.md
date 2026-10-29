@@ -259,6 +259,10 @@ francês (Canadá)
 
 ##### Maven build configuration
 
+Compile each Java module separately so it has its own annotation-processing
+output. A single `javac` invocation compiling multiple named modules is not
+supported; ordinary per-module Maven or Gradle builds remain supported.
+
 Also configure annotation processing in your POM's `build/plugins` section.
 This generates HTTP/SSE routes and MCP endpoint descriptors; declaring only
 the dependency is not sufficient on JDK 23 and later:
@@ -1372,12 +1376,12 @@ public Response multipart(
   Optional<String> contentType = document.getContentType();
   // Field data as bytes, if available
   Optional<byte[]> data = document.getData();
-  // Field data as a string, if available
-  Optional<String> dataAsString = document.getDataAsString();
+  // Keep binary uploads (such as PDF files) as bytes.
+  // Use getDataAsString() only for fields whose content is known to be text.
 
   // Apply the standard redirect-after-POST pattern
   return Response.withRedirect(
-    RedirectType.HTTP_307_TEMPORARY_REDIRECT, "/thanks"
+    RedirectType.HTTP_303_SEE_OTHER, "/thanks"
   ).build();
 }
 ```

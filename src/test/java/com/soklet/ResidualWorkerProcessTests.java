@@ -96,7 +96,7 @@ class ResidualWorkerProcessTests {
 
 		public static void main(String[] args) throws Exception {
 			Fixture fixture = new Fixture(args[0], Path.of(args[1]));
-			int port = TestSupport.findFreePort();
+			int port = 0; // Let the actual listener reserve its port atomically.
 			SokletConfig.Builder builder;
 			if (fixture.mode.startsWith("MCP")) {
 				McpToolRegistration<McpJsonObject> tool = McpToolRegistration.withName("block", Set.of(McpProtocolVersion.V2026_07_28))
@@ -129,7 +129,7 @@ class ResidualWorkerProcessTests {
 			SokletConfig config = builder.lifecycleObserver(fixture).lifecyclePolicy(LifecyclePolicy.builder()
 					.startupTimeout(Duration.ofSeconds(2)).startupCancelationTimeout(Duration.ofSeconds(1))
 					.gracefulShutdownTimeout(Duration.ofMillis(100)).forcedShutdownTimeout(Duration.ofMillis(100)).build()).build();
-			Thread client = new Thread(() -> fixture.drive(port), "residual-fixture-client");
+			Thread client = new Thread(() -> fixture.drive(config), "residual-fixture-client");
 			client.setDaemon(true); client.start();
 			try {
 				SokletApplication.fromConfig(config).run(ShutdownCleanup.fromTimeoutAndAction(Duration.ofMillis(100),
@@ -154,9 +154,12 @@ class ResidualWorkerProcessTests {
 			// Return main without System.exit/halt or releasing the blocked callback.
 		}
 
-		private void drive(int port) {
+		private void drive(SokletConfig config) {
 			try {
 				if (!this.ready.await(5, TimeUnit.SECONDS)) throw new AssertionError("Runner not ready");
+				int port = this.mode.startsWith("MCP")
+						? config.getMcpServer().orElseThrow().getDiagnostics().getBoundAddress().orElseThrow().getPort()
+						: ((DefaultHttpServer) config.getHttpServer().orElseThrow()).getEventLoop().orElseThrow().getPort();
 				try (Socket socket = TestSupport.connectWithRetry("127.0.0.1", port, 3000)) {
 					String wire = "GET /blocked HTTP/1.1\r\nHost: 127.0.0.1:" + port + "\r\nConnection: close\r\n\r\n";
 					if (this.mode.startsWith("MCP")) {

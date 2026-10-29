@@ -29,7 +29,9 @@ import java.nio.channels.SeekableByteChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.FileSystemException;
+import java.nio.file.FileSystemLoopException;
 import java.nio.file.AccessDeniedException;
+import java.nio.file.AccessMode;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.NotDirectoryException;
 import java.nio.file.InvalidPathException;
@@ -43,6 +45,7 @@ import java.util.Collections;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -77,6 +80,8 @@ public final class StaticFiles {
 	private static final Integer MAX_RELATIVE_PATH_UTF_8_LENGTH;
 	@NonNull
 	private static final Integer MAX_RELATIVE_PATH_SEGMENTS;
+	private static final int MAX_PATH_SEGMENT_UTF_8_LENGTH = 255;
+	private static final int MAX_SYMLINK_EXPANSIONS = 64;
 	@NonNull
 	private static final Integer CONTENT_HASH_BUFFER_SIZE;
 	@NonNull
@@ -183,6 +188,9 @@ public final class StaticFiles {
 	 * {@link HttpMethod#HEAD}, unsafe path input, directories without a configured index file,
 	 * unreadable files, and missing files. Once a path resolves, non-{@code 200} file responses such as
 	 * {@code 206}, {@code 304}, {@code 412}, and {@code 416} are returned inside the optional.
+	 * Root-relative input is limited to 4,096 UTF-8 bytes, 256 path segments, and 255 UTF-8 bytes
+	 * per segment. These portable input limits apply on every filesystem; providers may impose
+	 * stricter limits, whose unclassified failures propagate as I/O errors.
 	 * <p>
 	 * Resolvers receive the resolved file path after index-file resolution, not the original
 	 * {@code relativePath}.
@@ -191,7 +199,7 @@ public final class StaticFiles {
 	 * @param request the incoming request
 	 * @return the marshaled response, if a static file was resolved
 	 * @throws UncheckedIOException if filesystem access fails for a reason other than a missing,
-	 *         inaccessible, or changed file
+	 *         inaccessible, or changed file, including a provider that cannot open files without following links
 	 */
 	@NonNull
 	public Optional<@NonNull MarshaledResponse> marshaledResponseFor(@NonNull String relativePath,
@@ -214,8 +222,6 @@ public final class StaticFiles {
 		// metadata. These checks supplement the required immutable-root contract.
 		try (SeekableByteChannel ignored = secureRoot.open(file, attributes)) {
 			// The selected path still matches its expected identity and containment.
-		} catch (UnsupportedOperationException failure) {
-			return Optional.empty();
 		} catch (IOException failure) {
 			return unresolvedFile(failure);
 		}
@@ -234,8 +240,6 @@ public final class StaticFiles {
 			// delivery. In particular, do not follow a link swapped in by a resolver.
 			try (SeekableByteChannel channel = secureRoot.open(file, attributes)) {
 				entityTag = ContentHashEntityTagResolver.entityTagFor(channel);
-			} catch (UnsupportedOperationException failure) {
-				return Optional.empty();
 			} catch (IOException failure) {
 				return unresolvedFile(failure);
 			}
@@ -260,8 +264,6 @@ public final class StaticFiles {
 			return Optional.empty();
 		try (SeekableByteChannel ignored = secureRoot.open(file, attributes)) {
 			// Bodyless responses need the same post-resolver validation as body responses.
-		} catch (UnsupportedOperationException failure) {
-			return Optional.empty();
 		} catch (IOException failure) {
 			return unresolvedFile(failure);
 		}
@@ -340,8 +342,12 @@ public final class StaticFiles {
 		if (relativePath.getBytes(StandardCharsets.UTF_8).length > MAX_RELATIVE_PATH_UTF_8_LENGTH)
 			return Optional.empty();
 
-		if (relativePath.split("/", -1).length > MAX_RELATIVE_PATH_SEGMENTS)
+		String[] segments = relativePath.split("/", -1);
+		if (segments.length > MAX_RELATIVE_PATH_SEGMENTS)
 			return Optional.empty();
+		for (String segment : segments)
+			if (segment.getBytes(StandardCharsets.UTF_8).length > MAX_PATH_SEGMENT_UTF_8_LENGTH)
+				return Optional.empty();
 
 		if (containsControlCharacter(relativePath))
 			return Optional.empty();
@@ -408,7 +414,7 @@ public final class StaticFiles {
 				if (indexCandidate == null || !indexCandidate.startsWith(getResolutionRoot()) || hasSymlinkComponent(indexCandidate))
 					continue;
 
-				Optional<ResolvedFile> resolvedIndexFile = noFollowRegularFile(indexCandidate);
+				Optional<ResolvedFile> resolvedIndexFile = readableIndex(noFollowRegularFile(indexCandidate));
 
 				if (resolvedIndexFile.isPresent())
 					return resolvedIndexFile;
@@ -444,6 +450,8 @@ public final class StaticFiles {
 		// The Unix provider reports ENOTDIR as a generic FileSystemException.
 		// Inspect existing ancestors rather than relying on localized reason text.
 		if (failure instanceof FileSystemException) {
+			if (getFollowSymlinks() && hasUnresolvableSymlinkChain(candidate))
+				return Optional.empty();
 			for (Path parent = candidate.getParent(); parent != null && parent.startsWith(getResolutionRoot());
 					parent = parent.getParent()) {
 				try {
@@ -459,11 +467,62 @@ public final class StaticFiles {
 		return unresolvedFile(failure);
 	}
 
+	private boolean hasUnresolvableSymlinkChain(Path candidate) {
+		// A generic I/O failure on a path containing a symlink is not itself a loop.
+		// Prove a repeated expansion (or reject excessive expansion) using only
+		// public no-follow metadata. Preserve the original failure if probing fails.
+		Path root = getResolutionRoot();
+		var expansions = new HashSet<Path>();
+		expansions.add(candidate);
+		int links = 0;
+		try {
+			while (candidate.startsWith(root)) {
+				Path relative = root.relativize(candidate);
+				Path current = root;
+				boolean expanded = false;
+				for (int index = 0; index < relative.getNameCount(); index++) {
+					current = current.resolve(relative.getName(index));
+					if (!Files.readAttributes(current, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS).isSymbolicLink())
+						continue;
+					Path target = Files.readSymbolicLink(current);
+					Path parent = current.getParent();
+					if (!target.isAbsolute() && parent == null)
+						return false; // Cannot prove an unsafe chain; preserve the original I/O failure.
+					Path next = target.isAbsolute() ? target : parent.resolve(target);
+					if (index + 1 < relative.getNameCount())
+						next = next.resolve(relative.subpath(index + 1, relative.getNameCount()));
+					candidate = next.normalize();
+					if (++links > MAX_SYMLINK_EXPANSIONS || !expansions.add(candidate))
+						return true;
+					expanded = true;
+					break;
+				}
+				if (!expanded)
+					return false;
+			}
+			return true; // A resolved target outside the static root is always rejected.
+		} catch (IOException | UnsupportedOperationException failure) {
+			return false;
+		}
+	}
+
 	private static <T> Optional<T> unresolvedFile(IOException failure) {
-		if (failure instanceof NoSuchFileException || failure instanceof NotDirectoryException
+		if (failure instanceof NoSuchFileException || failure instanceof NotDirectoryException || failure instanceof FileSystemLoopException
 				|| failure instanceof AccessDeniedException || failure instanceof SecureStaticFileRoot.FileChangedException)
 			return Optional.empty();
 		throw new UncheckedIOException("Unable to acquire static file.", failure);
+	}
+
+	private Optional<ResolvedFile> readableIndex(Optional<ResolvedFile> candidate) {
+		if (candidate.isEmpty())
+			return candidate;
+		Path path = candidate.orElseThrow().path();
+		try {
+			path.getFileSystem().provider().checkAccess(path, AccessMode.READ);
+			return candidate;
+		} catch (IOException failure) {
+			return unresolvedFile(failure, path);
+		}
 	}
 
 	private static boolean sameFileIdentity(@NonNull BasicFileAttributes first, @NonNull BasicFileAttributes second) {
@@ -510,7 +569,7 @@ public final class StaticFiles {
 				if (!indexCandidate.startsWith(this.followRoot))
 					continue;
 
-				Optional<ResolvedFile> resolvedIndexFile = followedRegularFile(indexCandidate);
+				Optional<ResolvedFile> resolvedIndexFile = readableIndex(followedRegularFile(indexCandidate));
 
 				if (resolvedIndexFile.isPresent())
 					return resolvedIndexFile;
@@ -560,6 +619,7 @@ public final class StaticFiles {
 		requireNonNull(indexFileName);
 
 		if (indexFileName.isEmpty()
+				|| indexFileName.getBytes(StandardCharsets.UTF_8).length > MAX_PATH_SEGMENT_UTF_8_LENGTH
 				|| containsControlCharacter(indexFileName)
 				|| indexFileName.indexOf('/') >= 0
 				|| indexFileName.indexOf('\\') >= 0

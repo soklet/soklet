@@ -489,17 +489,12 @@ public class McpFiniteBoundInventoryTests {
 						"MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_VARIABLE_NAME_UTF_8_BYTES"));
 		put(values, "uri.match-dp-cells",
 				McpLevelOneUriTemplate.MAXIMUM_TEMPLATE_MATCH_DYNAMIC_PROGRAMMING_CELLS);
+		// Annotation processing delegates overlap validation to this runtime parser;
+		// there are no separate processor work-budget constants to compare.
 		put(values, "uri.overlap-states-per-pair",
 				McpLevelOneUriTemplate.MAXIMUM_OVERLAP_COMPARISON_STATES);
-		Assertions.assertEquals(McpLevelOneUriTemplate.MAXIMUM_OVERLAP_COMPARISON_STATES,
-				staticNumber("com.soklet.SokletProcessor",
-						"MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_OVERLAP_STATES"));
 		put(values, "uri.overlap-states-per-endpoint",
 				McpLevelOneUriTemplate.MAXIMUM_ENDPOINT_OVERLAP_COMPARISON_STATES);
-		Assertions.assertEquals(
-				McpLevelOneUriTemplate.MAXIMUM_ENDPOINT_OVERLAP_COMPARISON_STATES,
-				staticNumber("com.soklet.SokletProcessor",
-						"MAXIMUM_MCP_ENDPOINT_RESOURCE_URI_TEMPLATE_OVERLAP_STATES"));
 		put(values, "cursor.maximum-bytes.default",
 				McpCursorLimit.DEFAULT_MAXIMUM_SIZE_IN_BYTES);
 		put(values, "cursor.maximum-bytes.hard",

@@ -120,10 +120,11 @@ public class McpChunkGatheringTests {
     @Test
     public void guardIsCheckedBeforeEachGatheringWriteAndRevocationStopsPartialFrames() throws Exception {
         java.util.concurrent.atomic.AtomicInteger checks = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.function.BooleanSupplier guard = () -> checks.incrementAndGet() <= 1;
         Chunk chunk = new Chunk(Chunk.invoke(null, "payload",
-                new Class<?>[] {byte[].class, Object.class, java.util.function.BooleanSupplier.class, Runnable.class, Runnable.class},
-                "hello".getBytes(StandardCharsets.US_ASCII), null,
-                (java.util.function.BooleanSupplier) () -> checks.incrementAndGet() <= 1, null, null));
+                new Class<?>[] {byte[].class, Object.class, java.util.function.BooleanSupplier.class,
+                        java.util.function.BooleanSupplier.class, Runnable.class, Runnable.class},
+                "hello".getBytes(StandardCharsets.US_ASCII), null, guard, guard, null, null));
         try (RecordingSocketChannel socket = new RecordingSocketChannel(2)) {
             assertEquals(2L, chunk.writeTo(socket, Long.MAX_VALUE));
             assertEquals("5\r", socket.text());
@@ -148,8 +149,9 @@ public class McpChunkGatheringTests {
             }
         }
         static Chunk payload(String text) throws Exception {
-            return new Chunk(invoke(null, "payload", new Class<?>[] {byte[].class, Object.class, java.util.function.BooleanSupplier.class, Runnable.class, Runnable.class},
-                    text.getBytes(StandardCharsets.US_ASCII), null, null, null, null));
+            return new Chunk(invoke(null, "payload", new Class<?>[] {byte[].class, Object.class,
+                    java.util.function.BooleanSupplier.class, java.util.function.BooleanSupplier.class, Runnable.class, Runnable.class},
+                    text.getBytes(StandardCharsets.US_ASCII), null, null, null, null, null));
         }
         static Chunk terminal() throws Exception {
             return new Chunk(invoke(null, "terminalWithoutPayload", new Class<?>[0]));

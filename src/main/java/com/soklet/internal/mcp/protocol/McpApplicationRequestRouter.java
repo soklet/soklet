@@ -1557,6 +1557,8 @@ final class McpApplicationExecution {
 	@NonNull
 	private final McpApplicationRequestInterceptor defaultRequestInterceptor;
 	@NonNull
+	private final McpApplicationExecutionObserver executionObserver;
+	@NonNull
 	private final ExecutorService handlerExecutor;
 	@NonNull
 	private final ExecutorService cancellationCallbackExecutor;
@@ -1570,6 +1572,10 @@ final class McpApplicationExecution {
 	private final McpApplicationHandlerDispatcher sessionOwnerPolicyDispatcher;
 	@NonNull
 	private final Object executionBoundaryLock;
+	// Guarded by executionBoundaryLock. A cancellation election can precede
+	// its sidecar submission on another thread, including during stop().
+	private int pendingPolicyCancellationSubmissions;
+	private boolean cancellationCallbackShutdownRequested;
 	@NonNull
 	private final Map<@NonNull MicrohttpRequest, @NonNull Exchange> requestsByIdentity;
 	@NonNull
@@ -1680,6 +1686,7 @@ final class McpApplicationExecution {
 		this.clock = requireNonNull(clock);
 		this.protocolDeadlineCycle = protocolDeadlineCycle;
 		this.defaultRequestInterceptor = requireNonNull(requestInterceptor);
+		this.executionObserver = requireNonNull(observer);
 		this.handlerExecutor = requireNonNull(requireNonNull(executorFactory).create(
 				configuration.handlerConcurrency()),
 				"The application handler executor factory returned null.");
@@ -2196,50 +2203,62 @@ final class McpApplicationExecution {
 
 		private void dispatchCancellationIfReady() {
 			BooleanSupplier target;
-			synchronized (this.lock) {
-				if (this.cancellationDispatched
-						|| !this.state.isCancellationRequested()
-						|| this.cancellationTarget == null)
+			synchronized (executionBoundaryLock) {
+				synchronized (this.lock) {
+					if (this.cancellationDispatched
+							|| !this.state.isCancellationRequested()
+							|| this.cancellationTarget == null)
+						return;
+					this.cancellationDispatched = true;
+					target = this.cancellationTarget;
+				}
+				pendingPolicyCancellationSubmissions++;
+			}
+
+			try {
+				boolean callbackCannotRun;
+				try {
+					// The reason is fixed before this action interrupts or suppresses entry.
+					callbackCannotRun = requireNonNull(target).getAsBoolean();
+				} catch (Throwable ignored) {
+					// Preserve application callbacks when the internal ticket action fails.
+					// Sidecar delivery opens the gate without guessing that callback entry
+					// was impossible.
+					callbackCannotRun = false;
+				}
+
+				if (callbackCannotRun || !applicationCallbacksAllowed) {
+					this.state.discardCallbacks();
+					this.callbackChainReleased.countDown();
 					return;
-				this.cancellationDispatched = true;
-				target = this.cancellationTarget;
-			}
+				}
 
-			boolean callbackCannotRun;
-			try {
-				// The reason is fixed before this action interrupts or suppresses entry.
-				callbackCannotRun = requireNonNull(target).getAsBoolean();
-			} catch (Throwable ignored) {
-				// Preserve application callbacks when the internal ticket action fails.
-				// Sidecar delivery opens the gate without guessing that callback entry
-				// was impossible.
-				callbackCannotRun = false;
-			}
-
-			if (callbackCannotRun || !applicationCallbacksAllowed) {
-				this.state.discardCallbacks();
-				this.callbackChainReleased.countDown();
-				return;
-			}
-
-			try {
-				cancellationCallbackExecutor.execute(() -> {
-					try {
-						this.state.releaseCallbacks();
-					} catch (Throwable ignored) {
-						// One application hook cannot strand the ticket's release gate.
-					} finally {
-						this.callbackChainReleased.countDown();
-					}
-				});
-			} catch (RejectedExecutionException ignored) {
-				// Each running sidecar retains its corresponding dispatcher slot, so
-				// outstanding sidecars cannot exceed handler concurrency. Rejection
-				// before physical drain is therefore an internal lifecycle violation;
-				// keep the gate closed rather than silently dropping public callbacks.
-				throw new IllegalStateException(
-						"Bounded policy cancellation sidecar capacity was violated.",
-						ignored);
+				try {
+					cancellationCallbackExecutor.execute(() -> {
+						try (McpApplicationExecutionObserver.LifecycleScope ignored = executionObserver.enterLifecycleExecution()) {
+							this.state.releaseCallbacks();
+						} catch (Throwable ignored) {
+							// One application hook cannot strand the ticket's release gate.
+						} finally {
+							this.callbackChainReleased.countDown();
+						}
+					});
+				} catch (RejectedExecutionException ignored) {
+					// Each running sidecar retains its corresponding dispatcher slot, so
+					// outstanding sidecars cannot exceed handler concurrency. Rejection
+					// before physical drain is therefore an internal lifecycle violation;
+					// keep the gate closed rather than silently dropping public callbacks.
+					throw new IllegalStateException(
+							"Bounded policy cancellation sidecar capacity was violated.",
+							ignored);
+				}
+			} finally {
+				synchronized (executionBoundaryLock) {
+					pendingPolicyCancellationSubmissions--;
+					if (cancellationCallbackShutdownRequested
+							&& pendingPolicyCancellationSubmissions == 0)
+						cancellationCallbackExecutor.shutdown();
+				}
 			}
 		}
 
@@ -2374,8 +2393,10 @@ final class McpApplicationExecution {
 				if (!state.compareAndSet(BoundedPolicyState.WAITING_TO_ENTER,
 						BoundedPolicyState.ACTIVE))
 					return;
-				result.set(requireNonNull(callback.call(),
-						"The bounded MCP policy callback returned null."));
+				try (McpApplicationExecutionObserver.LifecycleScope ignored = executionObserver.enterLifecycleExecution()) {
+					result.set(requireNonNull(callback.call(),
+							"The bounded MCP policy callback returned null."));
+				}
 			} catch (Throwable throwable) {
 				failure.compareAndSet(null, throwable);
 			} finally {
@@ -2581,8 +2602,16 @@ final class McpApplicationExecution {
 		handlerExecutor.shutdown();
 		sessionOwnerPolicyExecutor.shutdown();
 		legacyHttpObservations.stop(true);
-		cancellationCallbackExecutor.shutdown();
+		requestCancellationCallbackShutdown();
 		LockSupport.unpark(timerThread);
+	}
+
+	private void requestCancellationCallbackShutdown() {
+		synchronized (executionBoundaryLock) {
+			cancellationCallbackShutdownRequested = true;
+			if (pendingPolicyCancellationSubmissions == 0)
+				cancellationCallbackExecutor.shutdown();
+		}
 	}
 
 	private void finishGracefulDrainIfComplete() {
@@ -2610,7 +2639,7 @@ final class McpApplicationExecution {
 		handlerExecutor.shutdown();
 		sessionOwnerPolicyExecutor.shutdown();
 		legacyHttpObservations.stop(false);
-		cancellationCallbackExecutor.shutdown();
+		requestCancellationCallbackShutdown();
 		LockSupport.unpark(timerThread);
 	}
 
@@ -3183,7 +3212,9 @@ final class McpApplicationExecution {
 			cancellationCallbacksOutstanding = true;
 			cancellationCallbackExecutor.execute(() -> {
 				awaitCancellationLatch(cancellationEffectsReady);
-				try { cancellation.releaseCallbacks(); }
+				try (McpApplicationExecutionObserver.LifecycleScope ignored = executionObserver.enterLifecycleExecution()) {
+					cancellation.releaseCallbacks();
+				}
 				finally { cancellationCallbacksFinished.countDown(); }
 			});
 		}

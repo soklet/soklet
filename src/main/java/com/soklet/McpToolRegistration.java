@@ -331,7 +331,8 @@ public final class McpToolRegistration<A> {
 	}
 
 	/**
-	 * Validates and decodes raw arguments without entering application code.
+	 * Validates and decodes raw arguments without invoking the tool handler.
+	 * Typed argument decoding may invoke application record constructors.
 	 * This package-private seam lets the server lazily establish that a task
 	 * origin is durable-safe and reuse the same decoded value when the handler
 	 * continuation proceeds.

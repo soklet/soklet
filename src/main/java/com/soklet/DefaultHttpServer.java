@@ -845,7 +845,8 @@ final class DefaultHttpServer implements HttpServer {
 											.captureTruncated(microhttpRequest.observedWireByteCount() > 0).build();
 									UnparsedRequestResponseSupport.PreparedResponse prepared = UnparsedRequestResponseSupport.marshal(
 											unparsedRequest, this.responseMarshaler, getLifecycleObserver(), this::safelyLog,
-											() -> responseOwner.get() == ResponseOwner.UNCLAIMED);
+											() -> responseOwner.get() == ResponseOwner.UNCLAIMED,
+											getLifecycleAdapter()::enterCallbackExecution);
 									unparsedResponse = prepared == null ? fallback : prepared.response();
 								}
 
@@ -979,11 +980,11 @@ final class DefaultHttpServer implements HttpServer {
 				this.streamingExecutorService = getStreamingExecutorServiceSupplier().get();
 				Supplier<StreamLifecycleCoordinator> streamLifecycleCoordinatorFactory = this.streamLifecycleCoordinatorFactoryForTests;
 				this.streamLifecycleCoordinator = streamLifecycleCoordinatorFactory == null
-						? new StreamLifecycleCoordinator(getStreamingLifecycleCapacity(),
+						? StreamLifecycleCoordinator.withCallbackExecution(getStreamingLifecycleCapacity(),
 								getStreamingCallbackConcurrency(), getStreamingCleanupTimeout(),
 								throwable -> safelyLog(LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR,
 										"An exception occurred during streaming lifecycle supervision")
-										.throwable(throwable).build()))
+										.throwable(throwable).build()), getLifecycleAdapter()::runCallback)
 						: requireNonNull(streamLifecycleCoordinatorFactory.get());
 				ScheduledThreadPoolExecutor streamingTimeoutExecutor = new ScheduledThreadPoolExecutor(1,
 						new NonvirtualThreadFactory("streaming-timeout"));
@@ -1194,7 +1195,7 @@ final class DefaultHttpServer implements HttpServer {
 						.observedByteCount(rejection.observedByteCount())
 						.captureTruncated(rejection.captureTruncated()).build(),
 				this.responseMarshaler, getLifecycleObserver(), this::safelyLog,
-				responseConsumer, admission::close);
+				responseConsumer, admission::close, getLifecycleAdapter()::enterCallbackExecution);
 	}
 
 	@NonNull
@@ -1984,7 +1985,7 @@ final class DefaultHttpServer implements HttpServer {
 	protected void safelyLog(@NonNull LogEvent logEvent) {
 		requireNonNull(logEvent);
 
-		try {
+		try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 			getLifecycleObserver().didReceiveLogEvent(logEvent);
 		} catch (Throwable throwable) {
 			LifecycleObserverLogFallback.report(throwable);
@@ -2001,7 +2002,7 @@ final class DefaultHttpServer implements HttpServer {
 		if (metricsCollector == null)
 			return;
 
-		try {
+		try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 			metricsConsumer.accept(metricsCollector);
 		} catch (Throwable throwable) {
 			safelyLog(LogEvent.with(LogEventType.METRICS_COLLECTOR_FAILED, message)
@@ -2045,10 +2046,12 @@ final class DefaultHttpServer implements HttpServer {
 				.build();
 
 		if (streamObservation != null) {
-			HttpResponseStreamObservation.Delivery delivery = streamObservation.deliver(streamingResponse, termination,
-					terminatedNanos, bodyBytes, this.metricsCollector, this::safelyLog);
-			streamingResponse = delivery.handle();
-			termination = delivery.termination();
+			try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
+				HttpResponseStreamObservation.Delivery delivery = streamObservation.deliver(streamingResponse, termination,
+						terminatedNanos, bodyBytes, this.metricsCollector, this::safelyLog);
+				streamingResponse = delivery.handle();
+				termination = delivery.termination();
+			}
 		}
 		if (cancelationReason != null && cancelationReason != StreamTerminationReason.CLIENT_DISCONNECTED
 				&& cancelationReason != StreamTerminationReason.SERVER_STOPPING) {
@@ -2064,7 +2067,7 @@ final class DefaultHttpServer implements HttpServer {
 					.build());
 		}
 
-		try {
+		try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 			getLifecycleObserver().willTerminateResponseStream(streamingResponse, termination);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_TERMINATE_RESPONSE_STREAM_FAILED,
@@ -2076,7 +2079,7 @@ final class DefaultHttpServer implements HttpServer {
 					.build());
 		}
 
-		try {
+		try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 			getLifecycleObserver().didTerminateResponseStream(streamingResponse, termination);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_TERMINATE_RESPONSE_STREAM_FAILED,
@@ -2090,7 +2093,7 @@ final class DefaultHttpServer implements HttpServer {
 	}
 
 	private void notifyWillAcceptConnection(@Nullable InetSocketAddress remoteAddress) {
-		try {
+		try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 			getLifecycleObserver().willAcceptConnection(ServerType.HTTP, remoteAddress);
 		} catch (Throwable throwable) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_ACCEPT_CONNECTION_FAILED,
@@ -2107,7 +2110,7 @@ final class DefaultHttpServer implements HttpServer {
 	}
 
 	private void notifyDidAcceptConnection(@Nullable InetSocketAddress remoteAddress) {
-		try {
+		try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 			getLifecycleObserver().didAcceptConnection(ServerType.HTTP, remoteAddress);
 		} catch (Throwable throwable) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_ACCEPT_CONNECTION_FAILED,
@@ -2128,7 +2131,7 @@ final class DefaultHttpServer implements HttpServer {
 																							 @Nullable Throwable throwable) {
 		requireNonNull(reason);
 
-		try {
+		try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 			getLifecycleObserver().didFailToAcceptConnection(ServerType.HTTP, remoteAddress, reason, throwable);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_FAIL_TO_ACCEPT_CONNECTION_FAILED,
@@ -2151,7 +2154,7 @@ final class DefaultHttpServer implements HttpServer {
 
 	private void notifyWillAcceptRequest(@Nullable InetSocketAddress remoteAddress,
 																			 @Nullable String requestTarget) {
-		try {
+		try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 			getLifecycleObserver().willAcceptRequest(ServerType.HTTP, remoteAddress, requestTarget);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_ACCEPT_REQUEST_FAILED,
@@ -2172,7 +2175,7 @@ final class DefaultHttpServer implements HttpServer {
 
 	private void notifyDidAcceptRequest(@Nullable InetSocketAddress remoteAddress,
 																			@Nullable String requestTarget) {
-		try {
+		try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 			getLifecycleObserver().didAcceptRequest(ServerType.HTTP, remoteAddress, requestTarget);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_ACCEPT_REQUEST_FAILED,
@@ -2197,7 +2200,7 @@ final class DefaultHttpServer implements HttpServer {
 																						@Nullable Throwable throwable) {
 		requireNonNull(reason);
 
-		try {
+		try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 			getLifecycleObserver().didFailToAcceptRequest(ServerType.HTTP, remoteAddress, requestTarget, reason, throwable);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_FAIL_TO_ACCEPT_REQUEST_FAILED,
@@ -2222,7 +2225,7 @@ final class DefaultHttpServer implements HttpServer {
 
 	private void notifyWillReadRequest(@Nullable InetSocketAddress remoteAddress,
 																		 @Nullable String requestTarget) {
-		try {
+		try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 			getLifecycleObserver().willReadRequest(ServerType.HTTP, remoteAddress, requestTarget);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_WILL_READ_REQUEST_FAILED,
@@ -2243,7 +2246,7 @@ final class DefaultHttpServer implements HttpServer {
 
 	private void notifyDidReadRequest(@Nullable InetSocketAddress remoteAddress,
 																		@Nullable String requestTarget) {
-		try {
+		try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 			getLifecycleObserver().didReadRequest(ServerType.HTTP, remoteAddress, requestTarget);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_READ_REQUEST_FAILED,
@@ -2268,7 +2271,7 @@ final class DefaultHttpServer implements HttpServer {
 																					@Nullable Throwable throwable) {
 		requireNonNull(reason);
 
-		try {
+		try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 			getLifecycleObserver().didFailToReadRequest(ServerType.HTTP, remoteAddress, requestTarget, reason, throwable);
 		} catch (Throwable t) {
 			safelyLog(LogEvent.with(LogEventType.LIFECYCLE_OBSERVER_DID_FAIL_TO_READ_REQUEST_FAILED,

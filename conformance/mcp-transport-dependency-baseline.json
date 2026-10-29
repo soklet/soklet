@@ -97,10 +97,18 @@
         {
           "owner": "com.soklet.internal.mcp.protocol.McpRequestSseStream.TransportChannel#delegate",
           "path": "src/main/java/com/soklet/internal/mcp/protocol/McpRequestSseStream.java"
+        },
+        {
+          "owner": "com.soklet.internal.mcp.transport.McpOutboundChannel.Chunk#isWriteAllowed",
+          "path": "src/main/java/com/soklet/internal/mcp/transport/McpOutboundChannel.java"
+        },
+        {
+          "owner": "com.soklet.internal.mcp.transport.McpOutboundChannel.Chunk#writeTo",
+          "path": "src/main/java/com/soklet/internal/mcp/transport/McpOutboundChannel.java"
         }
       ],
       "id": "MCP-TRANSPORT-001",
-      "statement": "Progress and subscription notifications use the request-scoped SSE stream and its single bounded McpOutboundChannel delegate. Modern resource invalidations retain accepted identities, use the bounded projection scheduler, and guard delivery with the installed stream, authorization generation and expiry. Task status frames additionally retain their projection authorization revision so an accepted renewal invalidates previously projected data before socket writes. Selected legacy POST streams share the finite legacy terminal projection with their immutable simulation JSON snapshots; the default modern encoder is preserved and message frames contain no event IDs or priming fields. Guarded legacy GET invalidations recheck source/GET/grant authority before every socket write; revoked unwritten chunks are purged, partially written chunks fail, and encoded-byte releases run outside the channel lock."
+      "statement": "Progress and subscription notifications use the request-scoped SSE stream and its single bounded McpOutboundChannel delegate. Modern resource invalidations retain accepted identities, use the bounded projection scheduler, and guard delivery with the installed stream, authorization generation and expiry. Task status frames retain their projection authorization revision until actual socket progress. Once started, they continue only under the captured stream, generation and live lease, so unchanged renewals preserve framing while actual revocation stops the remainder. Selected legacy POST streams share the finite legacy terminal projection with their immutable simulation JSON snapshots; the default modern encoder is preserved and message frames contain no event IDs or priming fields. Guarded legacy GET invalidations recheck source/GET/grant authority before every socket write; revoked unwritten chunks are purged, partially written chunks fail, and encoded-byte releases run outside the channel lock."
     },
     {
       "evidence": [

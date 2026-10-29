@@ -66,6 +66,7 @@ public final class StreamLifecycleCoordinator {
 	private final int capacity;
 	private final long cleanupGraceNanos;
 	private final Consumer<Throwable> diagnostics;
+	private final Consumer<Runnable> callbackExecution;
 	private final LongSupplier nanoClock;
 	private final Set<Reservation> reservations = new LinkedHashSet<>();
 	private final ThreadPoolExecutor callbackExecutor;
@@ -89,6 +90,17 @@ public final class StreamLifecycleCoordinator {
 
 	StreamLifecycleCoordinator(int capacity, int callbackConcurrency, Duration cleanupGrace,
 														 Consumer<Throwable> diagnostics, LongSupplier nanoClock) {
+		this(capacity, callbackConcurrency, cleanupGrace, diagnostics, nanoClock, Runnable::run);
+	}
+
+	/** Carries the owning lifecycle's self-wait guard across all managed application work. */
+	public static StreamLifecycleCoordinator withCallbackExecution(int capacity, int callbackConcurrency, @NonNull Duration cleanupGrace,
+			@NonNull Consumer<Throwable> diagnostics, @NonNull Consumer<Runnable> callbackExecution) {
+		return new StreamLifecycleCoordinator(capacity, callbackConcurrency, cleanupGrace, diagnostics, System::nanoTime, callbackExecution);
+	}
+
+	private StreamLifecycleCoordinator(int capacity, int callbackConcurrency, Duration cleanupGrace,
+			Consumer<Throwable> diagnostics, LongSupplier nanoClock, Consumer<Runnable> callbackExecution) {
 		if (capacity <= 0 || capacity > Integer.MAX_VALUE / 2)
 			throw new IllegalArgumentException("Stream lifecycle capacity must be positive and fit twice in an int");
 		if (callbackConcurrency <= 0 || callbackConcurrency > capacity)
@@ -103,6 +115,7 @@ public final class StreamLifecycleCoordinator {
 		}
 		this.capacity = capacity;
 		this.diagnostics = requireNonNull(diagnostics);
+		this.callbackExecution = requireNonNull(callbackExecution);
 		this.nanoClock = requireNonNull(nanoClock);
 		this.rejectionObserverCapacity = Math.min(capacity, Integer.MAX_VALUE - capacity * 2);
 		this.callbackExecutor = new ThreadPoolExecutor(callbackConcurrency, callbackConcurrency,
@@ -148,7 +161,7 @@ public final class StreamLifecycleCoordinator {
 		try {
 			this.callbackExecutor.execute(() -> {
 				synchronized (this.lock) { this.queuedRejectionObservers--; }
-				try { observer.run(); }
+				try { this.callbackExecution.accept(observer); }
 				finally { finishRejectionObserver(false); }
 			});
 			return true;
@@ -604,7 +617,7 @@ public final class StreamLifecycleCoordinator {
 				this.producerThread = Thread.currentThread();
 			}
 			try {
-				producer.run();
+				callbackExecution.accept(producer);
 			} catch (Throwable failure) {
 				cancel(StreamTerminationReason.PRODUCER_FAILED, failure);
 				report(failure);
@@ -808,6 +821,11 @@ public final class StreamLifecycleCoordinator {
 			dispatch(0, callbacks);
 		}
 
+		/** Applies owner context to an already-retained publisher/provider call; does not admit work. */
+		public void runProviderCallback(@NonNull Runnable callback) {
+			callbackExecution.accept(requireNonNull(callback));
+		}
+
 		/**
 		 * One application transport-termination notification, with no cleanup-completion
 		 * barrier. After successful production it receives a separate cleanup grace:
@@ -862,7 +880,7 @@ public final class StreamLifecycleCoordinator {
 
 		private void invokeSignal(BiConsumer<StreamTerminationReason, Throwable> handler) {
 			try {
-				handler.accept(requireNonNull(this.reason), this.cause);
+				callbackExecution.accept(() -> handler.accept(requireNonNull(this.reason), this.cause));
 			} catch (Throwable failure) {
 				report(failure);
 			} finally {
@@ -898,7 +916,7 @@ public final class StreamLifecycleCoordinator {
 				executor.execute(() -> {
 					synchronized (lock) { this.jobs[index] = JobState.RUNNING; }
 					try {
-						action.run();
+						callbackExecution.accept(action);
 					} catch (Throwable failure) {
 						report(failure);
 					} finally {
@@ -1030,7 +1048,7 @@ public final class StreamLifecycleCoordinator {
 					synchronized (lock) { secondary = this.producerFailure; }
 					try {
 						attachProducerEvidence(failure, secondary);
-						observer.accept(failure);
+						callbackExecution.accept(() -> observer.accept(failure));
 					} catch (Throwable ignored) {
 						// Diagnostics must not compromise state publication or accounting.
 					} finally {
@@ -1159,7 +1177,7 @@ public final class StreamLifecycleCoordinator {
 				this.reservation.producerThread = Thread.currentThread();
 			}
 			try {
-				this.producer.run();
+				callbackExecution.accept(this.producer);
 			} catch (Throwable failure) {
 				this.reservation.cancel(StreamTerminationReason.PRODUCER_FAILED, failure);
 				this.reservation.report(failure);

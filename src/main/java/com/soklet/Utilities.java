@@ -881,7 +881,9 @@ public final class Utilities {
 	 * Quality weights are honored by {@link Locale.LanguageRange#parse(String)}; results are then converted to
 	 * {@link Locale} instances that represent the client-supplied language tags. Wildcard ranges are ignored unless
 	 * they include a language component (e.g. {@code en-*} becomes {@code en}). On parse failure, an empty list is
-	 * returned.
+	 * returned. Empty comma-separated members are ignored. Inputs exceeding 4,096 characters or
+	 * 32 comma-separated members (including empty members) return an empty list, bounding parsing work
+	 * for untrusted values.
 	 *
 	 * @param acceptLanguageHeaderValue the raw header value (must be non-{@code null})
 	 * @return locales in descending preference order; empty if none could be resolved
@@ -935,11 +937,28 @@ public final class Utilities {
 		// Bound the quadratic JDK parser before it sees attacker-controlled input.
 		if (value.length() > 4_096)
 			return List.of();
-		int ranges = 1;
-		for (int index = 0; index < value.length(); index++)
-			if (value.charAt(index) == ',' && ++ranges > 32)
+		int members = 0;
+		int start = 0;
+		StringBuilder normalized = new StringBuilder(value.length());
+		for (int index = 0; index <= value.length(); index++) {
+			if (index < value.length() && value.charAt(index) != ',')
+				continue;
+			if (++members > 32)
 				return List.of();
-		return List.copyOf(LanguageRange.parse(value));
+			int end = index;
+			while (start < end && (value.charAt(start) == ' ' || value.charAt(start) == '\t'))
+				start++;
+			while (end > start && (value.charAt(end - 1) == ' ' || value.charAt(end - 1) == '\t'))
+				end--;
+			// HTTP list recipients ignore a bounded number of empty members (RFC 9110, 5.6.1.2).
+			if (start < end) {
+				if (!normalized.isEmpty())
+					normalized.append(',');
+				normalized.append(value, start, end);
+			}
+			start = index + 1;
+		}
+		return normalized.isEmpty() ? List.of() : List.copyOf(LanguageRange.parse(normalized.toString()));
 	}
 
 	/**
@@ -1744,10 +1763,10 @@ public final class Utilities {
 
 		// Simple case, e.g. "text/html"
 		if (indexOfSemicolon == -1)
-			return Optional.ofNullable(trimAggressivelyToNull(contentTypeHeaderValue));
+			return Optional.ofNullable(trimAggressivelyToNull(trimHeaderWhitespace(contentTypeHeaderValue)));
 
 		// More complex case, e.g. "text/html; charset=UTF-8"
-		return Optional.ofNullable(trimAggressivelyToNull(contentTypeHeaderValue.substring(0, indexOfSemicolon)));
+		return Optional.ofNullable(trimAggressivelyToNull(trimHeaderWhitespace(contentTypeHeaderValue.substring(0, indexOfSemicolon))));
 	}
 
 	/**

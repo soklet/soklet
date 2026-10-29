@@ -104,6 +104,16 @@ final class McpRequestSseStream {
 				@NonNull Frame frame, @NonNull Object coalescingKey,
 				@NonNull BooleanSupplier writeAllowed, @NonNull Runnable payloadWritten,
 				@NonNull Runnable payloadReleased) {
+			return offerGuardedCoalescing(frame, coalescingKey, writeAllowed,
+					writeAllowed, payloadWritten, payloadReleased);
+		}
+
+		@NonNull
+		default Optional<McpOutboundChannel.@NonNull OfferResult> offerGuardedCoalescing(
+				@NonNull Frame frame, @NonNull Object coalescingKey,
+				@NonNull BooleanSupplier writeAllowed, @NonNull BooleanSupplier continuationAllowed,
+				@NonNull Runnable payloadWritten, @NonNull Runnable payloadReleased) {
+			requireNonNull(continuationAllowed);
 			requireNonNull(payloadReleased);
 			requireNonNull(payloadWritten);
 			try {
@@ -312,6 +322,16 @@ final class McpRequestSseStream {
 			@NonNull McpJsonRpcMessage message, @NonNull Object coalescingKey,
 			@NonNull BooleanSupplier writeAllowed, @NonNull Runnable payloadWritten,
 			@NonNull Runnable payloadReleased) {
+		return offerGuardedCoalescingMessage(message, coalescingKey, writeAllowed,
+				writeAllowed, payloadWritten, payloadReleased);
+	}
+
+	@NonNull
+	Optional<McpOutboundChannel.@NonNull OfferResult> offerGuardedCoalescingMessage(
+			@NonNull McpJsonRpcMessage message, @NonNull Object coalescingKey,
+			@NonNull BooleanSupplier writeAllowed, @NonNull BooleanSupplier continuationAllowed,
+			@NonNull Runnable payloadWritten, @NonNull Runnable payloadReleased) {
+		requireNonNull(continuationAllowed);
 		requireNonNull(payloadReleased);
 		requireNonNull(payloadWritten);
 		boolean handedOff = false;
@@ -322,7 +342,7 @@ final class McpRequestSseStream {
 			testHooks.beforeCoalescingMessageOffer();
 			handedOff = true;
 			return channel.offerGuardedCoalescing(frame, coalescingKey,
-					writeAllowed, payloadWritten, payloadReleased);
+					writeAllowed, continuationAllowed, payloadWritten, payloadReleased);
 		} finally {
 			if (!handedOff)
 				payloadReleased.run();
@@ -517,6 +537,17 @@ final class McpRequestSseStream {
 				@NonNull Frame frame, @NonNull Object coalescingKey,
 				@NonNull BooleanSupplier writeAllowed, @NonNull Runnable payloadWritten,
 				@NonNull Runnable payloadReleased) {
+			return offerGuardedCoalescing(frame, coalescingKey, writeAllowed,
+					writeAllowed, payloadWritten, payloadReleased);
+		}
+
+		@Override
+		@NonNull
+		public Optional<McpOutboundChannel.@NonNull OfferResult> offerGuardedCoalescing(
+				@NonNull Frame frame, @NonNull Object coalescingKey,
+				@NonNull BooleanSupplier writeAllowed, @NonNull BooleanSupplier continuationAllowed,
+				@NonNull Runnable payloadWritten, @NonNull Runnable payloadReleased) {
+			requireNonNull(continuationAllowed);
 			requireNonNull(payloadReleased);
 			requireNonNull(payloadWritten);
 			boolean handedOff = false;
@@ -526,7 +557,7 @@ final class McpRequestSseStream {
 				requireNonNull(writeAllowed);
 				handedOff = true;
 				return this.delegate.offerGuardedCoalescing(encodedBytes,
-						coalescingKey, writeAllowed, payloadWritten, payloadReleased);
+						coalescingKey, writeAllowed, continuationAllowed, payloadWritten, payloadReleased);
 			} finally {
 				if (!handedOff)
 					payloadReleased.run();

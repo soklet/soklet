@@ -84,6 +84,14 @@ final class SecureStaticFileRoot {
 	}
 
 	SeekableByteChannel open(Path file, BasicFileAttributes expected) throws IOException {
+		try {
+			return openWithProvider(file, expected);
+		} catch (UnsupportedOperationException | IllegalArgumentException failure) {
+			throw new IOException("Static file provider does not support the required no-follow file access.", failure);
+		}
+	}
+
+	private SeekableByteChannel openWithProvider(Path file, BasicFileAttributes expected) throws IOException {
 		requireNonNull(file);
 		if (!sameInstance(file.getFileSystem(), this.configuredRoot.getFileSystem()) || !file.isAbsolute()
 				|| !file.equals(file.normalize()) || !file.startsWith(this.configuredRoot))

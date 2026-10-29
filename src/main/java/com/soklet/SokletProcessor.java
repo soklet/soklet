@@ -40,6 +40,7 @@ import com.soklet.annotation.SseEventSource;
 import com.soklet.internal.mcp.generated.McpGeneratedEndpointProviderIndex;
 import com.soklet.internal.mcp.protocol.McpAppMimeType;
 import com.soklet.internal.mcp.protocol.McpEndpointPathLimit;
+import com.soklet.internal.mcp.protocol.McpResourceTemplateValidation;
 import com.soklet.internal.mcp.schema.McpTypeMirrorTypedSchemaBridge;
 import com.google.errorprone.annotations.FormatMethod;
 import org.jspecify.annotations.NonNull;
@@ -113,6 +114,12 @@ import static java.util.Objects.requireNonNull;
  * <em>Resource Method</em> definitions, generated public-API-only MCP endpoint
  * adapters and their classpath index, and reports usage errors detectable by
  * static analysis.
+ *
+ * <p>Compile each Java module in its own compiler invocation. A single
+ * {@code javac --module-source-path} invocation spanning multiple modules is
+ * not supported because generated discovery indexes require one class-output
+ * root. Ordinary Maven and Gradle builds that compile modules separately are
+ * supported.</p>
  * <p>
  * This Annotation Processor ensures <em>Resource Methods</em> annotated with {@link SseEventSource} are declared as returning an instance of {@link SseHandshakeResult}.
  * It validates HTTP/SSE path syntax using {@link ResourcePathDeclaration}, reporting malformed, partial-component,
@@ -200,10 +207,6 @@ public final class SokletProcessor extends AbstractProcessor {
 	private static final int MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_VARIABLES = 32;
 	private static final int MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_VARIABLE_NAME_UTF_8_BYTES =
 			128;
-	private static final int MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_OVERLAP_STATES =
-			65_536;
-	private static final int MAXIMUM_MCP_ENDPOINT_RESOURCE_URI_TEMPLATE_OVERLAP_STATES =
-			1_048_576;
 	private static final String MCP_ABSENT_OUTPUT_SCHEMA_DIGEST =
 			"NO_OUTPUT_SCHEMA";
 
@@ -260,6 +263,7 @@ public final class SokletProcessor extends AbstractProcessor {
 	// Collected during this compilation invocation
 	private final List<ResourceMethodDeclaration> collected = new ArrayList<>();
 	private final Map<String, Element> collectedResourceMethodElements = new LinkedHashMap<>();
+	private final Set<String> deferredResourceOwners = new LinkedHashSet<>();
 	private final Set<String> touchedTopLevelBinaries = new LinkedHashSet<>();
 	private boolean resourceMethodAmbiguityDetected;
 	private final List<McpEndpointProviderDeclaration> collectedMcpEndpoints =
@@ -468,7 +472,7 @@ public final class SokletProcessor extends AbstractProcessor {
 
 		if (roundEnvironment.processingOver()) {
 			// Critical: don't overwrite a good index with a partial/failed compile.
-			if (roundEnvironment.errorRaised() || resourceMethodAmbiguityDetected
+			if (roundEnvironment.errorRaised() || resourceMethodAmbiguityDetected || resourceMethodIndexErrorDetected
 					|| mcpProcessingErrorDetected) {
 				debug("SokletProcessor: compilation has errors; skipping index write to avoid clobbering.");
 				return false;
@@ -498,6 +502,14 @@ public final class SokletProcessor extends AbstractProcessor {
 		Set<Element> candidates = new LinkedHashSet<>();
 		if (base != null) candidates.addAll(roundEnv.getElementsAnnotatedWith(base));
 		if (container != null) candidates.addAll(roundEnv.getElementsAnnotatedWith(container));
+		for (String ownerName : deferredResourceOwners) {
+			TypeElement owner = elements.getTypeElement(ownerName);
+			if (owner != null)
+				for (Element element : owner.getEnclosedElements())
+					if (element instanceof ExecutableElement method
+							&& !extractOccurrences(method, base, container).isEmpty())
+						candidates.add(method);
+		}
 
 		for (Element e : candidates) {
 			if (e.getKind() != ElementKind.METHOD) {
@@ -507,6 +519,15 @@ public final class SokletProcessor extends AbstractProcessor {
 
 			ExecutableElement method = (ExecutableElement) e;
 			TypeElement owner = (TypeElement) method.getEnclosingElement();
+			if (containsErrorType(method.getReturnType())
+					|| method.getParameters().stream().anyMatch(parameter -> containsErrorType(parameter.asType()))) {
+				deferredResourceOwners.add(owner.getQualifiedName().toString());
+				if (roundEnv.processingOver()) {
+					error(method, "Soklet: Resource Method contains an unresolved parameter or return type after annotation processing completed.");
+					resourceMethodIndexErrorDetected = true;
+				}
+				continue;
+			}
 
 			boolean isPublic = method.getModifiers().contains(Modifier.PUBLIC);
 			boolean isStatic = method.getModifiers().contains(Modifier.STATIC);
@@ -525,10 +546,11 @@ public final class SokletProcessor extends AbstractProcessor {
 					continue;
 				}
 
-				String path = normalizePath(rawPath);
+				String path = rawPath;
 
 				ValidationResult vr = validatePathTemplate(method, path);
 				if (!vr.ok) continue;
+				path = ResourcePathDeclaration.fromPath(path).getPath();
 
 				boolean bindingTypesValid = validatePathParameterTypes(method, vr);
 
@@ -558,6 +580,8 @@ public final class SokletProcessor extends AbstractProcessor {
 					ResourceMethodDeclaration declaration = new ResourceMethodDeclaration(
 							httpMethod, path, className, methodName, paramTypes, sseEventSource
 					);
+					if (collectedResourceMethodElements.containsKey(generateKey(declaration)))
+						continue;
 					detectResourceMethodAmbiguity(method, declaration);
 					collected.add(declaration);
 					collectedResourceMethodElements.put(generateKey(declaration), method);
@@ -983,6 +1007,8 @@ public final class SokletProcessor extends AbstractProcessor {
 		if (annotation == null)
 			return null;
 
+		validateMcpAnnotationStrings(endpointType);
+
 		if (endpointType.getKind() != ElementKind.CLASS)
 			mcpError(endpointType,
 					"Soklet: @McpServerEndpoint must annotate a concrete class.");
@@ -1321,12 +1347,12 @@ public final class SokletProcessor extends AbstractProcessor {
 					"Soklet: An annotated MCP endpoint may declare at most %d resource URI templates.",
 					MAXIMUM_MCP_RESOURCE_URI_TEMPLATES);
 		} else {
-			List<McpLevelOneResourceTemplate> parsedTemplates = templates.stream()
+			List<McpResourceTemplateValidation.Template> parsedTemplates = templates.stream()
 					.map(template -> parseLevelOneResourceTemplate(
 							template.address()))
 					.toList();
-			McpTemplateOverlapBudget overlapBudget =
-					new McpTemplateOverlapBudget();
+			McpResourceTemplateValidation.OverlapBudget overlapBudget =
+					McpResourceTemplateValidation.endpointOverlapBudget();
 			templatePairs:
 			for (int leftIndex = 0; leftIndex < templates.size(); ++leftIndex) {
 				for (int rightIndex = leftIndex + 1;
@@ -1743,6 +1769,8 @@ public final class SokletProcessor extends AbstractProcessor {
 			} else if (result instanceof McpTypeMirrorTypedSchemaBridge.CompiledSchemas compiled) {
 				inputSchemaBytes = compiled.getInputSchemaBytes();
 				outputSchemaBytes = compiled.getOutputSchemaBytes();
+				if (legacySelected && schemaDeclaresMirroredHeader(compiled.getInputSchemaDocument()))
+					mcpError(method, "Soklet: A 2025 @McpTool must not declare mirrored headers (tool '%s', revisions %s).", name, protocolVersions);
 				if (legacySelected && !new com.soklet.internal.mcp.protocol.McpJsonString("object")
 						.equals(compiled.getOutputSchemaDocument().members().get("type")))
 					mcpError(method,
@@ -1750,6 +1778,8 @@ public final class SokletProcessor extends AbstractProcessor {
 							name, protocolVersions);
 			} else if (result instanceof McpTypeMirrorTypedSchemaBridge.CompiledInputSchema compiled) {
 				inputSchemaBytes = compiled.getInputSchemaBytes();
+				if (legacySelected && schemaDeclaresMirroredHeader(compiled.getInputSchemaDocument()))
+					mcpError(method, "Soklet: A 2025 @McpTool must not declare mirrored headers (tool '%s', revisions %s).", name, protocolVersions);
 			}
 		}
 
@@ -2089,9 +2119,13 @@ public final class SokletProcessor extends AbstractProcessor {
 					"Soklet: MCP resource URI or URI template must not be blank.");
 		if (name.isBlank())
 			mcpError(method, "Soklet: MCP resource name must not be blank.");
-		if (!mimeType.isEmpty() && mimeType.isBlank())
-			mcpError(method,
-					"Soklet: MCP resource MIME type must not be blank.");
+		if (!mimeType.isEmpty()) {
+			try {
+				McpContentValueSupport.requireMimeType(mimeType);
+			} catch (IllegalArgumentException invalid) {
+				mcpError(method, "Soklet: MCP resource MIME type must be a valid media type.");
+			}
+		}
 		if (sizeInBytes < -1)
 			mcpError(method,
 					"Soklet: @McpResource sizeInBytes must be nonnegative or -1 when absent.");
@@ -2477,65 +2511,20 @@ public final class SokletProcessor extends AbstractProcessor {
 
 	private static List<String> parseLevelOneTemplateVariables(
 			@NonNull String template) {
-		McpLevelOneResourceTemplate parsed = parseLevelOneResourceTemplate(
+		McpResourceTemplateValidation.Template parsed = parseLevelOneResourceTemplate(
 				template);
-		return parsed == null ? null : parsed.variables();
+		return parsed == null ? null : List.copyOf(parsed.variableNames());
 	}
 
-	private static McpLevelOneResourceTemplate parseLevelOneResourceTemplate(
+	private static McpResourceTemplateValidation.Template parseLevelOneResourceTemplate(
 			@NonNull String template) {
-		if (template.getBytes(StandardCharsets.UTF_8).length
-				> MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_UTF_8_BYTES)
+		// Validation and overlap decisions must use the same grammar, URI
+		// normalization, and finite budgets as runtime resource routing.
+		try {
+			return McpResourceTemplateValidation.parse(template);
+		} catch (IllegalArgumentException invalid) {
 			return null;
-		List<String> variables = new ArrayList<>();
-		List<McpTemplateOverlapAtom> overlapAtoms = new ArrayList<>();
-		StringBuilder uriCandidate = new StringBuilder(template.length() + 16);
-		boolean previousWasVariable = false;
-		for (int index = 0; index < template.length();) {
-			char character = template.charAt(index);
-			if (character == '}')
-				return null;
-			if (character != '{') {
-				McpTemplateLiteralToken token = templateLiteralToken(template,
-						index);
-				if (token == null)
-					return null;
-				uriCandidate.append(token.value());
-				overlapAtoms.add(new McpTemplateOverlapAtom(token.value(),
-						false, token.variableConsumable()));
-				previousWasVariable = false;
-				index += token.sourceLength();
-				continue;
-			}
-			if (previousWasVariable)
-				return null;
-			int close = template.indexOf('}', index + 1);
-			if (close < 0 || (template.indexOf('{', index + 1) >= 0
-					&& template.indexOf('{', index + 1) < close))
-				return null;
-			String variable = template.substring(index + 1, close);
-			if (!validLevelOneVariableName(variable)
-					|| variable.getBytes(StandardCharsets.UTF_8).length
-					> MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_VARIABLE_NAME_UTF_8_BYTES
-					|| variables.contains(variable)
-					|| variables.size()
-					>= MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_VARIABLES)
-				return null;
-			variables.add(variable);
-			uriCandidate.append('x');
-			overlapAtoms.add(McpTemplateOverlapAtom.wildcardAtom());
-			previousWasVariable = true;
-			index = close + 1;
 		}
-		if (variables.isEmpty())
-			return null;
-		if (uriCandidate.length()
-				> MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_UTF_8_BYTES)
-			return null;
-		if (!validExactMcpResourceUri(uriCandidate.toString()))
-			return null;
-		return new McpLevelOneResourceTemplate(List.copyOf(variables),
-				List.copyOf(overlapAtoms));
 	}
 
 	private static int resourceTemplateVariableExpressionCount(
@@ -2842,94 +2831,11 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	private static boolean resourceTemplatesPotentiallyOverlap(
-			@Nullable McpLevelOneResourceTemplate leftParsed,
-			@Nullable McpLevelOneResourceTemplate rightParsed,
-			@NonNull McpTemplateOverlapBudget endpointBudget) {
-		if (leftParsed == null || rightParsed == null)
-			return false;
-		if (!endpointBudget.chargeState())
-			return true;
-		List<McpTemplateOverlapAtom> leftAtoms = leftParsed.overlapAtoms();
-		List<McpTemplateOverlapAtom> rightAtoms = rightParsed.overlapAtoms();
-		ArrayDeque<McpTemplateOverlapState> pending = new ArrayDeque<>();
-		Set<McpTemplateOverlapState> discovered = new LinkedHashSet<>();
-		McpTemplateOverlapState initial = new McpTemplateOverlapState(0, 0);
-		discovered.add(initial);
-		pending.add(initial);
-
-		while (!pending.isEmpty()) {
-			McpTemplateOverlapState state = pending.removeFirst();
-			int left = state.leftIndex();
-			int right = state.rightIndex();
-			if (left == leftAtoms.size() && right == rightAtoms.size())
-				return true;
-			if (left == leftAtoms.size()) {
-				if (onlyTemplateWildcardsRemain(rightAtoms, right))
-					return true;
-				continue;
-			}
-			if (right == rightAtoms.size()) {
-				if (onlyTemplateWildcardsRemain(leftAtoms, left))
-					return true;
-				continue;
-			}
-
-			McpTemplateOverlapAtom leftAtom = leftAtoms.get(left);
-			McpTemplateOverlapAtom rightAtom = rightAtoms.get(right);
-			boolean leftWildcard = leftAtom.wildcard();
-			boolean rightWildcard = rightAtom.wildcard();
-			if (leftWildcard) {
-				if (!enqueueTemplateOverlapState(pending, discovered, endpointBudget,
-						new McpTemplateOverlapState(left + 1, right)))
-					return true;
-				if (!rightWildcard && rightAtom.variableConsumable())
-					if (!enqueueTemplateOverlapState(pending, discovered, endpointBudget,
-							new McpTemplateOverlapState(left, right + 1)))
-						return true;
-			}
-			if (rightWildcard) {
-				if (!enqueueTemplateOverlapState(pending, discovered, endpointBudget,
-						new McpTemplateOverlapState(left, right + 1)))
-					return true;
-				if (!leftWildcard && leftAtom.variableConsumable())
-					if (!enqueueTemplateOverlapState(pending, discovered, endpointBudget,
-							new McpTemplateOverlapState(left + 1, right)))
-						return true;
-			}
-			if (!leftWildcard && !rightWildcard
-					&& leftAtom.value().equals(rightAtom.value()))
-				if (!enqueueTemplateOverlapState(pending, discovered, endpointBudget,
-						new McpTemplateOverlapState(left + 1, right + 1)))
-					return true;
-		}
-		return false;
-	}
-
-	private static boolean enqueueTemplateOverlapState(
-			@NonNull ArrayDeque<@NonNull McpTemplateOverlapState> pending,
-			@NonNull Set<@NonNull McpTemplateOverlapState> discovered,
-			@NonNull McpTemplateOverlapBudget endpointBudget,
-			@NonNull McpTemplateOverlapState state) {
-		if (discovered.contains(state))
-			return true;
-		if (discovered.size()
-				>= MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_OVERLAP_STATES) {
-			endpointBudget.markExhausted();
-			return false;
-		}
-		if (!endpointBudget.chargeState())
-			return false;
-		discovered.add(state);
-		pending.add(state);
-		return true;
-	}
-
-	private static boolean onlyTemplateWildcardsRemain(
-			@NonNull List<@NonNull McpTemplateOverlapAtom> atoms, int index) {
-		for (; index < atoms.size(); ++index)
-			if (!atoms.get(index).wildcard())
-				return false;
-		return true;
+			McpResourceTemplateValidation.@Nullable Template left,
+			McpResourceTemplateValidation.@Nullable Template right,
+			McpResourceTemplateValidation.@NonNull OverlapBudget endpointBudget) {
+		return left != null && right != null
+				&& left.potentiallyOverlaps(right, endpointBudget);
 	}
 
 	private boolean isOptionalString(@NonNull TypeMirror type) {
@@ -3683,6 +3589,22 @@ public final class SokletProcessor extends AbstractProcessor {
 					annotationName);
 	}
 
+	private static boolean schemaDeclaresMirroredHeader(
+			com.soklet.internal.mcp.protocol.McpJsonObject document) {
+		var pending = new ArrayDeque<com.soklet.internal.mcp.protocol.McpJsonObject>();
+		pending.add(document);
+		while (!pending.isEmpty()) {
+			var schema = pending.removeFirst();
+			if (schema.members().get("x-mcp-header") instanceof com.soklet.internal.mcp.protocol.McpJsonString)
+				return true;
+			if (schema.members().get("properties") instanceof com.soklet.internal.mcp.protocol.McpJsonObject properties)
+				for (var value : properties.members().values())
+					if (value instanceof com.soklet.internal.mcp.protocol.McpJsonObject property)
+						pending.add(property);
+		}
+		return false;
+	}
+
 	private static boolean isAppsMimeProfile(@NonNull String mimeType) {
 		if (mimeType.isBlank())
 			return false;
@@ -3706,6 +3628,44 @@ public final class SokletProcessor extends AbstractProcessor {
 		return "java.util.Set.of(" + versions.stream()
 				.map(version -> "com.soklet.McpProtocolVersion." + version)
 				.collect(Collectors.joining(", ")) + ")";
+	}
+
+	private void validateMcpAnnotationStrings(@NonNull Element owner) {
+		for (AnnotationMirror annotation : owner.getAnnotationMirrors()) {
+			if (!annotation.getAnnotationType().toString().startsWith("com.soklet.annotation.Mcp"))
+				continue;
+			for (Map.Entry<? extends ExecutableElement, ? extends AnnotationValue> entry
+					: elements.getElementValuesWithDefaults(annotation).entrySet())
+				validateMcpAnnotationValue(owner, annotation, entry.getKey().getSimpleName().toString(),
+						entry.getValue());
+		}
+		for (Element enclosed : owner.getEnclosedElements())
+			validateMcpAnnotationStrings(enclosed);
+		if (owner instanceof ExecutableElement method)
+			for (VariableElement parameter : method.getParameters())
+				validateMcpAnnotationStrings(parameter);
+	}
+
+	private void validateMcpAnnotationValue(@NonNull Element owner,
+			@NonNull AnnotationMirror annotation, @NonNull String member,
+			@NonNull AnnotationValue value) {
+		if (value.getValue() instanceof String string) {
+			try {
+				McpContentValueSupport.requireWellFormedString(string);
+			} catch (IllegalArgumentException invalid) {
+				mcpError(owner, "Soklet: @%s %s must not contain unpaired UTF-16 surrogates.",
+						annotation.getAnnotationType().asElement().getSimpleName(), member);
+			}
+		} else if (value.getValue() instanceof AnnotationMirror nested) {
+			for (Map.Entry<? extends ExecutableElement, ? extends AnnotationValue> entry
+					: elements.getElementValuesWithDefaults(nested).entrySet())
+				validateMcpAnnotationValue(owner, nested, entry.getKey().getSimpleName().toString(),
+						entry.getValue());
+		} else if (value.getValue() instanceof List<?> values) {
+			for (Object entry : values)
+				if (entry instanceof AnnotationValue item)
+					validateMcpAnnotationValue(owner, annotation, member, item);
+		}
 	}
 
 	@NonNull
@@ -3959,12 +3919,6 @@ public final class SokletProcessor extends AbstractProcessor {
 
 
 	// --- Existing utilities ----------------------------------------------------
-
-	private static String normalizePath(String p) {
-		if (p == null || p.isEmpty()) return "/";
-		if (p.charAt(0) != '/') return "/" + p;
-		return p;
-	}
 
 	private static Class<? extends Annotation> findRepeatableContainer(Class<? extends Annotation> base) {
 		Repeatable repeatable = base.getAnnotation(Repeatable.class);
@@ -4822,15 +4776,7 @@ public final class SokletProcessor extends AbstractProcessor {
 			String paramsJoined = new String(dec.decode(parts[4]), StandardCharsets.UTF_8);
 			boolean sse = Boolean.parseBoolean(parts[5]);
 
-			String[] paramTypes;
-			if (paramsJoined.isEmpty()) {
-				paramTypes = new String[0];
-			} else {
-				List<String> tmp = Arrays.stream(paramsJoined.split(";"))
-						.filter(s -> !s.isEmpty())
-						.collect(Collectors.toList());
-				paramTypes = tmp.toArray(String[]::new);
-			}
+			String[] paramTypes = ResourceMethodDeclaration.parameterTypesFromIndex(paramsJoined);
 
 			return new ResourceMethodDeclaration(httpMethod, path, className, methodName, paramTypes, sse);
 		} catch (Throwable t) {
@@ -5213,44 +5159,8 @@ public final class SokletProcessor extends AbstractProcessor {
 			List<McpResourceListParameterBinding> bindings,
 			List<String> protocolVersions) {}
 
-	private record McpLevelOneResourceTemplate(List<String> variables,
-			List<McpTemplateOverlapAtom> overlapAtoms) {}
-
 	private record McpTemplateLiteralToken(String value,
 			boolean variableConsumable, int sourceLength) {}
-
-	private record McpTemplateOverlapAtom(String value, boolean wildcard,
-			boolean variableConsumable) {
-		@NonNull
-		private static McpTemplateOverlapAtom wildcardAtom() {
-			return new McpTemplateOverlapAtom("", true, false);
-		}
-	}
-
-	private record McpTemplateOverlapState(int leftIndex, int rightIndex) {}
-
-	private static final class McpTemplateOverlapBudget {
-		private int remainingStates =
-				MAXIMUM_MCP_ENDPOINT_RESOURCE_URI_TEMPLATE_OVERLAP_STATES;
-		private boolean exhausted;
-
-		private boolean chargeState() {
-			if (remainingStates == 0) {
-				exhausted = true;
-				return false;
-			}
-			--remainingStates;
-			return true;
-		}
-
-		private void markExhausted() {
-			exhausted = true;
-		}
-
-		private boolean exhausted() {
-			return exhausted;
-		}
-	}
 
 	private enum McpResourceListParameterBinding {
 		REQUEST_CONTEXT,

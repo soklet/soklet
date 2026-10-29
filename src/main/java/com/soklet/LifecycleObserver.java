@@ -627,8 +627,10 @@ public interface LifecycleObserver {
 	 * Called if an SSE connection fails to establish before an accepted response has been written.
 	 * <p>
 	 * Capacity rejection is {@link SseConnection.HandshakeFailureReason#CAPACITY_EXCEEDED}; request processing,
-	 * response preparation and response writing failures use {@link SseConnection.HandshakeFailureReason#INTERNAL_ERROR}
-	 * with their cause. {@link SseConnection.HandshakeFailureReason#HANDSHAKE_REJECTED}
+	 * response preparation and accepted-handshake response writing failures use
+	 * {@link SseConnection.HandshakeFailureReason#INTERNAL_ERROR} with their cause.
+	 * A routine peer disconnect while writing a rejection retains its rejection reason and records the write cause.
+	 * {@link SseConnection.HandshakeFailureReason#HANDSHAKE_REJECTED}
 	 * also covers finite route/method mismatch responses on the SSE listener,
 	 * including HEAD and OPTIONS; an event-source method need not have run.
 	 * Failure during client initialization after acceptance uses the stream-termination callbacks.

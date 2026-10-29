@@ -150,7 +150,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		}
 
 		if (postProcessor != null)
-			marshaledResponse = postProcessor.postProcess(marshaledResponse);
+			marshaledResponse = ResponseBodyCleanup.transform(marshaledResponse, postProcessor::postProcess);
 
 		return marshaledResponse;
 	}
@@ -205,7 +205,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		}
 
 		if (postProcessor != null)
-			marshaledResponse = postProcessor.postProcess(marshaledResponse);
+			marshaledResponse = ResponseBodyCleanup.transform(marshaledResponse, postProcessor::postProcess);
 
 		return marshaledResponse;
 	}
@@ -231,7 +231,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		}
 
 		if (postProcessor != null)
-			marshaledResponse = postProcessor.postProcess(marshaledResponse);
+			marshaledResponse = ResponseBodyCleanup.transform(marshaledResponse, postProcessor::postProcess);
 
 		return marshaledResponse;
 	}
@@ -269,7 +269,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		}
 
 		if (postProcessor != null)
-			marshaledResponse = postProcessor.postProcess(marshaledResponse);
+			marshaledResponse = ResponseBodyCleanup.transform(marshaledResponse, postProcessor::postProcess);
 
 		return marshaledResponse;
 	}
@@ -296,7 +296,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		}
 
 		if (postProcessor != null)
-			marshaledResponse = postProcessor.postProcess(marshaledResponse);
+			marshaledResponse = ResponseBodyCleanup.transform(marshaledResponse, postProcessor::postProcess);
 
 		return marshaledResponse;
 	}
@@ -326,7 +326,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		}
 
 		if (postProcessor != null)
-			marshaledResponse = postProcessor.postProcess(marshaledResponse);
+			marshaledResponse = ResponseBodyCleanup.transform(marshaledResponse, postProcessor::postProcess);
 
 		return marshaledResponse;
 	}
@@ -355,7 +355,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		}
 
 		if (postProcessor != null)
-			marshaledResponse = postProcessor.postProcess(marshaledResponse);
+			marshaledResponse = ResponseBodyCleanup.transform(marshaledResponse, postProcessor::postProcess);
 
 		return marshaledResponse;
 	}
@@ -383,7 +383,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		}
 
 		if (postProcessor != null)
-			marshaledResponse = postProcessor.postProcess(marshaledResponse);
+			marshaledResponse = ResponseBodyCleanup.transform(marshaledResponse, postProcessor::postProcess);
 
 		return marshaledResponse;
 	}
@@ -425,7 +425,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		}
 
 		if (postProcessor != null)
-			marshaledResponse = postProcessor.postProcess(marshaledResponse);
+			marshaledResponse = ResponseBodyCleanup.transform(marshaledResponse, postProcessor::postProcess);
 
 		return marshaledResponse;
 	}
@@ -454,7 +454,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		}
 
 		if (postProcessor != null)
-			marshaledResponse = postProcessor.postProcess(marshaledResponse);
+			marshaledResponse = ResponseBodyCleanup.transform(marshaledResponse, postProcessor::postProcess);
 
 		return marshaledResponse;
 	}
@@ -525,7 +525,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		}
 
 		if (postProcessor != null)
-			marshaledResponse = postProcessor.postProcess(marshaledResponse);
+			marshaledResponse = ResponseBodyCleanup.transform(marshaledResponse, postProcessor::postProcess);
 
 		return marshaledResponse;
 	}
@@ -554,7 +554,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		}
 
 		if (postProcessor != null)
-			marshaledResponse = postProcessor.postProcess(marshaledResponse);
+			marshaledResponse = ResponseBodyCleanup.transform(marshaledResponse, postProcessor::postProcess);
 
 		return marshaledResponse;
 	}
@@ -610,7 +610,7 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		}
 
 		if (postProcessor != null)
-			finalMarshaledResponse = postProcessor.postProcess(finalMarshaledResponse);
+			finalMarshaledResponse = ResponseBodyCleanup.transform(finalMarshaledResponse, postProcessor::postProcess);
 
 		return finalMarshaledResponse;
 	}

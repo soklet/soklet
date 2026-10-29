@@ -36,7 +36,8 @@ const verifierPath = resolve(projectRoot,
 const temporaryRoot = mkdtempSync(join(tmpdir(),
   'soklet-mcp-transport-dependencies-self-test-'));
 const goldenRoot = resolve(temporaryRoot, 'golden');
-const EXPECTED_CASE_COUNT = 139;
+const OUTBOUND_CHANNEL = 'src/main/java/com/soklet/internal/mcp/transport/McpOutboundChannel.java';
+const EXPECTED_CASE_COUNT = 148;
 let passedCases = 0;
 
 const FIXTURE_SOURCES = Object.freeze([
@@ -936,10 +937,61 @@ try {
     (root) => {
       mutateSource(root, REQUEST_STREAM, (source) => source.replace(
         'return channel.offerGuardedCoalescing(frame, coalescingKey,\n'
-        + '\t\t\t\t\twriteAllowed, payloadWritten, payloadReleased);',
+        + '\t\t\t\t\twriteAllowed, continuationAllowed, payloadWritten, payloadReleased);',
         'return channel.offerGuardedCoalescing(frame, coalescingKey,\n'
-        + '\t\t\t\t\t() -> true, payloadWritten, payloadReleased);'));
+        + '\t\t\t\t\t() -> true, continuationAllowed, payloadWritten, payloadReleased);'));
     }, /must retain their guard and callbacks on the installed channel/u);
+
+  expectRejected('guarded notifications cannot bypass their continuation guard', (root) => {
+    mutateSource(root, REQUEST_STREAM, (source) => source.replace(
+      'writeAllowed, continuationAllowed, payloadWritten, payloadReleased);',
+      'writeAllowed, () -> true, payloadWritten, payloadReleased);'));
+  }, /must retain their guard and callbacks on the installed channel/u);
+
+  for (const guard of ['writeAllowed', 'continuationAllowed']) {
+    expectRejected(`transport adapter cannot discard its ${guard}`, (root) => {
+      mutateSource(root, REQUEST_STREAM, (source) => replaceAfter(source,
+        'return this.delegate.offerGuardedCoalescing(encodedBytes,',
+        'coalescingKey, writeAllowed, continuationAllowed, payloadWritten, payloadReleased);',
+        `coalescingKey, ${guard === 'writeAllowed' ? '() -> true' : 'writeAllowed'}, ${guard === 'continuationAllowed' ? '() -> true' : 'continuationAllowed'}, payloadWritten, payloadReleased);`));
+    }, /guarded channel offers must retain their guard and callbacks/u);
+  }
+
+  expectRejected('task continuation cannot bypass real authorization revocation', (root) => {
+    mutateSource(root, RUNTIME, (source) => source.replace(
+      '() -> resourceNotificationWriteAllowed(stream, reservedDelivery.authorizationGeneration()),',
+      '() -> true,'));
+  }, /started task frames must retain their captured generation and lease guard/u);
+
+  expectRejected('single-guard callers cannot silently lose continued protection', (root) => {
+    mutateSource(root, REQUEST_STREAM, (source) => source.replace(
+      'writeAllowed, payloadWritten, payloadReleased);',
+      '() -> true, payloadWritten, payloadReleased);'));
+  }, /single-guard compatibility offers must preserve their guard for both write phases/u);
+
+  expectRejected('chunk guard phases cannot be swapped', (root) => {
+    mutateSource(root, OUTBOUND_CHANNEL, (source) => source.replace(
+      'hasWrittenBytes ? continuationAllowed : writeAllowed',
+      'hasWrittenBytes ? writeAllowed : continuationAllowed'));
+  }, /chunk guard selection must switch only after socket progress/u);
+
+  expectRejected('zero-byte socket writes cannot enable continuation authority', (root) => {
+    mutateSource(root, OUTBOUND_CHANNEL, (source) => source.replace(
+      'if (currentWrite > 0L)', 'if (currentWrite >= 0L)'));
+  }, /a zero-byte socket write must not activate continuation authority/u);
+
+  expectRejected('chunk construction cannot drop continuation protection', (root) => {
+    mutateSource(root, OUTBOUND_CHANNEL, (source) => replaceAfter(source,
+      'return new Chunk(framedPayload(payload)',
+      'writeAllowed, continuationAllowed, payloadWritten, payloadReleased)',
+      'writeAllowed, null, payloadWritten, payloadReleased)'));
+  }, /chunk construction must preserve both guards/u);
+
+  expectRejected('outbound queue insertion cannot discard the continuation guard', (root) => {
+    mutateSource(root, OUTBOUND_CHANNEL, (source) => source.replace(
+      'addRegularChunk(ownedPayload, coalescingKey, writeAllowed, continuationAllowed,',
+      'addRegularChunk(ownedPayload, coalescingKey, writeAllowed, null,'));
+  }, /outbound queued frames must retain both guards/u);
 
   expectRejected('runtime notification writer must retain RequestControl routing',
     (root) => {

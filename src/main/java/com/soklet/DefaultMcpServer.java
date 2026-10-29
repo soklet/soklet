@@ -388,11 +388,15 @@ final class DefaultMcpServer implements McpServer {
 				this::getForcedShutdownTimeout);
 		this.runtimeBridge = new McpServerRuntimeBridge(host, port, endpointPlans,
 				allowedHosts, absentOriginPolicy == McpAbsentOriginPolicy.REQUIRE_ORIGIN,
-				this.corsAuthorizer, corsAuthorizerExplicitlyConfigured,
-				input -> this.admissionController.admit(
-						new DefaultMcpAdmissionContext(input)),
+				corsAuthorizerExplicitlyConfigured ? lifecycleCorsAuthorizer() : this.corsAuthorizer,
+				corsAuthorizerExplicitlyConfigured,
+				input -> {
+					try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
+						return this.admissionController.admit(new DefaultMcpAdmissionContext(input));
+					}
+				},
 				Optional.ofNullable(this.requestRateLimiter)
-						.map(DefaultMcpServer::toRateLimitAdapter),
+						.map(this::toRateLimitAdapter),
 				unknownMirroredHeaderPolicy,
 				unknownMirroredHeaderNameDiagnostics,
 				this::safelyLogUnknownMirroredHeaderName,
@@ -446,6 +450,12 @@ final class DefaultMcpServer implements McpServer {
 		return new McpApplicationExecutionObserver() {
 			private final AtomicLong lastCapacityDiagnostic = new AtomicLong(Long.MIN_VALUE);
 			@Override
+			public LifecycleScope enterLifecycleExecution() {
+				LifecycleExecutionContext.Scope scope = enterCallbackExecution();
+				return scope == null ? () -> {} : scope::close;
+			}
+
+			@Override
 			public void didSkipHttpRequestObservation() {
 				long now = System.nanoTime();
 				long previous = lastCapacityDiagnostic.get();
@@ -474,7 +484,7 @@ final class DefaultMcpServer implements McpServer {
 				LifecycleObserver observer = lifecycleObserver;
 				MetricsCollector collector = metricsCollector;
 				List<Throwable> startThrowables = new ArrayList<>();
-				try {
+				try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
 					observer.didStartRequestHandling(ServerType.HTTP, request, null);
 				} catch (Throwable throwable) {
 					startThrowables.add(throwable);
@@ -482,7 +492,7 @@ final class DefaultMcpServer implements McpServer {
 							LogEventType.LIFECYCLE_OBSERVER_DID_START_REQUEST_HANDLING_FAILED,
 							"An exception occurred while invoking LifecycleObserver::didStartRequestHandling").build(), null);
 				}
-				try {
+				try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
 					if (collector instanceof DefaultMetricsCollector defaultMetricsCollector)
 						defaultMetricsCollector.didStartMcpHttpRequestHandling(request, endpointPath);
 					else
@@ -504,13 +514,13 @@ final class DefaultMcpServer implements McpServer {
 					List<Throwable> allThrowables = new ArrayList<>(immutableStartThrowables);
 					allThrowables.addAll(throwables);
 					List<Throwable> immutableThrowables = List.copyOf(allThrowables);
-					try {
+					try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
 						collector.didFinishRequestHandling(ServerType.HTTP, request, null, response, duration, immutableThrowables);
 					} catch (Throwable throwable) {
 						safelyLogRequestObservation(observer, LogEvent.with(LogEventType.METRICS_COLLECTOR_FAILED,
 								"An exception occurred while invoking MetricsCollector::didFinishRequestHandling").build(), null);
 					}
-					try {
+					try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
 						observer.didFinishRequestHandling(ServerType.HTTP, request, null, response, duration, immutableThrowables);
 					} catch (Throwable throwable) {
 						safelyLogRequestObservation(observer, LogEvent.with(
@@ -1646,6 +1656,34 @@ final class DefaultMcpServer implements McpServer {
 		return this.lifecyclePolicy.getForcedShutdownTimeout();
 	}
 
+	@NonNull
+	private CorsAuthorizer lifecycleCorsAuthorizer() {
+		return new CorsAuthorizer() {
+			@Override public Optional<CorsResponse> authorize(Request request, Cors cors) {
+				try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
+					return corsAuthorizer.authorize(request, cors);
+				}
+			}
+			@Override public Optional<CorsPreflightResponse> authorizePreflight(Request request, CorsPreflight cors,
+					Map<HttpMethod, ResourceMethod> methods) {
+				try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
+					return corsAuthorizer.authorizePreflight(request, cors, methods);
+				}
+			}
+			@Override public Optional<CorsPreflightResponse> authorizePreflight(Request request, CorsPreflight cors,
+					Set<HttpMethod> methods) {
+				try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
+					return corsAuthorizer.authorizePreflight(request, cors, methods);
+				}
+			}
+		};
+	}
+
+	private LifecycleExecutionContext.@Nullable Scope enterCallbackExecution() {
+		Object ownerToken = this.lifecycleExecutionOwner;
+		return ownerToken == null ? null : LifecycleExecutionContext.enter(ownerToken);
+	}
+
 	void installLifecycleExecutionOwner(@NonNull Object ownerToken) {
 		Object exactOwner = requireNonNull(ownerToken);
 		synchronized (this.lifecycleLock) {
@@ -2171,12 +2209,16 @@ final class DefaultMcpServer implements McpServer {
 	}
 
 	@NonNull
-	private static RateLimitAdapter toRateLimitAdapter(
+	private RateLimitAdapter toRateLimitAdapter(
 			@NonNull McpRateLimiter rateLimiter) {
 		requireNonNull(rateLimiter);
-		return input -> toRateLimitResult(requireNonNull(
-				rateLimiter.acquire(new DefaultMcpRateLimitContext(input)),
-				"The MCP rate limiter returned null."));
+		return input -> {
+			try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
+				return toRateLimitResult(requireNonNull(
+						rateLimiter.acquire(new DefaultMcpRateLimitContext(input)),
+						"The MCP rate limiter returned null."));
+			}
+		};
 	}
 
 	@NonNull
@@ -3040,6 +3082,8 @@ final class DefaultMcpServer implements McpServer {
 	private static final class DefaultMcpTaskCreationContext<A>
 			implements McpTaskCreationContext {
 		@NonNull
+		private final ReentrantLock initializationLock = new ReentrantLock();
+		@NonNull
 		private final McpRequestContext requestContext;
 		@NonNull
 		private final McpToolRegistration<A> tool;
@@ -3083,7 +3127,8 @@ final class DefaultMcpServer implements McpServer {
 				return exactTaskOrigin;
 			if (this.taskOriginEncodingFailed)
 				throw previouslyFailedTaskOriginEncoding();
-			synchronized (this) {
+			this.initializationLock.lock();
+			try {
 				exactTaskOrigin = this.taskOrigin;
 				if (exactTaskOrigin != null)
 					return exactTaskOrigin;
@@ -3110,11 +3155,14 @@ final class DefaultMcpServer implements McpServer {
 				}
 				this.taskOrigin = exactTaskOrigin;
 				return exactTaskOrigin;
+			} finally {
+				this.initializationLock.unlock();
 			}
 		}
 
 		private void pinSelectedLocale(@Nullable String selectedLocale) {
-			synchronized (this) {
+			this.initializationLock.lock();
+			try {
 				if (this.selectedLocalePinned) {
 					if (!java.util.Objects.equals(this.selectedLocale,
 							selectedLocale))
@@ -3127,6 +3175,8 @@ final class DefaultMcpServer implements McpServer {
 							"MCP task locale selection completed after origin materialization.");
 				this.selectedLocale = selectedLocale;
 				this.selectedLocalePinned = true;
+			} finally {
+				this.initializationLock.unlock();
 			}
 		}
 
@@ -3137,7 +3187,10 @@ final class DefaultMcpServer implements McpServer {
 				return exactDecodedArguments;
 			if (this.argumentDecodingFailed)
 				throw previouslyFailedArgumentDecoding();
-			synchronized (this) {
+			// Typed arguments may run application record constructors. A blocking
+			// constructor must not pin its virtual-thread carrier on Java 21.
+			this.initializationLock.lock();
+			try {
 				exactDecodedArguments = this.decodedArguments;
 				if (exactDecodedArguments != null)
 					return exactDecodedArguments;
@@ -3152,6 +3205,8 @@ final class DefaultMcpServer implements McpServer {
 				}
 				this.decodedArguments = exactDecodedArguments;
 				return exactDecodedArguments;
+			} finally {
+				this.initializationLock.unlock();
 			}
 		}
 
@@ -4141,7 +4196,7 @@ final class DefaultMcpServer implements McpServer {
 		LifecycleObserver observer = this.lifecycleObserver;
 		List<Throwable> startThrowables = new ArrayList<>();
 
-		try {
+		try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
 			observer.didStartMcpRequestHandling(context);
 		} catch (Throwable throwable) {
 			startThrowables.add(throwable);
@@ -4193,7 +4248,7 @@ final class DefaultMcpServer implements McpServer {
 						observer, LogEvent.with(
 								LogEventType.MCP_TRACE_CORRELATION,
 								record.toLogMessage()).build(), null));
-				try {
+				try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
 					observer.didFinishMcpRequestHandling(context, outcome,
 							publicError, duration, immutableThrowables);
 				} catch (Throwable throwable) {
@@ -4266,7 +4321,7 @@ final class DefaultMcpServer implements McpServer {
 	private void safelyRecordMcpMetrics(@NonNull McpMetricsEvent event) {
 		MetricsCollector collector = this.metricsCollector;
 		LifecycleObserver observer = this.lifecycleObserver;
-		try {
+		try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
 			collector.didRecordMcpMetricsEvent(requireNonNull(event));
 		} catch (Throwable throwable) {
 			safelyLogRequestObservation(observer, LogEvent.with(
@@ -4279,7 +4334,7 @@ final class DefaultMcpServer implements McpServer {
 	private void safelyLogRequestObservation(@NonNull LifecycleObserver observer,
 			@NonNull LogEvent event,
 			@Nullable List<@NonNull Throwable> requestThrowables) {
-		try {
+		try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
 			observer.didReceiveLogEvent(requireNonNull(event));
 		} catch (Throwable throwable) {
 			LifecycleObserverLogFallback.report(throwable);
@@ -4289,7 +4344,7 @@ final class DefaultMcpServer implements McpServer {
 	}
 
 	private void safelyLogStartupDiagnostic(@NonNull String message) {
-		try {
+		try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
 			this.lifecycleObserver.didReceiveLogEvent(LogEvent.with(
 					LogEventType.MCP_SERVER_CONFIGURATION, message).build());
 		} catch (Throwable observerFailure) {
@@ -4299,7 +4354,7 @@ final class DefaultMcpServer implements McpServer {
 
 	private void safelyLogUnknownMirroredHeaderName(@NonNull String endpointPath,
 			@NonNull String headerName) {
-		try {
+		try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
 			this.lifecycleObserver.didReceiveLogEvent(LogEvent.with(
 					LogEventType.MCP_UNKNOWN_MIRRORED_HEADER,
 					"Unknown MCP mirrored header: endpointPath="
@@ -4313,7 +4368,7 @@ final class DefaultMcpServer implements McpServer {
 
 	private void safelyLogUnexpectedTermination(@NonNull Throwable throwable) {
 		requireNonNull(throwable);
-		try {
+		try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
 			this.lifecycleObserver.didReceiveLogEvent(LogEvent.with(
 					LogEventType.SERVER_TRANSPORT_FAILURE,
 					"MCP transport failure: event_loop_terminate")
