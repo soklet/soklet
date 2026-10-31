@@ -103,6 +103,11 @@ public interface HttpServer {
 		 * The {@link HttpServer} is responsible for converting its internal request representation into a {@link Request}, which a {@link com.soklet.Soklet} instance consumes and performs Soklet application request processing logic.
 		 * <p>
 		 * The {@link com.soklet.Soklet} instance will generate a {@link MarshaledResponse} for the request, which it "hands back" to the {@link HttpServer} to be sent over the wire to the client.
+		 * The receiving transport owns delivery and terminal cleanup. Call {@link MarshaledResponse#close()}
+		 * after delivery completes or is abandoned, including write failure and streaming cancelation.
+		 * This closes owned file-channel bodies and predecessor channels retained by response transformations;
+		 * borrowed channels and unopened path-backed bodies are unaffected. Soklet does not perform that
+		 * terminal cleanup on a custom transport's behalf.
 		 *
 		 * @param request               a Soklet {@link Request} representation of the {@link HttpServer}'s internal HTTP request data
 		 * @param requestResultConsumer invoked by {@link com.soklet.Soklet} when it's time for the {@link HttpServer} to write HTTP response data to the client
@@ -403,6 +408,9 @@ public interface HttpServer {
 		/**
 		 * Sets the maximum duration of one socket-selection wait. Passing
 		 * {@code null} restores the built-in default of 100 milliseconds.
+		 * Timeout enforcement is checked by the selection loop, so this interval also
+		 * bounds the polling precision of request, idle, response and drain deadlines;
+		 * a deadline may be observed up to one selection interval later.
 		 *
 		 * @param socketSelectTimeout socket-selection timeout, or {@code null} for
 		 * the default
@@ -432,7 +440,8 @@ public interface HttpServer {
 		/**
 		 * Sets the maximum number of concurrent client connections. Passing
 		 * {@code null} restores the built-in default of 8,192. An explicit value of
-		 * {@code 0} disables Soklet's connection cap.
+		 * {@code 0} disables Soklet's connection cap. A connection above the cap can
+		 * complete TCP acceptance and is then closed without an HTTP response.
 		 *
 		 * @param concurrentConnectionLimit concurrent connection limit, or
 		 * {@code null} for the default
@@ -680,7 +689,9 @@ public interface HttpServer {
 		 * exits. Cleanup supervision does not replace the response or idle timeout during healthy transport delivery.
 		 * Healthy queue backpressure during encoder finalization pauses the remaining cleanup budget; cancelation
 		 * starts a finite cleanup budget even if an output wait remains active. Successful socket writes refresh
-		 * response idle activity during or after production, so a progressing drain can complete.
+		 * response idle activity during or after production. Progress means bytes accepted
+		 * by a socket write, not bytes consumed by the peer: a slow reader can therefore
+		 * reach an idle timeout while draining already-buffered data.
 		 * <p>
 		 * Owned-resource close/abort and publisher cancel failures use {@link LogEventType#RESPONSE_STREAM_CLOSE_FAILED} with the original
 		 * exception, request, optional resource method and streaming response. Framework supervision failures and

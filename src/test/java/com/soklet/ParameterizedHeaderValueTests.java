@@ -20,6 +20,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.util.List;
 
 /**
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -42,6 +43,29 @@ public class ParameterizedHeaderValueTests {
 				.stringValue();
 
 		Assertions.assertEquals("attachment; filename*=UTF-8''r%C3%A9sum%C3%A9.txt", value);
+	}
+
+	@Test
+	public void rfc8187RejectsMalformedUnicodeBeforeMutatingTheBuilder() {
+		ParameterizedHeaderValue.Builder builder = ParameterizedHeaderValue.withName("attachment")
+				.quotedParameter("filename", "safe.txt");
+		String unchanged = builder.stringValue();
+		for (String invalid : List.of("secret-\uD800", "secret-\uDC00", "secret-\uD800x", "secret-\uDC00\uD800")) {
+			IllegalArgumentException failure = Assertions.assertThrows(IllegalArgumentException.class,
+					() -> builder.rfc8187Parameter("filename", invalid));
+			Assertions.assertEquals("Invalid Unicode in RFC 8187 parameter value.", failure.getMessage());
+			Assertions.assertNull(failure.getCause());
+			Assertions.assertEquals(unchanged, builder.stringValue());
+			Assertions.assertEquals(1, builder.build().getParameters().size());
+		}
+	}
+
+	@Test
+	public void rfc8187PreservesSupplementaryCharactersAndExplicitReplacementCharacters() {
+		ParameterizedHeaderValue header = ParameterizedHeaderValue.withName("attachment")
+				.rfc8187Parameter("filename", "🍪-�.txt").build();
+		Assertions.assertEquals("🍪-�.txt", header.getParameters().get(0).getValue());
+		Assertions.assertEquals("attachment; filename*=UTF-8''%F0%9F%8D%AA-%EF%BF%BD.txt", header.getStringValue());
 	}
 
 	@Test

@@ -760,10 +760,12 @@ public class McpSimulatorEveryOperationTests {
 						McpMetricsEvent.RequestFinished.class);
 			};
 			List<Class<?>> actual = events.stream().map(Object::getClass).toList();
-			if ("subscriptions/listen".equals(method)) {
+			if (Set.of("subscriptions/listen", "tools/call", "prompts/get", "resources/read").contains(method)) {
 				// The authorization callback ticket publishes its result before its
 				// physical-exit metric. The request thread can record maintenance,
 				// open the stream, or even finish it while that ticket is exiting.
+				// Semantic finish delivery also runs on its reserved observation
+				// worker, so physical handler exit may precede that queued finish.
 				// Preserve exact order for every other event and require one physical
 				// exit after its corresponding handler start.
 				Assertions.assertEquals(1L, actual.stream().filter(type -> type

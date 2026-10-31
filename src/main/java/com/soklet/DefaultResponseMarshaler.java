@@ -122,6 +122,15 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		this.postProcessor = builder.postProcessor;
 	}
 
+	@Override
+	@NonNull
+	public MarshaledResponse postProcess(@NonNull MarshaledResponse response) {
+		requireNonNull(response);
+		PostProcessor processor = getPostProcessor().orElse(null);
+		if (processor == null) return response;
+		return ResponseBodyCleanup.transform(response, processor::postProcess);
+	}
+
 	@NonNull
 	@Override
 	public MarshaledResponse forUnparsedRequest(
@@ -130,7 +139,6 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 
 		UnparsedRequestHandler unparsedRequestHandler =
 				getUnparsedRequestHandler().orElse(null);
-		PostProcessor postProcessor = getPostProcessor().orElse(null);
 		MarshaledResponse marshaledResponse;
 
 		if (unparsedRequestHandler != null) {
@@ -149,10 +157,8 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 			marshaledResponse = MarshaledResponse.fromStatusCode(statusCode);
 		}
 
-		if (postProcessor != null)
-			marshaledResponse = ResponseBodyCleanup.transform(marshaledResponse, postProcessor::postProcess);
 
-		return marshaledResponse;
+		return postProcess(marshaledResponse);
 	}
 
 	@NonNull
@@ -165,7 +171,6 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		requireNonNull(resourceMethod);
 
 		ResourceMethodHandler resourceMethodHandler = getResourceMethodHandler().orElse(null);
-		PostProcessor postProcessor = getPostProcessor().orElse(null);
 		MarshaledResponse marshaledResponse;
 
 		if (resourceMethodHandler != null) {
@@ -204,8 +209,6 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 					: builder.body(body).build();
 		}
 
-		if (postProcessor != null)
-			marshaledResponse = ResponseBodyCleanup.transform(marshaledResponse, postProcessor::postProcess);
 
 		return marshaledResponse;
 	}
@@ -216,7 +219,6 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		requireNonNull(request);
 
 		NotFoundHandler notFoundHandler = getNotFoundHandler().orElse(null);
-		PostProcessor postProcessor = getPostProcessor().orElse(null);
 		MarshaledResponse marshaledResponse;
 
 		if (notFoundHandler != null) {
@@ -230,8 +232,6 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 					.build();
 		}
 
-		if (postProcessor != null)
-			marshaledResponse = ResponseBodyCleanup.transform(marshaledResponse, postProcessor::postProcess);
 
 		return marshaledResponse;
 	}
@@ -244,7 +244,6 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		requireNonNull(allowedHttpMethods);
 
 		MethodNotAllowedHandler methodNotAllowedHandler = getMethodNotAllowedHandler().orElse(null);
-		PostProcessor postProcessor = getPostProcessor().orElse(null);
 		MarshaledResponse marshaledResponse;
 
 		if (methodNotAllowedHandler != null) {
@@ -268,8 +267,6 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 					.build();
 		}
 
-		if (postProcessor != null)
-			marshaledResponse = ResponseBodyCleanup.transform(marshaledResponse, postProcessor::postProcess);
 
 		return marshaledResponse;
 	}
@@ -281,7 +278,6 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		requireNonNull(request);
 
 		ContentTooLargeHandler contentTooLargeHandler = getContentTooLargeHandler().orElse(null);
-		PostProcessor postProcessor = getPostProcessor().orElse(null);
 		MarshaledResponse marshaledResponse;
 
 		if (contentTooLargeHandler != null) {
@@ -295,8 +291,6 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 					.build();
 		}
 
-		if (postProcessor != null)
-			marshaledResponse = ResponseBodyCleanup.transform(marshaledResponse, postProcessor::postProcess);
 
 		return marshaledResponse;
 	}
@@ -308,7 +302,6 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		requireNonNull(request);
 
 		ServiceUnavailableHandler serviceUnavailableHandler = getServiceUnavailableHandler().orElse(null);
-		PostProcessor postProcessor = getPostProcessor().orElse(null);
 		MarshaledResponse marshaledResponse;
 
 		if (serviceUnavailableHandler != null) {
@@ -325,8 +318,6 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 					.build();
 		}
 
-		if (postProcessor != null)
-			marshaledResponse = ResponseBodyCleanup.transform(marshaledResponse, postProcessor::postProcess);
 
 		return marshaledResponse;
 	}
@@ -339,7 +330,6 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		requireNonNull(allowedHttpMethods);
 
 		OptionsHandler optionsHandler = getOptionsHandler().orElse(null);
-		PostProcessor postProcessor = getPostProcessor().orElse(null);
 		MarshaledResponse marshaledResponse;
 
 		if (optionsHandler != null) {
@@ -354,8 +344,6 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 					.build();
 		}
 
-		if (postProcessor != null)
-			marshaledResponse = ResponseBodyCleanup.transform(marshaledResponse, postProcessor::postProcess);
 
 		return marshaledResponse;
 	}
@@ -366,7 +354,6 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		requireNonNull(request);
 
 		OptionsSplatHandler optionsSplatHandler = getOptionsSplatHandler().orElse(null);
-		PostProcessor postProcessor = getPostProcessor().orElse(null);
 		MarshaledResponse marshaledResponse;
 
 		if (optionsSplatHandler != null) {
@@ -382,8 +369,6 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 					.build();
 		}
 
-		if (postProcessor != null)
-			marshaledResponse = ResponseBodyCleanup.transform(marshaledResponse, postProcessor::postProcess);
 
 		return marshaledResponse;
 	}
@@ -396,7 +381,6 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		requireNonNull(getMethodMarshaledResponse);
 
 		HeadHandler headHandler = getHeadHandler().orElse(null);
-		PostProcessor postProcessor = getPostProcessor().orElse(null);
 		MarshaledResponse marshaledResponse;
 
 		if (headHandler != null) {
@@ -424,8 +408,6 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 			marshaledResponse = responseCopier.finish();
 		}
 
-		if (postProcessor != null)
-			marshaledResponse = ResponseBodyCleanup.transform(marshaledResponse, postProcessor::postProcess);
 
 		return marshaledResponse;
 	}
@@ -439,7 +421,6 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		requireNonNull(throwable);
 
 		ThrowableHandler throwableHandler = getThrowableHandler().orElse(null);
-		PostProcessor postProcessor = getPostProcessor().orElse(null);
 		MarshaledResponse marshaledResponse;
 
 		if (throwableHandler != null) {
@@ -453,8 +434,6 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 					.build();
 		}
 
-		if (postProcessor != null)
-			marshaledResponse = ResponseBodyCleanup.transform(marshaledResponse, postProcessor::postProcess);
 
 		return marshaledResponse;
 	}
@@ -469,7 +448,6 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		requireNonNull(corsPreflightResponse);
 
 		CorsPreflightAllowedHandler corsPreflightAllowedHandler = getCorsPreflightAllowedHandler().orElse(null);
-		PostProcessor postProcessor = getPostProcessor().orElse(null);
 		MarshaledResponse marshaledResponse;
 
 		if (corsPreflightAllowedHandler != null) {
@@ -524,8 +502,6 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 					.build();
 		}
 
-		if (postProcessor != null)
-			marshaledResponse = ResponseBodyCleanup.transform(marshaledResponse, postProcessor::postProcess);
 
 		return marshaledResponse;
 	}
@@ -538,7 +514,6 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		requireNonNull(corsPreflight);
 
 		CorsPreflightRejectedHandler corsPreflightRejectedHandler = getCorsPreflightRejectedHandler().orElse(null);
-		PostProcessor postProcessor = getPostProcessor().orElse(null);
 		MarshaledResponse marshaledResponse;
 
 		if (corsPreflightRejectedHandler != null) {
@@ -553,8 +528,6 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 					.build();
 		}
 
-		if (postProcessor != null)
-			marshaledResponse = ResponseBodyCleanup.transform(marshaledResponse, postProcessor::postProcess);
 
 		return marshaledResponse;
 	}
@@ -571,7 +544,6 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 		requireNonNull(marshaledResponse);
 
 		CorsAllowedHandler corsAllowedHandler = getCorsAllowedHandler().orElse(null);
-		PostProcessor postProcessor = getPostProcessor().orElse(null);
 		MarshaledResponse finalMarshaledResponse;
 
 		if (corsAllowedHandler != null) {
@@ -609,8 +581,6 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 					.finish();
 		}
 
-		if (postProcessor != null)
-			finalMarshaledResponse = ResponseBodyCleanup.transform(finalMarshaledResponse, postProcessor::postProcess);
 
 		return finalMarshaledResponse;
 	}

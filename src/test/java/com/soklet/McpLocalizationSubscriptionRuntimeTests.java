@@ -234,7 +234,7 @@ class McpLocalizationSubscriptionRuntimeTests {
 			// gracefully while the simulated client is still attached, which is
 			// what delivers the (pre-rendered) terminal frame.
 			try {
-				assertEquals(McpStreamTerminationReason.COMPLETED,
+				assertEquals(McpStreamTerminationReason.DEADLINE_EXCEEDED,
 						simulation.awaitCompletion(WAIT).orElseThrow(() ->
 								new AssertionError("Timed out.")).getReason());
 			} catch (InterruptedException e) {

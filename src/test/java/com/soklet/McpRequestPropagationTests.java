@@ -28,6 +28,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -45,6 +46,33 @@ class McpRequestPropagationTests {
 			"00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01";
 	private static final String HTTP_TRACEPARENT =
 			"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00";
+
+	@Test
+	void oversizedTraceMetadataIsIgnoredWithinBoundedTime() {
+		String oversized = java.util.stream.IntStream.range(0, 3_900)
+				.mapToObj(index -> "v" + index + "=" + "x".repeat(256))
+				.collect(java.util.stream.Collectors.joining(","));
+		assertTrue(oversized.length() > 1_000_000);
+		McpJsonObject metadata = McpJsonObject.builder()
+				.put("traceparent", MCP_TRACEPARENT)
+				.put("tracestate", oversized).build();
+		org.junit.jupiter.api.Assertions.assertTimeout(Duration.ofSeconds(1), () -> {
+			McpRequestPropagation propagation = McpRequestPropagation.fromMetadata(metadata);
+			assertEquals(MCP_TRACEPARENT, propagation.traceContext().orElseThrow().toTraceparentHeaderValue());
+			assertEquals("v0=" + "x".repeat(256), propagation.traceContext().orElseThrow().toTracestateHeaderValue().orElseThrow());
+			assertTrue(McpRequestPropagation.fromMetadata(McpJsonObject.builder()
+					.put("traceparent", MCP_TRACEPARENT + oversized).build()).traceContext().isEmpty());
+		});
+	}
+
+	@Test
+	void rawTracestateWhitespaceDoesNotSpendTheNormalizedMemberBudget() {
+		String padded = " ".repeat(600) + "rojo=00f067aa0ba902b7" + "\t".repeat(600);
+		McpRequestPropagation propagation = McpRequestPropagation.fromMetadata(McpJsonObject.builder()
+				.put("traceparent", MCP_TRACEPARENT).put("tracestate", padded).build());
+		assertEquals("rojo=00f067aa0ba902b7", propagation.traceContext().orElseThrow()
+				.toTracestateHeaderValue().orElseThrow());
+	}
 
 	@Test
 	void validatedMetadataReachesAdmissionAndToolHandlersInsteadOfHttpTraceHeaders()
@@ -91,6 +119,49 @@ class McpRequestPropagationTests {
 		registration.invoke(toolRequest, McpJsonObject.emptyInstance(),
 				McpInvocationFeatures.fromFeatures(Map.of()));
 		assertTrue(invoked.get());
+	}
+
+	@Test
+	void omittedContextAdapterPreservesStateCapabilitiesIdentityAndSemanticOrigin() throws Exception {
+		McpEndpoint endpoint = endpoint();
+		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint))).build();
+		java.lang.reflect.Method method = DefaultMcpServer.class.getDeclaredMethod("requestObservationAdapter");
+		method.setAccessible(true);
+		var adapter = (com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestObservationAdapter) method.invoke(server);
+		Request request = requestWithHttpTraceparent();
+		Object principal = new Object(), applicationContext = new Object();
+		McpAdmissionIdentity identity = McpAdmissionIdentity.withRateLimitPartitionKey("rate")
+				.authorizationPartitionKey("authorization").principal(principal).applicationContext(applicationContext).build();
+		McpJsonObject capabilities = McpJsonObject.builder().put("elicitation", McpJsonObject.builder()
+				.put("form", McpJsonObject.emptyInstance()).build()).build();
+		McpJsonObject metadata = McpJsonObject.builder().put("traceparent", MCP_TRACEPARENT).put("baggage", "key=value").build();
+		McpInputResponses responses = McpInputResponses.fromResponses(Map.of("answer", McpJsonString.fromValue("accepted")));
+		java.time.Instant start = java.time.Instant.parse("2026-10-30T12:00:00Z");
+		McpJsonObject frameworkState = McpJsonObject.builder().put("step", "next").build();
+		for (boolean framework : List.of(false, true)) {
+			RequestObservationInput input = new RequestObservationInput(request, endpoint, Map.of("parameter", "value"),
+					"tools/call", Optional.of(McpRequestId.fromString("continuation")), "2026-07-28", Optional.of("propagation"),
+					Optional.of(McpImplementation.withNameAndVersion("client", "1").build()), capabilities, metadata, responses,
+					framework ? Optional.of(frameworkState) : Optional.empty(), framework ? Optional.empty() : Optional.of("opaque-state"),
+					List.of("fr-CA, en"), identity, Optional.of(start));
+			McpRequestContext context = adapter.contextForOmittedRequest(input).orElseThrow();
+			assertTrue(context instanceof com.soklet.internal.mcp.generated.McpGeneratedEndpointProviderLoader.GeneratedInvocationContext);
+			assertTrue(context.getStartedAt().orElseThrow().equals(start));
+			org.junit.jupiter.api.Assertions.assertSame(request, context.getRequest());
+			org.junit.jupiter.api.Assertions.assertSame(endpoint, context.getEndpoint());
+			org.junit.jupiter.api.Assertions.assertSame(identity, context.getAdmissionIdentity());
+			org.junit.jupiter.api.Assertions.assertSame(responses, context.getInputResponses());
+			org.junit.jupiter.api.Assertions.assertSame(metadata, context.getRequestMetadata());
+			assertEquals(capabilities, context.getClientCapabilities().toJson());
+			assertEquals(input.frameworkRequestState(), context.getFrameworkRequestState());
+			assertEquals(input.applicationRequestState(), context.getApplicationRequestState());
+			assertEquals(input.requestId(), context.getRequestId());
+			assertEquals(input.operationName(), context.getOperationName());
+			assertEquals(input.endpointPathParameters(), context.getEndpointPathParameters());
+			assertEquals(input.clientInformation(), context.getClientInfo());
+			assertEquals(Map.of("key", "value"), context.getBaggage());
+			assertEquals(MCP_TRACEPARENT, context.getTraceContext().orElseThrow().toTraceparentHeaderValue());
+		}
 	}
 
 	@Test

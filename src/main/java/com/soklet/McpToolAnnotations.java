@@ -144,7 +144,7 @@ public final class McpToolAnnotations {
 		 */
 		@NonNull
 		public Builder title(@NonNull String title) {
-			this.title = requireNonNull(title);
+			this.title = McpContentValueSupport.requireWellFormedString(title);
 			return this;
 		}
 

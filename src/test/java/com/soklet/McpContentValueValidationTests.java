@@ -40,7 +40,44 @@ class McpContentValueValidationTests {
 				value -> McpJsonObject.fromMembers(Map.of(value, McpJsonNull.INSTANCE)),
 				value -> McpJsonObject.builder().put(value, true),
 				value -> McpPromptOutput.builder().description(value),
-				value -> McpArgumentCompletionResult.withValues(List.of("valid", value)));
+				value -> McpArgumentCompletionResult.withValues(List.of("valid", value)),
+				value -> McpJsonRpcError.fromApplication(1000, value),
+				value -> McpJsonRpcError.fromInvalidParameters(value),
+				value -> McpImplementation.withNameAndVersion(value, "1"),
+				value -> McpImplementation.withNameAndVersion("name", value),
+				value -> McpImplementation.withNameAndVersion("name", "1").title(value),
+				value -> McpImplementation.withNameAndVersion("name", "1").description(value),
+				value -> McpProgressUpdate.withProgress(1D).message(value),
+				McpRequestId::fromString,
+				value -> McpPromptArgumentDeclaration.withName("argument").description(value),
+				value -> McpPromptArgumentDeclaration.withName("argument").title(value),
+				value -> McpToolAnnotations.builder().title(value),
+				value -> McpResourceDescriptor.withUriAndName(RESOURCE, value),
+				value -> McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion("name", "1").build(),
+						java.util.Set.of(McpProtocolVersion.V2026_07_28)).instructions(value),
+				value -> McpToolRegistration.withName("tool", java.util.Set.of(McpProtocolVersion.V2026_07_28))
+						.jsonObjectArguments().handler((request, arguments, features) -> { throw new AssertionError(); }).description(value),
+				value -> McpPromptRegistration.withName("prompt", java.util.Set.of(McpProtocolVersion.V2026_07_28))
+						.handler((request, arguments, features) -> { throw new AssertionError(); }).title(value),
+				value -> McpResourceRegistration.withUriAndName(RESOURCE, "resource", java.util.Set.of(McpProtocolVersion.V2026_07_28))
+						.handler((request, arguments, features) -> { throw new AssertionError(); }).description(value),
+				value -> McpResourcePage.builder().nextCursor(value),
+				value -> McpSkillPage.builder().nextCursor(value),
+				value -> McpInputRequiredResult.withApplicationRequestState(value),
+				value -> McpInputRequiredResult.withInputRequest(value, inputRequest()),
+				value -> McpTask.withTaskId("task", McpTaskOrigin.fromPersistedState(McpJsonObject.emptyInstance()),
+						McpTaskStatus.INPUT_REQUIRED, java.time.Instant.EPOCH, java.time.Instant.EPOCH).addInputRequest(value, inputRequest()),
+				value -> McpTask.withTaskId("task", McpTaskOrigin.fromPersistedState(McpJsonObject.emptyInstance()),
+						McpTaskStatus.INPUT_REQUIRED, java.time.Instant.EPOCH, java.time.Instant.EPOCH).addInputRequests(Map.of(value, inputRequest())),
+				value -> McpLocalizableText.fromCoordinateAndDefaultText(
+						McpTextCoordinate.fromComponents("/mcp", McpTextOwnerType.TOOL, "tool", "/title"), value),
+				value -> McpToolRegistration.withName("tool", java.util.Set.of(McpProtocolVersion.V2026_07_28))
+						.jsonObjectArguments().handler((request, arguments, features) -> McpCompleteResult.fromToolText("ok")).rateLimiterName(value),
+				value -> McpRateLimiterRegistry.builder().addRateLimiter(value, context -> McpRateLimitDecision.allowed()),
+				McpLocalizationResult::localized,
+				McpTask::requireTaskId,
+				value -> McpTask.withTaskId("task", McpTaskOrigin.fromPersistedState(McpJsonObject.emptyInstance()),
+						McpTaskStatus.WORKING, java.time.Instant.EPOCH, java.time.Instant.EPOCH).taskStatusMessage(value));
 		for (String malformed : List.of("\uD800", "\uDC00", "\uDC00\uD800",
 				"\uD800\uD800", "\uDC00\uDC00", "\uD800x", "x\uDC00",
 				"😀\uD800", "\uDC00😀")) {
@@ -58,12 +95,37 @@ class McpContentValueValidationTests {
 		for (String value : List.of("", "\u0000\n\t", "😀𐀀\uDBFF\uDFFF",
 				"e\u0301", "é", " العربية 日本語 ")) {
 			assertEquals(value, McpTextContent.fromText(value).getText());
+			assertEquals(value, McpImplementation.withNameAndVersion(value, value).build().getName());
+			assertEquals(value, McpImplementation.withNameAndVersion(value, value).build().getVersion());
+			assertEquals(value, McpProgressUpdate.withProgress(1D).message(value).build().getMessage().orElseThrow());
 			assertEquals(value, McpTextResourceContents.withUriAndText(RESOURCE, value).build().getText());
 			assertEquals(value, McpJsonString.fromValue(value).getValue());
 			assertEquals(List.of(value), McpArgumentCompletionResult.fromValues(List.of(value)).getValues());
 			assertEquals(value, McpPromptOutput.builder().description(value).build().getDescription().orElseThrow());
 			assertEquals(List.of(value), List.copyOf(McpJsonObject.builder().put(value, true).build().getMembers().keySet()));
 		}
+	}
+
+	private static McpInputRequest inputRequest() {
+		return McpInputRequest.fromDeclaration(McpInputRequestDeclaration.fromElicitationForm(McpInputRequirement.REQUIRED),
+				McpJsonObject.builder().put("mode", "form").put("message", "Continue")
+						.put("requestedSchema", McpJsonObject.builder().put("type", "object").put("properties", McpJsonObject.emptyInstance()).build()).build());
+	}
+
+	@Test
+	void rejectedCursorAndStateSettersPreserveTheirPriorValues() {
+		McpResourcePage.Builder resources = McpResourcePage.builder().nextCursor("cursor😀");
+		assertThrows(IllegalArgumentException.class, () -> resources.nextCursor("\uD800"));
+		assertEquals("cursor😀", resources.build().getNextCursor().orElseThrow());
+		McpSkillPage.Builder skills = McpSkillPage.builder().nextCursor("cursor😀");
+		assertThrows(IllegalArgumentException.class, () -> skills.nextCursor("\uDC00"));
+		assertEquals("cursor😀", skills.build().getNextCursor().orElseThrow());
+		McpInputRequiredResult.Builder state = McpInputRequiredResult.withInputRequest("key😀", inputRequest())
+				.applicationRequestState("opaque😀");
+		assertThrows(IllegalArgumentException.class, () -> state.applicationRequestState("\uD800"));
+		assertThrows(IllegalArgumentException.class, () -> state.addInputRequest("\uDC00", inputRequest()));
+		assertEquals("opaque😀", state.build().getApplicationRequestState().orElseThrow());
+		assertEquals(java.util.Set.of("key😀"), state.build().getInputRequests().keySet());
 	}
 
 	@Test
@@ -75,6 +137,12 @@ class McpContentValueValidationTests {
 		McpPromptOutput.Builder prompt = McpPromptOutput.builder().description("retained");
 		assertThrows(IllegalArgumentException.class, () -> prompt.description("\uD800"));
 		assertEquals("retained", prompt.build().getDescription().orElseThrow());
+		McpProgressUpdate.Builder progress = McpProgressUpdate.withProgress(1D).message("retained");
+		assertThrows(IllegalArgumentException.class, () -> progress.message("\uD800"));
+		assertEquals("retained", progress.build().getMessage().orElseThrow());
+		McpImplementation.Builder implementation = McpImplementation.withNameAndVersion("name", "1").title("retained");
+		assertThrows(IllegalArgumentException.class, () -> implementation.title("\uDC00"));
+		assertEquals("retained", implementation.build().getTitle().orElseThrow());
 	}
 
 	@Test

@@ -364,6 +364,15 @@ class McpResultContentTests {
 	}
 
 	@Test
+	void resourceValuesPreserveRepeatedSlashSegments() {
+		URI uri = URI.create("catalog://items/a//b");
+		assertEquals(uri, McpTextResourceContents.withUriAndText(uri, "text").build().getUri());
+		assertEquals(uri, McpResourceDescriptor.withUriAndName(uri, "descriptor").build().getUri());
+		assertThrows(IllegalArgumentException.class, () -> McpTextResourceContents.withUriAndText(
+				URI.create("catalog://items/a//../b"), "text"));
+	}
+
+	@Test
 	void resourceValuesRejectRelativeOrUnnormalizedUrisAndBlankScalars() {
 		assertThrows(IllegalArgumentException.class, () ->
 				McpTextResourceContents.withUriAndText(

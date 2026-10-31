@@ -43,7 +43,7 @@ public final class McpLocalizableText {
 	 * @param defaultText canonical configured default text and safe fallback
 	 * @return immutable localizable text
 	 * @throws NullPointerException if either argument is null
-	 * @throws IllegalArgumentException if {@code defaultText} is blank
+	 * @throws IllegalArgumentException if {@code defaultText} is blank or contains malformed UTF-16
 	 */
 	@NonNull
 	public static McpLocalizableText fromCoordinateAndDefaultText(
@@ -55,7 +55,7 @@ public final class McpLocalizableText {
 	McpLocalizableText(@NonNull McpTextCoordinate coordinate,
 			@NonNull String defaultText) {
 		this.coordinate = requireNonNull(coordinate);
-		this.defaultText = requireNonNull(defaultText);
+		this.defaultText = McpContentValueSupport.requireWellFormedString(requireNonNull(defaultText));
 		if (defaultText.isBlank())
 			throw new IllegalArgumentException(
 					"Localizable MCP default text must not be blank.");

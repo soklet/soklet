@@ -27,32 +27,17 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Immutable finite configuration for Soklet's built-in in-memory token-bucket
- * rate limiter. This type intentionally has no unlimited or disabled form.
+ * rate limiter. Capacity, refill quantity, and refill interval must all be
+ * explicitly configured. This type has no unlimited or disabled form.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
 public final class McpTokenBucketConfig {
-	private static final long DEFAULT_CAPACITY = 20L;
-	private static final long DEFAULT_REFILL_TOKENS = 60L;
-	@NonNull
-	private static final Duration DEFAULT_REFILL_INTERVAL =
-			Duration.ofMinutes(1);
 	private final long capacity;
 	private final long refillTokens;
 	@NonNull
 	private final Duration refillInterval;
-
-	/**
-	 * Returns a configuration with capacity {@code 20} that replenishes
-	 * {@code 60} tokens per minute.
-	 *
-	 * @return default finite token-bucket configuration
-	 */
-	@NonNull
-	public static McpTokenBucketConfig fromDefaults() {
-		return withCapacity(DEFAULT_CAPACITY).build();
-	}
 
 	/**
 	 * Vends a builder primed with the bucket's maximum token capacity.
@@ -68,6 +53,9 @@ public final class McpTokenBucketConfig {
 
 	private McpTokenBucketConfig(@NonNull Builder builder) {
 		this.capacity = requirePositive(builder.capacity, "capacity");
+		if (builder.refillTokens == null || builder.refillInterval == null)
+			throw new IllegalStateException(
+					"refillTokens and refillInterval must be explicitly configured");
 		this.refillTokens = requirePositive(builder.refillTokens, "refillTokens");
 		this.refillInterval = requireNonNull(builder.refillInterval,
 				"refillInterval");
@@ -148,14 +136,12 @@ public final class McpTokenBucketConfig {
 	@NotThreadSafe
 	public static final class Builder {
 		private long capacity;
-		private long refillTokens;
-		@NonNull
+		@Nullable
+		private Long refillTokens;
+		@Nullable
 		private Duration refillInterval;
 
-		private Builder() {
-			this.refillTokens = DEFAULT_REFILL_TOKENS;
-			this.refillInterval = DEFAULT_REFILL_INTERVAL;
-		}
+		private Builder() {}
 
 		/**
 		 * Sets the maximum number of tokens held by one bucket.
@@ -171,31 +157,30 @@ public final class McpTokenBucketConfig {
 		}
 
 		/**
-		 * Sets the number of tokens replenished during one refill interval. The
-		 * default is {@code 60}.
+		 * Sets the number of tokens replenished during one refill interval.
+		 * This value is required and has no default.
 		 *
-		 * @param refillTokens positive refill quantity, or {@code null} to restore
-		 *                     the default
+		 * @param refillTokens positive refill quantity
 		 * @return this builder
+		 * @throws NullPointerException if {@code refillTokens} is null
 		 */
 		@NonNull
-		public Builder refillTokens(@Nullable Long refillTokens) {
-			this.refillTokens = refillTokens == null
-					? DEFAULT_REFILL_TOKENS : refillTokens;
+		public Builder refillTokens(@NonNull Long refillTokens) {
+			this.refillTokens = requireNonNull(refillTokens);
 			return this;
 		}
 
 		/**
-		 * Sets the positive refill interval. The default is one minute.
+		 * Sets the positive refill interval. This value is required and has no
+		 * default.
 		 *
-		 * @param refillInterval positive refill interval, or {@code null} to restore
-		 *                       the default
+		 * @param refillInterval positive refill interval
 		 * @return this builder
+		 * @throws NullPointerException if {@code refillInterval} is null
 		 */
 		@NonNull
-		public Builder refillInterval(@Nullable Duration refillInterval) {
-			this.refillInterval = refillInterval == null
-					? DEFAULT_REFILL_INTERVAL : refillInterval;
+		public Builder refillInterval(@NonNull Duration refillInterval) {
+			this.refillInterval = requireNonNull(refillInterval);
 			return this;
 		}
 
@@ -203,6 +188,7 @@ public final class McpTokenBucketConfig {
 		 * Builds an immutable finite configuration.
 		 *
 		 * @return token-bucket configuration
+		 * @throws IllegalStateException if refill quantity or interval is absent
 		 * @throws IllegalArgumentException if a numeric value is not positive or
 		 *                                  the refill interval cannot be represented
 		 *                                  in nanoseconds

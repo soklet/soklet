@@ -203,6 +203,8 @@ public final class Request {
 	 * The provided {@code path} must start with the {@code /} character and already be decoded (e.g. {@code "/my path"}, not {@code "/my%20path"}).  It must not include query parameters. For {@code OPTIONS *} requests, the {@code path} must be {@code *} - the "splat" symbol.
 	 * <p>
 	 * Query parameters must be specified via {@link PathBuilder#queryParameters(Map)} and are assumed to be already-decoded.
+	 * Building the request rejects unpaired UTF-16 surrogates in every query name and value,
+	 * including values that no handler selects. Valid supplementary characters remain supported.
 	 * <p>
 	 * Request body form parameters with {@code Content-Type: application/x-www-form-urlencoded} are parsed and decoded by using {@link QueryFormat#X_WWW_FORM_URLENCODED}.
 	 *
@@ -332,6 +334,11 @@ public final class Request {
 
 			// Use already-decoded query parameters as provided by the path builder
 			initialQueryParameters = pathBuilder.queryParameters == null ? Map.of() : Utilities.immutableValueLists(pathBuilder.queryParameters, false);
+			for (Map.Entry<String, List<String>> entry : initialQueryParameters.entrySet()) {
+				Utilities.validateDecodedQueryComponent(entry.getKey());
+				for (String value : entry.getValue())
+					Utilities.validateDecodedQueryComponent(value);
+			}
 		} else {
 			// RawBuilder scenario
 			String rawUrl = trimAggressivelyToEmpty(requireNonNull(rawBuilder).rawUrl);
@@ -440,12 +447,13 @@ public final class Request {
 	@Nullable
 	private static URI absoluteRequestTarget(@NonNull String rawUrl) {
 		String target = trimAggressivelyToEmpty(rawUrl);
-		if (target.startsWith("/") || target.equals("*"))
+		boolean pathTarget = target.startsWith("/") || target.equals("*");
+		if (target.indexOf('#') >= 0)
+			throw new IllegalRequestException(pathTarget ? "Invalid request URL." : "Invalid absolute request URL.");
+		if (pathTarget)
 			return null;
 
 		try {
-			if (target.indexOf('#') >= 0)
-				throw new IllegalRequestException("Invalid absolute request URL.");
 			int queryStart = target.indexOf('?');
 			URI uri = new URI(queryStart < 0 ? target : target.substring(0, queryStart));
 			if (!("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme()))
@@ -492,7 +500,7 @@ public final class Request {
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(getId(), getHttpMethod(), getPath(), getQueryParameters(), getHeaders(), getTraceContext(), Arrays.hashCode(this.body), isContentTooLarge());
+		return Objects.hash(getId(), getHttpMethod(), getPath(), getQueryParameters(), Utilities.headerHashCode(getHeaders()), getTraceContext(), Arrays.hashCode(this.body), isContentTooLarge());
 	}
 
 	private static boolean containsEncodedSlash(@NonNull String rawPath) {
@@ -637,13 +645,15 @@ public final class Request {
 	 * repeated empty values remain separate occurrences. Explicit empty names ({@code =value})
 	 * are retained under {@code ""}; empty separator segments are ignored.
 	 * At most 1,000 nonempty form pairs are accepted, including repeated names.
+	 * Delimiters and percent escapes are parsed from the original bytes, then each
+	 * component is decoded using the selected charset.
 	 * <p>
 	 * <em>Note that form parameters have case-sensitive names per the HTTP spec.</em>
 	 * <p>
 	 * Use {@link #getFormParameter(String)} for a convenience method to access form parameter values when only one is expected.
 	 *
 	 * @return the request's form parameters
-	 * @throws IllegalRequestBodyException if the raw body is invalid for its selected charset
+	 * @throws IllegalRequestBodyException if an unescaped form component is invalid for its selected charset
 	 * @throws IllegalRequestException if there are more than 1,000 pairs, or a form component contains malformed percent-encoding or text invalid for its selected charset
 	 */
 	@NonNull
@@ -657,8 +667,7 @@ public final class Request {
 
 				if (result == null) {
 					if (this.body != null && this.contentType != null && this.contentType.equalsIgnoreCase("application/x-www-form-urlencoded")) {
-						String bodyAsString = getBodyAsString().orElse("");
-						result = Utilities.extractQueryParametersFromQuery(bodyAsString, QueryFormat.X_WWW_FORM_URLENCODED, getCharset().orElse(DEFAULT_CHARSET), 1_000);
+						result = Utilities.extractFormParametersFromBody(this.body, getCharset().orElse(DEFAULT_CHARSET), 1_000);
 					} else {
 						result = Map.of();
 					}
@@ -1352,12 +1361,8 @@ public final class Request {
 		if (accessControlRequestMethod == null)
 			return Optional.empty();
 
-		Set<String> accessControlRequestHeaders = headers.get("Access-Control-Request-Headers").orElse(List.of())
-				.stream()
-				.flatMap(value -> Arrays.stream(value.split(",")))
-				.map(Utilities::trimHeaderWhitespace)
-				.filter(value -> !value.isEmpty())
-				.collect(Collectors.toCollection(LinkedHashSet::new));
+		Set<String> accessControlRequestHeaders = CorsPreflight.extractRequestHeaderNames(
+				headers.get("Access-Control-Request-Headers").orElse(List.of()));
 
 		return Optional.of(CorsPreflight.fromOrigin(origin,
 				accessControlRequestMethod, accessControlRequestHeaders));

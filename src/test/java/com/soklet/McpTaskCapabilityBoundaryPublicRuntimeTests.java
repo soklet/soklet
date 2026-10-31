@@ -92,7 +92,7 @@ class McpTaskCapabilityBoundaryPublicRuntimeTests {
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			Response failure = post(port, "/mcp", testCase.version(), "tools/call", "optional",
 					"\"name\":\"optional\",\"arguments\":{}", testCase.clientCapable());
-			assertEquals(testCase.version() == McpProtocolVersion.V2026_07_28 ? 500 : 200,
+			assertEquals(200,
 					failure.status(), failure.body());
 			assertTrue(failure.body().contains("\"code\":-32603"), failure.body());
 			assertFalse(failure.body().contains("-32021"), failure.body());

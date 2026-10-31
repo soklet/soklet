@@ -830,6 +830,7 @@ public final class McpEndpoint {
 		 */
 		@NonNull
 		public Builder instructions(@Nullable String instructions) {
+			if (instructions != null) McpContentValueSupport.requireWellFormedString(instructions);
 			if (instructions != null && instructions.isBlank())
 				throw new IllegalArgumentException(
 						"MCP endpoint instructions must not be blank.");
@@ -972,7 +973,8 @@ public final class McpEndpoint {
 		 * or a matching URI-template registration on this endpoint. Soklet validates
 		 * the complete page after the handler returns; a violation rejects the request
 		 * with JSON-RPC error {@code -32603} and HTTP
-		 * status {@code 500}. Null selects the static fallback: a single page on
+		 * status {@code 200} on {@code 2026-07-28} (the 2025 profiles also retain
+		 * in-band operation errors). Null selects the static fallback: a single page on
 		 * {@code 2026-07-28}, or bounded framework pages on {@code 2025-06-18} and
 		 * {@code 2025-11-25}.
 		 * Sequential calls are last-call-wins.
@@ -1052,6 +1054,7 @@ public final class McpEndpoint {
 				this.toolRateLimiter = null;
 				return this;
 			}
+			McpContentValueSupport.requireWellFormedString(toolRateLimiterName);
 			if (toolRateLimiterName.isBlank())
 				throw new IllegalArgumentException(
 						"MCP rate-limiter name must not be blank.");

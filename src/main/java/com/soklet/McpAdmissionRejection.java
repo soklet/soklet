@@ -204,10 +204,10 @@ public final class McpAdmissionRejection {
 			McpServerRuntimeBridge.validateAdmissionRejectionHeaders(headers);
 			Map<String, List<String>> copied = new LinkedHashMap<>();
 			headers.forEach((name, values) -> {
-				String checkedName = requireNonNull(name);
+				String checkedName = McpContentValueSupport.requireWellFormedString(name);
 				List<String> copiedValues = new ArrayList<>();
 				requireNonNull(values).forEach(
-						value -> copiedValues.add(requireNonNull(value)));
+						value -> copiedValues.add(McpContentValueSupport.requireWellFormedString(value)));
 				copied.put(checkedName, copiedValues);
 			});
 			McpServerRuntimeBridge.validateAdmissionRejectionHeaders(copied);
@@ -230,8 +230,8 @@ public final class McpAdmissionRejection {
 		 */
 		@NonNull
 		public Builder addHeader(@NonNull String name, @NonNull String value) {
-			requireNonNull(name);
-			requireNonNull(value);
+			McpContentValueSupport.requireWellFormedString(name);
+			McpContentValueSupport.requireWellFormedString(value);
 			Map<String, List<String>> updated = new LinkedHashMap<>(this.headers);
 			List<String> values = new ArrayList<>(updated.getOrDefault(name, List.of()));
 			values.add(value);

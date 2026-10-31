@@ -164,6 +164,9 @@ public final class ParameterizedHeaderValue {
 
 	/**
 	 * What type of header-value parameter this is: {@link #TOKEN}, {@link #QUOTED}, or {@link #RFC_8187}.
+	 * <p>
+	 * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
+	 *
 	 */
 	public enum ParameterType {
 		/**
@@ -362,7 +365,8 @@ public final class ParameterizedHeaderValue {
 		 * @param name  parameter name (token). The {@code *} is appended automatically.
 		 * @param value parameter value to encode as an RFC 8187 {@code ext-value}
 		 * @return this builder
-		 * @throws IllegalArgumentException if {@code name} is not a valid token or {@code value} contains control chars
+		 * @throws IllegalArgumentException if {@code name} is not a valid token or {@code value} contains
+		 *                                  control chars or unpaired UTF-16 surrogates
 		 */
 		@NonNull
 		public Builder rfc8187Parameter(@NonNull String name,
@@ -490,6 +494,8 @@ public final class ParameterizedHeaderValue {
 			// RFC 8187 values are encoded as UTF-8 bytes + percent-encoding.
 			// We still fail-fast on ASCII control characters to prevent header injection.
 			assertNoControlCharacters(value, "value");
+			if (Utilities.containsUnpairedSurrogate(value))
+				throw new IllegalArgumentException("Invalid Unicode in RFC 8187 parameter value.");
 			return value;
 		}
 

@@ -1,7 +1,6 @@
 package example;
 
 import com.soklet.HttpServer;
-import com.soklet.McpRateLimiter;
 import com.soklet.McpServer;
 import com.soklet.Soklet;
 import com.soklet.SokletConfig;
@@ -42,7 +41,7 @@ public final class ConsumerSmoke {
     do { ssePort = freePort(); } while (ssePort == httpPort || ssePort == mcpPort);
     McpServer mcp = McpServer.withPort(mcpPort).host("127.0.0.1")
         .allowedHosts(Set.of("127.0.0.1"))
-        .toolRateLimiter(McpRateLimiter.fromInMemoryDefaults()).build();
+        .build();
     SokletConfig.Builder builder = SokletConfig.withHttpServer(
         HttpServer.withPort(httpPort).host("127.0.0.1").build()).mcpServer(mcp);
     // Do not install a reflective resolver: these requests must use the packaged
@@ -117,7 +116,7 @@ public final class ConsumerSmoke {
     if (!noProcessor)
       builder.mcpServer(McpServer.withPort(mcpPort).host("127.0.0.1")
           .allowedHosts(Set.of("127.0.0.1"))
-          .toolRateLimiter(McpRateLimiter.fromInMemoryDefaults()).build());
+          .build());
     builder.sseServer(SseServer.withPort(ssePort).host("127.0.0.1").build());
 
     SokletStartupException failure = null;

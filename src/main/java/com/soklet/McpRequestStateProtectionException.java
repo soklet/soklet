@@ -36,6 +36,9 @@ public final class McpRequestStateProtectionException extends Exception {
 	/**
 	 * Sanitized protection-failure category.
 	 *
+	 * <p>
+	 * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
+	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	public enum Reason {

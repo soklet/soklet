@@ -957,6 +957,107 @@ function ledgerRows(root) {
   return rows;
 }
 
+// Classify public core enums/sealed roots independently from the MCP-only
+// signature ledgers. Brace depth keeps method-local and private nested types out.
+export function coreStructuralOwnersInSource(source, packageName = 'com.soklet') {
+  const text = stripJavaCommentsAndLiterals(source);
+  const declarations = new Map();
+  const pattern = /\b((?:(?:public|protected|private|abstract|static|final|sealed|non-sealed)\s+)*)(class|interface|enum|record)\s+([A-Za-z_$][\w$]*)/gu;
+  for (const match of text.matchAll(pattern)) {
+    const brace = text.indexOf('{', match.index + match[0].length);
+    if (brace >= 0) declarations.set(brace, {
+      modifiers: match[1].trim().split(/\s+/u), kind: match[2], name: match[3],
+    });
+  }
+  const stack = [];
+  const owners = [];
+  let depth = 0;
+  for (let index = 0; index < text.length; index++) {
+    if (text[index] === '{') {
+      const declaration = declarations.get(index);
+      if (declaration) {
+        const parent = stack.at(-1);
+        const directMember = parent && depth === parent.depth;
+        const exposed = declaration.modifiers.includes('public')
+          || (directMember && parent.kind === 'interface'
+            && !declaration.modifiers.includes('private'));
+        const visible = exposed && (!parent || (directMember && parent.visible));
+        const owner = parent ? `${parent.owner}.${declaration.name}`
+          : `${packageName}.${declaration.name}`;
+        const entry = { ...declaration, owner, visible, depth: depth + 1 };
+        stack.push(entry);
+        if (visible && (entry.kind === 'enum'
+            || entry.modifiers.includes('sealed'))) {
+          owners.push({ owner, kind: entry.kind === 'enum' ? 'enum' : 'sealedRoot' });
+        }
+      }
+      depth++;
+    } else if (text[index] === '}') {
+      if (stack.at(-1)?.depth === depth) stack.pop();
+      depth--;
+    }
+  }
+  return owners;
+}
+
+export function verifyStructuralOwnerDocumentation(root, owners) {
+  for (const { owner, kind, status } of owners) {
+    const parts = owner.split('.');
+    const source = readFileSync(join(root, 'src/main/java', ...parts.slice(0, 3)) + '.java', 'utf8');
+    const simple = parts.at(-1);
+    const stripped = stripJavaCommentsAndLiterals(source);
+    const declarations = [...stripped.matchAll(new RegExp(`\\b(?:class|interface|enum)\\s+${simple}\\b`, 'gu'))];
+    if (declarations.length !== 1) fail(`Cannot resolve evolution Javadoc owner: ${owner}`);
+    const declaration = declarations[0].index;
+    const start = source.lastIndexOf('/**', declaration);
+    const end = source.indexOf('*/', start);
+    if (start < 0 || end < 0 || end > declaration
+        || /[{};]/u.test(stripped.slice(end + 2, declaration)))
+      fail(`Missing attached evolution Javadoc: ${owner}`);
+    const comment = source.slice(start, end).replace(/\s*\*\s*/gu, ' ');
+    if (status === 'evolutionary') {
+      const growth = kind === 'enum' ? 'constants' : 'permitted subtypes';
+      if (!comment.includes(`may gain reviewed ${growth} in Soklet 4.x`)
+          || !comment.includes('forward-compatible default'))
+        fail(`Evolution Javadoc must document growth and a default switch: ${owner}`);
+      if (/\bFixed\b|\bclosed (?:domain|family|vocabulary)\b/u.test(comment))
+        fail(`Evolution Javadoc contradicts an evolutionary owner: ${owner}`);
+    } else if (owner === 'com.soklet.McpServer') {
+      if (!comment.includes('closed, framework-owned implementation domain'))
+        fail(`Evolution Javadoc must document framework ownership: ${owner}`);
+    } else if (!comment.includes('closed domain')
+        || !comment.includes('exhaustive switches are supported')) {
+      fail(`Evolution Javadoc must document a closed domain: ${owner}`);
+    }
+  }
+}
+
+export function verifyCoreStructuralOwners(root) {
+  const inventory = readJson(join(root, 'api/core-public-evolution-inventory.json'));
+  exactKeys(inventory, ['formatVersion', 'structuralOwners'], 'core public evolution inventory');
+  if (inventory.formatVersion !== 1) fail('Core public evolution inventory formatVersion must be 1.');
+  const sourceRoot = join(root, 'src/main/java/com/soklet');
+  const actual = readdirSync(sourceRoot).filter((name) => name.endsWith('.java')
+    && !name.startsWith('Mcp')).flatMap((name) =>
+    coreStructuralOwnersInSource(readFileSync(join(sourceRoot, name), 'utf8')))
+    .sort((a, b) => a.owner.localeCompare(b.owner));
+  const declared = inventory.structuralOwners.map(({ owner, kind }) => ({ owner, kind }))
+    .sort((a, b) => a.owner.localeCompare(b.owner));
+  if (JSON.stringify(actual) !== JSON.stringify(declared))
+    fail('Core structural-owner inventory differs from public source declarations.');
+  for (const owner of inventory.structuralOwners) {
+    exactKeys(owner, ['owner', 'kind', 'status', 'rationale', 'changePolicy',
+      'javadocGuidance', 'defaultSwitchGuidance'], `core structural owner ${owner.owner}`);
+    if (!['closed-by-domain', 'evolutionary'].includes(owner.status))
+      fail(`Invalid core owner status: ${owner.owner}`);
+    for (const key of ['rationale', 'changePolicy', 'javadocGuidance', 'defaultSwitchGuidance'])
+      if (typeof owner[key] !== 'string' || !owner[key].trim())
+        fail(`${owner.owner}.${key} must be nonempty.`);
+  }
+  verifyStructuralOwnerDocumentation(root, inventory.structuralOwners);
+  return inventory.structuralOwners.length;
+}
+
 export function verifyStructuralOwners(root, inventory, includes, ledgers) {
   const actualEnums = ledgers
     .filter(({ id, kind, api }) => kind === 'class'
@@ -991,6 +1092,7 @@ export function verifyStructuralOwners(root, inventory, includes, ledgers) {
     for (const key of ['rationale', 'changePolicy', 'javadocGuidance', 'defaultSwitchGuidance'])
       if (typeof owner[key] !== 'string' || !owner[key].trim()) fail(`${owner.owner}.${key} must be nonempty.`);
   }
+  verifyStructuralOwnerDocumentation(root, inventory.structuralOwners);
 }
 
 function deprecatedLedgerIds(ledgers, includes) {
@@ -1162,12 +1264,14 @@ export function verifyRoot(root, { externalSketchRoot } = {}) {
   const includes = loadIncludes(root);
   const ledgers = ledgerRows(root);
   verifyStructuralOwners(root, inventory, includes, ledgers);
+  const coreStructuralOwnerCount = verifyCoreStructuralOwners(root);
   verifySuppressionSchema(root, inventory);
   verifyCandidateSuppressionScan(root);
   verifyLifecycle(root, inventory, ledgers, includes);
   verifyActiveText(root);
   if (externalSketchRoot !== undefined) verifyExternal(root, inventory, externalSketchRoot);
   return { structuralOwnerCount: inventory.structuralOwners.length,
+    coreStructuralOwnerCount,
     lifecycleEntryCount: inventory.lifecycleEntries.length };
 }
 
@@ -1202,7 +1306,7 @@ if (isMain) {
       process.exit(0);
     }
     const result = verifyRoot(root, options);
-    console.log(`MCP public evolution inventory verified (${result.structuralOwnerCount} structural owners; ${result.lifecycleEntryCount} lifecycle entries).`);
+    console.log(`MCP public evolution inventory verified (${result.structuralOwnerCount} MCP and ${result.coreStructuralOwnerCount} core structural owners; ${result.lifecycleEntryCount} lifecycle entries).`);
   } catch (error) {
     console.error(error.message);
     process.exitCode = 1;

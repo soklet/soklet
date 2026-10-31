@@ -34,6 +34,7 @@ import java.time.temporal.ChronoField;
 import java.time.temporal.TemporalAccessor;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -71,9 +72,15 @@ public final class HttpDate {
 		GMT = ZoneId.of("GMT");
 		MINIMUM_IMF_FIXDATE_YEAR = 1;
 		MAXIMUM_IMF_FIXDATE_YEAR = 9_999;
+		Map<Long, String> shortDays = Map.of(1L, "Mon", 2L, "Tue", 3L, "Wed", 4L, "Thu", 5L, "Fri", 6L, "Sat", 7L, "Sun");
+		Map<Long, String> longDays = Map.of(1L, "Monday", 2L, "Tuesday", 3L, "Wednesday", 4L, "Thursday", 5L, "Friday", 6L, "Saturday", 7L, "Sunday");
+		Map<Long, String> months = Map.ofEntries(Map.entry(1L, "Jan"), Map.entry(2L, "Feb"), Map.entry(3L, "Mar"),
+				Map.entry(4L, "Apr"), Map.entry(5L, "May"), Map.entry(6L, "Jun"), Map.entry(7L, "Jul"), Map.entry(8L, "Aug"),
+				Map.entry(9L, "Sep"), Map.entry(10L, "Oct"), Map.entry(11L, "Nov"), Map.entry(12L, "Dec"));
 		IMF_FIXDATE_FORMATTER = new DateTimeFormatterBuilder()
 				.parseCaseInsensitive()
-				.appendPattern("EEE, dd MMM ")
+				.appendText(ChronoField.DAY_OF_WEEK, shortDays)
+				.appendPattern(", dd ").appendText(ChronoField.MONTH_OF_YEAR, months).appendLiteral(' ')
 				.appendValue(ChronoField.YEAR, 4)
 				.appendPattern(" HH:mm:ss 'GMT'")
 				.toFormatter(Locale.US)
@@ -82,21 +89,24 @@ public final class HttpDate {
 				.withResolverStyle(ResolverStyle.STRICT).withZone(GMT);
 		RFC_1036_PARSER = new DateTimeFormatterBuilder()
 				.parseCaseInsensitive()
-				.appendPattern("EEEE, dd-MMM-")
+				.appendText(ChronoField.DAY_OF_WEEK, longDays)
+				.appendPattern(", dd-").appendText(ChronoField.MONTH_OF_YEAR, months).appendLiteral('-')
 				.appendValue(ChronoField.YEAR, 2)
 				.appendPattern(" HH:mm:ss zzz")
 				.toFormatter(Locale.US)
 				.withZone(ZoneOffset.UTC);
 		TWO_DIGIT_YEAR_LEGACY_PARSER = new DateTimeFormatterBuilder()
 				.parseCaseInsensitive()
-				.appendPattern("EEE, dd MMM ")
+				.appendText(ChronoField.DAY_OF_WEEK, shortDays)
+				.appendPattern(", dd ").appendText(ChronoField.MONTH_OF_YEAR, months).appendLiteral(' ')
 				.appendValue(ChronoField.YEAR, 2)
 				.appendPattern(" HH:mm:ss zzz")
 				.toFormatter(Locale.US)
 				.withZone(ZoneOffset.UTC);
 		ASCTIME_PARSER = new DateTimeFormatterBuilder()
 				.parseCaseInsensitive()
-				.appendPattern("EEE MMM")
+				.appendText(ChronoField.DAY_OF_WEEK, shortDays)
+				.appendLiteral(' ').appendText(ChronoField.MONTH_OF_YEAR, months)
 				.appendLiteral(' ')
 				.optionalStart().appendLiteral(' ').optionalEnd()
 				.appendValue(ChronoField.DAY_OF_MONTH, 1, 2, SignStyle.NOT_NEGATIVE)
@@ -147,7 +157,7 @@ public final class HttpDate {
 			if (fields == null || position.getErrorIndex() >= 0 || position.getIndex() != trimmed.length())
 				continue;
 			try {
-				return Optional.of(resolveTwoDigitYearDate(fields, now));
+				return representableDate(resolveTwoDigitYearDate(fields, now));
 			} catch (DateTimeException ignored) {
 				// A recognized two-digit-year date must not fall back to RFC 1123
 				// parsing that can interpret its year as, for example, 0026.
@@ -156,12 +166,18 @@ public final class HttpDate {
 		}
 		for (DateTimeFormatter parser : PARSERS) {
 			try {
-				return Optional.of(Instant.from(parser.parse(trimmed)));
+				return representableDate(Instant.from(parser.parse(trimmed)));
 			} catch (DateTimeException ignored) {
 				// Try the next HTTP-date format.
 			}
 		}
 		return Optional.empty();
+	}
+
+	private static Optional<Instant> representableDate(Instant instant) {
+		int year = instant.atZone(GMT).getYear();
+		return year >= MINIMUM_IMF_FIXDATE_YEAR && year <= MAXIMUM_IMF_FIXDATE_YEAR
+				? Optional.of(instant) : Optional.empty();
 	}
 
 	@NonNull

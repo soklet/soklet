@@ -204,6 +204,7 @@ class McpLegacySessionTransportPublicRuntimeTests {
 	void transportEndDuringBlockedHttpStartDeliversFinishOnlyAfterStartReturns() throws Exception {
 		CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
 		AtomicInteger finishes = new AtomicInteger();
+		AtomicInteger observedStatus = new AtomicInteger();
 		MetricsCollector collector = new MetricsCollector() {
 			@Override public void didStartRequestHandling(ServerType type, Request request, ResourceMethod method) {
 				entered.countDown();
@@ -212,7 +213,7 @@ class McpLegacySessionTransportPublicRuntimeTests {
 				}
 			}
 			@Override public void didFinishRequestHandling(ServerType type, Request request, ResourceMethod method,
-					MarshaledResponse response, Duration duration, List<Throwable> failures) { finishes.incrementAndGet(); }
+					MarshaledResponse response, Duration duration, List<Throwable> failures) { observedStatus.set(response.getStatusCode()); finishes.incrementAndGet(); }
 		};
 		// The deadline starts before asynchronous observer dispatch. Allow that
 		// scheduling step to complete before exercising expiry during the blocked start.
@@ -221,10 +222,11 @@ class McpLegacySessionTransportPublicRuntimeTests {
 					"unknown.valid", "alice", "", List.of())) {
 				assertTrue(entered.await(5, TimeUnit.SECONDS));
 				Head head = client.readHead();
-				assertTrue(head.status() >= 500, "The bounded transport deadline must finish while start remains blocked.");
+				assertEquals(504, head.status(), "The bounded transport deadline must finish while start remains blocked.");
 				client.readBody(head); assertEquals(0, finishes.get());
 			} finally { release.countDown(); }
 			awaitCondition(() -> finishes.get() == 1 && fixture.httpFinishes.get() == 1);
+			assertEquals(504, observedStatus.get(), "HTTP observation must report the response which won publication.");
 		}
 	}
 
@@ -351,6 +353,54 @@ class McpLegacySessionTransportPublicRuntimeTests {
 				assertEquals(0, fixture.server.getDiagnostics().getActiveSubscriptions());
 				assertEquals(0, fixture.server.getDiagnostics().getActiveRequestStreams());
 			}
+	}
+
+	@Test
+	void reconciliationDuringGetAdmissionRetriesBothCooperativeAndStaleDecisions() throws Exception {
+		for (McpProtocolVersion version : LEGACY)
+			for (boolean cooperative : List.of(false, true))
+				try (Fixture fixture = new Fixture(true, builder -> builder.subscriptionAuthorizationTimeout(Duration.ofSeconds(3)))) {
+					String id = fixture.initialize("/mcp", version);
+					CountDownLatch entered = new CountDownLatch(1);
+					AtomicInteger attempts = new AtomicInteger();
+					fixture.policy.set((context, features) -> {
+						if (attempts.incrementAndGet() == 1) {
+							entered.countDown();
+							long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+							while (!features.getCancelationToken().isCanceled() && System.nanoTime() - until < 0L)
+								try { Thread.sleep(5); } catch (InterruptedException ignored) {}
+							assertTrue(features.getCancelationToken().isCanceled());
+							if (cooperative) features.getCancelationToken().throwIfCanceled();
+							return McpSessionTransportAdmissionDecision.rejected(McpAdmissionRejection.withStatusCodeAndError(403,
+									McpJsonRpcError.fromApplication(-31903, "Obsolete decision")).build());
+						}
+						return Fixture.allow(context, features);
+					});
+					try (RawClient get = fixture.openControl("GET", "/mcp", version, id, "alice", "", List.of())) {
+						assertTrue(entered.await(5, TimeUnit.SECONDS));
+						fixture.server.getSubscriptionReconciler().reconcileSubscriptions();
+						assertSse(get.readHead());
+						assertEquals(2, attempts.get(), "The obsolete admission must be reevaluated once.");
+					}
+				}
+	}
+
+	@Test
+	void repeatedlyReconciledGetAdmissionReturnsRetryable503AfterOneRetry() throws Exception {
+		try (Fixture fixture = new Fixture(true, builder -> {})) {
+			McpProtocolVersion version = McpProtocolVersion.V2025_11_25;
+			String id = fixture.initialize("/mcp", version);
+			AtomicInteger attempts = new AtomicInteger();
+			fixture.policy.set((context, features) -> {
+				attempts.incrementAndGet();
+				fixture.server.getSubscriptionReconciler().reconcileSubscriptions();
+				return Fixture.allow(context, features);
+			});
+			Response response = fixture.control("GET", "/mcp", version, id, "alice", "", List.of());
+			assertEquals(503, response.status());
+			assertEquals("0", response.header("Retry-After"));
+			assertEquals(2, attempts.get());
+		}
 	}
 
 	@Test
@@ -556,6 +606,7 @@ class McpLegacySessionTransportPublicRuntimeTests {
 	}
 
 	static final class Fixture implements AutoCloseable {
+		final McpSubscriptionEventPublisher publisher = McpSubscriptionEventPublisher.fromInMemoryDefaults();
 		final AtomicInteger rpcAdmissions = new AtomicInteger();
 		final AtomicInteger httpStarts = new AtomicInteger();
 		final AtomicInteger httpFinishes = new AtomicInteger();
@@ -578,10 +629,15 @@ class McpLegacySessionTransportPublicRuntimeTests {
 
 		Fixture(boolean controller, Consumer<McpServer.Builder> configure, McpToolHandler<McpJsonObject> handler,
 				MetricsCollector metricsCollector) throws Exception {
+			this(controller, configure, handler, metricsCollector, null);
+		}
+
+		Fixture(boolean controller, Consumer<McpServer.Builder> configure, McpToolHandler<McpJsonObject> handler,
+				MetricsCollector metricsCollector, LifecycleObserver observer) throws Exception {
 			this.toolCatalogIncluded = handler != null;
 			McpImplementation info = McpImplementation.withNameAndVersion("transport-test", "1").build();
 			McpSubscriptionConfig sources = McpSubscriptionConfig.withEventPublisherAndNotificationTypes(
-					McpSubscriptionEventPublisher.fromInMemoryDefaults(), FAMILIES).build();
+					publisher, FAMILIES).build();
 			List<McpEndpoint> endpoints = new ArrayList<>();
 			for (String path : List.of("/mcp", "/other", "/cleanup", "/stateless")) {
 				McpEndpoint.Builder endpoint = McpEndpoint.withPath(path, info, ALL);
@@ -615,7 +671,7 @@ class McpLegacySessionTransportPublicRuntimeTests {
 					.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).lifecyclePolicy(LIFECYCLE)
 					.metricsCollector(metricsCollector != null ? metricsCollector : new MetricsCollector() {
 						@Override public void didRecordMcpMetricsEvent(McpMetricsEvent event) { events.add(event); }
-					}).lifecycleObserver(new LifecycleObserver() {
+					}).lifecycleObserver(observer != null ? observer : new LifecycleObserver() {
 						@Override public void didStartRequestHandling(ServerType serverType, Request request, ResourceMethod method) {
 							assertEquals(ServerType.HTTP, serverType); assertNull(method); httpStarts.incrementAndGet();
 						}

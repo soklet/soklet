@@ -66,6 +66,7 @@ class McpSimulationResponseOrderingTests {
 		CountDownLatch releaseHead = new CountDownLatch(1);
 		CountDownLatch physicalHandlerExit = new CountDownLatch(1);
 		CountDownLatch progressFinished = new CountDownLatch(1);
+		CountDownLatch requestObservationFinished = new CountDownLatch(1);
 		AtomicReference<Thread> progressThread = new AtomicReference<>();
 		AtomicReference<Throwable> progressFailure = new AtomicReference<>();
 		AtomicReference<McpRequestOutcome> outcome = new AtomicReference<>();
@@ -94,6 +95,7 @@ class McpSimulationResponseOrderingTests {
 					Duration duration, List<Throwable> throwables) {
 				outcome.set(result);
 				requestFinishes.incrementAndGet();
+				requestObservationFinished.countDown();
 			}
 		};
 		McpNormalizedToolDescriptor descriptor = new McpNormalizedToolDescriptor(
@@ -169,6 +171,8 @@ class McpSimulationResponseOrderingTests {
 				assertEquals(McpStreamTerminationReason.COMPLETED, completion.getReason());
 				assertEquals(terminal.getMessage().orElseThrow(), completion.getTerminalMessage().orElseThrow());
 				assertTrue(completion.getThrowables().isEmpty());
+				assertTrue(requestObservationFinished.await(5, TimeUnit.SECONDS),
+						"Transport completion may precede off-loop request-finish observation.");
 				assertEquals(McpRequestOutcome.COMPLETE, outcome.get());
 				assertEquals(1, streamCloses.get());
 				assertEquals(1, requestFinishes.get());

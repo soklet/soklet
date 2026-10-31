@@ -29,12 +29,136 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.time.Duration;
 
 /*
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
 public class MultipartEdgeCaseTests {
+	@Test
+	public void duplicatePartCharsetsAreRedactedRequestBodyErrors() {
+		SokletSimulator.run(SimulatorConfig.builder().httpServer()
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(UploadResource.class)))
+				.lifecycleObserver(new LifecycleObserver() { @Override public void didReceiveLogEvent(LogEvent event) {} })
+				.build(), simulator -> {
+			for (String parameters : List.of("charset=UTF-8; charset=UTF-8", "charset=UTF-8; CHARSET=secret-charset")) {
+				String body = "--metadata\r\nContent-Disposition: form-data; name=\"a\"\r\n"
+						+ "Content-Type: text/plain; " + parameters + "\r\n\r\n1\r\n--metadata--\r\n";
+				Request request = Request.withPath(HttpMethod.POST, "/upload")
+						.headers(Map.of("Content-Type", List.of("multipart/form-data; boundary=metadata")))
+						.body(body.getBytes(StandardCharsets.US_ASCII)).build();
+				IllegalRequestBodyException failure = Assertions.assertThrows(IllegalRequestBodyException.class, request::getMultipartFields);
+				Assertions.assertEquals("Multipart part metadata is malformed.", failure.getMessage());
+				Assertions.assertNull(failure.getCause());
+				HttpRequestResult result = simulator.performHttpRequest(request);
+				Assertions.assertEquals(400, result.getMarshaledResponse().getStatusCode());
+				Assertions.assertEquals("HTTP 400: Bad Request", new String(result.getMarshaledResponse().bodyBytesOrEmpty(), StandardCharsets.UTF_8));
+			}
+		});
+	}
+
+	@Test
+	public void absentAndExplicitlyEmptyMultipartBodiesBothHaveNoFields() {
+		for (byte[] body : new byte[][]{null, new byte[0]}) {
+			Request request = Request.withPath(HttpMethod.POST, "/upload")
+					.headers(Map.of("Content-Type", List.of("multipart/form-data; boundary=empty")))
+					.body(body).build();
+			Assertions.assertTrue(request.getMultipartFields().isEmpty());
+		}
+	}
+
+	@Test
+	public void defaultParserPreservesBrowserFormDataBackslashes() {
+		// Header spellings captured from native Request/FormData serialization:
+		// WHATWG escapes CR, LF and quotes, but leaves every backslash literal.
+		for (String name : List.of("field\\part", "field\\\\part", "field\\", "field\\\\")) {
+			for (String filename : List.of("back\\slash.txt", "back\\\\slash.txt", "back\\", "back\\\\",
+					"C:\\fakepath\\file.txt", "\\\\server\\share\\file.txt")) {
+				String disposition = "form-data; name=\"" + name + "\"; filename=\"" + filename + "\"";
+				MultipartField field = parsedMultipartField(disposition, name);
+				Assertions.assertEquals(name, field.getName());
+				Assertions.assertEquals(Optional.of(filename), field.getFilename());
+			}
+		}
+	}
+
+	@Test
+	public void defaultMultipartParserRetainsSafetyLimitsAndStrictMetadataDecoding() {
+		Assertions.assertSame(MultipartParser.defaultInstance(), MultipartParser.defaultInstance());
+		Request tooManyParts = Request.withPath(HttpMethod.POST, "/upload")
+				.headers(Map.of("Content-Type", List.of("multipart/form-data; boundary=parser-safety")))
+				.body(multipartBodyWithFieldCount("parser-safety", 1001)).build();
+		Assertions.assertThrows(IllegalRequestBodyException.class, tooManyParts::getMultipartFields);
+		String source = "--parser-safety\r\nContent-Disposition: form-data; name=\"field\"; filename=\"INVALID\"\r\n\r\nx\r\n--parser-safety--\r\n";
+		byte[] invalidMetadata = source.getBytes(StandardCharsets.UTF_8);
+		invalidMetadata[source.indexOf("INVALID")] = (byte) 0xff;
+		Request invalid = Request.withPath(HttpMethod.POST, "/upload")
+				.headers(Map.of("Content-Type", List.of("multipart/form-data; boundary=parser-safety")))
+				.body(invalidMetadata).build();
+		IllegalRequestBodyException failure = Assertions.assertThrows(IllegalRequestBodyException.class, invalid::getMultipartFields);
+		Assertions.assertNull(failure.getCause());
+		Assertions.assertFalse(failure.getMessage().contains("INVALID"));
+		Request malformed = Request.withPath(HttpMethod.POST, "/upload")
+				.headers(Map.of("Content-Type", List.of("multipart/form-data; boundary=parser-safety")))
+				.body("--parser-safety\r\nunterminated".getBytes(StandardCharsets.US_ASCII)).build();
+		Assertions.assertThrows(IllegalRequestBodyException.class, malformed::getMultipartFields);
+	}
+
+	@Test
+	public void browserMultipartFieldNamesWithBackslashesBindToResourceArguments() {
+		SokletSimulator.run(SimulatorConfig.builder().httpServer()
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(BrowserUploadResource.class)))
+				.build(), simulator -> {
+			String disposition = "form-data; name=\"field\\part\"; filename=\"back\\\"";
+			Request request = Request.withPath(HttpMethod.POST, "/browser-upload")
+					.headers(Map.of("Content-Type", List.of("multipart/form-data; boundary=parameter-case")))
+					.body(multipartBodyWithContentDisposition("parameter-case", disposition)).build();
+			Assertions.assertEquals(204, simulator.performHttpRequest(request).getMarshaledResponse().getStatusCode());
+		});
+	}
+
+	private static MultipartField parsedMultipartField(String disposition, String name) {
+		Request request = Request.withPath(HttpMethod.POST, "/upload")
+				.headers(Map.of("Content-Type", List.of("multipart/form-data; boundary=parameter-case")))
+				.body(multipartBodyWithContentDisposition("parameter-case", disposition)).build();
+		Assertions.assertEquals(Set.of(name), request.getMultipartFields().keySet());
+		return request.getMultipartFields().get(name).getFirst();
+	}
+
+	public static final class BrowserUploadResource {
+		@POST("/browser-upload")
+		public MarshaledResponse upload(@Multipart(name="field\\part") MultipartField field) {
+			Assertions.assertEquals(Optional.of("back\\"), field.getFilename());
+			Assertions.assertEquals(Optional.of("1"), field.getDataAsString());
+			return MarshaledResponse.fromStatusCode(204);
+		}
+	}
+
+	@Test
+	public void unsupportedMultipartCharsetsDoNotPerformProviderLookupsPerParameter() {
+		for (String parameter : List.of(";x*=unknown-charset''a", ";x=\"=?unknown-charset?Q?a?=\"")) {
+			String part = "--charset-cost\r\nContent-Disposition: form-data; name=\"a\""
+					+ parameter.repeat(120) + "\r\n\r\nx\r\n";
+			Request request = Request.withPath(HttpMethod.POST, "/upload")
+					.headers(Map.of("Content-Type", List.of("multipart/form-data; boundary=charset-cost")))
+					.body((part.repeat(900) + "--charset-cost--\r\n").getBytes(StandardCharsets.US_ASCII)).build();
+			Assertions.assertTimeout(Duration.ofSeconds(5), () ->
+					Assertions.assertEquals(900, request.getMultipartFields().get("a").size()));
+		}
+	}
+
+	@Test
+	public void unsupportedMultipartCharsetsRetainTheirRawValues() {
+		for (String parameter : List.of("name*=unknown-charset''encoded", "name=\"=?unknown-charset?Q?encoded?=\"")) {
+			Request request = Request.withPath(HttpMethod.POST, "/upload")
+					.headers(Map.of("Content-Type", List.of("multipart/form-data; boundary=parameter-case")))
+					.body(multipartBodyWithContentDisposition("parameter-case", "form-data; " + parameter)).build();
+			String expected = parameter.startsWith("name*=") ? "unknown-charset''encoded" : "=?unknown-charset?Q?encoded?=";
+			Assertions.assertTrue(request.getMultipartFields().containsKey(expected));
+		}
+	}
+
 	@Test
 	public void malformedExtendedMultipartParametersAreRejectedWithoutRetainingInput() {
 		for (String value : List.of("secret%", "secret%2", "secret%GG", "secret%0z", "secret%ＦＦ", "secreté")) {
@@ -107,7 +231,7 @@ public class MultipartEdgeCaseTests {
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override public void didReceiveLogEvent(@NonNull LogEvent event) {}
 				}).build(), simulator -> {
-			for (String entity : Set.of("&#1114112;", "&#-1;", "&#55296;", "&#0;", "&#13;", "&#x110000;")) {
+			for (String entity : Set.of("&#1114112;", "&#-1;", "&#55296;", "&#0;", "&#13;", "&#x110000;", "&#Xaaaaaa;")) {
 				Request request = Request.withPath(HttpMethod.POST, "/upload")
 						.headers(Map.of("Content-Type", List.of("multipart/form-data; boundary=entity")))
 						.body(multipartBodyWithContentDisposition("entity",

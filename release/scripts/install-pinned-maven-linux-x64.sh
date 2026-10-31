@@ -30,7 +30,7 @@ archive_path="$staging_root/$archive"
 	|| { printf 'Pinned Maven archive does not match its version.\n' >&2; exit 1; }
 [[ "$archive_sha512" =~ ^[0-9a-f]{128}$ ]] \
 	|| { printf 'Pinned Maven SHA-512 is malformed.\n' >&2; exit 1; }
-[[ "$distribution_url" == "https://dlcdn.apache.org/maven/maven-3/$maven_version/binaries/$archive" ]] \
+[[ "$distribution_url" == "https://archive.apache.org/dist/maven/maven-3/$maven_version/binaries/$archive" ]] \
 	|| { printf 'Pinned Maven distribution URL is not canonical.\n' >&2; exit 1; }
 [[ ! -e "$staging_root" ]] \
 	|| { printf 'Pinned Maven staging directory already exists: %s\n' "$staging_root" >&2; exit 1; }

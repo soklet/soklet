@@ -2317,11 +2317,15 @@ conformance. These are local snapshot checks, not immutable-candidate evidence.
 The preceding four-row HTTP-contract reconciliation closed readable
 `initialize` and validated-unsupported-selector rejection diagnostics,
 unsupported classified-notification handling, universal MCP HTTP `no-store`,
-and exact request/notification validation precedence. Its separate 23-response
+and exact request/notification validation precedence. Its separate 24-response
 complete-HTTP corpus is bound
 by `conformance/golden-http-contract/precedence-no-store/manifest.sha256` at
 SHA-256
-`ccec7ec13ac245bbc4a1820b1c387b188347a3ef868d4128e3af5c3a6e331e92`.
+`4aabcd57070ffd17f7eef5a825c1c2592d6cd96d2bfa907d0edd8d4d3193feea`.
+Round 12 updates this local corpus with the modern in-band handler-error response.
+This checksum refresh is source-index maintenance; it does not claim a fresh
+external-client, official-conformance, or immutable-candidate qualification run.
+
 Five contract tests comprise three real-listener goldens, one exhaustive response-authority inventory, and one six-document manifest-digest parity gate;
 four diagnostic tests cover the positive post-JSON and negative pre-JSON/
 unreadable-method boundary. Those two classes pass 9/9 in the current focused
@@ -3459,3 +3463,69 @@ The Phase4 JSpecify layout digest is
 `a1251b02a164e6d8661feccba2a3bf34ea4d0a624ba9f96a2a401383466eac5d`.
 Removing only the eight canonical entries for the two approved callbacks
 reproduces the preceding `4b8439b0…` digest; all other nullability is unchanged.
+
+### 2026-10-30 semantic request timing amendment
+
+The owner approved the compatible default
+`McpRequestContext.getStartedAt(): Optional<Instant>`. Built-in observed contexts
+provide the wall-clock semantic start captured before start observers. Their
+finish duration excludes finish-observer queue delay. Derived subscription
+contexts retain the original listen start; custom and manually constructed
+contexts inherit an empty optional.
+
+The Phase 4 snapshot adds only this method, for 1,384 signatures with SHA-256
+`a6721afc325dd3e5eecc05771189d0d3c714275672d12f28ec4035dba207048c`.
+Its nullability digest is
+`602d8dfa9df56c4992a9376a55f2f97e933481c987c2e1a215d16c63003c4a55`;
+removing the method's three reflection rows reproduces the prior
+`d63d226e…` digest. Other snapshots, owner inventories and the 776-record
+incompatibility ledger are unchanged. This is local API-review evidence,
+separate from release-candidate qualification.
+
+
+### 2026-10-30 response finalization contract amendment
+
+Before 4.0.0, the owner approved an explicit, abstract
+`ResponseMarshaler.postProcess(MarshaledResponse)` phase. Decorators must implement
+and delegate it; an existing helper with that signature now implements the phase.
+Ordinary dispatch finalizes the interceptor-selected response once, after the
+interceptor returns and CORS customization, then projects HEAD from that finalized
+representation. Custom HEAD hooks preserve the supplied finalized metadata when
+projecting it. Direct marshaler composition owns the same explicit phase order.
+
+`MarshaledResponse` no longer implements `AutoCloseable`: its public `close()`
+method remains an explicit terminal-delivery cleanup operation, rather than an
+interceptor-local resource scope. Public response copies retain owned predecessor
+channels without closing resources used by the original response.
+
+The released 3.5.1 comparison adds exactly one incompatibility record:
+`ResponseMarshaler.postProcess` is an abstract interface method. All 776 preceding
+records are byte-for-byte unchanged, producing 777 records with SHA-256
+`2f6ecc2f7ef0a37fb53d52d84779399e04f45f7b46af7f4a8d30c5a8c79e21e6`. The exact current-side ownership remains 400; Phase
+4/5/6/provisional snapshots remain 1,384/240/466/143 signatures. Removing the
+newly introduced `AutoCloseable` marker adds no incompatibility against 3.5.1,
+which did not publish it. This amendment records local API review, and does not
+refresh release seals or establish candidate qualification.
+
+## 2026-10-31 explicit rate-limit policy amendment
+
+The owner approved optional tool rate limiting and explicit built-in quotas.
+Servers can expose tools without a fallback limiter. Resolution still prefers
+one tool override, then an endpoint override, then the optional server fallback;
+no resolved limiter means no tool rate quota. Configured callback failures and
+null decisions still fail closed. Transport, queue, concurrency, execution,
+retained-partition and legacy-control bounds are unchanged. Completion's
+separate request-limiter requirement is unchanged.
+
+Removed the zero-argument `McpRateLimiter.fromInMemoryDefaults()` and
+`McpTokenBucketConfig.fromDefaults()` factories. A token bucket now requires
+capacity, refill quantity, and refill interval explicitly; omitted refill values
+fail at build and null refill setters fail immediately. This supersedes the
+September construction amendment's implicit refill values.
+
+The Phase 4 snapshot has 1,382 records and SHA-256
+`2c8089ea3f3a976fa4d03fc5321363a3b26a214887fe239881c4308924f9c7f3`.
+The Phase 4 reflection/nullability digest is
+`127d61399990bdc65c3a87fc37ad787006b1c5a338f9a2835c78a94fda0121db`.
+No API owner is added or removed. Other phase snapshots are unchanged. These
+records document the owner's local API change, not immutable candidate CI evidence.

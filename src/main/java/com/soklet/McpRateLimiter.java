@@ -34,7 +34,8 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * Soklet invokes the configured request limiter once for each admitted
  * request or notification. It additionally invokes the resolved tool limiter
- * for a tool call. A {@code null} result or exception fails closed. Successful
+ * for a tool call when one is configured. A {@code null} result or exception
+ * fails closed. Successful
  * acquisitions are never refunded after later denial, failure, cancelation,
  * timeout, or response-write failure.
  * Small, valid, owner-verified 2025 session ping, unsubscribe, initialized and
@@ -59,17 +60,6 @@ public interface McpRateLimiter {
 	 */
 	@NonNull
 	McpRateLimitDecision acquire(@NonNull McpRateLimitContext rateLimitContext) throws Exception;
-
-	/**
-	 * Creates Soklet's built-in in-memory token-bucket limiter with documented
-	 * defaults.
-	 *
-	 * @return a new independent in-memory limiter
-	 */
-	@NonNull
-	static McpRateLimiter fromInMemoryDefaults() {
-		return fromInMemoryTokenBucket(McpTokenBucketConfig.fromDefaults());
-	}
 
 	/**
 	 * Creates Soklet's built-in in-memory token-bucket limiter.

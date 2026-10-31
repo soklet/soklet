@@ -22,6 +22,9 @@ package com.soklet;
  * <p>This selection does not create a cross-request application session.
  * Every retry remains an independent request and must carry its state again.
  *
+ * <p>
+ * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public enum McpRequestStateMode {

@@ -135,6 +135,26 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 public interface ResponseMarshaler {
 	/**
+	 * Finalizes the response selected by the interceptor after CORS customization and before HEAD/bodyless
+	 * projection and transport framing. Soklet invokes this phase once per ordinary dispatch, after
+	 * {@link RequestInterceptor#interceptRequest} returns. A response generator supplied to that interceptor
+	 * returns an unfinalized response; rebuilding or copying it does not invoke this phase early.
+	 * <p>
+	 * Implementations without postprocessing return the supplied response. A forwarding decorator must
+	 * explicitly delegate this method as well as the {@code forX} methods. An existing helper with the same
+	 * signature now implements this phase and must obey its contract. The builder's configured
+	 * {@link Builder.PostProcessor} is invoked by the standard implementation here. Custom code composing
+	 * the ordinary {@code forX} methods directly should invoke this method once after composing the response.
+	 * {@link #forUnparsedRequest(UnparsedRequest)} owns its own finalization because parser-owned failures
+	 * bypass ordinary dispatch.
+	 *
+	 * @param response the composed response
+	 * @return the finalized response
+	 */
+	@NonNull
+	MarshaledResponse postProcess(@NonNull MarshaledResponse response);
+
+	/**
 	 * Prepares a response for incoming bytes that a transport has rejected before
 	 * it can construct a valid {@link Request}.
 	 * <p>
@@ -247,7 +267,11 @@ public interface ResponseMarshaler {
 																			 @Nullable ResourceMethod resourceMethod);
 
 	/**
-	 * Prepares a response for a request that is rejected because the server is overloaded (e.g. connection limit reached), triggering an <a href="https://httpwg.org/specs/rfc9110.html#status.503">HTTP 503 Service Unavailable</a>.
+	 * Prepares an application-dispatched response for a request that is rejected because the server is overloaded (e.g. connection limit reached), triggering an <a href="https://httpwg.org/specs/rfc9110.html#status.503">HTTP 503 Service Unavailable</a>.
+	 * <p>
+	 * Built-in HTTP executor/queue rejection, handler timeouts and shutdown-admission failsafes bypass
+	 * this method, CORS and {@link #postProcess(MarshaledResponse)}. They must remain bounded when no
+	 * application worker is available, and never invoke application callbacks on the selector or timer.
 	 * <p>
 	 * Detailed documentation is available at <a href="https://www.soklet.com/docs/response-writing#503-service-unavailable">https://www.soklet.com/docs/response-writing#503-service-unavailable</a>.
 	 *
@@ -308,7 +332,9 @@ public interface ResponseMarshaler {
 	 * <p>
 	 * For an implicit {@code HEAD} match, the input is the equivalent {@code GET} method's marshaled response.
 	 * For an explicit {@link com.soklet.annotation.HEAD} method, the input is that method's own marshaled response.
-	 * The default implementation removes the body and derives {@code Content-Length} from an actual finite
+	 * This projection runs after CORS and {@link #postProcess(MarshaledResponse)}. Custom implementations
+	 * should preserve finalized headers and cookies, normally by copying the supplied response.
+	 * They are not postprocessed again. The default implementation removes the body and derives {@code Content-Length} from an actual finite
 	 * representation body. For an already bodyless response it preserves a valid application-supplied length,
 	 * or omits the header when unknown. It omits length for streaming bodies, never generates it for {@code 304},
 	 * and enforces the bodyless status restrictions for {@code 1xx}, {@code 204} and {@code 205}.
@@ -629,6 +655,8 @@ public interface ResponseMarshaler {
 			/**
 			 * Prepares a response for an HTTP {@code HEAD} request.
 			 * <p>
+			 * The input includes CORS and postprocessing. Preserve its finalized headers and cookies when
+			 * projecting it, normally with {@link MarshaledResponse#copy()}; this hook is not postprocessed again.
 			 * The input is the equivalent {@code GET} response for an implicit {@code HEAD} match,
 			 * or the explicit {@link com.soklet.annotation.HEAD} method's own marshaled response.
 			 * Return a response without either a finite or streaming body. To advertise an application-supplied
@@ -721,7 +749,13 @@ public interface ResponseMarshaler {
 		}
 
 		/**
-		 * Function used to support a pluggable "post-process" hook for any final customization or processing before data goes over the wire.
+		 * Function invoked once by {@link ResponseMarshaler#postProcess(MarshaledResponse)} for each
+		 * selected response, after the interceptor returns and CORS customization, before all HEAD/bodyless
+		 * projection and framing. Body changes contribute to the GET representation used for HEAD.
+		 * Generating or rebuilding responses inside an interceptor does not invoke this hook early.
+		 * The hook need not be idempotent.
+		 * Owned predecessor channels remain available to replacement channels or streaming callbacks
+		 * until the resulting response is completed or abandoned; see {@link MarshaledResponse#close()}.
 		 */
 		@FunctionalInterface
 		@ThreadSafe

@@ -18,6 +18,7 @@ package com.soklet.internal.mcp.protocol;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -25,9 +26,15 @@ import java.util.List;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static java.util.Objects.requireNonNull;
 
@@ -344,6 +351,101 @@ public class McpTaskNotificationProjectionSchedulerTests {
 		Assertions.assertEquals(1, runs.get());
 		Assertions.assertEquals(0, rejections.get());
 		Assertions.assertEquals(0, scheduler.queuedJobCount());
+	}
+
+	@Test
+	@Timeout(60)
+	public void executorCompletionsRacingARejectedSubmissionCannotStrandReadyOwners() throws Exception {
+		CountDownLatch activeEntered = new CountDownLatch(1), releaseActive = new CountDownLatch(1);
+		CountDownLatch rejectionEntered = new CountDownLatch(1), releaseRejection = new CountDownLatch(1);
+		CountDownLatch ordinaryWorkFinished = new CountDownLatch(2), projected = new CountDownLatch(1);
+		AtomicReference<McpHttpServerRuntime.TaskNotificationProjectionScheduler> schedulerReference = new AtomicReference<>();
+		AtomicInteger completions = new AtomicInteger(), runs = new AtomicInteger(), rejections = new AtomicInteger();
+		ThreadPoolExecutor executor = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
+				new ArrayBlockingQueue<>(1), (task, pool) -> {
+					rejectionEntered.countDown();
+					await(releaseRejection);
+					throw new RejectedExecutionException("synthetic saturation");
+				}) {
+			@Override protected void afterExecute(Runnable task, Throwable failure) {
+				McpHttpServerRuntime.TaskNotificationProjectionScheduler scheduler = schedulerReference.get();
+				if (scheduler != null) {
+					completions.incrementAndGet();
+					scheduler.executorMayAcceptWorker();
+				}
+				ordinaryWorkFinished.countDown();
+			}
+		};
+		FutureTask<Void> submission = null;
+		Thread submittingThread = null;
+		try {
+			executor.execute(() -> { activeEntered.countDown(); await(releaseActive); });
+			Assertions.assertTrue(activeEntered.await(5, TimeUnit.SECONDS));
+			executor.execute(() -> {});
+			McpHttpServerRuntime.TaskNotificationProjectionScheduler scheduler =
+					new McpHttpServerRuntime.TaskNotificationProjectionScheduler(executor, 1, 1);
+			schedulerReference.set(scheduler);
+			Object owner = new Object();
+			Assertions.assertTrue(scheduler.tryReserveOwners(List.of(owner)));
+			submission = new FutureTask<>(() -> {
+				scheduler.execute(new McpHttpServerRuntime.TaskNotificationProjectionJob(owner,
+						() -> { runs.incrementAndGet(); projected.countDown(); }, rejections::incrementAndGet));
+				return null;
+			});
+			submittingThread = new Thread(submission);
+			submittingThread.start();
+			Assertions.assertTrue(rejectionEntered.await(5, TimeUnit.SECONDS));
+			// Force both production-style afterExecute signals to arrive while
+			// workersScheduled still includes the rejected submission.
+			releaseActive.countDown();
+			Assertions.assertTrue(ordinaryWorkFinished.await(5, TimeUnit.SECONDS));
+			Assertions.assertEquals(2, completions.get());
+			releaseRejection.countDown();
+			submission.get(5, TimeUnit.SECONDS);
+			Assertions.assertTrue(projected.await(5, TimeUnit.SECONDS),
+					"No unrelated request or later publisher event should be needed to wake retained work");
+			Assertions.assertEquals(1, runs.get());
+			Assertions.assertEquals(0, rejections.get());
+			Assertions.assertEquals(0, scheduler.queuedJobCount());
+		} finally {
+			releaseActive.countDown();
+			releaseRejection.countDown();
+			if (submittingThread != null) submittingThread.join(5000);
+			executor.shutdownNow();
+			Assertions.assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));
+		}
+	}
+
+	@Test
+	public void racedAvailabilityAllowsOneRetryButUnchangedSaturationDoesNotSpin() {
+		AtomicReference<McpHttpServerRuntime.TaskNotificationProjectionScheduler> reference = new AtomicReference<>();
+		AtomicInteger attempts = new AtomicInteger(), rejections = new AtomicInteger();
+		Executor executor = task -> {
+			int attempt = attempts.incrementAndGet();
+			Assertions.assertTrue(attempt <= 2, "An unchanged full executor must not be retried repeatedly");
+			if (attempt == 1) reference.get().executorMayAcceptWorker();
+			throw new RejectedExecutionException("still saturated");
+		};
+		McpHttpServerRuntime.TaskNotificationProjectionScheduler scheduler =
+				new McpHttpServerRuntime.TaskNotificationProjectionScheduler(executor, 1, 1);
+		reference.set(scheduler);
+		Object owner = new Object();
+		Assertions.assertTrue(scheduler.tryReserveOwners(List.of(owner)));
+		scheduler.execute(job(owner, new AtomicInteger(), rejections));
+		Assertions.assertEquals(2, attempts.get());
+		Assertions.assertEquals(1, scheduler.queuedJobCount());
+		Assertions.assertEquals(0, rejections.get());
+		scheduler.shutdown();
+		Assertions.assertEquals(1, rejections.get());
+	}
+
+	private static void await(CountDownLatch latch) {
+		try {
+			Assertions.assertTrue(latch.await(5, TimeUnit.SECONDS), "The scheduler test barrier timed out");
+		} catch (InterruptedException failure) {
+			Thread.currentThread().interrupt();
+			throw new AssertionError(failure);
+		}
 	}
 
 	@Test

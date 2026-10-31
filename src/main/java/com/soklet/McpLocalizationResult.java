@@ -26,6 +26,9 @@ import static java.util.Objects.requireNonNull;
 /**
  * Immutable outcome of localizing one MCP presentation field.
  *
+ * <p>
+ * This is a closed domain; exhaustive switches are supported, and any new alternative requires an explicit reviewed contract amendment.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
@@ -85,7 +88,7 @@ public sealed interface McpLocalizationResult
 		 * @param text localized nonblank text
 		 */
 		private Localized(@NonNull String text) {
-			this.text = requireNonNull(text);
+			this.text = McpContentValueSupport.requireWellFormedString(text);
 			if (text.isBlank())
 				throw new IllegalArgumentException(
 						"Localized MCP text must not be blank.");

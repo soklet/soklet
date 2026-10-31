@@ -49,11 +49,18 @@ public interface MultipartParser {
 	 * The returned instance is guaranteed to be a JVM-wide singleton.
 	 * Multipart headers and encoded metadata are decoded strictly. Invalid byte sequences
 	 * in a supported charset produce {@link com.soklet.exception.IllegalRequestBodyException}.
+	 * RFC 2231 extended parameters and RFC 2047 encoded words use a fixed standard
+	 * charset allowlist: UTF-8, ISO-8859-1, US-ASCII, UTF-16, UTF-16BE and UTF-16LE,
+	 * including their recognized aliases. Unsupported charset names preserve the
+	 * original parameter text rather than performing client-selected provider lookups.
+	 * Backslashes in quoted parameter values remain literal, matching browser
+	 * form serialization and legacy Windows filenames.
 	 * Field data remains available as raw bytes; text decoding occurs when
 	 * {@link MultipartField#getDataAsString()} is invoked.
 	 * <p>
-	 * Malformed or missing delimiters in a nonempty body are rejected. Delimiter
-	 * transport padding is accepted. Filenames preserve named HTML entities as
+	 * A nonempty body without a valid opening delimiter is rejected; preamble
+	 * scanning and delimiter transport padding are supported. A closing delimiter
+	 * must end at EOF or with a line ending; directly appended garbage is rejected. Filenames preserve named HTML entities as
 	 * literal text; decimal and hexadecimal numeric character references are
 	 * decoded for compatibility with legacy form clients, rejecting invalid Unicode
 	 * scalar values and control characters.

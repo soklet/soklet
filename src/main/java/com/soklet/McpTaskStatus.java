@@ -23,6 +23,9 @@ package com.soklet;
  * Tasks wire representation remains the specification-required
  * {@code "cancelled"} value.
  *
+ * <p>
+ * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public enum McpTaskStatus {

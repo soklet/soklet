@@ -16,7 +16,11 @@
 
 package com.soklet;
 
-/** Describes the aggregate shutdown boundary reached by a Soklet. */
+/**
+ * Describes the aggregate shutdown boundary reached by a Soklet.
+ * <p>
+ * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
+ */
 public enum ShutdownDisposition {
 	/** No configured lifecycle component was started. */
 	NOT_STARTED,

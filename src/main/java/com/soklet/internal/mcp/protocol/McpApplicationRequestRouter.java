@@ -1285,7 +1285,14 @@ interface McpApplicationEntryGate {
 record McpApplicationResponse(int status, @NonNull String reason,
 		@NonNull Optional<@NonNull McpJsonRpcMessage> message,
 		@NonNull McpRequestOutcome outcome,
-		@NonNull List<@NonNull Throwable> throwables) {
+		@NonNull List<@NonNull Throwable> throwables, boolean transportFailure) {
+	McpApplicationResponse(int status, @NonNull String reason,
+			@NonNull Optional<@NonNull McpJsonRpcMessage> message,
+			@NonNull McpRequestOutcome outcome,
+			@NonNull List<@NonNull Throwable> throwables) {
+		this(status, reason, message, outcome, throwables, false);
+	}
+
 	McpApplicationResponse {
 		if (status < 100 || status > 599)
 			throw new IllegalArgumentException("HTTP status must be between 100 and 599.");
@@ -1294,6 +1301,12 @@ record McpApplicationResponse(int status, @NonNull String reason,
 		message.ifPresent(McpProtocolSupport::requireServerOutboundMessage);
 		requireNonNull(outcome);
 		throwables = List.copyOf(requireNonNull(throwables));
+	}
+
+	/** An executor integration failure is not an application protocol outcome. */
+	@NonNull
+	McpApplicationResponse asTransportFailure() {
+		return new McpApplicationResponse(status, reason, message, outcome, throwables, true);
 	}
 
 	@NonNull
@@ -1322,7 +1335,7 @@ record McpApplicationResponse(int status, @NonNull String reason,
 									resultResponse.result(), serverInformation),
 							resultResponse.extensionFields());
 			return new McpApplicationResponse(status, reason,
-					Optional.of(identified), outcome, throwables);
+					Optional.of(identified), outcome, throwables, transportFailure);
 		}
 		return this;
 	}
@@ -1341,7 +1354,7 @@ record McpApplicationResponse(int status, @NonNull String reason,
 				new McpJsonRpcMessage.ResultResponse(resultResponse.id(),
 						fallback.orElseThrow(), resultResponse.extensionFields());
 		return Optional.of(new McpApplicationResponse(status, reason,
-				Optional.of(unmirrored), outcome, throwables));
+				Optional.of(unmirrored), outcome, throwables, transportFailure));
 	}
 
 	@NonNull
@@ -1567,6 +1580,8 @@ final class McpApplicationExecution {
 	@NonNull
 	private final McpLegacyHttpObservationDispatcher legacyHttpObservations;
 	@NonNull
+	private final McpLegacyHttpObservationDispatcher semanticRequestObservations;
+	@NonNull
 	private final McpApplicationHandlerDispatcher dispatcher;
 	@NonNull
 	private final McpApplicationHandlerDispatcher sessionOwnerPolicyDispatcher;
@@ -1657,6 +1672,34 @@ final class McpApplicationExecution {
 			@NonNull McpApplicationClock clock,
 			@NonNull McpApplicationHandlerExecutorFactory executorFactory,
 			@Nullable McpProtocolDeadlineCycle protocolDeadlineCycle,
+			@NonNull McpApplicationExecutionObserver observer,
+			long maximumLegacyGetObservationReservations,
+			long maximumSemanticSubscriptionObservationReservations) {
+		this(configuration, clock, executorFactory, protocolDeadlineCycle,
+				McpApplicationRequestInterceptor.passThroughInstance(), observer,
+				maximumLegacyGetObservationReservations, maximumSemanticSubscriptionObservationReservations);
+	}
+
+	McpApplicationExecution(
+			@NonNull McpApplicationExecutionConfiguration configuration,
+			@NonNull McpApplicationClock clock,
+			@NonNull McpApplicationHandlerExecutorFactory executorFactory,
+			@Nullable McpProtocolDeadlineCycle protocolDeadlineCycle,
+			@NonNull McpApplicationExecutionObserver observer,
+			long maximumLegacyGetObservationReservations,
+			long maximumSemanticSubscriptionObservationReservations,
+			int protocolObservationHeadroom) {
+		this(configuration, clock, executorFactory, protocolDeadlineCycle,
+				McpApplicationRequestInterceptor.passThroughInstance(), observer,
+				maximumLegacyGetObservationReservations, maximumSemanticSubscriptionObservationReservations,
+				protocolObservationHeadroom);
+	}
+
+	McpApplicationExecution(
+			@NonNull McpApplicationExecutionConfiguration configuration,
+			@NonNull McpApplicationClock clock,
+			@NonNull McpApplicationHandlerExecutorFactory executorFactory,
+			@Nullable McpProtocolDeadlineCycle protocolDeadlineCycle,
 			@NonNull McpApplicationRequestInterceptor requestInterceptor) {
 		this(configuration, clock, executorFactory, protocolDeadlineCycle,
 				requestInterceptor,
@@ -1682,6 +1725,35 @@ final class McpApplicationExecution {
 			@NonNull McpApplicationRequestInterceptor requestInterceptor,
 			@NonNull McpApplicationExecutionObserver observer,
 			long maximumLegacyGetObservationReservations) {
+		this(configuration, clock, executorFactory, protocolDeadlineCycle, requestInterceptor,
+				observer, maximumLegacyGetObservationReservations, 0L);
+	}
+
+	private McpApplicationExecution(
+			@NonNull McpApplicationExecutionConfiguration configuration,
+			@NonNull McpApplicationClock clock,
+			@NonNull McpApplicationHandlerExecutorFactory executorFactory,
+			@Nullable McpProtocolDeadlineCycle protocolDeadlineCycle,
+			@NonNull McpApplicationRequestInterceptor requestInterceptor,
+			@NonNull McpApplicationExecutionObserver observer,
+			long maximumLegacyGetObservationReservations,
+			long maximumSemanticSubscriptionObservationReservations) {
+		this(configuration, clock, executorFactory, protocolDeadlineCycle, requestInterceptor, observer,
+				maximumLegacyGetObservationReservations, maximumSemanticSubscriptionObservationReservations, 0);
+	}
+
+	private McpApplicationExecution(
+			@NonNull McpApplicationExecutionConfiguration configuration,
+			@NonNull McpApplicationClock clock,
+			@NonNull McpApplicationHandlerExecutorFactory executorFactory,
+			@Nullable McpProtocolDeadlineCycle protocolDeadlineCycle,
+			@NonNull McpApplicationRequestInterceptor requestInterceptor,
+			@NonNull McpApplicationExecutionObserver observer,
+			long maximumLegacyGetObservationReservations,
+			long maximumSemanticSubscriptionObservationReservations,
+			int protocolObservationHeadroom) {
+		if (protocolObservationHeadroom < 0)
+			throw new IllegalArgumentException("Protocol observation headroom must be nonnegative.");
 		this.configuration = requireNonNull(configuration);
 		this.clock = requireNonNull(clock);
 		this.protocolDeadlineCycle = protocolDeadlineCycle;
@@ -1718,16 +1790,26 @@ final class McpApplicationExecution {
 		// or cancellation sidecar is occupied. This hidden dispatcher retains its
 		// own physical slots and never invokes the user's executor supplier twice.
 		@Nullable ExecutorService ownerExecutor = null;
+		@Nullable McpLegacyHttpObservationDispatcher createdHttpObservations = null;
 		try {
 			ownerExecutor = McpApplicationHandlerExecutorFactory.production().create(sessionOwnerConcurrency);
 			this.sessionOwnerPolicyDispatcher = new McpApplicationHandlerDispatcher(
 					sessionOwnerConcurrency, configuration.handlerQueueCapacity(), ownerExecutor,
 					McpApplicationExecutionObserver.disabledInstance(), this::signalDeadlineTimer);
 			this.sessionOwnerPolicyExecutor = ownerExecutor;
-			this.legacyHttpObservations = new McpLegacyHttpObservationDispatcher(
+			this.legacyHttpObservations = createdHttpObservations = new McpLegacyHttpObservationDispatcher(
 					sessionOwnerConcurrency, configuration.handlerQueueCapacity(),
 					maximumLegacyGetObservationReservations, this::signalDeadlineTimer);
+			// Protocol workers must still be able to observe a correlated handler
+			// capacity rejection while active and queued handlers retain their pairs.
+			int observationQueueCapacity = (int) Math.min(Integer.MAX_VALUE,
+					(long) configuration.handlerQueueCapacity() + protocolObservationHeadroom);
+			this.semanticRequestObservations = new McpLegacyHttpObservationDispatcher(
+					configuration.handlerConcurrency(), observationQueueCapacity,
+					maximumSemanticSubscriptionObservationReservations, this::signalDeadlineTimer,
+					"soklet-mcp-observer-");
 		} catch (RuntimeException | Error failure) {
+			if (createdHttpObservations != null) createdHttpObservations.stop(true);
 			shutdownFailedConstructionExecutor(ownerExecutor, failure);
 			shutdownFailedConstructionExecutor(handlerExecutor, failure);
 			shutdownFailedConstructionExecutor(cancellationCallbackExecutor, failure);
@@ -2547,7 +2629,13 @@ final class McpApplicationExecution {
 
 	boolean legacyHttpObservationAccepting() { return legacyHttpObservations.isAccepting(); }
 
-	boolean legacyHttpObservationOutstanding() { return legacyHttpObservations.outstanding() != 0; }
+	boolean legacyHttpObservationOutstanding() {
+		return legacyHttpObservations.outstanding() != 0 || semanticRequestObservations.outstanding() != 0;
+	}
+
+	McpLegacyHttpObservationDispatcher.@Nullable Reservation reserveSemanticRequestObservation(boolean subscription) {
+		return semanticRequestObservations.reserve(subscription);
+	}
 
 	void stop() {
 		stop(StreamTerminationReason.SERVER_STOPPING);
@@ -2563,6 +2651,7 @@ final class McpApplicationExecution {
 		dispatcher.beginGracefulDrain();
 		sessionOwnerPolicyDispatcher.beginGracefulDrain();
 		legacyHttpObservations.quiesce();
+		semanticRequestObservations.quiesce();
 		finishGracefulDrainIfComplete();
 		signalDeadlineTimer();
 	}
@@ -2602,6 +2691,7 @@ final class McpApplicationExecution {
 		handlerExecutor.shutdown();
 		sessionOwnerPolicyExecutor.shutdown();
 		legacyHttpObservations.stop(true);
+		semanticRequestObservations.stop(true);
 		requestCancellationCallbackShutdown();
 		LockSupport.unpark(timerThread);
 	}
@@ -2621,7 +2711,7 @@ final class McpApplicationExecution {
 		McpApplicationHandlerDispatcher.Snapshot ownerSnapshot = sessionOwnerPolicyDispatcher.snapshot();
 		if (snapshot.activeSlots() != 0 || snapshot.queueDepth() != 0
 				|| ownerSnapshot.activeSlots() != 0 || ownerSnapshot.queueDepth() != 0
-				|| legacyHttpObservations.outstanding() != 0
+				|| legacyHttpObservationOutstanding()
 				|| !retainedExchanges.isEmpty() || !requestsByIdentity.isEmpty())
 			return;
 		synchronized (executionBoundaryLock) {
@@ -2631,7 +2721,7 @@ final class McpApplicationExecution {
 			McpApplicationHandlerDispatcher.Snapshot confirmedOwner = sessionOwnerPolicyDispatcher.snapshot();
 			if (confirmed.activeSlots() != 0 || confirmed.queueDepth() != 0
 					|| confirmedOwner.activeSlots() != 0 || confirmedOwner.queueDepth() != 0
-					|| legacyHttpObservations.outstanding() != 0
+					|| legacyHttpObservationOutstanding()
 					|| !retainedExchanges.isEmpty() || !requestsByIdentity.isEmpty())
 				return;
 			stopped.set(true);
@@ -2639,6 +2729,7 @@ final class McpApplicationExecution {
 		handlerExecutor.shutdown();
 		sessionOwnerPolicyExecutor.shutdown();
 		legacyHttpObservations.stop(false);
+		semanticRequestObservations.stop(false);
 		requestCancellationCallbackShutdown();
 		LockSupport.unpark(timerThread);
 	}
@@ -2676,6 +2767,10 @@ final class McpApplicationExecution {
 		remaining = Math.max(0L, timeoutNanos - Math.max(0L, elapsed));
 		if (!legacyHttpObservations.isTerminated() && remaining > 0L)
 			legacyHttpObservations.awaitTermination(Duration.ofNanos(remaining));
+		elapsed = System.nanoTime() - startedAt;
+		remaining = Math.max(0L, timeoutNanos - Math.max(0L, elapsed));
+		if (!semanticRequestObservations.isTerminated() && remaining > 0L)
+			semanticRequestObservations.awaitTermination(Duration.ofNanos(remaining));
 		return isTerminated();
 	}
 
@@ -2685,7 +2780,7 @@ final class McpApplicationExecution {
 		McpApplicationHandlerDispatcher.Snapshot ownerSnapshot = sessionOwnerPolicyDispatcher.snapshot();
 		return stopped.get() && !timerThread.isAlive() && handlerExecutor.isTerminated()
 				&& sessionOwnerPolicyExecutor.isTerminated()
-				&& legacyHttpObservations.isTerminated()
+				&& legacyHttpObservations.isTerminated() && semanticRequestObservations.isTerminated()
 				&& cancellationCallbackExecutor.isTerminated()
 				&& dispatcherSnapshot.activeSlots() == 0
 				&& dispatcherSnapshot.queueDepth() == 0
@@ -3036,7 +3131,7 @@ final class McpApplicationExecution {
 					} else
 						respond(profiledFrameworkError(McpProfileErrorKind.CONTROL,
 								McpApplicationResponse.internalError(request.id(), 500,
-										"Internal Server Error", throwable)));
+										"Internal Server Error", throwable).asTransportFailure()));
 				}
 			} finally {
 				// The dispatcher has already changed the ticket to REJECTED and
@@ -3060,7 +3155,7 @@ final class McpApplicationExecution {
 							new McpJsonRpcMessage.ErrorResponse(
 									canonicalErrorResponse.id(), renderedError,
 									canonicalErrorResponse.extensionFields())),
-					canonicalResponse.outcome(), canonicalResponse.throwables());
+					canonicalResponse.outcome(), canonicalResponse.throwables(), canonicalResponse.transportFailure());
 		}
 
 		private boolean respond(@NonNull McpApplicationResponse response) {

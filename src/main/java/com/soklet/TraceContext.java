@@ -249,21 +249,37 @@ public final class TraceContext {
 		if (tracestateHeaderValues == null || tracestateHeaderValues.isEmpty())
 			return List.of();
 
-		List<TraceStateEntry> entries = new ArrayList<>();
+		List<TraceStateEntry> entries = new ArrayList<>(MAX_TRACESTATE_ENTRIES);
 		LinkedHashSet<String> keys = new LinkedHashSet<>();
 
 		for (String tracestateHeaderValue : tracestateHeaderValues) {
 			if (tracestateHeaderValue == null)
 				continue;
 
-			for (String member : tracestateHeaderValue.split(",", -1)) {
-				TraceStateEntry entry = TraceStateEntry.fromMember(member).orElse(null);
+			for (int start = 0; start < tracestateHeaderValue.length();) {
+				int separator = tracestateHeaderValue.indexOf(',', start);
+				int end = separator < 0 ? tracestateHeaderValue.length() : separator;
+				int first = start;
+				while (first < end && isOptionalWhitespace(tracestateHeaderValue.charAt(first)))
+					first++;
+				int last = end;
+				while (last > first && isOptionalWhitespace(tracestateHeaderValue.charAt(last - 1)))
+					last--;
+				start = end + 1;
+				// A member cannot fit in the normalized 512-character value. Avoid
+				// copying or validating arbitrarily large client-controlled members.
+				if (last - first > MAX_TRACESTATE_LENGTH)
+					continue;
+				TraceStateEntry entry = TraceStateEntry.fromMember(
+						tracestateHeaderValue.substring(first, last)).orElse(null);
 
 				if (entry == null || keys.contains(entry.getKey()))
 					continue;
 
 				keys.add(entry.getKey());
 				entries.add(entry);
+				if (entries.size() == MAX_TRACESTATE_ENTRIES)
+					return truncateTraceStateEntries(entries);
 			}
 		}
 
@@ -277,50 +293,36 @@ public final class TraceContext {
 		if (entries.isEmpty())
 			return List.of();
 
-		List<TraceStateEntry> normalizedEntries = new ArrayList<>(entries);
-
-		int largeEntryIndex;
-		while (isOverTraceStateLimits(normalizedEntries)
-				&& (largeEntryIndex = lastLargeTraceStateEntryIndex(normalizedEntries)) >= 0)
-			normalizedEntries.remove(largeEntryIndex);
-
-		while (normalizedEntries.size() > MAX_TRACESTATE_ENTRIES)
-			normalizedEntries.remove(normalizedEntries.size() - 1);
-
-		while (traceStateLength(normalizedEntries) > MAX_TRACESTATE_LENGTH)
-			normalizedEntries.remove(normalizedEntries.size() - 1);
-
+		int length = entries.size() - 1;
+		for (TraceStateEntry entry : entries)
+			length += traceStateEntryLength(entry);
+		boolean[] removed = new boolean[entries.size()];
+		for (int i = entries.size() - 1; i >= 0 && length > MAX_TRACESTATE_LENGTH; i--)
+			if (traceStateEntryLength(entries.get(i)) > MAX_TRACESTATE_ENTRY_TRUNCATION_LENGTH) {
+				removed[i] = true;
+				length -= traceStateEntryLength(entries.get(i)) + 1;
+			}
+		List<TraceStateEntry> normalizedEntries = new ArrayList<>(entries.size());
+		int retainedLength = 0;
+		for (int i = 0; i < entries.size(); i++) {
+			if (removed[i])
+				continue;
+			int memberLength = traceStateEntryLength(entries.get(i));
+			int nextLength = retainedLength + (normalizedEntries.isEmpty() ? 0 : 1) + memberLength;
+			if (nextLength > MAX_TRACESTATE_LENGTH)
+				break;
+			normalizedEntries.add(entries.get(i));
+			retainedLength = nextLength;
+		}
 		return List.copyOf(normalizedEntries);
 	}
 
-	private static boolean isOverTraceStateLimits(@NonNull List<@NonNull TraceStateEntry> entries) {
-		requireNonNull(entries);
-		return entries.size() > MAX_TRACESTATE_ENTRIES || traceStateLength(entries) > MAX_TRACESTATE_LENGTH;
+	private static int traceStateEntryLength(TraceStateEntry entry) {
+		return entry.getKey().length() + 1 + entry.getValue().length();
 	}
 
-	private static int lastLargeTraceStateEntryIndex(@NonNull List<@NonNull TraceStateEntry> entries) {
-		requireNonNull(entries);
-
-		for (int i = entries.size() - 1; i >= 0; i--)
-			if (entries.get(i).toHeaderMemberValue().length() > MAX_TRACESTATE_ENTRY_TRUNCATION_LENGTH)
-				return i;
-
-		return -1;
-	}
-
-	private static int traceStateLength(@NonNull List<@NonNull TraceStateEntry> entries) {
-		requireNonNull(entries);
-
-		int length = 0;
-
-		for (TraceStateEntry entry : entries) {
-			if (length > 0)
-				length++;
-
-			length += entry.toHeaderMemberValue().length();
-		}
-
-		return length;
+	private static boolean isOptionalWhitespace(char character) {
+		return character == ' ' || character == '\t';
 	}
 
 	private static boolean isLowercaseHex(@NonNull String value) {

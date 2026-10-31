@@ -1555,10 +1555,11 @@ function verifyCharacterizationSources(root, sourceFiles) {
     'com.soklet.internal.mcp.protocol.McpRequestSseStream',
     'offerGuardedCoalescingMessage', (candidate) =>
       /\bRunnable\s+payloadWritten\b/u.test(candidate.signatureCode)
-      && /\bBooleanSupplier\s+continuationAllowed\b/u.test(candidate.signatureCode),
+      && /\bBooleanSupplier\s+continuationAllowed\b/u.test(candidate.signatureCode)
+      && /\bboolean\s+coalesceStarted\b/u.test(candidate.signatureCode),
     'guarded notification offer with write acknowledgement');
   requireStructural(requestGuardedOffer,
-    /return\s+channel\s*\.\s*offerGuardedCoalescing\s*\(\s*frame\s*,\s*coalescingKey\s*,\s*writeAllowed\s*,\s*continuationAllowed\s*,\s*payloadWritten\s*,\s*payloadReleased\s*\)\s*;/u,
+    /return\s+channel\s*\.\s*offerGuardedCoalescing\s*\(\s*frame\s*,\s*coalescingKey\s*,\s*writeAllowed\s*,\s*continuationAllowed\s*,\s*payloadWritten\s*,\s*payloadReleased\s*,\s*coalesceStarted\s*\)\s*;/u,
     'guarded notifications must retain their guard and callbacks on the installed channel');
   const transportType = requestTypes.find((type) =>
     type.owner === 'com.soklet.internal.mcp.protocol.McpRequestSseStream.TransportChannel');
@@ -1609,11 +1610,25 @@ function verifyCharacterizationSources(root, sourceFiles) {
     'com.soklet.internal.mcp.protocol.McpRequestSseStream.TransportChannel',
     'offerGuardedCoalescing', (candidate) =>
       /\bRunnable\s+payloadWritten\b/u.test(candidate.signatureCode)
-      && /\bBooleanSupplier\s+continuationAllowed\b/u.test(candidate.signatureCode),
+      && /\bBooleanSupplier\s+continuationAllowed\b/u.test(candidate.signatureCode)
+      && /\bboolean\s+coalesceStarted\b/u.test(candidate.signatureCode),
     'guarded channel offer with write acknowledgement');
   requireStructural(transportGuardedOffer,
-    /return\s+this\s*\.\s*delegate\s*\.\s*offerGuardedCoalescing\s*\(\s*encodedBytes\s*,\s*coalescingKey\s*,\s*writeAllowed\s*,\s*continuationAllowed\s*,\s*payloadWritten\s*,\s*payloadReleased\s*\)\s*;/u,
+    /return\s+this\s*\.\s*delegate\s*\.\s*offerGuardedCoalescing\s*\(\s*encodedBytes\s*,\s*coalescingKey\s*,\s*writeAllowed\s*,\s*continuationAllowed\s*,\s*payloadWritten\s*,\s*payloadReleased\s*,\s*coalesceStarted\s*\)\s*;/u,
     'guarded channel offers must retain their guard and callbacks on the shared delegate');
+  for (const [lexed, path, owner, method, payload] of [
+    [request.lexed, requestPath, 'com.soklet.internal.mcp.protocol.McpRequestSseStream', 'offerGuardedCoalescingMessage', 'message'],
+    [request.lexed, requestPath, 'com.soklet.internal.mcp.protocol.McpRequestSseStream.TransportChannel', 'offerGuardedCoalescing', 'frame'],
+    [outbound.lexed, outboundPath, 'com.soklet.internal.mcp.transport.McpOutboundChannel', 'offerGuardedCoalescing', 'payload'],
+  ]) {
+    const compatibilityOffer = oneMethodMatching(lexed, path, owner, method,
+      (candidate) => /\bBooleanSupplier\s+continuationAllowed\b/u.test(candidate.signatureCode)
+        && !/\bboolean\s+coalesceStarted\b/u.test(candidate.signatureCode),
+      'six-argument guarded compatibility offer');
+    requireStructural(compatibilityOffer,
+      new RegExp(`^\\s*return\\s+${method}\\s*\\(\\s*${payload}\\s*,\\s*coalescingKey\\s*,\\s*writeAllowed\\s*,\\s*continuationAllowed\\s*,\\s*payloadWritten\\s*,\\s*payloadReleased\\s*,\\s*true\\s*\\)\\s*;\\s*$`, 'u'),
+      'six-argument guarded compatibility offers must preserve both guards and their coalescing default');
+  }
   for (const [lexed, path, owner, method, payload] of [
     [request.lexed, requestPath, 'com.soklet.internal.mcp.protocol.McpRequestSseStream', 'offerGuardedCoalescingMessage', 'message'],
     [request.lexed, requestPath, 'com.soklet.internal.mcp.protocol.McpRequestSseStream.Channel', 'offerGuardedCoalescing', 'frame'],
@@ -1630,7 +1645,8 @@ function verifyCharacterizationSources(root, sourceFiles) {
   }
   const outboundGuardedOffer = oneMethodMatching(outbound.lexed, outboundPath,
     'com.soklet.internal.mcp.transport.McpOutboundChannel', 'offerGuardedCoalescing',
-    (candidate) => /\bBooleanSupplier\s+continuationAllowed\b/u.test(candidate.signatureCode),
+    (candidate) => /\bBooleanSupplier\s+continuationAllowed\b/u.test(candidate.signatureCode)
+      && /\bboolean\s+coalesceStarted\b/u.test(candidate.signatureCode),
     'outbound offer with separate continuation guard');
   requireStructural(outboundGuardedOffer,
     /addRegularChunk\s*\(\s*ownedPayload\s*,\s*coalescingKey\s*,\s*writeAllowed\s*,\s*continuationAllowed\s*,\s*payloadWritten\s*,\s*payloadReleased\s*\)/u,

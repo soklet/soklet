@@ -106,8 +106,8 @@ class McpJsonAndSchemaLimitPublicRuntimeTests {
 				assertFalse(inputFailure.body().contains("\"error\""), inputFailure.body());
 			}
 			assertEquals(0, handlerCalls.get());
-			assertProtocolFailure(call(port, protocolVersion, "escaped", "{}"), protocolVersion, -32603, 500);
-			assertProtocolFailure(call(port, protocolVersion, "output", "{}"), protocolVersion, -32603, 500);
+			assertProtocolFailure(call(port, protocolVersion, "escaped", "{}"), protocolVersion, -32603, 200);
+			assertProtocolFailure(call(port, protocolVersion, "output", "{}"), protocolVersion, -32603, 200);
 			assertEquals(2, handlerCalls.get());
 			largeOutput.set(false);
 			for (String toolName : List.of("input", "escaped", "output")) {

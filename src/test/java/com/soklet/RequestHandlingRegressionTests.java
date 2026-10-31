@@ -84,7 +84,9 @@ public class RequestHandlingRegressionTests {
 			MarshaledResponse response = result.getMarshaledResponse();
 			assertEquals(Integer.valueOf(200), response.getStatusCode());
 			Assertions.assertTrue(response.getBody().isEmpty(), "HEAD response should not include a body");
-			assertEquals(List.of("5"), response.getHeaders().get("Content-Length"));
+			// The physical request is GET: after the wrapped HEAD removes the body,
+			// transport framing advertises the actual zero bytes that will be sent.
+			assertEquals(List.of("0"), response.getHeaders().get("Content-Length"));
 			assertEquals(List.of(ORIGIN), response.getHeaders().get("Access-Control-Allow-Origin"));
 		});
 	}

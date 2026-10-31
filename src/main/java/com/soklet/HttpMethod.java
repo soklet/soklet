@@ -25,6 +25,9 @@ import java.util.stream.Collectors;
 /**
  * Typesafe representation of <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods">HTTP request methods</a>.
  *
+ * <p>
+ * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public enum HttpMethod {

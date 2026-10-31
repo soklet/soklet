@@ -21,6 +21,11 @@ import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.net.SocketException;
+import java.net.SocketTimeoutException;
+import java.nio.channels.ClosedChannelException;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeoutException;
 
 /**
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -50,6 +55,12 @@ final class DefaultLifecycleObserver implements LifecycleObserver {
 
 		if (throwable == null) {
 			System.err.printf("%s::didReceiveLogEvent [%s]: %s%n", LifecycleObserver.class.getSimpleName(), logEvent.getLogEventType().name(), message);
+		} else if (isRoutineFailure(logEvent, throwable)) {
+			// Keep the event and exact Throwable available to custom observers, while
+			// avoiding stack rendering and allocation for ordinary control outcomes.
+			System.err.printf("%s::didReceiveLogEvent [%s]: %s (%s: %s)%n",
+					LifecycleObserver.class.getSimpleName(), logEvent.getLogEventType().name(),
+					message, throwable.getClass().getName(), routineFailureMessage(throwable));
 		} else {
 			StringWriter stringWriter = new StringWriter();
 			PrintWriter printWriter = new PrintWriter(stringWriter);
@@ -59,4 +70,53 @@ final class DefaultLifecycleObserver implements LifecycleObserver {
 			System.err.printf("%s::didReceiveLogEvent [%s]: %s\n%s\n", LifecycleObserver.class.getSimpleName(), logEvent.getLogEventType().name(), message, throwableWithStackTrace);
 		}
 	}
+
+	private static String routineFailureMessage(Throwable throwable) {
+		String message = throwable.getMessage();
+		if (message == null)
+			return "";
+		StringBuilder summary = new StringBuilder(Math.min(message.length(), 512));
+		for (int offset = 0; offset < message.length() && summary.length() < 512;) {
+			int character = message.codePointAt(offset);
+			offset += Character.charCount(character);
+			if (summary.length() + Character.charCount(character) > 512)
+				break;
+			summary.appendCodePoint(Character.isISOControl(character) || character == 0x2028 || character == 0x2029 ? ' ' : character);
+		}
+		return summary.toString();
+	}
+	private static boolean isRoutineFailure(@NonNull LogEvent event,
+			@NonNull Throwable throwable) {
+		// Nested/suppressed failures can contain unexpected diagnostics even when
+		// the outer exception is a routine interruption or socket close.
+		if (throwable.getCause() != null || throwable.getSuppressed().length != 0)
+			return false;
+		return switch (event.getLogEventType()) {
+			case SERVER_INTERNAL_ERROR, SSE_SERVER_INTERNAL_ERROR -> throwable instanceof RejectedExecutionException
+					&& ("Request handler executor rejected task".equals(event.getMessage())
+							|| "Request reader executor rejected task".equals(event.getMessage()));
+			case SSE_SERVER_CONNECTION_REJECTED -> throwable instanceof RejectedExecutionException
+					&& "Pending SSE handshake capacity exhausted".equals(event.getMessage());
+			case REQUEST_PROCESSING_FAILED -> throwable.getClass() == InterruptedException.class;
+			case SERVER_TRANSPORT_FAILURE -> isRoutineTransportEvent(event.getMessage())
+					&& (throwable instanceof SocketException
+							|| throwable instanceof SocketTimeoutException
+							|| throwable instanceof ClosedChannelException
+							|| throwable instanceof TimeoutException);
+			default -> false;
+		};
+	}
+
+	private static boolean isRoutineTransportEvent(@NonNull String message) {
+		int connectionId = message.indexOf(" (connectionId=");
+		String event = connectionId < 0 ? message : message.substring(0, connectionId);
+		return switch (event) {
+			case "HTTP transport failure: read_error", "HTTP transport failure: write_error",
+					"HTTP transport failure: request_timeout", "HTTP transport failure: response_write_idle_timeout",
+					"SSE transport failure: read_error", "SSE transport failure: write_error",
+					"SSE transport failure: request_timeout", "SSE transport failure: response_write_idle_timeout" -> true;
+			default -> false;
+		};
+	}
+
 }

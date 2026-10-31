@@ -4,9 +4,54 @@
 
 ### Breaking Changes
 
-- **Multipart input:** malformed or missing opening delimiters now fail with
-  HTTP 400 when parsed. Named HTML entities in filenames remain literal; numeric
-  references retain legacy compatibility with invalid-character checks.
+- **Explicit rate-limit policy:** tool rate limiting is optional. A tool with
+  no configured tool, endpoint, or server limiter has no tool rate quota;
+  existing transport and execution bounds remain. Removed
+  `McpRateLimiter.fromInMemoryDefaults()` and
+  `McpTokenBucketConfig.fromDefaults()`. Built-in token buckets require explicit
+  capacity, refill quantity, and refill interval. Refill setters reject null
+  instead of restoring hidden defaults, and incomplete configurations fail at
+  `build()`. Configured limiter precedence and fail-closed behavior are unchanged.
+
+- **Final response phase and cleanup:** `ResponseMarshaler.postProcess(...)` is
+  an abstract phase, applied once after the interceptor selects the final response
+  and after CORS. Decorators must forward this method. HEAD hooks receive the
+  processed GET representation and project it once; recovery does not reenter
+  failed head handlers. Public response copies never close original channels.
+  `MarshaledResponse.close()` remains explicit terminal cleanup; the descriptor
+  does not implement `AutoCloseable`. Finite simulator results capture bytes and
+  release owned channels before returning. Emergency HTTP503s bypass application
+  hooks. See [response processing and ownership](MIGRATING_TO_4_0.md#final-response-processing-and-channel-ownership).
+- **MCP observation isolation:** terminal outcomes during start observation now
+  release their reservations and preserve callback ordering. Observation
+  saturation omits a complete pair with a rate-limited diagnostic instead of
+  rejecting requests or cancellation. Finish callbacks use bounded daemon
+  platform workers on Java21, avoiding carrier pinning from those callbacks.
+  Guarded catalog hints discarded before writing restore their baseline so an
+  allowed reconcile catches clients up.
+- **Request metadata and interoperability:** core cookies recover valid
+  neighbors after malformed quotes; multipart metadata and CORS preflight
+  header names have finite counts. Unsupported charset lookup and malformed
+  encoded words avoid repeated provider scans and stack allocation. HTTP-date
+  parsing accepts only serializable years; static-file traversal past a file
+  remains404 after long symlink expansion on Java21. OTel switches handle future
+  enum values conservatively.
+- **Modern MCP application errors:** admitted application-execution/output
+  failures and active-handler deadlines return correlated JSON-RPC `-32603`
+  in HTTP 200. Capacity/queued deadlines remain 503; framework policy/protocol,
+  rate and transport errors retain their HTTP failure statuses. Intentional
+  JSON-RPC errors and tool `isError` results retain their separate mappings.
+- **Metric-key status classes:** `HttpServerRouteStatusKey` accepts only `1xx`
+  through `5xx` and `unknown`. Existing key constructors and nullable route
+  getters remain available. Public enum/sealed evolution policies are now
+  stated in each type's Javadoc and checked against reviewed inventories.
+
+- **Multipart input:** a nonempty body without a valid opening delimiter now
+  fails with HTTP 400 when parsed. Empty bodies have no fields and preambles require a valid opening delimiter; malformed delimiter candidates are rejected. Named HTML entities in filenames remain literal; numeric
+  references retain legacy compatibility with invalid-character checks. Encoded
+  parameter text supports UTF-8, ISO-8859-1, US-ASCII and UTF-16 variants (and their
+  standard aliases); unsupported charset names remain literal instead of invoking
+  charset providers on untrusted input.
 
 - **MCP body encoding:** unsupported request content codings now receive HTTP
   415 before JSON parsing or admission. Send uncompressed JSON. Authorized
@@ -400,6 +445,77 @@ maintenance or security fixes afterward. See the explicit
 
 ### Correctness Fixes
 
+- Coordinate HTTP and SSE timeout interrupts with handler retirement so a
+  delayed interrupt cannot reach the next request on a pooled worker.
+- Release owned response channels after late SSE capacity rejection and accepted
+  simulated handshakes, including preparation and initializer failures. Finite
+  HTTP channel cleanup carries the lifecycle owner guard; borrowed channels
+  remain caller-owned.
+- Decode URL-encoded forms from component bytes, supporting declared UTF-16
+  charsets and mixed literal/escaped multibyte text consistently. Apply the
+  128-name CORS preflight bound to normal request parsing before deduplication.
+- Reject literal `#` in raw HTTP request targets before routing; percent-encoded
+  `%23` and decoded path/query builders continue to support hash characters.
+- Ignore compiler bridge methods during automatic reflective route discovery,
+  matching generated-index discovery for generic and covariant handlers.
+  Explicit `fromMethods(...)` selection remains unchanged.
+- Extend lifecycle self-wait guards to MCP request-state protection, Skills
+  policy callbacks and publisher release, plus SSE fallback response callbacks,
+  materialization and owned-body cleanup.
+- Servlet response `getWriter()` reports a charset without encoder support as
+  `UnsupportedEncodingException` without locking the output method. Before
+  commitment, a supported encoding override can recover; raw output remains available.
+- Finalize fresh interceptor responses with the default marshaler, including
+  CORS and HEAD/bodyless handling. Preserve empty cookie occurrences so scalar
+  access and binding reject duplicates consistently.
+- Reject unpaired UTF-16 surrogates in decoded query names/values, request
+  copier updates and RFC 8187 header parameters. Preserve valid supplementary
+  Unicode and explicit replacement characters. Report duplicate charset
+  parameters in multipart part metadata as redacted request-body errors.
+- Guard lifecycle self-waits inside MCP catalog, access-policy and localization
+  callbacks. `McpRequestContext.getStartedAt()` exposes the semantic request's
+  wall-clock start when known; finish durations exclude observation delivery
+  delay, and custom contexts retain an empty default.
+- Refresh HEAD compression planning from fresh interceptor responses after
+  post-processing, preserving GET/HEAD encoding negotiation without running a
+  codec for HEAD. Preserve executor-availability wake-ups racing rejected MCP
+  projection submissions, and guard task-manager/sanitizer lifecycle self-waits.
+- Validate SSE return types for repeated annotations and candidates resolved in
+  later processing rounds. Reject unpaired UTF-16 route declarations before
+  index serialization. Preserve browser FormData's literal backslashes in
+  multipart field names and filenames, including trailing backslashes.
+- Servlet request readers preserve unsupported charset declarations and report
+  decoding errors instead of substituting a default. HTTP-date parsing rejects
+  invalid calendar dates and uses locale-independent weekday/month text.
+- Preserve accepted SSE framing when an interceptor builds a fresh response,
+  and finalize framework-generated admission, timeout and capacity responses.
+  Unparsed-response fallback releases retained predecessor channels, including
+  when post-processing selects an unsupported stream or borrowed wrapper.
+- Validate both HTTP/SSE and MCP routing-index snapshots before publishing
+  either, and use actual top-level ownership when replacing incremental routes.
+  Legal dollar signs in unrelated top-level class names no longer cause route loss.
+- Servlet date headers use the core's stable HTTP formatter, and malformed
+  quoted-cookie recovery preserves subsequent cookies. The Toy Store demo
+  ignores superseded sign-in responses so pending authentication cannot undo logout.
+- Bound HTTP tracestate work and MCP propagation metadata before admission;
+  multipart parameter decoding no longer scans charset providers for unknown
+  client-selected names. Empty multipart bodies behave consistently in simulation.
+- Preserve new HTTP/SSE routes during annotation-processor pruning and avoid
+  inspecting transitive record components when deferring HTTP DTO signatures.
+  MCP URI validation preserves repeated slashes, and comparison-budget failures
+  are distinguished from confirmed template overlap.
+- Retry legacy MCP GET admission after reconciliation within the original
+  deadline, preserve partially written hints during ordinary lease renewal,
+  and fence queued catalog notifications. Simulator completion reports the
+  exact server-owned reason.
+- Align finite simulator framing and rejected SSE request observation with the
+  transport. Expose the effective SSE request for custom transports. Excessive
+  ancestor symlink traversal resolves as a missing static file, and unsupported
+  index filenames fail during construction.
+- Metrics snapshots retain observed entries across concurrent eviction/reset.
+  Header value objects hash names without case, HTTP dates use fixed English
+  text, and lifecycle callback scopes reuse their empty per-thread depth maps.
+
 - MCP annotation processing shares runtime URI-template validation and rejects
   malformed UTF-16 metadata during compilation.
 - Built-in transport, MCP, streaming, and simulator callbacks detect attempts
@@ -407,10 +523,22 @@ maintenance or security fixes afterward. See the explicit
   from callbacks and wait from an independent control thread.
 - MCP shutdown preserves cancellation callbacks that have been claimed but
   not yet submitted, preventing lost delivery and stranded policy workers.
-- Response hooks and interceptors release owned file channels when processing
-  fails or a replacement abandons the body. Replacements sharing the channel
-  remain usable, borrowed channels stay open, and cleanup preserves the original
-  processing failure.
+- Response transformations retain owned predecessor channels through delegating
+  and streaming replacements until terminal delivery or abandonment. Built-in
+  transports and simulation perform the terminal response close; borrowed
+  channels remain open. Post-processing runs once per dispatch, including CORS
+  and HEAD, while later requests reusing a response get their own phase.
+- MCP finish observation and its trace/failure logs use separately reserved
+  worker capacity. Admission, limiting, CORS, start observation and state opening
+  use a configurable protocol pool (32 workers/128 queued jobs by default).
+  Unexpected admitted execution failures emit one sanitized
+  `MCP_REQUEST_PROCESSING_FAILED` log without application attachments.
+- Public MCP identifiers and descriptive/error text reject unpaired UTF-16 at
+  construction or the setter, before mutating state. Default stderr logging
+  avoids stack rendering for routine interruption, socket close/timeout and
+  known executor shedding while retaining unexpected/nested diagnostics.
+- Release tooling uses the durable Maven archive URL. Javadoc enables reference
+  and syntax checks, and API freeze XML preserves generic-parameter order.
 - Finite HTTP response write-idle timeouts report `WRITE_FAILED` with a timeout
   cause, so MCP observation does not mistake them for client cancelation.
 - Typed MCP task argument constructors can block without pinning Java 21

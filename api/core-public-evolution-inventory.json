@@ -1,0 +1,374 @@
+{
+  "formatVersion": 1,
+  "structuralOwners": [
+    {
+      "owner": "com.soklet.BearerAuthenticationError",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.ByteRangeSelection.ByteRangeSelectionType",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.ConnectionRejectionReason",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.EffectiveOriginResolver.TrustPolicy",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.HttpMethod",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.LogEventType",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.MarshaledResponseBody",
+      "kind": "sealedRoot",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed response or lifecycle alternatives.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.MetricsCollector.MetricsFormat",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.MetricsCollector.RouteType",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.MetricsCollector.SnapshotTextOptions.HistogramFormat",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.MetricsCollector.SseEventDropReason",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.MetricsCollector.SseEventEnqueueOutcome",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.MetricsCollector.TransportFailureReason",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.ParameterizedHeaderValue.ParameterType",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.QueryFormat",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.RedirectType",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.RequestReadFailureReason",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.RequestRejectionReason",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.ResidualActivityType",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.ResourcePathDeclaration.ComponentType",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.ResponseCookie.Priority",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.ResponseCookie.SameSite",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.ServerType",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.ShutdownCleanupFailureReason",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.ShutdownComponentDisposition",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.ShutdownComponentType",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.ShutdownDisposition",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.ShutdownPhase",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.ShutdownTrigger",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.SokletLifecycleException",
+      "kind": "sealedRoot",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed response or lifecycle alternatives.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.SokletStatus",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.SseComment.CommentType",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.SseConnection.HandshakeFailureReason",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.SseHandshakeResult",
+      "kind": "sealedRoot",
+      "status": "closed-by-domain",
+      "rationale": "An SSE handshake either accepts or rejects the connection.",
+      "changePolicy": "New alternatives require an explicit reviewed contract amendment.",
+      "javadocGuidance": "Document the closed decision domain.",
+      "defaultSwitchGuidance": "Exhaustive switches are permitted."
+    },
+    {
+      "owner": "com.soklet.SseRequestResult",
+      "kind": "sealedRoot",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed response or lifecycle alternatives.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.StartupDisposition",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.StaticFiles.Access",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.StatusCode",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.StreamTerminationReason",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.StreamingResponseBody",
+      "kind": "sealedRoot",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed response or lifecycle alternatives.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
+      "owner": "com.soklet.UnparsedRequestReason",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed classification values.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    }
+  ]
+}

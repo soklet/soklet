@@ -470,6 +470,8 @@ class SimulatorConfigDerivationTests {
 				.maximumSubscriptionsPerPartition(9)
 					.requestHandlerConcurrency(4)
 					.requestHandlerQueueCapacity(13)
+					.protocolExecutorConcurrency(7)
+					.protocolExecutorQueueCapacity(9)
 					.requestHeaderTimeout(Duration.ofSeconds(11))
 					.requestBodyTimeout(Duration.ofSeconds(12))
 					.maximumRequestSizeInBytes(5 * 1_024 * 1_024)
@@ -730,7 +732,7 @@ class SimulatorConfigDerivationTests {
 		Assertions.assertEquals(Set.of(
 					"port", "maximumCursorSizeInBytes",
 					"maximumSubscriptionsPerPartition", "requestHandlerConcurrency",
-					"requestHandlerQueueCapacity", "streamQueueCapacity",
+					"requestHandlerQueueCapacity", "protocolExecutorConcurrency", "protocolExecutorQueueCapacity", "streamQueueCapacity",
 					"maximumRequestSizeInBytes", "maximumHeaderCount",
 					"maximumHeadersSizeInBytes",
 					"maximumRequestTargetLengthInBytes",

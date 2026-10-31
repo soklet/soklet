@@ -664,7 +664,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 	}
 
 	private static void assertPrivateError(HttpResponse<String> response, McpProtocolVersion protocolVersion) {
-		Assertions.assertEquals(protocolVersion == McpProtocolVersion.V2026_07_28 ? 500 : 200,
+		Assertions.assertEquals(200,
 				response.statusCode(), response.body());
 		Assertions.assertEquals("{\"jsonrpc\":\"2.0\",\"id\":\"error\",\"error\":{\"code\":-32603,\"message\":\"Internal error\"}}",
 				response.body());
@@ -800,7 +800,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 					.orElseThrow().getPort();
 			HttpResponse<String> response = callTool(port, "late", "late", "{}");
 
-			Assertions.assertEquals(504, response.statusCode(), response.body());
+			Assertions.assertEquals(200, response.statusCode(), response.body());
 			Assertions.assertEquals(
 					"{\"jsonrpc\":\"2.0\",\"id\":\"late\","
 							+ "\"error\":{\"code\":-32603,"
@@ -924,7 +924,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 
 	private static void assertInternalError(HttpResponse<String> response,
 			String expectedId) {
-		Assertions.assertEquals(500, response.statusCode(), response.body());
+		Assertions.assertEquals(200, response.statusCode(), response.body());
 		Assertions.assertEquals("{\"jsonrpc\":\"2.0\",\"id\":\""
 				+ expectedId
 				+ "\",\"error\":{\"code\":-32603,\"message\":\"Internal error\"}}",

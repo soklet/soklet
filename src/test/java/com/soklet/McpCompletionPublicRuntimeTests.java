@@ -301,7 +301,7 @@ public class McpCompletionPublicRuntimeTests {
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			HttpResponse<String> response = send(port, "completion/complete",
 					params(true, "visible", "subject", "s", null), "wrong");
-			assertEquals(500, response.statusCode(), response.body());
+			assertEquals(200, response.statusCode(), response.body());
 			assertFalse(response.body().contains(
 					"An MCP Completion interceptor"), response.body());
 			assertEquals(0, handlerEntries.get());
@@ -358,7 +358,7 @@ public class McpCompletionPublicRuntimeTests {
 						assertTrue(response.body().contains("\"code\":-32602"), response.body());
 						assertTrue(response.body().contains("Visible handler error"), response.body());
 					} else {
-						assertEquals(500, response.statusCode(), response.body());
+						assertEquals(200, response.statusCode(), response.body());
 						assertTrue(response.body().contains("\"code\":-32603"), response.body());
 						assertFalse(response.body().contains("Private interceptor error"), response.body());
 						assertFalse(response.body().contains("3102"), response.body());

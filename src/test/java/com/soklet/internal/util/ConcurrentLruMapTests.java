@@ -15,6 +15,18 @@ import static org.junit.jupiter.api.Assertions.*;
 @Timeout(20)
 class ConcurrentLruMapTests {
     @Test
+    void entriesRetainObservedValuesAfterRemovalAndStillWriteThrough() {
+        ConcurrentLruMap<String, String> map = new ConcurrentLruMap<>(1);
+        map.put("first", "observed");
+        Map.Entry<String, String> entry = map.entrySet().iterator().next();
+        map.clear();
+        assertEquals("observed", entry.getValue());
+        assertEquals("observed", entry.setValue("replacement"));
+        assertEquals("replacement", map.get("first"));
+        assertEquals("replacement", entry.getValue());
+    }
+
+    @Test
     void pausedMaintenanceBackpressuresConcurrentWriters() throws Exception {
         int capacity = 16;
         int workers = 8;

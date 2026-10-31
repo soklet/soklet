@@ -34,6 +34,9 @@ import static java.util.Objects.requireNonNull;
  * implementation information received from the wire is informational and is
  * not an authenticated identity.
  *
+ * <p>String factories and setters reject unpaired UTF-16 surrogates with
+ * {@link IllegalArgumentException}; well-formed Unicode is preserved exactly.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
@@ -171,8 +174,8 @@ public final class McpImplementation {
 		private URI websiteUrl;
 
 		private Builder(@NonNull String name, @NonNull String version) {
-			this.name = requireNonNull(name);
-			this.version = requireNonNull(version);
+			this.name = McpContentValueSupport.requireWellFormedString(name);
+			this.version = McpContentValueSupport.requireWellFormedString(version);
 		}
 
 		/**
@@ -183,7 +186,7 @@ public final class McpImplementation {
 		 */
 		@NonNull
 		public Builder title(@NonNull String title) {
-			this.title = requireNonNull(title);
+			this.title = McpContentValueSupport.requireWellFormedString(title);
 			return this;
 		}
 
@@ -196,7 +199,7 @@ public final class McpImplementation {
 		 */
 		@NonNull
 		public Builder description(@NonNull String description) {
-			this.description = requireNonNull(description);
+			this.description = McpContentValueSupport.requireWellFormedString(description);
 			return this;
 		}
 

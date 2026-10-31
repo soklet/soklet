@@ -24,6 +24,9 @@ import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
+import java.net.SocketException;
+import java.net.SocketTimeoutException;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -31,6 +34,73 @@ import java.util.concurrent.atomic.AtomicInteger;
 /** Verifies logging ownership independently of other observation callbacks. */
 @ResourceLock("java.lang.System.err")
 class LifecycleObserverLoggingTests {
+
+	@Test
+	void routineFrameworkConditionsDoNotRenderStackTraces() {
+		for (LogEvent event : List.of(
+				LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Request handler executor rejected task")
+						.throwable(new RejectedExecutionException("full")).build(),
+				LogEvent.with(LogEventType.SSE_SERVER_INTERNAL_ERROR, "Request handler executor rejected task")
+						.throwable(new RejectedExecutionException("full")).build(),
+				LogEvent.with(LogEventType.SSE_SERVER_CONNECTION_REJECTED, "Pending SSE handshake capacity exhausted")
+						.throwable(new RejectedExecutionException("full")).build(),
+				LogEvent.with(LogEventType.REQUEST_PROCESSING_FAILED, "request interrupted")
+						.throwable(new InterruptedException("deadline")).build(),
+				LogEvent.with(LogEventType.SERVER_TRANSPORT_FAILURE, "HTTP transport failure: read_error")
+						.throwable(new SocketException("Connection reset")).build())) {
+			String output = captureStandardError(() -> LifecycleObserver.defaultInstance().didReceiveLogEvent(event));
+			Assertions.assertEquals(1, output.lines().count(), output);
+			Assertions.assertTrue(output.contains(event.getThrowable().orElseThrow().getClass().getName()), output);
+			Assertions.assertFalse(output.contains("routineFrameworkConditionsDoNotRenderStackTraces"), output);
+		}
+	}
+
+	@Test
+	void compactDiagnosticsRetainFailureReasonAndBoundMessagesToOneLine() {
+		for (Throwable failure : List.of(new RejectedExecutionException("executor is shut down"),
+				new SocketTimeoutException("Read timed out"))) {
+			LogEvent event = failure instanceof SocketTimeoutException
+					? LogEvent.with(LogEventType.SERVER_TRANSPORT_FAILURE, "HTTP transport failure: request_timeout").throwable(failure).build()
+					: LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Request handler executor rejected task").throwable(failure).build();
+			String output = captureStandardError(() -> LifecycleObserver.defaultInstance().didReceiveLogEvent(event));
+			Assertions.assertEquals(1, output.lines().count());
+			Assertions.assertTrue(output.contains(failure.getMessage()), output);
+		}
+		LogEvent hostile = LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "Request handler executor rejected task")
+				.throwable(new RejectedExecutionException("shutdown\r\n" + "x".repeat(2000))).build();
+		String output = captureStandardError(() -> LifecycleObserver.defaultInstance().didReceiveLogEvent(hostile));
+		Assertions.assertEquals(1, output.lines().count());
+		Assertions.assertTrue(output.length() < 800);
+	}
+
+	@Test
+	void unexpectedFailuresKeepTheirOriginalStacks() {
+		for (LogEvent event : List.of(
+				LogEvent.with(LogEventType.SERVER_INTERNAL_ERROR, "unexpected executor failure")
+						.throwable(new RejectedExecutionException("diagnostic")).build(),
+				LogEvent.with(LogEventType.REQUEST_PROCESSING_FAILED, "unexpected application failure")
+						.throwable(new IllegalStateException("diagnostic")).build(),
+				LogEvent.with(LogEventType.REQUEST_PROCESSING_FAILED, "application executor rejected")
+						.throwable(new RejectedExecutionException("application diagnostic")).build(),
+				LogEvent.with(LogEventType.SERVER_TRANSPORT_FAILURE, "unexpected transport failure")
+						.throwable(new IllegalStateException("diagnostic")).build(),
+				LogEvent.with(LogEventType.SERVER_TRANSPORT_FAILURE, "HTTP transport failure: accept_loop_error")
+						.throwable(new SocketException("unexpected listening socket failure")).build())) {
+			String output = captureStandardError(() -> LifecycleObserver.defaultInstance().didReceiveLogEvent(event));
+			Assertions.assertTrue(output.contains("unexpectedFailuresKeepTheirOriginalStacks"), output);
+		}
+	}
+
+	@Test
+	void routineFailuresWithNestedDiagnosticsStillRenderStacks() {
+		SocketException failure = new SocketException("Connection reset");
+		failure.addSuppressed(new IllegalStateException("diagnostic"));
+		LogEvent event = LogEvent.with(LogEventType.SERVER_TRANSPORT_FAILURE, "HTTP transport failure: read_error")
+				.throwable(failure).build();
+		String output = captureStandardError(() -> LifecycleObserver.defaultInstance().didReceiveLogEvent(event));
+		Assertions.assertTrue(output.contains("Suppressed: java.lang.IllegalStateException: diagnostic"), output);
+	}
+
 
 	@Test
 	void interfaceDefaultIsSilentAndDoesNotInspectTheThrowable() {

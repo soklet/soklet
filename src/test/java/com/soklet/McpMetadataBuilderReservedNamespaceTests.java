@@ -295,7 +295,7 @@ public class McpMetadataBuilderReservedNamespaceTests {
 
 	private static void assertGenericFailure(HttpResponse<String> response,
 			String id) {
-		Assertions.assertEquals(500, response.statusCode(), response.body());
+		Assertions.assertEquals(200, response.statusCode(), response.body());
 		Assertions.assertEquals(JSON_MEDIA_TYPE,
 				response.headers().firstValue("Content-Type").orElseThrow());
 		Assertions.assertTrue(response.body().contains("\"id\":\"" + id + "\""),

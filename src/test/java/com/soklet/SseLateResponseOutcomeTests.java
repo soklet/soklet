@@ -96,7 +96,9 @@ class SseLateResponseOutcomeTests {
             }
             assertNotNull(wire);
             assertTrue(wire.startsWith("HTTP/1.1 429 "), wire);
+            assertTrue(wire.contains("X-Final: once\r\n"), wire);
             assertTrue(wire.endsWith("timeout winner"), wire);
+            assertEquals(1, fixture.timeoutPostProcesses.get());
             assertEquals(1, wire.split("HTTP/1.1 ", -1).length - 1, "Only the timeout response may reach the wire");
             assertEquals(0, fixture.written.get());
             assertEquals(0, fixture.metricWritten.get());
@@ -122,6 +124,7 @@ class SseLateResponseOutcomeTests {
         final AtomicInteger written = new AtomicInteger();
         final AtomicInteger metricWritten = new AtomicInteger();
         final AtomicInteger established = new AtomicInteger();
+        final AtomicInteger timeoutPostProcesses = new AtomicInteger();
         final List<Throwable> writeFailures = new CopyOnWriteArrayList<>();
         final List<Throwable> metricWriteFailures = new CopyOnWriteArrayList<>();
         final List<Throwable> finishedFailures = new CopyOnWriteArrayList<>();
@@ -151,6 +154,10 @@ class SseLateResponseOutcomeTests {
                         timeoutEntered.countDown();
                         awaitIgnoringInterrupts(releaseTimeout);
                         return MarshaledResponse.withStatusCode(429).body("timeout winner".getBytes(StandardCharsets.US_ASCII)).build();
+                    }).postProcessor(response -> {
+                        if (response.getStatusCode() != 429) return response;
+                        timeoutPostProcesses.incrementAndGet();
+                        return response.copy().headers(headers -> headers.put("X-Final", List.of("once"))).finish();
                     }).build())
                     .lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(3))
                             .startupCancelationTimeout(Duration.ofSeconds(1)).gracefulShutdownTimeout(Duration.ofSeconds(1))

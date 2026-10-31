@@ -129,7 +129,7 @@ public class McpAppResourceRuntimeTests {
 			for (int index = 0; index < 5; index++) {
 				McpResourceContents wrong = invalid.get(index);
 				result.set(McpResourceOutput.fromContents(List.of(healthy, wrong)));
-				String response = read(simulator, 500);
+				String response = read(simulator, 200);
 				assertTrue(response.contains("\"code\":-32603"), response);
 				assertFalse(response.contains("SECRET"), response);
 				assertFalse(response.contains("healthy"), response);
@@ -171,7 +171,7 @@ public class McpAppResourceRuntimeTests {
 						.contentSecurityPolicy(McpAppResourceMetadata.ContentSecurityPolicy.builder()
 								.resourceDomains(domains).build()).build()).build();
 		run(endpoint(() -> McpResourceOutput.fromContent(contents)), simulator -> {
-			String response = read(simulator, 500);
+			String response = read(simulator, 200);
 			assertTrue(response.contains("\"code\":-32603"), response);
 			assertFalse(response.contains("secret-"), response);
 			assertFalse(response.contains("SECRET-HTML"), response);

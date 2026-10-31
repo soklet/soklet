@@ -504,7 +504,7 @@ public class McpCompleteToolResultSanitizerRuntimeTests {
 	}
 
 	private static void assertFixedFailure(Capture response) {
-		assertEquals(500, response.status(), response.body());
+		assertEquals(200, response.status(), response.body());
 		assertEquals("{\"jsonrpc\":\"2.0\",\"id\":\"request\",\"error\":{\"code\":-32603,\"message\":\"Internal error\"}}",
 				response.body());
 		assertFalse(response.body().contains(SECRET), response.body());

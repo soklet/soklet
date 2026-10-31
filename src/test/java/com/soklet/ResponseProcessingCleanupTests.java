@@ -178,10 +178,11 @@ class ResponseProcessingCleanupTests {
 					MarshaledResponse result = simulator.performHttpRequest(Request.fromPath(HttpMethod.GET, "/file"))
 							.getMarshaledResponse();
 					assertEquals(200, result.getStatusCode());
-					assertFalse(second.isOpen());
-					assertTrue(first.isOpen(), "Final channel belongs to the transport/consumer until consumed");
+					assertFalse(second.isOpen(), "Simulation consumes and closes owned predecessors before returning");
+					assertEquals(borrow, first.isOpen(), "Only borrowed final channels remain open after simulation");
 					assertArrayEquals("body".getBytes(java.nio.charset.StandardCharsets.UTF_8), result.bodyBytesOrNull());
 					assertEquals(borrow, first.isOpen());
+					assertFalse(second.isOpen());
 				});
 			}
 		}
@@ -197,7 +198,9 @@ class ResponseProcessingCleanupTests {
 					MarshaledResponse original = response(channel, owned);
 					MarshaledResponse result = ResponseMarshaler.builder().notFoundHandler(ignored -> original)
 							.postProcessor(ignored -> shared ? response(channel, false) : MarshaledResponse.fromStatusCode(404))
-							.build().forNotFound(request);
+							.build().postProcess(original);
+					assertTrue(channel.isOpen(), "Postprocessing retains predecessor ownership until terminal cleanup");
+					result.close();
 					assertEquals(shared || !owned, channel.isOpen());
 					if (shared) assertArrayEquals("body".getBytes(java.nio.charset.StandardCharsets.UTF_8), result.bodyBytesOrNull());
 				}
@@ -212,7 +215,7 @@ class ResponseProcessingCleanupTests {
 		FailingCloseChannel failed = new FailingCloseChannel();
 		MarshaledResponse original = MarshaledResponse.withStatusCode(200).body(failed, 0L, 1L, true).build();
 		Throwable thrown = assertThrows(IllegalStateException.class, () -> ResponseMarshaler.builder()
-				.notFoundHandler(ignored -> original).postProcessor(ignored -> { throw failure; }).build().forNotFound(request));
+				.notFoundHandler(ignored -> original).postProcessor(ignored -> { throw failure; }).build().postProcess(original));
 		assertSame(failure, thrown);
 		assertEquals(1, thrown.getSuppressed().length);
 		assertSame(failed.closeFailure, thrown.getSuppressed()[0].getCause());
@@ -222,14 +225,16 @@ class ResponseProcessingCleanupTests {
 		try (FileChannel replacement = FileChannel.open(path)) {
 			FailingCloseChannel old = new FailingCloseChannel();
 			MarshaledResponse predecessor = MarshaledResponse.withStatusCode(200).body(old, 0L, 1L, true).build();
-			assertThrows(UncheckedIOException.class, () -> ResponseMarshaler.builder().notFoundHandler(ignored -> predecessor)
-					.postProcessor(ignored -> response(replacement, true)).build().forNotFound(request));
+			MarshaledResponse transformed = ResponseMarshaler.builder().notFoundHandler(ignored -> predecessor)
+					.postProcessor(ignored -> response(replacement, true)).build().postProcess(predecessor);
+			assertTrue(replacement.isOpen());
+			assertThrows(UncheckedIOException.class, transformed::close);
 			assertFalse(replacement.isOpen());
 			assertEquals(1, old.closeCalls.get());
 		}
 		try (FileChannel channel = FileChannel.open(path)) {
 			assertThrows(NullPointerException.class, () -> ResponseMarshaler.builder().notFoundHandler(ignored -> response(channel, true))
-					.postProcessor(ignored -> null).build().forNotFound(request));
+					.postProcessor(ignored -> null).build().postProcess(response(channel, true)));
 			assertFalse(channel.isOpen());
 		}
 	}

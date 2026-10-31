@@ -16,7 +16,11 @@
 
 package com.soklet;
 
-/** Describes the terminal evidence for one shutdown component. */
+/**
+ * Describes the terminal evidence for one shutdown component.
+ * <p>
+ * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
+ */
 public enum ShutdownComponentDisposition {
 	/** The component did not start and no tracked setup call remains. */
 	NOT_STARTED,

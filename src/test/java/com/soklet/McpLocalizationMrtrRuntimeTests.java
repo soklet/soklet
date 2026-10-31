@@ -140,7 +140,7 @@ class McpLocalizationMrtrRuntimeTests {
 				continuation -> Locale.GERMAN), handlerInvocations,
 				request("mismatch-retry", ",\"requestState\":\"" + state + "\""));
 
-		assertEquals(500, retry.statusCode(), retry.body());
+		assertEquals(200, retry.statusCode(), retry.body());
 		assertTrue(retry.body().contains("\"code\":-32603"), retry.body());
 		assertTrue(retry.body().contains("\"message\":\"Internal error\""),
 				retry.body());
@@ -159,7 +159,7 @@ class McpLocalizationMrtrRuntimeTests {
 		Capture retry = call(null, handlerInvocations,
 				request("disabled-retry", ",\"requestState\":\"" + state + "\""));
 
-		assertEquals(500, retry.statusCode(), retry.body());
+		assertEquals(200, retry.statusCode(), retry.body());
 		assertTrue(retry.body().contains("\"code\":-32603"), retry.body());
 		assertFalse(retry.body().contains("fr-CA"), retry.body());
 		assertEquals(0, handlerInvocations.get(),

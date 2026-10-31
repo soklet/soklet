@@ -823,7 +823,7 @@ public class McpDeferredTaskOutputSafetyTests {
 
 	private static void assertFixedInternalError(
 			@NonNull HttpResponse<String> response, @NonNull String requestId) {
-		Assertions.assertEquals(500, response.statusCode(), response.body());
+		Assertions.assertEquals(200, response.statusCode(), response.body());
 		Assertions.assertEquals(
 				"{\"jsonrpc\":\"2.0\",\"id\":\"" + requestId
 						+ "\",\"error\":{\"code\":-32603,"
@@ -835,7 +835,7 @@ public class McpDeferredTaskOutputSafetyTests {
 
 	private static void assertActiveDeadline(
 			@NonNull HttpResponse<String> response, @NonNull String requestId) {
-		Assertions.assertEquals(504, response.statusCode(), response.body());
+		Assertions.assertEquals(200, response.statusCode(), response.body());
 		Assertions.assertEquals(
 				"{\"jsonrpc\":\"2.0\",\"id\":\"" + requestId
 						+ "\",\"error\":{\"code\":-32603,"

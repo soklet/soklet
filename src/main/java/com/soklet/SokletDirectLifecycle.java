@@ -2609,8 +2609,9 @@ final class SokletDirectLifecycle {
 	private HttpRequestResult serviceUnavailableResult(@NonNull Request request) {
 		MarshaledResponse response;
 		try {
-			response = this.config.getResponseMarshaler()
-					.forServiceUnavailable(requireNonNull(request), null);
+			ResponseMarshaler marshaler = this.config.getResponseMarshaler();
+			response = ResponseBodyCleanup.transform(
+					marshaler.forServiceUnavailable(requireNonNull(request), null), marshaler::postProcess);
 		} catch (Throwable failure) {
 			LifecycleObserverLogFallback.report(failure);
 			response = ResponseMarshaler.defaultInstance()

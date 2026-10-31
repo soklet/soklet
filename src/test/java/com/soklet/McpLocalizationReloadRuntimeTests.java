@@ -208,7 +208,7 @@ class McpLocalizationReloadRuntimeTests {
 			nextFrame(simulation);
 
 			try {
-				assertEquals(McpStreamTerminationReason.COMPLETED,
+				assertEquals(McpStreamTerminationReason.DEADLINE_EXCEEDED,
 						simulation.awaitCompletion(WAIT).orElseThrow(() ->
 								new AssertionError("Timed out.")).getReason());
 			} catch (InterruptedException e) {
@@ -258,7 +258,7 @@ class McpLocalizationReloadRuntimeTests {
 			}
 			nextFrame(simulation);
 			try {
-				assertEquals(McpStreamTerminationReason.COMPLETED,
+				assertEquals(McpStreamTerminationReason.DEADLINE_EXCEEDED,
 						simulation.awaitCompletion(WAIT).orElseThrow(() ->
 								new AssertionError("Timed out.")).getReason());
 			} catch (InterruptedException e) {

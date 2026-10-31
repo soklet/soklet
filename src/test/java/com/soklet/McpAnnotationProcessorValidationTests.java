@@ -1318,6 +1318,9 @@ public class McpAnnotationProcessorValidationTests {
 						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://items/%FF", name = "opaque-octet")
 						  public McpResourceOutput opaqueOctet() { return null; }
 
+						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://items//double", name = "repeated-slash")
+						  public McpResourceOutput repeatedSlash() { return null; }
+
 						  @McpResource(protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28, uri = "test://items/café", name = "unicode")
 						  public McpResourceOutput unicode() { return null; }
 
@@ -1627,7 +1630,7 @@ public class McpAnnotationProcessorValidationTests {
 				left, "left", oneOver, "right");
 		assertThat(failedClosed).failed();
 		assertThat(failedClosed).hadErrorContaining(
-				"Potentially overlapping MCP resource URI templates");
+				"MCP resource URI template overlap validation exceeded its comparison budget");
 
 		int[] exactEndpoint = {186, 201, 228, 233, 233, 235, 235};
 		assertThat(compileResourceTemplateOverlapSet(exactEndpoint))
@@ -1636,7 +1639,7 @@ public class McpAnnotationProcessorValidationTests {
 				new int[]{186, 201, 228, 233, 233, 235, 235, 1});
 		assertThat(endpointOneOver).failed();
 		assertThat(endpointOneOver).hadErrorContaining(
-				"Potentially overlapping MCP resource URI templates");
+				"MCP resource URI template overlap validation exceeded its comparison budget");
 	}
 
 	@Test

@@ -97,7 +97,7 @@ public final class ResourcePathDeclaration {
 	 * Vends an instance that represents a compile-time path declaration, for example {@code /users/{userId}}.
 	 *
 	 * @param path a compile-time path declaration that may include placeholders
-	 * @throws IllegalArgumentException if the declaration contains malformed placeholders, duplicate names or a non-final varargs placeholder
+	 * @throws IllegalArgumentException if the declaration contains unpaired UTF-16 surrogates, malformed placeholders, duplicate names or a non-final varargs placeholder
 	 */
 	@NonNull
 public static ResourcePathDeclaration fromPath(@NonNull String path) {
@@ -301,6 +301,15 @@ public static ResourcePathDeclaration fromPath(@NonNull String path) {
 	@NonNull
 	static String normalizePath(@NonNull String path, boolean trimDeclaration) {
 		requireNonNull(path);
+		for (int index = 0; index < path.length(); index++) {
+			char character = path.charAt(index);
+			if (Character.isHighSurrogate(character) && index + 1 < path.length()
+					&& Character.isLowSurrogate(path.charAt(index + 1))) {
+				index++;
+			} else if (Character.isSurrogate(character)) {
+				throw new IllegalArgumentException("Resource paths must not contain unpaired UTF-16 surrogates.");
+			}
+		}
 
 		if (trimDeclaration)
 			path = trimAggressivelyToEmpty(path);
@@ -405,6 +414,9 @@ public static ResourcePathDeclaration fromPath(@NonNull String path) {
 	 * </ul>
 	 * <p>
 	 * <strong>Note: this type is not normally used by Soklet applications unless they choose to implement a custom {@link ResourceMethodResolver}.</strong>
+	 *
+	 * <p>
+	 * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 * @see ResourcePathDeclaration

@@ -21,6 +21,7 @@
 package com.soklet;
 
 import com.soklet.exception.IllegalRequestBodyException;
+import com.soklet.exception.IllegalRequestException;
 import com.soklet.exception.MissingRequestHeaderException;
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 import org.jspecify.annotations.NonNull;
@@ -36,10 +37,7 @@ import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.io.UnsupportedEncodingException;
 import java.nio.charset.Charset;
-import java.nio.charset.IllegalCharsetNameException;
 import java.nio.charset.StandardCharsets;
-import java.nio.charset.UnsupportedCharsetException;
-import java.text.ParseException;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -62,6 +60,10 @@ final class DefaultMultipartParser implements MultipartParser {
 	private static final Integer MAX_MULTIPART_FIELDS;
 	@NonNull
 	private static final DefaultMultipartParser DEFAULT_INSTANCE;
+	@NonNull
+	private static final Map<String, Charset> MULTIPART_TEXT_CHARSETS = multipartTextCharsets();
+	private static final int MAXIMUM_HEADER_PARAMETERS = 128;
+	private static final int MAXIMUM_ENCODED_WORDS = 128;
 
 	static {
 		MAX_MULTIPART_FIELDS = 1_000;
@@ -69,7 +71,6 @@ final class DefaultMultipartParser implements MultipartParser {
 	}
 
 	private DefaultMultipartParser() {
-		// Singleton
 	}
 
 	@NonNull
@@ -108,7 +109,7 @@ final class DefaultMultipartParser implements MultipartParser {
 	public Map<@NonNull String, @NonNull List<@NonNull MultipartField>> extractMultipartFields(@NonNull Request request) {
 		byte[] requestBody = request.getBody().orElse(null);
 
-		if (requestBody == null)
+		if (requestBody == null || requestBody.length == 0)
 			return Map.of();
 
 		// Required for embedded commons-upload code
@@ -223,6 +224,9 @@ final class DefaultMultipartParser implements MultipartParser {
 		} catch (MultipartStream.MalformedStreamException ignored) {
 			throw new IllegalRequestBodyException(
 					"Multipart request body is malformed.");
+		} catch (IllegalRequestException ignored) {
+			// Part headers are body metadata. Do not retain their client-supplied values.
+			throw new IllegalRequestBodyException("Multipart part metadata is malformed.");
 		} catch (IOException e) {
 			throw new UncheckedIOException(e);
 		}
@@ -230,13 +234,24 @@ final class DefaultMultipartParser implements MultipartParser {
 		return Utilities.immutableValueLists(multipartFieldsByName, false);
 	}
 
-	private static String decodeMultipartText(byte[] bytes, String charsetName) throws UnsupportedEncodingException {
-		Charset charset;
-		try {
-			charset = Charset.forName(charsetName);
-		} catch (IllegalCharsetNameException | UnsupportedCharsetException ignored) {
-			throw new UnsupportedEncodingException("Unsupported multipart text encoding.");
+	private static Map<String, Charset> multipartTextCharsets() {
+		Map<String, Charset> charsets = new HashMap<>();
+		// Resolve only fixed standard charsets. Unsupported names must never
+		// trigger a provider scan for each parameter in an untrusted upload.
+		for (Charset charset : List.of(StandardCharsets.UTF_8, StandardCharsets.ISO_8859_1,
+				StandardCharsets.US_ASCII, StandardCharsets.UTF_16,
+				StandardCharsets.UTF_16BE, StandardCharsets.UTF_16LE)) {
+			charsets.put(charset.name().toLowerCase(Locale.ROOT), charset);
+			for (String alias : charset.aliases())
+				charsets.put(alias.toLowerCase(Locale.ROOT), charset);
 		}
+		return Map.copyOf(charsets);
+	}
+
+	private static String decodeMultipartText(byte[] bytes, String charsetName) throws UnsupportedEncodingException {
+		Charset charset = MULTIPART_TEXT_CHARSETS.get(charsetName.toLowerCase(Locale.ROOT));
+		if (charset == null)
+			throw new UnsupportedEncodingException("Unsupported multipart text encoding.");
 		return RequestTextDecoder.decodeBody(bytes, charset);
 	}
 
@@ -1784,16 +1799,12 @@ final class DefaultMultipartParser implements MultipartParser {
 			while (i2 > i1 && Character.isWhitespace(chars[i2 - 1])) {
 				i2--;
 			}
-			// Strip away quotation marks if necessary
+			// Strip enclosing quotation marks while preserving browser backslashes literally.
 			if (quoted && i2 - i1 >= 2 && chars[i1] == '"' && chars[i2 - 1] == '"') {
 				i1++;
 				i2--;
 			}
-			String result = null;
-			if (i2 > i1) {
-				result = new String(chars, i1, i2 - i1);
-			}
-			return result;
+			return i2 > i1 ? new String(chars, i1, i2 - i1) : null;
 		}
 
 		/**
@@ -1867,7 +1878,10 @@ final class DefaultMultipartParser implements MultipartParser {
 
 			String paramName;
 			String paramValue;
+			int parameterCount = 0;
 			while (hasChar()) {
+				if (++parameterCount > MAXIMUM_HEADER_PARAMETERS)
+					throw new IllegalRequestBodyException("Too many multipart header parameters.");
 				paramName = parseToken(new char[]{'=', separator});
 				paramValue = null;
 				if (hasChar() && charArray[pos] == '=') {
@@ -1947,16 +1961,21 @@ final class DefaultMultipartParser implements MultipartParser {
 			i1 = pos;
 			i2 = pos;
 			var quoted = false;
-			var charEscaped = false;
 			while (hasChar()) {
 				ch = chars[pos];
 				if (!quoted && isOneOf(ch, terminators)) {
 					break;
 				}
-				if (!charEscaped && ch == '"') {
-					quoted = !quoted;
+				// Retain literal browser backslashes. An interior quote followed by
+				// value text cannot terminate a parameter; only whitespace and the
+				// separator/end may follow its closing quote.
+				if (ch == '"') {
+					int next = pos + 1;
+					while (next < len && Character.isWhitespace(chars[next]))
+						next++;
+					if (!quoted || next == len || isOneOf(chars[next], terminators))
+						quoted = !quoted;
 				}
-				charEscaped = !charEscaped && ch == '\\';
 				i2++;
 				pos++;
 
@@ -2034,8 +2053,11 @@ final class DefaultMultipartParser implements MultipartParser {
 				// missing language
 				return encodedText;
 			}
+			Charset charset = MULTIPART_TEXT_CHARSETS.get(getJavaCharset(mimeCharset).toLowerCase(Locale.ROOT));
+			if (charset == null)
+				return encodedText;
 			final var bytes = fromHex(encodedText.substring(langDelimitEnd + 1));
-			return decodeMultipartText(bytes, getJavaCharset(mimeCharset));
+			return RequestTextDecoder.decodeBody(bytes, charset);
 		}
 
 		/**
@@ -2113,15 +2135,7 @@ final class DefaultMultipartParser implements MultipartParser {
 	 */
 	protected final class MimeUtils {
 
-		/**
-		 * The marker to indicate text is encoded with BASE64 algorithm.
-		 */
-		private static final String BASE64_ENCODING_MARKER = "B";
 
-		/**
-		 * The marker to indicate text is encoded with QuotedPrintable algorithm.
-		 */
-		private static final String QUOTEDPRINTABLE_ENCODING_MARKER = "Q";
 
 		/**
 		 * If the text contains any encoded tokens, those tokens will be marked with "=?".
@@ -2180,6 +2194,7 @@ final class DefaultMultipartParser implements MultipartParser {
 			final var decodedText = new StringBuilder(text.length());
 
 			var previousTokenEncoded = false;
+			int encodedWordCount = 0;
 
 			while (offset < endOffset) {
 				var ch = text.charAt(offset);
@@ -2216,25 +2231,17 @@ final class DefaultMultipartParser implements MultipartParser {
 					final var word = text.substring(wordStart, offset);
 					// is the token encoded? decode the word
 					if (word.startsWith(ENCODED_TOKEN_MARKER)) {
-						try {
-							// if this gives a parsing failure, treat it like a non-encoded word.
-							final var decodedWord = decodeWord(word);
-
-							// are any whitespace characters significant? Append 'em if we've got 'em.
+						if (++encodedWordCount > MAXIMUM_ENCODED_WORDS)
+							throw new IllegalRequestBodyException("Too many encoded words in multipart metadata.");
+						String decodedWord = decodeWord(word);
+						if (decodedWord != null) {
 							if (!previousTokenEncoded && startWhiteSpace != -1) {
 								decodedText.append(text, startWhiteSpace, endWhiteSpace);
 								startWhiteSpace = -1;
 							}
-							// this is definitely a decoded token.
 							previousTokenEncoded = true;
-							// and add this to the text.
 							decodedText.append(decodedWord);
-							// we continue parsing from here...we allow parsing errors to fall through
-							// and get handled as normal text.
 							continue;
-
-						} catch (final ParseException ignored) {
-							// just ignore it, skip to next word
 						}
 					}
 					// this is a normal token, so it doesn't matter what the previous token was. Add the white space
@@ -2252,78 +2259,59 @@ final class DefaultMultipartParser implements MultipartParser {
 			return decodedText.toString();
 		}
 
-		/**
-		 * Decodes a string using the RFC 2047 rules for an "encoded-word" type. This encoding has the syntax:
-		 * <p>
-		 * encoded-word = "=?" charset "?" encoding "?" encoded-text "?="
-		 *
-		 * @param word The possibly encoded word value.
-		 * @return The decoded word.
-		 * @throws ParseException               in case of a parse error of the RFC 2047.
-		 * @throws UnsupportedEncodingException Thrown when Invalid RFC 2047 encoding was found.
-		 */
-		private static String decodeWord(final String word) throws ParseException, UnsupportedEncodingException {
-			// encoded words start with the characters "=?". If this not an encoded word, we throw a
-			// ParseException for the caller.
-
-			final var etmPos = word.indexOf(ENCODED_TOKEN_MARKER);
-			if (etmPos != 0) {
-				throw new ParseException("Invalid RFC 2047 encoded-word: " + word, etmPos);
-			}
-
-			final var charsetPos = word.indexOf('?', 2);
-			if (charsetPos == -1) {
-				throw new ParseException("Missing charset in RFC 2047 encoded-word: " + word, charsetPos);
-			}
-
-			// pull out the character set information (this is the MIME name at this point).
-			final var charset = word.substring(2, charsetPos).toLowerCase(Locale.ENGLISH);
-
-			// now pull out the encoding token the same way.
-			final var encodingPos = word.indexOf('?', charsetPos + 1);
-			if (encodingPos == -1) {
-				throw new ParseException("Missing encoding in RFC 2047 encoded-word: " + word, encodingPos);
-			}
-
-			final var encoding = word.substring(charsetPos + 1, encodingPos);
-
-			// and finally the encoded text.
-			final var encodedTextPos = word.indexOf(ENCODED_TOKEN_FINISHER, encodingPos + 1);
-			if (encodedTextPos == -1) {
-				throw new ParseException("Missing encoded text in RFC 2047 encoded-word: " + word, encodedTextPos);
-			}
-
-			final var encodedText = word.substring(encodingPos + 1, encodedTextPos);
-
-			// seems a bit silly to encode a null string, but easy to deal with.
-			if (encodedText.isEmpty()) {
-				return "";
-			}
-
-			try {
-				// the decoder writes directly to an output stream.
-				final var out = new ByteArrayOutputStream(encodedText.length());
-
-				final var encodedData = encodedText.getBytes(StandardCharsets.US_ASCII);
-
-				// Base64 encoded?
-				if (encoding.equals(BASE64_ENCODING_MARKER)) {
-					out.write(Base64.getMimeDecoder().decode(encodedData));
-				} else if (encoding.equals(QUOTEDPRINTABLE_ENCODING_MARKER)) { // maybe quoted printable.
-					QuotedPrintableDecoder.decode(encodedData, out);
-				} else {
-					throw new UnsupportedEncodingException("Unknown RFC 2047 encoding: " + encoding);
+		/** Returns null for an unsupported or malformed encoded word, without exception allocation. */
+		private static String decodeWord(final String word) {
+			if (!word.startsWith(ENCODED_TOKEN_MARKER) || !word.endsWith(ENCODED_TOKEN_FINISHER))
+				return null;
+			int charsetEnd = word.indexOf('?', 2);
+			if (charsetEnd < 3)
+				return null;
+			int encodingEnd = word.indexOf('?', charsetEnd + 1);
+			if (encodingEnd != charsetEnd + 2 || encodingEnd + 3 > word.length())
+				return null;
+			Charset charset = MULTIPART_TEXT_CHARSETS.get(javaCharset(word.substring(2, charsetEnd).toLowerCase(Locale.ROOT)).toLowerCase(Locale.ROOT));
+			if (charset == null)
+				return null;
+			String data = word.substring(encodingEnd + 1, word.length() - 2);
+			ByteArrayOutputStream decoded = new ByteArrayOutputStream(data.length());
+			char encoding = Character.toUpperCase(word.charAt(charsetEnd + 1));
+			if (encoding == 'B') {
+				// Validate before invoking the decoder: malformed client tokens must
+				// not allocate a stack trace for every word in an upload.
+				int padding = data.endsWith("==") ? 2 : data.endsWith("=") ? 1 : 0;
+				int end = data.length() - padding;
+				if (end % 4 == 1 || (padding > 0 && data.length() % 4 != 0))
+					return null;
+				for (int i = 0; i < end; i++) {
+					char c = data.charAt(i);
+					if (!(c >= 'A' && c <= 'Z') && !(c >= 'a' && c <= 'z')
+							&& !(c >= '0' && c <= '9') && c != '+' && c != '/')
+						return null;
 				}
-				// get the decoded byte data and convert into a string.
-				final var decodedData = out.toByteArray();
-				return decodeMultipartText(decodedData, javaCharset(charset));
-			} catch (final IllegalArgumentException e) {
-				final var parseException = new ParseException("Invalid RFC 2047 Base64 encoded-word: " + word, encodingPos + 1);
-				parseException.initCause(e);
-				throw parseException;
-			} catch (final IOException e) {
-				throw new UnsupportedEncodingException("Invalid RFC 2047 encoding");
+				decoded.writeBytes(Base64.getDecoder().decode(data));
+			} else if (encoding == 'Q') {
+				for (int i = 0; i < data.length(); i++) {
+					char c = data.charAt(i);
+					if (c > 0x7f)
+						return null;
+					if (c == '=') {
+						if (i + 2 >= data.length())
+							return null;
+						char first = data.charAt(++i);
+						char second = data.charAt(++i);
+						int hi = first <= 0x7f ? Character.digit(first, 16) : -1;
+						int lo = second <= 0x7f ? Character.digit(second, 16) : -1;
+						if (hi < 0 || lo < 0)
+							return null;
+						decoded.write(hi << 4 | lo);
+					} else {
+						decoded.write(c == '_' ? ' ' : c);
+					}
+				}
+			} else {
+				return null;
 			}
+			return RequestTextDecoder.decodeBody(decoded.toByteArray(), charset);
 		}
 
 		/**

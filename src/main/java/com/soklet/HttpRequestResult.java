@@ -224,7 +224,14 @@ public final class HttpRequestResult {
 
 	@Nullable HttpResponseStreamObservation getResponseStreamObservation() { return this.responseStreamObservation; }
 
-	@NonNull Optional<Request> getEffectiveSseRequest() { return Optional.ofNullable(this.effectiveSseRequest); }
+	/**
+	 * The request after request-interceptor rewriting for an SSE handshake.
+	 * Custom transports should use this request for routing broadcasts and client initialization.
+	 *
+	 * @return the effective SSE request, or empty for results without an SSE dispatch
+	 */
+	@NonNull
+	public Optional<@NonNull Request> getEffectiveSseRequest() { return Optional.ofNullable(this.effectiveSseRequest); }
 
 	/**
 	 * Returns the logical SSE handshake result, if request processing produced one.

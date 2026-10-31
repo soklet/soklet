@@ -205,6 +205,9 @@ public final class EffectiveOriginResolver {
 
 	/**
 	 * Forwarded header trust policy.
+	 * <p>
+	 * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
+	 *
 	 */
 	public enum TrustPolicy {
 		/**

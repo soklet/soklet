@@ -906,8 +906,7 @@ public class UtilitiesTests {
 		Map<String, List<String>> cookies = Utilities.extractCookiesFromHeaders(h);
 		Assertions.assertEquals(List.of("b\";c"), cookies.get("a"));
 		Assertions.assertEquals(List.of(" "), cookies.get("d"));
-		// TODO: Should we preserve empty cookies?
-		// Assertions.assertEquals(List.of(""), cookies.get("e"));
+		Assertions.assertEquals(List.of(""), cookies.get("e"));
 		Assertions.assertEquals(List.of(""), cookies.get("f"));
 	}
 

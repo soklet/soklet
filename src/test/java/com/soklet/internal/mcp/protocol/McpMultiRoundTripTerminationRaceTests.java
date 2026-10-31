@@ -286,7 +286,7 @@ public class McpMultiRoundTripTerminationRaceTests {
 					clock.advance(REQUEST_DEADLINE.plusSeconds(1));
 					runtime.runApplicationTimerCycle();
 					McpChunkedHttpClient.HttpResponseHead head = client.readHead();
-					Assertions.assertEquals(504, head.status(), head.raw());
+					Assertions.assertEquals(200, head.status(), head.raw());
 					deadlineBody = client.readFixedBody(head);
 					Assertions.assertEquals("{\"jsonrpc\":\"2.0\","
 							+ "\"id\":\"blocked-seal\",\"error\":{\"code\":-32603,"
@@ -522,7 +522,7 @@ public class McpMultiRoundTripTerminationRaceTests {
 				clock.advance(REQUEST_DEADLINE.plusSeconds(1));
 				runtime.runApplicationTimerCycle();
 				McpChunkedHttpClient.HttpResponseHead head = client.readHead();
-				Assertions.assertEquals(504, head.status(), head.raw());
+				Assertions.assertEquals(200, head.status(), head.raw());
 				Assertions.assertEquals("{\"jsonrpc\":\"2.0\","
 						+ "\"id\":\"conditional-hold\",\"error\":{\"code\":-32603,"
 						+ "\"message\":\"Internal error\"}}",

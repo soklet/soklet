@@ -157,7 +157,7 @@ class DefaultHeadHandlingTests {
 					return response.copy().headers(headers -> headers.put("X-Processed", List.of("true"))).finish();
 				}).build();
 
-		MarshaledResponse result = marshaler.forHead(Request.fromPath(HttpMethod.HEAD, "/jwks"), representation);
+		MarshaledResponse result = marshaler.postProcess(marshaler.forHead(Request.fromPath(HttpMethod.HEAD, "/jwks"), representation));
 
 		assertEquals(2, stage.get());
 		assertEquals(202, result.getStatusCode());

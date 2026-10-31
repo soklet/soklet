@@ -52,10 +52,14 @@ public class CookieTests {
 
 		Assertions.assertEquals(Set.of(), blank.keySet());
 
-		Map<String, List<String>> missingValue = Utilities.extractCookiesFromHeaders(Map.of(
+		Map<String, List<String>> emptyValue = Utilities.extractCookiesFromHeaders(Map.of(
 				"Cookie", List.of("a=")
 		));
+		Assertions.assertEquals(List.of(""), emptyValue.get("a"));
 
+		Map<String, List<String>> missingValue = Utilities.extractCookiesFromHeaders(Map.of(
+				"Cookie", List.of("a")
+		));
 		Assertions.assertEquals(List.of(), missingValue.get("a"));
 	}
 

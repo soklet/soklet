@@ -16,7 +16,11 @@
 
 package com.soklet;
 
-/** Describes why the standalone runner's bounded cleanup did not complete. */
+/**
+ * Describes why the standalone runner's bounded cleanup did not complete.
+ * <p>
+ * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
+ */
 public enum ShutdownCleanupFailureReason {
 	/** The cleanup action threw. */
 	FAILED,

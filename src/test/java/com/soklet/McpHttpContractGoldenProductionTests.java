@@ -175,7 +175,7 @@ public class McpHttpContractGoldenProductionTests {
 					new RequestCase("interceptor-failure",
 							validToolPost("interceptor-failure", TOOL_NAME,
 									"schema-failure", false),
-							"internal-500.http.hex", List.of("admission",
+							"internal-200.http.hex", List.of("admission",
 									"request-limiter", "tool-limiter", "interceptor")),
 					new RequestCase("schema-failure",
 							validToolPost("schema-failure", TOOL_NAME,
@@ -185,13 +185,13 @@ public class McpHttpContractGoldenProductionTests {
 					new RequestCase("handler-failure",
 							validToolPost("handler-failure", TOOL_NAME,
 									"handler-failure", false),
-							"internal-500.http.hex", List.of("admission",
+							"internal-200.http.hex", List.of("admission",
 									"request-limiter", "tool-limiter", "interceptor",
 									"handler")),
 					new RequestCase("invalid-output",
 							validToolPost("invalid-output", TYPED_TOOL_NAME,
 									"invalid-output", false),
-							"internal-500.http.hex", List.of("admission",
+							"internal-200.http.hex", List.of("admission",
 									"request-limiter", "tool-limiter", "interceptor",
 									"handler", "sanitizer")),
 					new RequestCase("typed-success",
@@ -645,7 +645,7 @@ public class McpHttpContractGoldenProductionTests {
 		Path manifest = GOLDEN_ROOT.resolve("manifest.sha256");
 		Assertions.assertTrue(Files.isRegularFile(manifest, LinkOption.NOFOLLOW_LINKS));
 		List<String> rows = Files.readAllLines(manifest, StandardCharsets.US_ASCII);
-		Assertions.assertEquals(23, rows.size());
+		Assertions.assertEquals(24, rows.size());
 		List<String> manifested = new ArrayList<>();
 		for (String row : rows) {
 			String[] fields = row.split("  ", -1);

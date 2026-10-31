@@ -276,6 +276,8 @@ final class DefaultSseServer implements SseServer {
 		@NonNull
 		private final AtomicReference<Thread> handlerThreadRef;
 		@NonNull
+		private final Object handlerThreadLock;
+		@NonNull
 		private final AtomicReference<Request> requestRef;
 		@NonNull
 		private final AtomicReference<ResourceMethod> resourceMethodRef;
@@ -290,6 +292,7 @@ final class DefaultSseServer implements SseServer {
 			this.establishmentFailureNotified = new AtomicBoolean(false);
 			this.handshakeTimeoutFutureRef = new AtomicReference<>();
 			this.handlerThreadRef = new AtomicReference<>();
+			this.handlerThreadLock = new Object();
 			this.requestRef = new AtomicReference<>();
 			this.resourceMethodRef = new AtomicReference<>();
 			this.remoteAddressRef = new AtomicReference<>(remoteAddress);
@@ -1744,14 +1747,13 @@ final class DefaultSseServer implements SseServer {
 		// that the timeout already owns both the response and its classification.
 		handshakeContext.acceptanceFinalized.compareAndSet(false, true);
 
-		// Claim the handler-thread reference before interrupting it.  The handler
-		// clears this reference with the same CAS when it finishes, so a timeout
-		// can never interrupt a pooled worker after ownership has moved to another
-		// handshake.
-		Thread handlerThread = handshakeContext.handlerThreadRef.get();
-		if (handlerThread != null
-				&& handshakeContext.handlerThreadRef.compareAndSet(handlerThread, null))
-			handlerThread.interrupt();
+		// Retirement takes the same monitor, so a pooled worker cannot start
+		// another handshake while this handshake's interrupt is still in flight.
+		synchronized (handshakeContext.handlerThreadLock) {
+			Thread handlerThread = handshakeContext.handlerThreadRef.getAndSet(null);
+			if (handlerThread != null)
+				handlerThread.interrupt();
+		}
 
 		Request request = handshakeContext.requestRef.get();
 		ResourceMethod resourceMethod = handshakeContext.resourceMethodRef.get();
@@ -1796,7 +1798,7 @@ final class DefaultSseServer implements SseServer {
 		try {
 			ResponseMarshaler responseMarshaler = getResponseMarshaler().orElse(null);
 			if (request != null && responseMarshaler != null) {
-				MarshaledResponse response = responseMarshaler.forServiceUnavailable(request, resourceMethod);
+				MarshaledResponse response = serviceUnavailableHandshakeResponse(responseMarshaler, request, resourceMethod);
 				responseBytes = createHandshakeHttpResponse(HttpRequestResult.withMarshaledResponse(response).build(), headRequest);
 			}
 		} catch (Throwable t) {
@@ -1859,7 +1861,10 @@ final class DefaultSseServer implements SseServer {
 		boolean connectionProcessingStarted = false;
 		HandshakeRequestCapture requestCapture = new HandshakeRequestCapture();
 
-		handshakeContext.handlerThreadRef.set(Thread.currentThread());
+		synchronized (handshakeContext.handlerThreadLock) {
+			if (handshakeContext.handshakeResponseOwner.get() == HandshakeResponseOwner.UNCLAIMED)
+				handshakeContext.handlerThreadRef.set(Thread.currentThread());
+		}
 
 		ReentrantLock channelLock = handshakeContext.channelLock;
 		AtomicReference<HandshakeResponseOwner> handshakeResponseOwner =
@@ -1870,6 +1875,9 @@ final class DefaultSseServer implements SseServer {
 		InetSocketAddress remoteAddress = handshakeContext.remoteAddressRef.get();
 
 		if (handshakeResponseOwner.get() != HandshakeResponseOwner.UNCLAIMED) {
+			synchronized (handshakeContext.handlerThreadLock) {
+				handshakeContext.handlerThreadRef.compareAndSet(Thread.currentThread(), null);
+			}
 			closeHandshakeChannelUnlessTimeoutOwned(clientSocketChannel,
 					handshakeContext);
 			completeHandshake(clientSocketChannel);
@@ -2131,7 +2139,8 @@ final class DefaultSseServer implements SseServer {
 							SseConnection.HandshakeFailureReason.HANDSHAKE_REJECTED, e);
 
 				try {
-					MarshaledResponse response = requiredResponseMarshaler().forThrowable(request, e, null);
+					ResponseMarshaler responseMarshaler = requiredResponseMarshaler();
+					MarshaledResponse response = failedHandshakeResponse(responseMarshaler, request, e);
 					channelLock.lock();
 					try {
 						writeHandshakeResponseToChannel(clientSocketChannel, response);
@@ -2172,7 +2181,8 @@ final class DefaultSseServer implements SseServer {
 				safelyLog(LogEvent.with(LogEventType.SSE_SERVER_CONNECTION_REJECTED,
 						format("Rejecting request: Concurrent connection limit (%d) reached", getConcurrentConnectionLimit())).build());
 
-				MarshaledResponse response = requiredResponseMarshaler().forServiceUnavailable(request, resourceMethod);
+				ResponseMarshaler responseMarshaler = requiredResponseMarshaler();
+				MarshaledResponse response = serviceUnavailableHandshakeResponse(responseMarshaler, request, resourceMethod);
 
 				try {
 					channelLock.lock();
@@ -2203,7 +2213,7 @@ final class DefaultSseServer implements SseServer {
 						if (owner == HandshakeResponseOwner.TIMEOUT || owner == HandshakeResponseOwner.QUIESCE)
 							// Discard only owned, already-open bodies. Do not open a lazy
 							// source or close a body belonging to a duplicate handler offer.
-							requestResult.getMarshaledResponse().copy().withoutBody();
+							requestResult.getMarshaledResponse().close();
 						// A timeout's own handshake callback is authoritative. Its custom
 						// response may still be in preparation, so neither wait for it nor
 						// describe the late handler's suppressed response as written.
@@ -2253,7 +2263,10 @@ final class DefaultSseServer implements SseServer {
 									safelyLog(LogEvent.with(LogEventType.SSE_SERVER_CONNECTION_REJECTED,
 											"Rejecting request: SSE connection or lifecycle capacity reached").build());
 
-								MarshaledResponse response = requiredResponseMarshaler().forServiceUnavailable(requestForHandler, requestResult.getResourceMethod().orElse(null));
+								ResponseMarshaler responseMarshaler = requiredResponseMarshaler();
+								MarshaledResponse response = serviceUnavailableHandshakeResponse(responseMarshaler,
+										requestForHandler, requestResult.getResourceMethod().orElse(null));
+								response = ResponseBodyCleanup.retain(requestResult.getMarshaledResponse(), response);
 
 								effectiveRequestResult = requestResult.copy()
 										.marshaledResponse(response)
@@ -2273,6 +2286,12 @@ final class DefaultSseServer implements SseServer {
 									clientSocketChannel, requireNonNull(pendingReservation.get())));
 					} catch (Throwable t) {
 						preparationFailure = t;
+						// Preparation may fail before materialization takes ownership, including
+						// while generating a late capacity replacement. Retire the selected
+						// descriptor without replacing the primary preparation failure.
+						try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
+							ResponseBodyCleanup.discard(effectiveRequestResult.getMarshaledResponse(), null, t);
+						}
 						handshakeFailureReason.set(SseConnection.HandshakeFailureReason.INTERNAL_ERROR);
 						handshakeFailureCause.set(t);
 						if (pendingReservation.get() != null) {
@@ -2459,7 +2478,9 @@ final class DefaultSseServer implements SseServer {
 			if (t instanceof InterruptedException)
 				Thread.currentThread().interrupt();
 		} finally {
-			handshakeContext.handlerThreadRef.compareAndSet(Thread.currentThread(), null);
+			synchronized (handshakeContext.handlerThreadLock) {
+				handshakeContext.handlerThreadRef.compareAndSet(Thread.currentThread(), null);
+			}
 			if (!applicationPhaseQueued) {
 				cancelTimeout(handshakeContext.handshakeTimeoutFutureRef.getAndSet(null));
 
@@ -3184,6 +3205,14 @@ final class DefaultSseServer implements SseServer {
 	@NonNull
 	private byte[] createHandshakeHttpResponse(@NonNull HttpRequestResult requestResult,
 			boolean headRequest) throws IOException {
+		try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
+			return materializeHandshakeHttpResponse(requestResult, headRequest);
+		}
+	}
+
+	@NonNull
+	private byte[] materializeHandshakeHttpResponse(@NonNull HttpRequestResult requestResult,
+			boolean headRequest) throws IOException {
 		requireNonNull(requestResult);
 
 		MarshaledResponse marshaledResponse = requestResult.getMarshaledResponse();
@@ -3330,7 +3359,7 @@ final class DefaultSseServer implements SseServer {
 		} catch (IOException | RuntimeException | Error failure) {
 			if (!bodyMaterializationStarted) {
 				try {
-					marshaledResponse.copy().withoutBody();
+					marshaledResponse.close();
 				} catch (RuntimeException | Error cleanupFailure) {
 					if (!sameInstance(failure, cleanupFailure))
 						failure.addSuppressed(cleanupFailure);
@@ -3339,7 +3368,7 @@ final class DefaultSseServer implements SseServer {
 			throw failure;
 		}
 		if (!bodyMaterializationStarted)
-			marshaledResponse.copy().withoutBody();
+			marshaledResponse.close();
 		return serializedResponse;
 	}
 
@@ -5723,6 +5752,22 @@ final class DefaultSseServer implements SseServer {
 	@NonNull
 	protected Optional<ResponseMarshaler> getResponseMarshaler() {
 		return Optional.ofNullable(this.responseMarshaler);
+	}
+
+	@NonNull
+	private MarshaledResponse serviceUnavailableHandshakeResponse(@NonNull ResponseMarshaler marshaler,
+			@NonNull Request request, @Nullable ResourceMethod resourceMethod) {
+		try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
+			return ResponseBodyCleanup.transform(marshaler.forServiceUnavailable(request, resourceMethod), marshaler::postProcess);
+		}
+	}
+
+	@NonNull
+	private MarshaledResponse failedHandshakeResponse(@NonNull ResponseMarshaler marshaler,
+			@NonNull Request request, @NonNull Throwable failure) {
+		try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
+			return ResponseBodyCleanup.transform(marshaler.forThrowable(request, failure, null), marshaler::postProcess);
+		}
 	}
 
 	@NonNull

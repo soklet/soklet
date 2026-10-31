@@ -74,29 +74,25 @@ public class McpRateLimiterTests {
 
 	@Test
 	public void tokenBucketConfigurationIsFiniteAndValidated() {
-		McpTokenBucketConfig defaults = McpTokenBucketConfig.fromDefaults();
-		Assertions.assertEquals(Long.valueOf(20), defaults.getCapacity());
-		Assertions.assertEquals(Long.valueOf(60), defaults.getRefillTokens());
-		Assertions.assertEquals(Duration.ofMinutes(1), defaults.getRefillInterval());
-		McpTokenBucketConfig completedEntryPoint =
-				McpTokenBucketConfig.withCapacity(100L).build();
-		Assertions.assertEquals(Long.valueOf(100),
-				completedEntryPoint.getCapacity());
-		Assertions.assertEquals(Long.valueOf(60),
-				completedEntryPoint.getRefillTokens());
-		Assertions.assertEquals(Duration.ofMinutes(1),
-				completedEntryPoint.getRefillInterval());
-		McpTokenBucketConfig resetDefaults = McpTokenBucketConfig
+		Assertions.assertThrows(IllegalStateException.class, () ->
+				McpTokenBucketConfig.withCapacity(100L).build());
+		Assertions.assertThrows(IllegalStateException.class, () ->
+				McpTokenBucketConfig.withCapacity(100L).refillTokens(2L).build());
+		Assertions.assertThrows(IllegalStateException.class, () ->
+				McpTokenBucketConfig.withCapacity(100L)
+						.refillInterval(Duration.ofSeconds(3)).build());
+		McpTokenBucketConfig explicit = McpTokenBucketConfig
 				.withCapacity(100L)
 				.refillTokens(2L)
 				.refillInterval(Duration.ofSeconds(3))
-				.refillTokens(null)
-				.refillInterval(null)
 				.build();
-		Assertions.assertEquals(Long.valueOf(60),
-				resetDefaults.getRefillTokens());
-		Assertions.assertEquals(Duration.ofMinutes(1),
-				resetDefaults.getRefillInterval());
+		Assertions.assertEquals(Long.valueOf(100), explicit.getCapacity());
+		Assertions.assertEquals(Long.valueOf(2), explicit.getRefillTokens());
+		Assertions.assertEquals(Duration.ofSeconds(3), explicit.getRefillInterval());
+		Assertions.assertThrows(NullPointerException.class, () ->
+				McpTokenBucketConfig.withCapacity(1L).refillTokens(null));
+		Assertions.assertThrows(NullPointerException.class, () ->
+				McpTokenBucketConfig.withCapacity(1L).refillInterval(null));
 
 		Assertions.assertThrows(IllegalArgumentException.class, () ->
 				McpTokenBucketConfig.withCapacity(0L)

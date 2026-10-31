@@ -32,6 +32,9 @@ import java.net.URI;
  * subscription is admitted scopes registration and quota accounting; it is not
  * an event target and does not authorize catalog or resource access.
  *
+ * <p>
+ * This type may gain reviewed permitted subtypes in Soklet 4.x; use a forward-compatible default when switching over its values.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe

@@ -49,6 +49,9 @@ import static java.util.Objects.requireNonNull;
  * handler/interceptor side effects have already occurred. Configure reverse proxies to use HTTP/1.1
  * for their connection to Soklet. Normal HEAD body omission happens before this streaming check.
  *
+ * <p>
+ * This type may gain reviewed permitted subtypes in Soklet 4.x; use a forward-compatible default when switching over its values.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe

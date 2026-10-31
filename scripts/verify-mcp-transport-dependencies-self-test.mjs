@@ -37,7 +37,7 @@ const temporaryRoot = mkdtempSync(join(tmpdir(),
   'soklet-mcp-transport-dependencies-self-test-'));
 const goldenRoot = resolve(temporaryRoot, 'golden');
 const OUTBOUND_CHANNEL = 'src/main/java/com/soklet/internal/mcp/transport/McpOutboundChannel.java';
-const EXPECTED_CASE_COUNT = 148;
+const EXPECTED_CASE_COUNT = 151;
 let passedCases = 0;
 
 const FIXTURE_SOURCES = Object.freeze([
@@ -937,24 +937,36 @@ try {
     (root) => {
       mutateSource(root, REQUEST_STREAM, (source) => source.replace(
         'return channel.offerGuardedCoalescing(frame, coalescingKey,\n'
-        + '\t\t\t\t\twriteAllowed, continuationAllowed, payloadWritten, payloadReleased);',
+        + '\t\t\t\t\twriteAllowed, continuationAllowed, payloadWritten, payloadReleased, coalesceStarted);',
         'return channel.offerGuardedCoalescing(frame, coalescingKey,\n'
-        + '\t\t\t\t\t() -> true, continuationAllowed, payloadWritten, payloadReleased);'));
+        + '\t\t\t\t\t() -> true, continuationAllowed, payloadWritten, payloadReleased, coalesceStarted);'));
     }, /must retain their guard and callbacks on the installed channel/u);
 
   expectRejected('guarded notifications cannot bypass their continuation guard', (root) => {
     mutateSource(root, REQUEST_STREAM, (source) => source.replace(
-      'writeAllowed, continuationAllowed, payloadWritten, payloadReleased);',
-      'writeAllowed, () -> true, payloadWritten, payloadReleased);'));
+      'writeAllowed, continuationAllowed, payloadWritten, payloadReleased, coalesceStarted);',
+      'writeAllowed, () -> true, payloadWritten, payloadReleased, coalesceStarted);'));
   }, /must retain their guard and callbacks on the installed channel/u);
 
   for (const guard of ['writeAllowed', 'continuationAllowed']) {
     expectRejected(`transport adapter cannot discard its ${guard}`, (root) => {
       mutateSource(root, REQUEST_STREAM, (source) => replaceAfter(source,
         'return this.delegate.offerGuardedCoalescing(encodedBytes,',
-        'coalescingKey, writeAllowed, continuationAllowed, payloadWritten, payloadReleased);',
-        `coalescingKey, ${guard === 'writeAllowed' ? '() -> true' : 'writeAllowed'}, ${guard === 'continuationAllowed' ? '() -> true' : 'continuationAllowed'}, payloadWritten, payloadReleased);`));
+        'coalescingKey, writeAllowed, continuationAllowed, payloadWritten, payloadReleased, coalesceStarted);',
+        `coalescingKey, ${guard === 'writeAllowed' ? '() -> true' : 'writeAllowed'}, ${guard === 'continuationAllowed' ? '() -> true' : 'continuationAllowed'}, payloadWritten, payloadReleased, coalesceStarted);`));
     }, /guarded channel offers must retain their guard and callbacks/u);
+  }
+
+  for (const [label, path, anchor] of [
+    ['request stream', REQUEST_STREAM, 'offerGuardedCoalescingMessage('],
+    ['transport adapter', REQUEST_STREAM, 'private static final class TransportChannel'],
+    ['outbound channel', OUTBOUND_CHANNEL, 'public final class McpOutboundChannel'],
+  ]) {
+    expectRejected(`${label} cannot change the guarded compatibility default`, (root) => {
+      mutateSource(root, path, (source) => replaceAfter(source, anchor,
+        'payloadWritten, payloadReleased, true);',
+        'payloadWritten, payloadReleased, false);'));
+    }, /six-argument guarded compatibility offers must preserve both guards and their coalescing default/u);
   }
 
   expectRejected('task continuation cannot bypass real authorization revocation', (root) => {

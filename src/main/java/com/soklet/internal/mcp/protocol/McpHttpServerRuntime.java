@@ -98,7 +98,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
@@ -1245,7 +1245,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			McpApplicationExecution application = new McpApplicationExecution(
 					applicationConfiguration, applicationClock,
 					applicationExecutorFactory, this::runProtocolDeadlineCycle,
-					this.applicationExecutionObserver, maximumLegacyGetObservationReservations);
+					this.applicationExecutionObserver, maximumLegacyGetObservationReservations, maximumAdmittedModernSubscriptions(),
+					transportConfiguration.requestProcessorConcurrency());
 			List<SubscriptionSourceRegistrationControl> registrations =
 					new ArrayList<>();
 			generation = new SimulationGeneration(processor, application,
@@ -1902,7 +1903,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			candidateApplicationExecution = new McpApplicationExecution(
 					applicationConfiguration, applicationClock,
 					applicationExecutorFactory, this::runProtocolDeadlineCycle,
-					this.applicationExecutionObserver, maximumLegacyGetObservationReservations);
+					this.applicationExecutionObserver, maximumLegacyGetObservationReservations, maximumAdmittedModernSubscriptions(),
+					transportConfiguration.requestProcessorConcurrency());
 			synchronized (lifecycleLock) {
 				applicationExecution = candidateApplicationExecution;
 			}
@@ -3604,7 +3606,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				concurrency,
 				0L,
 				TimeUnit.MILLISECONDS,
-				new ArrayBlockingQueue<>(
+				new LinkedBlockingQueue<>(
 						transportConfiguration.requestProcessorQueueCapacity()),
 				threadFactory, taskProjectionConcurrency,
 				taskProjectionOwnerCapacity,
@@ -3632,7 +3634,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 		private LifecycleRequestProcessor(int corePoolSize, int maximumPoolSize,
 				long keepAliveTime, @NonNull TimeUnit unit,
-				@NonNull ArrayBlockingQueue<@NonNull Runnable> workQueue,
+				@NonNull BlockingQueue<@NonNull Runnable> workQueue,
 				@NonNull ThreadFactory threadFactory,
 				int taskProjectionConcurrency,
 				long taskProjectionOwnerCapacity,
@@ -3718,6 +3720,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private @Nullable ProjectionOwner lastReady;
 		private int queuedOwners;
 		private int workersScheduled;
+		private long executorAvailabilityGeneration;
 		private boolean shutdown;
 
 		TaskNotificationProjectionScheduler(@NonNull Executor executor,
@@ -3789,38 +3792,63 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				}
 			}
 			if (rejected) reject(List.of(required));
-			else executorMayAcceptWorker();
+			else scheduleWorkerIfNeeded(false);
 		}
 
 		void executorMayAcceptWorker() {
+			scheduleWorkerIfNeeded(true);
+		}
+
+		private void scheduleWorkerIfNeeded(boolean executorAvailabilityObserved) {
 			boolean scheduleWorker = false;
+			long submissionGeneration;
 			synchronized (this.lock) {
+				if (executorAvailabilityObserved)
+					this.executorAvailabilityGeneration++;
+				submissionGeneration = this.executorAvailabilityGeneration;
 				if (!this.shutdown && this.firstReady != null
 						&& this.workersScheduled < this.maximumWorkers) {
 					this.workersScheduled++;
 					scheduleWorker = true;
 				}
 			}
-			if (scheduleWorker) submitWorker();
+			if (scheduleWorker) submitWorker(submissionGeneration);
 		}
 
 		int queuedJobCount() {
 			synchronized (this.lock) { return this.queuedOwners; }
 		}
 
-		private void submitWorker() {
-			try {
-				this.executor.execute(this::runOne);
-			} catch (RuntimeException | Error failure) {
-				List<TaskNotificationProjectionJob> rejected = List.of();
-				synchronized (this.lock) {
-					this.workersScheduled--;
-					if (!(failure instanceof RejectedExecutionException)
-							&& this.workersScheduled == 0)
-						rejected = drainJobsWhileLocked();
+		private void submitWorker(long submissionGeneration) {
+			while (true) {
+				try {
+					this.executor.execute(this::runOne);
+					return;
+				} catch (RuntimeException | Error failure) {
+					List<TaskNotificationProjectionJob> rejected = List.of();
+					boolean retry = false;
+					synchronized (this.lock) {
+						this.workersScheduled--;
+						if (!(failure instanceof RejectedExecutionException)) {
+							if (this.workersScheduled == 0)
+								rejected = drainJobsWhileLocked();
+						} else if (!this.shutdown && this.firstReady != null
+							&& this.workersScheduled < this.maximumWorkers
+							&& submissionGeneration != this.executorAvailabilityGeneration) {
+							// A completion can signal while this rejected submission still
+							// owns its reservation. Consume that newer signal here instead
+							// of leaving ready owners stranded on an otherwise idle pool.
+							this.workersScheduled++;
+							submissionGeneration = this.executorAvailabilityGeneration;
+							retry = true;
+						}
+					}
+					reject(rejected);
+					if (!(failure instanceof RejectedExecutionException)) throw failure;
+					// Unchanged saturation does not retry. Every further attempt must
+					// be justified by a distinct executor-completion generation.
+					if (!retry) return;
 				}
-				reject(rejected);
-				if (!(failure instanceof RejectedExecutionException)) throw failure;
 			}
 		}
 
@@ -3842,14 +3870,16 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				job.run();
 			} finally {
 				boolean scheduleWorker;
+				long submissionGeneration;
 				synchronized (this.lock) {
 					state.running = false;
 					if (state.registered && state.pending != null)
 						appendWhileLocked(state);
 					scheduleWorker = !this.shutdown && this.firstReady != null;
+					submissionGeneration = this.executorAvailabilityGeneration;
 					if (!scheduleWorker) this.workersScheduled--;
 				}
-				if (scheduleWorker) submitWorker();
+				if (scheduleWorker) submitWorker(submissionGeneration);
 			}
 		}
 
@@ -6772,77 +6802,101 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				legacyGetControls.put(control, get);
 			}
 		}
-		long expectedGeneration = get == null ? 0L : get.establishmentGeneration();
 		long now = applicationClock.nanoTime();
 		long operationDeadline = minimumDeadline(now, control.deadlineNanos(), now
 				+ subscriptionRuntimeConfiguration.authorizationTimeout().toNanos());
-		McpApplicationExecution.BoundedPolicyCancellation cancellation = application.newBoundedPolicyCancellation();
-		synchronized (control.lock) { control.legacyHttpCancellation = cancellation; }
-		if (get != null) get.bindCancellation(cancellation);
-		LegacyHttpPolicyWork work = new LegacyHttpPolicyWork(() -> {}, method == HttpMethod.DELETE);
 		try {
-			if (get != null && !subscriptionTransportAccepting(control))
-				return legacyGetStoppingResponse(headers);
-			LegacyHttpAuthorization authorization = authorizeLegacyHttp(control, publicRequest,
-					endpoint, revision, offered, false, operationDeadline, cancellation, work);
-			if (get != null && !subscriptionTransportAccepting(control))
-				return legacyGetStoppingResponse(headers);
-			if (authorization.rejection() != null) return legacyHttpRejection(authorization.rejection(), headers);
-			McpLegacySessionTransportAdmission.Accepted accepted = requireNonNull(authorization.accepted());
-			long lease = legacyLeaseDeadline(accepted, Long.MAX_VALUE);
-			if (lease - applicationClock.nanoTime() <= 0L)
-				return emptyResponse(403, "Forbidden", headers);
-			McpEffectivePartition partition = requireNonNull(authorization.partition());
-			try {
-				McpLegacySessionStore store = requireNonNull(legacySessionStore);
-				String sessionId = singleHeader(request, MCP_SESSION_ID).orElseThrow();
-				if (method == HttpMethod.DELETE) {
-					McpLegacySessionStore.Acquisition acquisition = store.acquireControl(sessionId,
-							requireNonNull(authorization.owner()), endpoint.path(), revision, application,
-							null, new McpLegacySessionStore.Target() {
-								@Override public boolean cancel(McpLegacySessionStore.Cause cause) { return false; }
-								@Override public void retire(McpLegacySessionStore.Cause cause) { }
-							}, sessionRequestEvidenceBytes(request));
-					if (acquisition.status() != McpLegacySessionStore.Status.ACCEPTED)
-						return legacyHttpStatusResponse(acquisition.status(), headers);
-					McpLegacySessionStore.Call call = acquisition.call().orElseThrow();
-					if (!control.attachLegacyCall(call)) {
-						call.logicalComplete(); call.physicalComplete(); return null;
-					}
-					try {
-						return call.acceptedUse() && store.retireIfCurrent(call, McpLegacySessionStore.Cause.SESSION_CLOSED, lease)
-								? emptyResponse(204, "No Content", headers) : emptyResponse(403, "Forbidden", headers);
-					} finally { call.logicalComplete(); }
+			// Reconciliation invalidates a policy decision even when its callback
+			// ignores interruption. Retry once under the original deadline, with a
+			// fresh cancellation lease and independently retained physical work.
+			for (int attempt = 0; attempt < 2; attempt++) {
+				if (operationDeadline - applicationClock.nanoTime() <= 0L) {
+					control.reserveCatalogPolicyDeadlineResponse();
+					return attempt > 0 ? legacyGetReconciliationResponse(headers) : sessionCapacityResponse(503, headers);
 				}
-				LegacyGetControl delivery = requireNonNull(get);
-				if (!delivery.canEstablish(expectedGeneration))
-					return subscriptionTransportAccepting(control) ? emptyResponse(403, "Forbidden", headers)
-							: legacyGetStoppingResponse(headers);
-				// Allocate the transport before replacing an older logical GET.
-				delivery.prepareStream();
-				long total = applicationClock.nanoTime() + subscriptionRuntimeConfiguration.maximumSubscriptionDuration().toNanos();
-				McpLegacySessionStore.GetAllocation allocation = store.reserveGet(sessionId,
-						requireNonNull(authorization.owner()), endpoint.path(), revision, application, partition,
-						delivery, sessionRequestEvidenceBytes(request), lease, total, accepted.notificationTypes());
-				if (allocation.status() != McpLegacySessionStore.Status.ACCEPTED)
-					return legacyHttpStatusResponse(allocation.status(), headers);
-				if (!delivery.open(allocation.get().orElseThrow(), expectedGeneration, partition))
-					return subscriptionTransportAccepting(control) ? emptyResponse(403, "Forbidden", headers)
-							: legacyGetStoppingResponse(headers);
-				return null;
-			} finally { work.complete(); }
-		} catch (McpApplicationPolicyCapacityException | McpApplicationPolicyDeadlineException exception) {
-			if (get != null && !subscriptionTransportAccepting(control))
-				return legacyGetStoppingResponse(headers);
-			control.reserveCatalogPolicyDeadlineResponse();
+				McpApplicationExecution.BoundedPolicyCancellation cancellation = application.newBoundedPolicyCancellation();
+				synchronized (control.lock) { control.legacyHttpCancellation = cancellation; }
+				long expectedGeneration = get == null ? 0L : get.beginEstablishment(cancellation);
+				LegacyHttpPolicyWork work = new LegacyHttpPolicyWork(() -> {}, method == HttpMethod.DELETE);
+				try {
+					if (get != null && !subscriptionTransportAccepting(control))
+						return legacyGetStoppingResponse(headers);
+					LegacyHttpAuthorization authorization = authorizeLegacyHttp(control, publicRequest,
+							endpoint, revision, offered, false, operationDeadline, cancellation, work);
+					if (get != null && !subscriptionTransportAccepting(control))
+						return legacyGetStoppingResponse(headers);
+					if (get != null && get.establishmentReconciled(expectedGeneration)) {
+						if (attempt == 0) continue;
+						return legacyGetReconciliationResponse(headers);
+					}
+					if (authorization.rejection() != null) return legacyHttpRejection(authorization.rejection(), headers);
+					McpLegacySessionTransportAdmission.Accepted accepted = requireNonNull(authorization.accepted());
+					long lease = legacyLeaseDeadline(accepted, Long.MAX_VALUE);
+					if (lease - applicationClock.nanoTime() <= 0L)
+						return emptyResponse(403, "Forbidden", headers);
+					McpEffectivePartition partition = requireNonNull(authorization.partition());
+					McpLegacySessionStore store = requireNonNull(legacySessionStore);
+					String sessionId = singleHeader(request, MCP_SESSION_ID).orElseThrow();
+					if (method == HttpMethod.DELETE) {
+						McpLegacySessionStore.Acquisition acquisition = store.acquireControl(sessionId,
+								requireNonNull(authorization.owner()), endpoint.path(), revision, application,
+								null, new McpLegacySessionStore.Target() {
+									@Override public boolean cancel(McpLegacySessionStore.Cause cause) { return false; }
+									@Override public void retire(McpLegacySessionStore.Cause cause) { }
+								}, sessionRequestEvidenceBytes(request));
+						if (acquisition.status() != McpLegacySessionStore.Status.ACCEPTED)
+							return legacyHttpStatusResponse(acquisition.status(), headers);
+						McpLegacySessionStore.Call call = acquisition.call().orElseThrow();
+						if (!control.attachLegacyCall(call)) {
+							call.logicalComplete(); call.physicalComplete(); return null;
+						}
+						try {
+							return call.acceptedUse() && store.retireIfCurrent(call, McpLegacySessionStore.Cause.SESSION_CLOSED, lease)
+									? emptyResponse(204, "No Content", headers) : emptyResponse(403, "Forbidden", headers);
+						} finally { call.logicalComplete(); }
+					}
+					LegacyGetControl delivery = requireNonNull(get);
+					if (!delivery.canEstablish(expectedGeneration)) {
+						if (delivery.establishmentReconciled(expectedGeneration)) {
+							if (attempt == 0) continue;
+							return legacyGetReconciliationResponse(headers);
+						}
+						return subscriptionTransportAccepting(control) ? emptyResponse(403, "Forbidden", headers)
+								: legacyGetStoppingResponse(headers);
+					}
+					// Allocate the transport before replacing an older logical GET.
+					delivery.prepareStream();
+					long total = applicationClock.nanoTime() + subscriptionRuntimeConfiguration.maximumSubscriptionDuration().toNanos();
+					McpLegacySessionStore.GetAllocation allocation = store.reserveGet(sessionId,
+							requireNonNull(authorization.owner()), endpoint.path(), revision, application, partition,
+							delivery, sessionRequestEvidenceBytes(request), lease, total, accepted.notificationTypes());
+					if (allocation.status() != McpLegacySessionStore.Status.ACCEPTED)
+						return legacyHttpStatusResponse(allocation.status(), headers);
+					if (!delivery.open(allocation.get().orElseThrow(), expectedGeneration, partition))
+						return subscriptionTransportAccepting(control)
+								? delivery.establishmentReconciled(expectedGeneration)
+										? legacyGetReconciliationResponse(headers) : emptyResponse(403, "Forbidden", headers)
+								: legacyGetStoppingResponse(headers);
+					return null;
+				} catch (McpApplicationPolicyCapacityException | McpApplicationPolicyDeadlineException exception) {
+					if (get != null && !subscriptionTransportAccepting(control))
+						return legacyGetStoppingResponse(headers);
+					control.reserveCatalogPolicyDeadlineResponse();
+					return get != null && get.establishmentReconciled(expectedGeneration)
+							? legacyGetReconciliationResponse(headers) : sessionCapacityResponse(503, headers);
+				} catch (Throwable throwable) {
+					if (get != null && !subscriptionTransportAccepting(control))
+						return legacyGetStoppingResponse(headers);
+					if (get != null && get.establishmentReconciled(expectedGeneration)) {
+						if (attempt == 0) continue;
+						return legacyGetReconciliationResponse(headers);
+					}
+					control.admissionFailed(endpoint.path(), throwable);
+					return emptyResponse(500, "Internal Server Error", headers);
+				} finally { work.complete(); }
+			}
 			return sessionCapacityResponse(503, headers);
-		} catch (Throwable throwable) {
-			if (get != null && !subscriptionTransportAccepting(control))
-				return legacyGetStoppingResponse(headers);
-			control.admissionFailed(endpoint.path(), throwable);
-			return emptyResponse(500, "Internal Server Error", headers);
 		} finally {
-			work.complete();
 			control.finishCatalogPolicyEvaluation();
 			if (get != null) get.establishmentFinished();
 		}
@@ -7614,7 +7668,11 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				if (message instanceof McpJsonRpcMessage.ErrorResponse errorResponse)
 					recordProtocolErrorAfterSuccessfulEncoding(
 							errorResponse.error().code(), requestContext);
-				httpResponse = jsonResponse(response.status(), response.reason(),
+				// Modern clients consume admitted application failures as protocol
+				// responses. Capacity, queued deadlines and executor/transport faults
+				// retain their HTTP failure status; intentional JSON-RPC errors keep 400.
+				boolean inBand = modernApplicationError(protocolProfile, response);
+				httpResponse = jsonResponse(inBand ? 200 : response.status(), inBand ? "OK" : response.reason(),
 						encodedMessage, additionalHeaders);
 			} else {
 				httpResponse = emptyResponse(response.status(), response.reason(),
@@ -7627,7 +7685,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			McpJsonRpcError renderedError = requireNonNull(protocolProfile
 					.renderFrameworkError(McpProfileErrorKind.CONTROL,
 							canonicalError));
-			httpResponse = jsonRpcError(500, "Internal Server Error",
+			boolean inBand = "2026-07-28".equals(protocolProfile.revision()) && !response.transportFailure();
+			httpResponse = jsonRpcError(inBand ? 200 : 500, inBand ? "OK" : "Internal Server Error",
 					Optional.of(requestId), renderedError, additionalHeaders,
 					requestContext);
 			List<Throwable> throwables = new ArrayList<>(response.throwables());
@@ -7637,6 +7696,13 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 
 		return new ApplicationResponseRendering(httpResponse, observationResult);
+	}
+
+	private static boolean modernApplicationError(McpProtocolProfile profile, McpApplicationResponse response) {
+		return "2026-07-28".equals(profile.revision()) && !response.transportFailure()
+				&& response.message().orElse(null) instanceof McpJsonRpcMessage.ErrorResponse
+				&& ((response.status() == 500 && response.outcome() == McpRequestOutcome.INTERNAL_ERROR)
+						|| (response.status() == 504 && response.outcome() == McpRequestOutcome.DEADLINE_EXCEEDED));
 	}
 
 	/**
@@ -8231,6 +8297,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		return emptyResponse(503, "Service Unavailable", withConnectionClose(headers));
 	}
 
+	private MicrohttpResponse legacyGetReconciliationResponse(List<Header> headers) {
+		// A new request may retry the fresh authorization immediately. This does
+		// not predict when unrelated session or callback capacity will recover.
+		return emptyResponse(503, "Service Unavailable", rateLimitHeaders(Duration.ZERO, headers));
+	}
+
 	private @Nullable MicrohttpResponse observedSubscriptionAuthorizationFailure(
 			@NonNull RequestControl requestControl,
 			@NonNull McpJsonRpcId requestId,
@@ -8667,7 +8739,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		headers.add(new Header("Access-Control-Allow-Origin", allowedOrigin));
 		if (Boolean.TRUE.equals(response.getAccessControlAllowCredentials().orElse(null)))
 			headers.add(new Header("Access-Control-Allow-Credentials", "true"));
-		List<String> exposedHeaders = new ArrayList<>(MCP_EXPOSED_RESPONSE_HEADERS);
+		Set<String> exposedHeaders = new LinkedHashSet<>(MCP_EXPOSED_RESPONSE_HEADERS);
+		exposedHeaders.addAll(response.getAccessControlExposeHeaders());
 		if (legacySessionRevisions.containsKey(requestPath(request.uri())))
 			exposedHeaders.add(MCP_SESSION_ID);
 		if (!exposedHeaders.isEmpty())
@@ -10492,7 +10565,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			retryCapacity(current, current.generation());
 		}
 		void retryCapacity(McpLegacySessionStore.Grant current, long generation) {
-			if (!current.fenceIfCurrent(generation)) {
+			if (current.generation() != generation) {
 				maintenanceOutcome(McpMetricsEvent.SubscriptionMaintenance.Outcome.STALE_RESULT_DISCARDED); return;
 			}
 			maintenanceOutcome(McpMetricsEvent.SubscriptionMaintenance.Outcome.CAPACITY_REJECTED);
@@ -10538,17 +10611,34 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			this.control = control; this.originalRequest = originalRequest; this.endpoint = endpoint;
 			this.revision = revision; this.offered = Set.copyOf(offered); this.headers = List.copyOf(headers);
 		}
-		long establishmentGeneration() { synchronized (control.lock) { return establishmentGeneration; } }
 		boolean canEstablish(long generation) {
 			synchronized (control.lock) {
 				return !closing && !control.terminal && !control.canceled
 						&& establishmentGeneration == generation;
 			}
 		}
-		void bindCancellation(McpApplicationExecution.BoundedPolicyCancellation cancellation) {
+		long beginEstablishment(McpApplicationExecution.BoundedPolicyCancellation cancellation) {
 			boolean cancel;
-			synchronized (control.lock) { this.cancellation = cancellation; cancel = closing; }
+			long generation;
+			synchronized (legacyMaintenanceLock) {
+				synchronized (control.lock) {
+					reconciliationGeneration = legacyTransportReconciliationGeneration;
+					this.cancellation = cancellation;
+					generation = establishmentGeneration;
+					cancel = closing;
+				}
+			}
 			if (cancel) cancellation.cancel(StreamTerminationReason.APPLICATION_CANCELED);
+			return generation;
+		}
+		boolean establishmentReconciled(long generation) {
+			synchronized (legacyMaintenanceLock) {
+				synchronized (control.lock) {
+					return !closing && !control.terminal && !control.canceled
+							&& (establishmentGeneration != generation
+									|| reconciliationGeneration != legacyTransportReconciliationGeneration);
+				}
+			}
 		}
 		void prepareStream() {
 			McpRequestSseStream prepared = control.simulation == null
@@ -10647,7 +10737,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			synchronized (control.lock) { current = headOwned && !closing && !writerTerminated ? stream : null; }
 			if (current == null) { reservation.release(); return Optional.empty(); }
 			return current.offerGuardedCoalescingMessage(message, key, reservation::valid,
-					reservation::written, reservation::release);
+					reservation::continuationValid, reservation::written, reservation::release);
 		}
 		void recheckNotifications() {
 			McpRequestSseStream current;
@@ -10823,7 +10913,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			retryCapacity(current, current.generation());
 		}
 		void retryCapacity(McpLegacySessionStore.Get current, long generation) {
-			if (!current.fenceIfCurrent(generation)) {
+			if (current.generation() != generation) {
 				maintenanceOutcome(McpMetricsEvent.SubscriptionMaintenance.Outcome.STALE_RESULT_DISCARDED); return;
 			}
 			maintenanceOutcome(McpMetricsEvent.SubscriptionMaintenance.Outcome.CAPACITY_REJECTED);
@@ -10898,6 +10988,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				taskNotificationProjectionQueue;
 		@NonNull
 		private final McpCatalogProjectionQueue catalogProjectionQueue;
+		private final Map<McpCatalogProjectionQueue.Family, CatalogHintDelivery> catalogHintDeliveries =
+				new EnumMap<>(McpCatalogProjectionQueue.Family.class);
 		@NonNull
 		private final Object taskProjectionSchedulerOwner;
 		@NonNull
@@ -10944,6 +11036,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private boolean catalogPolicyEvaluationOwned;
 		private boolean catalogPolicyDeadlineResponseOwned;
 		private boolean subscriptionOwned;
+		private boolean streamObservationOpenDelivered;
+		private boolean subscriptionObservationOpenDelivered;
+		private boolean streamObservationCloseDelivered;
+		private boolean subscriptionObservationCloseDelivered;
+		private @Nullable StreamObservationCloseTransition streamObservationClose;
+		private @Nullable StreamObservationCloseTransition subscriptionObservationClose;
 		private boolean streamObservationOpened;
 		private boolean streamObservationClosed;
 		private boolean subscriptionObservationOpened;
@@ -10953,7 +11051,10 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private boolean streamAbortOwned;
 		private boolean canceled;
 		private boolean terminal;
+		private boolean requestObservationAttempted;
 		private boolean requestObservationReserved;
+		private McpLegacyHttpObservationDispatcher.@Nullable Reservation requestObservationReservation;
+		private boolean requestObservationHoldsLegacyEvidence;
 		private boolean requestRejectionRecorded;
 		private boolean lifecycleAdmissionReleased;
 		private boolean protocolLifecycleWorkReleased;
@@ -11120,6 +11221,22 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private void legacyHttpPolicyPhysicallyFinished() {
 			synchronized (lock) { legacyHttpPolicyWork--; if (lifecycleAdmission != null) lifecycleWorkOwners--; }
 			releaseLegacyPhysicalIfComplete(); releaseTrackedLifecycleIfComplete();
+		}
+		private void reserveSemanticObservationWorkWhileLocked(String revision) {
+			requestObservationHoldsLegacyEvidence = McpLegacyHttpWire.isLegacyRevision(revision);
+			if (requestObservationHoldsLegacyEvidence)
+				reserveLegacyHttpPolicyWork();
+			else if (lifecycleAdmission != null)
+				lifecycleWorkOwners++;
+		}
+		private void semanticObservationPhysicallyFinished() {
+			boolean legacy;
+			synchronized (lock) {
+				legacy = requestObservationHoldsLegacyEvidence;
+				if (!legacy && lifecycleAdmission != null) lifecycleWorkOwners--;
+			}
+			if (legacy) legacyHttpPolicyPhysicallyFinished();
+			else releaseTrackedLifecycleIfComplete();
 		}
 
 		private void releaseTrackedLifecycleIfComplete() {
@@ -13340,13 +13457,21 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					McpOutboundChannel.OfferResult offer = null;
 					Throwable offerFailure = null;
 					boolean offerDeadlineExpired = false;
+					CatalogHintDelivery offeredHint = new CatalogHintDelivery(projection);
 					try {
+						AtomicBoolean offerPending = new AtomicBoolean(true);
 						Optional<McpOutboundChannel.OfferResult> attemptedOffer =
-								stream.offerCoalescingMessageIf(
+								stream.offerGuardedCoalescingMessage(
 								requireNonNull(notification),
 								catalogSubscriptionEventKey(projection.family()),
-								() -> applicationClock.nanoTime()
-										- check.deadlineNanos() < 0L);
+								() -> (!offerPending.getAndSet(false)
+										|| applicationClock.nanoTime() - check.deadlineNanos() < 0L)
+										&& resourceNotificationWriteAllowed(stream, check.authorizationGeneration()),
+								() -> resourceNotificationWriteAllowed(stream, check.authorizationGeneration()),
+								offeredHint::markWritten, () -> {
+									offeredHint.released.set(true);
+									if (!offeredHint.written.get()) releaseUnwrittenCatalogHint(offeredHint);
+								}, false);
 						offer = attemptedOffer.orElse(null);
 						offerDeadlineExpired = attemptedOffer.isEmpty();
 					} catch (Throwable throwable) {
@@ -13384,8 +13509,25 @@ final class McpHttpServerRuntime implements AutoCloseable {
 									// before its hint can reach the client. Advance to its latest
 									// covered digest, not the first queued observation.
 									recordCoalesced = offer == McpOutboundChannel.OfferResult.COALESCED;
+									CatalogHintDelivery coveringHint;
+									if (recordCoalesced) {
+										// The channel keeps the old hint payload and releases
+										// this incoming payload. Transfer comparison coverage
+										// to the retained frame, not the discarded offer.
+										coveringHint = requireNonNull(catalogHintDeliveries.get(projection.family()));
+									} else {
+										coveringHint = offeredHint;
+										coveringHint.inheritUnwrittenBaselineFrom(catalogHintDeliveries.get(projection.family()));
+										catalogHintDeliveries.put(projection.family(), coveringHint);
+									}
 									catalogProjectionQueue.advanceBaseline(projection,
-											requireNonNull(execution.digest()));
+											requireNonNull(execution.digest()), coveringHint);
+									// Release may race offer completion, before coverage is
+									// installed. Cover that publication gap as well.
+									if (coveringHint.released.get() && !coveringHint.written.get()
+											&& catalogProjectionQueue.invalidateUnwrittenHint(coveringHint.family,
+													coveringHint, coveringHint.previousBaseline()))
+										catalogProjectionQueue.request(projection.family(), catalogProjectionDeadlineWhileLocked());
 									submitAgain = catalogProjectionQueue.finish(
 											projection, true, true);
 								}
@@ -13423,6 +13565,18 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			}
 			if (submitAgain)
 				submitCatalogProjection();
+		}
+
+		private void releaseUnwrittenCatalogHint(CatalogHintDelivery hint) {
+			boolean submit = false;
+			synchronized (lock) {
+				if (catalogProjectionQueue.invalidateUnwrittenHint(hint.family, hint, hint.previousBaseline())
+						&& catalogProjectionOwnerActiveWhileLocked()
+						&& subscriptionAuthorizationAllowsDeliveryWhileLocked())
+					submit = catalogProjectionQueue.request(hint.family, catalogProjectionDeadlineWhileLocked())
+							== McpCatalogProjectionQueue.RequestResult.SUBMIT;
+			}
+			if (submit) submitCatalogProjection();
 		}
 
 		@NonNull
@@ -14056,6 +14210,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			}
 			planRequestObservation(new RequestObservationResult(
 					McpRequestOutcome.COMPLETE, null, List.of()));
+			if (simulation != null)
+				simulation.reserveServerCompletionReason(
+						McpServerRuntimeBridge.toPublicTerminationReason(closeReason));
 			SubscriptionRegistration resolvedRegistration = requireNonNull(registration);
 			try {
 				if (!resolvedStream.completeMessage(preRendered != null ? preRendered
@@ -14234,16 +14391,44 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			synchronized (lock) {
 				if (terminal || canceled)
 					return false;
-				if (requestObservationReserved)
+				if (requestObservationAttempted)
 					throw new IllegalStateException(
 							"MCP request observation cannot start twice.");
+				requestObservationAttempted = true;
+				McpLegacyHttpObservationDispatcher.Reservation reservation = application.reserveSemanticRequestObservation(
+						"subscriptions/listen".equals(input.jsonRpcMethod()));
+				if (reservation == null) {
+					// Observation is optional. A full finish dispatcher must never
+					// prevent protocol work, including cancellation, from proceeding.
+					requestObservation = McpRuntimeRequestObservation.disabledInstance();
+				} else {
+				requestObservationReservation = reservation;
+				reserveSemanticObservationWorkWhileLocked(input.protocolVersion());
 				requestObservationReserved = true;
+				}
 			}
 			long startedAtNanos = applicationClock.nanoTime();
+			Instant startedAt = applicationClock.instant();
+			if (!requestObservationReserved) {
+				Optional<McpRequestContext> context;
+				try {
+					context = requireNonNull(sink.contextForOmittedRequest(input.withStartedAt(startedAt)),
+							"The MCP runtime request-context sink returned null.");
+				} catch (Throwable ignored) {
+					context = Optional.empty();
+				}
+				synchronized (lock) {
+					publicRequestContext = context;
+					requestObservationStartedAtNanos = startedAtNanos;
+				}
+				try { applicationExecutionObserver.didSkipHttpRequestObservation(); }
+				catch (Throwable ignored) { /* Optional diagnostics cannot reject a request. */ }
+				return protocolProcessingAllowed();
+			}
 			McpRuntimeRequestObservation observation;
 			Optional<@NonNull McpRequestContext> publicRequestContext;
 			try {
-				observation = requireNonNull(sink.didStartRequest(input),
+				observation = requireNonNull(sink.didStartRequest(input.withStartedAt(startedAt)),
 						"The MCP runtime observation sink returned null.");
 				publicRequestContext = requireNonNull(observation.publicContext(),
 						"The MCP runtime request observation returned a null public context.");
@@ -14252,13 +14437,18 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				publicRequestContext = Optional.empty();
 			}
 
-			synchronized (lock) {
-				requestObservation = observation;
-				this.publicRequestContext = publicRequestContext;
-				requestObservationStartedAtNanos = startedAtNanos;
+			synchronized (streamObservationTransitionLock) {
+				synchronized (lock) {
+					requestObservation = observation;
+					this.publicRequestContext = publicRequestContext;
+					requestObservationStartedAtNanos = startedAtNanos;
+				}
+				// Cancellation may have opened and closed a real stream while the
+				// start callback was running. Deliver its paired transitions first.
+				drainStreamObservationInOrder();
 			}
 			drainRequestObservation();
-			return true;
+			return protocolProcessingAllowed();
 		}
 
 		private void markTerminalWhileLocked() {
@@ -14283,7 +14473,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				catalogAccessCancellation.complete();
 			taskNotificationProjectionQueue.reset();
 			catalogProjectionQueue.reset();
-			if (!legacyHttpControl && !requestObservationReserved && !requestRejectionRecorded) {
+			if (!legacyHttpControl && !requestObservationAttempted && !requestRejectionRecorded) {
 				requestRejectionRecorded = true;
 				McpHttpServerRuntime.this.applicationExecutionObserver
 						.recordRequestRejected();
@@ -14465,24 +14655,29 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			McpRuntimeRequestObservation observation;
 			RequestObservationTerminal terminal;
 			long startedAtNanos;
+			McpLegacyHttpObservationDispatcher.Reservation reservation;
 			synchronized (lock) {
-				if (requestObservationDelivered || requestObservation == null
+				if (requestObservationDelivered || !requestObservationReserved || requestObservation == null
 						|| requestObservationTerminal == null)
 					return;
 				requestObservationDelivered = true;
 				observation = requestObservation;
 				terminal = requestObservationTerminal;
 				startedAtNanos = requestObservationStartedAtNanos;
+				reservation = requireNonNull(requestObservationReservation);
+				requestObservationReservation = null;
 			}
 
 			long elapsedNanos = terminal.finishedAtNanos() - startedAtNanos;
 			Duration duration = Duration.ofNanos(Math.max(0L, elapsedNanos));
-			try {
-				observation.didFinish(terminal.outcome(), terminal.error(), duration,
-						terminal.throwables());
-			} catch (Throwable ignored) {
-				// Observation must never alter protocol or transport behavior.
-			}
+			reservation.finish(() -> {
+				try {
+					observation.didFinish(terminal.outcome(), terminal.error(), duration,
+							terminal.throwables());
+				} catch (Throwable ignored) {
+					// Observation must never alter protocol or transport behavior.
+				}
+			}, this::semanticObservationPhysicallyFinished);
 		}
 
 		private void markStreamOpenedInOrder(boolean subscription) {
@@ -14527,24 +14722,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			recordStreamDiagnosticsTransition(
 					requiredTransition.requestStreamOpened() ? 1 : 0,
 					requiredTransition.subscriptionOpened() ? 1 : 0);
-			@Nullable McpRuntimeRequestObservation observation =
-					requiredTransition.observation();
-			if (observation == null)
-				return;
-			if (requiredTransition.requestStreamOpened()) {
-				try {
-					observation.didOpenRequestStream();
-				} catch (Throwable ignored) {
-					// Observation failures must not alter stream lifecycle behavior.
-				}
-			}
-			if (requiredTransition.subscriptionOpened()) {
-				try {
-					observation.didOpenSubscription();
-				} catch (Throwable ignored) {
-					// Observation failures must not alter subscription lifecycle behavior.
-				}
-			}
+			drainStreamObservationInOrder();
 		}
 
 		private void markStreamClosed(@NonNull StreamTerminationReason reason) {
@@ -14566,45 +14744,64 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private void markStreamClosedInOrder(
 				@NonNull StreamTerminationReason reason,
 				@Nullable McpStreamTerminationReason exactReason) {
-			McpRuntimeRequestObservation observation;
-			Duration streamDuration = null;
-			Duration subscriptionDuration = null;
+			boolean closedStream = false;
+			boolean closedSubscription = false;
 			long nowNanos = applicationClock.nanoTime();
 			synchronized (lock) {
-				observation = requestObservation;
 				if (streamObservationOpened && !streamObservationClosed) {
 					streamObservationClosed = true;
-					streamDuration = Duration.ofNanos(Math.max(0L,
-							nowNanos - streamOpenedAtNanos));
+					closedStream = true;
+					streamObservationClose = new StreamObservationCloseTransition(reason, exactReason,
+							Duration.ofNanos(Math.max(0L, nowNanos - streamOpenedAtNanos)));
 				}
-				if (subscriptionObservationOpened
-						&& !subscriptionObservationClosed) {
+				if (subscriptionObservationOpened && !subscriptionObservationClosed) {
 					subscriptionObservationClosed = true;
-					subscriptionDuration = Duration.ofNanos(Math.max(0L,
-							nowNanos - subscriptionOpenedAtNanos));
+					closedSubscription = true;
+					subscriptionObservationClose = new StreamObservationCloseTransition(reason, exactReason,
+							Duration.ofNanos(Math.max(0L, nowNanos - subscriptionOpenedAtNanos)));
 				}
 			}
-			recordStreamDiagnosticsTransition(streamDuration == null ? 0 : -1,
-					subscriptionDuration == null ? 0 : -1);
-			if (observation == null)
-				return;
-			if (streamDuration != null) {
-				try {
-					observation.didCloseRequestStream(reason, exactReason,
-							streamDuration);
-				} catch (Throwable ignored) {
-					// Observation failures must not alter stream cleanup behavior.
-				}
+			recordStreamDiagnosticsTransition(closedStream ? -1 : 0, closedSubscription ? -1 : 0);
+			drainStreamObservationInOrder();
+		}
+
+		/** Delivers each real stream's open before its close, including a start-observer race. */
+		private void drainStreamObservationInOrder() {
+			McpRuntimeRequestObservation observation;
+			boolean openStream;
+			boolean openSubscription;
+			StreamObservationCloseTransition closeStream;
+			StreamObservationCloseTransition closeSubscription;
+			synchronized (lock) {
+				if (!requestObservationReserved || requestObservation == null) return;
+				observation = requestObservation;
+				openStream = streamObservationOpened && !streamObservationOpenDelivered;
+				openSubscription = subscriptionObservationOpened && !subscriptionObservationOpenDelivered;
+				streamObservationOpenDelivered |= openStream;
+				subscriptionObservationOpenDelivered |= openSubscription;
+				closeStream = streamObservationCloseDelivered ? null : streamObservationClose;
+				closeSubscription = subscriptionObservationCloseDelivered ? null : subscriptionObservationClose;
+				streamObservationCloseDelivered |= closeStream != null;
+				subscriptionObservationCloseDelivered |= closeSubscription != null;
 			}
-			if (subscriptionDuration != null) {
-				try {
-					observation.didCloseSubscription(reason, exactReason,
-							subscriptionDuration);
-				} catch (Throwable ignored) {
-					// Observation failures must not alter subscription cleanup behavior.
-				}
+			if (openStream) {
+				try { observation.didOpenRequestStream(); } catch (Throwable ignored) { /* Observation cannot alter stream handling. */ }
+			}
+			if (openSubscription) {
+				try { observation.didOpenSubscription(); } catch (Throwable ignored) { /* Observation cannot alter stream handling. */ }
+			}
+			if (closeStream != null) {
+				try { observation.didCloseRequestStream(closeStream.reason(), closeStream.exactReason(), closeStream.duration()); }
+				catch (Throwable ignored) { /* Observation cannot change stream cleanup. */ }
+			}
+			if (closeSubscription != null) {
+				try { observation.didCloseSubscription(closeSubscription.reason(), closeSubscription.exactReason(), closeSubscription.duration()); }
+				catch (Throwable ignored) { /* Observation cannot change stream cleanup. */ }
 			}
 		}
+
+		private record StreamObservationCloseTransition(@NonNull StreamTerminationReason reason,
+				@Nullable McpStreamTerminationReason exactReason, @NonNull Duration duration) {}
 
 		private void markKeepAliveEmitted() {
 			McpRuntimeRequestObservation observation;
@@ -14838,7 +15035,6 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 
 		private void completeProtocolWithMetricSequence(@Nullable MicrohttpResponse response) {
-			if (response != null) noteLegacyHttpResponse(response);
 			ProtocolResponseReservation reservation;
 			StreamTerminationReason applicationStopReason = null;
 			McpApplicationExecutionObserver.MetricDeferral metricDeferral =
@@ -14917,11 +15113,11 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			}
 			Consumer<MicrohttpResponse> callback = reservation.responseCallback();
 			if (callback != null) {
+				MicrohttpResponse terminalResponse = requireNonNull(reservation.response());
+				noteLegacyHttpResponse(terminalResponse);
 				boolean trackBody = tracksLifecycleResponseBody();
 				if (!trackBody)
 					finishTransportLifecycle();
-				MicrohttpResponse terminalResponse =
-						requireNonNull(reservation.response());
 				RequestObservationResult fallback =
 						requestObservationResult(terminalResponse);
 				MicrohttpResponse observedResponse =
@@ -15729,6 +15925,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			MicrohttpResponse response = withRequestObservationTermination(
 					emptyResponse(504, "Gateway Timeout", expiration.responseHeaders()),
 					fallback);
+			noteLegacyHttpResponse(response);
 			boolean trackBody = tracksLifecycleResponseBody();
 			if (!trackBody)
 				finishTransportLifecycle();
@@ -15798,7 +15995,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			boolean trackBody = tracksLifecycleResponseBody();
 			McpLegacySessionStore.Initialization initialization;
 			synchronized (lock) {
-				observeRequest = requestObservation != null;
+				observeRequest = requestObservationReserved;
 				initialization = legacyInitialization;
 			}
 			if (!observeRequest && !trackBody)
@@ -16122,6 +16319,35 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	private record TaskNotificationDelivery(boolean terminalSnapshot,
 			@Nullable TaskNotificationDeliveryState state, long authorizationGeneration,
 			long authorizationRevision) {
+	}
+
+	/**
+	 * One frame covers every invalidation coalesced into it. Baseline inheritance
+	 * and reads require the owning RequestControl lock; write/release flags are
+	 * atomic because transport completion is independent of that lock.
+	 */
+	static final class CatalogHintDelivery {
+		private final McpCatalogProjectionQueue.Family family;
+		private McpCatalogProjectionQueue.Digest previousBaseline;
+		private final AtomicBoolean written = new AtomicBoolean();
+		private final AtomicBoolean released = new AtomicBoolean();
+
+		CatalogHintDelivery(McpCatalogProjectionQueue.Projection projection) {
+			this.family = projection.family();
+			this.previousBaseline = projection.baseline();
+		}
+
+		void inheritUnwrittenBaselineFrom(@Nullable CatalogHintDelivery preceding) {
+			// A newer projection can begin before the preceding frame is purged.
+			// Its snapshot then includes an invalidation the client never received.
+			// If write completion races this read, retaining the earlier baseline
+			// can produce an extra advisory hint, but cannot hide a catalog change.
+			if (preceding != null && !preceding.written.get())
+				this.previousBaseline = preceding.previousBaseline;
+		}
+
+		McpCatalogProjectionQueue.Digest previousBaseline() { return this.previousBaseline; }
+		void markWritten() { this.written.set(true); }
 	}
 
 	private record CatalogProjectionCheck(
@@ -16566,6 +16792,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 
 		@Override public @NonNull Request getRequest() { return request; }
+		@Override public @NonNull Optional<@NonNull Instant> getStartedAt() {
+			return initial.getStartedAt();
+		}
 		@Override public @NonNull McpEndpoint getEndpoint() {
 			return initial.getEndpoint();
 		}
@@ -17182,7 +17411,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				@NonNull SubscriptionRegistrationCloseAttempt attempt) {
 			Throwable failure = null;
 			enterLifecycleProofExecution();
-			try {
+			try (McpApplicationExecutionObserver.LifecycleScope ignored = applicationExecutionObserver.enterLifecycleExecution()) {
 				registration.close();
 			} catch (Throwable throwable) {
 				failure = throwable;

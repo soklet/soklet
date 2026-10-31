@@ -280,14 +280,14 @@ PartitionKeyDeriver partitionKeys = applicationPartitionKeyDeriver();
 McpServer mcpServer = McpServer.withPort(8081)
     .admissionController(new OAuthAdmissionController(verifier, partitionKeys))
     .host("127.0.0.1")
-    .toolRateLimiter(McpRateLimiter.fromInMemoryDefaults())
     .corsAuthorizer(CorsAuthorizer.rejectAllInstance())
     .allowedHosts(Set.of("127.0.0.1"))
     .build();
 ```
 
-The in-memory limiter remains only a one-node example. A fleet should provide a
-limiter whose partitioning and failure mode match the deployment.
+Rate limiting is optional and independent of OAuth admission. When configuring
+a quota, select explicit token-bucket values or provide a distributed limiter
+whose partitioning and failure mode match the deployment.
 
 ## Protected resource metadata
 

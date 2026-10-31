@@ -128,7 +128,7 @@ const ROW_KEYS = Object.freeze([
 ]);
 const FINITE_BOUND_INVENTORY_PATH = 'conformance/mcp-finite-bound-inventory.json';
 const EXPECTED_FINITE_BOUND_SEMANTICS_SHA256 =
-  '25a856ceb126b46bd74c09db2e0fc92d7fcb43e5bc21c6c5316541dc6ae0ff1e';
+  '6b6b9a50b6301ead1443e0e8e44ce65cdd754e6e2ed0425f2ea9a7b6e3cc2d3a';
 const EXPECTED_FINITE_BOUND_EXCLUSIONS_SHA256 =
   'e9b7ae9898e0fc5a311521ea8294c8aad24d40bd25154c56b51e1011e9e28394';
 const FINITE_BOUND_TOP_LEVEL_KEYS = Object.freeze([
@@ -234,7 +234,7 @@ const BOUND_NAME_PATTERN = /^(?:maximum|minimum)[A-Z].*|^.*(?:Capacity|Concurren
 const PRIVACY_BOUNDARY_INVENTORY_PATH =
   'conformance/mcp-privacy-boundary-inventory.json';
 const EXPECTED_PRIVACY_SEMANTICS_SHA256 =
-  'b51499c0aaa664515943d03b2d5ee67a754ac91589c6e2cc5a109fd7df4ac719';
+  'f44c844594e040aa6b7722d38669aaf055a34f330983744d944b2050c9166559';
 const PRIVACY_TOP_LEVEL_KEYS = Object.freeze([
   'artifactRoots',
   'boundaries',

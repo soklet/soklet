@@ -432,8 +432,10 @@ unauthenticated cryptographic validity oracle. Invalid, tampered, expired, or
 wrong-bound state is a sanitized HTTP 400 / JSON-RPC `-32602`; temporary
 protection unavailability is HTTP 503 / `-32603`. Invalid-state reports and
 malformed, noncanonical, empty, or oversized custom-open plaintext collapse to
-the same 400 / `-32602` response. Null or unexpected provider behavior and
-invalid sealing/server output fail as HTTP 500 / `-32603`.
+the same 400 / `-32602` response. Null or unexpected opening-provider behavior
+before application dispatch fails as HTTP 500 / `-32603`; invalid sealing or
+output contracts inside admitted application execution use correlated HTTP 200 /
+`-32603` on the modern profile. Provider diagnostics are not reflected.
 
 Canonical parameter binding uses the internal accepted-parameter profile,
 with 32 MiB output headroom and unchanged production structural/scalar limits.

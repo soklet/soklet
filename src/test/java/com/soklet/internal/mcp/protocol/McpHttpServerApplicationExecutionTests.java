@@ -1772,7 +1772,7 @@ public class McpHttpServerApplicationExecutionTests {
 
 	private static void assertExactActiveDeadlineResponse(
 			RawResponse response, String idJson) {
-		Assertions.assertEquals(504, response.status(), response.bodyText());
+		Assertions.assertEquals(200, response.status(), response.bodyText());
 		Assertions.assertEquals(JSON_MEDIA_TYPE,
 				response.singleHeader("Content-Type"));
 		Assertions.assertEquals("no-store",

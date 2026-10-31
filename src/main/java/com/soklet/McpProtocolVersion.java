@@ -29,6 +29,9 @@ import static java.util.Objects.requireNonNull;
 /**
  * An exact MCP core protocol revision.
  *
+ * <p>
+ * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public enum McpProtocolVersion {

@@ -89,7 +89,7 @@ public class McpPublicApiReflectionContractTests {
 	private static final int PROVISIONAL_TYPE_COUNT = 22;
 	private static final int CURRENT_MCP_TYPE_COUNT = 304;
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
-			"a1251b02a164e6d8661feccba2a3bf34ea4d0a624ba9f96a2a401383466eac5d";
+			"127d61399990bdc65c3a87fc37ad787006b1c5a338f9a2835c78a94fda0121db";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
 			"d677a7f58b36d0293b7ff47dd1501fee626369b6cacee26317a350a5fd14b1e1";
 	private static final String PHASE_SIX_NULLABILITY_SHA_256 =
@@ -805,6 +805,7 @@ public class McpPublicApiReflectionContractTests {
 						"maximumSubscriptionAuthorizationDuration",
 						"maximumSubscriptionDuration",
 						"maximumSubscriptionsPerPartition", "protectionConfig",
+						"protocolExecutorConcurrency", "protocolExecutorQueueCapacity",
 						"rateLimiterRegistry", "requestHandlerConcurrency",
 						"requestHandlerExecutorServiceSupplier",
 						"requestHandlerQueueCapacity", "requestRateLimiter",
@@ -842,9 +843,7 @@ public class McpPublicApiReflectionContractTests {
 						"unknownMirroredHeaders"),
 				McpLocalizationContext.Builder.class, Set.of("revision"),
 				McpLocalizer.Builder.class, Set.of("failurePolicy",
-						"maximumLocalizableTextCountPerResponse"),
-				McpTokenBucketConfig.Builder.class, Set.of(
-						"refillInterval", "refillTokens")));
+						"maximumLocalizableTextCountPerResponse")));
 		expectedNullableBuilderMethods.put(
 				McpSubscriptionAuthorization.Allowed.Builder.class,
 				Set.of("applicationContext"));
@@ -901,6 +900,14 @@ public class McpPublicApiReflectionContractTests {
 
 		Method server = McpServer.class.getMethod("withPort", Integer.class);
 		assertRequiredFactory(server, McpServer.Builder.class, "port");
+		for (String option : List.of("protocolExecutorConcurrency", "protocolExecutorQueueCapacity")) {
+			Method protocolBudget = assertInstanceMethod(McpServer.Builder.class,
+					option, McpServer.Builder.class, MethodShape.CONCRETE, false, Integer.class);
+			assertErasedGenericSignature(protocolBudget);
+			assertParameterNames(protocolBudget, option);
+			Assertions.assertTrue(protocolBudget.getAnnotatedReturnType().isAnnotationPresent(NonNull.class));
+			Assertions.assertTrue(protocolBudget.getAnnotatedParameterTypes()[0].isAnnotationPresent(Nullable.class));
+		}
 		Method catalogAccessPolicy = assertInstanceMethod(McpServer.Builder.class,
 				"catalogAccessPolicy", McpServer.Builder.class,
 				MethodShape.CONCRETE, false, McpCatalogAccessPolicy.class);

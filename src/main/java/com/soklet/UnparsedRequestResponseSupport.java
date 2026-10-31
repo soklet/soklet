@@ -21,7 +21,6 @@ import com.soklet.internal.microhttp.MicrohttpResponse;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -164,12 +163,12 @@ final class UnparsedRequestResponseSupport {
 					"Response marshaler is unavailable.").forUnparsedRequest(request),
 					"Response marshaler returned null for an unparsed request.");
 			if (!active.getAsBoolean()) {
-				releaseRejectedUnparsedResponseResources(marshaledResponse);
+				releaseRejectedUnparsedResponseResources(marshaledResponse, null);
 				return null;
 			}
 			return prepare(marshaledResponse);
 		} catch (Throwable throwable) {
-			releaseRejectedUnparsedResponseResources(marshaledResponse);
+			releaseRejectedUnparsedResponseResources(marshaledResponse, throwable);
 			if (active.getAsBoolean()) logMarshalingFailure(logger, throwable);
 			return null;
 		}
@@ -326,19 +325,16 @@ final class UnparsedRequestResponseSupport {
 	}
 
 	private static void releaseRejectedUnparsedResponseResources(
-			@Nullable MarshaledResponse marshaledResponse) {
+			@Nullable MarshaledResponse marshaledResponse, @Nullable Throwable primaryFailure) {
 		if (marshaledResponse == null)
 			return;
 
-		MarshaledResponseBody body = marshaledResponse.getBody().orElse(null);
-		if (!(body instanceof MarshaledResponseBody.FileChannel fileChannel)
-				|| !fileChannel.getCloseOnComplete())
-			return;
-
 		try {
-			fileChannel.getChannel().close();
-		} catch (IOException ignored) {
-			// Best effort: this is already a response-validation fallback path.
+			marshaledResponse.close();
+		} catch (RuntimeException | Error cleanupFailure) {
+			// Preserve validation/fallback and the timeout winner even if cleanup fails.
+			if (primaryFailure != null && !com.soklet.internal.ObjectIdentity.sameInstance(primaryFailure, cleanupFailure))
+				primaryFailure.addSuppressed(cleanupFailure);
 		}
 	}
 

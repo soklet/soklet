@@ -40,7 +40,15 @@ import java.util.List;
  * application-owned delivery barrier if it depends on observer state.
  * <p>
  * Soklet may invoke callbacks concurrently from lifecycle, transport, and
- * request-handling threads. Implementations must therefore be thread-safe. A
+ * request-handling threads. Implementations must therefore be thread-safe.
+ * HTTP/SSE connection-acceptance, request-acceptance, request-read and transport-failure
+ * callbacks can run inline on selector threads. Transport-failure and handler-queue
+ * rejection log events can run there too. These callbacks must return promptly;
+ * copy any required data into a bounded application queue before doing blocking work.
+ * TCP acceptance and later SSE handshake rejection are distinct observations: one
+ * connection can produce both {@code didAcceptConnection} and
+ * {@code didFailToAcceptConnection}, so their counts are not mutually exclusive.
+ * A
  * standard implementation can be acquired via the {@link #defaultInstance()}
  * factory method.
  * <p>
@@ -569,6 +577,13 @@ public interface LifecycleObserver {
 	 * concurrency, and the corresponding finish callback is not guaranteed to run
 	 * on the same thread. Exceptions are contained and do not alter the wire
 	 * result.
+	 * The built-in MCP transport invokes this callback on its protocol pool,
+	 * shared with admission, rate limiting, CORS authorization and request-state
+	 * opening. Configure that pool separately through
+	 * {@link McpServer.Builder#protocolExecutorConcurrency(Integer)} and
+	 * {@link McpServer.Builder#protocolExecutorQueueCapacity(Integer)} (defaults
+	 * 32 workers and 128 queued jobs). Handler-executor settings do not resize it.
+	 * Keep this callback bounded and nonblocking.
 	 *
 	 * @param requestContext immutable admitted-request context
 	 */
@@ -588,6 +603,15 @@ public interface LifecycleObserver {
 	 * guaranteed to run on the same thread as the corresponding start callback.
 	 * Implementations must be safe for the server's configured request
 	 * concurrency. Exceptions are contained and do not alter the wire result.
+	 * The built-in MCP transport delivers this callback and associated trace/failure
+	 * logs through separately bounded daemon platform workers, away from connection
+	 * event loops and the protocol/handler executors. It reserves delivery capacity
+	 * before start observation. When that capacity is unavailable, both callbacks
+	 * and their semantic request metrics are omitted; request processing continues
+	 * and a fixed diagnostic reports omissions at most once per minute. Each
+	 * reserved finish follows the corresponding start callback. A blocked
+	 * observer retains physical shutdown work, so keep it bounded and do not wait
+	 * for the same Soklet lifecycle to stop from inside this callback.
 	 *
 	 * @param requestContext immutable admitted-request context
 	 * @param requestOutcome fixed client-visible terminal outcome
@@ -720,7 +744,15 @@ public interface LifecycleObserver {
 	 * The interface default is a no-op. Override this method to route events
 	 * through application logging, or explicitly configure
 	 * {@link #defaultInstance()} for stderr logging. Custom observers do not
-	 * inherit an implicit stderr logger.
+	 * inherit an implicit stderr logger. Log delivery follows the emitting thread;
+	 * {@link LogEventType#MCP_TRACE_CORRELATION} and finish-observer failure events
+	 * use the bounded MCP observation worker. Transport-failure and overload events
+	 * can arrive on HTTP/SSE selector threads. Do not block those threads.
+	 * The default stderr observer prints routine executor shedding, request
+	 * interruption and socket close/timeout conditions as single lines without
+	 * rendering stacks; the line retains a sanitized failure message capped at 512 characters.
+	 * Unexpected failures and nested diagnostics retain their stack diagnostics.
+	 * Custom observers still receive the original event and Throwable.
 	 */
 	default void didReceiveLogEvent(@NonNull LogEvent logEvent) {
 		// No-op by default
@@ -728,8 +760,9 @@ public interface LifecycleObserver {
 
 	/**
 	 * Acquires a threadsafe {@link LifecycleObserver} instance with sensible defaults.
-	 * This instance writes log events and attached Throwable stack traces to
-	 * stderr. {@link SokletConfig} selects it when no lifecycle-observer
+	 * This instance writes log events to stderr, with full attached Throwable
+	 * stacks for unexpected failures and terse lines for routine interruption,
+	 * socket close/timeout and known executor-shedding conditions. {@link SokletConfig} selects it when no lifecycle-observer
 	 * configuration is supplied. Configuring custom observers replaces that
 	 * default; include this instance explicitly to retain stderr logging.
 	 *

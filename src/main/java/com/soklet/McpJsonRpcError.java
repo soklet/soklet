@@ -30,6 +30,9 @@ import static java.util.Objects.requireNonNull;
  * Immutable client-visible JSON-RPC error used by MCP application policies,
  * handlers, and request lifecycle observation.
  *
+ * <p>String factories and setters reject unpaired UTF-16 surrogates with
+ * {@link IllegalArgumentException}; well-formed Unicode is preserved exactly.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
@@ -148,7 +151,7 @@ public final class McpJsonRpcError {
 	private McpJsonRpcError(int code, @NonNull String message,
 			@Nullable McpJsonValue data, @Nullable URI resourceNotFoundUri) {
 		this.code = code;
-		this.message = requireNonNull(message);
+		this.message = McpContentValueSupport.requireWellFormedString(message);
 		if (message.isBlank())
 			throw new IllegalArgumentException("message must not be blank");
 		this.data = data;

@@ -21,11 +21,26 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.NotThreadSafe;
+import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 @NotThreadSafe
 public class McpRequestStateContextPlumbingTests {
+	@Test
+	public void observation_semantic_start_projects_without_using_context_construction_time() {
+		Instant startedAt = Instant.parse("2026-01-02T03:04:05Z");
+		RequestObservationInput input = new RequestObservationInput(
+				request(), endpoint(), Map.of(), "tools/call",
+				Optional.of(McpRequestId.fromString("request")), "2026-07-28",
+				Optional.of("lookup"), Optional.empty(),
+				McpJsonObject.emptyInstance(), McpJsonObject.emptyInstance(),
+				McpInputResponses.emptyInstance(), Optional.empty(), Optional.empty(),
+				List.of(), McpAdmissionIdentity.anonymousInstance(), Optional.of(startedAt));
+		Assertions.assertEquals(Optional.of(startedAt), new DefaultMcpRequestContext(input).getStartedAt());
+	}
+
 	@Test
 	public void observation_application_request_state_projects_into_the_public_context() {
 		String requestState = "opaque-state";
@@ -63,6 +78,8 @@ public class McpRequestStateContextPlumbingTests {
 		Assertions.assertSame(requestState,
 				context.getFrameworkRequestState().orElseThrow());
 		Assertions.assertTrue(context.getApplicationRequestState().isEmpty());
+		Assertions.assertTrue(context.getStartedAt().isEmpty(),
+				"Manual observation contexts must not invent a semantic clock origin.");
 	}
 
 	@Test

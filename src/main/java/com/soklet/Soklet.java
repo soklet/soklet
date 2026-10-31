@@ -240,6 +240,9 @@ public final class Soklet implements AutoCloseable {
 	/**
 	 * Claims this one-shot lifecycle's sole start attempt and returns only after
 	 * every configured transport is globally ready.
+	 * If the calling thread is already interrupted, startup is canceled before
+	 * readiness and fails with {@link SokletStartupException}; its lifecycle
+	 * result records {@link StartupDisposition#CANCELED}.
 	 *
 	 * @throws SokletStartupException if startup ends before readiness, carrying
 	 * the exact immutable lifecycle result
@@ -257,6 +260,12 @@ public final class Soklet implements AutoCloseable {
 	 * This method does not install or own process hooks, operating-system signal
 	 * handlers, or standard-input listeners; direct lifecycle callers own those
 	 * integrations.
+	 * <p>
+	 * Handlers, lifecycle/metric callbacks and transport-owned work may request
+	 * shutdown here, but must return without joining this stage or waiting on a
+	 * future derived from it. Shutdown can be waiting for that same work to exit;
+	 * a self-wait can consume the shutdown budget and publish an incomplete result.
+	 * Wait for completion from the owning process or another independent thread.
 	 *
 	 * @return cached shutdown-result stage
 	 */
@@ -311,6 +320,7 @@ public final class Soklet implements AutoCloseable {
 		SokletConfig sokletConfig = getSokletConfig();
 		ResourceMethodResolver resourceMethodResolver = sokletConfig.getResourceMethodResolver();
 		ResponseMarshaler responseMarshaler = sokletConfig.getResponseMarshaler();
+		ResponseFinalizationToken postProcessingToken = newPostProcessingToken();
 		LifecycleObserver lifecycleObserver = sokletConfig.getAggregateLifecycleObserver();
 		RequestInterceptor requestInterceptor = sokletConfig.getRequestInterceptor();
 		MetricsCollector metricsCollector = sokletConfig.getMetricsCollector();
@@ -325,12 +335,27 @@ public final class Soklet implements AutoCloseable {
 		AtomicReference<ResourceMethod> resourceMethodHolder = new AtomicReference<>();
 		AtomicReference<HttpRequestResult> requestResultHolder = new AtomicReference<>();
 		AtomicReference<Throwable> requestHandlingFailureHolder = new AtomicReference<>();
+		Consumer<MarshaledResponse> captureHeadRepresentation = representation -> {
+			if (serverType != ServerType.HTTP || requestHolder.get().getHttpMethod() != HttpMethod.HEAD)
+				return;
+			MarshaledResponseBody compressionBody = representation.getBody()
+					.filter(body -> body instanceof MarshaledResponseBody.Bytes || body instanceof MarshaledResponseBody.ByteBuffer)
+					.orElse(null);
+			Long bodyLength = representation.getBody().map(MarshaledResponseBody::getLength).orElse(null);
+			requestResultHolder.updateAndGet(result -> result == null
+					? HttpRequestResult.withMarshaledResponse(representation).resourceMethod(resourceMethodHolder.get())
+							.headResponseCompressionBody(compressionBody).headResponseBodyLength(bodyLength).build()
+					: result.copy().marshaledResponse(representation).headResponseCompressionBody(compressionBody)
+							.headResponseBodyLength(bodyLength).finish());
+		};
 
 		// Holders to permit mutable effectively-final state tracking
 		AtomicBoolean willStartResponseWritingCompleted = new AtomicBoolean(false);
 		AtomicBoolean didFinishResponseWritingCompleted = new AtomicBoolean(false);
 		AtomicBoolean didFinishRequestHandlingCompleted = new AtomicBoolean(false);
 		AtomicBoolean didInvokeWrapRequestConsumer = new AtomicBoolean(false);
+		AtomicBoolean wrapRequestScopeOpen = new AtomicBoolean(true);
+		Thread wrapRequestThread = Thread.currentThread();
 
 		List<Throwable> throwables = new ArrayList<>(10);
 
@@ -431,8 +456,12 @@ public final class Soklet implements AutoCloseable {
 		requestHolder.set(request);
 
 		try {
+			try {
 			requestInterceptor.wrapRequest(serverType, request, (wrappedRequest) -> {
-				didInvokeWrapRequestConsumer.set(true);
+				if (!wrapRequestScopeOpen.get() || !sameInstance(Thread.currentThread(), wrapRequestThread))
+					throw new IllegalStateException("RequestInterceptor::wrapRequest must call requestProcessor synchronously before returning");
+				if (!didInvokeWrapRequestConsumer.compareAndSet(false, true))
+					throw new IllegalStateException("RequestInterceptor::wrapRequest must call requestProcessor exactly once");
 				requestHolder.set(wrappedRequest);
 
 				try {
@@ -472,47 +501,8 @@ public final class Soklet implements AutoCloseable {
 							HttpRequestResult requestResult = toHttpRequestResult(requestHolder.get(), resourceMethodHolder.get(), serverType);
 							requestResultHolder.set(requestResult);
 
-							MarshaledResponse originalMarshaledResponse = requestResult.getMarshaledResponse();
+							// The interceptor chooses the response before CORS, postprocessing and HEAD projection.
 							MarshaledResponse updatedMarshaledResponse = requestResult.getMarshaledResponse();
-
-							// A few special cases that are "global" in that they can affect all requests and
-							// need to happen after marshaling the response...
-
-							// Preserve HEAD's in-memory representation only in the transport result, never
-							// in the bodyless MarshaledResponse exposed to lifecycle observers and logs.
-							if (serverType == ServerType.HTTP && requireNonNull(requestHolder.get()).getHttpMethod() == HttpMethod.HEAD) {
-								MarshaledResponseBody compressionBody = originalMarshaledResponse.getBody()
-										.filter(body -> body instanceof MarshaledResponseBody.Bytes
-												|| body instanceof MarshaledResponseBody.ByteBuffer).orElse(null);
-								requestResult = requestResult.copy().headResponseCompressionBody(compressionBody)
-										.headResponseBodyLength(originalMarshaledResponse.getBody().map(MarshaledResponseBody::getLength).orElse(null)).finish();
-								requestResultHolder.set(requestResult);
-							}
-
-							// 1. Customize response for HEAD (e.g. remove body, set Content-Length header)
-							updatedMarshaledResponse = ResponseBodyCleanup.transform(updatedMarshaledResponse,
-									response -> applyHeadResponseIfApplicable(requestHolder.get(), response));
-
-							// 2. Apply other standard response customizations (CORS, Content-Length)
-							// Note that we don't want to write Content-Length for SSE "accepted" handshakes
-							SseHandshakeResult sseHandshakeResult = requestResult.getSseHandshakeResult().orElse(null);
-							boolean suppressContentLength = sseHandshakeResult != null && sseHandshakeResult instanceof SseHandshakeResult.Accepted;
-
-							updatedMarshaledResponse = ResponseBodyCleanup.transform(updatedMarshaledResponse,
-									response -> applyCommonPropertiesToMarshaledResponse(requestHolder.get(), response, suppressContentLength));
-							if (!updatedMarshaledResponse.getStatusCode().equals(originalMarshaledResponse.getStatusCode())) {
-								requestResult = requestResult.copy().headResponseCompressionBody(null).headResponseBodyLength(null).finish();
-								requestResultHolder.set(requestResult);
-							}
-
-							// Update our result holder with the modified response if necessary
-							if (originalMarshaledResponse != updatedMarshaledResponse) {
-								marshaledResponseHolder.set(updatedMarshaledResponse);
-								requestResultHolder.set(requestResult.copy()
-										.marshaledResponse(updatedMarshaledResponse)
-										.finish());
-							}
-
 							return ResponseBodyCleanup.track(pendingResponseBodies, updatedMarshaledResponse);
 							} catch (Throwable t) {
 								requestHandlingFailureHolder.compareAndSet(null, t);
@@ -532,8 +522,6 @@ public final class Soklet implements AutoCloseable {
 							// Unhappy path.  Try to use configuration's exception response marshaler...
 							try {
 								MarshaledResponse marshaledResponse = responseMarshaler.forThrowable(requestHolder.get(), t, resourceMethodHolder.get());
-								marshaledResponse = ResponseBodyCleanup.transform(marshaledResponse,
-										response -> applyCommonPropertiesToMarshaledResponse(requestHolder.get(), response));
 								marshaledResponseHolder.set(marshaledResponse);
 
 								return ResponseBodyCleanup.track(pendingResponseBodies, marshaledResponse);
@@ -589,8 +577,6 @@ public final class Soklet implements AutoCloseable {
 								.build());
 
 						MarshaledResponse marshaledResponse = responseMarshaler.forThrowable(requestHolder.get(), t, resourceMethodHolder.get());
-						marshaledResponse = ResponseBodyCleanup.transform(marshaledResponse,
-							response -> applyCommonPropertiesToMarshaledResponse(requestHolder.get(), response));
 						marshaledResponseHolder.set(marshaledResponse);
 					} catch (Throwable t2) {
 						throwables.add(t2);
@@ -605,9 +591,48 @@ public final class Soklet implements AutoCloseable {
 						marshaledResponseHolder.set(provideFailsafeMarshaledResponse(requestHolder.get(), t2));
 					}
 				} finally {
+					MarshaledResponse selectedResponse = marshaledResponseHolder.get();
+					if (selectedResponse != null && requiresPostProcessing(selectedResponse, postProcessingToken)) {
+						try {
+							HttpRequestResult selectedResult = requestResultHolder.get();
+							boolean acceptedSse = serverType == ServerType.SSE && selectedResult != null
+									&& selectedResult.getSseHandshakeResult().orElse(null) instanceof SseHandshakeResult.Accepted;
+							MarshaledResponse finalized = ResponseBodyCleanup.transform(selectedResponse,
+									response -> applyCommonPropertiesToMarshaledResponse(requestHolder.get(), response, acceptedSse, captureHeadRepresentation, postProcessingToken));
+							try {
+								if (acceptedSse) isCompatibleAcceptedSseResponse(finalized);
+							} catch (RuntimeException | Error failure) {
+								ResponseBodyCleanup.discard(finalized, null, failure);
+								throw failure;
+							}
+							marshaledResponseHolder.set(finalized);
+						} catch (Throwable failure) {
+							throwables.add(failure);
+							requestHandlingFailureHolder.compareAndSet(null, failure);
+							requestResultHolder.updateAndGet(result -> result == null ? null
+									: result.copy().headResponseCompressionBody(null).headResponseBodyLength(null).finish());
+							safelyLog.accept(LogEvent.with(LogEventType.REQUEST_PROCESSING_FAILED,
+									"An exception occurred while finalizing response").throwable(failure)
+									.request(requestHolder.get()).resourceMethod(resourceMethodHolder.get()).build());
+							try {
+								MarshaledResponse recovery = responseMarshaler.forThrowable(requestHolder.get(), failure, resourceMethodHolder.get());
+								recovery = ResponseBodyCleanup.transform(recovery, response -> applyCommonPropertiesToMarshaledResponse(
+										requestHolder.get(), response, false, ignored -> {}, postProcessingToken, false));
+								marshaledResponseHolder.set(recovery);
+							} catch (Throwable recoveryFailure) {
+								throwables.add(recoveryFailure);
+								safelyLog.accept(LogEvent.with(LogEventType.RESPONSE_MARSHALER_FOR_THROWABLE_FAILED,
+										"Unable to finalize exception response").throwable(recoveryFailure)
+										.request(requestHolder.get()).resourceMethod(resourceMethodHolder.get()).build());
+								marshaledResponseHolder.set(provideFailsafeMarshaledResponse(requestHolder.get(), recoveryFailure));
+							}
+						}
+					}
 					for (MarshaledResponse pendingResponse : pendingResponseBodies) {
 						try {
-							ResponseBodyCleanup.discard(pendingResponse, marshaledResponseHolder.get(), null);
+							MarshaledResponse selected = marshaledResponseHolder.get();
+							if (selected == null) pendingResponse.close();
+							else marshaledResponseHolder.set(ResponseBodyCleanup.retain(pendingResponse, selected));
 						} catch (Throwable cleanupFailure) {
 							throwables.add(cleanupFailure);
 							safelyLog.accept(LogEvent.with(LogEventType.REQUEST_PROCESSING_FAILED,
@@ -726,6 +751,9 @@ public final class Soklet implements AutoCloseable {
 					}
 				}
 			});
+			} finally {
+				wrapRequestScopeOpen.set(false);
+			}
 
 			if (!didInvokeWrapRequestConsumer.get())
 				throw new IllegalStateException(format("%s::wrapRequest must call requestProcessor", RequestInterceptor.class.getSimpleName()));
@@ -756,7 +784,7 @@ public final class Soklet implements AutoCloseable {
 				try {
 					MarshaledResponse marshaledResponse = responseMarshaler.forThrowable(requestHolder.get(), t, resourceMethodHolder.get());
 					marshaledResponse = ResponseBodyCleanup.transform(marshaledResponse,
-							response -> applyCommonPropertiesToMarshaledResponse(requestHolder.get(), response));
+							response -> applyCommonPropertiesToMarshaledResponse(requestHolder.get(), response, false, ignored -> {}, postProcessingToken, false));
 					marshaledResponseHolder.set(marshaledResponse);
 				} catch (Throwable t2) {
 					throwables.add(t2);
@@ -1153,7 +1181,7 @@ public final class Soklet implements AutoCloseable {
 			// This response will never reach transport cleanup. Release only an
 			// explicitly owned finite body and keep validation as the primary failure.
 			try {
-				response.copy().withoutBody();
+				response.close();
 			} catch (RuntimeException | Error cleanupFailure) {
 				if (!sameInstance(cleanupFailure, failure))
 					failure.addSuppressed(cleanupFailure);
@@ -1196,26 +1224,59 @@ public final class Soklet implements AutoCloseable {
 	protected MarshaledResponse applyCommonPropertiesToMarshaledResponse(@NonNull Request request,
 																																			 @NonNull MarshaledResponse marshaledResponse,
 																																			 @NonNull Boolean suppressContentLength) {
+		return applyCommonPropertiesToMarshaledResponse(request, marshaledResponse, suppressContentLength, ignored -> {}, newPostProcessingToken());
+	}
+
+	@NonNull
+	private static final class ResponseFinalizationToken {
+		private boolean postProcessingStarted;
+	}
+
+	private ResponseFinalizationToken newPostProcessingToken() {
+		// Recovery must not repeat a processor that completed or failed before a later hook failed.
+		return new ResponseFinalizationToken();
+	}
+
+	private boolean requiresPostProcessing(MarshaledResponse response, @Nullable ResponseFinalizationToken token) {
+		return token != null && !response.isPostProcessedFor(token);
+	}
+
+	@NonNull
+	private MarshaledResponse applyCommonPropertiesToMarshaledResponse(@NonNull Request request,
+			@NonNull MarshaledResponse response, boolean suppressContentLength,
+			@NonNull Consumer<MarshaledResponse> beforeHead, @Nullable ResponseFinalizationToken postProcessingToken) {
+		return applyCommonPropertiesToMarshaledResponse(request, response, suppressContentLength,
+				beforeHead, postProcessingToken, true);
+	}
+
+	@NonNull
+	private MarshaledResponse applyCommonPropertiesToMarshaledResponse(@NonNull Request request,
+			@NonNull MarshaledResponse response, boolean suppressContentLength,
+			@NonNull Consumer<MarshaledResponse> beforeHead, @Nullable ResponseFinalizationToken postProcessingToken, boolean applyHead) {
 		requireNonNull(request);
-		requireNonNull(marshaledResponse);
-		requireNonNull(suppressContentLength);
-		// Normalize before another hook can replace an owned body and strand it.
-		marshaledResponse = normalizeBodylessMarshaledResponse(request, marshaledResponse);
-
-		// Don't write Content-Length for an accepted SSE Handshake, for example
-		if (!suppressContentLength)
-			marshaledResponse = applyContentLengthIfApplicable(request, marshaledResponse);
-
-		// If the Date header is missing, add it using our cached provider
-		if (!marshaledResponse.getHeaders().containsKey("Date"))
-			marshaledResponse = marshaledResponse.copy()
-					.headers(headers -> headers.put("Date", List.of(HttpDate.currentSecondHeaderValue())))
-					.finish();
-
-		marshaledResponse = ResponseBodyCleanup.transform(marshaledResponse,
-				response -> applyCorsResponseIfApplicable(request, response));
-		// CORS hooks and their postprocessor may replace the response too.
-		return normalizeBodylessMarshaledResponse(request, marshaledResponse);
+		requireNonNull(response);
+		boolean head = applyHead && request.getHttpMethod() == HttpMethod.HEAD;
+		response = normalizeBodylessMarshaledResponse(request, response);
+		response = ResponseBodyCleanup.transform(response, current -> applyCorsResponseIfApplicable(request, current));
+		if (requiresPostProcessing(response, postProcessingToken)) {
+			ResponseFinalizationToken token = requireNonNull(postProcessingToken);
+			if (!token.postProcessingStarted) {
+				token.postProcessingStarted = true;
+				ResponseMarshaler marshaler = getSokletConfig().getResponseMarshaler();
+				response = ResponseBodyCleanup.transform(response, marshaler::postProcess);
+			}
+			response = response.markPostProcessed(token);
+		}
+		beforeHead.accept(response);
+		boolean postProcessed = postProcessingToken != null && response.isPostProcessedFor(postProcessingToken);
+		if (head)
+			response = ResponseBodyCleanup.transform(response, current -> applyHeadResponseIfApplicable(request, current));
+		if (postProcessed) response = response.markPostProcessed(postProcessingToken);
+		response = normalizeBodylessMarshaledResponse(request, response);
+		if (!suppressContentLength) response = applyContentLengthIfApplicable(request, response);
+		if (!response.getHeaders().containsKey("Date"))
+			response = response.copy().headers(headers -> headers.put("Date", List.of(HttpDate.currentSecondHeaderValue()))).finish();
+		return response;
 	}
 
 	@NonNull
@@ -1928,6 +1989,9 @@ public final class Soklet implements AutoCloseable {
 				throw new IllegalStateException("You must register a request handler prior to simulating requests");
 
 			AtomicReference<StreamLifecycleCoordinator.Reservation> reservationHolder = new AtomicReference<>();
+			Throwable primaryFailure = null;
+			Throwable terminalCleanupFailure = null;
+			HttpRequestResult completedResult;
 			try {
 				requestHandler.handleRequest(request, HttpTransportResponseFeedback.fromWriter(feedback, requestResult -> {
 					// Simulated responses do not run transport compression or retain its private HEAD input.
@@ -1937,6 +2001,7 @@ public final class Soklet implements AutoCloseable {
 						long streamEstablishedNanos = System.nanoTime();
 						StreamLifecycleCoordinator.Reservation reservation = reserveHttpStream();
 						if (reservation == null) {
+							result.getMarshaledResponse().close();
 							MarshaledResponse unavailable = DefaultHttpServer.provideDefaultStreamingAdmissionRejection();
 							requestResultHolder.set(result.copy().marshaledResponse(unavailable).response(null).finish());
 							Throwable rejection = new RejectedExecutionException(
@@ -1975,25 +2040,77 @@ public final class Soklet implements AutoCloseable {
 					requestResultHolder.set(result);
 					return HttpTransportResponseOutcome.accepted();
 				}));
-				return materializeStreamingResponse(request, requestResultHolder.get(), reservationHolder.get());
+				completedResult = materializeStreamingResponse(request, requestResultHolder.get(), reservationHolder.get());
+				if (!completedResult.getMarshaledResponse().isStreaming())
+					completedResult = materializeFiniteSimulationResult(completedResult);
+			} catch (RuntimeException | Error failure) {
+				primaryFailure = failure;
+				throw failure;
 			} finally {
 				// Also retire a reservation if handling fails before inline producer entry.
 				StreamLifecycleCoordinator.Reservation reservation = reservationHolder.get();
-				if (reservation != null) reservation.complete();
+				try {
+					HttpRequestResult result = requestResultHolder.get();
+					if (result != null) {
+						try { result.getMarshaledResponse().close(); }
+						catch (RuntimeException | Error cleanupFailure) {
+							if (primaryFailure != null && !sameInstance(primaryFailure, cleanupFailure)) primaryFailure.addSuppressed(cleanupFailure);
+							if (reservation != null) reservation.reportCleanupFailure(cleanupFailure);
+							else if (primaryFailure == null) terminalCleanupFailure = cleanupFailure;
+						}
+					}
+				} finally {
+					if (reservation != null) reservation.complete();
+				}
+			}
+			if (terminalCleanupFailure instanceof RuntimeException runtime) throw runtime;
+			if (terminalCleanupFailure instanceof Error error) throw error;
+			return completedResult;
+		}
+
+		private static HttpRequestResult materializeFiniteSimulationResult(HttpRequestResult result) {
+			MarshaledResponse response = result.getMarshaledResponse();
+			Throwable primary = null;
+			try {
+				byte[] bytes = response.bodyBytesOrNull();
+				MarshaledResponse snapshot = MarshaledResponse.withStatusCode(response.getStatusCode())
+						.headers(response.getHeaders()).cookies(response.getCookies()).body(bytes).build();
+				return result.copy().marshaledResponse(snapshot).finish();
+			} catch (RuntimeException | Error failure) {
+				primary = failure;
+				throw failure;
+			} finally {
+				MarshaledResponse.closeChannels(response.ownedChannels(), primary);
+			}
+		}
+
+		private HttpRequestResult materializeAcceptedSseSimulationResult(HttpRequestResult result) {
+			MarshaledResponse response = result.getMarshaledResponse();
+			Object token = this.executionOwnerToken;
+			try (LifecycleExecutionContext.Scope ignored = token == null ? null : LifecycleExecutionContext.enter(token)) {
+				Throwable primary = null;
+				try {
+					// Accepted handshakes have no body. Keep their metadata without retaining
+					// channel ownership after the headers have been materialized.
+					MarshaledResponse snapshot = MarshaledResponse.withStatusCode(response.getStatusCode())
+							.headers(response.getHeaders()).cookies(response.getCookies()).build();
+					return result.copy().marshaledResponse(snapshot).finish();
+				} catch (RuntimeException | Error failure) {
+					primary = failure;
+					throw failure;
+				} finally {
+					MarshaledResponse.closeChannels(response.ownedChannels(), primary);
+				}
 			}
 		}
 
 		private static HttpRequestResult projectSimulatedHttpResponse(Request request, HttpRequestResult result) {
 			MarshaledResponse response = normalizeBodylessMarshaledResponse(request, result.getMarshaledResponse());
 			boolean head = request.getHttpMethod() == HttpMethod.HEAD;
-			int status = response.getStatusCode();
-			if (!response.isStreaming() && status != 204 && status != 304) {
-				boolean hasLength = response.getHeaders().containsKey("Content-Length");
-				Long length = head && response.getBody().isEmpty()
-						? result.getHeadResponseBodyLength().orElse(null) : response.getBodyLength();
-				if (!hasLength && length != null)
-					response = response.copy().headers(headers -> headers.put("Content-Length", List.of(Long.toString(length)))).finish();
-			}
+			if (!response.isStreaming())
+				response = response.copy().headers(DefaultHttpServer.simulatedFiniteResponseHeaders(request, response,
+						result.getHeadResponseBodyLength().orElse(null))).finish();
+
 			// The transport suppresses HEAD bytes even when an interceptor or custom
 			// HeadHandler leaves a body. Never execute a suppressed stream producer.
 			if (head)
@@ -2120,6 +2237,8 @@ public final class Soklet implements AutoCloseable {
 				throw new IllegalStateException("Simulated streaming response failed.", t);
 			}
 
+			try { requestResult.getMarshaledResponse().close(); }
+			catch (RuntimeException | Error cleanupFailure) { reservation.reportCleanupFailure(cleanupFailure); }
 			MarshaledResponse marshaledResponse = requestResult.getMarshaledResponse().copy()
 					.withoutStreamingResponseBody()
 					.body(bytes)
@@ -2489,8 +2608,10 @@ public final class Soklet implements AutoCloseable {
 						replacementFailureReason.set(SseConnection.HandshakeFailureReason.CAPACITY_EXCEEDED);
 						MarshaledResponse unavailable;
 						try {
-							unavailable = sseServer.getSokletConfig().orElseThrow().getResponseMarshaler()
-									.forServiceUnavailable(request, requestResult.getResourceMethod().orElse(null));
+							ResponseMarshaler marshaler = sseServer.getSokletConfig().orElseThrow().getResponseMarshaler();
+							unavailable = ResponseBodyCleanup.transform(
+									marshaler.forServiceUnavailable(request, requestResult.getResourceMethod().orElse(null)),
+									marshaler::postProcess);
 						} catch (Throwable failure) {
 							preparationFailure = failure;
 							unavailable = DefaultSseServer.describeFailsafeHandshakeResponse(StatusCode.HTTP_500,
@@ -2516,11 +2637,16 @@ public final class Soklet implements AutoCloseable {
 							"Unable to generate SSE handshake response").throwable(preparationFailure).request(request)
 							.resourceMethod(requestResult.getResourceMethod().orElse(null)).build());
 				}
+				if (!sameInstance(effectiveResult, requestResult))
+					effectiveResult = effectiveResult.copy().marshaledResponse(ResponseBodyCleanup.retain(
+							requestResult.getMarshaledResponse(), effectiveResult.getMarshaledResponse())).finish();
+				HttpRequestResult logicalResult = effectiveResult;
 				if (!(effectiveResult.getSseHandshakeResult().orElse(null) instanceof SseHandshakeResult.Accepted))
 					effectiveResult = projectSimulatedSseRejection(request, effectiveResult);
 				requestResultHolder.set(effectiveResult);
-				if (!sameInstance(effectiveResult, requestResult))
-					return HttpTransportResponseOutcome.replaced(effectiveResult.getMarshaledResponse(), preparationFailure, null);
+				if (!sameInstance(logicalResult, requestResult)) {
+					return HttpTransportResponseOutcome.replaced(logicalResult.getMarshaledResponse(), preparationFailure, null);
+				}
 				return HttpTransportResponseOutcome.accepted();
 			}));
 
@@ -2529,6 +2655,8 @@ public final class Soklet implements AutoCloseable {
 				throw new IllegalStateException("SSE request handler did not provide a request result");
 
 			SseHandshakeResult sseHandshakeResult = requestResult.getSseHandshakeResult().orElse(null);
+			if (!(sseHandshakeResult instanceof SseHandshakeResult.Accepted))
+				requestResult = materializeFiniteSimulationResult(requestResult);
 
 			if (sseHandshakeResult == null) {
 				Throwable cause = replacementFailureCause.get();
@@ -2547,6 +2675,7 @@ public final class Soklet implements AutoCloseable {
 				StreamLifecycleCoordinator.Reservation reservation = requireNonNull(reservationHolder.get());
 
 				try {
+					requestResult = materializeAcceptedSseSimulationResult(requestResult);
 					// Create a synthetic logical response using values from the accepted handshake.
 					if (requestResult.getResponse().isEmpty())
 						requestResult = requestResult.copy()
@@ -2588,11 +2717,12 @@ public final class Soklet implements AutoCloseable {
 					return;
 				coordinator = sseCoordinatorWhileLocked();
 			}
+			Request effectiveRequest = requestResult.getEffectiveSseRequest().orElse(request);
 			ResourceMethod resourceMethod = requestResult.getResourceMethod().orElse(null);
-			if (!coordinator.dispatchRejectionObserver(() -> server.notifyConnectionLifecycle(request, resourceMethod,
+			if (!coordinator.dispatchRejectionObserver(() -> server.notifyConnectionLifecycle(effectiveRequest, resourceMethod,
 					LogEventType.LIFECYCLE_OBSERVER_DID_ESTABLISH_SSE_CONNECTION_FAILED, "didFailToEstablishSseConnection",
-					observer -> observer.didFailToEstablishSseConnection(request, resourceMethod, reason, cause),
-					metrics -> metrics.didFailToEstablishSseConnection(request, resourceMethod, reason, cause)))) {
+					observer -> observer.didFailToEstablishSseConnection(effectiveRequest, resourceMethod, reason, cause),
+					metrics -> metrics.didFailToEstablishSseConnection(effectiveRequest, resourceMethod, reason, cause)))) {
 				server.safelyLog(LogEvent.with(LogEventType.SSE_SERVER_CONNECTION_REJECTED,
 						"Simulated SSE handshake-failure observer capacity was unavailable.").request(request).build());
 			}
@@ -2645,12 +2775,6 @@ public final class Soklet implements AutoCloseable {
 		public Optional<@NonNull McpServer> getMcpServer() {
 			requireScopeOpen();
 			return Optional.ofNullable(this.mcpServer);
-		}
-
-		@NonNull
-		Optional<MockSseServer> getSimulatedSseServer() {
-			requireScopeOpen();
-			return Optional.ofNullable(this.sseServer);
 		}
 
 		@NonNull

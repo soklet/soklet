@@ -467,7 +467,7 @@ public class McpAnnotatedResourceProcessorRuntimeTests {
 				operationName, parameters);
 		String responseBody = new String(response.getBody().orElseThrow(),
 				StandardCharsets.UTF_8);
-		Assertions.assertEquals(500, response.getStatusCode(), responseBody);
+		Assertions.assertEquals(200, response.getStatusCode(), responseBody);
 		Assertions.assertEquals(McpSimulationBodyType.JSON,
 				response.getBodyType());
 		Assertions.assertTrue(responseBody.contains("\"code\":-32603"),

@@ -154,7 +154,6 @@ Save this as `src/main/java/example/CatalogMcpApp.java`:
 package example;
 
 import com.soklet.CorsAuthorizer;
-import com.soklet.McpRateLimiter;
 import com.soklet.McpServer;
 import com.soklet.ShutdownTrigger;
 import com.soklet.SokletApplication;
@@ -166,7 +165,6 @@ public final class CatalogMcpApp {
   public static void main(String[] args) {
     McpServer mcpServer = McpServer.withPort(8081)
         .host("127.0.0.1")
-        .toolRateLimiter(McpRateLimiter.fromInMemoryDefaults())
         .corsAuthorizer(CorsAuthorizer.rejectAllInstance())
         .allowedHosts(Set.of("127.0.0.1"))
         .build();
@@ -190,9 +188,9 @@ java -cp target/classes:$HOME/.m2/repository/com/soklet/soklet/4.0.0/soklet-4.0.
 
 The classpath separator above is for macOS/Linux; use `;` on Windows.
 
-The built-in anonymous admission policy and node-local in-memory limiter are
-development choices. Before a remote deployment, supply application-owned
-authentication and authorization, fleet-appropriate limiting, an intentional
+The anonymous admission policy is a development choice, and this example
+configures no application rate quota. Before a remote deployment, supply application-owned
+authentication and authorization, any application quotas, an intentional
 Origin policy, allowed hosts, and TLS termination. See the worked
 [OAuth resource-server pattern](release/MCP_OAUTH_RESOURCE_SERVER.md).
 

@@ -38,6 +38,20 @@ import static java.util.Objects.requireNonNull;
  * ordinary {@link HttpServer} or {@link SseServer}.
  * Server diagnostics are safe to invoke concurrently. Lifecycle is owned by
  * the {@link Soklet} configured with this server.
+ * <p>
+ * The built-in transport defaults to a protocol pool of 32 workers with a 128-entry
+ * queue. Admission, request/tool rate limiting, CORS, request-start observation and
+ * request-state opening share this pool. Request-handler concurrency and executor
+ * settings govern application dispatch. Configure the protocol budget with
+ * {@link Builder#protocolExecutorConcurrency(Integer)} and
+ * {@link Builder#protocolExecutorQueueCapacity(Integer)}. Keep shared-pool
+ * callbacks bounded. Request-finish observation and its log events use a separate
+ * bounded dispatcher on daemon platform threads; their physical execution remains
+ * part of shutdown accounting. Full observation capacity omits the paired
+ * observations with a rate-limited diagnostic while requests continue normally.
+ *
+ * <p>
+ * This is a closed, framework-owned implementation domain; applications configure the server rather than switch over or implement its subtypes.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -160,10 +174,10 @@ public sealed interface McpServer permits DefaultMcpServer {
 	/**
 	 * Returns the server-level fallback tool limiter.
 	 * <p>
-	 * This value is required when the server exposes any tool. Endpoint and tool
-	 * overrides replace it according to the documented resolution order.
+	 * Endpoint and tool overrides replace it according to the documented
+	 * resolution order. A tool with no resolved limiter has no tool rate quota.
 	 *
-	 * @return fallback limiter, or the empty optional for a tool-free server
+	 * @return configured fallback limiter, or the empty optional when absent
 	 */
 	@NonNull
 	Optional<@NonNull McpRateLimiter> getToolRateLimiter();
@@ -283,6 +297,8 @@ public sealed interface McpServer permits DefaultMcpServer {
 		private static final int DEFAULT_MAXIMUM_SUBSCRIPTIONS_PER_PARTITION = 32;
 		private static final int DEFAULT_REQUEST_HANDLER_CONCURRENCY = 32;
 		private static final int DEFAULT_REQUEST_HANDLER_QUEUE_CAPACITY = 128;
+		private static final int DEFAULT_PROTOCOL_EXECUTOR_CONCURRENCY = 32;
+		private static final int DEFAULT_PROTOCOL_EXECUTOR_QUEUE_CAPACITY = 128;
 		private static final int DEFAULT_STREAM_QUEUE_CAPACITY = 128;
 		private static final int DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES =
 				10 * 1_024 * 1_024;
@@ -323,6 +339,8 @@ public sealed interface McpServer permits DefaultMcpServer {
 		private int maximumSubscriptionsPerPartition;
 		private int requestHandlerConcurrency;
 		private int requestHandlerQueueCapacity;
+		private int protocolExecutorConcurrency;
+		private int protocolExecutorQueueCapacity;
 		private int streamQueueCapacity;
 		private int maximumRequestSizeInBytes;
 		private int maximumHeaderCount;
@@ -422,6 +440,8 @@ public sealed interface McpServer permits DefaultMcpServer {
 			this.requestHandlerConcurrency = DEFAULT_REQUEST_HANDLER_CONCURRENCY;
 			this.requestHandlerQueueCapacity =
 					DEFAULT_REQUEST_HANDLER_QUEUE_CAPACITY;
+			this.protocolExecutorConcurrency = DEFAULT_PROTOCOL_EXECUTOR_CONCURRENCY;
+			this.protocolExecutorQueueCapacity = DEFAULT_PROTOCOL_EXECUTOR_QUEUE_CAPACITY;
 			this.streamQueueCapacity = DEFAULT_STREAM_QUEUE_CAPACITY;
 			this.maximumRequestSizeInBytes =
 					DEFAULT_MAXIMUM_REQUEST_SIZE_IN_BYTES;
@@ -471,6 +491,8 @@ public sealed interface McpServer permits DefaultMcpServer {
 					exactSource.requestHandlerConcurrency;
 			this.requestHandlerQueueCapacity =
 					exactSource.requestHandlerQueueCapacity;
+			this.protocolExecutorConcurrency = exactSource.protocolExecutorConcurrency;
+			this.protocolExecutorQueueCapacity = exactSource.protocolExecutorQueueCapacity;
 			this.streamQueueCapacity = exactSource.streamQueueCapacity;
 			this.maximumRequestSizeInBytes = exactSource.maximumRequestSizeInBytes;
 			this.maximumHeaderCount = exactSource.maximumHeaderCount;
@@ -943,6 +965,44 @@ public sealed interface McpServer permits DefaultMcpServer {
 		}
 
 		/**
+		 * Sets the maximum concurrent protocol workers. Admission, rate limiters,
+		 * CORS authorization, start observers, and request-state opening share this
+		 * bounded pool independently of the application handler executor.
+		 * Catalog/task subscription projections require at least two workers;
+		 * incompatible singleton configurations fail when {@link #build()} is called.
+		 *
+		 * @param protocolExecutorConcurrency positive worker count, or null to restore 32
+		 * @return this builder
+		 * @throws IllegalArgumentException if the count is less than one
+		 */
+		@NonNull
+		public Builder protocolExecutorConcurrency(@Nullable Integer protocolExecutorConcurrency) {
+			if (protocolExecutorConcurrency != null && protocolExecutorConcurrency < 1)
+				throw new IllegalArgumentException("Protocol executor concurrency must be positive.");
+			this.protocolExecutorConcurrency = protocolExecutorConcurrency == null
+					? DEFAULT_PROTOCOL_EXECUTOR_CONCURRENCY : protocolExecutorConcurrency;
+			return this;
+		}
+
+		/**
+		 * Sets the bounded, lazily growing waiting queue for protocol operations. Exhaustion sheds
+		 * requests with HTTP 503 before semantic start; it never runs protocol work
+		 * on the connection event loop.
+		 *
+		 * @param protocolExecutorQueueCapacity positive queue size, or null to restore 128
+		 * @return this builder
+		 * @throws IllegalArgumentException if the size is less than one
+		 */
+		@NonNull
+		public Builder protocolExecutorQueueCapacity(@Nullable Integer protocolExecutorQueueCapacity) {
+			if (protocolExecutorQueueCapacity != null && protocolExecutorQueueCapacity < 1)
+				throw new IllegalArgumentException("Protocol executor queue capacity must be positive.");
+			this.protocolExecutorQueueCapacity = protocolExecutorQueueCapacity == null
+					? DEFAULT_PROTOCOL_EXECUTOR_QUEUE_CAPACITY : protocolExecutorQueueCapacity;
+			return this;
+		}
+
+		/**
 		 * Sets the positive, finite number of application handler dispatches that
 		 * may hold server-wide execution slots. The default is {@code 32}.
 		 *
@@ -1326,9 +1386,10 @@ public sealed interface McpServer permits DefaultMcpServer {
 		}
 
 		/**
-		 * Configures the server-level fallback tool limiter. A fallback is required
-		 * when any endpoint exposes a tool; endpoint and tool overrides replace it
-		 * instead of adding another charge.
+		 * Configures the optional server-level fallback tool limiter. Endpoint and
+		 * tool overrides replace it instead of adding another charge. When no
+		 * limiter resolves for a tool, no tool rate quota is applied; transport
+		 * and execution bounds remain in effect.
 		 *
 		 * @param toolRateLimiter application-owned fallback tool limiter, or null
 		 *                        to clear it
@@ -1555,8 +1616,7 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 *                               conflicting, or unloadable index or provider; the
 		 *                               keep-alive interval is not shorter than the write
 		 *                               timeout; a configured limiter name is unknown;
-		 *                               tools exist without a fallback tool limiter; a
-		 *                               task-required tool or an endpoint enabling Tasks
+		 *                               a task-required tool or an endpoint enabling Tasks
 		 *                               exists without a task manager;
 		 *                               Completion is enabled without a request limiter;
 		 *                               framework-protected request state is declared
@@ -1601,11 +1661,6 @@ public sealed interface McpServer permits DefaultMcpServer {
 					.anyMatch(group -> group.getSkillRegistrations().size() > 1))
 				throw new IllegalStateException(
 						"An MCP Skills variant selector must be explicitly configured for multivariant groups.");
-			boolean toolsPresent = endpointRegistry.getEndpoints().stream()
-					.anyMatch(endpoint -> !endpoint.getToolRegistrations().isEmpty());
-			if (toolsPresent && this.toolRateLimiter == null)
-				throw new IllegalStateException(
-						"An MCP tool rate limiter must be configured when tools are registered.");
 			for (McpEndpoint endpoint : endpointRegistry.getEndpoints()) {
 				endpoint.getToolRateLimiterName().ifPresent(name ->
 						requireRegisteredLimiter(name,
@@ -1619,7 +1674,8 @@ public sealed interface McpServer permits DefaultMcpServer {
 			DefaultMcpServer server = new DefaultMcpServer(this.port, this.host,
 					this.maximumCursorSizeInBytes,
 					this.requestHandlerConcurrency,
-					this.requestHandlerQueueCapacity, this.requestTimeout,
+					this.requestHandlerQueueCapacity, this.protocolExecutorConcurrency,
+					this.protocolExecutorQueueCapacity, this.requestTimeout,
 					this.requestHandlerExecutorServiceSupplier,
 					this.requestHeaderTimeout, this.requestBodyTimeout,
 					this.maximumRequestSizeInBytes,

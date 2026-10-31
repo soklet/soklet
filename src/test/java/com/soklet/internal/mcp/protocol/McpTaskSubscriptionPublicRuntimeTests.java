@@ -703,7 +703,7 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 	}
 
 	private static void assertTaskReadUnavailable(@NonNull HttpResponse<String> response) {
-		Assertions.assertEquals(500, response.statusCode(), response.body());
+		Assertions.assertEquals(200, response.statusCode(), response.body());
 		Assertions.assertEquals("no-store", response.headers().firstValue("Cache-Control").orElseThrow());
 		Assertions.assertEquals("{\"jsonrpc\":\"2.0\",\"id\":\"poll\","
 				+ "\"error\":{\"code\":-32603,\"message\":\"Internal error\"}}", response.body());

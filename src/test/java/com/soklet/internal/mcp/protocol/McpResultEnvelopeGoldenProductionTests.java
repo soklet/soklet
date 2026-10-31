@@ -721,7 +721,7 @@ public class McpResultEnvelopeGoldenProductionTests {
 				",\"name\":\"result.typed\",\"arguments\":{\"mode\":\""
 						+ mode + "\"}", "", "result.typed", null)) {
 			McpChunkedHttpClient.HttpResponseHead head = client.readHead();
-			assertJsonHead(head, 500);
+			assertJsonHead(head, 200);
 			String body = client.readFixedBody(head);
 			Assertions.assertEquals("{\"jsonrpc\":\"2.0\",\"id\":" + idJson
 					+ ",\"error\":{\"code\":-32603,"

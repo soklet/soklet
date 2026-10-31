@@ -21,6 +21,9 @@ import javax.annotation.concurrent.ThreadSafe;
 /**
  * Operation-specific immutable data carried by a complete MCP result.
  *
+ * <p>
+ * This type may gain reviewed permitted subtypes in Soklet 4.x; use a forward-compatible default when switching over its values.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe

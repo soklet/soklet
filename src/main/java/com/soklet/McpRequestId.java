@@ -46,7 +46,7 @@ public final class McpRequestId {
 	 */
 	@NonNull
 	public static McpRequestId fromString(@NonNull String value) {
-		return new McpRequestId(requireNonNull(value), null);
+		return new McpRequestId(McpContentValueSupport.requireWellFormedString(value), null);
 	}
 
 	/**

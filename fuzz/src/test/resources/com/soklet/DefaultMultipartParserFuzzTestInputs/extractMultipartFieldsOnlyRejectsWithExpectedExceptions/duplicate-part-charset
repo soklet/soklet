@@ -1,0 +1,9 @@
+------SokletFuzzBoundary
+Content-Disposition: form-data; name="file"; filename="a.txt"
+Content-Type: text/plain; charset=UTtext/plain; charset=UTF-8
+
+hello
+------SokletFuzzBounF-8
+
+hello
+------SokletFuzzBoundary--

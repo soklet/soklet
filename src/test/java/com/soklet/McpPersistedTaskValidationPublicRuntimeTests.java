@@ -141,7 +141,7 @@ class McpPersistedTaskValidationPublicRuntimeTests {
 
 	private static void assertFixedInternalError(McpTaskCapabilityBoundaryPublicRuntimeTests.Response response,
 			String taskId) {
-		assertEquals(500, response.status(), response.body());
+		assertEquals(200, response.status(), response.body());
 		assertEquals("{\"jsonrpc\":\"2.0\",\"id\":\"task-boundary\","
 				+ "\"error\":{\"code\":-32603,\"message\":\"Internal error\"}}", response.body());
 		assertFalse(response.body().contains(CANARY), response.body());

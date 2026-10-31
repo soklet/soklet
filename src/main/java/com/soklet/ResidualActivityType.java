@@ -16,7 +16,11 @@
 
 package com.soklet;
 
-/** Categorizes framework-observed work that remains after shutdown. */
+/**
+ * Categorizes framework-observed work that remains after shutdown.
+ * <p>
+ * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
+ */
 public enum ResidualActivityType {
 	/** An admitted callback remains active. */
 	CALLBACK,

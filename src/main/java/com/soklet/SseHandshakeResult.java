@@ -87,6 +87,9 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * Full documentation is available at <a href="https://www.soklet.com/docs/server-sent-events">https://www.soklet.com/docs/server-sent-events</a>.
  *
+ * <p>
+ * This is a closed domain; exhaustive switches are supported, and any new alternative requires an explicit reviewed contract amendment.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
@@ -359,7 +362,7 @@ public sealed interface SseHandshakeResult permits SseHandshakeResult.Accepted, 
 
 		@Override
 		public int hashCode() {
-			return Objects.hash(getHeaders(), getCookies(), getClientContext(), getClientInitializer());
+			return Objects.hash(Utilities.headerHashCode(getHeaders()), getCookies(), getClientContext(), getClientInitializer());
 		}
 	}
 

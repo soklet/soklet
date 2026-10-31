@@ -30,7 +30,8 @@ import javax.annotation.concurrent.ThreadSafe;
  * the same endpoint, so every listed resource remains readable. Soklet
  * validates the complete page after the handler returns; a violation rejects
  * the request with JSON-RPC error
- * {@code -32603} and HTTP status {@code 500}. Implementations must be safe for
+ * {@code -32603} and HTTP status {@code 200} on {@code 2026-07-28}; the 2025
+ * profiles likewise retain in-band operation errors. Implementations must be safe for
  * concurrent invocation.
  *
  * <p>The application owns cursor syntax and cryptographic integrity,

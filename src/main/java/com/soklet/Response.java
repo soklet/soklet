@@ -175,7 +175,7 @@ public final class Response {
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(getStatusCode(), getCookies(), getHeaders(), getBody());
+		return Objects.hash(getStatusCode(), getCookies(), Utilities.headerHashCode(getHeaders()), getBody());
 	}
 
 	/**

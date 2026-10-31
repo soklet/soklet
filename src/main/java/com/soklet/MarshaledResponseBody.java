@@ -35,7 +35,13 @@ import static java.util.Objects.requireNonNull;
  * These descriptors are thread-safe value holders, but they do not take ownership of or make immutable their backing
  * content. From construction until every response using a descriptor has completed, callers must not concurrently
  * mutate a backing byte array or byte-buffer content, modify a path-backed file region, or close or modify a borrowed
- * file channel. A channel configured with {@link FileChannel#getCloseOnComplete()} is closed by Soklet after use.
+ * file channel. A channel configured with {@link FileChannel#getCloseOnComplete()}
+ * is closed after delivery or abandonment by closing the containing
+ * {@link MarshaledResponse}. Soklet's built-in transports implement this ownership;
+ * a custom transport must invoke {@link MarshaledResponse#close()} itself.
+ *
+ * <p>
+ * This type may gain reviewed permitted subtypes in Soklet 4.x; use a forward-compatible default when switching over its values.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -206,7 +212,10 @@ public sealed interface MarshaledResponseBody permits MarshaledResponseBody.Byte
 	 * A finalized response body backed by a {@link java.nio.channels.FileChannel}.
 	 * <p>
 	 * The channel remains caller-owned while a response is using it. Callers must not close it or modify the referenced
-	 * region concurrently. Soklet closes the channel after use only when {@link #getCloseOnComplete()} is {@code true}.
+	 * region concurrently. The receiving transport closes the channel after delivery
+	 * or abandonment only when {@link #getCloseOnComplete()} is {@code true}, by
+	 * closing the containing {@link MarshaledResponse}. Custom transports must invoke
+	 * {@link MarshaledResponse#close()} themselves at the terminal delivery point.
 	 * <p>
 	 * The standard HTTP server allows native transfer for the JDK's standard file channels when the platform supports it.
 	 * Custom channels, including delegating wrappers and channels from other filesystem providers, use a socket adapter

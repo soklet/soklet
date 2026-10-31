@@ -55,6 +55,7 @@ import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ResourceListPlan;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.ResourcePlan;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestError;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestObservation;
+import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestObservationAdapter;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestObservationInput;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestStateProtectionAdapter;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.RequestStateProtectionInput;
@@ -79,6 +80,7 @@ import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.Collections;
 import java.util.ArrayList;
@@ -248,6 +250,7 @@ final class DefaultMcpServer implements McpServer {
 	DefaultMcpServer(int port, @NonNull String host,
 			int maximumCursorSizeInBytes,
 			int requestHandlerConcurrency, int requestHandlerQueueCapacity,
+			int protocolExecutorConcurrency, int protocolExecutorQueueCapacity,
 			@NonNull Duration requestTimeout,
 			@Nullable Supplier<@NonNull ExecutorService>
 					requestHandlerExecutorServiceSupplier,
@@ -374,6 +377,21 @@ final class DefaultMcpServer implements McpServer {
 		validateSubscriptionAuthorizerConfiguration(endpointPlans,
 				this.taskEventPublisher,
 				subscriptionAuthorizerExplicitlyConfigured);
+		if (protocolExecutorConcurrency < 2 && endpointPlans.stream().anyMatch(plan -> {
+			McpEndpoint endpoint = plan.endpoint();
+			if (endpoint.getSubscriptionProtocolVersions().isEmpty())
+				return false;
+			return (endpoint.getSubscriptionProtocolVersions().contains(McpProtocolVersion.V2026_07_28)
+					&& !endpoint.getTaskProtocolVersions().isEmpty() && this.taskEventPublisher != null)
+					|| endpoint.getSubscriptionConfig().map(configuration ->
+						(!plan.toolPlans().isEmpty() && configuration.getNotificationTypes().contains(McpSubscriptionNotificationType.TOOLS_LIST_CHANGED))
+								|| (!plan.promptPlans().isEmpty() && configuration.getNotificationTypes().contains(McpSubscriptionNotificationType.PROMPTS_LIST_CHANGED))).orElse(false)
+					|| plan.catalogLocalizer().map(localizerPlan ->
+						(!plan.toolPlans().isEmpty() && localizerPlan.localizedResponseKinds().contains(McpRuntimeCatalogLocalizer.ResponseKind.TOOLS_LIST))
+								|| (!plan.promptPlans().isEmpty() && localizerPlan.localizedResponseKinds().contains(McpRuntimeCatalogLocalizer.ResponseKind.PROMPTS_LIST))).orElse(false);
+		}))
+			throw new IllegalStateException(
+					"MCP protocolExecutorConcurrency must be at least two when task or catalog subscription projections are enabled.");
 		validateTaskRequiredTools(endpointPlans, taskManager);
 		if (this.requestRateLimiter == null && endpointPlans.stream()
 				.anyMatch(plan -> !plan.completionPlans().isEmpty()))
@@ -405,7 +423,7 @@ final class DefaultMcpServer implements McpServer {
 				Optional.ofNullable(requestHandlerExecutorServiceSupplier),
 				this::safelyLogStartupDiagnostic,
 				this::safelyLogUnexpectedTermination,
-				this::didStartRequestObservation, requestStateProtectionPlan,
+				requestObservationAdapter(), requestStateProtectionPlan,
 				this.streamQueueCapacity, this.writeTimeout,
 				this.keepAliveInterval,
 				this.maximumSubscriptionsPerPartition,
@@ -422,7 +440,8 @@ final class DefaultMcpServer implements McpServer {
 						this.maximumHeaderCount,
 						this.maximumHeadersSizeInBytes,
 						this.maximumRequestTargetLengthInBytes,
-						this.concurrentConnectionLimit));
+						this.concurrentConnectionLimit, protocolExecutorConcurrency,
+						protocolExecutorQueueCapacity));
 		this.runtimeBridge.configureLegacySessions(Optional.ofNullable(this.sessionConfig));
 		this.runtimeBridge.configureLegacySessionTransport(Optional.ofNullable(this.sessionConfig));
 		this.subscriptionReconciler =
@@ -462,7 +481,7 @@ final class DefaultMcpServer implements McpServer {
 				if (previous != Long.MIN_VALUE && now - previous < TimeUnit.MINUTES.toNanos(1)
 						|| !lastCapacityDiagnostic.compareAndSet(previous, now)) return;
 				safelyLogRequestObservation(lifecycleObserver, LogEvent.with(LogEventType.MCP_SERVER_CONFIGURATION,
-						"MCP HTTP observation callbacks were omitted because their bounded delivery capacity is unavailable.")
+						"Paired MCP HTTP or semantic request observations were omitted because their bounded delivery capacity is unavailable.")
 						.build(), null);
 			}
 
@@ -708,8 +727,10 @@ final class DefaultMcpServer implements McpServer {
 					public String seal(@NonNull RequestStateProtectionInput input,
 							byte @NonNull [] canonicalPlaintext)
 							throws McpRequestStateProtectionException {
-						return securityKeyManagers.sealRequestState(
-								protectionContext(input), canonicalPlaintext);
+						try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
+							return securityKeyManagers.sealRequestState(
+									protectionContext(input), canonicalPlaintext);
+						}
 					}
 
 					@Override
@@ -717,8 +738,10 @@ final class DefaultMcpServer implements McpServer {
 							@NonNull RequestStateProtectionInput input,
 							@NonNull String protectedState)
 							throws McpRequestStateProtectionException {
-						return securityKeyManagers.openRequestState(
-								protectionContext(input), protectedState);
+						try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
+							return securityKeyManagers.openRequestState(
+									protectionContext(input), protectedState);
+						}
 					}
 				};
 		return new RequestStateProtectionPlan(
@@ -866,6 +889,13 @@ final class DefaultMcpServer implements McpServer {
 	}
 
 	private ResourceListInvocationResult invokeSkills(McpEndpoint endpoint,
+			McpSkillPolicyEvaluator evaluator, SkillsInvocation invocation) throws Exception {
+		try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
+			return invokeSkillsWhileMarked(endpoint, evaluator, invocation);
+		}
+	}
+
+	private ResourceListInvocationResult invokeSkillsWhileMarked(McpEndpoint endpoint,
 			McpSkillPolicyEvaluator evaluator, SkillsInvocation invocation) throws Exception {
 		PromptInvocation base = invocation.base();
 		McpRequestContext request = base.requestContext();
@@ -1097,8 +1127,11 @@ final class DefaultMcpServer implements McpServer {
 				McpInvocationFeatures invocationFeatures =
 						lazyCatalogAccess.invocationFeatures();
 				requireCatalogAccessEvaluationActive(exactInput);
-				boolean accessible = policy.isToolAccessible(requestContext, tool,
-						invocationFeatures);
+				boolean accessible;
+				try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
+					accessible = policy.isToolAccessible(requestContext, tool,
+							invocationFeatures);
+				}
 				requireCatalogAccessEvaluationActive(exactInput);
 				return accessible;
 			}
@@ -1114,8 +1147,11 @@ final class DefaultMcpServer implements McpServer {
 				McpInvocationFeatures invocationFeatures =
 						lazyCatalogAccess.invocationFeatures();
 				requireCatalogAccessEvaluationActive(exactInput);
-				boolean accessible = policy.isPromptAccessible(requestContext,
-						prompt, invocationFeatures);
+				boolean accessible;
+				try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
+					accessible = policy.isPromptAccessible(requestContext,
+							prompt, invocationFeatures);
+				}
 				requireCatalogAccessEvaluationActive(exactInput);
 				return accessible;
 			}
@@ -1189,10 +1225,12 @@ final class DefaultMcpServer implements McpServer {
 					boolean includeDetailedResult,
 					@NonNull Optional<@NonNull CatalogAccessSession>
 							catalogAccessView) throws Exception {
-				Optional<McpTask> task = requireNonNull(
-						configuredTaskManager.findTask(new McpTaskRequestContext(
-								requestContext, taskId)),
-						"The MCP task manager returned null.");
+				Optional<McpTask> task;
+				try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
+					task = requireNonNull(
+							configuredTaskManager.findTask(new McpTaskRequestContext(requestContext, taskId)),
+							"The MCP task manager returned null.");
+				}
 				if (task.isEmpty())
 					return Optional.empty();
 				McpTask snapshot = task.orElseThrow();
@@ -1205,16 +1243,20 @@ final class DefaultMcpServer implements McpServer {
 			public void updateTask(@NonNull McpRequestContext requestContext,
 					@NonNull String taskId,
 					@NonNull McpInputResponses inputResponses) throws Exception {
-				configuredTaskManager.updateTask(new McpTaskUpdateContext(
-						requestContext, taskId, inputResponses));
+				try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
+					configuredTaskManager.updateTask(new McpTaskUpdateContext(
+							requestContext, taskId, inputResponses));
+				}
 			}
 
 			@Override
 			public void requestTaskCancelation(
 					@NonNull McpRequestContext requestContext,
 					@NonNull String taskId) throws Exception {
-				configuredTaskManager.requestTaskCancelation(
-						new McpTaskRequestContext(requestContext, taskId));
+				try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
+					configuredTaskManager.requestTaskCancelation(
+							new McpTaskRequestContext(requestContext, taskId));
+				}
 			}
 		});
 	}
@@ -1364,7 +1406,7 @@ final class DefaultMcpServer implements McpServer {
 									: input.resourceListCursor().get(0),
 							configuredLocalizer.getFallbackLocale());
 
-			try {
+			try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
 				context = requireNonNull(configuredLocalizer.getContextProvider()
 						.provideContext(localizationRequest),
 						"The MCP localization context provider returned null.");
@@ -1382,14 +1424,17 @@ final class DefaultMcpServer implements McpServer {
 		if (input.terminalBoundary().getAsBoolean())
 			return localizationFailure(configuredLocalizer, input);
 
-		McpLocalizationRenderer.Outcome outcome = McpLocalizationRenderer.render(
-				input.canonicalDocument(), input.canonicalEncodedBytes(),
-				input.envelopeBytes(), input.maximumResponseBytes(),
-				input.maximumReplacementCharacters(),
-				resolvedSlots, context,
-				configuredLocalizer.getFailurePolicy(),
-				() -> input.terminalBoundary().getAsBoolean(),
-				document -> input.encodedLength().applyAsLong(document));
+		McpLocalizationRenderer.Outcome outcome;
+		try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
+			outcome = McpLocalizationRenderer.render(
+					input.canonicalDocument(), input.canonicalEncodedBytes(),
+					input.envelopeBytes(), input.maximumResponseBytes(),
+					input.maximumReplacementCharacters(),
+					resolvedSlots, context,
+					configuredLocalizer.getFailurePolicy(),
+					() -> input.terminalBoundary().getAsBoolean(),
+					document -> input.encodedLength().applyAsLong(document));
+		}
 
 		return switch (outcome.disposition()) {
 			case LOCALIZED -> new McpRuntimeCatalogLocalizer.Outcome(
@@ -1447,7 +1492,7 @@ final class DefaultMcpServer implements McpServer {
 		}
 
 		McpLocalizationContext context;
-		try {
+		try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
 			if (seed.localizationContext().isPresent()) {
 				context = seed.localizationContext().orElseThrow();
 			} else {
@@ -1485,7 +1530,7 @@ final class DefaultMcpServer implements McpServer {
 								return McpLocalizationResult.failure();
 							++distinctLookupCount;
 							McpLocalizationResult result;
-							try {
+							try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
 								result = context.localize(text);
 								if (result instanceof McpLocalizationResult.Localized localized) {
 									String replacement = localized.getText();
@@ -2108,14 +2153,16 @@ final class DefaultMcpServer implements McpServer {
 	@NonNull
 	private <A> ToolPlan toToolPlan(@NonNull McpEndpoint endpoint,
 			@NonNull McpToolRegistration<A> tool) {
-		McpRateLimiter resolvedRateLimiter = resolveToolRateLimiter(endpoint, tool);
+		RateLimitAdapter rateLimitAdapter = resolveToolRateLimiter(endpoint, tool)
+				.map(this::toRateLimitAdapter)
+				.orElseGet(() -> input -> RateLimitResult.allowed());
 		return new ToolPlan(tool.getName(), tool.getInputSchema().getDocument(),
 				tool.getMirroredHeaderPlan(),
 				tool.getOutputSchema().map(McpToolSchema::getDocument),
 				toolDescriptorFields(tool), McpAppMetadataSupport.toolMetadata(
 						tool.getMetadata(), tool.getAppToolMetadata().orElse(null), true),
 				tool.isStructuredContentMirroredAsText(),
-				toRateLimitAdapter(resolvedRateLimiter),
+				rateLimitAdapter,
 				tool.getInputRequestDeclarations(), tool.getRequestStateMode(),
 				tool.isTaskRequired(),
 				invocation -> invokeTool(tool, invocation));
@@ -2194,18 +2241,15 @@ final class DefaultMcpServer implements McpServer {
 	}
 
 	@NonNull
-	private McpRateLimiter resolveToolRateLimiter(@NonNull McpEndpoint endpoint,
+	private Optional<@NonNull McpRateLimiter> resolveToolRateLimiter(@NonNull McpEndpoint endpoint,
 			@NonNull McpToolRegistration<?> tool) {
-		Optional<McpRateLimiter> resolved = tool.getRateLimiter()
+		return tool.getRateLimiter()
 				.or(() -> tool.getRateLimiterName()
 						.flatMap(this.rateLimiterRegistry::find))
 				.or(endpoint::getToolRateLimiter)
 				.or(() -> endpoint.getToolRateLimiterName()
 						.flatMap(this.rateLimiterRegistry::find))
 				.or(() -> Optional.ofNullable(this.toolRateLimiter));
-		return resolved.orElseThrow(() -> new IllegalStateException(
-				"No MCP tool rate limiter resolved for tool '"
-						+ tool.getName() + "'."));
 	}
 
 	@NonNull
@@ -2285,10 +2329,11 @@ final class DefaultMcpServer implements McpServer {
 				return ToolInvocationResult.invalidInput();
 			}
 			String taskId = taskCreatedResult.getTaskId();
-			Optional<McpTask> task = requireNonNull(
-					configuredTaskManager.findTask(new McpTaskRequestContext(
-							requestContext, taskId)),
-					"The MCP task manager returned null.");
+			Optional<McpTask> task;
+			try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
+				task = requireNonNull(configuredTaskManager.findTask(new McpTaskRequestContext(requestContext, taskId)),
+						"The MCP task manager returned null.");
+			}
 			if (task.isEmpty())
 				throw new IllegalStateException(
 						"The created MCP task was not durably readable.");
@@ -2367,7 +2412,7 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull McpRequestContext requestContext, @NonNull String toolName,
 			@NonNull McpJsonObject rawArguments,
 			@NonNull McpCompleteResult completeResult) {
-		try {
+		try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
 			McpCompleteResult sanitizedResult = this.toolResultSanitizer.sanitize(
 					requestContext, toolName, rawArguments, completeResult);
 			if (sanitizedResult == null
@@ -3319,7 +3364,7 @@ final class DefaultMcpServer implements McpServer {
 		McpLocalizationContext context;
 		String selectedLocaleTag;
 
-		try {
+		try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
 			context = requireNonNull(configuredLocalizer.getContextProvider()
 					.provideContext(localizationRequest),
 					"The MCP localization context provider returned null.");
@@ -4179,6 +4224,24 @@ final class DefaultMcpServer implements McpServer {
 	}
 
 	@NonNull
+	private RequestObservationAdapter requestObservationAdapter() {
+		return new RequestObservationAdapter() {
+			@Override
+			public RequestObservation didStartRequest(RequestObservationInput input) {
+				return didStartRequestObservation(input);
+			}
+
+			@Override
+			public Optional<McpRequestContext> contextForOmittedRequest(RequestObservationInput input) {
+				try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
+					return Optional.of(new DefaultMcpRequestContext(requireNonNull(input),
+							securityKeyManagers, instanceProvider));
+				}
+			}
+		};
+	}
+
+	@NonNull
 	private RequestObservation didStartRequestObservation(
 			@NonNull RequestObservationInput input) {
 		DefaultMcpRequestContext context = new DefaultMcpRequestContext(
@@ -4244,6 +4307,10 @@ final class DefaultMcpServer implements McpServer {
 								metricEndpointPath,
 								metricJsonRpcMethod,
 								outcome, duration), metricSequence);
+				if (outcome == McpRequestOutcome.INTERNAL_ERROR && !throwables.isEmpty())
+					safelyLogRequestObservation(observer, LogEvent.with(
+							LogEventType.MCP_REQUEST_PROCESSING_FAILED,
+							"An MCP request failed while processing application code.").build(), null);
 				traceLogRecord.ifPresent(record -> safelyLogRequestObservation(
 						observer, LogEvent.with(
 								LogEventType.MCP_TRACE_CORRELATION,
@@ -4626,8 +4693,10 @@ final class DefaultMcpServer implements McpServer {
 								&& sameInstance(this.deliveryThread, currentThread))
 							finishDeliveryLocked();
 					}
-					signalAsynchronousDrainIfNeeded();
 				}
+				// An asynchronous handoff can outlive an empty queue. A later
+				// producer that declines synchronous delivery must still wake it.
+				signalAsynchronousDrainIfNeeded();
 			}
 		}
 
@@ -4880,17 +4949,13 @@ final class DefaultMcpAdmissionContext implements McpAdmissionContext {
 	private final AdmissionInput input;
 	@NonNull
 	private final Optional<@NonNull McpClientCapabilities> clientCapabilities;
-	@NonNull
-	private final McpRequestPropagation requestPropagation;
+	@Nullable
+	private volatile McpRequestPropagation requestPropagation;
 
 	DefaultMcpAdmissionContext(@NonNull AdmissionInput input) {
 		this.input = requireNonNull(input);
 		this.clientCapabilities = input.clientCapabilitiesJson()
 				.map(McpClientCapabilities::fromJson);
-		this.requestPropagation = input.requestMetadata()
-				.map(McpRequestPropagation::fromMetadata)
-				.orElseGet(() -> McpRequestPropagation.fromMetadata(
-						McpJsonObject.emptyInstance()));
 	}
 
 	@Override public @NonNull Request getRequest() { return this.input.request(); }
@@ -4942,7 +5007,13 @@ final class DefaultMcpAdmissionContext implements McpAdmissionContext {
 		return this.input.requestedTaskIds();
 	}
 	@Override public @NonNull Optional<@NonNull TraceContext> getTraceContext() {
-		return this.requestPropagation.traceContext();
+		McpRequestPropagation propagation = this.requestPropagation;
+		if (propagation == null) {
+			propagation = McpRequestPropagation.fromMetadata(
+					this.input.requestMetadata().orElseGet(McpJsonObject::emptyInstance));
+			this.requestPropagation = propagation;
+		}
+		return propagation.traceContext();
 	}
 }
 
@@ -4990,6 +5061,8 @@ final class DefaultMcpRateLimitContext implements McpRateLimitContext {
 @ThreadSafe
 final class DefaultMcpRequestContext implements McpRequestContext,
 		GeneratedInvocationContext {
+	@NonNull
+	private final Optional<@NonNull Instant> startedAt;
 	@NonNull
 	private final Request request;
 	@NonNull
@@ -5039,7 +5112,8 @@ final class DefaultMcpRequestContext implements McpRequestContext,
 				invocation.requestContext().getInputResponses(),
 				invocation.requestContext().getFrameworkRequestState(),
 				invocation.requestContext().getApplicationRequestState(),
-				invocation.admissionIdentity(), Optional.empty());
+				invocation.admissionIdentity(), Optional.empty(),
+				invocation.requestContext().getStartedAt());
 	}
 
 	DefaultMcpRequestContext(@NonNull PromptInvocation invocation) {
@@ -5052,7 +5126,8 @@ final class DefaultMcpRequestContext implements McpRequestContext,
 				invocation.requestContext().getInputResponses(),
 				invocation.requestContext().getFrameworkRequestState(),
 				invocation.requestContext().getApplicationRequestState(),
-				invocation.admissionIdentity(), Optional.empty());
+				invocation.admissionIdentity(), Optional.empty(),
+				invocation.requestContext().getStartedAt());
 	}
 
 	DefaultMcpRequestContext(@NonNull ResourceInvocation invocation) {
@@ -5065,7 +5140,8 @@ final class DefaultMcpRequestContext implements McpRequestContext,
 				invocation.requestContext().getInputResponses(),
 				invocation.requestContext().getFrameworkRequestState(),
 				invocation.requestContext().getApplicationRequestState(),
-				invocation.admissionIdentity(), Optional.empty());
+				invocation.admissionIdentity(), Optional.empty(),
+				invocation.requestContext().getStartedAt());
 	}
 
 	DefaultMcpRequestContext(@NonNull ResourceListInvocation invocation) {
@@ -5078,7 +5154,8 @@ final class DefaultMcpRequestContext implements McpRequestContext,
 				invocation.requestContext().getInputResponses(),
 				invocation.requestContext().getFrameworkRequestState(),
 				invocation.requestContext().getApplicationRequestState(),
-				invocation.admissionIdentity(), Optional.empty());
+				invocation.admissionIdentity(), Optional.empty(),
+				invocation.requestContext().getStartedAt());
 	}
 
 	DefaultMcpRequestContext(@NonNull RequestObservationInput input) {
@@ -5114,7 +5191,8 @@ final class DefaultMcpRequestContext implements McpRequestContext,
 				input.requestMetadata(), input.inputResponses(),
 				input.frameworkRequestState(), input.applicationRequestState(),
 				input.admissionIdentity(), input.acceptLanguageValues(),
-				requireNonNull(securityKeyManagers), requireNonNull(instanceProvider));
+				requireNonNull(securityKeyManagers), requireNonNull(instanceProvider),
+				input.startedAt());
 	}
 
 	private DefaultMcpRequestContext(@NonNull Request request,
@@ -5132,13 +5210,14 @@ final class DefaultMcpRequestContext implements McpRequestContext,
 			@NonNull Optional<@NonNull String> applicationRequestState,
 			@NonNull McpAdmissionIdentity admissionIdentity,
 			@NonNull Optional<@NonNull DefaultMcpSecurityKeyManagers>
-					securityKeyManagers) {
+					securityKeyManagers,
+			@NonNull Optional<@NonNull Instant> startedAt) {
 		this(request, endpoint, endpointPathParameters, jsonRpcMethod, requestId,
 				protocolVersion, operationName, clientInformation,
 				clientCapabilitiesJson, requestMetadata, inputResponses,
 				frameworkRequestState, applicationRequestState,
 				admissionIdentity, acceptLanguageValues(request), securityKeyManagers,
-				InstanceProvider.defaultInstance());
+				InstanceProvider.defaultInstance(), startedAt);
 	}
 
 	@SuppressWarnings("UnusedMethod") // Retained for public-evolution source inventory.
@@ -5164,7 +5243,7 @@ final class DefaultMcpRequestContext implements McpRequestContext,
 				clientCapabilitiesJson, requestMetadata, inputResponses,
 				frameworkRequestState, applicationRequestState, admissionIdentity,
 				acceptLanguageValues, securityKeyManagers,
-				InstanceProvider.defaultInstance());
+				InstanceProvider.defaultInstance(), Optional.empty());
 	}
 
 	private DefaultMcpRequestContext(@NonNull Request request,
@@ -5184,7 +5263,9 @@ final class DefaultMcpRequestContext implements McpRequestContext,
 			@NonNull List<@NonNull String> acceptLanguageValues,
 			@NonNull Optional<@NonNull DefaultMcpSecurityKeyManagers>
 					securityKeyManagers,
-			@NonNull InstanceProvider instanceProvider) {
+			@NonNull InstanceProvider instanceProvider,
+			@NonNull Optional<@NonNull Instant> startedAt) {
+		this.startedAt = requireNonNull(startedAt);
 		this.request = requireNonNull(request);
 		this.endpoint = requireNonNull(endpoint);
 		this.endpointPathParameters = Map.copyOf(
@@ -5228,6 +5309,9 @@ final class DefaultMcpRequestContext implements McpRequestContext,
 		return this.acceptLanguageValues;
 	}
 
+	@Override public @NonNull Optional<@NonNull Instant> getStartedAt() {
+		return this.startedAt;
+	}
 	@Override public @NonNull Request getRequest() {
 		return this.request;
 	}

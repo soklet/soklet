@@ -249,7 +249,7 @@ class McpTasksFleetPublicRuntimeTests {
 			HttpResponse<String> unsupported = taskRequest(secondPort, MAIN_PATH,
 					"tasks/get", "unsupported-origin", "unsupported-origin-task",
 					TENANT_ALPHA);
-			assertNoStore(unsupported, 500);
+			assertNoStore(unsupported, 200);
 			Assertions.assertTrue(unsupported.body().contains("\"code\":-32603"),
 					unsupported.body());
 			Assertions.assertFalse(unsupported.body().contains(
@@ -529,7 +529,7 @@ class McpTasksFleetPublicRuntimeTests {
 
 	private static void assertTaskReadUnavailable(
 			@NonNull HttpResponse<String> response, @NonNull String requestId) {
-		assertNoStore(response, 500);
+		assertNoStore(response, 200);
 		Assertions.assertEquals("{\"jsonrpc\":\"2.0\",\"id\":\"" + requestId
 				+ "\",\"error\":{\"code\":-32603,\"message\":\"Internal error\"}}",
 				response.body());
@@ -549,7 +549,7 @@ class McpTasksFleetPublicRuntimeTests {
 	private static void assertInvalidOriginWithoutDisclosure(
 			@NonNull HttpResponse<String> response, @NonNull String taskId,
 			@NonNull String canary) {
-		assertNoStore(response, 500);
+		assertNoStore(response, 200);
 		Assertions.assertTrue(response.body().contains("\"code\":-32603"),
 				response.body());
 		Assertions.assertFalse(response.body().contains(taskId), response.body());

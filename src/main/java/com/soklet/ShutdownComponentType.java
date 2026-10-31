@@ -16,7 +16,11 @@
 
 package com.soklet;
 
-/** Identifies one component represented in shutdown evidence. */
+/**
+ * Identifies one component represented in shutdown evidence.
+ * <p>
+ * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
+ */
 public enum ShutdownComponentType {
 	/** HTTP request transport. */
 	HTTP,

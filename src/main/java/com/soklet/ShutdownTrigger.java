@@ -27,6 +27,9 @@ package com.soklet;
  * hook is always installed independently of this enum; the constants here add
  * to that built-in trigger.
  *
+ * <p>
+ * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  * @see SokletApplication#run(SokletConfig, ShutdownTrigger...)
  */

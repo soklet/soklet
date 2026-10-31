@@ -263,7 +263,7 @@ public class McpCompletionWireParityTests {
 			default -> null;
 		};
 		if (completion == null) {
-			assertEquals(500, capture.status(), capture.body());
+			assertEquals(200, capture.status(), capture.body());
 			assertTrue(capture.body().contains("\"error\":"), capture.body());
 			assertFalse(capture.body().contains("\"result\":"), capture.body());
 			assertFalse(capture.body().contains("SENSITIVE-SUGGESTION"), capture.body());

@@ -209,7 +209,7 @@ public class McpTaskInputUpdateRuntimeTests {
 					Map.of("undeclared", formRequest()), null);
 			HttpResponse<String> undeclared = getTask(port, "undeclared",
 					undeclaredTaskId);
-			Assertions.assertEquals(500, undeclared.statusCode(), undeclared.body());
+			Assertions.assertEquals(200, undeclared.statusCode(), undeclared.body());
 			Assertions.assertTrue(undeclared.body().contains("\"code\":-32603"),
 					undeclared.body());
 			Assertions.assertFalse(undeclared.body().contains("-32021"),

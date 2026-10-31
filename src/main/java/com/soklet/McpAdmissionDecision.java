@@ -28,6 +28,9 @@ import static java.util.Objects.requireNonNull;
  * carriers are safe for concurrent access; application-owned values reachable
  * through an accepted identity retain their own thread-safety contracts.
  *
+ * <p>
+ * This is a closed domain; exhaustive switches are supported, and any new alternative requires an explicit reviewed contract amendment.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe

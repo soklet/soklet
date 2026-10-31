@@ -39,7 +39,7 @@ final class McpResourceValueSupport {
 		if (!uri.isAbsolute())
 			throw new IllegalArgumentException(
 					"MCP resource URIs must be absolute.");
-		if (!uri.normalize().equals(uri))
+		if (com.soklet.internal.mcp.protocol.McpResourceTemplateValidation.hasDotPathSegments(uri))
 			throw new IllegalArgumentException(
 					"MCP resource URIs must be normalized.");
 		String host = uri.getHost();

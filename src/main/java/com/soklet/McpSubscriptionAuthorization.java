@@ -33,6 +33,9 @@ import static java.util.Objects.requireNonNull;
  * thread safety of an opaque application-context object stored in an allowed
  * result. {@link Allowed} and {@link Denied} are the exhaustive result domain.
  *
+ * <p>
+ * This is a closed domain; exhaustive switches are supported, and any new alternative requires an explicit reviewed contract amendment.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe

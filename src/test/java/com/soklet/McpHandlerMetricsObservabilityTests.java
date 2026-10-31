@@ -376,7 +376,7 @@ public class McpHandlerMetricsObservabilityTests {
 					.get(5, TimeUnit.SECONDS);
 			HttpResponse<String> queuedResponse = requireNonNull(queued)
 					.get(5, TimeUnit.SECONDS);
-			Assertions.assertEquals(504, activeResponse.statusCode(),
+			Assertions.assertEquals(200, activeResponse.statusCode(),
 					activeResponse.body());
 			Assertions.assertEquals(503, queuedResponse.statusCode(),
 					queuedResponse.body());

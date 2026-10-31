@@ -33,9 +33,7 @@ import java.net.URLEncoder;
 import java.net.UnknownHostException;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.Charset;
-import java.nio.charset.IllegalCharsetNameException;
 import java.nio.charset.StandardCharsets;
-import java.nio.charset.UnsupportedCharsetException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -69,6 +67,14 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 public final class Utilities {
 	private static final byte @NonNull [] EMPTY_BYTE_ARRAY;
+	// Header maps compare names without case; their value-object hashes must do so too.
+	static int headerHashCode(Map<String, List<String>> headers) {
+		int hash = 0;
+		for (Map.Entry<String, List<String>> header : headers.entrySet())
+			hash += header.getKey().toLowerCase(Locale.ROOT).hashCode() ^ header.getValue().hashCode();
+		return hash;
+	}
+
 	@NonNull
 	private static final Pattern HEADER_PERCENT_ENCODING_PATTERN;
 
@@ -204,6 +210,69 @@ public final class Utilities {
 
 		freezeStringValueLists(queryParameters);
 		return Collections.unmodifiableMap(queryParameters);
+	}
+
+	@NonNull
+	static Map<@NonNull String, @NonNull List<@NonNull String>> extractFormParametersFromBody(
+			byte @NonNull [] body, @NonNull Charset charset, int maximumPairs) {
+		requireNonNull(body);
+		requireNonNull(charset);
+		Map<String, List<String>> parameters = new LinkedHashMap<>();
+		int pairCount = 0;
+		for (int start = 0; start < body.length;) {
+			int end = start;
+			while (end < body.length && body[end] != '&')
+				end++;
+			if (end == start) {
+				start = end + 1;
+				continue;
+			}
+			if (++pairCount > maximumPairs)
+				throw new IllegalRequestException("Too many form parameters.");
+			int separator = start;
+			while (separator < end && body[separator] != '=')
+				separator++;
+			String name = decodeFormComponent(body, start, separator, charset);
+			String value = decodeFormComponent(body, separator < end ? separator + 1 : end, end, charset);
+			addStringValue(parameters, name, value);
+			start = end + 1;
+		}
+		freezeStringValueLists(parameters);
+		return Collections.unmodifiableMap(parameters);
+	}
+
+	@NonNull
+	private static String decodeFormComponent(byte @NonNull [] body, int start, int end, @NonNull Charset charset) {
+		byte[] bytes = Arrays.copyOfRange(body, start, end);
+		int length = 0;
+		boolean escaped = false;
+		for (int index = 0; index < bytes.length; index++) {
+			int value = bytes[index] & 0xff;
+			if (value == '%') {
+				if (index + 2 >= bytes.length)
+					throw new IllegalRequestException("Invalid percent-encoding in form component.");
+				int high = hex((char) (bytes[index + 1] & 0xff));
+				int low = hex((char) (bytes[index + 2] & 0xff));
+				if (high < 0 || low < 0)
+					throw new IllegalRequestException("Invalid percent-encoding in form component.");
+				value = high * 16 + low;
+				index += 2;
+				escaped = true;
+			} else if (value == '+') {
+				value = ' ';
+			}
+			bytes[length++] = (byte) value;
+		}
+		byte[] decodedBytes = length == bytes.length ? bytes : Arrays.copyOf(bytes, length);
+		if (!escaped)
+			return RequestTextDecoder.decodeBody(decodedBytes, charset);
+		try {
+			// Literal and escaped bytes may together make one character. Decode once,
+			// after processing the complete component, rather than escape run by run.
+			return RequestTextDecoder.decode(decodedBytes, charset);
+		} catch (CharacterCodingException ignored) {
+			throw new IllegalRequestException("Invalid character encoding in form component.");
+		}
 	}
 
 	@NonNull
@@ -428,6 +497,24 @@ public final class Utilities {
 		return -1;
 	}
 
+	static boolean containsUnpairedSurrogate(@NonNull String value) {
+		requireNonNull(value);
+		for (int index = 0; index < value.length(); index++) {
+			char character = value.charAt(index);
+			if (Character.isHighSurrogate(character) && index + 1 < value.length()
+					&& Character.isLowSurrogate(value.charAt(index + 1)))
+				index++;
+			else if (Character.isSurrogate(character))
+				return true;
+		}
+		return false;
+	}
+
+	static void validateDecodedQueryComponent(@NonNull String value) {
+		if (containsUnpairedSurrogate(value))
+			throw new IllegalRequestException("Invalid Unicode in query parameter.");
+	}
+
 	/**
 	 * Parses {@code Cookie} request headers into a map of cookie names to values.
 	 * <p>
@@ -478,7 +565,7 @@ public final class Utilities {
 
 					String[] cookiePair = cookieComponent.split("=", 2);
 					String rawName = trimAggressivelyToNull(cookiePair[0]);
-					String rawValue = (cookiePair.length == 2 ? trimAggressivelyToNull(cookiePair[1]) : null);
+					String rawValue = (cookiePair.length == 2 ? trimAggressivelyToEmpty(cookiePair[1]) : null);
 
 					if (rawName == null || (selectedName != null && !selectedName.equals(rawName))) continue;
 
@@ -553,47 +640,64 @@ public final class Utilities {
 	 * Supports backslash-escaped quotes within quoted strings.
 	 */
 	private static List<@NonNull String> splitCookieHeaderRespectingQuotes(@NonNull String headerValue) {
-		List<String> parts = new ArrayList<>();
-		StringBuilder cur = new StringBuilder(headerValue.length());
+		List<@NonNull String> parts = new ArrayList<>();
+		StringBuilder current = new StringBuilder(headerValue.length());
 		boolean inQuotes = false;
 		boolean escape = false;
+		boolean seenEquals = false;
+		boolean valueStarted = false;
 
 		for (int i = 0; i < headerValue.length(); i++) {
 			char c = headerValue.charAt(i);
-
-			if (escape) {
-				// keep escaped char literally (e.g., \" \; \\)
-				cur.append(c);
+			if (inQuotes && escape) {
 				escape = false;
-				continue;
-			}
-
-			if (c == '\\') {
+			} else if (inQuotes && c == '\\') {
 				escape = true;
-				// keep the backslash for now; unquote step will handle unescaping
-				cur.append(c);
+			} else if (c == '"' && inQuotes) {
+				if (!isCookieValueTerminator(headerValue, i + 1) && current.indexOf(";") >= 0) {
+					// A quote followed by more value text cannot close this quoted
+					// value. Recover prior delimiters, then let it open the later
+					// cookie's value (for example, bad="oops; session=x; pref="ok").
+					String[] recovered = current.toString().split(";", -1);
+					for (int part = 0; part < recovered.length - 1; part++)
+						parts.add(recovered[part]);
+					current.setLength(0);
+					current.append(recovered[recovered.length - 1]);
+					int equals = current.indexOf("=");
+					seenEquals = equals >= 0;
+					valueStarted = seenEquals && !current.substring(equals + 1).isBlank();
+					inQuotes = seenEquals && !valueStarted;
+				} else {
+					inQuotes = false;
+				}
+			} else if (c == '"' && seenEquals && !valueStarted) {
+				inQuotes = true;
+			} else if (c == ';' && !inQuotes) {
+				parts.add(current.toString());
+				current.setLength(0);
+				seenEquals = false;
+				valueStarted = false;
 				continue;
 			}
-
-			if (c == '"') {
-				inQuotes = !inQuotes;
-				cur.append(c);
-				continue;
-			}
-
-			if (c == ';' && !inQuotes) {
-				parts.add(cur.toString());
-				cur.setLength(0);
-				continue;
-			}
-
-			cur.append(c);
+			if (seenEquals && !Character.isWhitespace(c))
+				valueStarted = true;
+			if (c == '=' && !seenEquals)
+				seenEquals = true;
+			current.append(c);
 		}
 
-		if (cur.length() > 0)
-			parts.add(cur.toString());
-
+		// An unterminated quote is malformed; recover later cookies at their delimiters.
+		if (inQuotes)
+			Collections.addAll(parts, current.toString().split(";", -1));
+		else if (current.length() > 0)
+			parts.add(current.toString());
 		return parts;
+	}
+
+	private static boolean isCookieValueTerminator(@NonNull String headerValue, int offset) {
+		while (offset < headerValue.length() && Character.isWhitespace(headerValue.charAt(offset)))
+			offset++;
+		return offset == headerValue.length() || headerValue.charAt(offset) == ';';
 	}
 
 	/**
@@ -852,6 +956,7 @@ public final class Utilities {
 																		 @NonNull QueryFormat queryFormat) {
 		requireNonNull(queryComponent);
 		requireNonNull(queryFormat);
+		validateDecodedQueryComponent(queryComponent);
 
 		String encoded = URLEncoder.encode(queryComponent, StandardCharsets.UTF_8);
 
@@ -1795,7 +1900,8 @@ public final class Utilities {
 	 * Extracts the {@code charset=...} parameter from a {@code Content-Type} header value.
 	 * <p>
 	 * Parsing is forgiving: parameters may appear in any order and with arbitrary spacing. If a charset is found,
-	 * it is validated via {@link Charset#forName(String)}; invalid names result in {@link Optional#empty()}.
+	 * it is resolved from the installed charset and alias snapshot; invalid names result in {@link Optional#empty()}.
+	 * Untrusted names never trigger repeated charset-provider discovery.
 	 * Quoted strings and their escaped characters are respected when separating parameters.
 	 * Multiple charset parameters are rejected, even when their values are identical.
 	 *
@@ -1834,10 +1940,22 @@ public final class Utilities {
 		if (charsetName == null)
 			return Optional.empty();
 
-		try {
-			return Optional.of(Charset.forName(charsetName));
-		} catch (IllegalCharsetNameException | UnsupportedCharsetException ignored) {
-			return Optional.empty();
+		return Optional.ofNullable(HeaderCharsets.BY_NAME.get(charsetName.toLowerCase(Locale.ROOT)));
+	}
+
+	// Initialize once, on first use, rather than asking providers about each
+	// client-supplied name. Include aliases to preserve installed-charset support.
+	private static final class HeaderCharsets {
+		private static final Map<String, Charset> BY_NAME = byName();
+
+		private static Map<String, Charset> byName() {
+			Map<String, Charset> result = new LinkedHashMap<>();
+			for (Charset charset : Charset.availableCharsets().values()) {
+				result.put(charset.name().toLowerCase(Locale.ROOT), charset);
+				for (String alias : charset.aliases())
+					result.put(alias.toLowerCase(Locale.ROOT), charset);
+			}
+			return Map.copyOf(result);
 		}
 	}
 

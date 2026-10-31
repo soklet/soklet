@@ -135,7 +135,7 @@ public static Cors fromOrigin(@NonNull HttpMethod httpMethod,
 	 *
 	 * @return the HTTP method
 	 */
-	@Nullable
+	@NonNull
 	public HttpMethod getHttpMethod() {
 		return this.httpMethod;
 	}

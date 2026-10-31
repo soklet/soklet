@@ -52,6 +52,14 @@ import static java.util.Objects.requireNonNull;
  * Custom HTTP callbacks receive the original request and a null {@link ResourceMethod},
  * because these operations are handled by the MCP transport.
  * <p>
+ * Snapshot dimension keys retain nullable route accessors: a route is present exactly
+ * when {@link RouteType#MATCHED} applies. This keeps these frequently used keys as
+ * simple dimension carriers without allocating an Optional for each lookup. Their
+ * public constructors preserve the direct-construction contract of earlier record
+ * keys. The newer {@link HttpResponseStreamTerminationKey#fromDimensions(HttpServerRouteStatusKey, StreamTerminationReason)}
+ * factory composes an existing route/status key with a terminal reason; it does not
+ * replace the constructors of the established dimension keys.
+ * <p>
  * If you prefer OpenTelemetry, Micrometer, or another metrics system for monitoring, you might choose to create your own
  * implementation of this interface.
  * <p>
@@ -168,6 +176,9 @@ public interface MetricsCollector {
 
 	/**
 	 * Called when a request fails to be accepted before application-level handling begins.
+	 * SSE request acceptance/rejection counts are not mutually exclusive: a parsed
+	 * request can be accepted for handling and later rejected at handshake admission.
+	 * Do not derive a request total by adding those counters.
 	 *
 	 * @param serverType    the server type that received the request
 	 * @param remoteAddress the best-effort remote address, or {@code null} if unavailable
@@ -639,6 +650,9 @@ public interface MetricsCollector {
 	 * Text format to use for {@link #snapshotText(SnapshotTextOptions)}.
 	 * <p>
 	 * This controls serialization only; the underlying metrics data is unchanged.
+	 * <p>
+	 * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
+	 *
 	 */
 	enum MetricsFormat {
 		/**
@@ -753,6 +767,9 @@ public interface MetricsCollector {
 
 		/**
 		 * Supported histogram rendering strategies.
+		 * <p>
+		 * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
+		 *
 		 */
 		public enum HistogramFormat {
 			/**
@@ -2291,6 +2308,9 @@ public interface MetricsCollector {
 	/**
 	 * Low-level server transport failure reasons.
 	 *
+	 * <p>
+	 * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
+	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	enum TransportFailureReason {
@@ -2371,6 +2391,9 @@ public interface MetricsCollector {
 	/**
 	 * Indicates whether a request was matched to a {@link ResourcePathDeclaration}.
 	 *
+	 * <p>
+	 * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
+	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	enum RouteType {
@@ -2386,6 +2409,9 @@ public interface MetricsCollector {
 
 	/**
 	 * Outcomes for a Server-Sent Event enqueue attempt.
+	 *
+	 * <p>
+	 * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
@@ -2406,6 +2432,9 @@ public interface MetricsCollector {
 
 	/**
 	 * Reasons a Server-Sent Event payload or comment was dropped before it could be written.
+	 *
+	 * <p>
+	 * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
@@ -2705,7 +2734,10 @@ public interface MetricsCollector {
 		 * @param method HTTP method
 		 * @param routeType whether a route matched
 		 * @param resourcePathDeclaration matched route, or {@code null} when unmatched
-		 * @param statusClass HTTP status class
+		 * @param statusClass one of {@code 1xx}, {@code 2xx}, {@code 3xx}, {@code 4xx},
+		 *                    {@code 5xx}, or {@code unknown}
+		 * @throws IllegalArgumentException if the route dimensions disagree or the
+		 *                                  status class is outside this bounded vocabulary
 		 */
 		public HttpServerRouteStatusKey(@NonNull HttpMethod method,
 				@NonNull RouteType routeType,
@@ -2715,7 +2747,7 @@ public interface MetricsCollector {
 			validateRouteDimensions(routeType, resourcePathDeclaration);
 			this.routeType = routeType;
 			this.resourcePathDeclaration = resourcePathDeclaration;
-			this.statusClass = requireNonNull(statusClass);
+			this.statusClass = requireStatusClass(statusClass);
 		}
 
 		/** @return HTTP method */
@@ -3388,6 +3420,15 @@ public interface MetricsCollector {
 					+ ", route=" + this.resourcePathDeclaration + ", terminationReason="
 					+ this.terminationReason + "}";
 		}
+	}
+
+	@NonNull
+	private static String requireStatusClass(@NonNull String statusClass) {
+		requireNonNull(statusClass);
+		return switch (statusClass) {
+			case "1xx", "2xx", "3xx", "4xx", "5xx", "unknown" -> statusClass;
+			default -> throw new IllegalArgumentException("Unsupported HTTP status class.");
+		};
 	}
 
 	private static void validateRouteDimensions(@NonNull RouteType routeType,

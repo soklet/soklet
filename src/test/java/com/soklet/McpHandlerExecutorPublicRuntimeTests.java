@@ -50,6 +50,7 @@ class McpHandlerExecutorPublicRuntimeTests {
 				DynamicTest.dynamicTest("submission rejection / " + version, () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> executorSubmissionRejectionUsesTheFixedCapacityResponseAndRecovers(version))),
 				DynamicTest.dynamicTest("policy submission rejection / " + version, () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> policySubmissionRejectionUsesTheFixedCapacityResponseAndRecovers(version))),
 				DynamicTest.dynamicTest("caller runs / " + version, () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> callerRunsCannotMoveAnApplicationHandlerOntoTheProtocolThread(version))),
+				DynamicTest.dynamicTest("executor integration failure / " + version, () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> unexpectedExecutorFailureRetainsTransportStatusAndRecovers(version))),
 				DynamicTest.dynamicTest("handler exception / " + version, () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> aHandlerThrownRejectionRemainsAnApplicationFailure(version)))));
 	}
 
@@ -150,7 +151,7 @@ class McpHandlerExecutorPublicRuntimeTests {
 			try (RawClient client = fixture.open(version, "handler-failure")) {
 				Head head = client.readHead();
 				String body = client.readBody(head);
-				assertEquals(version == McpProtocolVersion.V2026_07_28 ? 500 : 200, head.status(), body);
+				assertEquals(200, head.status(), body);
 				assertTrue(body.contains("\"code\":-32603"), body);
 				assertFalse(body.contains("handler-private-detail"), body);
 			}
@@ -159,6 +160,24 @@ class McpHandlerExecutorPublicRuntimeTests {
 			assertEquals(List.of(McpRequestOutcome.INTERNAL_ERROR), fixture.outcomes);
 			assertEquals(List.of(List.of(fixture.handlerFailure)), fixture.failures);
 			assertEquals(0, fixture.metricCount(McpMetricsEvent.HandlerCapacityRejected.class));
+		}
+	}
+
+	void unexpectedExecutorFailureRetainsTransportStatusAndRecovers(McpProtocolVersion version) throws Exception {
+		Executor executor = new Executor(false, false, true);
+		try (Fixture fixture = new Fixture(executor, false, false)) {
+			try (RawClient client = fixture.open(version, "executor-failure")) {
+				Head head = client.readHead();
+				String body = client.readBody(head);
+				assertEquals(version == McpProtocolVersion.V2026_07_28 ? 500 : 200, head.status(), body);
+				assertTrue(body.contains("\"id\":\"executor-failure\""), body);
+				assertTrue(body.contains("\"code\":-32603"), body);
+				assertFalse(body.contains("executor-private-detail"), body);
+			}
+			awaitCondition(() -> fixture.outcomes.size() == 1);
+			assertEquals(0, fixture.handlerCalls.get());
+			assertEquals(List.of(McpRequestOutcome.INTERNAL_ERROR), fixture.outcomes);
+			try (RawClient client = fixture.open(version, "recovered")) { assertSuccess(client); }
 		}
 	}
 
@@ -269,14 +288,21 @@ class McpHandlerExecutorPublicRuntimeTests {
 	private static final class Executor extends ThreadPoolExecutor {
 		private final AtomicInteger submissions = new AtomicInteger();
 		private final boolean rejectFirst;
+		private final boolean failFirstUnexpectedly;
 		private final RejectedExecutionException rejection = new RejectedExecutionException("executor-private-detail");
 		private Executor(boolean rejectFirst, boolean callerRuns) {
+			this(rejectFirst, callerRuns, false);
+		}
+		private Executor(boolean rejectFirst, boolean callerRuns, boolean failFirstUnexpectedly) {
 			super(1, 1, 0L, TimeUnit.SECONDS, new SynchronousQueue<>(),
 					runnable -> new Thread(runnable, "mcp-public-executor-test"), callerRuns ? new CallerRunsPolicy() : new AbortPolicy());
 			this.rejectFirst = rejectFirst;
+			this.failFirstUnexpectedly = failFirstUnexpectedly;
 		}
 		@Override public void execute(Runnable command) {
-			if (submissions.incrementAndGet() == 1 && rejectFirst) throw rejection;
+			int submission = submissions.incrementAndGet();
+			if (submission == 1 && rejectFirst) throw rejection;
+			if (submission == 1 && failFirstUnexpectedly) throw new IllegalStateException("executor-private-detail");
 			super.execute(command);
 		}
 	}

@@ -23,8 +23,9 @@ import java.util.List;
 import java.util.function.Function;
 
 import static java.util.Objects.requireNonNull;
+import static com.soklet.internal.ObjectIdentity.sameInstance;
 
-/** Releases owned file channels abandoned before a response reaches the transport. */
+/** Carries owned channels through response transformations and releases abandoned resources. */
 final class ResponseBodyCleanup {
 	private ResponseBodyCleanup() {}
 
@@ -39,42 +40,33 @@ final class ResponseBodyCleanup {
 			throw failure;
 		}
 		try {
-			discard(previous, replacement, null);
+			return retain(previous, replacement);
 		} catch (RuntimeException | Error failure) {
-			// The replacement cannot be returned if releasing its predecessor failed.
 			discard(replacement, null, failure);
 			throw failure;
 		}
-		return replacement;
 	}
 
 	@NonNull
 	static MarshaledResponse track(@NonNull List<MarshaledResponse> pending,
 			@NonNull MarshaledResponse response) {
-		if (response.getBody().orElse(null) instanceof MarshaledResponseBody.FileChannel body
-				&& body.getCloseOnComplete())
+		if (response.hasOwnedChannels())
 			pending.add(response);
 		return response;
 	}
 
-	@SuppressWarnings("ReferenceEquality")
+	@NonNull
+	static MarshaledResponse retain(@NonNull MarshaledResponse previous, @NonNull MarshaledResponse replacement) {
+		return replacement.retainingChannels(previous.ownedChannels());
+	}
+
 	static void discard(@NonNull MarshaledResponse previous, @Nullable MarshaledResponse replacement,
 			@Nullable Throwable primaryFailure) {
-		if (!(previous.getBody().orElse(null) instanceof MarshaledResponseBody.FileChannel body)
-				|| !body.getCloseOnComplete())
-			return;
-		// A copied response or a new range descriptor can retain the same channel.
-		if (replacement != null
-				&& replacement.getBody().orElse(null) instanceof MarshaledResponseBody.FileChannel nextBody
-				&& body.getChannel() == nextBody.getChannel())
-			return;
-		try {
-			previous.copy().withoutBody();
-		} catch (RuntimeException | Error cleanupFailure) {
-			if (primaryFailure == null)
-				throw cleanupFailure;
-			if (primaryFailure != cleanupFailure)
-				primaryFailure.addSuppressed(cleanupFailure);
+		List<java.nio.channels.FileChannel> channels = previous.ownedChannels();
+		if (replacement != null && replacement.getBody().orElse(null) instanceof MarshaledResponseBody.FileChannel next) {
+			channels = new java.util.ArrayList<>(channels);
+			channels.removeIf(channel -> sameInstance(channel, next.getChannel()));
 		}
+		MarshaledResponse.closeChannels(channels, primaryFailure);
 	}
 }

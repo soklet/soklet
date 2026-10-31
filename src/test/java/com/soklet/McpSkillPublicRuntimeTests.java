@@ -409,7 +409,7 @@ public class McpSkillPublicRuntimeTests {
 			accessible.set(false);
 			HttpResponse<String> revoked = send(port, "revoked", "skills/list",
 					",\"cursor\":\"continue\"", null, "fr");
-			assertError(revoked, 500, -32603, "revoked");
+			assertError(revoked, 200, -32603, "revoked");
 			Assertions.assertFalse(revoked.body().contains("private-continuation-canary"), revoked.body());
 			Assertions.assertFalse(revoked.body().contains(french.getUri().toString()), revoked.body());
 
@@ -417,7 +417,7 @@ public class McpSkillPublicRuntimeTests {
 			discoverable.set(false);
 			HttpResponse<String> hidden = send(port, "hidden", "skills/list",
 					",\"cursor\":\"continue\"", null, "fr");
-			assertError(hidden, 500, -32603, "hidden");
+			assertError(hidden, 200, -32603, "hidden");
 			Assertions.assertFalse(hidden.body().contains("private-continuation-canary"), hidden.body());
 			Assertions.assertFalse(hidden.body().contains(french.getUri().toString()), hidden.body());
 			Assertions.assertEquals(1, selections.get(), "Continuation must not rerun variant selection");
@@ -492,11 +492,11 @@ public class McpSkillPublicRuntimeTests {
 			assertContains(exactOutput.body(), "\"nextCursor\":\"世界\"");
 			HttpResponse<String> oversizedOutput = send(port, "oversized-output", "skills/list",
 					",\"cursor\":\"big\"", null, null);
-			assertError(oversizedOutput, 500, -32603, "oversized-output");
+			assertError(oversizedOutput, 200, -32603, "oversized-output");
 			Assertions.assertFalse(oversizedOutput.body().contains("世界語"), oversizedOutput.body());
 			HttpResponse<String> malformedOutput = send(port, "malformed-output", "skills/list",
 					",\"cursor\":\"unicode\"", null, null);
-			assertError(malformedOutput, 500, -32603, "malformed-output");
+			assertError(malformedOutput, 200, -32603, "malformed-output");
 			Assertions.assertFalse(malformedOutput.body().contains("private-cursor-canary"),
 					malformedOutput.body());
 			Assertions.assertEquals(3, handlerCalls.get());
@@ -556,7 +556,7 @@ public class McpSkillPublicRuntimeTests {
 		try {
 			owner.start();
 			HttpResponse<String> response = send(port(server), "ordinary", "resources/list", "", null, null);
-			assertError(response, 500, -32603, "ordinary");
+			assertError(response, 200, -32603, "ordinary");
 			Assertions.assertFalse(response.body().contains("private-resource-list-canary"), response.body());
 			Assertions.assertFalse(response.body().contains("private-resource-canary"), response.body());
 			Assertions.assertFalse(response.body().contains(registration.getUri().toString()), response.body());
@@ -663,7 +663,7 @@ public class McpSkillPublicRuntimeTests {
 			for (String invalid : List.of("foreign", "reordered", "duplicate")) {
 				mode.set(invalid);
 				HttpResponse<String> response = send(port, invalid, "skills/list", "", null, null);
-				Assertions.assertEquals(500, response.statusCode(), response.body());
+				Assertions.assertEquals(200, response.statusCode(), response.body());
 				assertContains(response.body(), "\"code\":-32603");
 				Assertions.assertFalse(response.body().contains("First"), response.body());
 				Assertions.assertFalse(response.body().contains("Second"), response.body());
@@ -819,7 +819,7 @@ public class McpSkillPublicRuntimeTests {
 	}
 
 	private static void assertFixedInternalError(HttpResponse<String> response, String expectedId) {
-		assertError(response, 500, -32603, expectedId);
+		assertError(response, 200, -32603, expectedId);
 		Assertions.assertEquals("{\"jsonrpc\":\"2.0\",\"id\":\"" + expectedId
 				+ "\",\"error\":{\"code\":-32603,\"message\":\"Internal error\"}}",
 				response.body());

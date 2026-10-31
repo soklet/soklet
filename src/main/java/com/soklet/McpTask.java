@@ -263,7 +263,7 @@ public final class McpTask {
 
 	@NonNull
 	static String requireTaskId(@NonNull String taskId) {
-		requireNonNull(taskId);
+		McpContentValueSupport.requireWellFormedString(taskId);
 		if (taskId.isBlank())
 			throw new IllegalArgumentException("MCP task IDs must not be blank.");
 		if (taskId.indexOf('\r') >= 0 || taskId.indexOf('\n') >= 0)
@@ -387,7 +387,7 @@ public final class McpTask {
 		@NonNull
 		public Builder taskStatusMessage(
 				@Nullable String taskStatusMessage) {
-			this.taskStatusMessage = taskStatusMessage;
+			this.taskStatusMessage = taskStatusMessage == null ? null : McpContentValueSupport.requireWellFormedString(taskStatusMessage);
 			return this;
 		}
 
@@ -432,12 +432,12 @@ public final class McpTask {
 		 * @param inputRequest outstanding input request
 		 * @return this builder
 		 * @throws NullPointerException if an argument is null
-		 * @throws IllegalArgumentException if the key is already present
+		 * @throws IllegalArgumentException if the key is already present or contains malformed UTF-16
 		 */
 		@NonNull
 		public Builder addInputRequest(@NonNull String key,
 				@NonNull McpInputRequest inputRequest) {
-			requireNonNull(key);
+			McpContentValueSupport.requireWellFormedString(requireNonNull(key));
 			requireNonNull(inputRequest);
 			if (this.inputRequests.putIfAbsent(key, inputRequest) != null)
 				throw new IllegalArgumentException(
@@ -454,7 +454,7 @@ public final class McpTask {
 		 * @param inputRequests input requests to append
 		 * @return this builder
 		 * @throws NullPointerException if the map, a key, or a value is null
-		 * @throws IllegalArgumentException if a key is already present
+		 * @throws IllegalArgumentException if a key is already present or contains malformed UTF-16
 		 */
 		@NonNull
 		public Builder addInputRequests(
@@ -466,7 +466,7 @@ public final class McpTask {
 			for (Map.Entry<@NonNull String,
 					? extends @NonNull McpInputRequest> entry
 					: inputRequests.entrySet()) {
-				String key = requireNonNull(entry.getKey());
+				String key = McpContentValueSupport.requireWellFormedString(requireNonNull(entry.getKey()));
 				McpInputRequest inputRequest = requireNonNull(entry.getValue());
 				if (this.inputRequests.containsKey(key)
 						|| copied.putIfAbsent(key, inputRequest) != null)

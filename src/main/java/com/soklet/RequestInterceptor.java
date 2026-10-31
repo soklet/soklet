@@ -97,11 +97,21 @@ public interface RequestInterceptor {
 	 * Soklet's request lifecycle bookkeeping (for example, metrics correlation and timeout handling)
 	 * is thread-affine to the request-handler thread.
 	 * <p>
+	 * The response generator returns an unfinalized response. Soklet applies CORS, postprocessing,
+	 * HEAD projection and transport properties once after this interceptor selects its final response.
+	 * Copying or rebuilding generated parts therefore does not repeat postprocessing.
+	 * <p>
 	 * Generating a streaming response creates a body descriptor; it does not execute the producer in
 	 * this method's scope. A transaction opened here covers response generation, not subsequent body
 	 * production or delivery. Materialize the needed data before that transaction ends, or open a separate
 	 * bounded transaction in the producer. Do not capture a transaction-bound cursor or lazy entity whose
 	 * owning transaction ends here.
+	 *
+	 * A replacement can retain a generated owned channel through a delegating channel or streaming
+	 * callback. Soklet defers predecessor-channel cleanup until the replacement completes or is abandoned.
+	 * Custom transports must invoke {@link MarshaledResponse#close()} at that terminal point; built-in
+	 * transports and simulation do so automatically. Caller-owned channels ({@code closeOnComplete=false})
+	 * remain the application's responsibility.
 	 *
 	 * @param serverType                the server type that received the request
 	 * @param request                   the request that was received

@@ -19,6 +19,9 @@ package com.soklet;
 /**
  * Standard Bearer challenge errors defined by RFC 6750.
  *
+ * <p>
+ * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public enum BearerAuthenticationError {

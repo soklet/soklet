@@ -24,6 +24,9 @@ import java.util.Optional;
 /**
  * Immutable content block carried by an MCP tool result or prompt message.
  *
+ * <p>
+ * This type may gain reviewed permitted subtypes in Soklet 4.x; use a forward-compatible default when switching over its values.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe

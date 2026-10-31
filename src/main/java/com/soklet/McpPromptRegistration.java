@@ -215,7 +215,7 @@ public final class McpPromptRegistration {
 
 	@NonNull
 	private static String requireName(@NonNull String name) {
-		requireNonNull(name);
+		McpContentValueSupport.requireWellFormedString(name);
 		if (name.isBlank())
 			throw new IllegalArgumentException(
 					"MCP prompt names must not be blank.");
@@ -250,7 +250,7 @@ public final class McpPromptRegistration {
 
 		private HandlerStage(@NonNull String name,
 				@NonNull Set<@NonNull McpProtocolVersion> protocolVersions) {
-			this.name = requireNonNull(name);
+			this.name = McpContentValueSupport.requireWellFormedString(name);
 			this.protocolVersions = requireNonNull(protocolVersions);
 		}
 
@@ -304,7 +304,7 @@ public final class McpPromptRegistration {
 		private Builder(@NonNull String name,
 				@NonNull Set<@NonNull McpProtocolVersion> protocolVersions,
 				@NonNull McpPromptHandler handler) {
-			this.name = requireNonNull(name);
+			this.name = McpContentValueSupport.requireWellFormedString(name);
 			this.protocolVersions = requireNonNull(protocolVersions);
 			this.handler = requireNonNull(handler);
 		}
@@ -313,7 +313,7 @@ public final class McpPromptRegistration {
 		 * @return this builder */
 		@NonNull
 		public Builder title(@NonNull String title) {
-			this.title = requireNonNull(title);
+			this.title = McpContentValueSupport.requireWellFormedString(title);
 			return this;
 		}
 
@@ -321,7 +321,7 @@ public final class McpPromptRegistration {
 		 * @return this builder */
 		@NonNull
 		public Builder description(@NonNull String description) {
-			this.description = requireNonNull(description);
+			this.description = McpContentValueSupport.requireWellFormedString(description);
 			return this;
 		}
 
@@ -459,7 +459,7 @@ public final class McpPromptRegistration {
 		@Override
 		@NonNull
 		public Optional<@NonNull String> findArgument(@NonNull String name) {
-			return Optional.ofNullable(this.arguments.get(requireNonNull(name)));
+			return Optional.ofNullable(this.arguments.get(McpContentValueSupport.requireWellFormedString(name)));
 		}
 	}
 }

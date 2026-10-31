@@ -157,7 +157,7 @@ class McpLegacyRpcStatusTests {
 	}
 
 	@Test
-	void modernOperationErrorsRetainTheirStatusTable() throws Exception {
+	void modernOperationErrorsKeepIntentionalErrorsAt400AndHandlerFailuresInBand() throws Exception {
 		try (Fixture fixture = new Fixture(false)) {
 			McpProtocolVersion version = McpProtocolVersion.V2026_07_28;
 			assertError(fixture.call(version, null, "tools/call",
@@ -165,7 +165,7 @@ class McpLegacyRpcStatusTests {
 			assertError(fixture.call(version, null, "resources/read",
 					"\"uri\":\"test://missing\""), 400, -32602);
 			assertError(fixture.call(version, null, "tools/call",
-					"\"name\":\"fail\",\"arguments\":{}"), 500, -32603);
+					"\"name\":\"fail\",\"arguments\":{}"), 200, -32603);
 		}
 	}
 

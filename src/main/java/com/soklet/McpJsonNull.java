@@ -19,6 +19,9 @@ package com.soklet;
 /**
  * The immutable JSON {@code null} value.
  *
+ * <p>
+ * This is a closed domain; exhaustive switches are supported, and any new alternative requires an explicit reviewed contract amendment.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public enum McpJsonNull implements McpJsonValue {

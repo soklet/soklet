@@ -93,7 +93,7 @@ public final class McpInputRequiredResult implements McpOperationResult {
 	 * @param applicationRequestState nonempty opaque application-protected state
 	 * @return input-required-result builder
 	 * @throws NullPointerException if {@code applicationRequestState} is null
-	 * @throws IllegalArgumentException if {@code applicationRequestState} is empty
+	 * @throws IllegalArgumentException if {@code applicationRequestState} is empty or contains malformed UTF-16
 	 */
 	@NonNull
 	public static Builder withApplicationRequestState(
@@ -212,12 +212,12 @@ public final class McpInputRequiredResult implements McpOperationResult {
 		 * @param inputRequest server-initiated request
 		 * @return this builder
 		 * @throws NullPointerException if an argument is null
-		 * @throws IllegalArgumentException if the key is already present
+		 * @throws IllegalArgumentException if the key is already present or contains malformed UTF-16
 		 */
 		@NonNull
 		public Builder addInputRequest(@NonNull String key,
 				@NonNull McpInputRequest inputRequest) {
-			requireNonNull(key);
+			McpContentValueSupport.requireWellFormedString(requireNonNull(key));
 			requireNonNull(inputRequest);
 			if (this.inputRequests.containsKey(key))
 				throw new IllegalArgumentException(
@@ -269,12 +269,12 @@ public final class McpInputRequiredResult implements McpOperationResult {
 		 * @param applicationRequestState nonempty opaque application-protected state
 		 * @return this builder
 		 * @throws NullPointerException if {@code applicationRequestState} is null
-		 * @throws IllegalArgumentException if {@code applicationRequestState} is empty
+		 * @throws IllegalArgumentException if {@code applicationRequestState} is empty or contains malformed UTF-16
 		 */
 		@NonNull
 		public Builder applicationRequestState(
 				@NonNull String applicationRequestState) {
-			String validatedState = requireNonNull(applicationRequestState);
+			String validatedState = McpContentValueSupport.requireWellFormedString(requireNonNull(applicationRequestState));
 			if (validatedState.isEmpty())
 				throw new IllegalArgumentException(
 						"Application request state must not be empty.");

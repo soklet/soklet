@@ -1350,3 +1350,76 @@ it precedes handling finish, while termination may precede finish. Collection
 buffers one early terminal observation without blocking. Without preparation,
 request accounting ends at handoff. Built-in transports and delegating adapters
 forward this guarantee explicitly. No new type or abstract method is added.
+
+## 2026-10-29 round 12 runtime finalization amendment
+
+The Phase 4 snapshot adds two positive, nullable-reset protocol-pool builder
+settings, `protocolExecutorConcurrency(Integer)` and
+`protocolExecutorQueueCapacity(Integer)`, with defaults 32 and 128. This makes
+the admission/limiter/CORS/start-observer/state-opening budget explicit without
+changing application-handler executor ownership. Existing notification
+projection validation still requires at least two protocol workers when that
+feature is enabled. Simulation copies both settings.
+
+`LogEventType.MCP_REQUEST_PROCESSING_FAILED` adds bounded observation for
+unexpected admitted application-execution failures. Its fixed sanitized message
+has no Throwable, request, resource-method or response attachment, and routine
+capacity, cancelation, deadline and intentional rejection outcomes are excluded.
+The addition creates no metric dimension or caller-controlled diagnostic label.
+Finish observation and related logs use separately reserved worker capacity;
+the semantic request pair retains one finish after its start.
+
+The non-MCP response APIs also gain explicit terminal channel cleanup through
+`MarshaledResponse.close()` and one final `ResponseMarshaler.postProcess(...)`
+phase per Soklet dispatch. Their existing reviewed non-MCP owners remain in the
+allowlist. Established metric-key constructors and nullable route getters are
+retained; status classes are constrained to `1xx` through `5xx` and `unknown`.
+These are source/API decisions in the working tree. They do not assert a new
+immutable-candidate CI receipt or external-client qualification run.
+
+## 2026-10-30 semantic request timing amendment
+
+The owner approved one additive default method on the existing Phase 4
+`McpRequestContext`: `Optional<Instant> getStartedAt()`. The optional and its
+element are nonnull. Built-in observed contexts supply the semantic request's
+wall-clock start before start observers; derived subscription contexts retain
+the original listen start. Custom and manually constructed contexts keep the
+empty default. Elapsed finish duration uses the same semantic origin and
+excludes finish-observation delivery delay.
+
+Only this method is added to the Phase 4 signature snapshot, which now has
+1,384 records and SHA-256
+`a6721afc325dd3e5eecc05771189d0d3c714275672d12f28ec4035dba207048c`.
+The reviewed Phase 4 nullability digest is
+`602d8dfa9df56c4992a9376a55f2f97e933481c987c2e1a215d16c63003c4a55`.
+Removing this method's three canonical reflection rows exactly reproduces the
+preceding `d63d226e…` digest. All existing signatures, the other phase snapshots,
+400-owner comparison inventory and 776-record incompatibility ledger remain
+unchanged. This local source/API amendment supplies no new release-candidate
+or external-client qualification evidence.
+The source evolution inventory updates only the existing private
+`DefaultMcpRequestContext` constructor fingerprint for its appended timing
+optional; suppression scanning and all other declaration guards remain intact.
+
+## 2026-10-31 explicit rate-limit policy amendment
+
+The owner approved optional tool rate limiting and explicit built-in quotas.
+Servers can expose tools without a fallback limiter. Resolution still prefers
+one tool override, then an endpoint override, then the optional server fallback;
+no resolved limiter means no tool rate quota. Configured callback failures and
+null decisions still fail closed. Transport, queue, concurrency, execution,
+retained-partition and legacy-control bounds are unchanged. Completion's
+separate request-limiter requirement is unchanged.
+
+Removed the zero-argument `McpRateLimiter.fromInMemoryDefaults()` and
+`McpTokenBucketConfig.fromDefaults()` factories. A token bucket now requires
+capacity, refill quantity, and refill interval explicitly; omitted refill values
+fail at build and null refill setters fail immediately. This supersedes the
+September construction amendment's implicit refill values.
+
+The Phase 4 snapshot has 1,382 records and SHA-256
+`2c8089ea3f3a976fa4d03fc5321363a3b26a214887fe239881c4308924f9c7f3`.
+The Phase 4 reflection/nullability digest is
+`127d61399990bdc65c3a87fc37ad787006b1c5a338f9a2835c78a94fda0121db`.
+No API owner is added or removed. Other phase snapshots are unchanged. These
+records document the owner's local API change, not immutable candidate CI evidence.

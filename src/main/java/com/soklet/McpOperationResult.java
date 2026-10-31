@@ -30,6 +30,9 @@ import javax.annotation.concurrent.ThreadSafe;
  * may add framework-owned result types, so callers should retain a default
  * branch when switching on the result family.
  *
+ * <p>
+ * This type may gain reviewed permitted subtypes in Soklet 4.x; use a forward-compatible default when switching over its values.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe

@@ -101,6 +101,47 @@ class McpLegacySessionTransportCapacityRuntimeTests {
 	}
 
 	@Test
+	void routineRenewalCapacityDoesNotRevokeTheStillValidGetGrant() throws Exception {
+		for (McpProtocolVersion version : LEGACY) {
+			CountDownLatch handlerEntered = new CountDownLatch(1), handlerRelease = new CountDownLatch(1);
+			AtomicReference<Response> first = new AtomicReference<>(), second = new AtomicReference<>();
+			AtomicReference<Throwable> failure = new AtomicReference<>();
+			List<Thread> callers = new ArrayList<>();
+			try (Fixture fixture = new Fixture(true, builder -> builder.requestHandlerConcurrency(1).requestHandlerQueueCapacity(1)
+					.catalogAccessPolicy(McpCatalogAccessPolicy.fromEvaluators((request, registration, features) -> true,
+							(request, registration, features) -> true))
+					.maximumSubscriptionAuthorizationDuration(Duration.ofSeconds(4)).maximumSubscriptionDuration(Duration.ofSeconds(10)),
+					(request, arguments, features) -> { handlerEntered.countDown(); awaitRelease(handlerRelease); return McpCompleteResult.fromToolText("done"); })) {
+				String session = fixture.initialize("/mcp", version);
+				assertEquals(200, fixture.control("POST", "/mcp", version, session, "alice",
+						"{\"jsonrpc\":\"2.0\",\"id\":\"catalog\",\"method\":\"tools/list\",\"params\":{}}", List.of()).status());
+				try (RawClient get = fixture.openControl("GET", "/mcp", version, session, "alice", "", List.of())) {
+					assertSse(get.readHead());
+					callers.add(toolCaller(fixture, version, session, first, failure)); callers.get(0).start();
+					assertTrue(handlerEntered.await(5, TimeUnit.SECONDS));
+					callers.add(toolCaller(fixture, version, session, second, failure)); callers.get(1).start();
+					await(() -> fixture.server.getDiagnostics().getRequestHandlerQueueDepth() == 1);
+					// This is a routine renewal, with no reconciliation or changed authority.
+					await(() -> maintenance(fixture, McpMetricsEvent.SubscriptionMaintenance.Outcome.CAPACITY_REJECTED));
+					fixture.publisher.publishToolsListChanged();
+					boolean received = false;
+					long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+					while (System.nanoTime() < until) {
+						byte[] chunk = get.readChunk();
+						if (chunk == null) break;
+						if (new String(chunk, java.nio.charset.StandardCharsets.UTF_8).contains("notifications/tools/list_changed")) { received = true; break; }
+					}
+					assertTrue(received, "Capacity alone must preserve delivery under the existing unexpired authorization.");
+				} finally {
+					handlerRelease.countDown();
+					for (Thread caller : callers) { caller.join(5000); assertFalse(caller.isAlive()); }
+				}
+				assertNull(failure.get());
+			} finally { handlerRelease.countDown(); }
+		}
+	}
+
+	@Test
 	void four_ignoring_renewals_hold_global_maintenance_capacity_after_their_gets_expire() throws Exception {
 		for (McpProtocolVersion version : LEGACY) {
 			CountDownLatch entered = new CountDownLatch(4);

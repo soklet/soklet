@@ -33,6 +33,7 @@ import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -62,6 +63,29 @@ public class ResourcePathDeclarationValidationTests {
 				() -> ResourcePathDeclaration.fromPath("/PRIVATE_CONFIG/prefix{PRIVATE_NAME}"));
 		assertFalse(failure.getMessage().contains("PRIVATE_"));
 		assertEquals(null, failure.getCause());
+	}
+
+	@Test
+	void routeValueFactoriesRejectUnpairedSurrogatesWithoutEchoingInput() {
+		for (String malformed : List.of("/PRIVATE_\uD800", "/PRIVATE_\uDC00", "/PRIVATE_\uD800x", "/PRIVATE_\uDC00\uD800")) {
+			for (Runnable factory : List.<Runnable>of(() -> ResourcePathDeclaration.fromPath(malformed),
+					() -> ResourcePath.fromPath(malformed), () -> Request.fromPath(HttpMethod.GET, malformed))) {
+				IllegalArgumentException failure = assertThrows(IllegalArgumentException.class, factory::run);
+				assertEquals("Resource paths must not contain unpaired UTF-16 surrogates.", failure.getMessage());
+				assertEquals(null, failure.getCause());
+			}
+		}
+	}
+
+	@Test
+	void supplementaryRouteCharactersKeepTheirIdentityAndNormalization() {
+		String normalized = "/items/😀/{tail*}";
+		ResourcePathDeclaration declaration = ResourcePathDeclaration.fromPath("  items//😀/{tail*}/  ");
+		assertEquals(normalized, declaration.getPath());
+		Request request = Request.fromRawUrl(HttpMethod.GET, "/items/%F0%9F%98%80/value");
+		assertEquals("/items/😀/value", request.getPath());
+		assertEquals(Map.of("tail", "value"), declaration.extractPlaceholders(request.getResourcePath()));
+		assertEquals("/items/😀/value", ResourcePath.fromPath("/items//😀/value/").getPath());
 	}
 
 	@Test

@@ -19,6 +19,9 @@ package com.soklet;
 /**
  * Identifies the HTTP resource-method transport or the dedicated Server-Sent Event transport.
  *
+ * <p>
+ * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public enum ServerType {

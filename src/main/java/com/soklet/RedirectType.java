@@ -25,6 +25,9 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * Detailed documentation is available at <a href="https://www.soklet.com/docs/response-writing#redirects">https://www.soklet.com/docs/response-writing#redirects</a>.
  *
+ * <p>
+ * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public enum RedirectType {

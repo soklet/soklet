@@ -410,7 +410,7 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 							.orElseThrow().getPort();
 					HttpResponse<String> failureResponse = sendToolCall(failingPort,
 							"needle", toolCallBody("annotated-provider-failure"));
-					Assertions.assertEquals(500, failureResponse.statusCode(),
+					Assertions.assertEquals(200, failureResponse.statusCode(),
 							failureResponse.body());
 					Assertions.assertTrue(failureResponse.body().contains(
 							"\"code\":-32603"), failureResponse.body());
@@ -430,7 +430,7 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 									+ "\"io.modelcontextprotocol/clientCapabilities\":{}},"
 									+ "\"name\":\"catalog.compose\",\"arguments\":{"
 									+ "\"subject\":\"needle\"}}}");
-					Assertions.assertEquals(500,
+					Assertions.assertEquals(200,
 							promptFailureResponse.statusCode(),
 							promptFailureResponse.body());
 					Assertions.assertTrue(promptFailureResponse.body().contains(

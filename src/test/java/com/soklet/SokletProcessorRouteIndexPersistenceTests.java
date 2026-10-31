@@ -31,10 +31,13 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Comparator;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -42,6 +45,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Timeout(30)
 public class SokletProcessorRouteIndexPersistenceTests {
+	@Test
+	void pruningRetainsOwnersBeingCompiledBeforeTheirClassFilesExist(@TempDir Path directory) throws Exception {
+		Fixture fixture = new Fixture(directory, "sidecar");
+		fixture.compileWith("sidecar", List.of(fixture.alpha), List.of(), List.of("-Asoklet.pruneDeleted=true"));
+		fixture.assertSnapshots(List.of("example.Alpha"));
+		fixture.compileWith("sidecar", List.of(fixture.beta), List.of(), List.of("-Asoklet.pruneDeleted=true"));
+		fixture.assertSnapshots(List.of("example.Alpha", "example.Beta"));
+	}
+
 	@Test
 	void incrementalAmbiguityFailsBeforePublishingMetadata(@TempDir Path directory) throws Exception {
 		Fixture fixture = new Fixture(directory, "sidecar");
@@ -72,6 +84,66 @@ public class SokletProcessorRouteIndexPersistenceTests {
 		assertEquals(sidecar, Files.readString(fixture.sidecar()));
 	}
 
+
+	@Test
+	@Timeout(60)
+	void finalMcpValidationPreservesEverySnapshotAndLaterMcpOnlyCompilationKeepsHttpRoutes(
+			@TempDir Path directory) throws Exception {
+		for (String mode : List.of("none", "sidecar", "persistent")) {
+			Fixture fixture = new Fixture(directory.resolve(mode), mode);
+			Path first = fixture.writeEndpoint("FirstEndpoint", "/mcp");
+			fixture.compile(fixture.alpha, first);
+			Map<Path, String> snapshots = fixture.snapshots();
+			byte[] originalClass = Files.readAllBytes(fixture.classes.resolve("example/Alpha.class"));
+			fixture.writeResource("Alpha", "/changed");
+			Path duplicate = fixture.writeEndpoint("SecondEndpoint", "/mcp");
+
+			assertFalse(fixture.tryCompile(mode, List.of(fixture.alpha, duplicate), List.of(), List.of()));
+			assertTrue(fixture.diagnostics.contains("Duplicate annotated MCP endpoint path"), fixture.diagnostics);
+			assertEquals(snapshots, fixture.snapshots(), "A final MCP diagnostic must preserve both index families and every cache");
+			assertArrayEquals(originalClass, Files.readAllBytes(fixture.classes.resolve("example/Alpha.class")));
+			fixture.verifyPackagedRoutes("/alpha");
+
+			// A successful incremental recovery may compile only the corrected MCP
+			// owner. Its untouched HTTP metadata must still match the old classfile.
+			fixture.writeEndpoint("SecondEndpoint", "/other-mcp");
+			fixture.compile(duplicate);
+			for (Map.Entry<Path, String> snapshot : snapshots.entrySet())
+				if (snapshot.getKey().getFileName().toString().equals("resource-method-lookup-table")
+						|| snapshot.getKey().startsWith(fixture.cache.resolve("resource-methods")))
+					assertEquals(snapshot.getValue(), Files.readString(snapshot.getKey()));
+			fixture.assertSnapshots(List.of("example.Alpha"));
+			assertArrayEquals(originalClass, Files.readAllBytes(fixture.classes.resolve("example/Alpha.class")));
+			fixture.verifyPackagedRoutes("/alpha");
+		}
+	}
+
+	@Test
+	@Timeout(60)
+	void topLevelDollarOwnerSurvivesPrefixRecompilationAndNestedOwnersAreUpdated(
+			@TempDir Path directory) throws Exception {
+		for (String mode : List.of("none", "sidecar", "persistent")) {
+			Fixture fixture = new Fixture(directory.resolve(mode), mode);
+			Path independent = fixture.writeResource("Alpha$Part", "/dollar");
+			fixture.writeNestedAlpha("/alpha", "/nested", true);
+			fixture.compile(fixture.alpha, independent);
+			fixture.assertSnapshots(List.of("example.Alpha", "example.Alpha$Inner$Part",
+					"example.Alpha$Inner$Part$Deeper", "example.Alpha$Part"));
+			byte[] independentClass = Files.readAllBytes(fixture.classes.resolve("example/Alpha$Part.class"));
+			// Exercise the existing six-column cache format as the authoritative
+			// snapshot too; the fix must not require an index-format migration.
+			if (!mode.equals("none")) Files.delete(fixture.index());
+			if (mode.equals("persistent")) Files.delete(fixture.sidecar());
+
+			fixture.writeNestedAlpha("/changed", "/nested-new", false);
+			fixture.compile(fixture.alpha);
+			fixture.assertSnapshots(List.of("example.Alpha", "example.Alpha$Inner$Part", "example.Alpha$Part"));
+			assertArrayEquals(independentClass, Files.readAllBytes(fixture.classes.resolve("example/Alpha$Part.class")));
+			assertTrue(Files.exists(fixture.classes.resolve("example/Alpha$Inner$Part$Deeper.class")),
+					"A stale nested classfile must not retain its removed route");
+			fixture.verifyPackagedRoutes("/changed", "/nested-new", "/dollar");
+		}
+	}
 
 	@Test
 	void deletedOwnerIsPrunedWhileUntouchedOwnerRemains(@TempDir Path directory) throws Exception {
@@ -269,11 +341,13 @@ public class SokletProcessorRouteIndexPersistenceTests {
 		}
 	}
 
-	private static class Fixture {
+	// Shared by processor regressions that exercise real incremental javac output.
+	static class Fixture {
 		final Path directory, sources, classes, cache, alpha, beta, plain;
 		final String mode;
 		int invocation;
 		String diagnostics = "";
+		String diagnosticMessages = "";
 
 		Fixture(Path directory, String mode) throws IOException {
 			this.directory = directory;
@@ -303,6 +377,51 @@ public class SokletProcessorRouteIndexPersistenceTests {
 			return source;
 		}
 
+		Path writeEndpoint(String name, String path) throws IOException {
+			Path source = sources.resolve("example/" + name + ".java");
+			Files.writeString(source, """
+					package example;
+					@com.soklet.annotation.McpServerEndpoint(
+					  protocolVersions = com.soklet.McpProtocolVersion.V2026_07_28,
+					  path = "%s", name = "%s", version = "1")
+					public class %s {}
+					""".formatted(path, name, name), StandardCharsets.UTF_8);
+			return source;
+		}
+
+		void writeNestedAlpha(String path, String nestedPath, boolean includeDeeper) throws IOException {
+			String deeper = includeDeeper ? """
+					public static class Deeper {
+					  @GET("/deep") public String get() { return "/deep"; }
+					}
+					""" : "";
+			Files.writeString(alpha, """
+					package example;
+					import com.soklet.annotation.GET;
+					public class Alpha {
+					  @GET("%s") public String get() { return "%s"; }
+					  public static class Inner$Part {
+					    @GET("%s") public String get() { return "%s"; }
+					    %s
+					  }
+					}
+					""".formatted(path, path, nestedPath, nestedPath, deeper), StandardCharsets.UTF_8);
+		}
+
+		Map<Path, String> snapshots() throws IOException {
+			Map<Path, String> snapshots = new LinkedHashMap<>();
+			List<Path> roots = new ArrayList<>(List.of(classes.resolve("META-INF/soklet")));
+			if (!mode.equals("none")) roots.add(directory.resolve("soklet"));
+			if (mode.equals("persistent")) roots.add(cache);
+			for (Path root : roots)
+				try (var files = Files.walk(root)) {
+					for (Path file : files.filter(Files::isRegularFile)
+							.filter(file -> !file.getFileName().toString().equals(".soklet-output-root")).sorted().toList())
+						snapshots.put(file, Files.readString(file));
+				}
+			return snapshots;
+		}
+
 		void initialCompile() throws IOException { compile(alpha, beta); }
 		void compile(Path... sources) throws IOException { compileWith(mode, List.of(sources), List.of(), List.of()); }
 		void compileWith(String mode, List<Path> sources, List<Path> dependencies, List<String> options) throws IOException {
@@ -321,11 +440,17 @@ public class SokletProcessorRouteIndexPersistenceTests {
 						"-d", classes.toString(), "-s", generated.toString(), "-Asoklet.cacheMode=" + mode, "-Asoklet.cacheDir=" + cache));
 				arguments.addAll(options);
 				var task = compiler.getTask(null, manager, collector, arguments, null, manager.getJavaFileObjectsFromPaths(sources));
-				task.setProcessors(List.of(new SokletProcessor()));
+				task.setProcessors(processors());
 				boolean successful = task.call();
 				diagnostics = collector.getDiagnostics().toString();
+				diagnosticMessages = collector.getDiagnostics().stream().map(diagnostic -> diagnostic.getMessage(null))
+						.collect(java.util.stream.Collectors.joining("\n"));
 				return successful;
 			}
+		}
+
+		List<? extends javax.annotation.processing.Processor> processors() {
+			return List.of(new SokletProcessor());
 		}
 
 		Path index() { return classes.resolve(SokletProcessor.RESOURCE_METHOD_LOOKUP_TABLE_PATH); }
@@ -350,7 +475,9 @@ public class SokletProcessorRouteIndexPersistenceTests {
 		void verifyPackagedRoutes(List<Path> dependencies, String... paths) throws Exception {
 			Path verification = sources.resolve("example/Verification.java");
 			Files.writeString(verification, VERIFICATION, StandardCharsets.UTF_8);
-			compileWith(mode, List.of(verification), dependencies, List.of());
+			// This runtime probe must not run another processor round or repair the
+			// snapshot being checked as a side effect of compiling verification code.
+			compileWith(mode, List.of(verification), dependencies, List.of("-proc:none"));
 			String classpath = classes + System.getProperty("path.separator") + System.getProperty("java.class.path");
 			for (Path dependency : dependencies) classpath += System.getProperty("path.separator") + dependency;
 			List<String> command = new ArrayList<>(List.of(Path.of(System.getProperty("java.home"), "bin", "java").toString(),
@@ -385,6 +512,25 @@ public class SokletProcessorRouteIndexPersistenceTests {
 			    }) {
 			      Thread.currentThread().setContextClassLoader(loader);
 			      ResourceMethodResolver resolver = ResourceMethodResolver.fromClasspathIntrospection();
+			      Set<Class<?>> owners = new HashSet<>();
+			      for (ResourceMethod method : resolver.getResourceMethods()) owners.add(method.getMethod().getDeclaringClass());
+			      if (!resolver.getResourceMethods().equals(ResourceMethodResolver.fromClasses(owners).getResourceMethods()))
+			        throw new AssertionError("Indexed and reflective route declarations differ");
+			      Set<String> expected = new HashSet<>(Arrays.asList(arguments).subList(separator + 1, arguments.length));
+			      Set<String> actual = new HashSet<>();
+			      for (ResourceMethod method : resolver.getResourceMethods())
+			        if (method.getHttpMethod() == HttpMethod.GET && !method.isSseEventSource())
+			          actual.add(method.getResourcePathDeclaration().getPath());
+			      if (!expected.equals(actual)) throw new AssertionError("Expected " + expected + " but found " + actual);
+			      for (ResourceMethod method : resolver.getResourceMethods()) {
+			        if (!method.isSseEventSource()) continue;
+			        ResourceMethod selected = resolver.resourceMethodForRequest(
+			          Request.fromPath(HttpMethod.GET, method.getResourcePathDeclaration().getPath()), ServerType.SSE).orElseThrow();
+			        if (!selected.getMethod().equals(method.getMethod())) throw new AssertionError("Wrong SSE method");
+			        Object owner = selected.getMethod().getDeclaringClass().getConstructor().newInstance();
+			        if (!SseHandshakeResult.class.isAssignableFrom(selected.getMethod().getReturnType())) throw new AssertionError("Invalid SSE return type");
+			        if (selected.getMethod().getParameterCount() == 0 && !(selected.getMethod().invoke(owner) instanceof SseHandshakeResult)) throw new AssertionError("Invalid SSE return value");
+			      }
 			      for (int i = separator + 1; i < arguments.length; i++) {
 			        ResourceMethod method = resolver.resourceMethodForRequest(Request.withPath(HttpMethod.GET, arguments[i]).build(), ServerType.HTTP).orElseThrow();
 			        Object owner = method.getMethod().getDeclaringClass().getConstructor().newInstance();

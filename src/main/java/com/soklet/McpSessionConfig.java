@@ -44,7 +44,9 @@ import static java.util.Objects.requireNonNull;
  * distributed independently of these local sessions.
  * <p>
  * Capacity reclamation replaces only the initializing owner's quiescent
- * sessions. There is no global fair-share reclamation: the default 256 slots
+ * sessions after at least 30 seconds without client activity or physically
+ * active client work. Repeated reconnects without DELETE can reach the owner
+ * limit before any record becomes eligible. There is no global fair-share reclamation: the default 256 slots
  * can be filled by 16 owners at their 16-session limits, denying new owners
  * until slots are released or abandoned sessions reach the 24-hour idle limit.
  * Configure counts for the owner population and idle duration for abandoned

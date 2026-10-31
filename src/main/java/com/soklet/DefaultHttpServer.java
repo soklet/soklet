@@ -589,6 +589,7 @@ final class DefaultHttpServer implements HttpServer {
 				AtomicReference<MicrohttpResponse> timeoutResponseRef = new AtomicReference<>();
 				AtomicReference<TimeoutScheduler.ScheduledTask> timeoutFutureRef = new AtomicReference<>();
 				AtomicReference<Thread> handlerThreadRef = new AtomicReference<>();
+				Object handlerThreadLock = new Object();
 				AtomicReference<MicrohttpResponse> unparsedFallbackResponseRef = new AtomicReference<>();
 				Thread submittingThread = Thread.currentThread();
 				AtomicBoolean executedInline = new AtomicBoolean(false);
@@ -602,14 +603,13 @@ final class DefaultHttpServer implements HttpServer {
 						if (!responseOwner.compareAndSet(ResponseOwner.UNCLAIMED, ResponseOwner.TIMEOUT))
 							return;
 
-						// The CAS makes the interrupt mutually exclusive with the handler's own finally-clear:
-						// whichever side wins the CAS owns the thread reference. A benign sliver remains where
-						// the handler completes between our CAS and the interrupt() call below — interrupting a
-						// completed handler is acceptable because the timeout response has already been claimed
-						// via responseOwner above. Intentional; do not "fix" by rechecking after the CAS.
-						Thread handlerThread = handlerThreadRef.get();
-						if (handlerThread != null && handlerThreadRef.compareAndSet(handlerThread, null))
-							handlerThread.interrupt();
+						// Retirement takes the same monitor, so a pooled worker cannot start
+						// another request while this request's interrupt is still in flight.
+						synchronized (handlerThreadLock) {
+							Thread handlerThread = handlerThreadRef.getAndSet(null);
+							if (handlerThread != null)
+								handlerThread.interrupt();
+						}
 
 						try {
 							microHttpCallback.accept(timeoutResponse);
@@ -631,10 +631,11 @@ final class DefaultHttpServer implements HttpServer {
 							return;
 						}
 						try {
-							if (responseOwner.get() != ResponseOwner.UNCLAIMED)
-								return;
-
-							handlerThreadRef.set(Thread.currentThread());
+							synchronized (handlerThreadLock) {
+								if (responseOwner.get() != ResponseOwner.UNCLAIMED)
+									return;
+								handlerThreadRef.set(Thread.currentThread());
+							}
 
 							RequestHandler requestHandler = getRequestHandler().orElse(null);
 
@@ -712,7 +713,7 @@ final class DefaultHttpServer implements HttpServer {
 											// Release only an owned, already-open body; lazy sources must
 											// remain unopened and duplicate handler offers retain ownership.
 											Throwable cleanupFailure = null;
-											try { requestResult.getMarshaledResponse().copy().withoutBody(); }
+											try { requestResult.getMarshaledResponse().close(); }
 											catch (Throwable failure) { cleanupFailure = failure; }
 											return HttpTransportResponseOutcome.replaced(
 													describeFiniteTransportResponse(requireNonNull(timeoutResponseRef.get())), cleanupFailure, null);
@@ -863,7 +864,9 @@ final class DefaultHttpServer implements HttpServer {
 								}
 							}
 						} finally {
-							handlerThreadRef.compareAndSet(Thread.currentThread(), null);
+							synchronized (handlerThreadLock) {
+								handlerThreadRef.compareAndSet(Thread.currentThread(), null);
+							}
 						}
 					});
 					if (executedInline.get())
@@ -1365,6 +1368,32 @@ final class DefaultHttpServer implements HttpServer {
 			@Nullable Long headResponseBodyLength,
 																@NonNull BooleanSupplier streamingForcedShutdownStarted,
 			@Nullable HttpResponseStreamObservation streamObservation) {
+		try {
+			MicrohttpResponse response = prepareMicrohttpResponse(request, resourceMethod, marshaledResponse,
+					headResponseCompressionBody, headResponseBodyLength, streamingForcedShutdownStarted, streamObservation);
+			if (!response.streaming() && marshaledResponse.hasOwnedChannels())
+				response = response.withBodyTerminationListener((reason, cause) -> {
+					try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
+						marshaledResponse.close();
+					}
+				});
+			return response;
+		} catch (RuntimeException | Error failure) {
+			try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
+				MarshaledResponse.closeChannels(marshaledResponse.ownedChannels(), failure);
+			}
+			throw failure;
+		}
+	}
+
+	@NonNull
+	private MicrohttpResponse prepareMicrohttpResponse(@Nullable Request request,
+																@Nullable ResourceMethod resourceMethod,
+																@NonNull MarshaledResponse marshaledResponse,
+																@Nullable MarshaledResponseBody headResponseCompressionBody,
+			@Nullable Long headResponseBodyLength,
+																@NonNull BooleanSupplier streamingForcedShutdownStarted,
+			@Nullable HttpResponseStreamObservation streamObservation) {
 		requireNonNull(marshaledResponse);
 		requireNonNull(streamingForcedShutdownStarted);
 		if (marshaledResponse.getStatusCode() < 200 || marshaledResponse.getStatusCode() > 599)
@@ -1463,6 +1492,8 @@ final class DefaultHttpServer implements HttpServer {
 							@Override public void didTerminate(Instant establishedAt, Duration streamDuration,
 									@Nullable StreamTerminationReason cancelationReason, @Nullable Throwable throwable,
 									long terminatedNanos, long bodyBytes) {
+							try { marshaledResponse.close(); }
+							catch (RuntimeException | Error cleanupFailure) { reservation.reportCleanupFailure(cleanupFailure); }
 							boolean interrupted = false;
 							while (true) {
 								try { preparationFinished.await(); break; }
@@ -1556,7 +1587,9 @@ final class DefaultHttpServer implements HttpServer {
 		if (body instanceof MarshaledResponseBody.FileChannel fileChannel)
 			return MicrohttpResponse.withFileChannelBody(
 					marshaledResponse.getStatusCode(), reasonPhrase, headers,
-					fileChannel.getChannel(), fileChannel.getOffset(), fileChannel.getCount(), fileChannel.getCloseOnComplete());
+					// The descriptor's termination listener closes owned channels under the
+					// lifecycle owner scope, including current and replaced response bodies.
+					fileChannel.getChannel(), fileChannel.getOffset(), fileChannel.getCount(), false);
 
 		if (body instanceof MarshaledResponseBody.SecureFile secureFile)
 			return MicrohttpResponse.withSecureFileBody(
@@ -1566,6 +1599,28 @@ final class DefaultHttpServer implements HttpServer {
 			return MicrohttpResponse.withByteBufferBody(marshaledResponse.getStatusCode(), reasonPhrase, headers, byteBuffer.getBuffer());
 
 		throw new IllegalStateException(format("Unsupported marshaled response body type: %s", body.getClass().getName()));
+	}
+
+	@NonNull
+	static Map<String, List<String>> simulatedFiniteResponseHeaders(Request request, MarshaledResponse response,
+			@Nullable Long headRepresentationLength) {
+		List<Header> fields = new ArrayList<>();
+		for (Map.Entry<String, List<String>> entry : response.getHeaders().entrySet())
+			for (String value : entry.getValue()) fields.add(new Header(entry.getKey(), value));
+		fields = finiteResponseHeaders(fields, response.getStatusCode(), request.getHttpMethod() == HttpMethod.HEAD);
+		fields = finiteContentLengthHeaders(fields, request, response.getStatusCode(), response.getBodyLength(), headRepresentationLength);
+		Map<String, List<String>> result = new LinkedCaseInsensitiveMap<>();
+		for (Header field : fields) {
+			// Microhttp omits Content-Length when serializing a 304.
+			if (response.getStatusCode() == 304 && field.name().equalsIgnoreCase("Content-Length")) continue;
+			List<String> values = result.get(field.name());
+			if (values == null) {
+				values = new ArrayList<>();
+				result.put(field.name(), values);
+			}
+			values.add(field.value());
+		}
+		return result;
 	}
 
 	@NonNull

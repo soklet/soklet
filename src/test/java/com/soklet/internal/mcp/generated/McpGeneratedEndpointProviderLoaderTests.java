@@ -22,7 +22,6 @@ import com.soklet.McpEndpointRegistry;
 import com.soklet.McpInvocationFeatures;
 import com.soklet.McpJsonObject;
 import com.soklet.McpOperationResult;
-import com.soklet.McpRateLimiter;
 import com.soklet.McpRequestContext;
 import com.soklet.McpServer;
 import com.soklet.McpSkillBundle;
@@ -208,8 +207,7 @@ public class McpGeneratedEndpointProviderLoaderTests {
 			ClassLoader previous = Thread.currentThread().getContextClassLoader();
 			try {
 				Thread.currentThread().setContextClassLoader(emptyClassLoader);
-				McpServer.Builder builder = McpServer.withPort(0)
-						.toolRateLimiter(McpRateLimiter.fromInMemoryDefaults());
+				McpServer.Builder builder = McpServer.withPort(0);
 				Thread.currentThread().setContextClassLoader(classLoader);
 				McpServer server = builder.build();
 
@@ -235,7 +233,6 @@ public class McpGeneratedEndpointProviderLoaderTests {
 				Thread.currentThread().setContextClassLoader(emptyClassLoader);
 				McpServer server = McpServer.withPort(0)
 						.endpointRegistry(explicitRegistry)
-						.toolRateLimiter(McpRateLimiter.fromInMemoryDefaults())
 						.build();
 
 				assertSame(explicitRegistry, server.getEndpointRegistry());
@@ -263,7 +260,6 @@ public class McpGeneratedEndpointProviderLoaderTests {
 									"custom admission controller must have been reset");
 						})
 						.admissionController(null)
-						.toolRateLimiter(McpRateLimiter.fromInMemoryDefaults())
 						.build();
 
 				assertEquals(List.of("/a", "/b"),

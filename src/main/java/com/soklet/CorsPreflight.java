@@ -16,18 +16,18 @@
 
 package com.soklet;
 
+import com.soklet.exception.IllegalRequestException;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
@@ -55,6 +55,7 @@ public final class CorsPreflight {
 	private final HttpMethod accessControlRequestMethod;
 	@NonNull
 	private final Set<@NonNull String> accessControlRequestHeaders;
+	private static final int MAXIMUM_REQUEST_HEADER_NAMES = 128;
 
 	/**
 	 * Acquires a CORS <strong>preflight</strong> request representation for the given HTTP request data.
@@ -103,6 +104,7 @@ public final class CorsPreflight {
 	 *
 	 * @param headers the request headers
 	 * @return the CORS preflight data for this request, or {@link Optional#empty()} if insufficient data is present
+	 * @throws IllegalRequestException if more than 128 nonempty request header names are supplied
 	 */
 	@NonNull
 	public static Optional<@NonNull CorsPreflight> fromHeaders(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
@@ -149,19 +151,33 @@ public final class CorsPreflight {
 		if (accessControlRequestMethods.size() == 0)
 			return Optional.empty();
 
-		Set<String> accessControlRequestHeaderValues = Optional
-				.ofNullable(normalizedHeaders.get("access-control-request-headers"))
-				.orElse(List.of())
-				.stream()
-				.flatMap(value -> Arrays.stream(value.split(",")))
-				.map(value -> Utilities.trimHeaderWhitespace(value))
-				.filter(value -> !value.isEmpty())
-				.collect(Collectors.toCollection(LinkedHashSet::new));
-
-		if (accessControlRequestHeaderValues == null)
-			accessControlRequestHeaderValues = Set.of();
+		Set<String> accessControlRequestHeaderValues = extractRequestHeaderNames(
+				normalizedHeaders.getOrDefault("access-control-request-headers", List.of()));
 
 		return Optional.of(new CorsPreflight(originHeaderValue, accessControlRequestMethods.get(0), accessControlRequestHeaderValues));
+	}
+
+	@NonNull
+	static Set<@NonNull String> extractRequestHeaderNames(@NonNull List<@NonNull String> headerValues) {
+		Set<String> names = new LinkedHashSet<>();
+		int nameCount = 0;
+		for (String value : headerValues) {
+			int start = 0;
+			for (int end = 0; end <= value.length(); end++) {
+				if (end != value.length() && value.charAt(end) != ',')
+					continue;
+				String name = Utilities.trimHeaderWhitespace(value.substring(start, end));
+				start = end + 1;
+				if (!name.isEmpty()) {
+					// Count supplied names before deduplication, across all field lines.
+					if (++nameCount > MAXIMUM_REQUEST_HEADER_NAMES)
+						throw new IllegalRequestException("Too many CORS preflight request header names.");
+					names.add(name);
+				}
+			}
+		}
+
+		return names;
 	}
 
 	private CorsPreflight(@NonNull String origin,
@@ -173,7 +189,7 @@ public final class CorsPreflight {
 		this.origin = origin;
 		this.accessControlRequestMethod = accessControlRequestMethod;
 		this.accessControlRequestHeaders = accessControlRequestHeaders == null ?
-				Set.of() : Set.copyOf(accessControlRequestHeaders);
+				Set.of() : Collections.unmodifiableSet(new LinkedHashSet<>(accessControlRequestHeaders));
 	}
 
 	@Override

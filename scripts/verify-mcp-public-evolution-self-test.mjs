@@ -12,6 +12,7 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import {
+  coreStructuralOwnersInSource,
   declarationKey,
   declarationResolutionCountForTest,
   hasDeprecationSuppressionForTest,
@@ -19,6 +20,8 @@ import {
   verifyActiveText,
   verifyLifecycle,
   verifyStructuralOwners,
+  verifyStructuralOwnerDocumentation,
+  verifyCoreStructuralOwners,
   verifySuppressionSchema,
 } from './verify-mcp-public-evolution.mjs';
 
@@ -69,6 +72,32 @@ const reviewedLedgers = inventory.reviewedIncludeFiles.flatMap((path) =>
   readFileSync(resolve(root, path.replace('.includes', '.signatures.jsonl')),
     'utf8').trim().split(/\r?\n/u).map((line) => JSON.parse(line)));
 verifyStructuralOwners(root, inventory, reviewedIncludes, reviewedLedgers);
+assert.equal(verifyCoreStructuralOwners(root), 41);
+assert.deepEqual(coreStructuralOwnersInSource(`
+  public interface Fixture {
+    enum Visible { VALUE }
+    private class Hidden { public enum Nested { VALUE } }
+    default void run() { class Local { public enum Nested { VALUE } } }
+  }
+`), [{ owner: 'com.soklet.Fixture.Visible', kind: 'enum' }]);
+const documentationFixture = mkdtempSync(join(tmpdir(), 'soklet-evolution-docs-'));
+try {
+  const sourcePath = join(documentationFixture, 'src/main/java/com/soklet/Fixture.java');
+  mkdirSync(dirname(sourcePath), { recursive: true });
+  const owner = { owner: 'com.soklet.Fixture', kind: 'enum', status: 'evolutionary' };
+  writeFileSync(sourcePath, '/** A fixed vocabulary. */ public enum Fixture { VALUE }');
+  assert.throws(() => verifyStructuralOwnerDocumentation(documentationFixture, [owner]),
+    /must document growth and a default switch/u);
+  const guidance = 'This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.';
+  writeFileSync(sourcePath, `/** ${guidance} */ public enum Fixture { VALUE }`);
+  assert.doesNotThrow(() => verifyStructuralOwnerDocumentation(documentationFixture, [owner]));
+  writeFileSync(sourcePath, `/** Fixed vocabulary. ${guidance} */ public enum Fixture { VALUE }`);
+  assert.throws(() => verifyStructuralOwnerDocumentation(documentationFixture, [owner]),
+    /contradicts an evolutionary owner/u);
+} finally {
+  rmSync(documentationFixture, { recursive: true, force: true });
+}
+
 const provisionalOwners = new Set(readFileSync(resolve(root,
   'api/mcp/provisional.includes'), 'utf8').trim().split(/\r?\n/u)
   .map((owner) => owner.replaceAll('$', '.')));

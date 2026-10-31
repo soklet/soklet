@@ -16,7 +16,11 @@
 
 package com.soklet;
 
-/** Describes how a Soklet startup attempt ended. */
+/**
+ * Describes how a Soklet startup attempt ended.
+ * <p>
+ * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
+ */
 public enum StartupDisposition {
 	/** No startup attempt was made. */
 	NOT_ATTEMPTED,

@@ -130,7 +130,7 @@ class McpLocalizationHandlerRuntimeTests {
 		Capture capture = call(endpoint, localizer, interceptor,
 				toolCallRequest("creation-failure", Set.of()), observedThrowables);
 
-		assertEquals(500, capture.statusCode(), capture.body());
+		assertEquals(200, capture.statusCode(), capture.body());
 		assertTrue(capture.body().contains("\"code\":-32603"), capture.body());
 		assertTrue(capture.body().contains("\"message\":\"Internal error\""),
 				capture.body());

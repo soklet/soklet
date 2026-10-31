@@ -226,6 +226,9 @@ public final class ByteRangeSelection {
 
 	/**
 	 * Classification of a parsed byte-range selection.
+	 * <p>
+	 * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
+	 *
 	 */
 	public enum ByteRangeSelectionType {
 		/**

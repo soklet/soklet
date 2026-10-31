@@ -1176,7 +1176,11 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		Set<Method> methods = new HashSet<>();
 
 		for (Class<?> resourceClass : resourceClasses)
-			for (Method method : resourceClass.getMethods())
+			for (Method method : resourceClass.getMethods()) {
+				// javac copies route annotations onto generic/covariant bridges.
+				// They delegate to the real declaration rather than adding a route.
+				if (method.isBridge())
+					continue;
 				for (Annotation annotation : method.getAnnotations())
 					if (annotation instanceof GET
 							|| annotation instanceof POST
@@ -1195,6 +1199,7 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 							|| annotation instanceof HEADs
 							|| annotation instanceof SseEventSources)
 						methods.add(method);
+			}
 
 		return methods;
 	}

@@ -157,8 +157,14 @@ public final class StaticFiles {
 		this.headersResolver = builder.headersResolver == null ? HeadersResolver.disabledInstance() : builder.headersResolver;
 		this.rangeRequestsResolver = builder.rangeRequestsResolver == null ? RangeRequestsResolver.enabledInstance() : builder.rangeRequestsResolver;
 
-		for (String indexFileName : this.indexFileNames)
+		for (String indexFileName : this.indexFileNames) {
 			validateIndexFileName(indexFileName);
+			try {
+				this.root.resolve(indexFileName);
+			} catch (java.nio.file.InvalidPathException failure) {
+				throw new IllegalArgumentException(format("Invalid index file name '%s'.", indexFileName), failure);
+			}
+		}
 
 		try {
 			this.followRoot = this.root.toRealPath();
@@ -471,6 +477,7 @@ public final class StaticFiles {
 		// A generic I/O failure on a path containing a symlink is not itself a loop.
 		// Prove a repeated expansion (or reject excessive expansion) using only
 		// public no-follow metadata. Preserve the original failure if probing fails.
+		Path original = candidate;
 		Path root = getResolutionRoot();
 		var expansions = new HashSet<Path>();
 		expansions.add(candidate);
@@ -482,7 +489,13 @@ public final class StaticFiles {
 				boolean expanded = false;
 				for (int index = 0; index < relative.getNameCount(); index++) {
 					current = current.resolve(relative.getName(index));
-					if (!Files.readAttributes(current, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS).isSymbolicLink())
+					BasicFileAttributes attributes = Files.readAttributes(current, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+					// Check each prefix before resolving the next component. On JDK 21,
+					// lstat(file/child) may report ENOTDIR as a generic I/O failure.
+					if (!attributes.isSymbolicLink() && !attributes.isDirectory()
+							&& index + 1 < relative.getNameCount())
+						return true;
+					if (!attributes.isSymbolicLink())
 						continue;
 					Path target = Files.readSymbolicLink(current);
 					Path parent = current.getParent();
@@ -497,10 +510,18 @@ public final class StaticFiles {
 					expanded = true;
 					break;
 				}
-				if (!expanded)
-					return false;
+				if (!expanded) {
+					if (candidate.equals(original))
+						return false;
+					// The OS may exhaust its symlink budget before our explicit
+					// expansion does. A resolvable terminal path proves that
+					// the failed spelling was an excessive traversal.
+					return Files.exists(candidate.toRealPath());
+				}
 			}
 			return true; // A resolved target outside the static root is always rejected.
+		} catch (NoSuchFileException | NotDirectoryException | FileSystemLoopException | AccessDeniedException failure) {
+			return true;
 		} catch (IOException | UnsupportedOperationException failure) {
 			return false;
 		}
@@ -968,6 +989,9 @@ public final class StaticFiles {
 
 	/**
 	 * Access outcome for a resolved static file.
+	 *
+	 * <p>
+	 * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
 	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */

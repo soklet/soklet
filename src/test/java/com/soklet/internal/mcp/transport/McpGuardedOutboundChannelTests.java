@@ -148,6 +148,30 @@ public class McpGuardedOutboundChannelTests {
 	}
 
 	@Test
+	public void guarded_catalog_hints_keep_a_successor_and_drop_it_at_an_authorization_fence() throws Exception {
+		McpOutboundChannel channel = channel(3, 64, new RecordingListener());
+		AtomicBoolean allowed = new AtomicBoolean(true);
+		AtomicInteger releases = new AtomicInteger();
+		Assertions.assertEquals(Optional.of(McpOutboundChannel.OfferResult.ACCEPTED),
+				channel.offerGuardedCoalescing(ascii("one"), "catalog", allowed::get, allowed::get,
+						() -> {}, releases::incrementAndGet, false));
+		WritableSource source = channel.newWritableSource(); source.start();
+		TestSocketChannel socket = new TestSocketChannel(1);
+		Assertions.assertEquals(7, source.writeTo(socket, 7));
+		Assertions.assertEquals(Optional.of(McpOutboundChannel.OfferResult.ACCEPTED),
+				channel.offerGuardedCoalescing(ascii("two"), "catalog", allowed::get, allowed::get,
+						() -> {}, releases::incrementAndGet, false));
+		Assertions.assertEquals(2, channel.snapshot().bufferedFrames());
+		Assertions.assertEquals(1, source.writeTo(socket, 1));
+		allowed.set(false);
+		Assertions.assertTrue(channel.recheckGuardedFrames());
+		Assertions.assertEquals(0, channel.snapshot().bufferedFrames());
+		Assertions.assertEquals(2, releases.get());
+		Assertions.assertEquals("3\r\none\r\n", new String(socket.writtenBytes(), StandardCharsets.US_ASCII));
+		source.close();
+	}
+
+	@Test
 	public void catalog_successor_obeys_capacity_when_the_prior_hint_has_started() throws Exception {
 		McpOutboundChannel channel = channel(1, 64, new RecordingListener());
 		channel.offerCoalescingIf(ascii("one"), "catalog", () -> true);

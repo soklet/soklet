@@ -27,6 +27,7 @@ import java.util.Arrays;
 import java.util.EnumMap;
 
 import static java.util.Objects.requireNonNull;
+import static com.soklet.internal.ObjectIdentity.sameInstance;
 
 /**
  * Per-subscription catalog-projection state. Access is serialized by the owning
@@ -226,13 +227,36 @@ final class McpCatalogProjectionQueue {
 	 * transport hint. This is an invalidation baseline, not a delivery receipt.
 	 * Ownership is enforced here; the covering transport outcome is caller-owned.
 	 */
-	void advanceBaseline(@NonNull Projection projection,
-			@NonNull Digest baseline) {
+	void advanceBaseline(@NonNull Projection projection, @NonNull Digest baseline) {
+		advanceBaseline(projection, baseline, projection);
+	}
+
+	/** Coalesced observations retain the identity of the frame that covers them. */
+	void advanceBaseline(@NonNull Projection projection, @NonNull Digest baseline,
+			@NonNull Object hintOwner) {
 		Projection requiredProjection = requireNonNull(projection);
 		if (!owns(requiredProjection))
 			throw new IllegalStateException(
 					"Only the active catalog projection may advance its baseline.");
 		requiredProjection.state.baseline = requireNonNull(baseline);
+		requiredProjection.state.baselineOwner = requireNonNull(hintOwner);
+	}
+
+	/** Restores only the latest hint's baseline when transport discarded it before writing. */
+	boolean invalidateUnwrittenHint(@NonNull Projection projection) {
+		Projection requiredProjection = requireNonNull(projection);
+		return invalidateUnwrittenHint(requiredProjection.family, requiredProjection,
+				requiredProjection.baseline);
+	}
+
+	boolean invalidateUnwrittenHint(@NonNull Family family, @NonNull Object hintOwner,
+			@NonNull Digest previousBaseline) {
+		State state = state(family);
+		if (!sameInstance(state.baselineOwner, requireNonNull(hintOwner)))
+			return false;
+		state.baseline = requireNonNull(previousBaseline);
+		state.baselineOwner = null;
+		return true;
 	}
 
 	/**
@@ -293,6 +317,7 @@ final class McpCatalogProjectionQueue {
 		this.jobOutstanding = false;
 		for (State state : this.states.values()) {
 			state.baseline = null;
+			state.baselineOwner = null;
 			state.requestedGeneration = 0L;
 			state.deadlineNanos = 0L;
 			state.dirty = false;
@@ -376,6 +401,7 @@ final class McpCatalogProjectionQueue {
 
 	private static final class State {
 		private @Nullable Digest baseline;
+		private @Nullable Object baselineOwner;
 		private long requestedGeneration;
 		private long deadlineNanos;
 		private boolean dirty;

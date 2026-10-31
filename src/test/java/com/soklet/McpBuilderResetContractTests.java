@@ -219,6 +219,8 @@ public class McpBuilderResetContractTests {
 				.requestHandlerConcurrency(null)
 				.requestHandlerQueueCapacity(4)
 				.requestHandlerQueueCapacity(null)
+				.protocolExecutorConcurrency(3).protocolExecutorConcurrency(null)
+				.protocolExecutorQueueCapacity(4).protocolExecutorQueueCapacity(null)
 				.requestHandlerExecutorServiceSupplier(() -> {
 					throw new AssertionError("custom supplier must have been reset");
 				})

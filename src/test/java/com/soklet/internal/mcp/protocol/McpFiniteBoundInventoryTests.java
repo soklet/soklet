@@ -172,6 +172,8 @@ public class McpFiniteBoundInventoryTests {
 		put(values, "server.maximum-request-body-bytes.hard", staticNumber(
 				"com.soklet.McpServer$Builder",
 				"MAXIMUM_SUPPORTED_REQUEST_SIZE_IN_BYTES"));
+		put(values, "propagation.traceparent-maximum-code-units", staticNumber(
+				"com.soklet.McpRequestPropagation", "MAXIMUM_TRACEPARENT_LENGTH"));
 		put(values, "transport.accept-backlog", transport.acceptBacklog());
 		put(values, "transport.read-buffer-bytes", transport.readBufferSize());
 		put(values, "transport.maximum-connections", transport.maximumConnections());

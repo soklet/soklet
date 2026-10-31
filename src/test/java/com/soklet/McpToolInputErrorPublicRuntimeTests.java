@@ -129,7 +129,7 @@ class McpToolInputErrorPublicRuntimeTests {
 			assertEquals(0, handlerCalls.get());
 
 			Response application = call(port, version, "application", "application", "{}");
-			assertEquals(version == McpProtocolVersion.V2026_07_28 ? 500 : 200, application.status(), application.body());
+			assertEquals(200, application.status(), application.body());
 			assertTrue(application.body().contains("\"code\":-32603"), application.body());
 			assertFalse(application.body().contains(SECRET), application.body());
 			assertFalse(application.body().contains("\"isError\""), application.body());
@@ -137,7 +137,7 @@ class McpToolInputErrorPublicRuntimeTests {
 			if (version != McpProtocolVersion.V2025_06_18) {
 				sanitizerFails.set(true);
 				Response failedSanitizer = call(port, version, "sanitizer-failure", "typed", "{}");
-				assertEquals(version == McpProtocolVersion.V2026_07_28 ? 500 : 200,
+				assertEquals(200,
 						failedSanitizer.status(), failedSanitizer.body());
 				assertTrue(failedSanitizer.body().contains("\"code\":-32603"), failedSanitizer.body());
 				assertFalse(failedSanitizer.body().contains(SECRET), failedSanitizer.body());

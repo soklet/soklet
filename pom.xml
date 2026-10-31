@@ -65,6 +65,11 @@
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <version>3.4.0</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.16.0</version>
                 <configuration>
@@ -159,7 +164,7 @@
                     </additionalDependencies>
                     <additionalOptions>
                         <additionalOption>-XDignore.symbol.file</additionalOption>
-                        <additionalOption>-Xdoclint:-html</additionalOption>
+                        <additionalOption>-Xdoclint:all,-html,-missing</additionalOption>
                     </additionalOptions>
                     <linksource>true</linksource>
                     <show>public</show>
@@ -467,7 +472,8 @@
                                 <skipXmlReport>false</skipXmlReport>
                                 <skipHtmlReport>true</skipHtmlReport>
                                 <skipMarkdownReport>true</skipMarkdownReport>
-                                <skipDiffReport>false</skipDiffReport>
+                                <!-- The text report sorts generic templates in place before XML generation. -->
+                                <skipDiffReport>true</skipDiffReport>
                             </parameter>
                         </configuration>
                     </plugin>

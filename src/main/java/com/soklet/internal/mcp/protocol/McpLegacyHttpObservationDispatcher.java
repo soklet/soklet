@@ -22,6 +22,8 @@ import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -51,6 +53,13 @@ final class McpLegacyHttpObservationDispatcher {
 
 	McpLegacyHttpObservationDispatcher(int concurrency, int queueCapacity,
 			long maximumGetReservations, @NonNull Runnable exitObserver) {
+		this(concurrency, queueCapacity, maximumGetReservations, exitObserver, "soklet-mcp-handler-");
+	}
+
+	McpLegacyHttpObservationDispatcher(int concurrency, int queueCapacity,
+			long maximumGetReservations, @NonNull Runnable exitObserver, @NonNull String threadPrefix) {
+		if (concurrency < 1 || queueCapacity < 1)
+			throw new IllegalArgumentException("Observation concurrency and queue capacity must be positive.");
 		if (maximumGetReservations < 0L)
 			throw new IllegalArgumentException("The GET observation limit must be nonnegative.");
 		this.transientCapacity = (long) concurrency + queueCapacity;
@@ -59,7 +68,18 @@ final class McpLegacyHttpObservationDispatcher {
 		this.getCapacity = Math.min(maximumGetReservations,
 				Math.max(0L, Integer.MAX_VALUE - transientCapacity));
 		this.exitObserver = requireNonNull(exitObserver);
-		this.executor = McpApplicationHandlerExecutorFactory.production().create(concurrency);
+		// Java 21 virtual threads can pin their carriers when an observer blocks
+		// while holding a monitor. Keep application observation on daemon platform
+		// threads so a slow logger cannot stall unrelated virtual-thread handlers.
+		// The dispatcher owns the waiting callbacks. This small second queue only
+		// covers a worker that has released its dispatcher slot and is returning
+		// from the previous executor envelope; a direct handoff can reject there.
+		ThreadPoolExecutor observationExecutor = new ThreadPoolExecutor(concurrency,
+				concurrency, 30L, TimeUnit.SECONDS, new LinkedBlockingQueue<>(concurrency),
+				Thread.ofPlatform().daemon().name(requireNonNull(threadPrefix), 1L).factory(),
+				new ThreadPoolExecutor.AbortPolicy());
+		observationExecutor.allowCoreThreadTimeOut(true);
+		this.executor = observationExecutor;
 		this.dispatcher = new McpApplicationHandlerDispatcher(concurrency,
 				(int) (queueCapacity + getCapacity), executor);
 	}

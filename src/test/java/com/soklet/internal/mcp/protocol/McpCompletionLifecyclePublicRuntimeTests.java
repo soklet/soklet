@@ -208,7 +208,7 @@ public class McpCompletionLifecyclePublicRuntimeTests {
 						prompt ? "prompt-deadline" : "resource-deadline",
 						prompt, null)) {
 					McpChunkedHttpClient.HttpResponseHead head = client.readHead();
-					assertEquals(504, head.status(), head.raw());
+					assertEquals(200, head.status(), head.raw());
 					assertTrue(client.readFixedBody(head).contains(
 							"\"message\":\"Internal error\""));
 				}

@@ -6,6 +6,7 @@ then HTTP/SSE integration and simulation. Do not place the
 The machine-readable [incompatibility ledger](api/mcp/current-incompatibilities.jsonl)
 is an audit aid; this guide is the migration path.
 
+For existing MCP endpoints, follow [the 3.5.1 MCP mapping](#351-mcp-endpoints).
 For MCP development, start with the [MCP quickstart](MCP_QUICKSTART.md) and
 [current API and wire reference](MCP.md).
 
@@ -32,7 +33,8 @@ and SSE is available on every supported runtime. Custom executor policies and
 existing admission, queue, lifecycle, and shutdown bounds remain in effect.
 
 On Java 21, blocking inside a `synchronized` method or block can pin a virtual
-thread to its carrier and limit throughput. Profile application callbacks and
+thread to its carrier. If every carrier is pinned, virtual threads across the JVM can stall,
+including unrelated HTTP and SSE handlers. Profile application callbacks and
 long-running critical sections with JFR before tuning executors. Java 24 removed
 monitor-related pinning, so Java 25 includes that improvement; native calls can
 still pin. See the [Java 21 virtual-thread guide](https://docs.oracle.com/en/java/javase/21/core/virtual-threads.html)
@@ -64,6 +66,8 @@ when an explicit `@OPTIONS` method matches. The default authorizer rejects all
 origins; move any preflight authorization from `@OPTIONS` handlers into a
 configured authorizer, such as `CorsAuthorizer.fromWhitelistedOrigins(...)`.
 Ordinary non-preflight `OPTIONS` requests still use explicit resource methods.
+At most 128 nonempty requested header names are accepted across
+`Access-Control-Request-Headers` field lines, counting names before deduplication.
 
 ### HTTP values preserve every occurrence
 
@@ -111,6 +115,10 @@ Identical values count as separate occurrences. Single-value request accessors
 and scalar annotation parameters reject more than one occurrence with the
 existing request exceptions; default HTTP error handling returns a bad request.
 Use list accessors or annotated `List<T>` parameters when repetition is allowed.
+An explicit empty cookie such as `session=` retains one empty value, just like
+`session=""`. Thus `session=; session=value` has two occurrences and scalar
+access or binding rejects it. Bare tokens without `=`, such as `session`,
+retain their existing valueless behavior.
 Header names remain case insensitive, while query, form, and cookie names remain
 case sensitive. Header and outgoing-cookie values retain their supplied order.
 
@@ -190,6 +198,14 @@ The affected types are `TransportFailureKey`, `RequestReadFailureKey`,
 `SseEventRouteDropKey`, `SseCommentRouteDropKey`, and
 `SseStreamRouteTerminationKey`, all nested in `MetricsCollector`.
 
+Route getters on these keys remain nullable, with a route present exactly when
+`RouteType.MATCHED` applies. Existing key types retain public constructors from
+their former record API. The new `HttpResponseStreamTerminationKey` instead
+uses `fromDimensions(existingRouteStatusKey, reason)` to compose that established
+key. This is deliberate; no Optional or constructor migration is required.
+`HttpServerRouteStatusKey` accepts only `1xx`, `2xx`, `3xx`, `4xx`, `5xx` and
+`unknown`, rejecting other status-class strings with `IllegalArgumentException`.
+
 ### Naming and collection replacements
 
 The remaining 4.0 naming cleanup removes the old names without aliases:
@@ -242,17 +258,42 @@ Paths, queries, and cookie values use UTF-8. Body and field text use their
 specified charset, falling back to UTF-8 when none is specified. Valid Unicode,
 including an explicitly encoded U+FFFD replacement character, remains accepted.
 
+URL-encoded forms parse delimiters and percent escapes from the original bytes
+before decoding each component with the selected charset. This supports encoded
+UTF-16 components and mixed literal/escaped multibyte characters. Body text
+access remains independent of form-component decoding.
+
 Extended multipart parameters such as `name*` and `filename*` require complete
 ASCII hexadecimal percent-escapes. Malformed or truncated escapes and raw
 non-ASCII characters in those encoded parameters are rejected instead of
 silently changing the field name or filename. Valid percent-encoded Unicode
 remains supported.
 
+The default multipart parser retains literal backslashes in quoted field names
+and filenames, including repeated or trailing backslashes and Windows drive/UNC
+paths. Interior quotes followed by more value text do not terminate the parameter;
+backslashes remain literal in those values. This preserves the literal-backslash convention used by browser form
+serialization; backslashes are not treated as MIME escape characters. Multipart
+header text must be valid UTF-8. Clients such as Apache HttpClient must explicitly
+select UTF-8 for non-ASCII multipart names/filenames, or send RFC 5987 extended
+parameters. Raw ISO-8859-1 header bytes are rejected rather than guessed.
+Each multipart header accepts at most 128 parameter tokens (including its initial
+media/disposition token), and each metadata value at most 128 RFC 2047 words.
+Unknown charset names and malformed encoded words retain their literal fallback
+without repeated charset-provider lookup or exception allocation.
+
 Path and query validation occurs when the request is constructed, including
 query values that a handler never selects. Body, form, cookie, and multipart
 decoding remains lazy. Existing `IllegalRequestException` and
 `IllegalRequestBodyException` types report these failures; the default response
 marshaler returns HTTP 400 with a redacted diagnostic.
+
+Decoded query names and values supplied to `Request.withPath(...)` or a request
+copier also reject unpaired UTF-16 surrogates, as does
+`Utilities.encodeQueryParameters(...)`. The RFC 8187 header builder
+`ParameterizedHeaderValue.Builder.rfc8187Parameter(...)` rejects malformed
+UTF-16 before changing the builder, instead of encoding a substituted `?`.
+Valid supplementary characters and explicit U+FFFD remain supported.
 
 For binary payloads or application-defined text decoding, continue using
 `Request.getBody()` and `MultipartField.getData()`. The raw bytes are unchanged.
@@ -265,6 +306,9 @@ Request parsing also corrects these cases:
 - An origin-form target such as `//x/admin` retains every path component.
   `getRawPath()` returns `//x/admin`; the existing decoded normalization makes
   `getPath()` return `/x/admin`, preserving `x` when routing.
+- Literal `#` characters in raw request targets are rejected before routing,
+  including query suffixes. Send `%23` for a hash character. Decoded
+  `Request.withPath(...)` path/query values still accept hashes and encode them.
 - Absolute request URLs supply the effective `Host`, replacing the supplied field;
   `EffectiveOriginResolver.withRequest` retains the target scheme as a fallback.
   HTTP/1.1 still requires one syntactically valid physical `Host` field.
@@ -783,6 +827,48 @@ by a `ServerType.MCP` constant. This uppercase built-in label is separate from `
 explicit `soklet.server.type` vocabulary, which remains lowercase `http`,
 `sse`, and `mcp`.
 
+## Final response processing and channel ownership
+
+The builder `PostProcessor` runs once after the interceptor selects the final
+ordinary response, following CORS composition and before HEAD/bodyless/framing
+projection. Rebuilding a response from its parts does not run the processor
+twice. The response generator returns an unfinalized descriptor; finalization
+runs after `interceptRequest` returns. A transaction or thread-local scope opened
+inside that interceptor therefore covers generation, not the later final phase.
+Materialize transaction-dependent values during generation or establish a bounded
+scope in the processor. A surrounding `wrapRequest` scope still encloses dispatch. Every `forHead` implementation, including a configured `HeadHandler`, now
+receives the finalized GET representation. Preserve its metadata with
+`response.copy()` when projecting HEAD; a fresh descriptor intentionally replaces
+that metadata. Error recovery uses the configured throwable hook without reentering a failed custom head handler or an already-attempted post-processor.
+
+`ResponseMarshaler.postProcess(MarshaledResponse)` is abstract in 4.0. Direct
+implementations must implement it; forwarding decorators must forward it to their
+delegate so a builder's security headers and other processing remain active.
+Check preexisting helper methods with the same signature: they now implement
+this framework phase and may need renaming. `forX` hooks return intermediate
+responses. Outside Soklet dispatch, call `postProcess` once on the completed
+response; direct calls are not intrinsically idempotent. Inside dispatch, Soklet
+owns the phase. Reusing a descriptor in another request gets that request's phase.
+The parser-only `forUnparsedRequest` hook owns its own processing call.
+
+Dispatch-generated responses and eligible SSE admission/timeout rejections use
+this phase. Emergency HTTP handler-timeout, exhausted-handler-queue, shutdown,
+and streaming-admission failsafes remain fixed finite responses that bypass
+application marshaling, CORS and post-processing. Their transport/timer threads
+must remain able to reject work when application execution is unavailable.
+Accepted SSE responses retain handshake framing when an interceptor supplies a
+fresh response; a post-processor may replace acceptance with a finite denial.
+
+Constructing a `MarshaledResponse` copy never closes the original's channels,
+even when the copy replaces or omits its body. Dispatch-owned cleanup releases
+retained predecessors after the selected replacement finishes. `MarshaledResponse`
+is not `AutoCloseable`: use its explicit, idempotent `close()` only at terminal
+delivery or abandonment, never try-with-resources around a handed-off response.
+Built-in transports and simulation perform that cleanup. Custom transports must
+call `close()` when delivery completes, fails or is canceled. Borrowed channels
+(`closeOnComplete=false`) remain application-owned. Finite simulator results
+contain captured bytes and have already released owned channels before return.
+
 ## Response compression
 
 `ResponseGzipPolicy` and `HttpServer.Builder.responseGzipPolicy(...)` are
@@ -888,6 +974,21 @@ have the embedding process explicitly request and await shutdown on termination.
 `Soklet.close()` remains available for direct
 embedders; it requests shutdown, joins it uninterruptibly, restores interrupt
 status, and throws if the result is unsuccessful.
+
+Calling blocking `close()` or awaiting shutdown from an application handler,
+interceptor, lifecycle callback or metric callback can deadlock against the
+caller's own work. Built-in callback scopes reject these waits with
+`IllegalStateException`, including MCP catalog, access-policy, localization,
+request-state protection and Skills policy callbacks, and MCP publisher release.
+SSE fallback response handlers/postprocessors, handshake materialization and
+owned-body cleanup also carry these checks. Replace an admin route's old
+`soklet.close()` idiom
+with `soklet.shutdown()` and return promptly; await the result from the owning
+process thread. Joining the returned shutdown stage inside the callback can
+still exhaust the shutdown budget and produce `INCOMPLETE`.
+
+An already interrupted thread cancels `start()` rather than starting normally;
+the thrown `SokletStartupException` records `StartupDisposition.CANCELED`.
 
 ### Standalone applications use the runner
 
@@ -1145,8 +1246,14 @@ MCP shutdown metrics and downstream OpenTelemetry projections use exactly:
 - `residual_activity`
 - `termination_unknown`
 
-Do not infer this set dynamically from enum constants; use an exhaustive
-mapping so a future enum addition cannot silently change metric cardinality.
+Do not infer this set dynamically from enum constants. Use an explicit reviewed
+mapping with a deliberate default for unrecognized values so a future enum
+addition cannot silently change metric cardinality.
+
+HTTP/SSE request-start and request-finish observers retain the original
+pre-`wrapRequest` request, while the supplied resource method can describe the
+rewritten effective route. Do not assume the observer request path was the
+routing path; this also differs from older 3.5.1 observer behavior.
 
 ### Log-event routing with custom observers
 
@@ -1375,6 +1482,86 @@ or `withMcpServer(...)` entry points. Reusing a transport object across
 lifecycle generations is not a replacement for copying: each generation needs
 fresh one-shot transports.
 
+## 3.5.1 MCP endpoints
+
+The Java MCP API was rebuilt in 4.0.0. Recompile the whole integration and use
+operation-specific registrations rather than adapting removed session/context
+objects in place.
+
+| 3.5.1 API or behavior | 4.0.0 replacement |
+| --- | --- |
+| `McpServer.fromPort(...)` | `McpServer.withPort(...)`, followed by `build()`; see listener configuration below. |
+| `McpValue`, `McpArray`, `McpObject`, `McpString`, `McpNumber`, `McpBoolean`, `McpNull` | Immutable `McpJsonValue`, `McpJsonArray`, `McpJsonObject`, `McpJsonString`, `McpJsonNumber`, `McpJsonBoolean`, `McpJsonNull`. |
+| `McpHandlerResolver.fromClasspathIntrospection()` / `fromClasses(...)` and `.withTool(...)` / `.withPrompt(...)` | `McpEndpointProvider` / generated `@McpServerEndpoint` providers, or explicit endpoint and operation registrations supplied to `McpServer.Builder`. |
+| `McpEndpoint` implemented by application classes and `McpEndpointRegistration` | Immutable `McpEndpoint.withPath(path, serverInfo, protocolVersions)` with operation registrations; server information belongs to `McpServerInfo`. |
+| `McpToolHandler.handle(McpToolHandlerContext)` and `McpSchema` | `McpToolRegistration` with typed `McpToolHandler`, typed arguments and Tool Schema Profile 1. |
+| Old handler, initialization, stored-session and request-result types | Operation-specific registrations and contexts (`McpToolRegistration`, `McpPromptRegistration`, `McpResourceRegistration`, etc.), `McpOperationResult` families, and `McpRequestContext`. |
+| Legacy schema objects | Java-derived Tool Schema Profile 1; raw `McpJsonObject` input can use an authored Profile 1 input schema. |
+| `McpCorsAuthorizer` | Shared `CorsAuthorizer`; custom implementations must implement the transport-neutral `authorizePreflight(Request, CorsPreflight, Set<HttpMethod>)` overload. |
+| Session-scoped authentication or client/capability assumptions | Fresh `McpAdmissionController` identity per request; select the wire revision and its session policy explicitly. |
+| Legacy MCP callbacks on `MetricsCollector` | One `didRecordMcpMetricsEvent(McpMetricsEvent)` callback; use current bounded event fields and labels. |
+| Legacy request observer signatures | `didStartMcpRequestHandling(McpRequestContext)` and `didFinishMcpRequestHandling(context, outcome, error, duration, throwables)`. |
+| `writeTimeout(Duration.ZERO)` to disable writes timing out | Configure a positive finite write timeout; zero now fails validation. |
+
+Endpoint and operation authoring now require exact protocol revision sets. For
+example, `McpEndpoint.withPath(path, serverInfo, protocolVersions)` and
+`@McpServerEndpoint(protocolVersions={...})` explicitly select revisions, as do
+operation registrations/annotations. Use `V2025_06_18` or `V2025_11_25` for the
+supported initialization/session wire profiles, or `V2026_07_28` for the modern
+stateless profile. Declaring an enum value alone does not add runtime support;
+`V2025_03_26` is not supported. The endpoint's operation sets must be compatible
+subsets. [Current endpoint authoring](MCP.md#endpoint-authoring) supplies complete
+programmatic and annotation examples.
+
+Modern calls carry per-request metadata/capabilities and do not initialize or
+acquire a session. The explicitly enabled 2025 adapter supports `initialize`;
+sessions, GET notifications, DELETE and URI subscriptions each require their
+current explicit configuration. See [legacy MCP session migration](#legacy-mcp-session-migration)
+and [the compatibility reference](MCP.md#compatibility-and-unsupported-features).
+Do not assume removed public session objects return when enabling that adapter.
+Templated HTTP endpoint paths are removed: register fixed endpoints, or carry
+application-authenticated tenancy through admission and declared metadata.
+Resource URI templates remain separate and supported.
+
+Tool rate limiting is optional; tool and endpoint overrides can be used without
+a server fallback. Configure an explicit token bucket or custom implementation
+when quotas are needed. `McpRateLimiter.fromInMemoryDefaults()` and
+`McpTokenBucketConfig.fromDefaults()` are removed. A built-in token bucket
+must explicitly configure capacity, refill quantity, and refill interval;
+refill setters reject null and incomplete builders fail rather than choosing
+a quota. Completion requires a request limiter. Interceptors now receive `(McpRequestContext,
+McpInvocationFeatures, McpHandlerContinuation)`; the continuation is synchronous,
+thread-bound and usable once. Framework-protected state requires protection
+configuration, and durable Tasks use the current `McpTaskManager`/origin/result
+contracts with application-owned persistence.
+
+`McpRequestContext.getStartedAt()` is an additive default method returning
+`Optional<Instant>`. Built-in observed contexts supply the semantic request's
+wall-clock start, captured before start observers. Their finish duration uses
+the same semantic origin and excludes finish-observer queue delay. Derived
+subscription contexts retain the original listen request's start. Existing
+custom and manually constructed contexts return the empty optional unless they
+override the method.
+
+MCP metric names, outcome/termination labels and callback ownership have changed.
+Replace old session/stream dimensions with the event families and bounded label
+mappings in [MCP metrics](MCP.md#lifecycle-and-metrics). Finish observation and its
+trace/failure logs use a separate bounded worker dispatcher with capacity
+reserved before start; blocking observers retain shutdown work. Exhaustion omits
+the whole observation pair with a rate-limited diagnostic instead of rejecting
+protocol or cancellation traffic. Finish workers are bounded daemon platform
+threads; start observers continue on the protocol executor. Admission,
+limiters, CORS, start observation and state opening share the separately tunable
+protocol pool: `protocolExecutorConcurrency` and `protocolExecutorQueueCapacity`
+default to 32/128, independent of application-handler executor settings.
+
+Common annotation replacements are `@McpArgument` → `@McpToolArgument` or
+`@McpPromptArgument`, `@McpListResources` → `@McpResourceList`, and
+`@McpUriParameter` → `@McpResourceUriParameter`. Use `@McpToolProperty` for
+record-property metadata. `@McpEndpointPathParameter` has no direct replacement.
+Roots and Sampling APIs are removed; current multi-round input supports form
+and URL elicitation.
+
 ## MCP listener binding and construction
 
 The MCP listener's default bind host changes from `0.0.0.0` in 3.5.1 to
@@ -1402,9 +1589,8 @@ Soklet does not derive an allowed hostname from `Forwarded` or
 `X-Forwarded-Host`. Bind/Host validation, Origin policy and application
 admission remain independent; remote binding does not add TLS.
 
-Construction validates the combined configuration. A tool-bearing server
-requires its fallback `toolRateLimiter`, even when tools or endpoints name
-overrides. Completion requires `requestRateLimiter`. An endpoint enabling
+Construction validates the combined configuration. Tool rate limiting is
+optional; Completion requires `requestRateLimiter`. An endpoint enabling
 Tasks, or a task-required tool, requires `taskManager`. Any operation using
 `FRAMEWORK_PROTECTED` request state requires `protectionConfig`. Missing
 required collaborators fail with `IllegalStateException` at `build()`.
@@ -1482,7 +1668,7 @@ SimulatorConfig simulatorConfig = SimulatorConfig
     .simulatorOptions(simulatorOptions)
     .configureMcpServer(mcpServerBuilder -> mcpServerBuilder
         .requestTimeout(shortTestTimeout)
-        .toolRateLimiter(McpRateLimiter.fromInMemoryDefaults()))
+        )
     .build();
 ```
 
@@ -1507,7 +1693,7 @@ SimulatorConfig simulatorConfig = SimulatorConfig.builder()
         .endpointRegistry(endpointRegistry)
         .admissionController(admissionController)
         .requestTimeout(requestTimeout)
-        .toolRateLimiter(McpRateLimiter.fromInMemoryDefaults()))
+        )
     .resourceMethodResolver(resourceMethods)
     .build();
 ```
@@ -1590,6 +1776,10 @@ in memory and copy it into a finite response through `toMarshaledResponse()` or
 `toResponse()`. Conversion does not send the response. `flushBuffer()` and writer
 or output-stream flushes affect local commitment, not network delivery;
 `isCommitted()` does not prove that Soklet has sent the response head.
+A response charset without encoder support (such as `ISO-2022-CN`) makes
+`getWriter()` throw `UnsupportedEncodingException` without acquiring the writer
+or locking the output method. Before commitment, select a supported encoding
+and retry, or use the raw output stream. Existing commitment remains in effect.
 The default local commit threshold is 1,024 bytes. `setBufferSize(...)` is a local commit threshold, not a body-size or memory cap.
 Capture continues beyond it, and conversion adds body copies. Bound response
 sizes and concurrent captures in the application. Request-size settings and
@@ -1623,8 +1813,15 @@ another placeholder (`/{id}/{id*}` is invalid). The processor reports these
 errors on the annotated method, including each repeatable route declaration.
 `ResourcePathDeclaration.fromPath(...)` and explicit class/method resolvers
 apply the same syntax rules; malformed paths formerly accepted as literals
-now fail at construction or resolver setup. Correct these declarations and
-rebuild their generated indexes.
+now fail at construction or resolver setup. HTTP/SSE annotations and the
+`ResourcePathDeclaration` and `ResourcePath` factories also reject unpaired
+UTF-16 surrogates, which previously could change route identity during UTF-8
+index serialization. Valid supplementary characters remain supported. Correct
+invalid declarations and rebuild their generated indexes.
+
+Every `@SseEventSource` method must declare `SseHandshakeResult` or one of its
+subtypes as its return type. The processor now enforces this for repeated
+annotations and declarations whose types resolve in a later processing round.
 
 Each HTTP/SSE Java parameter may have only one Soklet binding annotation
 (`@PathParameter`, `@QueryParameter`, `@FormParameter`, `@RequestHeader`,
@@ -1671,16 +1868,27 @@ and persistent caches; an empty current index is authoritative. Recompiled
 types replace their old declarations, and retained owners absent from the
 compiler's sources/classpath are removed. Untouched sources, compiled classes
 and dependency JARs must remain visible to the compiler.
+The same visibility and clean-build rules apply to annotated MCP endpoint owners.
+Package only successful compiler output: late javac or cache-publication errors
+can leave partial generated indexes, so recover from those failures with a clean build.
 
-After deleting or renaming a resource, remove its old compiled classfiles or
-perform a clean build. An old classfile still on the compiler's classpath remains
-a usable type. A malformed selected index now fails compilation with its
+After deleting, renaming, or moving a resource owner into a dependency, perform
+a normal clean build (`mvn clean` or `gradle clean`). Removing only compiled
+classfiles can leave the default sidecar outside the classes directory; when
+the owner still resolves from a dependency it can restore stale rows. Clear
+any custom persistent cache as well. An old classfile still visible to the
+compiler remains a usable type. A malformed selected index now fails compilation with its
 location; delete the reported generated index and rebuild all annotated code.
 The processor preserves that invalid snapshot and existing caches on a read
 failure. If a cache update fails, it invalidates the stale cache; inability to
 update or invalidate it also fails compilation.
 
 ## HTTP and SSE route precedence
+
+Automatic reflective discovery through `ResourceMethodResolver.fromClasses(...)`
+ignores compiler bridge methods. Generic and covariant annotated handlers now
+match generated-index discovery without a false duplicate-route error.
+`fromMethods(...)` still uses the methods explicitly selected by the caller.
 
 Competing varargs routes now compare path components from left to right:
 a literal outranks a single-component placeholder, and both outrank a varargs
@@ -2146,8 +2354,10 @@ Configure reverse proxies to use HTTP/1.1 for the MCP upstream.
 
 ## Final input and callback corrections
 
-- Missing or malformed opening multipart delimiters now fail parsing with HTTP
-  400. Valid space/tab delimiter padding is accepted. Named HTML entities in
+- A nonempty multipart body with no valid opening delimiter now fails parsing
+  with HTTP 400. Any preamble must be followed by a valid opening delimiter; a boundary-like token with an invalid suffix is malformed. Empty bodies have no fields.
+  Valid space/tab delimiter padding is accepted. The closing delimiter must end
+  at EOF or with a line ending; bytes appended directly after its `--` are rejected. Named HTML entities in
   filenames remain literal; numeric references retain legacy compatibility,
   with invalid code points, surrogate values, and controls rejected.
 - MCP POST bodies accept absent or identity-only `Content-Encoding`; unsupported

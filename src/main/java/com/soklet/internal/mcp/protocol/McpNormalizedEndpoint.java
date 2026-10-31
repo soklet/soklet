@@ -265,11 +265,15 @@ final class McpNormalizedEndpoint {
 				McpNormalizedResourceTemplateDescriptor rightDescriptor = resourceTemplates
 						.get(right).resourceTemplateDescriptor().orElseThrow();
 				if (leftDescriptor.parsedTemplate().potentiallyOverlaps(
-						rightDescriptor.parsedTemplate(), overlapBudget))
+						rightDescriptor.parsedTemplate(), overlapBudget)) {
+					if (overlapBudget.exhausted())
+						throw new IllegalArgumentException(
+								"Resource URI template overlap validation exceeded its comparison budget.");
 					throw new IllegalArgumentException(
 							"Potentially overlapping resource URI templates '"
 									+ leftDescriptor.uriTemplate() + "' and '"
 									+ rightDescriptor.uriTemplate() + "'.");
+				}
 			}
 		}
 	}

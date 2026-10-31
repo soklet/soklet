@@ -905,7 +905,7 @@ function validateToolchains(toolchains, projectRoot) {
   if (toolchains.maven.archive !== expectedMavenArchive)
     fail(`Maven archive must be exactly ${expectedMavenArchive}`);
 
-  const expectedMavenUrl = `https://dlcdn.apache.org/maven/maven-3/${toolchains.maven.version}/binaries/${expectedMavenArchive}`;
+  const expectedMavenUrl = `https://archive.apache.org/dist/maven/maven-3/${toolchains.maven.version}/binaries/${expectedMavenArchive}`;
   if (toolchains.maven.distributionUrl !== expectedMavenUrl)
     fail(`Maven distribution URL must be exactly ${expectedMavenUrl}`);
 

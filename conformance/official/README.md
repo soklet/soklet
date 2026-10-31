@@ -345,10 +345,14 @@ not rerun locally and remains owned by candidate conformance. These are local
 snapshot checks, not immutable-candidate evidence.
 
 The preceding four-row HTTP-contract reconciliation added a third, independent
-evidence surface without changing the official corpus: 22 canonical complete
+evidence surface without changing the official corpus: 24 canonical complete
 HTTP response fixtures bound by
 `../golden-http-contract/precedence-no-store/manifest.sha256` at SHA-256
-`ccec7ec13ac245bbc4a1820b1c387b188347a3ef868d4128e3af5c3a6e331e92`.
+`4aabcd57070ffd17f7eef5a825c1c2592d6cd96d2bfa907d0edd8d4d3193feea`.
+Round 12 updates this local corpus with the modern in-band handler-error response.
+This checksum refresh is source-index maintenance; it does not claim a fresh
+external-client, official-conformance, or immutable-candidate qualification run.
+
 Five contract tests—three real-listener goldens, one exhaustive response-
 authority inventory, and one six-document manifest-digest parity gate—and four
 initialize-diagnostic tests pass 9/9 in the current focused execution. Full

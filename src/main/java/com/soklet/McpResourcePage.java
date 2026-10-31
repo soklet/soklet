@@ -178,10 +178,11 @@ public final class McpResourcePage implements McpOperationResult {
 		 *
 		 * @param nextCursor next cursor
 		 * @return this builder
+		 * @throws IllegalArgumentException if the cursor contains malformed UTF-16
 		 */
 		@NonNull
 		public Builder nextCursor(@NonNull String nextCursor) {
-			this.nextCursor = requireNonNull(nextCursor);
+			this.nextCursor = McpContentValueSupport.requireWellFormedString(requireNonNull(nextCursor));
 			return this;
 		}
 

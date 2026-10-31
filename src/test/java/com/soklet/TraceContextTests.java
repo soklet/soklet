@@ -23,6 +23,7 @@ import javax.annotation.concurrent.ThreadSafe;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.time.Duration;
 
 /**
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -169,6 +170,25 @@ public class TraceContextTests {
 				TraceStateEntry.fromKeyAndValue("a1", "x".repeat(126)),
 				TraceStateEntry.fromKeyAndValue("a2", "x".repeat(126))), minimallyTrimmedTraceContext.getTraceStateEntries());
 		Assertions.assertTrue(minimallyTrimmedTraceContext.toTracestateHeaderValue().orElseThrow().length() <= 512);
+	}
+
+	@Test
+	public void oversizedTracestateParsingIsBounded() {
+		List<String> members = new ArrayList<>();
+		for (int i = 0; i < 250; i++)
+			members.add("v" + i + "=" + "x".repeat(256));
+		String header = String.join(",", members);
+		Assertions.assertTrue(header.length() > 63_000);
+		Assertions.assertTimeout(Duration.ofSeconds(2), () -> {
+			for (int i = 0; i < 64; i++) {
+				TraceContext context = TraceContext.fromHeaderValues(List.of(TRACEPARENT), List.of(header)).orElseThrow();
+				Assertions.assertTrue(context.getTraceStateEntries().size() <= 32);
+				Assertions.assertTrue(context.toTracestateHeaderValue().orElseThrow().length() <= 512);
+			}
+		});
+		TraceContext context = TraceContext.fromHeaderValues(List.of(TRACEPARENT),
+				List.of("oversized=" + "x".repeat(1_000_000) + ",valid=retained")).orElseThrow();
+		Assertions.assertEquals("valid=retained", context.toTracestateHeaderValue().orElseThrow());
 	}
 
 	@Test

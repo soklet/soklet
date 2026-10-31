@@ -158,8 +158,16 @@ public final class McpServerRuntimeBridge {
 			@NonNull Duration requestBodyTimeout, int readBufferSize,
 			int maximumRequestBodyBytes, int maximumHeaderCount,
 			int maximumHeaderBytes, int maximumRequestTargetBytes,
-			int maximumConnections) {
+			int maximumConnections, int protocolExecutorConcurrency, int protocolExecutorQueueCapacity) {
 		private static final int HTTP_FRAMING_ALLOWANCE_BYTES = 1_024;
+
+		public HttpTransportPlan(@NonNull Duration requestHeaderTimeout,
+				@NonNull Duration requestBodyTimeout, int readBufferSize,
+				int maximumRequestBodyBytes, int maximumHeaderCount,
+				int maximumHeaderBytes, int maximumRequestTargetBytes, int maximumConnections) {
+			this(requestHeaderTimeout, requestBodyTimeout, readBufferSize, maximumRequestBodyBytes,
+					maximumHeaderCount, maximumHeaderBytes, maximumRequestTargetBytes, maximumConnections, 32, 128);
+		}
 
 		public HttpTransportPlan {
 			requireNonNull(requestHeaderTimeout);
@@ -183,6 +191,8 @@ public final class McpServerRuntimeBridge {
 					|| maximumRequestTargetBytes < 1 || maximumConnections < 0)
 				throw new IllegalArgumentException(
 						"MCP transport byte and count limits must be positive; maximum connections may be zero.");
+			if (protocolExecutorConcurrency < 1 || protocolExecutorQueueCapacity < 1)
+				throw new IllegalArgumentException("MCP protocol executor limits must be positive.");
 			if (maximumRequestBodyBytes
 					> McpJsonLimits.maximumSupported().maximumInputBytes())
 				throw new IllegalArgumentException(
@@ -1101,8 +1111,8 @@ public final class McpServerRuntimeBridge {
 				httpTransportPlan.maximumRequestTargetBytes(),
 				httpTransportPlan.maximumConnections(),
 				defaults.connectionWriterConcurrency(),
-				defaults.requestProcessorConcurrency(),
-				defaults.requestProcessorQueueCapacity(),
+				httpTransportPlan.protocolExecutorConcurrency(),
+				httpTransportPlan.protocolExecutorQueueCapacity(),
 				subscriptionRuntimeConfiguration.streamQueueCapacity());
 		McpApplicationExecutionConfiguration applicationConfiguration =
 				new McpApplicationExecutionConfiguration(requestHandlerConcurrency,
@@ -1629,9 +1639,100 @@ public final class McpServerRuntimeBridge {
 
 		RequestObservationAdapter observationAdapter =
 				requestObservationAdapter.orElseThrow();
-		McpRuntimeObservationSink observationSink = input -> {
-			RequestObservation publicObservation = requireNonNull(
-					observationAdapter.didStartRequest(new RequestObservationInput(
+		McpRuntimeObservationSink observationSink = new McpRuntimeObservationSink() {
+			@Override
+			public McpRuntimeRequestObservation didStartRequest(McpRuntimeRequestInput input) {
+				RequestObservation publicObservation = requireNonNull(
+						observationAdapter.didStartRequest(toObservationInput(input, publicEndpoint)),
+						"The MCP request-observation adapter returned null.");
+				return new McpRuntimeRequestObservation() {
+					@Override
+					@NonNull
+					public Optional<@NonNull McpRequestContext> publicContext() {
+						return Optional.of(requireNonNull(publicObservation.context(),
+								"An MCP request observation returned a null context."));
+					}
+
+					@Override
+					public void didFinish(@NonNull McpRequestOutcome outcome,
+							com.soklet.internal.mcp.protocol.@Nullable McpJsonRpcError error,
+							@NonNull Duration duration,
+							@NonNull List<@NonNull Throwable> throwables) {
+						publicObservation.didFinish(outcome,
+								error == null ? null : new RequestError(
+										error.code(), error.message(),
+										error.data().map(McpServerRuntimeBridge::toPublic)),
+								duration,
+								throwables);
+					}
+
+					@Override
+					public void didOpenRequestStream() {
+						publicObservation.didOpenRequestStream();
+					}
+
+					@Override
+					public void didCloseRequestStream(
+							@NonNull StreamTerminationReason reason,
+							@NonNull Duration duration) {
+						publicObservation.didCloseRequestStream(
+								toPublic(reason), duration);
+					}
+
+					@Override
+					public void didCloseRequestStream(
+							@NonNull StreamTerminationReason reason,
+							@Nullable McpStreamTerminationReason exactReason,
+							@NonNull Duration duration) {
+						publicObservation.didCloseRequestStream(exactReason == null
+								? toPublic(reason) : exactReason, duration);
+					}
+
+					@Override
+					public void didOpenSubscription() {
+						publicObservation.didOpenSubscription();
+					}
+
+					@Override
+					public void didCloseSubscription(
+							@NonNull StreamTerminationReason reason,
+							@NonNull Duration duration) {
+						publicObservation.didCloseSubscription(
+								toPublic(reason), duration);
+					}
+
+					@Override
+					public void didCloseSubscription(
+							@NonNull StreamTerminationReason reason,
+							@Nullable McpStreamTerminationReason exactReason,
+							@NonNull Duration duration) {
+						publicObservation.didCloseSubscription(exactReason == null
+								? toPublic(reason) : exactReason, duration);
+					}
+
+					@Override
+					public void didEmitKeepAlive() {
+						publicObservation.didEmitKeepAlive();
+					}
+				};
+			}
+
+			@Override
+			public Optional<McpRequestContext> contextForOmittedRequest(McpRuntimeRequestInput input) {
+				return requireNonNull(observationAdapter.contextForOmittedRequest(
+						toObservationInput(input, publicEndpoint)),
+						"The MCP request-context adapter returned null.");
+			}
+		};
+		return new McpHttpEndpointBinding(endpointPolicy, endpoint,
+				applicationRouter, observationSink, subscriptionEventSources,
+				endpointPlan.taskManagerAdapter(), revisionEndpoints);
+	}
+
+	@NonNull
+	private static RequestObservationInput toObservationInput(@NonNull McpRuntimeRequestInput input,
+			@NonNull McpEndpoint publicEndpoint) {
+		return new RequestObservationInput(
 							input.request(), publicEndpoint,
 							input.endpointPathParameters(), input.jsonRpcMethod(),
 							input.requestId().map(McpServerRuntimeBridge::toPublic),
@@ -1644,82 +1745,7 @@ public final class McpServerRuntimeBridge {
 							toPublicFrameworkRequestState(input.requestState()),
 							toPublicApplicationRequestState(input.requestState()),
 							input.acceptLanguageValues(),
-							toPublic(input.admissionIdentity()))),
-					"The MCP request-observation adapter returned null.");
-			return new McpRuntimeRequestObservation() {
-				@Override
-				@NonNull
-				public Optional<@NonNull McpRequestContext> publicContext() {
-					return Optional.of(requireNonNull(publicObservation.context(),
-							"An MCP request observation returned a null context."));
-				}
-
-				@Override
-				public void didFinish(@NonNull McpRequestOutcome outcome,
-						com.soklet.internal.mcp.protocol.@Nullable McpJsonRpcError error,
-						@NonNull Duration duration,
-						@NonNull List<@NonNull Throwable> throwables) {
-					publicObservation.didFinish(outcome,
-							error == null ? null : new RequestError(
-									error.code(), error.message(),
-									error.data().map(McpServerRuntimeBridge::toPublic)),
-							duration,
-							throwables);
-				}
-
-				@Override
-				public void didOpenRequestStream() {
-					publicObservation.didOpenRequestStream();
-				}
-
-				@Override
-				public void didCloseRequestStream(
-						@NonNull StreamTerminationReason reason,
-						@NonNull Duration duration) {
-					publicObservation.didCloseRequestStream(
-							toPublic(reason), duration);
-				}
-
-				@Override
-				public void didCloseRequestStream(
-						@NonNull StreamTerminationReason reason,
-						@Nullable McpStreamTerminationReason exactReason,
-						@NonNull Duration duration) {
-					publicObservation.didCloseRequestStream(exactReason == null
-							? toPublic(reason) : exactReason, duration);
-				}
-
-				@Override
-				public void didOpenSubscription() {
-					publicObservation.didOpenSubscription();
-				}
-
-				@Override
-				public void didCloseSubscription(
-						@NonNull StreamTerminationReason reason,
-						@NonNull Duration duration) {
-					publicObservation.didCloseSubscription(
-							toPublic(reason), duration);
-				}
-
-				@Override
-				public void didCloseSubscription(
-						@NonNull StreamTerminationReason reason,
-						@Nullable McpStreamTerminationReason exactReason,
-						@NonNull Duration duration) {
-					publicObservation.didCloseSubscription(exactReason == null
-							? toPublic(reason) : exactReason, duration);
-				}
-
-				@Override
-				public void didEmitKeepAlive() {
-					publicObservation.didEmitKeepAlive();
-				}
-			};
-		};
-		return new McpHttpEndpointBinding(endpointPolicy, endpoint,
-				applicationRouter, observationSink, subscriptionEventSources,
-				endpointPlan.taskManagerAdapter(), revisionEndpoints);
+							toPublic(input.admissionIdentity()), input.startedAt());
 	}
 
 	/** Retains the existing minimum collection guard for an unpaged projection. */
@@ -4066,6 +4092,14 @@ public final class McpServerRuntimeBridge {
 		@NonNull
 		RequestObservation didStartRequest(
 				@NonNull RequestObservationInput input);
+
+		/** Returns execution context without starting observers or semantic request metrics. */
+		@NonNull
+		default Optional<@NonNull McpRequestContext> contextForOmittedRequest(
+				@NonNull RequestObservationInput input) {
+			requireNonNull(input);
+			return Optional.empty();
+		}
 	}
 
 	/**
@@ -4149,7 +4183,31 @@ public final class McpServerRuntimeBridge {
 			@NonNull Optional<@NonNull McpJsonValue> frameworkRequestState,
 			@NonNull Optional<@NonNull String> applicationRequestState,
 			@NonNull List<@NonNull String> acceptLanguageValues,
-			@NonNull McpAdmissionIdentity admissionIdentity) {
+			@NonNull McpAdmissionIdentity admissionIdentity,
+			@NonNull Optional<@NonNull Instant> startedAt) {
+		/** Creates an observation input without a captured semantic start. */
+		public RequestObservationInput(@NonNull Request request,
+				@NonNull McpEndpoint endpoint,
+				@NonNull Map<@NonNull String, @NonNull String> endpointPathParameters,
+				@NonNull String jsonRpcMethod,
+				@NonNull Optional<@NonNull McpRequestId> requestId,
+				@NonNull String protocolVersion,
+				@NonNull Optional<@NonNull String> operationName,
+				@NonNull Optional<@NonNull McpImplementation> clientInformation,
+				@NonNull McpJsonObject clientCapabilities,
+				@NonNull McpJsonObject requestMetadata,
+				@NonNull McpInputResponses inputResponses,
+				@NonNull Optional<@NonNull McpJsonValue> frameworkRequestState,
+				@NonNull Optional<@NonNull String> applicationRequestState,
+				@NonNull List<@NonNull String> acceptLanguageValues,
+				@NonNull McpAdmissionIdentity admissionIdentity) {
+			this(request, endpoint, endpointPathParameters, jsonRpcMethod,
+					requestId, protocolVersion, operationName, clientInformation,
+					clientCapabilities, requestMetadata, inputResponses,
+					frameworkRequestState, applicationRequestState,
+					acceptLanguageValues, admissionIdentity, Optional.empty());
+		}
+
 		/** Creates an observation input without raw-header provenance. */
 		public RequestObservationInput(@NonNull Request request,
 				@NonNull McpEndpoint endpoint,
@@ -4235,6 +4293,7 @@ public final class McpServerRuntimeBridge {
 			acceptLanguageValues = List.copyOf(
 					requireNonNull(acceptLanguageValues));
 			requireNonNull(admissionIdentity);
+			requireNonNull(startedAt);
 		}
 
 		@Override

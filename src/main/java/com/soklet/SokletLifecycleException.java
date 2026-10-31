@@ -27,6 +27,9 @@ import static java.util.Objects.requireNonNull;
  * Sealed base class for exceptions that carry an immutable lifecycle result.
  * Exception instances retain {@link Throwable}'s mutable state and are not
  * thread-safe; their {@link ShutdownResult} values remain immutable.
+ * <p>
+ * This type may gain reviewed permitted subtypes in Soklet 4.x; use a forward-compatible default when switching over its values.
+ *
  */
 @NotThreadSafe
 public abstract sealed class SokletLifecycleException extends RuntimeException

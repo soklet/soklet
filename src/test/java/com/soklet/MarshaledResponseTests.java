@@ -552,6 +552,8 @@ public class MarshaledResponseTests {
 
 			Assertions.assertTrue(headResponse.getBody().isEmpty());
 			Assertions.assertEquals(List.of("6"), headResponse.getHeaders().get("Content-Length"));
+			Assertions.assertTrue(fileChannel.isOpen(), "Projection is not terminal delivery");
+			headResponse.close();
 			Assertions.assertFalse(fileChannel.isOpen());
 		} finally {
 			if (fileChannel.isOpen())

@@ -184,6 +184,10 @@ public interface Simulator {
 	 * Paired lifecycle and metrics callbacks, including HTTP stream handles, share that dispatch copy,
 	 * so the same caller-supplied request may be reused concurrently without sharing observation identity.
 	 * <p>
+	 * Finite file/channel bodies are materialized into bytes before this method returns. All selected
+	 * owned channels and retained predecessor channels are released at completion, including HEAD/bodyless
+	 * results; borrowed channels remain caller-owned. Returned finite responses retain independent bytes.
+	 * <p>
 	 * Streaming producers run synchronously on the calling thread and successful
 	 * output is materialized into bytes. HTTP streaming total/idle timeout settings
 	 * are not applied: the stream's deadline and idle timeout are empty. Cleanup

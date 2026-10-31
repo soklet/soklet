@@ -316,12 +316,12 @@ run('production imported fixtures cannot disappear or change without new evidenc
   const name = 'temporary_handler_capacity_keeps_get_fenced_and_retries_without_replacing_its_stream';
   const row = rowByName(INVENTORY, name);
   assert.equal(row.review.generationCount, 2);
-  // The three-argument fixture delegates to its four-argument owner
-  // constructor. Both proof entries describe each same fixture; the two
-  // legacy revisions still create exactly two lifecycle owners.
-  assert.equal(row.source.importedLifecycleHelperEvidence.length, 2);
+  // The three-argument fixture delegates through the four-argument overload
+  // to its five-argument owner constructor. All three proof entries describe
+  // the same fixture; the two revisions still create exactly two owners.
+  assert.equal(row.source.importedLifecycleHelperEvidence.length, 3);
   assert.equal(new Set(row.source.importedLifecycleHelperEvidence.map(
-    (helper) => helper.scopeSha256)).size, 2);
+    (helper) => helper.scopeSha256)).size, 3);
   assert.ok(row.source.importedLifecycleHelperEvidence.every((helper) =>
     helper.scopeName === 'Fixture' && helper.callCount === 1
       && helper.path === 'src/test/java/com/soklet/McpLegacySessionTransportPublicRuntimeTests.java'));
@@ -1774,10 +1774,21 @@ run('fully qualified builder installation keeps exact literal budgets', () => {
 run('literal dynamic producers preserve their exact independently guarded node counts', () => {
   const rows = buildLifecycleScopeObservations(sourceTexts(
     'src/test/java/com/soklet/McpHandlerExecutorPublicRuntimeTests.java',
+    'src/test/java/com/soklet/McpLocalizationLifecycleExecutionTests.java',
+    'src/test/java/com/soklet/McpRemainingSpiLifecycleExecutionTests.java',
+    'src/test/java/com/soklet/McpTaskLifecycleExecutionTests.java',
+    'src/test/java/com/soklet/SseMarshalerLifecycleExecutionTests.java',
+    'src/test/java/com/soklet/McpObservationStartRaceTests.java',
+    'src/test/java/com/soklet/McpLegacySessionTransportPublicRuntimeTests.java',
     'src/test/java/com/soklet/ShutdownDiagnosticsTests.java',
     'src/test/java/com/soklet/UnparsedRequestAdditionalTransportTests.java'));
   for (const [name, count] of [
-    ['executorBoundariesForEachRevision', 15],
+    ['executorBoundariesForEachRevision', 18],
+    ['localizationAndCompletedTaskPolicyCallbacksCannotJoinTheirOwnShutdown', 4],
+    ['stateSkillsAndRegistrationCallbacksCannotJoinTheirOwnShutdown', 7],
+    ['taskManagerAndSanitizerCallbacksCannotJoinTheirOwnShutdown', 5],
+    ['noncentralHandshakeCallbacksCannotWaitOnTheirOwnShutdown', 8],
+    ['terminalDuringStartReleasesPairedObservationAndPreservesStreamOrder', 8],
     ['actualSimulatorResidualWorkIsExplainedWithoutChangingFailurePrecedence', 4],
     ['sseInvalidOrFailedMarshalingUsesTheOriginalFallback', 3],
   ]) {

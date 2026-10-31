@@ -19,6 +19,9 @@ package com.soklet;
 /**
  * MCP application-cache visibility for a successful result.
  *
+ * <p>
+ * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public enum McpCacheScope {

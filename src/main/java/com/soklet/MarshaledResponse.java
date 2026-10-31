@@ -43,6 +43,7 @@ import java.util.function.Consumer;
 import static java.lang.String.format;
 import static java.nio.file.StandardOpenOption.READ;
 import static java.util.Objects.requireNonNull;
+import static com.soklet.internal.ObjectIdentity.sameInstance;
 
 /**
  * A finalized representation of a {@link Response}, suitable for sending to clients over the wire.
@@ -53,8 +54,10 @@ import static java.util.Objects.requireNonNull;
  * For example, if a {@link Response} were to specify a body of {@code List.of("one", "two")}, a {@link ResponseMarshaler} might
  * convert it to the JSON string {@code ["one", "two"]} and provide as output a corresponding {@link MarshaledResponse} with a byte-array-backed body containing UTF-8 bytes that represent {@code ["one", "two"]}.
  * <p>
- * Alternatively, your <em>Resource Method</em> might want to directly serve bytes to clients (e.g. an image or PDF) and skip the {@link ResponseMarshaler} entirely.
- * To accomplish this, just have your <em>Resource Method</em> return a {@link MarshaledResponse} instance: this tells Soklet "I already know exactly what bytes I want to send; don't go through the normal marshaling process".
+ * Alternatively, a <em>Resource Method</em> can return a {@link MarshaledResponse}
+ * directly to supply a prepared body, such as an image or PDF, without ordinary
+ * body serialization. Configured {@link ResponseMarshaler#postProcess(MarshaledResponse)}
+ * and HEAD/bodyless/transport finalization still apply during Soklet dispatch.
  * <p>
  * Instances can be acquired via the {@link #withResponse(Response)}, {@link #withStatusCode(Integer)}, or {@link #withFile(Path, Request)} builder factory methods.
  * Convenience instance factories are also available via {@link #fromResponse(Response)} and {@link #fromStatusCode(Integer)}.
@@ -93,6 +96,10 @@ public final class MarshaledResponse {
 	private final MarshaledResponseBody body;
 	@Nullable
 	private final StreamingResponseBody streamingResponseBody;
+	@NonNull
+	private final List<@NonNull FileChannel> retainedChannels;
+	@Nullable
+	private final Object postProcessingToken;
 
 	/**
 	 * Acquires a builder for {@link MarshaledResponse} instances.
@@ -203,6 +210,7 @@ public final class MarshaledResponse {
 		this.cookies = builder.cookies == null ? List.of() : List.copyOf(builder.cookies);
 		this.body = builder.body;
 		this.streamingResponseBody = builder.streamingResponseBody;
+		this.postProcessingToken = builder.postProcessingToken;
 
 		if (getBody().isPresent() && getStreamingResponseBody().isPresent())
 			throw new IllegalStateException("A MarshaledResponse may not specify both a known-length body and a streaming response body.");
@@ -217,6 +225,7 @@ public final class MarshaledResponse {
 			if (this.headers.containsKey("Transfer-Encoding"))
 				throw new IllegalStateException("Streaming responses must not specify Transfer-Encoding.");
 		}
+		this.retainedChannels = retainedChannels(builder.retainedChannels, this.body);
 	}
 
 	@Override
@@ -322,7 +331,96 @@ public final class MarshaledResponse {
 		return body == null ? 0L : body.getLength();
 	}
 
+	/**
+	 * Releases this response's owned channels after delivery completes or is abandoned.
+	 * <p>
+	 * Built-in transports perform this cleanup automatically. Custom transports must call this method
+	 * after completing or abandoning delivery, including streaming responses. It also releases owned
+	 * predecessor channels retained by response transformations. Borrowed channels and unopened
+	 * path-backed bodies are unaffected. Repeated calls are safe.
+	 *
+	 * Do not call this method from a response interceptor that is returning the response for delivery,
+	 * or use an application cleanup scope that ends before delivery.
+	 *
+	 * @throws UncheckedIOException if an owned channel cannot be closed
+	 */
+	public void close() {
+		closeChannels(ownedChannels(), null);
+	}
+
+	boolean isPostProcessedFor(Object token) { return sameInstance(this.postProcessingToken, token); }
+
+	MarshaledResponse markPostProcessed(Object token) {
+		requireNonNull(token);
+		if (isPostProcessedFor(token)) return this;
+		Copier copier = copy();
+		copier.builder.postProcessingToken = token;
+		return copier.finish();
+	}
+
+	boolean hasOwnedChannels() {
+		return !this.retainedChannels.isEmpty() || this.body instanceof MarshaledResponseBody.FileChannel channel
+				&& channel.getCloseOnComplete();
+	}
+
+	List<FileChannel> ownedChannels() {
+		if (!(this.body instanceof MarshaledResponseBody.FileChannel channel) || !channel.getCloseOnComplete())
+			return this.retainedChannels;
+		List<FileChannel> channels = new ArrayList<>(this.retainedChannels);
+		channels.add(channel.getChannel());
+		return channels;
+	}
+
+	MarshaledResponse retainingChannels(List<FileChannel> channels) {
+		if (channels.isEmpty()) return this;
+		Copier copier = copy();
+		copier.builder.retainChannels(channels);
+		return copier.finish();
+	}
+
+	private static List<FileChannel> retainedChannels(List<FileChannel> candidates,
+			@Nullable MarshaledResponseBody body) {
+		if (candidates.isEmpty()) return List.of();
+		java.util.Set<FileChannel> seen = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+		List<FileChannel> retained = new ArrayList<>();
+		for (FileChannel channel : candidates) {
+			if (body instanceof MarshaledResponseBody.FileChannel current && sameInstance(current.getChannel(), channel))
+				continue; // The final descriptor decides whether its own channel is owned or borrowed.
+			if (seen.add(channel)) retained.add(channel);
+		}
+		// Copying a descriptor never releases resources belonging to the original.
+		// The selected response's terminal owner releases all retained predecessors.
+		return List.copyOf(retained);
+	}
+
+	static void closeChannels(List<FileChannel> channels, @Nullable Throwable primaryFailure) {
+		if (channels.isEmpty()) return;
+		Throwable failure = primaryFailure;
+		java.util.Set<FileChannel> seen = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+		for (FileChannel channel : channels) {
+			if (!seen.add(channel)) continue;
+			try { channel.close(); }
+			catch (IOException | RuntimeException | Error closeFailure) {
+				Throwable reported = closeFailure instanceof IOException io
+						? new UncheckedIOException("Unable to close file-channel response body.", io) : closeFailure;
+				if (failure == null) failure = reported;
+				else if (!sameInstance(failure, reported)) failure.addSuppressed(reported);
+			}
+		}
+		if (primaryFailure == null) {
+			if (failure instanceof RuntimeException runtime) throw runtime;
+			if (failure instanceof Error error) throw error;
+		}
+	}
+
 	byte @Nullable [] bodyBytesOrNull() {
+		Throwable failure = null;
+		try { return materializeBodyBytes(); }
+		catch (RuntimeException | Error thrown) { failure = thrown; throw thrown; }
+		finally { closeChannels(this.retainedChannels, failure); }
+	}
+
+	private byte @Nullable [] materializeBodyBytes() {
 		MarshaledResponseBody body = getBody().orElse(null);
 
 		if (body == null)
@@ -374,6 +472,16 @@ public final class MarshaledResponse {
 		private MarshaledResponseBody body;
 		@Nullable
 		private StreamingResponseBody streamingResponseBody;
+		@NonNull
+		private List<FileChannel> retainedChannels = List.of();
+		@Nullable
+		private Object postProcessingToken;
+
+		private void retainChannels(List<FileChannel> channels) {
+			if (channels.isEmpty()) return;
+			if (this.retainedChannels.isEmpty()) this.retainedChannels = new ArrayList<>();
+			this.retainedChannels.addAll(channels);
+		}
 
 		Builder(@NonNull Integer statusCode) {
 			requireNonNull(statusCode);
@@ -719,8 +827,15 @@ public final class MarshaledResponse {
 					.headers(Utilities.mutableValueLists(marshaledResponse.getHeaders(), true))
 					.cookies(new ArrayList<>(marshaledResponse.getCookies()));
 
+			this.builder.postProcessingToken = marshaledResponse.postProcessingToken;
+			this.builder.retainChannels(marshaledResponse.ownedChannels());
 			marshaledResponse.getBody().ifPresent(this.builder::body);
 			marshaledResponse.getStreamingResponseBody().ifPresent(this.builder::streamingResponseBody);
+		}
+
+		private void retainCurrentBody() {
+			if (this.builder.body instanceof MarshaledResponseBody.FileChannel channel && channel.getCloseOnComplete())
+				this.builder.retainChannels(List.of(channel.getChannel()));
 		}
 
 		@NonNull
@@ -805,6 +920,8 @@ public final class MarshaledResponse {
 		 */
 		@NonNull
 		public Copier body(byte @Nullable [] bytes) {
+			if (bytes == null) return withoutBody();
+			retainCurrentBody();
 			this.builder.body(bytes);
 			return this;
 		}
@@ -818,6 +935,8 @@ public final class MarshaledResponse {
 		 */
 		@NonNull
 		public Copier body(@Nullable MarshaledResponseBody body) {
+			if (body == null) return withoutBody();
+			retainCurrentBody();
 			this.builder.body(body);
 			return this;
 		}
@@ -831,12 +950,15 @@ public final class MarshaledResponse {
 		 */
 		@NonNull
 		public Copier body(@Nullable Path path) {
+			if (path == null) return withoutBody();
+			retainCurrentBody();
 			this.builder.body(path);
 			return this;
 		}
 
 		@NonNull
 		public Copier body(@NonNull Path path, @NonNull Long offset, @NonNull Long count) {
+			retainCurrentBody();
 			this.builder.body(path, offset, count);
 			return this;
 		}
@@ -846,6 +968,7 @@ public final class MarshaledResponse {
 											 @NonNull Long offset,
 											 @NonNull Long count,
 											 @NonNull Boolean closeOnComplete) {
+			retainCurrentBody();
 			this.builder.body(fileChannel, offset, count, closeOnComplete);
 			return this;
 		}
@@ -859,6 +982,8 @@ public final class MarshaledResponse {
 		 */
 		@NonNull
 		public Copier body(@Nullable ByteBuffer byteBuffer) {
+			if (byteBuffer == null) return withoutBody();
+			retainCurrentBody();
 			this.builder.body(byteBuffer);
 			return this;
 		}
@@ -897,14 +1022,17 @@ public final class MarshaledResponse {
 		/**
 		 * Removes the response body from this copier.
 		 * <p>
-		 * If the current body owns a caller-supplied {@link FileChannel}, the channel is closed before it is
-		 * removed. Path-backed file bodies are lazy and do not hold open resources at this point.
+		 * An owned channel remains open while copying, including when the replacement is bodyless or
+		 * independent bytes. The completed response retains that predecessor until its terminal owner invokes
+		 * {@link MarshaledResponse#close()}. A replacement channel or stream may still use it.
+		 * Path-backed bodies do not hold open resources.
 		 *
 		 * @return this copier
 		 */
 		@NonNull
 		public Copier withoutBody() {
-			this.builder.withoutBody();
+			retainCurrentBody();
+			this.builder.body = null;
 			return this;
 		}
 

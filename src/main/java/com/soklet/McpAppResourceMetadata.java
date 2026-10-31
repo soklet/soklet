@@ -133,6 +133,9 @@ public final class McpAppResourceMetadata {
 	 * <p>This domain is closed for 4.0. Adding a permission requires an explicit
 	 * domain and API-evolution amendment; raw metadata cannot bypass this domain.
 	 *
+	 * <p>
+	 * This is a closed domain; exhaustive switches are supported, and any new alternative requires an explicit reviewed contract amendment.
+	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	public enum Permission {

@@ -164,11 +164,12 @@ public final class McpSkillPage implements McpOperationResult {
 		 *
 		 * @param nextCursor next cursor
 		 * @return this builder
+		 * @throws IllegalArgumentException if the cursor contains malformed UTF-16
 		 * @throws NullPointerException if the cursor is null
 		 */
 		@NonNull
 		public Builder nextCursor(@NonNull String nextCursor) {
-			this.nextCursor = requireNonNull(nextCursor);
+			this.nextCursor = McpContentValueSupport.requireWellFormedString(requireNonNull(nextCursor));
 			return this;
 		}
 

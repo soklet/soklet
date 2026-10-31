@@ -32,6 +32,7 @@ import com.soklet.McpLocalizationResult;
 import com.soklet.McpLocalizer;
 import com.soklet.McpProtocolVersion;
 import com.soklet.McpRateLimiter;
+import com.soklet.McpTokenBucketConfig;
 import com.soklet.McpRequestContext;
 import com.soklet.McpResourceDescriptor;
 import com.soklet.McpResourceOutput;
@@ -191,8 +192,12 @@ public final class AppsFixture {
 				.catalogAccessPolicy(McpCatalogAccessPolicy.fromEvaluators(
 						(context, tool, features) -> caller(context).allowed(),
 						(context, prompt, features) -> false))
-				.requestRateLimiter(McpRateLimiter.fromInMemoryDefaults())
-				.toolRateLimiter(McpRateLimiter.fromInMemoryDefaults())
+				.requestRateLimiter(McpRateLimiter.fromInMemoryTokenBucket(
+						McpTokenBucketConfig.withCapacity(20L).refillTokens(60L)
+								.refillInterval(Duration.ofMinutes(1)).build()))
+				.toolRateLimiter(McpRateLimiter.fromInMemoryTokenBucket(
+						McpTokenBucketConfig.withCapacity(20L).refillTokens(60L)
+								.refillInterval(Duration.ofMinutes(1)).build()))
 				.subscriptionAuthorizer(McpSubscriptionAuthorizer.denyAllInstance())
 				.localizer(McpLocalizer.withFallbackLocale(Locale.US, request -> {
 					Caller admitted = caller(request.getRequestContext());

@@ -65,6 +65,78 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 			.build();
 
 	@Test
+	public void toolsWithoutALimiterHaveNoImplicitQuotaAndStillChargeRequestLimiter()
+			throws Exception {
+		AtomicInteger handled = new AtomicInteger();
+		AtomicInteger requestCharges = new AtomicInteger();
+		McpEndpoint endpoint = endpoint("optional-tool-limiter", (request, arguments, features) -> {
+			handled.incrementAndGet();
+			return McpCompleteResult.fromToolText("unlimited-by-policy");
+		});
+		McpServer server = serverBuilder(endpoint, McpAdmissionController.acceptAllInstance(),
+				context -> McpRateLimitDecision.denied(TOOL_RETRY_AFTER))
+				.toolRateLimiter(null)
+				.requestRateLimiter(context -> {
+					requestCharges.incrementAndGet();
+					return McpRateLimitDecision.allowed();
+				})
+				.build();
+		Assertions.assertTrue(server.getToolRateLimiter().isEmpty());
+		Soklet owner = managedSoklet(server);
+		try {
+			owner.start();
+			for (int index = 0; index < 25; index++)
+				assertSuccess(callTool(server, "optional-" + index), "optional-" + index);
+			Assertions.assertEquals(25, handled.get());
+			Assertions.assertEquals(25, requestCharges.get());
+			assertIdleStartedDiagnostics(server);
+		} finally {
+			stopAndAssertClean(owner, server);
+		}
+	}
+
+	@Test
+	public void endpointAndToolOverridesEnforceQuotasWithoutAServerFallback()
+			throws Exception {
+		for (String mode : List.of("endpoint-direct", "endpoint-named", "tool-direct", "tool-named")) {
+			OnePermitLimiter limiter = new OnePermitLimiter(TOOL_RETRY_AFTER, ignored -> {});
+			var toolBuilder = McpToolRegistration.withName(TOOL_NAME,
+					Set.of(McpProtocolVersion.V2026_07_28)).jsonObjectArguments()
+					.handler((request, arguments, features) -> McpCompleteResult.fromToolText("limited"));
+			if (mode.equals("tool-direct"))
+				toolBuilder.rateLimiter(limiter);
+			else if (mode.equals("tool-named"))
+				toolBuilder.rateLimiterName("policy");
+			var endpointBuilder = McpEndpoint.withPath(MCP_PATH,
+					McpImplementation.withNameAndVersion(mode, "1.0.0").build(),
+					Set.of(McpProtocolVersion.V2026_07_28))
+					.toolRegistrations(List.of(toolBuilder.build()));
+			if (mode.equals("endpoint-direct"))
+				endpointBuilder.toolRateLimiter(limiter);
+			else if (mode.equals("endpoint-named"))
+				endpointBuilder.toolRateLimiterName("policy");
+			else
+				endpointBuilder.toolRateLimiter(context -> Assertions.fail(
+						"A tool override must replace the endpoint limiter"));
+			McpServer server = serverBuilder(endpointBuilder.build(),
+					McpAdmissionController.acceptAllInstance(), null)
+					.rateLimiterRegistry(McpRateLimiterRegistry.builder()
+							.addRateLimiter("policy", limiter).build())
+					.build();
+			Assertions.assertTrue(server.getToolRateLimiter().isEmpty());
+			Soklet owner = managedSoklet(server);
+			try {
+				owner.start();
+				assertSuccess(callTool(server, "first"), "first");
+				assertRateLimited(callTool(server, "second"), "second", TOOL_RETRY_AFTER);
+				assertLimiterSnapshot(limiter, 2, 1);
+			} finally {
+				stopAndAssertClean(owner, server);
+			}
+		}
+	}
+
+	@Test
 	public void successfulToolCallTraversesTheExactPublicStageOrder()
 			throws Exception {
 		List<String> stages = Collections.synchronizedList(new ArrayList<>());
@@ -427,7 +499,7 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 
 	private static void assertInternalError(HttpResponse<String> response,
 			String expectedId) {
-		Assertions.assertEquals(500, response.statusCode(), response.body());
+		Assertions.assertEquals(200, response.statusCode(), response.body());
 		Assertions.assertEquals(JSON_MEDIA_TYPE,
 				response.headers().firstValue("Content-Type").orElseThrow());
 		Assertions.assertEquals("no-store",

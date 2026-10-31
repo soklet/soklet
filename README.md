@@ -60,6 +60,17 @@ Similarly-flavored commercially-friendly OSS libraries are available.
 - [Pyranid](https://www.pyranid.com) - makes working with JDBC pleasant
 - [Lokalized](https://www.lokalized.com) - natural-sounding translations (i18n) via expression language
 
+### Public API evolution
+
+Public enums and sealed roots are classified in their Javadocs. Evolutionary
+types can gain reviewed constants or permitted subtypes in 4.x; application
+switches should include a safe default. Types explicitly documented as closed
+support exhaustive switches. The reviewed [core inventory](api/core-public-evolution-inventory.json)
+and [MCP inventory](api/mcp/mcp-public-evolution-inventory.json) record each
+classification, and the evolution verifier checks that the guidance is present
+on every listed owner. New telemetry values still require explicit cardinality
+and privacy review; do not derive metric labels from enum names automatically.
+
 ### License
 
 [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0)
@@ -482,24 +493,21 @@ SokletConfig config = SokletConfig.withHttpServer(
     String body = request.getBodyAsString()
       .filter(value -> !value.isBlank())
       .orElseThrow(() -> new IllegalRequestBodyException(
-        "Request body must contain JSON."
-      ));
+        "Request body must contain JSON."));
 
     try {
       Object value = GSON.fromJson(body, requestBodyType);
 
       if (value == null)
         throw new IllegalRequestBodyException(
-          "Request body must contain a non-null JSON value."
-        );
+          "Request body must contain a non-null JSON value.");
 
       return Optional.of(value);
     } catch (JsonParseException e) {
       // Expected parse failures are client errors. Keep request data and
       // the parser's input-bearing cause out of the public diagnostic.
       throw new IllegalRequestBodyException(
-        "Request body is not valid JSON."
-      );
+        "Request body is not valid JSON.");
     }
   }
 }).build();
@@ -613,7 +621,7 @@ SokletConfig config = SokletConfig.withHttpServer(
 
 ##### File and Buffer Responses
 
-Already know exactly what you want to send over the wire? Use [`MarshaledResponse`](https://javadoc.soklet.com/com/soklet/MarshaledResponse.html) to skip additional processing. File-backed responses using the JDK's standard file channels pass the real socket target to `FileChannel.transferTo`, allowing native transfer when supported. Custom and other provider file channels use a typed socket adapter to distinguish source and target failures. Native zero-copy is not guaranteed across platforms or file/channel implementations.
+Already know exactly what you want to send over the wire? Use [`MarshaledResponse`](https://javadoc.soklet.com/com/soklet/MarshaledResponse.html) to supply a prepared body without ordinary serialization. Configured final post-processing and transport framing still apply. File-backed responses using the JDK's standard file channels pass the real socket target to `FileChannel.transferTo`, allowing native transfer when supported. Custom and other provider file channels use a typed socket adapter to distinguish source and target failures. Native zero-copy is not guaranteed across platforms or file/channel implementations.
 
 ```java
 @GET("/example-image.png")
@@ -945,16 +953,15 @@ endpoint looks like this:
 
 ```java
 McpServer mcpServer = McpServer.withPort(8081)
-  .toolRateLimiter(McpRateLimiter.fromInMemoryDefaults())
   .build();
 
 SokletConfig config = SokletConfig.withMcpServer(mcpServer).build();
 ```
 
-The built-in accept-all admission policy and the in-memory limiter are
-convenient development choices, not production authentication or fleet-wide
-rate limiting. Every tool-bearing server requires a fallback tool limiter. The
-listener binds to `127.0.0.1` by default; configure
+The built-in accept-all admission policy is a development choice. Configure
+application authentication and authorization for private endpoints. Tool rate
+limiting is optional; configure an explicit token bucket or custom limiter when
+the application needs quotas. The listener binds to `127.0.0.1` by default; configure
 [`McpServer.Builder::host`](<https://javadoc.soklet.com/com/soklet/McpServer.Builder.html#host(java.lang.String)>),
 [`McpServer.Builder::allowedHosts`](<https://javadoc.soklet.com/com/soklet/McpServer.Builder.html#allowedHosts(java.util.Set)>),
 authentication/admission, and TLS termination deliberately
@@ -1703,10 +1710,27 @@ SokletConfig config = SokletConfig.withHttpServer(server)
             .accessControlAllowHeaders(Set.of("*"))
             .accessControlAllowCredentials(true)
             .accessControlMaxAge(Duration.ofMinutes(10))
-            .build()
-        );
+            .build());
 
       return Optional.empty();
+    }
+
+    @NonNull
+    @Override
+    public Optional<CorsPreflightResponse> authorizePreflight(
+      @NonNull Request request,
+      @NonNull CorsPreflight corsPreflight,
+      @NonNull Set<HttpMethod> availableHttpMethods
+    ) {
+      if (!originMatchesValidSubdomain(corsPreflight.getOrigin()))
+        return Optional.empty();
+      return Optional.of(CorsPreflightResponse
+        .withAccessControlAllowOrigin(corsPreflight.getOrigin())
+        .accessControlAllowMethods(availableHttpMethods)
+        .accessControlAllowHeaders(Set.of("*"))
+        .accessControlAllowCredentials(true)
+        .accessControlMaxAge(Duration.ofMinutes(10))
+        .build());
     }
 
     @NonNull
@@ -1720,8 +1744,7 @@ SokletConfig config = SokletConfig.withHttpServer(server)
         return Optional.of(
           CorsResponse.withAccessControlAllowOrigin(cors.getOrigin())
             .accessControlExposeHeaders(Set.of("*"))
-            .build()
-        );
+            .build());
 
       return Optional.empty();
     }
@@ -1883,8 +1906,7 @@ logical port defaults to `0`. Override the port and add any test-specific
 settings in that callback when needed. The builder uses the same
 classpath-discovery and accept-all defaults as
 [`McpServer::withPort`](<https://javadoc.soklet.com/com/soklet/McpServer.html#withPort(java.lang.Integer)>),
-including its requirement to configure a fallback tool rate limiter when any
-discovered endpoint has a tool. Supply an explicit endpoint registry or
+with optional tool rate limiting. Supply an explicit endpoint registry or
 admission controller through the MCP builder when a test must override either
 default:
 
@@ -1893,8 +1915,7 @@ SimulatorConfig simulatorConfig = SimulatorConfig.builder()
     .configureMcpServer(mcpServerBuilder -> mcpServerBuilder
         .port(8082)
         .endpointRegistry(testEndpointRegistry)
-        .admissionController(testAdmissionController)
-        .toolRateLimiter(McpRateLimiter.fromInMemoryDefaults()))
+        .admissionController(testAdmissionController))
     .build();
 ```
 

@@ -658,6 +658,7 @@
 {"id":"M:com/soklet/ResponseGzipPolicy#disabledInstance()Lcom/soklet/ResponseGzipPolicy;","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
 {"id":"M:com/soklet/ResponseGzipPolicy#fromDefaultsWithMinimumBodySizeInBytes(Ljava/lang/Integer;)Lcom/soklet/ResponseGzipPolicy;","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
 {"id":"M:com/soklet/ResponseGzipPolicy#shouldGzip(Lcom/soklet/Request;Lcom/soklet/MarshaledResponse;)Ljava/lang/Boolean;","kind":"method","changes":[{"type":"METHOD_REMOVED","site":"method","binaryCompatible":false,"sourceCompatible":false}]}
+{"id":"M:com/soklet/ResponseMarshaler#postProcess(Lcom/soklet/MarshaledResponse;)Lcom/soklet/MarshaledResponse;","kind":"method","changes":[{"type":"METHOD_ADDED_TO_INTERFACE","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
 {"id":"M:com/soklet/ResponseStream#asOutputStream()Ljava/io/OutputStream;","kind":"method","changes":[{"type":"METHOD_ADDED_TO_INTERFACE","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
 {"id":"M:com/soklet/ResponseStream#flush()V","kind":"method","changes":[{"type":"METHOD_NO_LONGER_THROWS_CHECKED_EXCEPTION","site":"method","binaryCompatible":true,"sourceCompatible":false}]}
 {"id":"M:com/soklet/ResponseStream#getCancelationToken()Lcom/soklet/CancelationToken;","kind":"method","changes":[{"type":"METHOD_ADDED_TO_INTERFACE","site":"method","binaryCompatible":true,"sourceCompatible":false}]}

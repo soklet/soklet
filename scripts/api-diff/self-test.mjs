@@ -297,6 +297,24 @@ assert.match(addedApiSignatures,
   /"id":"C:com\/soklet\/annotation\/McpMarker"/);
 assert.doesNotMatch(addedApiSignatures, /FutureApi|PublicInternal|RemovedOnlyHost|#legacy\(\)V/);
 
+// japicmp's text report sorts genericTemplates in place, losing source order
+// before XML serialization. Keep it disabled and pin order in canonical rows.
+assert.match(readUtf8(resolve(projectRoot, 'pom.xml')),
+  /<skipDiffReport>true<\/skipDiffReport>/u);
+const genericTemplate = addedApiXml.match(
+  /<genericTemplate\b[^>]*name="R"[\s\S]*?<\/genericTemplate>/u)?.[0];
+assert.ok(genericTemplate);
+const secondTemplate = genericTemplate.replace('name="R"', 'name="T"');
+const orderedGenericsXml = addedApiXml.replace(genericTemplate,
+  `${genericTemplate}\n${secondTemplate}`);
+const reversedGenericsXml = addedApiXml.replace(genericTemplate,
+  `${secondTemplate}\n${genericTemplate}`);
+const orderedSignatures = apiSignatureJsonlFromXml(orderedGenericsXml, addedApiIncludes);
+assert.notEqual(orderedSignatures,
+  apiSignatureJsonlFromXml(reversedGenericsXml, addedApiIncludes));
+assert.throws(() => verifyReviewedApiSignatures(reversedGenericsXml,
+  addedApiIncludes, orderedSignatures), /changed \(1\)/u);
+
 const addedSignatureLines = addedApiSignatures.trimEnd().split('\n');
 assert.throws(
   () => verifyReviewedApiSignatures(

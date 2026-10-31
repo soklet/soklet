@@ -552,6 +552,9 @@ public final class ResponseCookie {
 	 * <p>
 	 * See <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie#samesitesamesite-value">https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie#samesitesamesite-value</a> for details.
 	 *
+	 * <p>
+	 * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
+	 *
 	 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 	 */
 	public enum SameSite {
@@ -611,6 +614,9 @@ public final class ResponseCookie {
 
 	/**
 	 * Represents the {@code Priority} response cookie attribute.
+	 * <p>
+	 * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
+	 *
 	 */
 	public enum Priority {
 		LOW("Low"),

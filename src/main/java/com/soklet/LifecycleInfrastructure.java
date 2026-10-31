@@ -556,8 +556,8 @@ final class LifecycleExecutionContext {
 				depths.remove(this.ownerToken);
 			else
 				depths.put(this.ownerToken, remaining);
-			if (depths.isEmpty())
-				DEPTHS.remove();
+			// Keep the empty per-thread map for the next callback. All owner tokens
+			// have been removed, so this retains no server or application state.
 		}
 	}
 }

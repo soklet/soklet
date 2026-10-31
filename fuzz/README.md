@@ -93,6 +93,13 @@ Checked-in inputs under `src/test/resources/**/<FuzzTest>Inputs/<method>/`
 are curated regression seeds. They are reviewed, named, and should remain small
 enough for fast deterministic replay on every PR and push.
 
+The multipart corpus includes `ci-invalid-filename-codepoint`, the exact
+137-byte input from the 2026-10-30 nightly failure. It must be rejected with a
+typed, redacted request-body error, rather than leaking an unchecked Unicode
+code-point exception.
+The follow-up `duplicate-part-charset` seed checks that ambiguous charset
+declarations inside a part are also reported as redacted request-body errors.
+
 The protocol-neutral fixtures under
 `src/test/resources/com/soklet/json-corpus/` were retained from the removed MCP
 codec for the greenfield JSON implementation. The fuzz-module resource setup
@@ -128,6 +135,12 @@ and validator regression gate, not a comprehensive privacy, security, or
 release-readiness result.
 
 ## CI Behavior
+
+The root, fuzz and soak builds pin Maven Resources Plugin 3.4.0 so Maven's
+implicit plugin selection cannot change resource processing between runs.
+The 2026-10-30 media-range job failed before executing tests while resolving
+the implicitly selected 3.5.0 plugin's parent POM. That parent is available
+again; the explicit pin keeps future builds reproducible.
 
 Pull requests and pushes run deterministic corpus replay with:
 

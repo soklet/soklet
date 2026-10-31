@@ -23,6 +23,12 @@
  * {@link com.soklet.SokletConfig} composes their lifecycle without mounting
  * MCP inside the ordinary HTTP or SSE server.
  * <p>
+ * Unless a type explicitly documents a closed domain, public enums and sealed
+ * roots may gain reviewed constants or permitted subtypes in Soklet 4.x.
+ * Applications switching over evolutionary types should retain a default that
+ * safely handles new alternatives. Closed-domain decision/value families state
+ * their exhaustive-switch contract on the type itself.
+ * <p>
  * Full documentation is available at <a href="https://www.soklet.com">https://www.soklet.com</a>.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>

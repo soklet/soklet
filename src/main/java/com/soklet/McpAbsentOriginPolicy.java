@@ -22,6 +22,9 @@ package com.soklet;
  * This policy is independent of Host validation and authorization of requests
  * that do carry an Origin.
  *
+ * <p>
+ * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public enum McpAbsentOriginPolicy {

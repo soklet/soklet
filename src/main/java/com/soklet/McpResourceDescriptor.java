@@ -170,7 +170,7 @@ public final class McpResourceDescriptor {
 
 	@NonNull
 	private static String requireName(@NonNull String name) {
-		requireNonNull(name);
+		McpContentValueSupport.requireWellFormedString(name);
 		if (name.isBlank())
 			throw new IllegalArgumentException(
 					"MCP resource names must not be blank.");

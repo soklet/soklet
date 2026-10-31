@@ -866,7 +866,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 				public Entry<K, V> next() {
 					last = it.next();
 					K key = last.getKey();
-					return new WriteThroughEntry(key);
+					return new WriteThroughEntry(key, last.getValue().value);
 				}
 
 				@Override
@@ -892,9 +892,11 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 
 	private final class WriteThroughEntry implements Entry<K, V> {
 		private final K key;
+		private V value;
 
-		private WriteThroughEntry(K key) {
+		private WriteThroughEntry(K key, V value) {
 			this.key = key;
+			this.value = value;
 		}
 
 		@Override
@@ -903,10 +905,8 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 		}
 
 		@Override
-		@Nullable
 		public V getValue() {
-			Node<K, V> node = map.get(key);
-			return node == null ? null : node.value;
+			return this.value;
 		}
 
 		/**
@@ -917,9 +917,9 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 		@Nullable
 		public V setValue(V value) {
 			Objects.requireNonNull(value, "value");
-			Node<K, V> prior = map.get(key);
-			V oldValue = prior == null ? null : prior.value;
+			V oldValue = this.value;
 			ConcurrentLruMap.this.put(key, value);
+			this.value = value;
 			return oldValue;
 		}
 

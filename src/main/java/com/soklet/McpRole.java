@@ -19,6 +19,9 @@ package com.soklet;
 /**
  * MCP conversation role used by prompt messages and content annotations.
  *
+ * <p>
+ * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public enum McpRole {

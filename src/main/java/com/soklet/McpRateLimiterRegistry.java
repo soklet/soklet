@@ -88,7 +88,7 @@ public final class McpRateLimiterRegistry {
 
 	@NonNull
 	private static String requireName(@NonNull String name) {
-		requireNonNull(name);
+		McpContentValueSupport.requireWellFormedString(requireNonNull(name));
 		if (name.isBlank())
 			throw new IllegalArgumentException("Rate-limiter name must not be blank.");
 		return name;

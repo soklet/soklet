@@ -26,6 +26,7 @@ import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -44,6 +45,14 @@ interface McpRuntimeObservationSink {
 	@NonNull
 	McpRuntimeRequestObservation didStartRequest(
 			@NonNull McpRuntimeRequestInput input);
+
+	/** Creates execution context without emitting either half of an omitted observation pair. */
+	@NonNull
+	default Optional<@NonNull McpRequestContext> contextForOmittedRequest(
+			@NonNull McpRuntimeRequestInput input) {
+		requireNonNull(input);
+		return Optional.empty();
+	}
 
 	@NonNull
 	static McpRuntimeObservationSink disabledInstance() {
@@ -128,7 +137,36 @@ record McpRuntimeRequestInput(@NonNull Request request,
 		@NonNull McpJsonObject inputResponses,
 		@NonNull Optional<@NonNull McpRuntimeRequestState> requestState,
 		@NonNull List<@NonNull String> acceptLanguageValues,
-		@NonNull McpAdmissionIdentity admissionIdentity) {
+		@NonNull McpAdmissionIdentity admissionIdentity,
+		@NonNull Optional<@NonNull Instant> startedAt) {
+	McpRuntimeRequestInput(@NonNull Request request,
+			@NonNull Map<@NonNull String, @NonNull String> endpointPathParameters,
+			@NonNull String jsonRpcMethod,
+			@NonNull Optional<@NonNull McpJsonRpcId> requestId,
+			@NonNull String protocolVersion,
+			@NonNull Optional<@NonNull String> operationName,
+			@NonNull Optional<@NonNull McpImplementationMetadata> clientInformation,
+			@NonNull McpJsonObject clientCapabilities,
+			@NonNull McpJsonObject requestMetadata,
+			@NonNull McpJsonObject inputResponses,
+			@NonNull Optional<@NonNull McpRuntimeRequestState> requestState,
+			@NonNull List<@NonNull String> acceptLanguageValues,
+			@NonNull McpAdmissionIdentity admissionIdentity) {
+		this(request, endpointPathParameters, jsonRpcMethod, requestId,
+				protocolVersion, operationName, clientInformation,
+				clientCapabilities, requestMetadata, inputResponses, requestState,
+				acceptLanguageValues, admissionIdentity, Optional.empty());
+	}
+
+	@NonNull
+	McpRuntimeRequestInput withStartedAt(@NonNull Instant startedAt) {
+		return new McpRuntimeRequestInput(request, endpointPathParameters,
+				jsonRpcMethod, requestId, protocolVersion, operationName,
+				clientInformation, clientCapabilities, requestMetadata,
+				inputResponses, requestState, acceptLanguageValues,
+				admissionIdentity, Optional.of(requireNonNull(startedAt)));
+	}
+
 	McpRuntimeRequestInput(@NonNull Request request,
 			@NonNull Map<@NonNull String, @NonNull String> endpointPathParameters,
 			@NonNull String jsonRpcMethod,
@@ -196,6 +234,7 @@ record McpRuntimeRequestInput(@NonNull Request request,
 		acceptLanguageValues = List.copyOf(
 				requireNonNull(acceptLanguageValues));
 		requireNonNull(admissionIdentity);
+		requireNonNull(startedAt);
 	}
 
 	@Override

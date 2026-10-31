@@ -508,7 +508,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 
 	private static void assertFixedInternalError(HttpResponse<String> response,
 			String expectedId) {
-		Assertions.assertEquals(500, response.statusCode(), response.body());
+		Assertions.assertEquals(200, response.statusCode(), response.body());
 		assertContains(response.body(), "\"id\":\"" + expectedId + "\"");
 		assertContains(response.body(), "\"code\":-32603");
 		assertContains(response.body(), "\"message\":\"Internal error\"");

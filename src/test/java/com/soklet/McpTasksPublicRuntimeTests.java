@@ -1084,7 +1084,7 @@ public class McpTasksPublicRuntimeTests {
 	private static void assertInternalErrorWithoutDisclosure(
 			@NonNull HttpResponse<String> response, @NonNull String taskId,
 			@NonNull String canary) {
-		assertNoStore(response, 500);
+		assertNoStore(response, 200);
 		Assertions.assertTrue(response.body().contains("\"code\":-32603"),
 				response.body());
 		Assertions.assertTrue(response.body().contains(

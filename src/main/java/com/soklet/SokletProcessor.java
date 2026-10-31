@@ -166,7 +166,7 @@ import static java.util.Objects.requireNonNull;
  *   <li>Replaces entries for touched top-level types and removes retained HTTP/SSE owners absent from the compiler's sources/classpath. Untouched visible types, nested types and dependency JAR owners remain eligible.</li>
  *   <li>A selected HTTP/SSE snapshot that cannot be read completely or contains malformed rows causes a compiler diagnostic and is not overwritten with partial metadata.</li>
  *   <li>Declares wildcard annotation support, while claiming no annotations, so a compiler still invokes it when a touched type removes its final Soklet annotation.</li>
- *   <li>Skips writing the index entirely if compilation errors are present, preventing clobbering a good index.</li>
+ *   <li>Skips publishing HTTP/SSE and MCP indexes when an annotation-processing diagnostic is already known. Later javac errors, including errors in method bodies, are outside this processing-phase guarantee; use a clean build after a failed compilation.</li>
  *   <li>Writes with originating elements (best-effort) so incremental build tools can track dependencies.</li>
  * </ul>
  *
@@ -178,9 +178,11 @@ import static java.util.Objects.requireNonNull;
  *   <li><code>-Asoklet.debug=true|false</code> (default: false)</li>
  * </ul>
  *
- * <p>For incremental HTTP/SSE compilation, untouched owners must remain visible on the compiler's source path or classpath.
+ * <p>For incremental HTTP/SSE and annotated MCP compilation, untouched owners must remain visible on the compiler's source path or classpath.
  * A deleted source whose old classfile is still visible remains a resolvable type; remove that old output or perform a clean build.
  * The optional <code>soklet.pruneDeleted</code> setting additionally checks classfile presence in CLASS_OUTPUT and is stricter than normal compiler-visibility cleanup.
+ * If a cache cannot be updated or invalidated, compilation fails rather than leaving a usable stale fallback.
+ * That diagnostic can follow publication of a CLASS_OUTPUT index; discard failed compiler output and use a clean build before packaging it.
  *
  * <p><strong>Important</strong>: This processor will never create a project-root <code>.soklet</code> directory by default.
  * Persistent caching is only enabled when <code>cacheMode=persistent</code> <em>and</em> <code>soklet.cacheDir</code> is set.
@@ -455,9 +457,6 @@ public final class SokletProcessor extends AbstractProcessor {
 			}
 		}
 
-		// SSE-specific return type check
-		enforceSseReturnTypes(roundEnvironment);
-
 		// Collect + validate
 		collect(roundEnvironment, HttpMethod.GET, GET.class, false);
 		collect(roundEnvironment, HttpMethod.POST, POST.class, false);
@@ -477,10 +476,20 @@ public final class SokletProcessor extends AbstractProcessor {
 				debug("SokletProcessor: compilation has errors; skipping index write to avoid clobbering.");
 				return false;
 			}
-			mergeAndWriteIndex(collected, touchedTopLevelBinaries);
+			// Validate both complete snapshots before publishing either one. Final
+			// MCP validation can reject an untouched endpoint's path/provider pair
+			// after the HTTP merge has already succeeded.
+			PreparedRouteIndex routes = prepareRouteIndex(collected, touchedTopLevelBinaries);
+			if (routes == null)
+				return false;
+			PreparedMcpEndpointIndex endpoints = prepareMcpEndpointIndex(collectedMcpEndpoints,
+					touchedMcpTopLevelBinaries);
+			if (endpoints == null)
+				return false;
+			publishRouteIndex(routes, collected, touchedTopLevelBinaries);
 			if (resourceMethodIndexErrorDetected || resourceMethodAmbiguityDetected)
 				return false;
-			mergeAndWriteMcpEndpointIndex(collectedMcpEndpoints,
+			publishMcpEndpointIndex(endpoints, collectedMcpEndpoints,
 					touchedMcpTopLevelBinaries);
 		}
 
@@ -519,13 +528,23 @@ public final class SokletProcessor extends AbstractProcessor {
 
 			ExecutableElement method = (ExecutableElement) e;
 			TypeElement owner = (TypeElement) method.getEnclosingElement();
-			if (containsErrorType(method.getReturnType())
-					|| method.getParameters().stream().anyMatch(parameter -> containsErrorType(parameter.asType()))) {
+			if (containsErrorType(method.getReturnType(), false)
+					|| method.getParameters().stream().anyMatch(parameter -> containsErrorType(parameter.asType(), false))) {
 				deferredResourceOwners.add(owner.getQualifiedName().toString());
 				if (roundEnv.processingOver()) {
-					error(method, "Soklet: Resource Method contains an unresolved parameter or return type after annotation processing completed.");
+					error(method, "Soklet: Resource Method contains an unresolved parameter or return type after annotation processing completed: return type %s, parameter types %s.", method.getReturnType(), method.getParameters().stream().map(parameter -> parameter.asType().toString()).collect(Collectors.joining(", ")));
 					resourceMethodIndexErrorDetected = true;
 				}
+				continue;
+			}
+
+			// This candidate set includes repeated annotations and methods revisited
+			// after another processor resolves their parameter or return types.
+			if (sseEventSource && sseHandshakeResultType != null
+					&& !types.isAssignable(method.getReturnType(), sseHandshakeResultType)) {
+				error(method, "Soklet: Methods annotated with @SseEventSource must specify a return type of SseHandshakeResult (found: %s).",
+						method.getReturnType());
+				resourceMethodIndexErrorDetected = true;
 				continue;
 			}
 
@@ -742,13 +761,17 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	private boolean containsErrorType(@NonNull TypeMirror type) {
+		return containsErrorType(type, true);
+	}
+
+	private boolean containsErrorType(@NonNull TypeMirror type, boolean inspectRecordComponents) {
 		return containsErrorType(type, new LinkedHashSet<>(), 1,
-				new int[] { 0 });
+				new int[] { 0 }, inspectRecordComponents);
 	}
 
 	private boolean containsErrorType(@NonNull TypeMirror type,
 			@NonNull Set<@NonNull TypeElement> activeRecords, int depth,
-			int @NonNull [] visitedNodeCount) {
+			int @NonNull [] visitedNodeCount, boolean inspectRecordComponents) {
 		if (depth > MCP_SCHEMA_PREFLIGHT_MAXIMUM_DEPTH
 				|| visitedNodeCount[0]
 				>= MCP_SCHEMA_PREFLIGHT_MAXIMUM_NODE_COUNT)
@@ -758,18 +781,19 @@ public final class SokletProcessor extends AbstractProcessor {
 			return true;
 		if (type instanceof ArrayType array)
 			return containsErrorType(array.getComponentType(), activeRecords,
-					depth + 1, visitedNodeCount);
+					depth + 1, visitedNodeCount, inspectRecordComponents);
 		if (type instanceof DeclaredType declared) {
 			TypeMirror enclosing = declared.getEnclosingType();
 			if (enclosing.getKind() != TypeKind.NONE
 					&& containsErrorType(enclosing, activeRecords, depth + 1,
-							visitedNodeCount))
+							visitedNodeCount, inspectRecordComponents))
 				return true;
 			for (TypeMirror argument : declared.getTypeArguments())
 				if (containsErrorType(argument, activeRecords, depth + 1,
-						visitedNodeCount))
+						visitedNodeCount, inspectRecordComponents))
 					return true;
-			if (!(declared.asElement() instanceof TypeElement declaration)
+			if (!inspectRecordComponents
+					|| !(declared.asElement() instanceof TypeElement declaration)
 					|| declaration.getKind() != ElementKind.RECORD
 					|| !activeRecords.add(declaration))
 				return false;
@@ -781,7 +805,7 @@ public final class SokletProcessor extends AbstractProcessor {
 					if (accessorType instanceof ExecutableType accessor
 							&& containsErrorType(accessor.getReturnType(),
 									activeRecords, depth + 1,
-									visitedNodeCount))
+									visitedNodeCount, inspectRecordComponents))
 						return true;
 				}
 			} finally {
@@ -789,21 +813,27 @@ public final class SokletProcessor extends AbstractProcessor {
 			}
 			return false;
 		}
-		// Unsupported operation type variables are rejected later by the
-		// signature policies. Avoid traversing self-referential generic bounds
-		// while looking only for compiler ERROR placeholders that another
-		// processor may resolve.
-		if (type instanceof TypeVariable)
+		// HTTP erases type variables, so their upper bounds must resolve before
+		// indexing. The shared depth/node budget bounds self-referential types.
+		// MCP rejects operation type variables through its signature policy.
+		if (type instanceof TypeVariable variable)
+			return !inspectRecordComponents && containsErrorType(variable.getUpperBound(),
+					activeRecords, depth + 1, visitedNodeCount, false);
+		if (type instanceof javax.lang.model.type.IntersectionType intersection) {
+			for (TypeMirror bound : intersection.getBounds())
+				if (containsErrorType(bound, activeRecords, depth + 1, visitedNodeCount, inspectRecordComponents))
+					return true;
 			return false;
+		}
 		if (type instanceof WildcardType wildcard) {
 			TypeMirror extendsBound = wildcard.getExtendsBound();
 			TypeMirror superBound = wildcard.getSuperBound();
 			return (extendsBound != null
 					&& containsErrorType(extendsBound, activeRecords, depth + 1,
-							visitedNodeCount))
+							visitedNodeCount, inspectRecordComponents))
 					|| (superBound != null
 					&& containsErrorType(superBound, activeRecords, depth + 1,
-							visitedNodeCount));
+							visitedNodeCount, inspectRecordComponents));
 		}
 		return false;
 	}
@@ -1363,11 +1393,15 @@ public final class SokletProcessor extends AbstractProcessor {
 							&& resourceTemplatesPotentiallyOverlap(
 							parsedTemplates.get(leftIndex),
 							parsedTemplates.get(rightIndex), overlapBudget)) {
+						if (overlapBudget.exhausted()) {
+							mcpError(endpointType,
+									"Soklet: MCP resource URI template overlap validation exceeded its comparison budget in endpoint %s.",
+									endpointBinaryName);
+							break templatePairs;
+						}
 						mcpError(right.method(),
 								"Soklet: Potentially overlapping MCP resource URI templates in endpoint %s.",
 								endpointBinaryName);
-						if (overlapBudget.exhausted())
-							break templatePairs;
 					}
 				}
 			}
@@ -2638,7 +2672,7 @@ public final class SokletProcessor extends AbstractProcessor {
 			// Keep annotation validation aligned with resource routing's RFC 3986
 			// contract, rather than Java URI's additional scoped IPv6 syntax.
 			boolean scopedIpv6 = host != null && host.startsWith("[") && host.indexOf('%') >= 0;
-			return uri.isAbsolute() && uri.equals(uri.normalize()) && !scopedIpv6;
+			return uri.isAbsolute() && !McpResourceTemplateValidation.hasDotPathSegments(uri) && !scopedIpv6;
 		} catch (IllegalArgumentException exception) {
 			return false;
 		}
@@ -3990,45 +4024,6 @@ public final class SokletProcessor extends AbstractProcessor {
 		}
 	}
 
-	// ---- SSE return-type validation ------------------------------------------
-
-	private void enforceSseReturnTypes(RoundEnvironment roundEnv) {
-		enforceAnnotatedReturnTypes(roundEnv, SseEventSource.class, sseHandshakeResultType, "SseHandshakeResult");
-	}
-
-	private void enforceAnnotatedReturnTypes(RoundEnvironment roundEnv,
-																					 Class<? extends Annotation> annotationType,
-																					 TypeMirror expectedReturnType,
-																					 String expectedReturnTypeName) {
-		if (expectedReturnType == null)
-			return;
-
-		TypeElement annotationElement = elements.getTypeElement(annotationType.getCanonicalName());
-		if (annotationElement == null)
-			return;
-
-		for (Element element : roundEnv.getElementsAnnotatedWith(annotationElement)) {
-			if (element.getKind() != ElementKind.METHOD) {
-				error(element, "@%s can only be applied to methods.", annotationType.getSimpleName());
-				continue;
-			}
-
-			ExecutableElement method = (ExecutableElement) element;
-			TypeMirror returnType = method.getReturnType();
-			boolean assignable = types.isAssignable(returnType, expectedReturnType);
-
-			if (!assignable) {
-				error(element,
-						"Soklet: Methods annotated with @%s must specify a return type of %s (found: %s).",
-						annotationType.getSimpleName(), expectedReturnTypeName, prettyType(returnType));
-			}
-		}
-	}
-
-	private static String prettyType(TypeMirror t) {
-		return (t == null ? "null" : t.toString());
-	}
-
 	// ---- Index read/merge/write ----------------------------------------------
 
 	private void detectResourceMethodAmbiguity(@NonNull Element element,
@@ -4137,7 +4132,8 @@ public final class SokletProcessor extends AbstractProcessor {
 		return true;
 	}
 
-	private void mergeAndWriteIndex(List<ResourceMethodDeclaration> newlyCollected,
+	@Nullable
+	private PreparedRouteIndex prepareRouteIndex(List<ResourceMethodDeclaration> newlyCollected,
 																	Set<String> touchedTopLevelBinaries) {
 
 		Path classOutputRoot = findClassOutputRoot();
@@ -4165,7 +4161,7 @@ public final class SokletProcessor extends AbstractProcessor {
 		if (!existingSnapshotRead && persistentIndexPath != null)
 			readIndexFromPath(persistentIndexPath, merged);
 		if (resourceMethodIndexErrorDetected)
-			return;
+			return null;
 
 		debug("SokletProcessor: mergedExistingIndexSize=%d", merged.size());
 
@@ -4189,7 +4185,7 @@ public final class SokletProcessor extends AbstractProcessor {
 			}
 		}
 		if (resourceMethodAmbiguityDetected)
-			return;
+			return null;
 
 		// Add new entries
 		for (ResourceMethodDeclaration r : dedupeAndOrder(newlyCollected)) {
@@ -4198,7 +4194,10 @@ public final class SokletProcessor extends AbstractProcessor {
 
 		// Optional prune by classfile existence (NOT IDE-safe by default)
 		if (pruneDeletedEnabled && classOutputRoot != null) {
-			merged.values().removeIf(r -> !classFileExistsInOutputRoot(classOutputRoot, r.className()));
+			Set<String> currentOwners = newlyCollected.stream()
+					.map(ResourceMethodDeclaration::className).collect(Collectors.toSet());
+			merged.values().removeIf(r -> !currentOwners.contains(r.className())
+					&& !classFileExistsInOutputRoot(classOutputRoot, r.className()));
 			debug("SokletProcessor: afterPruneDeleted=%d", merged.size());
 		}
 
@@ -4209,44 +4208,64 @@ public final class SokletProcessor extends AbstractProcessor {
 				.thenComparing(ResourceMethodDeclaration::className)
 				.thenComparing(ResourceMethodDeclaration::methodName));
 
-		// Write CLASS_OUTPUT index (the real output)
-		writeRoutesIndexResource(toWrite, classOutputIndexPath, touchedTopLevelBinaries, newlyCollected);
+		return new PreparedRouteIndex(toWrite, classOutputIndexPath,
+				sideCarIndexPath, persistentIndexPath);
+	}
 
-		// Write caches (best-effort)
-		if (sideCarIndexPath != null) writeIndexFileAtomically(sideCarIndexPath, toWrite);
-		if (persistentIndexPath != null) writeIndexFileAtomically(persistentIndexPath, toWrite);
-
-		debug("SokletProcessor: wroteIndexSize=%d", toWrite.size());
+	private void publishRouteIndex(@NonNull PreparedRouteIndex prepared,
+			@NonNull List<ResourceMethodDeclaration> newlyCollected,
+			@NonNull Set<String> touchedTopLevelBinaries) {
+		writeRoutesIndexResource(prepared.declarations(), prepared.classOutputIndexPath(),
+				touchedTopLevelBinaries, newlyCollected);
+		if (prepared.sideCarIndexPath() != null)
+			writeIndexFileAtomically(prepared.sideCarIndexPath(), prepared.declarations());
+		if (prepared.persistentIndexPath() != null)
+			writeIndexFileAtomically(prepared.persistentIndexPath(), prepared.declarations());
+		debug("SokletProcessor: wroteIndexSize=%d", prepared.declarations().size());
 	}
 
 	private boolean resourceOwnerTypeAvailable(@NonNull String binaryName) {
+		return resourceOwnerType(binaryName) != null;
+	}
+
+	@Nullable
+	private TypeElement resourceOwnerType(@NonNull String binaryName) {
 		TypeElement direct = elements.getTypeElement(binaryName);
 		if (direct != null && elements.getBinaryName(direct).contentEquals(binaryName))
-			return true;
+			return direct;
 		// Elements expects canonical names for nested types. Walk actual enclosed
 		// declarations rather than replacing every '$', which is also legal in identifiers.
 		for (int separator = binaryName.lastIndexOf('$'); separator >= 0;
 				separator = binaryName.lastIndexOf('$', separator - 1)) {
 			TypeElement enclosing = elements.getTypeElement(binaryName.substring(0, separator));
-			if (enclosing != null && containsResourceOwner(enclosing, binaryName))
-				return true;
+			if (enclosing != null) {
+				TypeElement owner = findResourceOwner(enclosing, binaryName);
+				if (owner != null)
+					return owner;
+			}
 		}
-		return false;
+		return null;
 	}
 
-	private boolean containsResourceOwner(@NonNull TypeElement typeElement, @NonNull String binaryName) {
+	@Nullable
+	private TypeElement findResourceOwner(@NonNull TypeElement typeElement, @NonNull String binaryName) {
 		String name = elements.getBinaryName(typeElement).toString();
 		if (name.equals(binaryName))
-			return true;
+			return typeElement;
 		if (!binaryName.startsWith(name + "$"))
-			return false;
-		for (Element enclosed : typeElement.getEnclosedElements())
-			if (enclosed instanceof TypeElement nested && containsResourceOwner(nested, binaryName))
-				return true;
-		return false;
+			return null;
+		for (Element enclosed : typeElement.getEnclosedElements()) {
+			if (enclosed instanceof TypeElement nested) {
+				TypeElement owner = findResourceOwner(nested, binaryName);
+				if (owner != null)
+					return owner;
+			}
+		}
+		return null;
 	}
 
-	private void mergeAndWriteMcpEndpointIndex(
+	@Nullable
+	private PreparedMcpEndpointIndex prepareMcpEndpointIndex(
 			@NonNull List<McpEndpointProviderDeclaration> newlyCollected,
 			@NonNull Set<String> touchedTopLevelBinaries) {
 		Path classOutputRoot = findClassOutputRoot();
@@ -4283,7 +4302,7 @@ public final class SokletProcessor extends AbstractProcessor {
 		if (!existingSnapshotRead && persistentIndexPath != null)
 			readMcpEndpointIndexFromPath(persistentIndexPath, merged);
 		if (mcpProcessingErrorDetected)
-			return;
+			return null;
 
 		merged.values().removeIf(declaration -> touchedTopLevelBinaries
 				.contains(declaration.topLevelBinaryName()));
@@ -4318,7 +4337,7 @@ public final class SokletProcessor extends AbstractProcessor {
 				mcpError("Soklet: Duplicate annotated MCP endpoint path is declared by %s and %s.",
 						previous,
 						declaration.endpointBinaryName());
-				return;
+				return null;
 			}
 		}
 
@@ -4331,7 +4350,7 @@ public final class SokletProcessor extends AbstractProcessor {
 					&& !previous.equals(declaration.endpointBinaryName())) {
 				mcpError("Soklet: Generated MCP provider %s is assigned to multiple endpoint classes.",
 						declaration.providerBinaryName());
-				return;
+				return null;
 			}
 		}
 
@@ -4341,16 +4360,24 @@ public final class SokletProcessor extends AbstractProcessor {
 				.comparing(McpEndpointProviderDeclaration::endpointBinaryName)
 				.thenComparing(
 						McpEndpointProviderDeclaration::providerBinaryName));
-		writeMcpEndpointIndexResource(ordered, classOutputIndexPath,
+		return new PreparedMcpEndpointIndex(ordered, classOutputIndexPath,
+				sideCarIndexPath, persistentIndexPath);
+	}
+
+	private void publishMcpEndpointIndex(@NonNull PreparedMcpEndpointIndex prepared,
+			@NonNull List<McpEndpointProviderDeclaration> newlyCollected,
+			@NonNull Set<String> touchedTopLevelBinaries) {
+		writeMcpEndpointIndexResource(prepared.declarations(), prepared.classOutputIndexPath(),
 				touchedTopLevelBinaries, newlyCollected);
 		if (mcpProcessingErrorDetected)
 			return;
-		if (sideCarIndexPath != null)
-			writeMcpEndpointIndexCache(sideCarIndexPath, ordered);
-		if (persistentIndexPath != null)
-			writeMcpEndpointIndexCache(persistentIndexPath, ordered);
-		debug("SokletProcessor: wroteMcpEndpointIndexSize=%d",
-				ordered.size());
+		Path sidecar = prepared.sideCarIndexPath();
+		if (sidecar != null)
+			writeMcpEndpointIndexCache(sidecar, prepared.declarations());
+		Path persistent = prepared.persistentIndexPath();
+		if (persistent != null)
+			writeMcpEndpointIndexCache(persistent, prepared.declarations());
+		debug("SokletProcessor: wroteMcpEndpointIndexSize=%d", prepared.declarations().size());
 	}
 
 	private boolean readMcpEndpointIndexFromLocation(
@@ -4606,13 +4633,14 @@ public final class SokletProcessor extends AbstractProcessor {
 																		Set<String> touchedTopLevelBinaries) {
 		if (touchedTopLevelBinaries == null || touchedTopLevelBinaries.isEmpty()) return;
 
-		merged.values().removeIf(r -> {
-			String ownerBin = r.className();
-			for (String top : touchedTopLevelBinaries) {
-				if (ownerBin.equals(top) || ownerBin.startsWith(top + "$")) return true;
-			}
-			return false;
-		});
+		Map<String, Boolean> touchedOwners = new LinkedHashMap<>();
+		merged.values().removeIf(declaration -> touchedOwners.computeIfAbsent(
+				declaration.className(), binaryName -> {
+					// '$' is legal in top-level identifiers too. Resolve the actual
+					// enclosing declaration instead of inferring nesting from its name.
+					TypeElement owner = resourceOwnerType(binaryName);
+					return owner != null && touchedTopLevelBinaries.contains(topLevelBinaryName(owner));
+				}));
 	}
 
 
@@ -4852,12 +4880,11 @@ public final class SokletProcessor extends AbstractProcessor {
 		// Also include owners of newly collected routes (top-level if possible)
 		if (newlyCollected != null) {
 			for (ResourceMethodDeclaration r : newlyCollected) {
-				String bin = r.className();
-				int dollar = bin.indexOf('$');
-				String top = (dollar >= 0) ? bin.substring(0, dollar) : bin;
-
-				TypeElement te = elements.getTypeElement(top);
-				if (te != null) origins.add(te);
+				TypeElement owner = resourceOwnerType(r.className());
+				if (owner != null) {
+					TypeElement top = elements.getTypeElement(topLevelBinaryName(owner));
+					if (top != null) origins.add(top);
+				}
 			}
 		}
 
@@ -5035,6 +5062,14 @@ public final class SokletProcessor extends AbstractProcessor {
 				.thenComparing(ResourceMethodDeclaration::methodName));
 		return out;
 	}
+
+	private record PreparedRouteIndex(List<ResourceMethodDeclaration> declarations,
+			@Nullable Path classOutputIndexPath, @Nullable Path sideCarIndexPath,
+			@Nullable Path persistentIndexPath) {}
+
+	private record PreparedMcpEndpointIndex(List<McpEndpointProviderDeclaration> declarations,
+			@Nullable Path classOutputIndexPath, @Nullable Path sideCarIndexPath,
+			@Nullable Path persistentIndexPath) {}
 
 	private record McpEndpointProviderDeclaration(String endpointBinaryName,
 			String providerBinaryName, String topLevelBinaryName,

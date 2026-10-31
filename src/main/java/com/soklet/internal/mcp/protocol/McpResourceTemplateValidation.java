@@ -19,6 +19,7 @@ package com.soklet.internal.mcp.protocol;
 import org.jspecify.annotations.NonNull;
 
 import java.util.Set;
+import java.net.URI;
 
 import static java.util.Objects.requireNonNull;
 
@@ -30,6 +31,22 @@ import static java.util.Objects.requireNonNull;
  */
 public final class McpResourceTemplateValidation {
 	private McpResourceTemplateValidation() {}
+
+	/** Whether a hierarchical URI path contains a literal RFC 3986 dot segment. */
+	public static boolean hasDotPathSegments(@NonNull URI uri) {
+		String path = requireNonNull(uri).getRawPath();
+		if (path == null) return false;
+		int segmentStart = 0;
+		for (int index = 0; index <= path.length(); ++index) {
+			if (index != path.length() && path.charAt(index) != '/') continue;
+			int length = index - segmentStart;
+			if ((length == 1 || length == 2) && path.charAt(segmentStart) == '.'
+					&& (length == 1 || path.charAt(segmentStart + 1) == '.'))
+				return true;
+			segmentStart = index + 1;
+		}
+		return false;
+	}
 
 	@NonNull
 	public static Template parse(@NonNull String template) {

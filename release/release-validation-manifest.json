@@ -53,7 +53,7 @@
     "maven": {
       "archive": "apache-maven-3.9.16-bin.tar.gz",
       "archiveSha512": "831a8591fe20c8243b1dbe7d71e3244f31d1665b0804b2e825e38cbbe5ce0cafb8338851f90780735568773e0a6cd07bbec107cda0b896b008b861075358b6f6",
-      "distributionUrl": "https://dlcdn.apache.org/maven/maven-3/3.9.16/binaries/apache-maven-3.9.16-bin.tar.gz",
+      "distributionUrl": "https://archive.apache.org/dist/maven/maven-3/3.9.16/binaries/apache-maven-3.9.16-bin.tar.gz",
       "installFileGoal": "org.apache.maven.plugins:maven-install-plugin:3.1.4:install-file",
       "version": "3.9.16"
     },

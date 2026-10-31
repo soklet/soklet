@@ -110,7 +110,7 @@ public final class McpPromptArgumentDeclaration {
 
 	@NonNull
 	private static String requireName(@NonNull String name) {
-		requireNonNull(name);
+		McpContentValueSupport.requireWellFormedString(name);
 		if (name.isBlank())
 			throw new IllegalArgumentException(
 					"MCP prompt argument names must not be blank.");
@@ -133,7 +133,7 @@ public final class McpPromptArgumentDeclaration {
 		private boolean required;
 
 		private Builder(@NonNull String name) {
-			this.name = requireNonNull(name);
+			this.name = McpContentValueSupport.requireWellFormedString(name);
 		}
 
 		/**
@@ -144,7 +144,7 @@ public final class McpPromptArgumentDeclaration {
 		 */
 		@NonNull
 		public Builder title(@NonNull String title) {
-			this.title = requireNonNull(title);
+			this.title = McpContentValueSupport.requireWellFormedString(title);
 			return this;
 		}
 
@@ -156,7 +156,7 @@ public final class McpPromptArgumentDeclaration {
 		 */
 		@NonNull
 		public Builder description(@NonNull String description) {
-			this.description = requireNonNull(description);
+			this.description = McpContentValueSupport.requireWellFormedString(description);
 			return this;
 		}
 

@@ -224,6 +224,34 @@ public class McpRequestMetricOrderingTests {
 				"A sequence must be an identity marker without request data or predecessor links.");
 	}
 
+	@Test
+	public void physicalHandlerExitResignalsAnEmptyAsynchronousDrainHandoff() throws Exception {
+		AtomicReference<McpApplicationExecutionObserver> observerReference = new AtomicReference<>();
+		RecordingCollector collector = new RecordingCollector() {
+			@Override public void didRecordMcpMetricsEvent(McpMetricsEvent event) {
+				super.didRecordMcpMetricsEvent(event);
+				if (event instanceof McpMetricsEvent.HandlerExecutionStarted)
+					// An asynchronous signal may arrive while the synchronous drainer
+					// still owns delivery, after its final pending event was removed.
+					observerReference.get().drainAsynchronously();
+			}
+		};
+		DefaultMcpServer server = server(collector);
+		McpApplicationExecutionObserver observer = observer(server);
+		observerReference.set(observer);
+		observer.recordHandlerExecutionStarted();
+		observer.drain();
+		assertEquals(List.of(McpMetricsEvent.handlerExecutionStarted()), collector.events);
+
+		// No additional HTTP request, timeout, or lifecycle event should be needed
+		// to release the physical handler gauge after this handoff.
+		observer.recordHandlerExecutionFinished();
+		observer.drain();
+		awaitEvents(collector, 2);
+		assertEquals(List.of(McpMetricsEvent.handlerExecutionStarted(),
+				McpMetricsEvent.handlerExecutionFinished()), collector.events);
+	}
+
 	@Test public void realWorkerCannotOvertakePausedSubmission() throws Exception { runtimeCase(WORKER); }
 	@Test public void realDeadlineCannotOvertakePausedSubmission() throws Exception { runtimeCase(TIMEOUT); }
 	@Test public void realCancellationCannotOvertakePausedSubmission() throws Exception { runtimeCase(CANCELLATION); }
@@ -431,7 +459,7 @@ public class McpRequestMetricOrderingTests {
 			catch (InterruptedException ignored) { interrupted = true; }
 		} finally { if (interrupted) Thread.currentThread().interrupt(); }
 	}
-	private static final class RecordingCollector implements MetricsCollector {
+	private static class RecordingCollector implements MetricsCollector {
 		private final List<McpMetricsEvent> events = new CopyOnWriteArrayList<>();
 		private final CountDownLatch independentDelivered = new CountDownLatch(1);
 		@Override public void didRecordMcpMetricsEvent(McpMetricsEvent event) {

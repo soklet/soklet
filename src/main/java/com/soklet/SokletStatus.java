@@ -16,7 +16,11 @@
 
 package com.soklet;
 
-/** Racy diagnostic snapshot of a Soklet lifecycle. */
+/**
+ * Racy diagnostic snapshot of a Soklet lifecycle.
+ * <p>
+ * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
+ */
 public enum SokletStatus {
 	/** No start or shutdown intent has been claimed. */
 	NEW,

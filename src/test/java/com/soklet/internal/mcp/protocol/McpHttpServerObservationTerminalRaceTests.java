@@ -453,7 +453,7 @@ class McpHttpServerObservationTerminalRaceTests {
 			MicrohttpResponse response = awaitValue(renderedResponse,
 					"The mapped error response was not offered.");
 			Assertions.assertNull(cancellationFailure.get());
-			Assertions.assertEquals(500, response.status());
+			Assertions.assertEquals(200, response.status());
 			String body = new String(response.body(), StandardCharsets.UTF_8);
 			Assertions.assertEquals(
 					"{\"jsonrpc\":\"2.0\",\"id\":\"precommit-error-owner\","
@@ -870,7 +870,7 @@ class McpHttpServerObservationTerminalRaceTests {
 
 			MicrohttpResponse response = awaitValue(renderedResponse,
 					"The encoding fallback response was not offered.");
-			Assertions.assertEquals(500, response.status());
+			Assertions.assertEquals(200, response.status());
 			String body = new String(response.body(), StandardCharsets.UTF_8);
 			Assertions.assertTrue(body.contains("\"code\":-32603"), body);
 			Assertions.assertTrue(body.contains("\"message\":\"Internal error\""), body);

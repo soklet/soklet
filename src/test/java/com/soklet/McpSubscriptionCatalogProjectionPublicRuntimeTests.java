@@ -291,7 +291,7 @@ public class McpSubscriptionCatalogProjectionPublicRuntimeTests {
 					assertAcknowledgment(nextItem(subscription), "localized-opening-change", prompts);
 					Assertions.assertEquals(1, authorizations.get());
 					assertNotification(nextItem(subscription), catalogNotification(prompts), "localized-opening-change");
-					Assertions.assertEquals(McpStreamTerminationReason.COMPLETED, awaitCompletion(subscription).getReason());
+					Assertions.assertEquals(McpStreamTerminationReason.DEADLINE_EXCEEDED, awaitCompletion(subscription).getReason());
 					String terminal = new String(nextItem(subscription).getEncodedBytes(), StandardCharsets.UTF_8);
 					Assertions.assertTrue(terminal.contains("\"title\":\"Canonical server title\""), terminal);
 					Assertions.assertFalse(terminal.contains("OLD:"), "Do not retain terminal text from the invalidated snapshot.");

@@ -107,7 +107,7 @@ class McpIconPublicRuntimeTests {
 			for (String invalid : List.of("relative", "mime", "size")) {
 				mode.set(invalid);
 				Response failure = call(port, protocolVersion, "tools/call");
-				assertEquals(protocolVersion == McpProtocolVersion.V2026_07_28 ? 500 : 200, failure.status(), failure.body());
+				assertEquals(200, failure.status(), failure.body());
 				assertTrue(failure.body().contains("\"code\":-32603"), failure.body());
 				for (String privateText : List.of(CANARY, "absolute URIs", "MIME type", "WxH", "\"content\"", "\"icons\""))
 					assertFalse(failure.body().contains(privateText), failure.body());

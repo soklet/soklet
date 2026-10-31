@@ -867,7 +867,7 @@ public class McpInputRequiredPublicRuntimeTests {
 					"undeclared", "undeclared-input",
 					FORM_AND_URL_INPUT_CAPABILITIES);
 
-			Assertions.assertEquals(500, response.statusCode(), response.body());
+			Assertions.assertEquals(200, response.statusCode(), response.body());
 			Assertions.assertEquals(
 					"{\"jsonrpc\":\"2.0\",\"id\":\"undeclared\",\"error\":{"
 							+ "\"code\":-32603,\"message\":\"Internal error\"}}",
@@ -1208,7 +1208,7 @@ public class McpInputRequiredPublicRuntimeTests {
 
 			HttpResponse<String> oversized = callTool(port, "aggregate-input",
 					"aggregate-input-requests", URL_INPUT_CAPABILITY);
-			Assertions.assertEquals(500, oversized.statusCode(), oversized.body());
+			Assertions.assertEquals(200, oversized.statusCode(), oversized.body());
 			Assertions.assertEquals(
 					"{\"jsonrpc\":\"2.0\",\"id\":\"aggregate-input\","
 							+ "\"error\":{\"code\":-32603,"
@@ -1366,7 +1366,7 @@ public class McpInputRequiredPublicRuntimeTests {
 	private static void assertInternalErrorWithoutOutput(
 			HttpResponse<String> response, String expectedId,
 			String parameterSecret, String metadataSecret) {
-		Assertions.assertEquals(500, response.statusCode(), response.body());
+		Assertions.assertEquals(200, response.statusCode(), response.body());
 		Assertions.assertEquals(
 				"{\"jsonrpc\":\"2.0\",\"id\":\"" + expectedId
 						+ "\",\"error\":{\"code\":-32603,"

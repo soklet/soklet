@@ -71,7 +71,7 @@ class McpRequestStateBoundaryPublicRuntimeTests {
 		try (Fixture fixture = new Fixture(10 * MIB, 1)) {
 			String state = protectedState(fixture.post("initial", "{}", null, 200));
 			fixture.reemit.set(true);
-			String failure = fixture.post("exhausted", "{}", state, 500);
+			String failure = fixture.post("exhausted", "{}", state, 200);
 			assertTrue(failure.contains("\"code\":-32603"), failure);
 			assertTrue(failure.contains("Internal error"), failure);
 			assertFalse(failure.contains("maximum round"), failure);

@@ -347,7 +347,7 @@ public class McpTaskCancelationLifecycleTests {
 			Assertions.assertTrue(taskCreated.await(5, TimeUnit.SECONDS),
 					"The timed request did not create its durable task.");
 			HttpResponse<String> response = request.get(5, TimeUnit.SECONDS);
-			Assertions.assertEquals(504, response.statusCode(), response.body());
+			Assertions.assertEquals(200, response.statusCode(), response.body());
 			Assertions.assertTrue(requestCanceled.await(5, TimeUnit.SECONDS),
 					"The request cancelation token was not signaled.");
 			Assertions.assertTrue(handlerInterrupted.await(5, TimeUnit.SECONDS),

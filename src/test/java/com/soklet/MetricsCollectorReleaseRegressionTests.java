@@ -37,6 +37,23 @@ public class MetricsCollectorReleaseRegressionTests {
 	private static final String JSON_RPC_METHOD = "tools/call";
 
 	@Test
+	public void httpStatusClassKeysAcceptOnlyBoundedClasses() {
+		for (String statusClass : List.of("1xx", "2xx", "3xx", "4xx", "5xx", "unknown")) {
+			MetricsCollector.HttpServerRouteStatusKey key = new MetricsCollector.HttpServerRouteStatusKey(
+					HttpMethod.GET, MetricsCollector.RouteType.UNMATCHED, null, statusClass);
+			Assertions.assertEquals(statusClass, key.getStatusClass());
+			Assertions.assertNull(key.getResourcePathDeclaration());
+		}
+		for (String statusClass : List.of("", "200", "6xx", "2XX", " 2xx", "customer-controlled"))
+			Assertions.assertThrows(IllegalArgumentException.class, () ->
+					new MetricsCollector.HttpServerRouteStatusKey(HttpMethod.GET,
+							MetricsCollector.RouteType.UNMATCHED, null, statusClass));
+		Assertions.assertThrows(NullPointerException.class, () ->
+				new MetricsCollector.HttpServerRouteStatusKey(HttpMethod.GET,
+						MetricsCollector.RouteType.UNMATCHED, null, null));
+	}
+
+	@Test
 	public void broadcastCallbacksUseExplicitlyNonNullBoxedCounts() throws Exception {
 		for (Class<?> type : List.of(MetricsCollector.class, DefaultMetricsCollector.class)) {
 			Method event = type.getMethod("didBroadcastSseEvent",

@@ -307,7 +307,7 @@ public final class McpResourceRegistration {
 
 	@NonNull
 	private static String requireName(@NonNull String name) {
-		requireNonNull(name);
+		McpContentValueSupport.requireWellFormedString(name);
 		if (name.isBlank())
 			throw new IllegalArgumentException(
 					"MCP resource names must not be blank.");
@@ -322,7 +322,7 @@ public final class McpResourceRegistration {
 	@NonNull
 	private static String requireBasicUriTemplate(
 			@NonNull String uriTemplate) {
-		requireNonNull(uriTemplate);
+		McpContentValueSupport.requireWellFormedString(uriTemplate);
 		if (uriTemplate.isBlank())
 			throw new IllegalArgumentException(
 					"MCP resource URI templates must not be blank.");
@@ -373,7 +373,7 @@ public final class McpResourceRegistration {
 		private ExactHandlerStage(@NonNull URI uri, @NonNull String name,
 				@NonNull Set<@NonNull McpProtocolVersion> protocolVersions) {
 			this.uri = requireNonNull(uri);
-			this.name = requireNonNull(name);
+			this.name = McpContentValueSupport.requireWellFormedString(name);
 			this.protocolVersions = requireNonNull(protocolVersions);
 		}
 
@@ -407,8 +407,8 @@ public final class McpResourceRegistration {
 		private TemplateHandlerStage(@NonNull String uriTemplate,
 				@NonNull String name,
 				@NonNull Set<@NonNull McpProtocolVersion> protocolVersions) {
-			this.uriTemplate = requireNonNull(uriTemplate);
-			this.name = requireNonNull(name);
+			this.uriTemplate = McpContentValueSupport.requireWellFormedString(uriTemplate);
+			this.name = McpContentValueSupport.requireWellFormedString(name);
 			this.protocolVersions = requireNonNull(protocolVersions);
 		}
 
@@ -444,7 +444,7 @@ public final class McpResourceRegistration {
 		 * @return this builder */
 		@NonNull
 		public ExactBuilder title(@NonNull String title) {
-			this.state.title = requireNonNull(title);
+			this.state.title = McpContentValueSupport.requireWellFormedString(title);
 			return this;
 		}
 
@@ -452,7 +452,7 @@ public final class McpResourceRegistration {
 		 * @return this builder */
 		@NonNull
 		public ExactBuilder description(@NonNull String description) {
-			this.state.description = requireNonNull(description);
+			this.state.description = McpContentValueSupport.requireWellFormedString(description);
 			return this;
 		}
 
@@ -583,7 +583,7 @@ public final class McpResourceRegistration {
 		 * @return this builder */
 		@NonNull
 		public TemplateBuilder title(@NonNull String title) {
-			this.state.title = requireNonNull(title);
+			this.state.title = McpContentValueSupport.requireWellFormedString(title);
 			return this;
 		}
 
@@ -591,7 +591,7 @@ public final class McpResourceRegistration {
 		 * @return this builder */
 		@NonNull
 		public TemplateBuilder description(@NonNull String description) {
-			this.state.description = requireNonNull(description);
+			this.state.description = McpContentValueSupport.requireWellFormedString(description);
 			return this;
 		}
 
@@ -761,7 +761,7 @@ public final class McpResourceRegistration {
 					: McpResourceAddressType.URI;
 			this.uri = uri;
 			this.uriTemplate = uriTemplate;
-			this.name = requireNonNull(name);
+			this.name = McpContentValueSupport.requireWellFormedString(name);
 			this.protocolVersions = requireNonNull(protocolVersions);
 			this.handler = requireNonNull(handler);
 		}

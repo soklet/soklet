@@ -27,6 +27,9 @@ import static java.util.Objects.requireNonNull;
 /**
  * Immutable result of one MCP rate-limit acquisition attempt.
  *
+ * <p>
+ * This is a closed domain; exhaustive switches are supported, and any new alternative requires an explicit reviewed contract amendment.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe

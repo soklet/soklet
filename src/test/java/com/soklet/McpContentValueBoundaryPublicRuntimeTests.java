@@ -110,7 +110,7 @@ class McpContentValueBoundaryPublicRuntimeTests {
 	}
 
 	private static void assertPrivateFailure(Response response, McpProtocolVersion protocolVersion) {
-		assertEquals(protocolVersion == McpProtocolVersion.V2026_07_28 ? 500 : 200, response.status(), response.body());
+		assertEquals(200, response.status(), response.body());
 		assertTrue(response.body().contains("\"code\":-32603"), response.body());
 		assertFalse(response.body().contains("\"content\""), response.body());
 		assertFalse(response.body().contains("\"isError\""), response.body());

@@ -24,6 +24,9 @@ import java.util.function.Function;
 /**
  * Kinds of {@link LogEvent} instances that Soklet can produce.
  *
+ * <p>
+ * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public enum LogEventType {
@@ -41,6 +44,13 @@ public enum LogEventType {
 	 * Indicates an MCP server configuration diagnostic, such as the use of the default reject-all CORS authorizer.
 	 */
 	MCP_SERVER_CONFIGURATION,
+	/**
+	 * An admitted MCP operation contained an unexpected processing failure.
+	 * The fixed message retains no exception text, throwable, request, resource
+	 * method, or response. Intentional application errors, policy rejections,
+	 * capacity rejection, cancellation, and deadlines do not emit this event.
+	 */
+	MCP_REQUEST_PROCESSING_FAILED,
 	/**
 	 * Indicates that an MCP request carried an unregistered mirrored-header name
 	 * and the server's bounded name-diagnostic opt-in was enabled. The event

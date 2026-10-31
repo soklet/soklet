@@ -46,6 +46,7 @@ record McpRequestPropagation(
 	private static final String BAGGAGE_KEY = "baggage";
 	private static final int MAXIMUM_BAGGAGE_BYTES = 8_192;
 	private static final int MAXIMUM_BAGGAGE_ENTRIES = 64;
+	private static final int MAXIMUM_TRACEPARENT_LENGTH = 512;
 
 	McpRequestPropagation {
 		requireNonNull(traceContext);
@@ -64,7 +65,11 @@ record McpRequestPropagation(
 	@NonNull
 	static McpRequestPropagation fromMetadata(@NonNull McpJsonObject metadata) {
 		requireNonNull(metadata);
-		Optional<String> traceparent = stringValue(metadata, TRACEPARENT_KEY);
+		Optional<String> traceparent = stringValue(metadata, TRACEPARENT_KEY)
+				.filter(value -> value.length() <= MAXIMUM_TRACEPARENT_LENGTH);
+		// TraceContext bounds the normalized members and skips oversized ones
+		// without copying them. Raw OWS and discarded members need not fit the
+		// normalized 512-character limit.
 		Optional<String> tracestate = stringValue(metadata, TRACESTATE_KEY);
 		Optional<TraceContext> traceContext = traceparent.flatMap(value ->
 				TraceContext.fromHeaderValues(List.of(value),

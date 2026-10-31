@@ -674,7 +674,7 @@ final class McpLevelOneUriTemplate {
 			throw new IllegalArgumentException(description + " must be a valid absolute URI.",
 					exception);
 		}
-		if (!parsed.normalize().equals(parsed))
+		if (McpResourceTemplateValidation.hasDotPathSegments(parsed))
 			throw new IllegalArgumentException(description + " must be normalized.");
 		// Java URI also accepts scoped IPv6 literals. Zone identifiers are not
 		// part of RFC 3986 URI syntax and are local to an operating system; treating

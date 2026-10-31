@@ -388,7 +388,7 @@ public final class McpToolRegistration<A> {
 
 	@NonNull
 	private static String requireName(@NonNull String name) {
-		requireNonNull(name);
+		McpContentValueSupport.requireWellFormedString(name);
 		if (name.length() < 1 || name.length() > MAXIMUM_NAME_LENGTH
 				|| !NAME_PATTERN.matcher(name).matches())
 			throw new IllegalArgumentException(
@@ -411,7 +411,7 @@ public final class McpToolRegistration<A> {
 
 		private ArgumentTypeStage(@NonNull String name,
 				@NonNull Set<@NonNull McpProtocolVersion> protocolVersions) {
-			this.name = requireNonNull(name);
+			this.name = McpContentValueSupport.requireWellFormedString(name);
 			this.protocolVersions = requireNonNull(protocolVersions);
 		}
 
@@ -618,7 +618,7 @@ public final class McpToolRegistration<A> {
 				@NonNull Type argumentType, @NonNull Type outputType,
 				@NonNull McpRuntimeTypedSchemaBridge<A> inputBridge,
 				@NonNull McpRuntimeTypedSchemaBridge<R> outputBridge) {
-			this.name = requireNonNull(name);
+			this.name = McpContentValueSupport.requireWellFormedString(name);
 			this.protocolVersions = requireNonNull(protocolVersions);
 			this.argumentType = requireNonNull(argumentType);
 			this.outputType = requireNonNull(outputType);
@@ -743,7 +743,7 @@ public final class McpToolRegistration<A> {
 				@NonNull Type argumentType, @NonNull McpToolSchema inputSchema,
 				@NonNull McpMirroredHeaderPlan mirroredHeaderPlan,
 				@NonNull ArgumentDecoder<A> argumentDecoder) {
-			this.name = requireNonNull(name);
+			this.name = McpContentValueSupport.requireWellFormedString(name);
 			this.protocolVersions = requireNonNull(protocolVersions);
 			this.argumentType = requireNonNull(argumentType);
 			this.inputSchema = requireNonNull(inputSchema);
@@ -792,7 +792,7 @@ public final class McpToolRegistration<A> {
 		 * @return this builder */
 		@NonNull
 		public OperationBuilder<@NonNull A> title(@NonNull String title) {
-			this.state.title = requireNonNull(title);
+			this.state.title = McpContentValueSupport.requireWellFormedString(title);
 			return this;
 		}
 
@@ -800,7 +800,7 @@ public final class McpToolRegistration<A> {
 		 * @return this builder */
 		@NonNull
 		public OperationBuilder<@NonNull A> description(@NonNull String description) {
-			this.state.description = requireNonNull(description);
+			this.state.description = McpContentValueSupport.requireWellFormedString(description);
 			return this;
 		}
 
@@ -984,7 +984,7 @@ public final class McpToolRegistration<A> {
 		 * @return this builder */
 		@NonNull
 		public CompleteBuilder<@NonNull A> title(@NonNull String title) {
-			this.state.title = requireNonNull(title);
+			this.state.title = McpContentValueSupport.requireWellFormedString(title);
 			return this;
 		}
 
@@ -993,7 +993,7 @@ public final class McpToolRegistration<A> {
 		@NonNull
 		public CompleteBuilder<@NonNull A> description(
 				@NonNull String description) {
-			this.state.description = requireNonNull(description);
+			this.state.description = McpContentValueSupport.requireWellFormedString(description);
 			return this;
 		}
 
@@ -1128,7 +1128,7 @@ public final class McpToolRegistration<A> {
 	private static String requireNonBlank(@NonNull String value,
 			@NonNull String description) {
 		requireNonNull(value);
-		requireNonNull(description);
+		McpContentValueSupport.requireWellFormedString(value);
 		if (value.isBlank())
 			throw new IllegalArgumentException(
 					description + " must not be blank.");
@@ -1224,7 +1224,7 @@ public final class McpToolRegistration<A> {
 				@NonNull McpToolHandler<A> handler,
 				@NonNull ArgumentDecoder<A> argumentDecoder,
 				boolean taskRequired) {
-			this.name = requireNonNull(name);
+			this.name = McpContentValueSupport.requireWellFormedString(name);
 			this.protocolVersions = requireNonNull(protocolVersions);
 			this.argumentType = requireNonNull(argumentType);
 			this.inputSchema = requireNonNull(inputSchema);

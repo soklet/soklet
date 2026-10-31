@@ -16,10 +16,14 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import com.soklet.StreamTerminationReason;
+import com.soklet.internal.mcp.transport.McpOutboundChannel;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.soklet.internal.mcp.protocol.McpCatalogProjectionQueue.Family.PROMPTS;
 import static com.soklet.internal.mcp.protocol.McpCatalogProjectionQueue.Family.TOOLS;
@@ -88,6 +92,148 @@ public class McpCatalogProjectionQueueTests {
 				"A clean family must capture its next dirty epoch's deadline.");
 		Assertions.assertEquals(second, next.baseline());
 		Assertions.assertFalse(queue.finish(next, true, true));
+	}
+
+	@Test
+	public void unwrittenGuardedHintRestoresBaselineForAllowedReconciliation() {
+		McpCatalogProjectionQueue queue = new McpCatalogProjectionQueue();
+		McpCatalogProjectionQueue.Digest initial = digest(bytes(1)), changed = digest(bytes(2));
+		queue.establishBaseline(TOOLS, initial);
+		Assertions.assertEquals(SUBMIT, queue.request(TOOLS, FIRST_DEADLINE_NANOS));
+		McpCatalogProjectionQueue.Projection offered = projection(queue);
+		McpOutboundChannel channel = new McpOutboundChannel(2, 64, 64, System::nanoTime, new McpOutboundChannel.Listener() {
+			@Override public void didWrite(long bytes, long timestamp) {}
+			@Override public void didApplyBackpressure() {}
+			@Override public void didTerminate(StreamTerminationReason reason, Throwable cause) {}
+		});
+		AtomicBoolean authorized = new AtomicBoolean(true), written = new AtomicBoolean();
+		Assertions.assertEquals(Optional.of(McpOutboundChannel.OfferResult.ACCEPTED), channel.offerGuardedCoalescing(
+				new byte[]{1}, "tools", authorized::get, () -> written.set(true),
+				() -> { if (!written.get()) queue.invalidateUnwrittenHint(offered); }));
+		queue.advanceBaseline(offered, changed);
+		Assertions.assertFalse(queue.finish(offered, true, true));
+		authorized.set(false);
+		Assertions.assertTrue(channel.recheckGuardedFrames());
+		Assertions.assertEquals(0, channel.snapshot().bufferedFrames());
+		Assertions.assertEquals(SUBMIT, queue.retryAll(LATER_DEADLINE_NANOS));
+		McpCatalogProjectionQueue.Projection afterReconciliation = projection(queue);
+		Assertions.assertEquals(initial, afterReconciliation.baseline(),
+				"An allowed reconciliation must project the change whose hint was purged before writing.");
+		Assertions.assertNotEquals(changed, afterReconciliation.baseline());
+		queue.advanceBaseline(afterReconciliation, changed);
+		Assertions.assertFalse(queue.finish(afterReconciliation, true, true));
+		Assertions.assertFalse(queue.invalidateUnwrittenHint(offered),
+				"Release of an older coalesced hint must not roll back its replacement.");
+	}
+
+	@Test
+	public void coalescedPayloadReleaseKeepsCoverageUntilTheRetainedFrameIsPurged() {
+		McpCatalogProjectionQueue queue = new McpCatalogProjectionQueue();
+		McpCatalogProjectionQueue.Digest initial = digest(bytes(1)), firstChange = digest(bytes(2)), secondChange = digest(bytes(3));
+		queue.establishBaseline(TOOLS, initial);
+		queue.request(TOOLS, FIRST_DEADLINE_NANOS);
+		McpCatalogProjectionQueue.Projection first = projection(queue);
+		Object retainedFrame = new Object(), incomingOffer = new Object();
+		AtomicBoolean authorized = new AtomicBoolean(true);
+		McpOutboundChannel channel = new McpOutboundChannel(2, 64, 64, System::nanoTime, new McpOutboundChannel.Listener() {
+			@Override public void didWrite(long bytes, long timestamp) {}
+			@Override public void didApplyBackpressure() {}
+			@Override public void didTerminate(StreamTerminationReason reason, Throwable cause) {}
+		});
+		Assertions.assertEquals(Optional.of(McpOutboundChannel.OfferResult.ACCEPTED), channel.offerGuardedCoalescing(
+				new byte[]{1}, "tools", authorized::get,
+				() -> queue.invalidateUnwrittenHint(TOOLS, retainedFrame, initial)));
+		queue.advanceBaseline(first, firstChange, retainedFrame);
+		queue.finish(first, true, true);
+		queue.request(TOOLS, LATER_DEADLINE_NANOS);
+		McpCatalogProjectionQueue.Projection second = projection(queue);
+		Assertions.assertEquals(Optional.of(McpOutboundChannel.OfferResult.COALESCED), channel.offerGuardedCoalescing(
+				new byte[]{1}, "tools", authorized::get,
+				() -> Assertions.assertFalse(queue.invalidateUnwrittenHint(TOOLS, incomingOffer, firstChange))));
+		queue.advanceBaseline(second, secondChange, retainedFrame);
+		queue.finish(second, true, true);
+		queue.retryAll(LATER_DEADLINE_NANOS + 1L);
+		McpCatalogProjectionQueue.Projection unchanged = projection(queue);
+		Assertions.assertEquals(secondChange, unchanged.baseline(), "Discarding the coalesced offer must not undo its covered baseline.");
+		queue.finish(unchanged, true, true);
+		authorized.set(false);
+		Assertions.assertTrue(channel.recheckGuardedFrames());
+		queue.retryAll(LATER_DEADLINE_NANOS + 2L);
+		McpCatalogProjectionQueue.Projection afterFence = projection(queue);
+		Assertions.assertEquals(initial, afterFence.baseline(),
+				"Purging the retained frame must undo all changes it covered, including coalesced generations.");
+		queue.finish(afterFence, true, true);
+	}
+
+	@Test
+	public void successorStartedBeforePurgeRetainsLastUnwrittenFrameBaseline() {
+		McpCatalogProjectionQueue queue = new McpCatalogProjectionQueue();
+		McpCatalogProjectionQueue.Digest initial = digest(bytes(1)), firstChange = digest(bytes(2)), secondChange = digest(bytes(3));
+		queue.establishBaseline(TOOLS, initial);
+		queue.request(TOOLS, FIRST_DEADLINE_NANOS);
+		McpCatalogProjectionQueue.Projection first = projection(queue);
+		McpHttpServerRuntime.CatalogHintDelivery firstFrame = new McpHttpServerRuntime.CatalogHintDelivery(first);
+		AtomicBoolean oldGeneration = new AtomicBoolean(true), newGeneration = new AtomicBoolean(true);
+		McpOutboundChannel channel = new McpOutboundChannel(2, 64, 64, System::nanoTime, new McpOutboundChannel.Listener() {
+			@Override public void didWrite(long bytes, long timestamp) {}
+			@Override public void didApplyBackpressure() {}
+			@Override public void didTerminate(StreamTerminationReason reason, Throwable cause) {}
+		});
+		channel.offerGuardedCoalescing(new byte[]{1}, "tools", oldGeneration::get, () -> {
+			if (queue.invalidateUnwrittenHint(TOOLS, firstFrame, firstFrame.previousBaseline()))
+				queue.request(TOOLS, LATER_DEADLINE_NANOS);
+		});
+		queue.advanceBaseline(first, firstChange, firstFrame);
+		queue.finish(first, true, true);
+		// The accepted authorization schedules its refresh before purging old frames.
+		queue.request(TOOLS, LATER_DEADLINE_NANOS);
+		McpCatalogProjectionQueue.Projection successor = projection(queue);
+		McpHttpServerRuntime.CatalogHintDelivery successorFrame = new McpHttpServerRuntime.CatalogHintDelivery(successor);
+		Assertions.assertEquals(firstChange, successor.baseline());
+		oldGeneration.set(false);
+		Assertions.assertTrue(channel.recheckGuardedFrames());
+		// The projection remains authorized under its newer generation. Its snapshot
+		// includes the first offer, but the client has received neither invalidation.
+		successorFrame.inheritUnwrittenBaselineFrom(firstFrame);
+		Assertions.assertEquals(initial, successorFrame.previousBaseline());
+		channel.offerGuardedCoalescing(new byte[]{2}, "tools", newGeneration::get,
+				() -> queue.invalidateUnwrittenHint(TOOLS, successorFrame, successorFrame.previousBaseline()));
+		queue.advanceBaseline(successor, secondChange, successorFrame);
+		Assertions.assertTrue(queue.finish(successor, true, true));
+		McpCatalogProjectionQueue.Projection catchUp = projection(queue);
+		Assertions.assertEquals(secondChange, catchUp.baseline());
+		queue.finish(catchUp, true, true);
+		newGeneration.set(false);
+		Assertions.assertTrue(channel.recheckGuardedFrames());
+		queue.retryAll(LATER_DEADLINE_NANOS + 1L);
+		McpCatalogProjectionQueue.Projection reauthorized = projection(queue);
+		Assertions.assertEquals(initial, reauthorized.baseline());
+		Assertions.assertNotEquals(firstChange, reauthorized.baseline(),
+				"Returning to the first changed catalog must notify a client which still holds the initial catalog.");
+		queue.finish(reauthorized, true, true);
+	}
+
+	@Test
+	public void predecessorWriteCompletionCannotUndoInheritedConservativeBaseline() {
+		McpCatalogProjectionQueue queue = new McpCatalogProjectionQueue();
+		McpCatalogProjectionQueue.Digest initial = digest(bytes(1)), changed = digest(bytes(2));
+		queue.establishBaseline(TOOLS, initial);
+		queue.request(TOOLS, FIRST_DEADLINE_NANOS);
+		McpCatalogProjectionQueue.Projection first = projection(queue);
+		McpHttpServerRuntime.CatalogHintDelivery preceding = new McpHttpServerRuntime.CatalogHintDelivery(first);
+		queue.advanceBaseline(first, changed, preceding);
+		queue.finish(first, true, true);
+		queue.request(TOOLS, LATER_DEADLINE_NANOS);
+		McpCatalogProjectionQueue.Projection next = projection(queue);
+		McpHttpServerRuntime.CatalogHintDelivery conservative = new McpHttpServerRuntime.CatalogHintDelivery(next);
+		conservative.inheritUnwrittenBaselineFrom(preceding);
+		preceding.markWritten();
+		Assertions.assertEquals(initial, conservative.previousBaseline(),
+				"Write completion after inheritance may cause an extra hint, never stale suppression.");
+		McpHttpServerRuntime.CatalogHintDelivery afterWrite = new McpHttpServerRuntime.CatalogHintDelivery(next);
+		afterWrite.inheritUnwrittenBaselineFrom(preceding);
+		Assertions.assertEquals(changed, afterWrite.previousBaseline());
+		queue.finish(next, true, true);
 	}
 
 	@Test

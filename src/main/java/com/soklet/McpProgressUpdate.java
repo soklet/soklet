@@ -33,6 +33,9 @@ import static java.util.Objects.requireNonNull;
  * update with the initiating request's opaque progress token; applications do
  * not copy or manage that token themselves.
  *
+ * <p>String factories and setters reject unpaired UTF-16 surrogates with
+ * {@link IllegalArgumentException}; well-formed Unicode is preserved exactly.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
@@ -139,10 +142,11 @@ public final class McpProgressUpdate {
 		 * @param message progress message
 		 * @return this builder
 		 * @throws NullPointerException if {@code message} is null
+		 * @throws IllegalArgumentException if {@code message} contains unpaired UTF-16 surrogates
 		 */
 		@NonNull
 		public Builder message(@NonNull String message) {
-			this.message = requireNonNull(message);
+			this.message = McpContentValueSupport.requireWellFormedString(message);
 			return this;
 		}
 

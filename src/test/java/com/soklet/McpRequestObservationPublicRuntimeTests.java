@@ -28,6 +28,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.HexFormat;
@@ -69,6 +70,62 @@ public class McpRequestObservationPublicRuntimeTests {
 			"metric-key-id-canary";
 	private static final String TRACE_CARDINALITY_KEY_MATERIAL =
 			"metric-key-material-canary-00000";
+
+	@Test
+	public void semanticStartIsCapturedBeforeComposedStartObserversAndRetainedThroughFinish()
+			throws Exception {
+		CountDownLatch firstObserverEntered = new CountDownLatch(1);
+		CountDownLatch releaseFirstObserver = new CountDownLatch(1);
+		AtomicReference<McpRequestContext> firstContext = new AtomicReference<>();
+		AtomicReference<Instant> firstObserverEnteredAt = new AtomicReference<>();
+		LifecycleObserver first = new LifecycleObserver() {
+			@Override public void didReceiveLogEvent(LogEvent event) {}
+			@Override public void didStartMcpRequestHandling(McpRequestContext context) {
+				firstContext.set(context);
+				firstObserverEnteredAt.set(Instant.now());
+				firstObserverEntered.countDown();
+				try {
+					if (!releaseFirstObserver.await(5, TimeUnit.SECONDS))
+						throw new IllegalStateException("Timed out awaiting start-observer release.");
+				} catch (InterruptedException failure) {
+					Thread.currentThread().interrupt();
+					throw new IllegalStateException(failure);
+				}
+			}
+		};
+		RecordingLifecycleObserver second = new RecordingLifecycleObserver();
+		AtomicReference<McpRequestContext> handlerContext = new AtomicReference<>();
+		McpToolRegistration<McpJsonObject> tool = McpToolRegistration.withName(TOOL_NAME,
+				Set.of(McpProtocolVersion.V2026_07_28)).jsonObjectArguments().handler((context, arguments, features) -> {
+				handlerContext.set(context);
+				return McpCompleteResult.fromToolText("observed");
+			}).build();
+		McpServer server = serverBuilder(endpointBuilder("observation-origin-test")
+				.toolRegistrations(List.of(tool)).build()).build();
+		Soklet soklet = managedSoklet(server, List.of(first, second), new RecordingMetricsCollector());
+		try {
+			soklet.start();
+			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
+			Instant beforeRequest = Instant.now();
+			CompletableFuture<HttpResponse<String>> response = sendAsync(port, toolRequest("origin", TOOL_NAME),
+					"tools/call", Optional.of(TOOL_NAME), Optional.empty());
+			Assertions.assertTrue(firstObserverEntered.await(5, TimeUnit.SECONDS));
+			Instant origin = firstContext.get().getStartedAt().orElseThrow();
+			Assertions.assertFalse(origin.isBefore(beforeRequest));
+			Assertions.assertFalse(origin.isAfter(firstObserverEnteredAt.get()));
+			Assertions.assertNull(second.startedContext.get(), "The later observer must still be behind the blocked start callback.");
+			releaseFirstObserver.countDown();
+			assertSuccess(response.get(5, TimeUnit.SECONDS), "origin");
+			second.awaitFinished();
+			Assertions.assertSame(firstContext.get(), second.startedContext.get());
+			Assertions.assertSame(firstContext.get(), handlerContext.get());
+			Assertions.assertSame(firstContext.get(), second.finishedContext.get());
+			Assertions.assertEquals(Optional.of(origin), second.finishedContext.get().getStartedAt());
+		} finally {
+			releaseFirstObserver.countDown();
+			soklet.close();
+		}
+	}
 
 	@Test
 	public void admittedDiscoveryPublishesLifecycleAndMetricsWithoutInterception()
@@ -859,7 +916,7 @@ public class McpRequestObservationPublicRuntimeTests {
 					Optional.of(TOOL_NAME));
 			observer.awaitFinished();
 
-			Assertions.assertEquals(500, response.statusCode(), response.body());
+			Assertions.assertEquals(200, response.statusCode(), response.body());
 			Assertions.assertEquals("{\"jsonrpc\":\"2.0\",\"id\":"
 					+ "\"handler-failure\",\"error\":{\"code\":-32603,"
 					+ "\"message\":\"Internal error\"}}", response.body());

@@ -599,7 +599,7 @@ public class McpHttpServerRequestScopedSseTests {
 			try (McpChunkedHttpClient precommit = McpChunkedHttpClient.postMcp(
 					port, "\"precommit-error\"", APPLICATION_METHOD)) {
 				McpChunkedHttpClient.HttpResponseHead head = precommit.readHead();
-				Assertions.assertEquals(500, head.status());
+				Assertions.assertEquals(200, head.status());
 				Assertions.assertEquals("application/json",
 						head.singleHeader("Content-Type"));
 				Assertions.assertEquals(

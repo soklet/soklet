@@ -21,6 +21,9 @@ import java.nio.charset.Charset;
 /**
  * Strategies for encoding/decoding query strings: {@code Content-Type: application/x-www-form-urlencoded} (supports {@code "+"} for spaces) or "strict" RFC 3986 (percent-decoding only).
  *
+ * <p>
+ * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  * @see com.soklet.Utilities#extractQueryParametersFromQuery(String, QueryFormat)
  * @see com.soklet.Utilities#extractQueryParametersFromQuery(String, QueryFormat, Charset)

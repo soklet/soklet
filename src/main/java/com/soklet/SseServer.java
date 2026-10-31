@@ -156,7 +156,12 @@ public interface SseServer {
 		 * the logical handshake decision. The public result does not expose a handling-failure
 		 * cause when that optional is absent, so a custom transport cannot reproduce every
 		 * built-in failure cause from the result alone. An absent or rejected handshake must not be
-		 * inferred to be accepted from an HTTP status code alone.
+		 * inferred to be accepted from an HTTP status code alone. The transport owns
+		 * terminal cleanup of the delivered handshake response: invoke
+		 * {@link MarshaledResponse#close()} after response delivery or abandonment,
+		 * including failure/cancelation. This releases owned channels and retained
+		 * response predecessors while preserving borrowed channels. Custom transports
+		 * must perform that terminal close themselves.
 		 * <p>
 		 * For an actually accepted connection, the transport preserves the
 		 * {@link SseHandshakeResult.Accepted#getClientContext() client context} and invokes
@@ -408,7 +413,9 @@ public interface SseServer {
 		 * Sets the maximum accepted SSE handshake request size in bytes.
 		 * <p>
 		 * This limit applies to the whole received handshake request, including request line
-		 * and headers. Established SSE stream writes are governed by the write timeout and
+		 * and headers. After the handshake, the same bound also limits accumulated
+		 * unexpected client input; exceeding it terminates the connection.
+		 * Established SSE stream writes are governed by the write timeout and
 		 * connection queue capacity settings instead.
 		 * Passing {@code null} restores the built-in default of 64 KiB.
 		 *
@@ -506,6 +513,8 @@ public interface SseServer {
 		/**
 		 * Sets the transport's maximum number of concurrent SSE connections. Zero disables this
 		 * connection cap. Passing {@code null} restores the built-in default of 8,192.
+		 * Connections above the cap can complete TCP acceptance and receive a finite
+		 * HTTP 503 rejection when the request can be parsed. Early transport failures may close without a response.
 		 * <p>
 		 * {@link #streamingLifecycleCapacity(Integer)} separately bounds retained SSE lifetimes and
 		 * defaults to 256. With both defaults, at most 256 SSE connections can be admitted.

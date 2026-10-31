@@ -32,7 +32,7 @@ import static java.util.Objects.requireNonNull;
  * <p>
  * These events are exposed via {@link LifecycleObserver#didReceiveLogEvent(LogEvent)}.
  * <p>
- * The built-in MCP server's request-observer, metrics-collector and transport
+ * The built-in MCP server's unexpected application-execution, request-observer, metrics-collector and transport
  * failure events deliberately omit the {@link Throwable}, {@link Request},
  * {@link ResourceMethod} and {@link MarshaledResponse} attachments. Their
  * diagnostic messages do not include exception text or stack traces. This
@@ -150,7 +150,7 @@ public final class LogEvent {
 
 	/**
 	 * The throwable for this log event, if available.
-	 * Built-in MCP request-observer, metrics-collector and transport failure
+	 * Built-in MCP application-execution, request-observer, metrics-collector and transport failure
 	 * events deliberately leave this empty; see the class privacy contract.
 	 *
 	 * @return the throwable, or {@link Optional#empty()} if not available

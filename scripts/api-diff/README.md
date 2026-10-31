@@ -1,7 +1,7 @@
 # MCP API-diff gate
 
 The gate compares the checked-out Soklet source with the released 3.5.1
-artifact and turns japicmp 0.26.1 XML into a reviewed, bidirectional set of
+artifact and turns japicmp 0.26.2 XML into a reviewed, bidirectional set of
 removed or incompatible JVM symbols.
 
 Run it with a supported JDK, Maven, and Node.js available:
@@ -12,6 +12,10 @@ scripts/api-diff/verify.sh
 
 CI selects JDK 21 explicitly; the script itself uses the caller-selected JDK.
 The Maven profile pins both the 3.5.1 baseline coordinate and japicmp version.
+It disables japicmp's text diff report because that renderer sorts generic
+parameter templates in place before XML serialization. The XML and signature
+snapshots retain source declaration order, so swapping `<T, R>` to `<R, T>`
+fails the freeze gate.
 The wrapper writes generated evidence under `target/japicmp/` and compares it with
 `api/mcp/current-incompatibilities.jsonl` in both directions. It never updates
 the reviewed file automatically.

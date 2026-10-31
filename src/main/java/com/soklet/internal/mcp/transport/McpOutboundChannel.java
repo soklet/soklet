@@ -278,6 +278,17 @@ public final class McpOutboundChannel {
 			byte @NonNull [] payload, @NonNull Object coalescingKey,
 			@NonNull BooleanSupplier writeAllowed, @NonNull BooleanSupplier continuationAllowed,
 			@NonNull Runnable payloadWritten, @NonNull Runnable payloadReleased) {
+		return offerGuardedCoalescing(payload, coalescingKey, writeAllowed, continuationAllowed,
+				payloadWritten, payloadReleased, true);
+	}
+
+	/** Catalog observations need a successor once the prior hint has started writing. */
+	@NonNull
+	public Optional<@NonNull OfferResult> offerGuardedCoalescing(
+			byte @NonNull [] payload, @NonNull Object coalescingKey,
+			@NonNull BooleanSupplier writeAllowed, @NonNull BooleanSupplier continuationAllowed,
+			@NonNull Runnable payloadWritten, @NonNull Runnable payloadReleased,
+			boolean coalesceStarted) {
 		requireNonNull(payload);
 		requireNonNull(coalescingKey);
 		requireNonNull(writeAllowed);
@@ -296,7 +307,8 @@ public final class McpOutboundChannel {
 					result = Optional.empty();
 				else if (closed || failure != null || terminalReserved)
 					result = Optional.of(OfferResult.CLOSED);
-				else if (pendingCoalescingChunks.containsKey(coalescingKey))
+				else if (pendingCoalescingChunks.containsKey(coalescingKey)
+						&& (coalesceStarted || !pendingCoalescingChunks.get(coalescingKey).hasWrittenBytes))
 					result = Optional.of(OfferResult.COALESCED);
 				else if (ownedPayload.length > byteCapacity)
 					result = Optional.of(OfferResult.TOO_LARGE);

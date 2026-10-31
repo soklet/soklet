@@ -52,7 +52,7 @@ exactly which host/tool versions were manually exercised.
 | Simulation | Asynchronous off-network MCP HTTP requests, including POST, session-enabled 2025 GET/DELETE with transport admission configured, and OPTIONS preflight; GET also needs enabled notification families and sources. Real processor/lifecycle with bounded JSON and exact SSE capture; no listener, bound address, or public diagnostic activity |
 | Bounded observation | Exactly one clean/residual outcome per successfully started listener generation, plus server-wide active-handler, queued-request, queue-full-rejection, and immutable handler-capacity, live-stream, protection, and trace-configuration diagnostics |
 | Trace logging | Default-off pseudonymous correlation and a separate raw-validated-trace-ID opt-in through bounded `MCP_TRACE_CORRELATION` log records; no trace metric dimensions |
-| Policy | Host and Origin checks, application admission, optional request limiting, mandatory fallback tool limiting for tool-bearing servers, bounded execution, and shared Soklet observation hosts |
+| Policy | Host and Origin checks, application admission, optional request and tool rate limiting, bounded execution, and shared Soklet observation hosts |
 | Schema | Closed Soklet MCP Tool Schema Profile 1 with Java-derived schemas and public authored input-schema registration |
 
 ## Exact protocol revisions
@@ -601,13 +601,12 @@ no-reuse obligation, described [below](#explicitly-enabled-2025-sessions).
 Every server must resolve:
 
 - a nonempty `McpEndpointRegistry`, using classpath introspection by default;
-- one `McpAdmissionController`, using the accept-all controller by default; and
-- a server-level fallback `McpRateLimiter` if any endpoint has a tool.
+- one `McpAdmissionController`, using the accept-all controller by default.
 
-The fallback tool limiter remains required even if every tool has an endpoint
-or tool override. Each tool call is charged by exactly one limiter, resolved in
-tool, endpoint, then server-fallback order; requiring the fallback makes that
-resolution total without relying on override coverage.
+Tool rate limiting is optional. A configured limiter resolves in tool, endpoint,
+then server-fallback order; an override replaces the fallback charge. A tool
+with no resolved limiter has no tool rate quota. Transport, queue, concurrency,
+and execution bounds remain in effect.
 
 The listener binds to `127.0.0.1` by default. A loopback literal or
 `localhost` seeds its effective authority into Host validation. A non-loopback
@@ -623,7 +622,28 @@ Forwarded headers cannot authorize an otherwise unlisted hostname. Hostname
 labels use ASCII letters, digits and hyphens; underscores are rejected. Use a
 valid deployment alias for Docker or other service names containing underscores.
 
+## Public API evolution
+
+The type Javadoc states whether an enum or sealed root is evolutionary or a
+closed domain. Evolutionary types may gain reviewed constants or permitted
+subtypes in Soklet 4.x; use a safe default in application switches. This includes
+content blocks, resource contents, subscription events, operation results and
+observability vocabularies. JSON values and the explicitly closed decision
+families support exhaustive switches. `McpServer` has a closed framework-owned
+implementation boundary. See the [reviewed MCP evolution inventory](api/mcp/mcp-public-evolution-inventory.json)
+and [core inventory](api/core-public-evolution-inventory.json) for per-owner
+policies. The verifier checks that the policies are published in each type's
+Javadoc; a sealed declaration alone does not promise an unchanging family.
+
 ## Construction and builder conventions
+
+Public protocol text, including request/task IDs, implementation and registration
+names, titles/descriptions, endpoint instructions, progress/status messages,
+localizable text and JSON-RPC error messages, rejects unpaired UTF-16 surrogates
+with a sanitized `IllegalArgumentException` at construction or the setter. A
+failed setter does not alter its previous value. Valid Unicode is preserved;
+operation-specific byte and wire-size limits still apply at their documented
+validation stages.
 
 MCP construction entrypoints include every unconditional required value. In
 addition to the server and endpoint factories above, the primary forms are:
@@ -653,8 +673,10 @@ Collection methods use one grammar throughout MCP: `addX(...)` and
 `notificationTypes(...)` replaces the previous collection. Additive methods
 reject null elements.
 
-For optional or defaulted builder properties, passing null clears the optional
-feature or restores the documented built-in default. This includes the server
+Null handling is specific to each builder setter. Only setters documented with a
+nullable argument accept null to clear an optional feature or restore a built-in
+default; optional output from a getter does not imply a nullable setter. These
+nullable configuration setters include the server
 endpoint registry and admission controller, host and operational budgets,
 optional endpoint features, localizer revision, protection limits, simulation
 options, token-bucket refill settings, and metrics maps. Required construction
@@ -987,9 +1009,8 @@ An incoming JSON token/string limit failure produces the fixed JSON-RPC parse
 error `-32700` before handler execution. An outgoing JSON limit failure produces
 the fixed internal error `-32603`; submitted or generated text and exception
 details are not reflected in that error. The early JSON parse-limit rejection
-uses HTTP 400 for all three supported revisions. An output error uses HTTP 500
-for an uncommitted modern response; the 2025 adapters carry that error in HTTP
-200.
+uses HTTP 400 for all three supported revisions. An application-output error uses HTTP 200 with its correlated JSON-RPC error on
+all supported profiles, including an uncommitted modern response.
 
 The schema-operation budget limits work, rather than only the number of JSON
 nodes. Repeated `allOf`/`anyOf` branches, references, structural equality and
@@ -1003,7 +1024,7 @@ Schema-budget exhaustion remains a generic validation rejection. For tool input,
 `2025-11-25` and `2026-07-28` return HTTP 200 with the safe completed `isError`
 result; `2025-06-18` returns JSON-RPC `-32602` in HTTP 200. The application handler
 is not invoked. Output-schema exhaustion produces the fixed internal error
-`-32603` (HTTP 500 for an uncommitted modern response, HTTP 200 for 2025).
+`-32603` in HTTP 200 for application execution on every supported profile.
 Detailed internal limit outcomes and diagnostic paths are not a public error API.
 Keep schemas and individual results bounded; use multiple calls or pagination
 where an application needs larger logical collections.
@@ -1100,7 +1121,7 @@ localization-context creation failure instead uses the fixed redacted internal-
 error path because no evaluator can receive its required context. A detailed
 completed-task read rechecks the current origin-tool registration before
 sanitizing its result. A missing or newly hidden origin fails the detailed read
-with HTTP 500 and the fixed redacted JSON-RPC internal error (`-32603`). It does
+with HTTP 200 and the fixed redacted JSON-RPC internal error (`-32603`). It does
 not emit `status: "completed"` without the required result, run the sanitizer,
 or change the persisted task. An explicit later poll can recover after access
 is restored or on a node with the origin registration; the error does not
@@ -1229,7 +1250,7 @@ through an exact resource or URI-template read route registered on that same
 endpoint. This is a reachability invariant: a custom-list-only endpoint may
 return an empty page, but it cannot return a nonempty page until a matching
 read route is registered. Soklet rejects the complete page if any listed URI
-does not match a route; the invariant violation is reported as HTTP 500 with
+does not match a route; the invariant violation is reported as HTTP 200 with
 JSON-RPC `-32603`, not as a partially filtered page. Applications should
 validate database-backed or otherwise dynamic catalog entries against their
 registered templates before returning them.
@@ -1549,7 +1570,7 @@ valid retry carrying the final allowed round can complete normally, but cannot
 emit another framework continuation. Likewise, a state valid when opened can
 expire while the handler runs. Re-emission checks the original expiry and the
 next round after the handler returns. Either failure is a sanitized JSON-RPC
-`-32603` internal error (HTTP 500 when the response is still uncommitted), with
+`-32603` internal error (HTTP 200 when the response is still uncommitted), with
 no new state emitted and no rollback of application side effects. Incoming
 state already expired or beyond the configured round limit remains HTTP 400 /
 `-32602` before handler entry.
@@ -1594,8 +1615,9 @@ same-prior-ID framework state returns HTTP 400 / JSON-RPC `-32602`; temporary
 protector unavailability returns HTTP 503 / `-32603`. Invalid-state reports
 and malformed, noncanonical, empty, or oversized plaintext returned while
 opening custom-protected state collapse to the same 400 / `-32602` response.
-Null or unexpected provider behavior, invalid sealing output, and invalid
-application output fail closed as HTTP 500 / `-32603`, without reflecting
+Null or unexpected opening-provider behavior before application dispatch fails
+closed as HTTP 500 / `-32603`. Invalid sealing output or other contract failures
+inside admitted application execution use HTTP 200 / `-32603`. Neither reflects
 provider diagnostics.
 
 `input_required` results intentionally carry no protocol cache hints, and tool
@@ -1640,8 +1662,7 @@ did not declare Tasks.
 An advanced handler or interceptor must complete inline when
 `McpInvocationFeatures.getTaskCreationContext()` is empty. Returning a task
 handle anyway is an application contract failure, reported as the fixed
-JSON-RPC internal error (`-32603`): HTTP 500 for the modern revision and HTTP
-200 for the 2025 revisions. The application callback has already run, so this
+JSON-RPC internal error (`-32603`) in HTTP 200 for every supported revision. The application callback has already run, so this
 error does not roll back its effects. It is distinct from the statically
 task-required tool's preflight capability rejection.
 
@@ -1808,7 +1829,7 @@ supplies no worker-side API for running the complete delivery pipeline;
 preserve the origin as opaque data instead of interpreting its persisted
 members.
 
-Invalid stored payloads cause a fixed internal error (`-32603`, HTTP 500) on
+Invalid stored payloads cause a fixed internal error (`-32603`, HTTP 200) on
 `tasks/get`; invalid notification projections are suppressed. Reads do not
 mutate authoritative task state, publish a state transition, or notify the
 worker. Soklet does not synthesize `FAILED` from a delivery error: current
@@ -2082,8 +2103,10 @@ classification, while `getJsonRpcMethod()` is the exact validated method text.
 For example, a policy that distinguishes tool calls should compare the former
 to `McpOperationType.TOOLS_CALL`, not compare the latter to a string literal.
 
-The built-in `McpRateLimiter.fromInMemoryDefaults()` is a finite, bounded token
-bucket local to one JVM. It is not fleet-wide enforcement. A denial returns
+The built-in `McpRateLimiter.fromInMemoryTokenBucket(...)` accepts an explicit
+`McpTokenBucketConfig`: capacity, refill quantity, and refill interval are all
+required, with no implicit quota values. The finite token bucket is local to
+one JVM; use an application-owned distributed implementation for fleet-wide quotas. A denial returns
 HTTP 429, `Retry-After`, and MCP error `-31999` for a request; a notification
 has the HTTP status but no JSON-RPC body. For an authorized CORS origin, a rate-limit
 response exposes `Retry-After` to browser code. The first denial wins and successful
@@ -2115,7 +2138,7 @@ deadline. If that deadline owns while the request is still queued and writable,
 Soklet removes it without application dispatch and returns the same fixed
 503/`-32603` response; a client disconnect owns without writing a response.
 Promotion first ends the queued state. If the absolute deadline then owns an
-active request, Soklet returns HTTP 504 with a correlated JSON-RPC `-32603`
+active application-handler request, Soklet returns HTTP 200 with a correlated JSON-RPC `-32603`
 error; if an SSE response stream is already open, that error is its terminal
 frame. Only an unwritable terminal falls back to stream failure. These
 transitions produce one queue-depth removal and one observable request outcome
@@ -2501,7 +2524,10 @@ client may already have consumed the earlier event. Releasing the earlier frame
 preserves the successor's coalescing key. This prevents a catalog that changes
 back and forth from silently leaving the client on an earlier view. The baseline
 is an invalidation comparison, not a client receipt or a retained catalog snapshot;
-clients re-list under current authorization when they receive a hint.
+clients re-list under current authorization when they receive a hint. If an
+authorization fence removes a wholly unwritten hint, Soklet restores its
+comparison baseline so an allowed reauthorization can regenerate that hint.
+Releasing an older coalesced hint cannot roll back a newer hint's baseline.
 
 Long-lived catalog and localization checks use a derived request context
 without any headers, body, trace identifiers or baggage.
@@ -2665,8 +2691,7 @@ collaborator with a test-scoped implementation:
 SimulatorConfig simulatorConfig = SimulatorConfig
     .withSokletConfig(sokletConfig)
     .configureMcpServer(builder -> builder
-        .requestTimeout(Duration.ofSeconds(2))
-        .toolRateLimiter(McpRateLimiter.fromInMemoryDefaults()))
+        .requestTimeout(Duration.ofSeconds(2)))
     .build();
 ```
 
@@ -2679,8 +2704,8 @@ it with [`port(Integer)`](<https://javadoc.soklet.com/com/soklet/McpServer.Build
 when a test needs another logical value. The fresh builder uses the same
 generated-endpoint discovery and accept-all admission defaults as
 [`McpServer::withPort`](<https://javadoc.soklet.com/com/soklet/McpServer.html#withPort(java.lang.Integer)>).
-A discovered tool still requires a configured fallback tool rate limiter, just
-as it does on the production builder. Override endpoint discovery or admission
+Discovered tools have no tool rate quota unless a tool, endpoint, or server
+limiter is configured, as on the production builder. Override endpoint discovery or admission
 by calling [`endpointRegistry(...)`](<https://javadoc.soklet.com/com/soklet/McpServer.Builder.html#endpointRegistry(com.soklet.McpEndpointRegistry)>)
 or [`admissionController(...)`](<https://javadoc.soklet.com/com/soklet/McpServer.Builder.html#admissionController(com.soklet.McpAdmissionController)>)
 on the supplied builder:
@@ -2690,8 +2715,7 @@ SimulatorConfig simulatorConfig = SimulatorConfig.builder()
     .configureMcpServer(builder -> builder
         .port(8082)
         .endpointRegistry(testEndpointRegistry)
-        .admissionController(testAdmissionController)
-        .toolRateLimiter(McpRateLimiter.fromInMemoryDefaults()))
+        .admissionController(testAdmissionController))
     .build();
 ```
 
@@ -2759,7 +2783,11 @@ retry hints. There is no implicit stateless downgrade or unrelated-owner evictio
 The default 256-session count can be filled by 16 owners with 16 sessions each;
 new owners then receive `503`. Abandoned, acknowledged sessions can occupy those
 slots for the default 24-hour idle window. Existing owners can reclaim their own
-quiescent records without freeing space for another owner. Opted-in anonymous
+quiescent records only after at least 30 seconds without either client activity or
+physically active client work, without freeing space for another owner. Rapid
+reconnects which do not DELETE their sessions can therefore reach the per-owner
+limit and receive 429 until an eligible record can be reclaimed, explicitly
+deleted, or expired. Opted-in anonymous
 sessions additionally share a 64-session global count. This policy provides
 owner isolation, not a fair share of global capacity. Size both count limits for
 the expected owner population and shorten idle retention for abandoned clients.
@@ -2968,7 +2996,10 @@ authorization duration, fixed `maximumSubscriptionDuration`, or session deadline
 Renewal reuses the original GET credentials and repeats current HTTP admission,
 owner verification, identity and partition checks; it cannot extend that fixed
 total lifetime or revive a retired stream. Reconciliation fences earlier GET
-authorization before bounded reevaluation. A session allows at most two logical
+authorization before bounded reevaluation. Capacity-only rejection of a routine
+renewal preserves the existing grant until its original expiry; it neither
+creates new authority nor clears an earlier reconciliation fence. A session
+allows at most two logical
 GETs and one shared modern/legacy subscription registration charged to its fixed
 first partition. Capacity rejection is `503` and preserves existing live
 streams. Replaced GET request evidence remains charged through physical exit;
@@ -3207,6 +3238,17 @@ fixed JSON and empty responses, CORS preflight, notification responses, and
 production SSE. Application policy cannot replace it with a cacheable value;
 an attempted `Cache-Control` response header fails closed.
 
+On the modern profile, unexpected failures and output-contract errors from
+admitted application execution, plus an active application-handler deadline,
+return HTTP 200 with the correlated JSON-RPC `-32603` error. This preserves
+in-band error handling in clients. Intentional `McpJsonRpcException` failures
+and successful tool results with `isError=true` retain their distinct mappings.
+Framework-owned discovery/catalog policy errors, pre-dispatch/protocol deadlines,
+executor submission errors, capacity/rate failures and transport/parser failures
+retain their HTTP failure statuses. Queued deadlines remain HTTP 503. A response
+already committed as SSE keeps its terminal result/error in that stream.
+The 2025 profile's in-band operation-error behavior is described separately above.
+
 Implemented framework mappings are stable:
 
 | Condition | HTTP | JSON-RPC/MCP code |
@@ -3215,15 +3257,18 @@ Implemented framework mappings are stable:
 | Strict unknown mirrored header | 400 | `-31998` |
 | Handler capacity exhausted | 503 | `-32603` |
 | Queued request deadline | 503 | `-32603` |
-| Active application-handler request deadline | 504 | `-32603` |
+| Active application-handler request deadline | 200 | `-32603` |
 | Framework-owned protocol-operation deadline | 504 | bodyless |
+| Catalog access-policy deadline | 504 | `-32603` |
+| Intentional application `McpJsonRpcException` | 400 | authored error code |
 | Standard or custom header mismatch | 400 | `-32020` |
 | Unsupported protocol version | 400 | `-32022` |
 | Missing required capability | 400 | `-32021` |
 | Specified invalid parameters | 400 | `-32602` |
 | Invalid, expired, or wrong-bound request state | 400 | `-32602` |
 | Request-state protector unavailable | 503 | `-32603` |
-| Application/protector output contract failure | 500 | `-32603` |
+| Application-execution failure or output/protector contract failure | 200 | `-32603` |
+| Framework policy or pre-dispatch protector contract failure | 500 | `-32603` |
 | Unknown request method | 404 | `-32601` |
 
 Readable request IDs retain their original string or integer identity. Error
@@ -3319,14 +3364,74 @@ Admitted framework and application operations receive
 `didStartMcpRequestHandling` and `didFinishMcpRequestHandling` with the same
 immutable `McpRequestContext`. Start occurs after admission and before request
 limiting, handler-queue admission, interception and handler execution. Finish
-occurs once at the client-visible terminal outcome; an uncooperative handler
-can remain physically active afterward. Callbacks can run on different threads
+describes the client-visible terminal outcome and is delivered once by the
+observation worker; an uncooperative handler can remain physically active afterward. Callbacks can run on different threads
 and independent requests can overlap. Observer exceptions are contained.
 
+`McpRequestContext.getStartedAt()` exposes the wall-clock semantic start for
+built-in observed contexts, captured before start observers. The elapsed finish
+duration measures from that semantic origin and excludes finish-delivery queue
+delay. Derived subscription contexts retain the original listen request's start;
+custom and manually constructed contexts inherit an empty optional by default.
+
+Admission, both rate limiters, CORS authorization, start observation and
+`McpRequestStateProtector.open` share the protocol executor. Configure it with
+`protocolExecutorConcurrency(Integer)` and `protocolExecutorQueueCapacity(Integer)`;
+the defaults are 32 workers and 128 queued jobs, null restores those defaults,
+and both values must be positive. The queue grows lazily up to its configured
+capacity. Catalog/task subscription projections need at least two protocol
+workers; incompatible singleton configurations fail at build() with the public
+option name. Handler concurrency and the handler executor
+supplier remain independent. Blocking downstream calls consume protocol slots;
+keep them bounded and size the protocol pool for their latency. Subscription
+projections and maintenance share that pool with incoming protocol work; they
+have no reserved protocol worker. Sustained admission or policy saturation can
+delay existing subscribers' hints until capacity becomes available. Projection
+deadlines bound application entry and stale output, not notification delivery.
+
+Finish observation, `MCP_TRACE_CORRELATION` and finish-observer-failure logs run
+on a separate bounded dispatcher using daemon platform threads, away from
+connection event loops and the protocol/application executors. This avoids
+Java 21 virtual-thread carrier pinning from monitor-blocking observer code.
+Delivery capacity is reserved before start observation. When capacity is full,
+both start and finish observations are omitted while protocol processing
+continues normally, including cancellation and session initialization. A fixed
+configuration diagnostic reports omission at most once per minute per server.
+Each admitted observation retains exactly one finish following its start.
+Execution context creation is independent of observation capacity: omitted
+requests retain the same admitted identity, original Request, capabilities,
+input responses, verified state, semantic start, and handler features used by
+catalog, task and subscription authorization.
+Metrics and spans derived from an omitted pair omit that request too; these
+observations are best effort under saturation.
+Omission affects telemetry only. Caller-aware policies, handlers and subscription
+authorization still receive the admitted request context and invocation features.
+If a deadline or cancellation terminates the request during context/start
+creation, later policy and session state work is skipped.
+The callback can run after the client-visible terminal outcome, whose recorded
+duration excludes observer queue delay. Blocking observation still retains
+physical shutdown work, so use finite operations and never wait on this same
+Soklet lifecycle from the callback.
+
+The dispatcher uses `requestHandlerConcurrency` workers. Its transient
+reservation bound is handler concurrency + handler queue capacity + protocol
+concurrency (192 with defaults), with sums clamped to representable capacities.
+Modern subscription lifetimes have a separate reservation bound up to the
+admitted-subscription limit: the configured connection cap, or 8,192 when that
+TCP cap is disabled, subject to the combined integer-capacity limit. These reservations keep accepted finishes queued through forced shutdown.
+Slow readers or callbacks can consume this shared observation budget and cause
+other clients' observation pairs to be omitted; they do not cause protocol
+rejection. Both callbacks and their associated semantic request metrics are
+omitted together. Cross-client delivery order is unspecified. A request's start
+always precedes its own finish and related logs.
+
 Callback context, error values and exact observed `Throwable` objects are
-application-owned sensitive data. The built-in MCP failure log omits request
-and throwable attachments; this does not redact the objects supplied to an
-application observer or a custom log event.
+application-owned sensitive data. Unexpected application-execution failures emit
+one `MCP_REQUEST_PROCESSING_FAILED` diagnostic with a fixed sanitized message and
+no Throwable, request, resource-method or response attachments. Routine capacity,
+cancelation, deadline and intentional rejection outcomes do not emit this event.
+The finish callback still supplies exact observed Throwables for application-owned
+logging and redaction.
 
 `Soklet` owns one lifecycle for its configured transports. `ServerStarted`
 requires listener readiness. Coordinated shutdown projects one

@@ -39,6 +39,9 @@ import static java.util.Objects.requireNonNull;
  * values reachable through the identity retain their own thread-safety and
  * lifecycle contracts.
  *
+ * <p>
+ * This is a closed domain; exhaustive switches are supported, and any new alternative requires an explicit reviewed contract amendment.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe

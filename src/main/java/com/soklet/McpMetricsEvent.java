@@ -38,6 +38,9 @@ import static java.util.Objects.requireNonNull;
  * unrecognized method, operation name, resource URI, principal, header, trace
  * data, argument, or result is a framework-produced built-in metric dimension.
  *
+ * <p>
+ * This type may gain reviewed permitted subtypes in Soklet 4.x; use a forward-compatible default when switching over its values.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
@@ -901,7 +904,10 @@ public sealed interface McpMetricsEvent permits
 	@ThreadSafe
 	public final class SubscriptionMaintenance implements McpMetricsEvent {
 		/**
-		 * Fixed subscription-maintenance work families.
+		 * Bounded subscription-maintenance work families.
+		 *
+		 * <p>
+		 * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
 		 *
 		 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 		 */
@@ -915,7 +921,10 @@ public sealed interface McpMetricsEvent permits
 		}
 
 		/**
-		 * Fixed subscription-maintenance outcomes.
+		 * Bounded subscription-maintenance outcomes.
+		 *
+		 * <p>
+		 * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
 		 *
 		 * @author <a href="https://www.revetkn.com">Mark Allen</a>
 		 */

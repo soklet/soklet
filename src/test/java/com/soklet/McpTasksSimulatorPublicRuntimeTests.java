@@ -145,7 +145,7 @@ public class McpTasksSimulatorPublicRuntimeTests {
 		SokletSimulator.run(config, simulator -> {
 			String error = performJson(simulator, request("tools/call", TOOL_NAME,
 					"ineligible", "\"name\":\"" + TOOL_NAME + "\",\"arguments\":{}", false),
-					500, "An MCP task result requires an available task creation context.");
+					200, "An MCP task result requires an available task creation context.");
 			Assertions.assertEquals("{\"jsonrpc\":\"2.0\",\"id\":\"ineligible\","
 					+ "\"error\":{\"code\":-32603,\"message\":\"Internal error\"}}", error);
 		});
@@ -166,7 +166,7 @@ public class McpTasksSimulatorPublicRuntimeTests {
 					McpCompleteResult.fromToolText("simulation-output-canary"), "Ready");
 			visible.set(false);
 			String error = performJson(simulator, request("tasks/get", taskId, "hidden",
-					"\"taskId\":\"" + taskId + "\"", true), 500,
+					"\"taskId\":\"" + taskId + "\"", true), 200,
 					"The completed MCP task result is unavailable.");
 			Assertions.assertEquals("{\"jsonrpc\":\"2.0\",\"id\":\"hidden\","
 					+ "\"error\":{\"code\":-32603,\"message\":\"Internal error\"}}", error);

@@ -431,7 +431,7 @@ final class McpLegacySessionStore {
 							session.grants.put(URI.create(uri), entry); logicalGrants++; session.usage.liveGrants++;
 							session.retainedUriBytes += uriBytes; retainedUriBytes += uriBytes;
 						}
-						entry.generation.incrementAndGet(); entry.authorized = false;
+						entry.generation.incrementAndGet(); entry.deliveryGeneration.incrementAndGet(); entry.authorized = false;
 						if (entry.pending != null) retireGrantHandleWhileLocked(entry.pending, GrantCause.REPLACED, actions);
 						fenceGrantTargetWhileLocked(entry.activeGrant, entry.generation.get(), actions);
 						Grant grant = new Grant(entry, target, verifiedUse.evidence);
@@ -677,12 +677,16 @@ final class McpLegacySessionStore {
 		private final long dirtySequence;
 		private final long getGeneration;
 		private final long grantGeneration;
+		private final long getDeliveryGeneration;
+		private final long grantDeliveryGeneration;
 		private final BooleanSupplier sourceActive;
 		private boolean written;
 		private DeliveryAttempt(Get get, McpResourceNotificationType type, @Nullable GrantEntry entry, long sequence) {
 			this.get = get; this.notificationType = type; this.entry = entry; this.dirtySequence = sequence;
 			this.catalog = entry == null ? requireNonNull(get.session.catalogDirty.get(type)) : null;
 			this.getGeneration = get.authorizationGeneration.get(); this.grantGeneration = entry == null ? 0L : entry.generation.get();
+			this.getDeliveryGeneration = get.deliveryGeneration.get();
+			this.grantDeliveryGeneration = entry == null ? 0L : entry.deliveryGeneration.get();
 			this.sourceActive = entry == null
 					? requireNonNull(catalog).sourceActive : entry.sourceActive;
 		}
@@ -693,6 +697,14 @@ final class McpLegacySessionStore {
 			long now = clock.nanoTime();
 			return sourceActive.getAsBoolean() && get.validGeneration(getGeneration, notificationType, now)
 					&& (entry == null || entry.generation.get() == grantGeneration && grantDeliverable(entry, now));
+		}
+		/** Routine lease renewal can recheck an unwritten frame without truncating a started chunk. */
+		boolean continuationValid() {
+			long now = clock.nanoTime();
+			return sourceActive.getAsBoolean() && get.deliveryGeneration.get() == getDeliveryGeneration
+					&& get.deliveryPermitted(notificationType, now)
+					&& (entry == null || entry.deliveryGeneration.get() == grantDeliveryGeneration
+							&& grantDeliverable(entry, now));
 		}
 		private boolean currentDirtyWhileLocked() {
 			if (entry != null) return entry.dirty && entry.dirtySequence == dirtySequence;
@@ -725,6 +737,7 @@ final class McpLegacySessionStore {
 			this.attempt = attempt; this.encodedBytes = encodedBytes;
 		}
 		boolean valid() { return !released.get() && attempt.valid(); }
+		boolean continuationValid() { return !released.get() && attempt.continuationValid(); }
 		/** Called only for a complete frame, before release, outside the channel lock. */
 		void written() {
 			synchronized (lock) { if (!released.get()) attempt.written = true; }
@@ -1071,6 +1084,7 @@ final class McpLegacySessionStore {
 		private final long totalDeadlineNanos;
 		private volatile long leaseDeadlineNanos;
 		private final AtomicLong authorizationGeneration = new AtomicLong(1L);
+		private final AtomicLong deliveryGeneration = new AtomicLong(1L);
 		private volatile boolean authorized = true;
 		private volatile boolean logical = true;
 		private boolean physical = true;
@@ -1170,7 +1184,10 @@ final class McpLegacySessionStore {
 			return result;
 		}
 		private boolean validGeneration(long expected, McpResourceNotificationType type, long now) {
-			return logical && session.live && authorized && authorizationGeneration.get() == expected
+			return authorizationGeneration.get() == expected && deliveryPermitted(type, now);
+		}
+		private boolean deliveryPermitted(McpResourceNotificationType type, long now) {
+			return logical && session.live && authorized
 					&& notificationTypes.contains(type) && now - leaseDeadlineNanos < 0L;
 		}
 		void retire(@NonNull GetCause cause) {
@@ -1504,6 +1521,7 @@ final class McpLegacySessionStore {
 	private void fenceGetWhileLocked(Get get, List<Runnable> actions) {
 		if (!get.logical || !get.session.live) return;
 		get.authorized = false;
+		get.deliveryGeneration.incrementAndGet();
 		long generation = get.authorizationGeneration.incrementAndGet();
 		GetTarget target = get.target;
 		if (target != null) actions.add(() -> target.fence(generation));
@@ -1518,7 +1536,8 @@ final class McpLegacySessionStore {
 
 	private void completeGetWhileLocked(Get get, List<Runnable> actions) {
 		if (!get.logical) return;
-		get.logical = false; get.authorized = false; get.authorizationGeneration.incrementAndGet(); get.target = null;
+		get.logical = false; get.authorized = false; get.authorizationGeneration.incrementAndGet();
+		get.deliveryGeneration.incrementAndGet(); get.target = null;
 		get.session.gets.remove(get); logicalGets--;
 		maintenanceDemandUnits -= get.maintenanceDemandUnits; get.maintenanceDemandUnits = 0L;
 		// A pending frame keeps its key until the writer reports complete write or
@@ -1529,7 +1548,7 @@ final class McpLegacySessionStore {
 
 	private void fenceGrantEntryWhileLocked(GrantEntry entry, List<Runnable> actions) {
 		if (!entry.live || !entry.session.live) return;
-		entry.authorized = false; entry.generation.incrementAndGet();
+		entry.authorized = false; entry.generation.incrementAndGet(); entry.deliveryGeneration.incrementAndGet();
 		fenceGrantTargetWhileLocked(entry.activeGrant, entry.generation.get(), actions);
 		fenceGrantTargetWhileLocked(entry.pending, entry.generation.get(), actions);
 	}
@@ -1555,7 +1574,7 @@ final class McpLegacySessionStore {
 		boolean lostEstablishedGrant = entry.activeGrant != null
 				&& (cause == GrantCause.AUTHORIZATION_DENIED || cause == GrantCause.AUTHORIZATION_FAILED
 						|| cause == GrantCause.LEASE_EXPIRED || cause == GrantCause.TOTAL_LIFETIME_EXPIRED);
-		entry.live = false; entry.authorized = false; entry.generation.incrementAndGet();
+		entry.live = false; entry.authorized = false; entry.generation.incrementAndGet(); entry.deliveryGeneration.incrementAndGet();
 		entry.session.grants.remove(URI.create(entry.uri), entry);
 		logicalGrants--; entry.session.usage.liveGrants--;
 		maintenanceDemandUnits -= entry.maintenanceDemandUnits; entry.maintenanceDemandUnits = 0L;
@@ -1820,6 +1839,7 @@ final class McpLegacySessionStore {
 		private final long totalDeadlineNanos;
 		private final AuthorizationSlot authorizationSlot;
 		private final AtomicLong generation = new AtomicLong();
+		private final AtomicLong deliveryGeneration = new AtomicLong();
 		private volatile long leaseDeadlineNanos;
 		private volatile boolean live = true;
 		private volatile boolean authorized;

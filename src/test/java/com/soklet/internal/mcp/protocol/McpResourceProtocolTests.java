@@ -222,7 +222,7 @@ public class McpResourceProtocolTests {
 					request("oversized-output", "resources/list",
 							",\"cursor\":\"big\""),
 					headers("resources/list", null));
-			assertError(oversizedOutput, 500, -32603, "oversized-output");
+			assertError(oversizedOutput, 200, -32603, "oversized-output");
 			Assertions.assertFalse(oversizedOutput.body().contains("世界語"),
 					oversizedOutput.body());
 			Assertions.assertEquals(4, admissions.get());
@@ -285,11 +285,11 @@ public class McpResourceProtocolTests {
 			FixedResponse invalidScope = send(port,
 					request("invalid-scope", "resources/list", ""),
 					headers("resources/list", null));
-			assertError(invalidScope, 500, -32603, "invalid-scope");
+			assertError(invalidScope, 200, -32603, "invalid-scope");
 
 			FixedResponse invalidTtl = read(port, "invalid-ttl",
 					"catalog://items/1");
-			assertError(invalidTtl, 500, -32603, "invalid-ttl");
+			assertError(invalidTtl, 200, -32603, "invalid-ttl");
 		}
 	}
 
@@ -322,7 +322,7 @@ public class McpResourceProtocolTests {
 			FixedResponse response = send(runtime.start().getPort(),
 					request("equivalent-uris", "resources/list", ""),
 					headers("resources/list", null));
-			assertError(response, 500, -32603, "equivalent-uris");
+			assertError(response, 200, -32603, "equivalent-uris");
 			Assertions.assertFalse(response.body().contains(registeredUri),
 					response.body());
 		}

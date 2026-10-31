@@ -469,7 +469,7 @@ public class McpResourcePublicRuntimeTests {
 			HttpResponse<String> oversizedOutput = send(port,
 					request("oversized-output", "resources/list",
 							",\"cursor\":\"big\""), "resources/list");
-			assertError(oversizedOutput, 500, -32603, "oversized-output");
+			assertError(oversizedOutput, 200, -32603, "oversized-output");
 			Assertions.assertFalse(oversizedOutput.body().contains("世界語"),
 					oversizedOutput.body());
 
@@ -662,7 +662,7 @@ public class McpResourcePublicRuntimeTests {
 						request(cursor, "resources/list",
 								",\"cursor\":\"" + cursor + "\""),
 						"resources/list");
-				assertError(response, 500, -32603, cursor);
+				assertError(response, 200, -32603, cursor);
 				Assertions.assertFalse(response.body().contains("secret"),
 						response.body());
 				Throwable failure = resourceListFailures.poll(5, TimeUnit.SECONDS);
@@ -682,7 +682,7 @@ public class McpResourcePublicRuntimeTests {
 
 			HttpResponse<String> invalidContent = read(port,
 					"invalid-content-metadata", "test://invalid-content-metadata");
-			assertError(invalidContent, 500, -32603,
+			assertError(invalidContent, 200, -32603,
 					"invalid-content-metadata");
 			Assertions.assertFalse(invalidContent.body().contains("secret"),
 					invalidContent.body());
@@ -826,7 +826,7 @@ public class McpResourcePublicRuntimeTests {
 					request("aggregate-page", "resources/list",
 							",\"cursor\":\"oversized\""),
 					"resources/list");
-			assertError(oversized, 500, -32603, "aggregate-page");
+			assertError(oversized, 200, -32603, "aggregate-page");
 			Assertions.assertEquals(
 					"{\"jsonrpc\":\"2.0\",\"id\":\"aggregate-page\","
 							+ "\"error\":{\"code\":-32603,"
@@ -903,13 +903,13 @@ public class McpResourcePublicRuntimeTests {
 
 			HttpResponse<String> oversized = read(port, "blob-oversized",
 					oversizedUri.toString());
-			assertError(oversized, 500, -32603, "blob-oversized");
+			assertError(oversized, 200, -32603, "blob-oversized");
 				Assertions.assertTrue(oversized.body().length() < 1_000,
 						Integer.toString(oversized.body().length()));
 
 				HttpResponse<String> aggregateOversized = read(port,
 						"blob-aggregate-oversized", aggregateUri.toString());
-				assertError(aggregateOversized, 500, -32603,
+				assertError(aggregateOversized, 200, -32603,
 						"blob-aggregate-oversized");
 				Assertions.assertTrue(aggregateOversized.body().length() < 1_000,
 						Integer.toString(aggregateOversized.body().length()));
@@ -1325,7 +1325,7 @@ public class McpResourcePublicRuntimeTests {
 					int before = handlerEntries.get();
 					HttpResponse<String> response = modern ? read(port, "private", TEXT_URI.toString())
 							: sendLegacy(port, version.getWireValue(), "resources/read", "\"uri\":\"" + TEXT_URI + "\"", null);
-					assertError(response, modern ? 500 : 200, -32603, modern ? "private" : "legacy");
+					assertError(response, 200, -32603, modern ? "private" : "legacy");
 					Assertions.assertFalse(response.body().contains("private-interceptor"), response.body());
 					Assertions.assertEquals(before + (mode == 2 ? 1 : 0), handlerEntries.get());
 				}

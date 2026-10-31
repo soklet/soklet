@@ -529,6 +529,35 @@ class McpLegacySessionGrantStoreTests {
 	}
 
 	@Test
+	void started_uri_hint_survives_routine_get_and_grant_renewal_but_not_an_authorization_fence() {
+		for (String revision : List.of("2025-06-18", "2025-11-25")) {
+			Fixture fixture = new Fixture(revision); Session session = fixture.session("owner");
+			McpLegacySessionStore.Grant grant = fixture.subscribe(session, "test:///resource", new GrantTarget(), 16, 60 * SECOND, 120 * SECOND);
+			McpLegacySessionStore.Get get = fixture.get(session, Set.of(McpResourceNotificationType.RESOURCE_UPDATED), 60 * SECOND);
+			fixture.store.markResourceDirty("/mcp", revision, grant.uri());
+			McpLegacySessionStore.DeliveryAttempt attempt = onlyDelivery(fixture).forGet(get).orElseThrow();
+			McpLegacySessionStore.NotificationReservation bytes = fixture.store.reserveNotificationBytes(attempt, 80).reservation().orElseThrow();
+			assertTrue(bytes.valid()); assertTrue(bytes.continuationValid());
+			assertTrue(grant.renew(grant.generation(), 70 * SECOND));
+			assertTrue(get.renew(get.generation(), session.owner, fixture.partition, 70 * SECOND));
+			assertFalse(bytes.valid(), "An unwritten frame must be rechecked after renewal.");
+			assertTrue(bytes.continuationValid(), "Renewing the same authority must not truncate an already started chunk.");
+			fixture.store.fenceGrants();
+			assertFalse(bytes.continuationValid());
+			assertTrue(grant.renew(grant.generation(), 80 * SECOND));
+			assertFalse(bytes.continuationValid(), "Reauthorization must not revive a frame from before the fence.");
+			bytes.release();
+			McpLegacySessionStore.DeliveryAttempt fresh = onlyDelivery(fixture).forGet(get).orElseThrow();
+			McpLegacySessionStore.NotificationReservation freshBytes = fixture.store.reserveNotificationBytes(fresh, 80).reservation().orElseThrow();
+			long fenced = get.fence();
+			assertFalse(freshBytes.continuationValid());
+			assertTrue(get.renew(fenced, session.owner, fixture.partition, 80 * SECOND));
+			assertFalse(freshBytes.continuationValid());
+			freshBytes.release(); get.physicalComplete(); fixture.store.close(); fixture.assertEmpty();
+		}
+	}
+
+	@Test
 	void queued_uri_hint_is_reoffered_after_grant_generation_changes_even_if_old_release_is_late() {
 		for (String revision : List.of("2025-06-18", "2025-11-25"))
 			for (String transition : List.of("renew", "reconcile", "duplicate")) {
@@ -549,6 +578,7 @@ class McpLegacySessionGrantStoreTests {
 					assertTrue(grant.renew(grant.generation(), 70 * SECOND));
 				}
 				assertFalse(oldBytes.valid()); assertFalse(fixture.store.acknowledgeOffered(old));
+				assertEquals(transition.equals("renew"), oldBytes.continuationValid());
 				assertTrue(fixture.store.pendingDeliveries("/mcp", revision).isEmpty(), "A fenced writer must report its outcome before another stream can claim the same notification.");
 				oldBytes.release();
 				McpLegacySessionStore.DeliveryAttempt replacement = onlyDelivery(fixture).forGet(get).orElseThrow();

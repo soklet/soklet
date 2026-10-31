@@ -19,6 +19,7 @@ package com.soklet;
 import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
 
@@ -45,6 +46,25 @@ import java.util.Optional;
  */
 @ThreadSafe
 public interface McpRequestContext {
+	/**
+	 * Returns the semantic request's wall-clock start, captured before its start
+	 * observers run. This is the origin of the elapsed duration supplied to
+	 * {@link LifecycleObserver#didFinishMcpRequestHandling(McpRequestContext, McpRequestOutcome, McpJsonRpcError, java.time.Duration, java.util.List)};
+	 * delayed finish observation does not extend that duration.
+	 * <p>
+	 * Built-in admitted contexts supply this value, including when optional
+	 * observation callbacks are omitted. Derived subscription contexts
+	 * retain their original listen request's start, rather than recording a new
+	 * start for maintenance work. Custom and manually constructed contexts may
+	 * return the empty optional, which is the default.
+	 *
+	 * @return semantic request start, if known
+	 */
+	@NonNull
+	default Optional<@NonNull Instant> getStartedAt() {
+		return Optional.empty();
+	}
+
 	/**
 	 * Returns the immutable Soklet request for this context. Subscription catalog
 	 * and localization projections use a derived request without headers, body,

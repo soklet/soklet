@@ -20,6 +20,9 @@ package com.soklet;
  * Declares when an MCP operation requires the client capability associated
  * with an input request.
  *
+ * <p>
+ * This is a closed domain; exhaustive switches are supported, and any new alternative requires an explicit reviewed contract amendment.
+ *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 public enum McpInputRequirement {
