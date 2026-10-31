@@ -660,7 +660,8 @@ const REVIEWED_SCOPE_TOPOLOGY_OVERRIDES = checkedReviewMap([
   ...reviewedScopeFile("src/test/java/com/soklet/McpRateLimitIdentityPublicRuntimeTests.java", "a03b26462a04da772ec81fc0f332c8b16067e8b38288ac486caa077d512a6ab4", [
     ["allowlistedSocketPeerCanSelectForwardedIpPartitions","a204fc9c5ca2beb351f9ab37986c3d89aed0c82e8c05add8d0903a35622b7856",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1}}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/McpRateLimitPipelinePublicRuntimeTests.java", "5c9f90c29c5c4a7a7581669eb530630a016cce1a4d3a8fdd01a6b3d9b48bd2db", [
+  ...reviewedScopeFile("src/test/java/com/soklet/McpRateLimitPipelinePublicRuntimeTests.java", "9a57bf3eb49a33ccf5d44d6d0181832e0faee3f7b5548ec9529e7edf48f80612", [
+    ["endpointAndToolOverridesEnforceQuotasWithoutAServerFallback","79700cfa3d67927e5445287a713f754b7e66901de8889fe0eae929923ca6a058",{"generation":{"count":4,"mode":"SEQUENTIAL","complete":4,"prior":3,"incomplete":1}}],
     ["successfulChargesAreRetainedAfterEveryDownstreamFailure","6021dbe8040107292a2b90efe2a60899cf07dc1c61690ee44de7c463fb998cf0",{"generation":{"count":6,"mode":"SEQUENTIAL","complete":6,"prior":5,"incomplete":1},"controlJoinMillis":30000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
   ]),
   ...reviewedScopeFile("src/test/java/com/soklet/McpRequestObservationPublicRuntimeTests.java", "79812657b21492dfb0f96d5da0b2b3578440c67eed7b73841f9fdba81ba31533", [

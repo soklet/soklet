@@ -96,6 +96,7 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 	}
 
 	@Test
+	@Timeout(90)
 	public void endpointAndToolOverridesEnforceQuotasWithoutAServerFallback()
 			throws Exception {
 		for (String mode : List.of("endpoint-direct", "endpoint-named", "tool-direct", "tool-named")) {

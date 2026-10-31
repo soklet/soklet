@@ -1700,8 +1700,8 @@ SimulatorConfig simulatorConfig = SimulatorConfig.builder()
 
 Set an explicit endpoint registry or admission controller on the MCP builder
 supplied to `configureMcpServer`, as shown above. Like
-`McpServer.withPort(port)`, the standalone form still requires a fallback tool
-rate limiter when a discovered endpoint has a tool. The outer
+`McpServer.withPort(port)`, the standalone form applies a tool rate quota only
+when a tool, endpoint, or server limiter is configured. The outer
 [`SimulatorConfig.Builder`](https://javadoc.soklet.com/com/soklet/SimulatorConfig.Builder.html)
 owns the call to [`McpServer.Builder::build`](<https://javadoc.soklet.com/com/soklet/McpServer.Builder.html#build()>);
 the configurer must not build or retain the supplied MCP builder.
