@@ -1292,8 +1292,7 @@ public class StaticFilesTests {
 								? instanceClass.cast(resource) : defaultProvider.provide(instanceClass);
 					}
 				}).build();
-		try (Soklet soklet = Soklet.fromConfig(configuration)) {
-			soklet.start();
+		Soklet.run(configuration, () -> {
 			String full = staticFileWireResponse(port, "GET /assets/asset.txt HTTP/1.1\r\n"
 					+ "Host: localhost\r\nConnection: close\r\n\r\n");
 			Assertions.assertTrue(full.startsWith("HTTP/1.1 200 "));
@@ -1302,7 +1301,7 @@ public class StaticFilesTests {
 					+ "Host: localhost\r\nRange: bytes=1-3\r\nConnection: close\r\n\r\n");
 			Assertions.assertTrue(range.startsWith("HTTP/1.1 206 "));
 			Assertions.assertEquals("ubl", range.split("\r\n\r\n", 2)[1]);
-		}
+		});
 	}
 
 	@Test
@@ -1334,12 +1333,11 @@ public class StaticFilesTests {
 								? instanceClass.cast(resource) : defaultProvider.provide(instanceClass);
 					}
 				}).build();
-		try (Soklet soklet = Soklet.fromConfig(configuration)) {
-			soklet.start();
+		Soklet.run(configuration, () -> {
 			String wire = staticFileWireResponse(port, "GET /swapped HTTP/1.1\r\nHost: localhost\r\n"
 					+ "Connection: close\r\n\r\n");
 			Assertions.assertFalse(wire.contains("secret"));
-		}
+		});
 	}
 
 	private static String staticFileWireResponse(int port, String request) throws IOException {

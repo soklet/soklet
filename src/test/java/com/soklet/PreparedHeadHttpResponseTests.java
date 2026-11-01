@@ -47,7 +47,8 @@ class PreparedHeadHttpResponseTests {
 
 	@Test
 	void explicitHeadPreservesPreparedGetLengthWithoutWritingBodyBytes() throws Exception {
-		try (Fixture fixture = new Fixture()) {
+		Fixture fixture = new Fixture();
+		Soklet.run(fixture.config, () -> {
 			WireResponse get = fixture.pipeline("GET", "/prepared", Map.of());
 			WireResponse head = fixture.pipeline("HEAD", "/prepared", Map.of());
 			assertEquals(200, head.status());
@@ -57,22 +58,24 @@ class PreparedHeadHttpResponseTests {
 			assertEquals(get.headers().get("content-type"), head.headers().get("content-type"));
 			assertEquals(get.headers().get("etag"), head.headers().get("etag"));
 			assertEquals("", head.body());
-		}
+		});
 	}
 
 	@Test
 	void explicitHeadWithoutRepresentationLengthOmitsContentLength() throws Exception {
-		try (Fixture fixture = new Fixture()) {
+		Fixture fixture = new Fixture();
+		Soklet.run(fixture.config, () -> {
 			WireResponse response = fixture.pipeline("HEAD", "/unknown", Map.of());
 			assertEquals(200, response.status());
 			assertFalse(response.headers().containsKey("content-length"), response.headers().toString());
 			assertEquals("", response.body());
-		}
+		});
 	}
 
 	@Test
 	void conditionalGetAndHeadDoNotInventContentLengthForNotModified() throws Exception {
-		try (Fixture fixture = new Fixture()) {
+		Fixture fixture = new Fixture();
+		Soklet.run(fixture.config, () -> {
 			for (String method : List.of("GET", "HEAD")) {
 				WireResponse response = fixture.pipeline(method, "/prepared", Map.of("If-None-Match", Resource.ETAG));
 				assertEquals(304, response.status(), method);
@@ -80,12 +83,13 @@ class PreparedHeadHttpResponseTests {
 				assertFalse(response.headers().containsKey("content-length"), method + ": " + response.headers());
 				assertEquals("", response.body(), method);
 			}
-		}
+		});
 	}
 
 	@Test
 	void implicitHeadStillCalculatesLengthFromGetRepresentation() throws Exception {
-		try (Fixture fixture = new Fixture()) {
+		Fixture fixture = new Fixture();
+		Soklet.run(fixture.config, () -> {
 			WireResponse get = fixture.pipeline("GET", "/fallback", Map.of());
 			WireResponse head = fixture.pipeline("HEAD", "/fallback", Map.of());
 			assertEquals(200, head.status());
@@ -93,7 +97,7 @@ class PreparedHeadHttpResponseTests {
 			assertEquals(List.of("13"), head.headers().get("content-length"));
 			assertEquals(get.headers().get("content-length"), head.headers().get("content-length"));
 			assertEquals("", head.body());
-		}
+		});
 	}
 
 	public static final class Resource {
@@ -134,14 +138,14 @@ class PreparedHeadHttpResponseTests {
 
 	private record WireResponse(int status, Map<String, List<String>> headers, String body) {}
 
-	private static final class Fixture implements AutoCloseable {
+	private static final class Fixture {
 		private final int port;
-		private final Soklet soklet;
+		private final SokletConfig config;
 
 		private Fixture() throws Exception {
 			this.port = findFreePort();
 			Resource resource = new Resource();
-			SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(this.port).host("127.0.0.1").build())
+			this.config = SokletConfig.withHttpServer(HttpServer.withPort(this.port).host("127.0.0.1").build())
 					.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(10))
 							.startupCancelationTimeout(Duration.ofSeconds(1)).gracefulShutdownTimeout(Duration.ofSeconds(1))
 							.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
@@ -155,8 +159,6 @@ class PreparedHeadHttpResponseTests {
 						@Override public void didReceiveLogEvent(LogEvent event) {}
 					})
 					.build();
-			this.soklet = Soklet.fromConfig(config);
-			this.soklet.start();
 		}
 
 		private WireResponse pipeline(String method, String path, Map<String, String> headers) throws Exception {
@@ -194,9 +196,6 @@ class PreparedHeadHttpResponseTests {
 			}
 		}
 
-		@Override public void close() {
-			this.soklet.close();
-		}
 	}
 
 	private static WireResponse readResponse(InputStream input, boolean head) throws Exception {

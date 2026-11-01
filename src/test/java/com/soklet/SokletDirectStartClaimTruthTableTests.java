@@ -39,8 +39,9 @@ final class SokletDirectStartClaimTruthTableTests {
 	@Test
 	void successfulStartThenStopRejectsLaterStartWithPlainClaimFailure() {
 		TruthHttpEndpoint http = new TruthHttpEndpoint();
-		try (Soklet soklet = Soklet.fromConfig(
-				config(http, completeResolver()).build())) {
+		try (SokletTestScope sokletScope = SokletTestScope.of(Soklet.fromConfig(
+				config(http, completeResolver()).build()))) {
+			Soklet soklet = sokletScope.soklet();
 			soklet.start();
 			ShutdownResult publicResult = soklet.shutdown()
 					.toCompletableFuture().join();
@@ -65,8 +66,9 @@ final class SokletDirectStartClaimTruthTableTests {
 	@Test
 	void failedStartRejectsLaterStartWithPlainClaimFailure() {
 		TruthHttpEndpoint http = new TruthHttpEndpoint();
-		try (Soklet soklet = Soklet.fromConfig(
-				config(http, emptyResolver()).build())) {
+		try (SokletTestScope sokletScope = SokletTestScope.of(Soklet.fromConfig(
+				config(http, emptyResolver()).build()))) {
+			Soklet soklet = sokletScope.soklet();
 			SokletStartupException firstFailure = Assertions.assertThrows(
 					SokletStartupException.class, soklet::start);
 			InternalShutdownResult ownerResult = firstFailure
@@ -89,8 +91,9 @@ final class SokletDirectStartClaimTruthTableTests {
 	@Test
 	void closeWinningNewMakesLaterStartReplayExactNotAttemptedResult() {
 		TruthHttpEndpoint http = new TruthHttpEndpoint();
-		try (Soklet soklet = Soklet.fromConfig(
-				config(http, completeResolver()).build())) {
+		try (SokletTestScope sokletScope = SokletTestScope.of(Soklet.fromConfig(
+				config(http, completeResolver()).build()))) {
+			Soklet soklet = sokletScope.soklet();
 			soklet.close();
 			InternalShutdownResult ownerResult = soklet.getDirectLifecycle().result()
 					.orElseThrow();

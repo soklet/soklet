@@ -61,7 +61,8 @@ class SseTransportHandshakeAccessTests {
 		};
 		SseHandshakeResult.Accepted accepted = SseHandshakeResult.Accepted.builder()
 				.clientContext(clientContext).clientInitializer(initializer).build();
-		try (Fixture fixture = new Fixture(accepted)) {
+		Fixture fixture = new Fixture(accepted);
+		Soklet.run(fixture.config, () -> {
 			HttpRequestResult result = fixture.request("/events");
 			assertEquals(200, result.getMarshaledResponse().getStatusCode());
 			assertTrue(result.getResponse().isEmpty());
@@ -75,50 +76,54 @@ class SseTransportHandshakeAccessTests {
 			assertEquals(1, calls.get());
 			assertSame(event, unicaster.event.get());
 			assertSame(comment, unicaster.comment.get());
-		}
+		});
 	}
 
 	@Test
 	void defaultAcceptanceExposesEmptyOptionalContextAndInitializer() {
-		try (Fixture fixture = new Fixture(SseHandshakeResult.accept())) {
+		Fixture fixture = new Fixture(SseHandshakeResult.accept());
+		Soklet.run(fixture.config, () -> {
 			SseHandshakeResult.Accepted accepted = assertInstanceOf(SseHandshakeResult.Accepted.class,
 					fixture.request("/events").getSseHandshakeResult().orElseThrow());
 			assertTrue(accepted.getClientContext().isEmpty());
 			assertTrue(accepted.getClientInitializer().isEmpty());
-		}
+		});
 	}
 
 	@Test
 	void rejectionPreservesItsDecisionAndOriginalLogicalResponse() {
 		Response response = Response.withStatusCode(403).body("denied").build();
 		SseHandshakeResult.Rejected rejected = SseHandshakeResult.rejectWithResponse(response);
-		try (Fixture fixture = new Fixture(rejected)) {
+		Fixture fixture = new Fixture(rejected);
+		Soklet.run(fixture.config, () -> {
 			HttpRequestResult result = fixture.request("/events");
 			assertSame(rejected, result.getSseHandshakeResult().orElseThrow());
 			assertSame(response, result.getResponse().orElseThrow());
 			assertEquals(403, result.getMarshaledResponse().getStatusCode());
-		}
+		});
 	}
 
 	@Test
 	void successfulHttpStatusDoesNotMakeARejectedHandshakeAccepted() {
 		SseHandshakeResult.Rejected rejected = SseHandshakeResult.rejectWithResponse(Response.withStatusCode(200).body("finite reply").build());
-		try (Fixture fixture = new Fixture(rejected)) {
+		Fixture fixture = new Fixture(rejected);
+		Soklet.run(fixture.config, () -> {
 			HttpRequestResult result = fixture.request("/events");
 			assertEquals(200, result.getMarshaledResponse().getStatusCode());
 			assertSame(rejected, result.getSseHandshakeResult().orElseThrow());
 			assertInstanceOf(SseHandshakeResult.Rejected.class, result.getSseHandshakeResult().orElseThrow());
-		}
+		});
 	}
 
 	@Test
 	void ordinaryAndUnmatchedResultsHaveNoHandshake() {
 		assertTrue(HttpRequestResult.fromMarshaledResponse(MarshaledResponse.withStatusCode(200).build()).getSseHandshakeResult().isEmpty());
-		try (Fixture fixture = new Fixture(SseHandshakeResult.accept())) {
+		Fixture fixture = new Fixture(SseHandshakeResult.accept());
+		Soklet.run(fixture.config, () -> {
 			HttpRequestResult result = fixture.request("/missing");
 			assertEquals(404, result.getMarshaledResponse().getStatusCode());
 			assertTrue(result.getSseHandshakeResult().isEmpty());
-		}
+		});
 	}
 
 	@Test
@@ -128,7 +133,8 @@ class SseTransportHandshakeAccessTests {
 		SseClientInitializer initializer = sseUnicaster -> calls.incrementAndGet();
 		SseHandshakeResult.Accepted accepted = SseHandshakeResult.Accepted.builder()
 				.clientContext(clientContext).clientInitializer(initializer).build();
-		try (Fixture fixture = new Fixture(accepted)) {
+		Fixture fixture = new Fixture(accepted);
+		Soklet.run(fixture.config, () -> {
 			HttpRequestResult result = fixture.request("/events");
 			HttpRequestResult copy = result.copy().finish();
 			assertEquals(result, copy);
@@ -142,26 +148,29 @@ class SseTransportHandshakeAccessTests {
 				assertFalse(candidate.toString().contains("sseHandshakeResult="));
 			}
 			assertEquals(0, calls.get());
-		}
+		});
 	}
 
 	@Test
 	void initializerFailureRemainsTheCustomTransportsResponsibility() throws Exception {
 		IOException failure = new IOException("initializer failure");
 		SseClientInitializer initializer = sseUnicaster -> { throw failure; };
-		try (Fixture fixture = new Fixture(SseHandshakeResult.Accepted.builder().clientInitializer(initializer).build())) {
+		Fixture fixture = new Fixture(SseHandshakeResult.Accepted.builder().clientInitializer(initializer).build());
+		Soklet.run(fixture.config, () -> {
 			HttpRequestResult result = fixture.request("/events");
 			assertEquals(200, result.getMarshaledResponse().getStatusCode());
 			SseHandshakeResult.Accepted accepted = assertInstanceOf(SseHandshakeResult.Accepted.class, result.getSseHandshakeResult().orElseThrow());
 			assertSame(failure, assertThrows(IOException.class,
 					() -> accepted.getClientInitializer().orElseThrow().initialize(new CapturingUnicaster())));
-		}
+		});
 	}
 
 	@Test
 	void sealedAdmissionReturnsUnavailableWithoutAnApplicationHandshake() {
-		try (Fixture fixture = new Fixture(SseHandshakeResult.accept())) {
-			fixture.soklet.close();
+		Fixture fixture = new Fixture(SseHandshakeResult.accept());
+		// Keep direct control to probe admission after the lifecycle has stopped.
+		try (com.soklet.SokletTestScope scope = com.soklet.SokletTestScope.of(Soklet.run(fixture.config))) {
+			com.soklet.SokletTestScope.close(scope.soklet());
 			HttpRequestResult result = fixture.request("/events");
 			assertEquals(503, result.getMarshaledResponse().getStatusCode());
 			assertTrue(result.getSseHandshakeResult().isEmpty());
@@ -169,13 +178,13 @@ class SseTransportHandshakeAccessTests {
 		}
 	}
 
-	private static final class Fixture implements AutoCloseable {
+	private static final class Fixture {
 		final CustomSseServer server = new CustomSseServer();
 		final Resource resource;
-		final Soklet soklet;
+		final SokletConfig config;
 		Fixture(SseHandshakeResult handshake) {
 			this.resource = new Resource(handshake);
-			this.soklet = Soklet.fromConfig(SokletConfig.withSseServer(this.server)
+			this.config = SokletConfig.withSseServer(this.server)
 					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Resource.class)))
 					.instanceProvider(new InstanceProvider() {
 						@Override public <T> T provide(Class<T> type) {
@@ -184,15 +193,13 @@ class SseTransportHandshakeAccessTests {
 					}).lifecycleObserver(new LifecycleObserver() {
 						@Override public void didReceiveLogEvent(LogEvent logEvent) {}
 					}).lifecyclePolicy(LifecyclePolicy.builder().gracefulShutdownTimeout(Duration.ofSeconds(1))
-							.forcedShutdownTimeout(Duration.ofSeconds(1)).build()).build());
-			this.soklet.start();
+							.forcedShutdownTimeout(Duration.ofSeconds(1)).build()).build();
 		}
 		HttpRequestResult request(String path) {
 			AtomicReference<HttpRequestResult> result = new AtomicReference<>();
 			this.server.requestHandler.handleRequest(Request.withPath(HttpMethod.GET, path).build(), result::set);
 			return java.util.Objects.requireNonNull(result.get(), "The synchronous public request handler must offer a result");
 		}
-		@Override public void close() { this.soklet.close(); }
 	}
 
 	public static final class Resource {

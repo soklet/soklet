@@ -153,6 +153,29 @@ run('positive unresolved helper controls keep their source-bound composition', (
     controlComposition:'REVIEWED_SEQUENTIAL_SOURCE_BOUND'}}),/not source-applicable/u);
 });
 
+run('ready-returning Soklet runs and explicit shutdown remain executing lifecycles', () => {
+  const scopes=syntheticScopes(`class SyntheticLifecycleTests {
+    @Test void publicRun() { Soklet owner=Soklet.run(config); owner.requestShutdown(); owner.awaitShutdown(); }
+    @Test void asyncRun() { var owner=Soklet.run(config); owner.awaitShutdownAsync(); owner.requestShutdown(); }
+    @Test void internalRunner() { SokletProcessLifecycle.fromConfig(config).run(cleanup); }
+    @Test void internalLaunch() { Soklet owner=SokletProcessLifecycle.launch(config, null, factory, dispatcher); owner.requestShutdown(); owner.awaitShutdown(); }
+    @Test void unrelatedLaunch() { Other.launch(config); }
+    @Test void rejectedCleanup() { Soklet.run(config, (ShutdownCleanup) null); }
+    @Test void inert() { Other.run(config); }
+  }`);
+  for(const name of ['publicRun','asyncRun','internalRunner','internalLaunch']) {
+    const row=scopes.find(scope=>scope.scopeName===name);
+    assert.equal(row.hasExecution,true);
+    assert.equal(row.applicationRunSiteCount,1);
+  }
+  const publicRun=scopes.find(scope=>scope.scopeName==='publicRun');
+  assert.ok(publicRun.observedOperations.includes('SHUTDOWN_OR_STOP'));
+  assert.ok(publicRun.observedOperations.includes('AWAIT_TERMINATION'));
+  assert.equal(scopes.find(scope=>scope.scopeName==='rejectedCleanup').cleanupConfigured,false);
+  assert.ok(!scopes.some(scope=>scope.scopeName==='inert'&&scope.hasExecution));
+  assert.ok(!scopes.some(scope=>scope.scopeName==='unrelatedLaunch'&&scope.hasExecution));
+});
+
 run('chained public application runner retains actual execution evidence', () => {
   const scopes=syntheticScopes(`class SyntheticLifecycleTests {
     @Test void chained() { SokletApplication.fromConfig(config).run(cleanup); }
@@ -173,6 +196,203 @@ run('positive production closure', () => {
   const result = verifyLifecycleBoundHarnessInventory({ root: ROOT });
   assert.equal(result.lifecycleScopes, INVENTORY.lifecycleScopes.length);
   assert.ok(result.discoveryCandidates > 4_000);
+});
+
+run('held exception regression retains exact phases and source-bound controls', () => {
+  const name = 'canceledStartupAndCatchUpFailureFinishWhilePrimaryExceptionMonitorIsHeld';
+  const row = rowByName(INVENTORY, name);
+  assert.equal(row.source.path,
+    'src/test/java/com/soklet/SokletFailureEvidenceMonitorTests.java');
+  assert.equal(row.source.hasExecution, true);
+  assert.equal(row.review.outerGuard.millis, 90_000);
+  assert.equal(row.review.generationCount, 1);
+  assert.equal(row.review.phasePolicy.startupMillis, 5_000);
+  assert.equal(row.review.phasePolicy.startupCancellationMillis, 100);
+  assert.equal(row.review.phasePolicy.gracefulShutdownMillis, 300);
+  assert.equal(row.review.phasePolicy.forcedShutdownMillis, 300);
+  assert.equal(row.review.controlJoinMillis, 35_000);
+  assert.equal(row.review.controlTopology, 'REVIEWED_SEQUENTIAL_SOURCE_BOUND');
+  const source = clone(EVIDENCE.lifecycleScopeObservations.find(
+    (candidate) => candidate.scopeName === name));
+  source.fileSha256 = '0'.repeat(64);
+  expectFailure(() => buildReviewedLifecycleScopeRows([source],
+    { requireRegistryCompleteness: false }), /override is stale/u);
+  const downgraded = clone(INVENTORY.lifecycleScopes);
+  downgraded.find((candidate) => candidate.source.scopeName === name)
+    .review.classification = 'NON_EXECUTING_LIFECYCLE_EVIDENCE';
+  expectFailure(() => verifyRequiredExecutingRows(downgraded),
+    /Required lifecycle execution scope is not bounded and closed/u);
+});
+
+run('scoped callback return retains a full lifecycle without manual shutdown', () => {
+  const scopes = syntheticScopes(`class SyntheticLifecycleTests {
+    @Test void scoped() throws Exception {
+      Soklet.run(config, () -> gate.await(2, TimeUnit.SECONDS));
+    }
+  }`);
+  assert.equal(scopes.length, 1);
+  assert.equal(scopes[0].hasExecution, true);
+  assert.equal(scopes[0].applicationRunSiteCount, 1);
+  assert.ok(scopes[0].observedOperations.includes('RUN_APPLICATION'));
+  const [row] = reviewedSyntheticRows(scopes, {});
+  assert.equal(row.review.generationCount, 1);
+  assert.equal(row.review.phasePolicy.startupMillis, 30_000);
+  assert.equal(row.review.phasePolicy.startupCancellationMillis, 2_000);
+  assert.equal(row.review.phasePolicy.gracefulShutdownMillis, 15_000);
+  assert.equal(row.review.phasePolicy.forcedShutdownMillis, 3_000);
+  assert.equal(row.review.controlJoinMillis, 2_000);
+  assert.equal(row.review.terminalReportCount, 1);
+});
+
+run('scoped production callbacks retain exact phase cleanup and control bounds', () => {
+  const path = 'src/test/java/com/soklet/SokletScopedRunTests.java';
+  const rows = INVENTORY.lifecycleScopes.filter((row) => row.source.path === path);
+  assert.equal(rows.length, 14);
+  for (const row of rows) {
+    assert.equal(row.source.hasExecution, true);
+    assert.equal(row.review.outerGuard.millis, 90_000);
+    assert.equal(row.review.phasePolicy.startupMillis, 5_000);
+    assert.equal(row.review.phasePolicy.startupCancellationMillis, 100);
+    assert.equal(row.review.phasePolicy.gracefulShutdownMillis, 1_000);
+    assert.equal(row.review.phasePolicy.forcedShutdownMillis, 1_000);
+    if (row.source.cleanupConfigured)
+      assert.equal(row.review.applicationCleanupMillis, 5_000);
+    assert.equal(row.review.terminalReportCount, 1);
+  }
+  const invalid = rowByName(INVENTORY, 'invalidScopedArgumentsDoNotClaimTheTransport');
+  assert.equal(invalid.review.generationCount, 5);
+  assert.equal(invalid.review.generationMode, 'ONE_FULL_PLUS_PREINIT_REJECTIONS');
+  assert.equal(invalid.review.completeGenerationMultiplier, 1);
+  assert.equal(invalid.review.applicationCleanupCount, 0);
+  const interruption = rowByName(INVENTORY,
+    'interruptionWhileJoiningCleanupCannotEndTheScopeEarly');
+  assert.equal(interruption.review.controlJoinMillis, 20_000);
+  const source = clone(EVIDENCE.lifecycleScopeObservations.find(
+    (candidate) => candidate.scopeName === interruption.source.scopeName));
+  source.fileSha256 = '0'.repeat(64);
+  expectFailure(() => buildReviewedLifecycleScopeRows([source],
+    { requireRegistryCompleteness: false }), /override is stale/u);
+  const downgraded = clone(INVENTORY.lifecycleScopes);
+  downgraded.find((row) => row.source.scopeName === interruption.source.scopeName)
+    .review.classification = 'NON_EXECUTING_LIFECYCLE_EVIDENCE';
+  expectFailure(() => verifyRequiredExecutingRows(downgraded),
+    /Required lifecycle execution scope is not bounded and closed/u);
+});
+
+run('removed console input retires only its obsolete discovery evidence', () => {
+  assert.ok(!INVENTORY.classifications.some((row) => row.paths.includes(
+    'src/test/java/com/soklet/SokletApplicationTriggerTests.java')));
+  for (const name of ['hookRegistrationPrecedesStartAndRemovalFollowsReport',
+    'explicitCancellationWithIncompleteRollbackThrowsIncomplete',
+    'concurrentHookInterruptionAndExplicitShutdownShareOneAttempt'])
+    assert.equal(rowByName(INVENTORY, name).source.hasExecution, true);
+  assert.ok(!INVENTORY.lifecycleScopes.some((row) =>
+    row.source.scopeName === 'triggerRegistrationFailureStillFinalizesPostcommitOwner'));
+});
+
+run('scoped network and simulator runs retain two owners and one process report', () => {
+  const scopes = syntheticScopes(`class SyntheticLifecycleTests {
+    @Test @Timeout(120) void bothRuntimes() {
+      SokletSimulator.run(simulatorConfig, simulator -> { });
+      Soklet.run(config, () -> { });
+    }
+  }`);
+  assert.equal(scopes[0].generationSiteCount, 2);
+  assert.equal(scopes[0].applicationRunSiteCount, 1);
+  const [row] = reviewedSyntheticRows(scopes, {});
+  assert.equal(row.review.generationCount, 2);
+  assert.equal(row.review.completeGenerationMultiplier, 2);
+  assert.equal(row.review.terminalReportCount, 1);
+  assert.equal(row.review.phasePolicy.startupMillis, 30_000);
+  assert.equal(row.review.phasePolicy.startupCancellationMillis, 2_000);
+  assert.equal(row.review.phasePolicy.gracefulShutdownMillis, 15_000);
+  assert.equal(row.review.phasePolicy.forcedShutdownMillis, 3_000);
+  assert.equal(row.review.totalComposedBoundMillis, 98_250);
+});
+
+run('ordinary integration callbacks retain public finalization and guarded controls', () => {
+  const integration = INVENTORY.lifecycleScopes.filter((row) =>
+    row.source.path === 'src/test/java/com/soklet/IntegrationTests.java'
+      && row.source.applicationRunSiteCount > 0);
+  assert.ok(integration.length >= 70);
+  for (const row of integration) {
+    assert.equal(row.source.hasExecution, true);
+    assert.equal(row.source.applicationRunSiteCount, 1);
+    assert.equal(row.review.terminalReportCount, 1);
+  }
+  const fallback = rowByName(INVENTORY,
+    'timeoutsAndUnsafeExecutorDispatchUseTheBuiltInFallback');
+  assert.equal(fallback.review.generationCount, 5);
+  assert.equal(fallback.review.terminalReportCount, 5);
+  assert.equal(fallback.review.phasePolicy.startupMillis, 5_000);
+  assert.equal(fallback.review.phasePolicy.startupCancellationMillis, 2_000);
+  assert.equal(fallback.review.phasePolicy.gracefulShutdownMillis, 2_000);
+  assert.equal(fallback.review.phasePolicy.forcedShutdownMillis, 1_000);
+  assert.equal(fallback.review.outerGuard.millis, 90_000);
+  assert.equal(fallback.review.totalComposedBoundMillis, 60_250);
+  assert.equal(rowByName(INVENTORY,
+    'mixedOutputKeepsOrderAndCopiesCallerBuffersBeforeReturning')
+    .review.terminalReportCount, 1);
+  assert.equal(rowByName(INVENTORY,
+    'checkedSourcesAreLazyAndReopenedForEachExecution')
+    .review.terminalReportCount, 2);
+  const nestedOwners = rowByName(INVENTORY,
+    'nestedAdmissionRejectedHttpWriteCannotReplaceAnIndependentResponse');
+  assert.equal(nestedOwners.review.generationCount, 2);
+  assert.equal(nestedOwners.review.terminalReportCount, 1);
+  assert.equal(nestedOwners.review.controlJoinMillis, 17_000);
+  assert.equal(nestedOwners.review.totalComposedBoundMillis, 37_250);
+  const cancellation = rowByName(INVENTORY,
+    'blockedCancellationCallbacksDoNotHoldHttpCompletionButRetainTheirPhysicalExecutionSlot');
+  assert.equal(cancellation.review.generationCount, 2);
+  assert.equal(cancellation.review.terminalReportCount, 2);
+  assert.equal(cancellation.review.controlJoinMillis, 132_000);
+  assert.equal(cancellation.review.totalComposedBoundMillis, 148_500);
+  assert.equal(cancellation.review.outerGuard.millis, 180_000);
+  for (const name of [
+    'shedLegacyGetClosesItsHttpConnectionImmediately',
+    'expiredGracePeriodClosesItsHttpConnectionImmediately',
+    'temporary_handler_capacity_keeps_get_fenced_and_retries_without_replacing_its_stream',
+    'routineRenewalCapacityDoesNotRevokeTheStillValidGetGrant',
+    'four_ignoring_renewals_hold_global_maintenance_capacity_after_their_gets_expire',
+    'deleteEndsAnExistingGetAndShutdownBalancesMetricsAndDiagnostics',
+    'terminalDuringStartReleasesPairedObservationAndPreservesStreamOrder',
+  ]) {
+    const row = rowByName(INVENTORY, name);
+    assert.equal(row.review.phasePolicy.startupMillis, 5_000);
+    assert.equal(row.review.phasePolicy.startupCancellationMillis, 2_000);
+    assert.equal(row.review.phasePolicy.gracefulShutdownMillis, 1_000);
+    assert.equal(row.review.phasePolicy.forcedShutdownMillis, 1_000);
+  }
+  for (const name of [
+    'httpFinalizerFailureHasCleanupClassificationAndOriginalStreamContext',
+    'simulatorFinalizerFailureHasCleanupClassificationAndOriginalStreamContext',
+  ]) {
+    const row = rowByName(INVENTORY, name);
+    assert.equal(row.review.generationCount, 1);
+    assert.equal(row.review.terminalReportCount, 1);
+    assert.equal(row.review.controlJoinMillis, 3_000);
+    assert.equal(row.review.totalComposedBoundMillis, 35_450);
+  }
+  assert.equal(rowByName(INVENTORY,
+    'localizationInvalidationWorksWithoutCallerPolicyAndIgnoresModernOnlyLocalizedOwners')
+    .review.terminalReportCount, 1);
+  assert.equal(rowByName(INVENTORY,
+    'interceptorFiniteReplacementCannotJoinTheBroadcasterInLiveOrSimulatedSse')
+    .review.terminalReportCount, 2);
+  assert.deepEqual(INVENTORY.orphanLifecycleHelpers.filter((row) =>
+    row.source.path.endsWith('/McpLocalizationFleetPublicRuntimeTests.java'))
+    .map((row) => row.source.scopeName).sort(),
+  ['close', 'start', 'stopFirst', 'stopSecond']);
+  assert.ok(!INVENTORY.orphanLifecycleHelpers.some((row) =>
+    row.source.path.endsWith('/SseInitializerRuntimeTests.java')));
+  const completionParity = INVENTORY.lifecycleScopes.filter((row) =>
+    row.source.path === 'src/test/java/com/soklet/McpCompletionWireParityTests.java');
+  assert.equal(completionParity.length, 12);
+  for (const row of completionParity) {
+    assert.equal(row.review.generationCount, 4);
+    assert.equal(row.review.terminalReportCount, 2);
+  }
 });
 
 run('legacy revision and restart loops retain exact sequential owner counts', () => {
@@ -313,6 +533,75 @@ run('imported fixture constructors contribute policy and execution to their call
 });
 
 run('production imported fixtures cannot disappear or change without new evidence', () => {
+  const callerPath = 'src/test/java/com/soklet/ImportedConfigOnlyTests.java';
+  const fixturePath = 'src/test/java/com/soklet/ConfigOnlyFixture.java';
+  const configOnly = buildLifecycleScopeObservations(new Map([
+    [callerPath, `package com.soklet;
+      import com.soklet.ConfigOnlyFixture;
+      class ImportedConfigOnlyTests {
+        @Test @Timeout(60) void scopedOwner() {
+          ConfigOnlyFixture fixture = new ConfigOnlyFixture();
+          Soklet.run(fixture.config, () -> {});
+        }
+      }`],
+    [fixturePath, `package com.soklet;
+      class ConfigOnlyFixture {
+        final SokletConfig config;
+        ConfigOnlyFixture() {
+          config = SokletConfig.withHttpServer(HttpServer.withPort(0).build())
+            .lifecyclePolicy(LifecyclePolicy.builder()
+              .startupTimeout(Duration.ofSeconds(5))
+              .startupCancelationTimeout(Duration.ofSeconds(2))
+              .gracefulShutdownTimeout(Duration.ofSeconds(1))
+              .forcedShutdownTimeout(Duration.ofSeconds(1)).build()).build();
+        }
+      }`],
+  ]));
+  assert.equal(configOnly.length, 1);
+  const [configuredOwner] = buildReviewedLifecycleScopeRows(configOnly,
+    { requireRegistryCompleteness: false });
+  assert.equal(configuredOwner.source.hasExecution, true);
+  assert.equal(configuredOwner.review.generationCount, 1);
+  assert.equal(configuredOwner.review.terminalReportCount, 1);
+  assert.equal(configuredOwner.review.phasePolicy.startupMillis, 30_000,
+    'Imported configuration provenance alone must not narrow an owner policy.');
+  const [reviewedOwner] = buildReviewedLifecycleScopeRows(configOnly, {
+    requireRegistryCompleteness: false,
+    reviewedOverrides: syntheticOverrideMap(configOnly, { scopedOwner: {
+      phasePolicy: { startupMillis: 5_000, startupCancellationMillis: 2_000,
+        gracefulShutdownMillis: 1_000, forcedShutdownMillis: 1_000 },
+    } }),
+  });
+  assert.equal(reviewedOwner.review.phasePolicy.startupMillis, 5_000);
+  const independentConfig = buildLifecycleScopeObservations(new Map([
+    [callerPath, `package com.soklet;
+      import com.soklet.ConfigOnlyFixture;
+      class ImportedConfigOnlyTests {
+        @Test @Timeout(60) void separateDefaultOwner() {
+          ConfigOnlyFixture unused = new ConfigOnlyFixture();
+          Soklet.run(SokletConfig.withHttpServer(null).build(), () -> {});
+        }
+      }`],
+    [fixturePath, `package com.soklet;
+      class ConfigOnlyFixture {
+        ConfigOnlyFixture() {
+          SokletConfig config = SokletConfig.withHttpServer(null)
+            .lifecyclePolicy(LifecyclePolicy.builder()
+              .startupTimeout(Duration.ofSeconds(5))
+              .startupCancelationTimeout(Duration.ofSeconds(2))
+              .gracefulShutdownTimeout(Duration.ofSeconds(1))
+              .forcedShutdownTimeout(Duration.ofSeconds(1)).build()).build();
+        }
+      }`],
+  ]));
+  const [independentOwner] = buildReviewedLifecycleScopeRows(independentConfig,
+    { requireRegistryCompleteness: false });
+  assert.equal(independentOwner.review.generationCount, 1);
+  assert.equal(independentOwner.review.phasePolicy.startupMillis, 30_000);
+  assert.equal(independentOwner.review.phasePolicy.gracefulShutdownMillis, 15_000);
+  assert.equal(configuredOwner.source.importedLifecycleHelperEvidence.length, 1);
+  assert.equal(configuredOwner.source.importedLifecycleHelperEvidence[0].path,
+    fixturePath);
   const name = 'temporary_handler_capacity_keeps_get_fenced_and_retries_without_replacing_its_stream';
   const row = rowByName(INVENTORY, name);
   assert.equal(row.review.generationCount, 2);
@@ -486,15 +775,17 @@ run('streaming helper-only wait and policy edits invalidate unchanged caller pro
 
 run('static-file wire probes compose whole-response controls under their guards', () => {
   for (const [name, allowance, guard, reserve] of [
-    ['staticFilesSecureBodyReachesBuiltInHttpTransport', 12_000, 75_000, 13_000],
-    ['staticFilesLiveTransportNeverServesPostValidationSymlink', 6_000, 60_000, 4_000],
+    ['staticFilesSecureBodyReachesBuiltInHttpTransport', 12_000, 75_000, 12_750],
+    ['staticFilesLiveTransportNeverServesPostValidationSymlink', 6_000, 60_000, 3_750],
   ]) {
     const row = rowByName(INVENTORY, name);
     assert.equal(row.review.generationCount, 1);
     assert.equal(row.review.controlJoinMillis, allowance);
     assert.equal(row.review.controlTopology, 'CONSERVATIVE_SEQUENTIAL_SUM');
     assert.equal(row.review.lifecycleCoreBranchBoundsMillis.INCOMPLETE_CORE, 50_000);
-    assert.equal(row.review.totalComposedBoundMillis, 50_000 + allowance);
+    assert.equal(row.review.terminalReportCount, 1);
+    assert.equal(row.review.terminalReportMillis, 250);
+    assert.equal(row.review.totalComposedBoundMillis, 50_000 + allowance + 250);
     assert.equal(row.review.outerGuard.millis, guard);
     assert.equal(row.review.reserveMillis, reserve);
 
@@ -536,9 +827,11 @@ run('SSE admission saturation composes its finite controls under a larger outer 
     'defaultConnectionAdmissionSaturatesAt256AndRecoversAfterDisconnect');
   assert.equal(row.review.controlJoinMillis, 20_000);
   assert.equal(row.review.lifecycleCoreBranchBoundsMillis.INCOMPLETE_CORE, 36_000);
-  assert.equal(row.review.totalComposedBoundMillis, 56_000);
+  assert.equal(row.review.terminalReportCount, 1);
+  assert.equal(row.review.terminalReportMillis, 250);
+  assert.equal(row.review.totalComposedBoundMillis, 56_250);
   assert.equal(row.review.outerGuard.millis, 90_000);
-  assert.equal(row.review.reserveMillis, 34_000);
+  assert.equal(row.review.reserveMillis, 33_750);
 });
 
 run('configured policy understatement rejected', () => {
@@ -1839,6 +2132,7 @@ run('sequential owners inside a dynamic node require independent exact cardinali
     'wholeResponseFallbackAndNoLocalizerPreserveCanonicalBytes');
   const review = {
     dynamicNodeCount: 2,
+    terminalReportCount: 3,
     generation: { count: 3, mode: 'SEQUENTIAL', complete: 3, prior: 2,
       incomplete: 1 },
   };

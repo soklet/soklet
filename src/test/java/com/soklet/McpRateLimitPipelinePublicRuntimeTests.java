@@ -82,16 +82,17 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 				})
 				.build();
 		Assertions.assertTrue(server.getToolRateLimiter().isEmpty());
-		Soklet owner = managedSoklet(server);
+		SokletConfig ownerConfig = config(server);
 		try {
-			owner.start();
-			for (int index = 0; index < 25; index++)
-				assertSuccess(callTool(server, "optional-" + index), "optional-" + index);
-			Assertions.assertEquals(25, handled.get());
-			Assertions.assertEquals(25, requestCharges.get());
-			assertIdleStartedDiagnostics(server);
+			Soklet.run(ownerConfig, () -> {
+				for (int index = 0; index < 25; index++)
+					assertSuccess(callTool(server, "optional-" + index), "optional-" + index);
+				Assertions.assertEquals(25, handled.get());
+				Assertions.assertEquals(25, requestCharges.get());
+				assertIdleStartedDiagnostics(server);
+			});
 		} finally {
-			stopAndAssertClean(owner, server);
+			verifyClean(server);
 		}
 	}
 
@@ -125,14 +126,15 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 							.addRateLimiter("policy", limiter).build())
 					.build();
 			Assertions.assertTrue(server.getToolRateLimiter().isEmpty());
-			Soklet owner = managedSoklet(server);
+			SokletConfig ownerConfig = config(server);
 			try {
-				owner.start();
-				assertSuccess(callTool(server, "first"), "first");
-				assertRateLimited(callTool(server, "second"), "second", TOOL_RETRY_AFTER);
-				assertLimiterSnapshot(limiter, 2, 1);
+				Soklet.run(ownerConfig, () -> {
+					assertSuccess(callTool(server, "first"), "first");
+					assertRateLimited(callTool(server, "second"), "second", TOOL_RETRY_AFTER);
+					assertLimiterSnapshot(limiter, 2, 1);
+				});
 			} finally {
-				stopAndAssertClean(owner, server);
+				verifyClean(server);
 			}
 		}
 	}
@@ -173,36 +175,37 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 					return output;
 				})
 				.build();
-		Soklet owner = managedSoklet(server);
+		SokletConfig ownerConfig = config(server);
 
 		try {
-			owner.start();
-			HttpResponse<String> response = callTool(server, "ordered");
+			Soklet.run(ownerConfig, () -> {
+				HttpResponse<String> response = callTool(server, "ordered");
 
-			assertSuccess(response, "ordered");
-			Assertions.assertTrue(response.body().contains("\"text\":\"ordered\""),
-					response.body());
-			Assertions.assertEquals(List.of(
-					"auth-authz-admission+accepted-identity",
-					"request-limiter",
-					"tool-limiter",
-					"interceptor-before",
-					"handler",
-					"interceptor-after",
-					"result-sanitizer"), stages);
-			Assertions.assertEquals(1, handlerInvocations.get());
-			Assertions.assertEquals(1, sanitizerInvocations.get());
-			assertLimiterSnapshot(requestLimiter, 1, 1);
-			assertLimiterSnapshot(toolLimiter, 1, 1);
-			assertAcceptedContext(admissions.get(0), requestLimiter.contexts().get(0),
-					endpoint, identity, McpRateLimitTarget.REQUEST);
-			assertAcceptedContext(admissions.get(0), toolLimiter.contexts().get(0),
-					endpoint, identity, McpRateLimitTarget.TOOL);
-			Assertions.assertSame(requestLimiter.contexts().get(0).getRequest(),
-					toolLimiter.contexts().get(0).getRequest());
-			assertIdleStartedDiagnostics(server);
+				assertSuccess(response, "ordered");
+				Assertions.assertTrue(response.body().contains("\"text\":\"ordered\""),
+						response.body());
+				Assertions.assertEquals(List.of(
+						"auth-authz-admission+accepted-identity",
+						"request-limiter",
+						"tool-limiter",
+						"interceptor-before",
+						"handler",
+						"interceptor-after",
+						"result-sanitizer"), stages);
+				Assertions.assertEquals(1, handlerInvocations.get());
+				Assertions.assertEquals(1, sanitizerInvocations.get());
+				assertLimiterSnapshot(requestLimiter, 1, 1);
+				assertLimiterSnapshot(toolLimiter, 1, 1);
+				assertAcceptedContext(admissions.get(0), requestLimiter.contexts().get(0),
+						endpoint, identity, McpRateLimitTarget.REQUEST);
+				assertAcceptedContext(admissions.get(0), toolLimiter.contexts().get(0),
+						endpoint, identity, McpRateLimitTarget.TOOL);
+				Assertions.assertSame(requestLimiter.contexts().get(0).getRequest(),
+						toolLimiter.contexts().get(0).getRequest());
+				assertIdleStartedDiagnostics(server);
+			});
 		} finally {
-			stopAndAssertClean(owner, server);
+			verifyClean(server);
 		}
 	}
 
@@ -240,39 +243,40 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 					return output;
 				})
 				.build();
-		Soklet owner = managedSoklet(server);
+		SokletConfig ownerConfig = config(server);
 
 		try {
-			owner.start();
-			HttpResponse<String> toolDenied = callTool(server, "tool-denied");
-			HttpResponse<String> requestDenied = callTool(server, "request-denied");
+			Soklet.run(ownerConfig, () -> {
+				HttpResponse<String> toolDenied = callTool(server, "tool-denied");
+				HttpResponse<String> requestDenied = callTool(server, "request-denied");
 
-			assertRateLimited(toolDenied, "tool-denied", TOOL_RETRY_AFTER);
-			assertRateLimited(requestDenied, "request-denied",
-					REQUEST_RETRY_AFTER);
-			Assertions.assertEquals(List.of(
-					"auth-authz-admission+accepted-identity",
-					"request-limiter",
-					"tool-limiter",
-					"auth-authz-admission+accepted-identity",
-					"request-limiter"), stages,
-					"A tool denial must stop application dispatch, and the retry must "
-							+ "stop at the retained request charge.");
-			assertLimiterSnapshot(requestLimiter, 2, 1);
-			assertLimiterSnapshot(toolLimiter, 1, 0);
-			Assertions.assertEquals(2, admissions.size());
-			assertAcceptedContext(admissions.get(0), requestLimiter.contexts().get(0),
-					endpoint, identity, McpRateLimitTarget.REQUEST);
-			assertAcceptedContext(admissions.get(0), toolLimiter.contexts().get(0),
-					endpoint, identity, McpRateLimitTarget.TOOL);
-			assertAcceptedContext(admissions.get(1), requestLimiter.contexts().get(1),
-					endpoint, identity, McpRateLimitTarget.REQUEST);
-			Assertions.assertEquals(0, interceptorInvocations.get());
-			Assertions.assertEquals(0, handlerInvocations.get());
-			Assertions.assertEquals(0, sanitizerInvocations.get());
-			assertIdleStartedDiagnostics(server);
+				assertRateLimited(toolDenied, "tool-denied", TOOL_RETRY_AFTER);
+				assertRateLimited(requestDenied, "request-denied",
+						REQUEST_RETRY_AFTER);
+				Assertions.assertEquals(List.of(
+						"auth-authz-admission+accepted-identity",
+						"request-limiter",
+						"tool-limiter",
+						"auth-authz-admission+accepted-identity",
+						"request-limiter"), stages,
+						"A tool denial must stop application dispatch, and the retry must "
+								+ "stop at the retained request charge.");
+				assertLimiterSnapshot(requestLimiter, 2, 1);
+				assertLimiterSnapshot(toolLimiter, 1, 0);
+				Assertions.assertEquals(2, admissions.size());
+				assertAcceptedContext(admissions.get(0), requestLimiter.contexts().get(0),
+						endpoint, identity, McpRateLimitTarget.REQUEST);
+				assertAcceptedContext(admissions.get(0), toolLimiter.contexts().get(0),
+						endpoint, identity, McpRateLimitTarget.TOOL);
+				assertAcceptedContext(admissions.get(1), requestLimiter.contexts().get(1),
+						endpoint, identity, McpRateLimitTarget.REQUEST);
+				Assertions.assertEquals(0, interceptorInvocations.get());
+				Assertions.assertEquals(0, handlerInvocations.get());
+				Assertions.assertEquals(0, sanitizerInvocations.get());
+				assertIdleStartedDiagnostics(server);
+			});
 		} finally {
-			stopAndAssertClean(owner, server);
+			verifyClean(server);
 		}
 	}
 
@@ -332,38 +336,39 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 					return output;
 				})
 				.build();
-		Soklet owner = managedSoklet(server);
+		SokletConfig ownerConfig = config(server);
 
 		try {
-			owner.start();
-			String failedId = failure.name().toLowerCase(Locale.ROOT) + "-failed";
-			HttpResponse<String> failed = callTool(server, failedId);
-			assertInternalError(failed, failedId);
-			Assertions.assertFalse(failed.body().contains("secret"), failed.body());
-			Assertions.assertEquals(expectedFailureStages(failure), stages);
-			assertLimiterSnapshot(requestLimiter, 1, 1);
-			assertLimiterSnapshot(toolLimiter, 1, 1);
+			Soklet.run(ownerConfig, () -> {
+				String failedId = failure.name().toLowerCase(Locale.ROOT) + "-failed";
+				HttpResponse<String> failed = callTool(server, failedId);
+				assertInternalError(failed, failedId);
+				Assertions.assertFalse(failed.body().contains("secret"), failed.body());
+				Assertions.assertEquals(expectedFailureStages(failure), stages);
+				assertLimiterSnapshot(requestLimiter, 1, 1);
+				assertLimiterSnapshot(toolLimiter, 1, 1);
 
-			String requestRetryId = failure.name().toLowerCase(Locale.ROOT)
-					+ "-request-retry";
-			HttpResponse<String> requestRetry = callTool(server, requestRetryId);
-			assertRateLimited(requestRetry, requestRetryId, REQUEST_RETRY_AFTER);
-			List<String> expectedWithRequestRetry = new ArrayList<>(
-					expectedFailureStages(failure));
-			expectedWithRequestRetry.add(
-					"auth-authz-admission+accepted-identity");
-			expectedWithRequestRetry.add("request-limiter");
-			Assertions.assertEquals(expectedWithRequestRetry, stages);
-			assertLimiterSnapshot(requestLimiter, 2, 1);
-			assertLimiterSnapshot(toolLimiter, 1, 1);
-			Assertions.assertEquals(1, interceptorInvocations.get());
-			Assertions.assertEquals(
-					failure == DownstreamFailure.INTERCEPTOR ? 0 : 1,
-					handlerInvocations.get());
-			Assertions.assertEquals(0, sanitizerInvocations.get());
-			assertIdleStartedDiagnostics(server);
+				String requestRetryId = failure.name().toLowerCase(Locale.ROOT)
+						+ "-request-retry";
+				HttpResponse<String> requestRetry = callTool(server, requestRetryId);
+				assertRateLimited(requestRetry, requestRetryId, REQUEST_RETRY_AFTER);
+				List<String> expectedWithRequestRetry = new ArrayList<>(
+						expectedFailureStages(failure));
+				expectedWithRequestRetry.add(
+						"auth-authz-admission+accepted-identity");
+				expectedWithRequestRetry.add("request-limiter");
+				Assertions.assertEquals(expectedWithRequestRetry, stages);
+				assertLimiterSnapshot(requestLimiter, 2, 1);
+				assertLimiterSnapshot(toolLimiter, 1, 1);
+				Assertions.assertEquals(1, interceptorInvocations.get());
+				Assertions.assertEquals(
+						failure == DownstreamFailure.INTERCEPTOR ? 0 : 1,
+						handlerInvocations.get());
+				Assertions.assertEquals(0, sanitizerInvocations.get());
+				assertIdleStartedDiagnostics(server);
+			});
 		} finally {
-			stopAndAssertClean(owner, server);
+			verifyClean(server);
 		}
 
 		List<String> probeStages = Collections.synchronizedList(new ArrayList<>());
@@ -388,25 +393,26 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 					return output;
 				})
 				.build();
-		Soklet probeOwner = managedSoklet(probeServer);
+		SokletConfig probeOwnerConfig = config(probeServer);
 
 		try {
-			probeOwner.start();
-			String toolRetryId = failure.name().toLowerCase(Locale.ROOT)
-					+ "-tool-retry";
-			HttpResponse<String> toolRetry = callTool(probeServer, toolRetryId);
+			Soklet.run(probeOwnerConfig, () -> {
+				String toolRetryId = failure.name().toLowerCase(Locale.ROOT)
+						+ "-tool-retry";
+				HttpResponse<String> toolRetry = callTool(probeServer, toolRetryId);
 
-			assertRateLimited(toolRetry, toolRetryId, TOOL_RETRY_AFTER);
-			Assertions.assertEquals(List.of(
-					"auth-authz-admission+accepted-identity",
-					"tool-limiter"), probeStages);
-			assertLimiterSnapshot(toolLimiter, 2, 1);
-			Assertions.assertEquals(0, probeInterceptorInvocations.get());
-			Assertions.assertEquals(0, probeHandlerInvocations.get());
-			Assertions.assertEquals(0, probeSanitizerInvocations.get());
-			assertIdleStartedDiagnostics(probeServer);
+				assertRateLimited(toolRetry, toolRetryId, TOOL_RETRY_AFTER);
+				Assertions.assertEquals(List.of(
+						"auth-authz-admission+accepted-identity",
+						"tool-limiter"), probeStages);
+				assertLimiterSnapshot(toolLimiter, 2, 1);
+				Assertions.assertEquals(0, probeInterceptorInvocations.get());
+				Assertions.assertEquals(0, probeHandlerInvocations.get());
+				Assertions.assertEquals(0, probeSanitizerInvocations.get());
+				assertIdleStartedDiagnostics(probeServer);
+			});
 		} finally {
-			stopAndAssertClean(probeOwner, probeServer);
+			verifyClean(probeServer);
 		}
 	}
 
@@ -455,12 +461,12 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 				.allowedHosts(Set.of(LOOPBACK));
 	}
 
-	private static Soklet managedSoklet(McpServer server) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+	private static SokletConfig config(McpServer server) {
+		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
-				.build());
+				.build();
 	}
 
 	private static HttpResponse<String> callTool(McpServer server, String id)
@@ -571,8 +577,7 @@ public class McpRateLimitPipelinePublicRuntimeTests {
 		throw new AssertionError();
 	}
 
-	private static void stopAndAssertClean(Soklet owner, McpServer server) {
-		owner.close();
+	private static void verifyClean(McpServer server) {
 		McpServerDiagnostics diagnostics = server.getDiagnostics();
 		Assertions.assertEquals(McpServerStatus.TERMINATED, diagnostics.getStatus());
 		Assertions.assertTrue(diagnostics.getBoundAddress().isPresent());

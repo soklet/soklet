@@ -110,10 +110,8 @@ public class McpProgressPublicRuntimeTests {
 					return McpCompleteResult.fromToolText("progress complete");
 				});
 		McpServer server = server(List.of(progressTool));
-		Soklet soklet = managedSoklet(server);
+		Soklet.run(managedSokletConfig(server), () -> {
 
-		try {
-			soklet.start();
 			int port = boundPort(server);
 			assertExactProgressExchange(port, "\"string-request\"",
 					"\"string-token\"", "\"string-token\"");
@@ -137,9 +135,7 @@ public class McpProgressPublicRuntimeTests {
 			lateRegistration.close();
 			Assertions.assertFalse(lateCallback.get());
 			Assertions.assertFalse(terminalToken.get().isCanceled());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -155,10 +151,8 @@ public class McpProgressPublicRuntimeTests {
 					return McpCompleteResult.fromToolText("floating progress complete");
 				});
 		McpServer server = server(List.of(progressTool));
-		Soklet soklet = managedSoklet(server);
+		Soklet.run(managedSokletConfig(server), () -> {
 
-		try {
-			soklet.start();
 			try (McpChunkedHttpClient client = callTool(boundPort(server),
 					"\"float-request\"", "progress.float", "{}",
 					"\"float-token\"")) {
@@ -177,9 +171,7 @@ public class McpProgressPublicRuntimeTests {
 						client.readChunkText());
 				Assertions.assertNull(client.readChunk());
 			}
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -197,10 +189,8 @@ public class McpProgressPublicRuntimeTests {
 					return McpCompleteResult.fromToolText("no token complete");
 				});
 		McpServer server = server(List.of(tool));
-		Soklet soklet = managedSoklet(server);
+		Soklet.run(managedSokletConfig(server), () -> {
 
-		try {
-			soklet.start();
 			try (McpChunkedHttpClient client = callTool(boundPort(server),
 					"\"no-token\"", "progress.no-token", "{}", null)) {
 				McpChunkedHttpClient.HttpResponseHead head = client.readHead();
@@ -215,9 +205,7 @@ public class McpProgressPublicRuntimeTests {
 			Assertions.assertFalse(observedToken.get().isCanceled());
 			Assertions.assertTrue(
 					observedToken.get().getCancelationReason().isEmpty());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -258,10 +246,8 @@ public class McpProgressPublicRuntimeTests {
 						.inputRequestDeclarations(java.util.List.of(roots))
 						.build();
 		McpServer server = server(List.of(complete, input));
-		Soklet soklet = managedSoklet(server);
+		Soklet.run(managedSokletConfig(server), () -> {
 
-		try {
-			soklet.start();
 			int port = boundPort(server);
 			try (McpChunkedHttpClient client = callTool(port,
 					"\"conditional-complete\"",
@@ -300,9 +286,7 @@ public class McpProgressPublicRuntimeTests {
 						"\"id\":\"conditional-supported\""));
 				Assertions.assertNull(client.readChunk());
 			}
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -403,132 +387,135 @@ public class McpProgressPublicRuntimeTests {
 					}
 				});
 		McpServer server = server(List.of(tool));
-		Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
-				.lifecyclePolicy(com.soklet.LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(10))
-						.startupCancelationTimeout(Duration.ofSeconds(1)).gracefulShutdownTimeout(Duration.ofSeconds(1))
-						.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
-				.resourceMethodResolver(
-						ResourceMethodResolver.fromMethods(Set.of()))
-				.metricsCollector(metricsCollector)
-				.build());
-		McpChunkedHttpClient client = null;
 
 		try {
-			soklet.start();
-			client = callTool(boundPort(server), "\"disconnect\"",
-					"progress.cancel", "{}", "\"disconnect-token\"");
-			assertSseHead(client.readHead());
-			Assertions.assertTrue(client.readChunkText().contains(
-					"\"progressToken\":\"disconnect-token\""));
-			Assertions.assertTrue(client.readChunkText().contains(
-					"\"progress\":2"));
-			client.disconnect(mode);
+			Soklet.run(SokletConfig.withMcpServer(server)
+					.lifecyclePolicy(com.soklet.LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(10))
+							.startupCancelationTimeout(Duration.ofSeconds(1)).gracefulShutdownTimeout(Duration.ofSeconds(1))
+							.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
+					.resourceMethodResolver(
+							ResourceMethodResolver.fromMethods(Set.of()))
+					.metricsCollector(metricsCollector)
+				.build(), () -> {
+				McpChunkedHttpClient client = null;
 
-			Assertions.assertTrue(callbackInvoked.await(5, TimeUnit.SECONDS),
-					"Disconnect did not run the public cancelation callback.");
-			Assertions.assertTrue(handlerExited.await(5, TimeUnit.SECONDS),
-					"Disconnect did not interrupt the application handler.");
-			Assertions.assertTrue(requestFinishedMetric.await(5, TimeUnit.SECONDS),
-					"Disconnect did not deliver the request-finished metric.");
-			Assertions.assertTrue(handlerFinishedMetric.await(5, TimeUnit.SECONDS),
-					"The interrupted handler did not release its metric slot.");
-			Assertions.assertTrue(callbackSawCanceled.get());
-			Assertions.assertTrue(observedToken.get().isCanceled());
-			Assertions.assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED,
-					observedReason.get());
-			Assertions.assertEquals(
-					java.util.Optional.of(StreamTerminationReason.CLIENT_DISCONNECTED),
-					observedToken.get().getCancelationReason());
-			List<McpMetricsEvent.ProgressEmitted> progressEvents = metrics.stream()
-					.filter(McpMetricsEvent.ProgressEmitted.class::isInstance)
-					.map(McpMetricsEvent.ProgressEmitted.class::cast)
-					.toList();
-			List<McpMetricsEvent.CancelationSignaled> cancelationEvents =
-					metrics.stream()
-							.filter(McpMetricsEvent.CancelationSignaled.class::isInstance)
-							.map(McpMetricsEvent.CancelationSignaled.class::cast)
+				try {
+					client = callTool(boundPort(server), "\"disconnect\"",
+							"progress.cancel", "{}", "\"disconnect-token\"");
+					assertSseHead(client.readHead());
+					Assertions.assertTrue(client.readChunkText().contains(
+							"\"progressToken\":\"disconnect-token\""));
+					Assertions.assertTrue(client.readChunkText().contains(
+							"\"progress\":2"));
+					client.disconnect(mode);
+
+					Assertions.assertTrue(callbackInvoked.await(5, TimeUnit.SECONDS),
+							"Disconnect did not run the public cancelation callback.");
+					Assertions.assertTrue(handlerExited.await(5, TimeUnit.SECONDS),
+							"Disconnect did not interrupt the application handler.");
+					Assertions.assertTrue(requestFinishedMetric.await(5, TimeUnit.SECONDS),
+							"Disconnect did not deliver the request-finished metric.");
+					Assertions.assertTrue(handlerFinishedMetric.await(5, TimeUnit.SECONDS),
+							"The interrupted handler did not release its metric slot.");
+					Assertions.assertTrue(callbackSawCanceled.get());
+					Assertions.assertTrue(observedToken.get().isCanceled());
+					Assertions.assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED,
+							observedReason.get());
+					Assertions.assertEquals(
+							java.util.Optional.of(StreamTerminationReason.CLIENT_DISCONNECTED),
+							observedToken.get().getCancelationReason());
+					List<McpMetricsEvent.ProgressEmitted> progressEvents = metrics.stream()
+							.filter(McpMetricsEvent.ProgressEmitted.class::isInstance)
+							.map(McpMetricsEvent.ProgressEmitted.class::cast)
 							.toList();
-			Assertions.assertEquals(List.of(
-					McpMetricsEvent.progressEmitted(MCP_PATH, "tools/call"),
-					McpMetricsEvent.progressEmitted(MCP_PATH, "tools/call")),
-					progressEvents);
-			Assertions.assertEquals(List.of(
-					McpMetricsEvent.cancelationSignaled(MCP_PATH, "tools/call")),
-					cancelationEvents);
-			List<McpMetricsEvent> eventSnapshot = List.copyOf(metrics);
-			List<Class<?>> deterministicPrefixTypes = eventSnapshot.stream()
-					.filter(event -> event instanceof McpMetricsEvent.ServerStarted
-							|| event instanceof McpMetricsEvent.RequestStarted
-							|| event instanceof McpMetricsEvent.HandlerExecutionStarted
-							|| event instanceof McpMetricsEvent.RequestStreamOpened
-							|| event instanceof McpMetricsEvent.ProgressEmitted)
-					.map(Object::getClass)
-					.toList();
-			Assertions.assertEquals(List.of(
-					McpMetricsEvent.ServerStarted.class,
-					McpMetricsEvent.RequestStarted.class,
-					McpMetricsEvent.HandlerExecutionStarted.class,
-					McpMetricsEvent.RequestStreamOpened.class,
-					McpMetricsEvent.ProgressEmitted.class,
-					McpMetricsEvent.ProgressEmitted.class),
-					deterministicPrefixTypes,
-					"Startup, stream-open, and accepted progress events must retain their deterministic record order.");
-			List<McpMetricsEvent.RequestStreamClosed> streamClosedEvents =
-					eventSnapshot.stream()
-					.filter(McpMetricsEvent.RequestStreamClosed.class::isInstance)
-					.map(McpMetricsEvent.RequestStreamClosed.class::cast)
-					.toList();
-			List<McpMetricsEvent.RequestFinished> requestFinishedEvents =
-					eventSnapshot.stream()
-					.filter(McpMetricsEvent.RequestFinished.class::isInstance)
-					.map(McpMetricsEvent.RequestFinished.class::cast)
-					.toList();
-			Assertions.assertEquals(1, streamClosedEvents.size(),
-					"Disconnect must close the request stream exactly once.");
-			Assertions.assertEquals(1, requestFinishedEvents.size(),
-					"Disconnect must finish request observation exactly once.");
-			McpMetricsEvent.RequestStreamClosed streamClosed =
-					streamClosedEvents.get(0);
-			McpMetricsEvent.RequestFinished requestFinished =
-					requestFinishedEvents.get(0);
-			Assertions.assertEquals(
-					com.soklet.McpStreamTerminationReason.CLIENT_DISCONNECTED,
-					streamClosed.getReason());
-			Assertions.assertEquals(com.soklet.McpRequestOutcome.CLIENT_DISCONNECTED,
-					requestFinished.getOutcome());
-			int streamClosedIndex = eventSnapshot.indexOf(streamClosed);
-			int requestFinishedIndex = eventSnapshot.indexOf(requestFinished);
-			Assertions.assertTrue(streamClosedIndex < requestFinishedIndex,
-					"Request-stream closure must precede terminal request observation.");
-			var diagnostics = server.getDiagnostics();
-			Assertions.assertEquals(0,
-					diagnostics.getActiveHandlerExecutions());
-			Assertions.assertEquals(0, diagnostics.getRequestHandlerQueueDepth());
-			Assertions.assertEquals(0, diagnostics.getActiveRequestStreams());
-			Assertions.assertEquals(0, diagnostics.getActiveSubscriptions());
-			Assertions.assertEquals(1,
-					maximumConcurrentMetricCallbacks.get(),
-					"A reentrant progress report must queue instead of recursively invoking the collector.");
-			Assertions.assertNull(monitorProbeFailure.get(),
-					"ProgressEmitted was delivered while the progress reporter monitor was held.");
+					List<McpMetricsEvent.CancelationSignaled> cancelationEvents =
+							metrics.stream()
+									.filter(McpMetricsEvent.CancelationSignaled.class::isInstance)
+									.map(McpMetricsEvent.CancelationSignaled.class::cast)
+									.toList();
+					Assertions.assertEquals(List.of(
+							McpMetricsEvent.progressEmitted(MCP_PATH, "tools/call"),
+							McpMetricsEvent.progressEmitted(MCP_PATH, "tools/call")),
+							progressEvents);
+					Assertions.assertEquals(List.of(
+							McpMetricsEvent.cancelationSignaled(MCP_PATH, "tools/call")),
+							cancelationEvents);
+					List<McpMetricsEvent> eventSnapshot = List.copyOf(metrics);
+					List<Class<?>> deterministicPrefixTypes = eventSnapshot.stream()
+							.filter(event -> event instanceof McpMetricsEvent.ServerStarted
+									|| event instanceof McpMetricsEvent.RequestStarted
+									|| event instanceof McpMetricsEvent.HandlerExecutionStarted
+									|| event instanceof McpMetricsEvent.RequestStreamOpened
+									|| event instanceof McpMetricsEvent.ProgressEmitted)
+							.map(Object::getClass)
+							.toList();
+					Assertions.assertEquals(List.of(
+							McpMetricsEvent.ServerStarted.class,
+							McpMetricsEvent.RequestStarted.class,
+							McpMetricsEvent.HandlerExecutionStarted.class,
+							McpMetricsEvent.RequestStreamOpened.class,
+							McpMetricsEvent.ProgressEmitted.class,
+							McpMetricsEvent.ProgressEmitted.class),
+							deterministicPrefixTypes,
+							"Startup, stream-open, and accepted progress events must retain their deterministic record order.");
+					List<McpMetricsEvent.RequestStreamClosed> streamClosedEvents =
+							eventSnapshot.stream()
+							.filter(McpMetricsEvent.RequestStreamClosed.class::isInstance)
+							.map(McpMetricsEvent.RequestStreamClosed.class::cast)
+							.toList();
+					List<McpMetricsEvent.RequestFinished> requestFinishedEvents =
+							eventSnapshot.stream()
+							.filter(McpMetricsEvent.RequestFinished.class::isInstance)
+							.map(McpMetricsEvent.RequestFinished.class::cast)
+							.toList();
+					Assertions.assertEquals(1, streamClosedEvents.size(),
+							"Disconnect must close the request stream exactly once.");
+					Assertions.assertEquals(1, requestFinishedEvents.size(),
+							"Disconnect must finish request observation exactly once.");
+					McpMetricsEvent.RequestStreamClosed streamClosed =
+							streamClosedEvents.get(0);
+					McpMetricsEvent.RequestFinished requestFinished =
+							requestFinishedEvents.get(0);
+					Assertions.assertEquals(
+							com.soklet.McpStreamTerminationReason.CLIENT_DISCONNECTED,
+							streamClosed.getReason());
+					Assertions.assertEquals(com.soklet.McpRequestOutcome.CLIENT_DISCONNECTED,
+							requestFinished.getOutcome());
+					int streamClosedIndex = eventSnapshot.indexOf(streamClosed);
+					int requestFinishedIndex = eventSnapshot.indexOf(requestFinished);
+					Assertions.assertTrue(streamClosedIndex < requestFinishedIndex,
+							"Request-stream closure must precede terminal request observation.");
+					var diagnostics = server.getDiagnostics();
+					Assertions.assertEquals(0,
+							diagnostics.getActiveHandlerExecutions());
+					Assertions.assertEquals(0, diagnostics.getRequestHandlerQueueDepth());
+					Assertions.assertEquals(0, diagnostics.getActiveRequestStreams());
+					Assertions.assertEquals(0, diagnostics.getActiveSubscriptions());
+					Assertions.assertEquals(1,
+							maximumConcurrentMetricCallbacks.get(),
+							"A reentrant progress report must queue instead of recursively invoking the collector.");
+					Assertions.assertNull(monitorProbeFailure.get(),
+							"ProgressEmitted was delivered while the progress reporter monitor was held.");
 
-			// Once canceled, monotonicity and delivery are both inert. In
-			// particular, a retained reporter cannot emit another notification or
-			// its corresponding accepted-delivery metric.
-			Assertions.assertDoesNotThrow(() -> observedReporter.get().report(
-					McpProgressUpdate.withProgress(0.0d).build()));
-			Assertions.assertDoesNotThrow(() -> observedReporter.get().report(
-					McpProgressUpdate.withProgress(1.0d).build()));
-			Assertions.assertDoesNotThrow(() -> observedReporter.get().report(
-					McpProgressUpdate.withProgress(2.0d).build()));
-			Assertions.assertEquals(2, metrics.stream()
-					.filter(McpMetricsEvent.ProgressEmitted.class::isInstance)
-					.count(), "Canceled reports must not emit or record progress.");
+					// Once canceled, monotonicity and delivery are both inert. In
+					// particular, a retained reporter cannot emit another notification or
+					// its corresponding accepted-delivery metric.
+					Assertions.assertDoesNotThrow(() -> observedReporter.get().report(
+							McpProgressUpdate.withProgress(0.0d).build()));
+					Assertions.assertDoesNotThrow(() -> observedReporter.get().report(
+							McpProgressUpdate.withProgress(1.0d).build()));
+					Assertions.assertDoesNotThrow(() -> observedReporter.get().report(
+							McpProgressUpdate.withProgress(2.0d).build()));
+					Assertions.assertEquals(2, metrics.stream()
+							.filter(McpMetricsEvent.ProgressEmitted.class::isInstance)
+							.count(), "Canceled reports must not emit or record progress.");
+				} finally {
+					emergencyRelease.countDown();
+					if (client != null)
+						client.close();
+			}
+			});
 		} finally {
-			emergencyRelease.countDown();
-			if (client != null)
-				client.close();
-			soklet.close();
 			probeExecutor.shutdownNow();
 			Assertions.assertTrue(probeExecutor.awaitTermination(
 					5, TimeUnit.SECONDS));
@@ -611,113 +598,116 @@ public class McpProgressPublicRuntimeTests {
 					throw new IllegalStateException(secret);
 				});
 		McpServer server = server(List.of(tool));
-		Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
-				.lifecyclePolicy(com.soklet.LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(10))
-						.startupCancelationTimeout(Duration.ofSeconds(1)).gracefulShutdownTimeout(Duration.ofSeconds(1))
-						.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
-				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.metricsCollector(metricsCollector)
-				.build());
-		McpChunkedHttpClient client = null;
 
 		try {
-			McpRequestSseStream.setTestHooks(hooks);
-			soklet.start();
-			String idJson = "\"" + id + "\"";
-			String tokenJson = "\"" + id + "-token\"";
-			client = callTool(boundPort(server), idJson,
-					"progress." + id, "{}", tokenJson);
-			assertSseHead(client.readHead());
-			Assertions.assertEquals(progressEvent(tokenJson, "1"),
-					client.readChunkText());
-			if (progressWins) {
-				Assertions.assertEquals(progressEvent(tokenJson, "2"),
-						client.readChunkText());
-			}
-			String terminal = sse("{\"jsonrpc\":\"2.0\",\"id\":\"" + id
-					+ "\",\"error\":{\"code\":-32603,"
-					+ "\"message\":\"Internal error\"}}");
-			String terminalFrame = client.readChunkText();
-			Assertions.assertEquals(terminal, terminalFrame);
-			Assertions.assertFalse(terminalFrame.contains(secret), terminalFrame);
-			if (!progressWins)
-				releaseLateEnqueue.countDown();
-			Assertions.assertTrue(lateReportFinished.await(5, TimeUnit.SECONDS),
-					"The late progress report remained blocked.");
-			Future<?> report = lateReport.get();
-			Assertions.assertNotNull(report);
-			report.get(5, TimeUnit.SECONDS);
-			Assertions.assertNull(lateReportFailure.get());
-			Assertions.assertEquals(1, enqueueAttempts.get(),
-					"Only the late report traverses the existing-stream enqueue path.");
-			Assertions.assertFalse(lateReporterInterrupted.get(),
-					"A terminal-owned late report is inert and must not synthesize "
-							+ "thread interruption.");
-			Assertions.assertNull(client.readChunk(),
-					"No progress frame may follow the mapped terminal error.");
+			Soklet.run(SokletConfig.withMcpServer(server)
+					.lifecyclePolicy(com.soklet.LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(10))
+							.startupCancelationTimeout(Duration.ofSeconds(1)).gracefulShutdownTimeout(Duration.ofSeconds(1))
+							.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
+					.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+					.metricsCollector(metricsCollector)
+				.build(), () -> {
+				McpChunkedHttpClient client = null;
 
-			Assertions.assertTrue(requestFinished.await(5, TimeUnit.SECONDS),
-					"The mapped-error request did not finish observation.");
-			awaitPublicCleanup(server);
-			Assertions.assertEquals(progressWins ? 2L : 1L, metrics.stream()
-					.filter(McpMetricsEvent.ProgressEmitted.class::isInstance)
-					.count());
-			List<McpMetricsEvent.ProtocolError> protocolErrors = metrics.stream()
-					.filter(McpMetricsEvent.ProtocolError.class::isInstance)
-					.map(McpMetricsEvent.ProtocolError.class::cast)
-					.toList();
-			Assertions.assertEquals(1, protocolErrors.size());
-			Assertions.assertEquals(McpJsonRpcError.INTERNAL_ERROR,
-					protocolErrors.get(0).getCode());
-			List<McpMetricsEvent.RequestFinished> finishes = metrics.stream()
-					.filter(McpMetricsEvent.RequestFinished.class::isInstance)
-					.map(McpMetricsEvent.RequestFinished.class::cast)
-					.toList();
-			Assertions.assertEquals(1, finishes.size());
-			Assertions.assertEquals(com.soklet.McpRequestOutcome.INTERNAL_ERROR,
-					finishes.get(0).getOutcome());
-			List<McpMetricsEvent.RequestStreamClosed> streamCloses = metrics.stream()
-					.filter(McpMetricsEvent.RequestStreamClosed.class::isInstance)
-					.map(McpMetricsEvent.RequestStreamClosed.class::cast)
-					.toList();
-			Assertions.assertEquals(1, streamCloses.size());
-			Assertions.assertEquals(
-					com.soklet.McpStreamTerminationReason.COMPLETED,
-					streamCloses.get(0).getReason());
-			Assertions.assertTrue(metrics.indexOf(streamCloses.get(0))
-					< metrics.indexOf(finishes.get(0)));
-			Assertions.assertTrue(metrics.indexOf(protocolErrors.get(0))
-					< metrics.indexOf(finishes.get(0)));
-			List<Class<?>> requestTerminalOrder = metrics.stream()
-					.filter(event -> event instanceof McpMetricsEvent.ProgressEmitted
-							|| event instanceof McpMetricsEvent.ProtocolError
-							|| event instanceof McpMetricsEvent.RequestStreamClosed
-							|| event instanceof McpMetricsEvent.RequestFinished)
-					.map(Object::getClass)
-					.toList();
-			List<Class<?>> expectedOrder = progressWins ? List.of(
-					McpMetricsEvent.ProgressEmitted.class,
-					McpMetricsEvent.ProgressEmitted.class,
-					McpMetricsEvent.ProtocolError.class,
-					McpMetricsEvent.RequestStreamClosed.class,
-					McpMetricsEvent.RequestFinished.class) : List.of(
-					McpMetricsEvent.ProgressEmitted.class,
-					McpMetricsEvent.ProtocolError.class,
-					McpMetricsEvent.RequestStreamClosed.class,
-					McpMetricsEvent.RequestFinished.class);
-			Assertions.assertEquals(expectedOrder, requestTerminalOrder,
-					"Accepted progress and terminal events must retain request FIFO.");
-			Assertions.assertEquals(0,
-					server.getDiagnostics().getActiveHandlerExecutions());
-			Assertions.assertEquals(0, server.getDiagnostics().getRequestHandlerQueueDepth());
-			Assertions.assertEquals(0,
-					server.getDiagnostics().getActiveRequestStreams());
+				try {
+					McpRequestSseStream.setTestHooks(hooks);
+					String idJson = "\"" + id + "\"";
+					String tokenJson = "\"" + id + "-token\"";
+					client = callTool(boundPort(server), idJson,
+							"progress." + id, "{}", tokenJson);
+					assertSseHead(client.readHead());
+					Assertions.assertEquals(progressEvent(tokenJson, "1"),
+							client.readChunkText());
+					if (progressWins) {
+						Assertions.assertEquals(progressEvent(tokenJson, "2"),
+								client.readChunkText());
+					}
+					String terminal = sse("{\"jsonrpc\":\"2.0\",\"id\":\"" + id
+							+ "\",\"error\":{\"code\":-32603,"
+							+ "\"message\":\"Internal error\"}}");
+					String terminalFrame = client.readChunkText();
+					Assertions.assertEquals(terminal, terminalFrame);
+					Assertions.assertFalse(terminalFrame.contains(secret), terminalFrame);
+					if (!progressWins)
+						releaseLateEnqueue.countDown();
+					Assertions.assertTrue(lateReportFinished.await(5, TimeUnit.SECONDS),
+							"The late progress report remained blocked.");
+					Future<?> report = lateReport.get();
+					Assertions.assertNotNull(report);
+					report.get(5, TimeUnit.SECONDS);
+					Assertions.assertNull(lateReportFailure.get());
+					Assertions.assertEquals(1, enqueueAttempts.get(),
+							"Only the late report traverses the existing-stream enqueue path.");
+					Assertions.assertFalse(lateReporterInterrupted.get(),
+							"A terminal-owned late report is inert and must not synthesize "
+									+ "thread interruption.");
+					Assertions.assertNull(client.readChunk(),
+							"No progress frame may follow the mapped terminal error.");
+
+					Assertions.assertTrue(requestFinished.await(5, TimeUnit.SECONDS),
+							"The mapped-error request did not finish observation.");
+					awaitPublicCleanup(server);
+					Assertions.assertEquals(progressWins ? 2L : 1L, metrics.stream()
+							.filter(McpMetricsEvent.ProgressEmitted.class::isInstance)
+							.count());
+					List<McpMetricsEvent.ProtocolError> protocolErrors = metrics.stream()
+							.filter(McpMetricsEvent.ProtocolError.class::isInstance)
+							.map(McpMetricsEvent.ProtocolError.class::cast)
+							.toList();
+					Assertions.assertEquals(1, protocolErrors.size());
+					Assertions.assertEquals(McpJsonRpcError.INTERNAL_ERROR,
+							protocolErrors.get(0).getCode());
+					List<McpMetricsEvent.RequestFinished> finishes = metrics.stream()
+							.filter(McpMetricsEvent.RequestFinished.class::isInstance)
+							.map(McpMetricsEvent.RequestFinished.class::cast)
+							.toList();
+					Assertions.assertEquals(1, finishes.size());
+					Assertions.assertEquals(com.soklet.McpRequestOutcome.INTERNAL_ERROR,
+							finishes.get(0).getOutcome());
+					List<McpMetricsEvent.RequestStreamClosed> streamCloses = metrics.stream()
+							.filter(McpMetricsEvent.RequestStreamClosed.class::isInstance)
+							.map(McpMetricsEvent.RequestStreamClosed.class::cast)
+							.toList();
+					Assertions.assertEquals(1, streamCloses.size());
+					Assertions.assertEquals(
+							com.soklet.McpStreamTerminationReason.COMPLETED,
+							streamCloses.get(0).getReason());
+					Assertions.assertTrue(metrics.indexOf(streamCloses.get(0))
+							< metrics.indexOf(finishes.get(0)));
+					Assertions.assertTrue(metrics.indexOf(protocolErrors.get(0))
+							< metrics.indexOf(finishes.get(0)));
+					List<Class<?>> requestTerminalOrder = metrics.stream()
+							.filter(event -> event instanceof McpMetricsEvent.ProgressEmitted
+									|| event instanceof McpMetricsEvent.ProtocolError
+									|| event instanceof McpMetricsEvent.RequestStreamClosed
+									|| event instanceof McpMetricsEvent.RequestFinished)
+							.map(Object::getClass)
+							.toList();
+					List<Class<?>> expectedOrder = progressWins ? List.of(
+							McpMetricsEvent.ProgressEmitted.class,
+							McpMetricsEvent.ProgressEmitted.class,
+							McpMetricsEvent.ProtocolError.class,
+							McpMetricsEvent.RequestStreamClosed.class,
+							McpMetricsEvent.RequestFinished.class) : List.of(
+							McpMetricsEvent.ProgressEmitted.class,
+							McpMetricsEvent.ProtocolError.class,
+							McpMetricsEvent.RequestStreamClosed.class,
+							McpMetricsEvent.RequestFinished.class);
+					Assertions.assertEquals(expectedOrder, requestTerminalOrder,
+							"Accepted progress and terminal events must retain request FIFO.");
+					Assertions.assertEquals(0,
+							server.getDiagnostics().getActiveHandlerExecutions());
+					Assertions.assertEquals(0, server.getDiagnostics().getRequestHandlerQueueDepth());
+					Assertions.assertEquals(0,
+							server.getDiagnostics().getActiveRequestStreams());
+				} finally {
+					releaseLateEnqueue.countDown();
+					McpRequestSseStream.setTestHooks(null);
+					if (client != null)
+						client.close();
+			}
+			});
 		} finally {
-			releaseLateEnqueue.countDown();
-			McpRequestSseStream.setTestHooks(null);
-			if (client != null)
-				client.close();
-			soklet.close();
 			lateReporter.shutdownNow();
 			Assertions.assertTrue(lateReporter.awaitTermination(
 					5, TimeUnit.SECONDS));
@@ -802,14 +792,14 @@ public class McpProgressPublicRuntimeTests {
 				.build();
 	}
 
-	private static Soklet managedSoklet(McpServer server) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+	private static SokletConfig managedSokletConfig(McpServer server) {
+		return SokletConfig.withMcpServer(server)
 				.lifecyclePolicy(com.soklet.LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(10))
 						.startupCancelationTimeout(Duration.ofSeconds(1)).gracefulShutdownTimeout(Duration.ofSeconds(1))
 						.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
-				.build());
+				.build();
 	}
 
 	private static int boundPort(McpServer server) {

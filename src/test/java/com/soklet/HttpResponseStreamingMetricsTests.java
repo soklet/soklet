@@ -83,37 +83,38 @@ public class HttpResponseStreamingMetricsTests {
             .resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Resource.class)))
             .metricsCollector(collector).lifecycleObserver(observer).build();
         ExecutorService client = Executors.newSingleThreadExecutor();
-        try (Soklet soklet = Soklet.fromConfig(config)) {
-            soklet.start();
-            Future<String> wire = client.submit(() -> {
-                try (Socket socket = new Socket("127.0.0.1", port)) {
-                    socket.setSoTimeout(5000);
-                    socket.getOutputStream().write(("GET /stream-metrics-probe HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
-                        .getBytes(StandardCharsets.US_ASCII));
-                    return new String(socket.getInputStream().readAllBytes(), StandardCharsets.US_ASCII);
-                }
-            });
-            if (!producerEntered.await(5, TimeUnit.SECONDS) || !handoff.await(5, TimeUnit.SECONDS))
-                throw new AssertionError("Probe did not reach the live streamed response");
-            MetricsCollector.Snapshot mid = defaults.snapshot().orElseThrow();
-            org.junit.jupiter.api.Assertions.assertNull(terminal.get());
-            org.junit.jupiter.api.Assertions.assertEquals(1L, mid.getActiveRequests());
-            long bytes = mid.getHttpResponseBodyBytes().values().stream().mapToLong(h -> h.getSum().longValue()).sum();
-            org.junit.jupiter.api.Assertions.assertTrue(mid.getHttpResponseBodyBytes().isEmpty());
-            org.junit.jupiter.api.Assertions.assertTrue(mid.getHttpRequestDurations().isEmpty());
-            releaseProducer.countDown();
-            String response = wire.get(5, TimeUnit.SECONDS);
-            if (!terminated.await(5, TimeUnit.SECONDS) || !response.startsWith("HTTP/1.1 200")
-                    || !response.contains("first") || !response.contains("second") || terminal.get().getReason() != StreamTerminationReason.COMPLETED)
-                throw new AssertionError("Control stream did not complete normally");
-            MetricsCollector.Snapshot after = defaults.snapshot().orElseThrow();
-            double beforeDuration = mid.getHttpRequestDurations().values().stream().mapToDouble(h -> h.getSum()).sum();
-            double afterDuration = after.getHttpRequestDurations().values().stream().mapToDouble(h -> h.getSum()).sum();
-            long afterBytes = after.getHttpResponseBodyBytes().values().stream().mapToLong(h -> h.getSum().longValue()).sum();
-            org.junit.jupiter.api.Assertions.assertTrue(afterDuration > beforeDuration);
-            org.junit.jupiter.api.Assertions.assertEquals(11L, afterBytes);
-            org.junit.jupiter.api.Assertions.assertEquals(0L, after.getActiveRequests());
+        try {
+            Soklet.run(config, () -> {
+                Future<String> wire = client.submit(() -> {
+                    try (Socket socket = new Socket("127.0.0.1", port)) {
+                        socket.setSoTimeout(5000);
+                        socket.getOutputStream().write(("GET /stream-metrics-probe HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+                            .getBytes(StandardCharsets.US_ASCII));
+                        return new String(socket.getInputStream().readAllBytes(), StandardCharsets.US_ASCII);
+                    }
+                });
+                if (!producerEntered.await(5, TimeUnit.SECONDS) || !handoff.await(5, TimeUnit.SECONDS))
+                    throw new AssertionError("Probe did not reach the live streamed response");
+                MetricsCollector.Snapshot mid = defaults.snapshot().orElseThrow();
+                org.junit.jupiter.api.Assertions.assertNull(terminal.get());
+                org.junit.jupiter.api.Assertions.assertEquals(1L, mid.getActiveRequests());
+                long bytes = mid.getHttpResponseBodyBytes().values().stream().mapToLong(h -> h.getSum().longValue()).sum();
+                org.junit.jupiter.api.Assertions.assertTrue(mid.getHttpResponseBodyBytes().isEmpty());
+                org.junit.jupiter.api.Assertions.assertTrue(mid.getHttpRequestDurations().isEmpty());
+                releaseProducer.countDown();
+                String response = wire.get(5, TimeUnit.SECONDS);
+                if (!terminated.await(5, TimeUnit.SECONDS) || !response.startsWith("HTTP/1.1 200")
+                        || !response.contains("first") || !response.contains("second") || terminal.get().getReason() != StreamTerminationReason.COMPLETED)
+                    throw new AssertionError("Control stream did not complete normally");
+                MetricsCollector.Snapshot after = defaults.snapshot().orElseThrow();
+                double beforeDuration = mid.getHttpRequestDurations().values().stream().mapToDouble(h -> h.getSum()).sum();
+                double afterDuration = after.getHttpRequestDurations().values().stream().mapToDouble(h -> h.getSum()).sum();
+                long afterBytes = after.getHttpResponseBodyBytes().values().stream().mapToLong(h -> h.getSum().longValue()).sum();
+                org.junit.jupiter.api.Assertions.assertTrue(afterDuration > beforeDuration);
+                org.junit.jupiter.api.Assertions.assertEquals(11L, afterBytes);
+                org.junit.jupiter.api.Assertions.assertEquals(0L, after.getActiveRequests());
 
+            });
         } finally {
             releaseProducer.countDown(); client.shutdownNow();
             if (!client.awaitTermination(5, TimeUnit.SECONDS)) throw new AssertionError("Client did not stop");

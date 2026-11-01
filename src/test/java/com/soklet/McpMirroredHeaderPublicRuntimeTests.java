@@ -66,10 +66,8 @@ public class McpMirroredHeaderPublicRuntimeTests {
 				handlers, observed, observedRaw);
 		McpServer server = serverBuilder(List.of(endpoint(MCP_PATH, tool)),
 				admissions, CorsAuthorizer.rejectAllInstance()).build();
-		Soklet soklet = lifecycleSoklet(server, new CopyOnWriteArrayList<>());
+		Soklet.run(lifecycleSokletConfig(server, new CopyOnWriteArrayList<>()), () -> {
 
-		try {
-			soklet.start();
 			int port = boundPort(server);
 			HttpResponse<String> valid = call(port, MCP_PATH, "valid", TOOL_NAME,
 					mirroredArgumentsJson(), validHeaders());
@@ -98,9 +96,7 @@ public class McpMirroredHeaderPublicRuntimeTests {
 			assertBodyAuthoritativeArguments(observed, observedRaw);
 			Assertions.assertFalse(ignored.body().contains("administrator-canary"),
 					ignored.body());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -130,8 +126,7 @@ public class McpMirroredHeaderPublicRuntimeTests {
 				McpImplementation.withNameAndVersion("wide-integer-mirrors", "1").build(), tool.getProtocolVersions())
 				.toolRegistrations(List.of(tool)).build();
 		McpServer server = serverBuilder(List.of(endpoint), admissions, CorsAuthorizer.rejectAllInstance()).build();
-		try (Soklet owner = lifecycleSoklet(server, new CopyOnWriteArrayList<>())) {
-			owner.start();
+		Soklet.run(lifecycleSokletConfig(server, new CopyOnWriteArrayList<>()), () -> {
 			int port = boundPort(server);
 			for (String value : List.of("-9007199254740991", "0", "9007199254740991")) {
 				HttpResponse<String> response = numericCall(port,
@@ -165,7 +160,7 @@ public class McpMirroredHeaderPublicRuntimeTests {
 			Assertions.assertEquals(4, handlers.get(), "Invalid mirrors cannot enter the application handler.");
 
 			Assertions.assertEquals(20, admissions.get(), "Modern value constraints follow admission.");
-		}
+		});
 		for (McpProtocolVersion version : List.of(McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25)) {
 			McpToolRegistration<WideIntegerArguments> legacyTool = McpToolRegistration.withName("wide.integer", Set.of(version))
 					.argumentType(WideIntegerArguments.class)
@@ -222,10 +217,8 @@ public class McpMirroredHeaderPublicRuntimeTests {
 				handlers, new AtomicReference<>());
 		McpServer server = serverBuilder(List.of(endpoint(MCP_PATH, tool)),
 				admissions, CorsAuthorizer.rejectAllInstance()).build();
-		Soklet soklet = lifecycleSoklet(server, events);
+		Soklet.run(lifecycleSokletConfig(server, events), () -> {
 
-		try {
-			soklet.start();
 			Map<String, String> headers = validHeaders();
 			headers.put("Mcp-Param-Default-Off", "must-not-be-logged");
 			HttpResponse<String> response = call(boundPort(server), MCP_PATH,
@@ -235,9 +228,7 @@ public class McpMirroredHeaderPublicRuntimeTests {
 			Assertions.assertEquals(1, admissions.get());
 			Assertions.assertEquals(1, handlers.get());
 			Assertions.assertTrue(nameDiagnostics(events).isEmpty(), events.toString());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -252,10 +243,8 @@ public class McpMirroredHeaderPublicRuntimeTests {
 				admissions, CorsAuthorizer.rejectAllInstance())
 				.unknownMirroredHeaderNameDiagnostics(true)
 				.build();
-		Soklet soklet = lifecycleSoklet(server, events);
+		Soklet.run(lifecycleSokletConfig(server, events), () -> {
 
-		try {
-			soklet.start();
 			Map<String, String> headers = validHeaders();
 			headers.put("mCp-PaRaM-Super-Secret-Name", "super-secret-value");
 			HttpResponse<String> response = call(boundPort(server), MCP_PATH,
@@ -281,9 +270,7 @@ public class McpMirroredHeaderPublicRuntimeTests {
 					events.toString());
 			Assertions.assertFalse(events.toString().contains(
 					"notification-secret-value"), events.toString());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -404,10 +391,8 @@ public class McpMirroredHeaderPublicRuntimeTests {
 						McpUnknownMirroredHeaderPolicy.REJECT_REQUESTS)
 				.unknownMirroredHeaderNameDiagnostics(true)
 				.build();
-		Soklet soklet = lifecycleSoklet(server, events);
+		Soklet.run(lifecycleSokletConfig(server, events), () -> {
 
-		try {
-			soklet.start();
 			Map<String, String> headers = validHeaders();
 			headers.put("Mcp-Param-Super-Secret-Name", "super-secret-value");
 			HttpResponse<String> response = call(boundPort(server), MCP_PATH,
@@ -424,9 +409,7 @@ public class McpMirroredHeaderPublicRuntimeTests {
 			Assertions.assertEquals(0, handlers.get());
 			assertNameDiagnostic(events, "Mcp-Param-Super-Secret-Name",
 					"super-secret-value");
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -449,10 +432,8 @@ public class McpMirroredHeaderPublicRuntimeTests {
 		McpServer server = serverBuilder(
 				List.of(tenantEndpoint, regionEndpoint), admissions,
 				CorsAuthorizer.fromWhitelistedOrigins(Set.of(origin))).build();
-		Soklet soklet = lifecycleSoklet(server, new CopyOnWriteArrayList<>());
+		Soklet.run(lifecycleSokletConfig(server, new CopyOnWriteArrayList<>()), () -> {
 
-		try {
-			soklet.start();
 			int port = boundPort(server);
 			Assertions.assertEquals(204, preflight(port, "/tenant", origin,
 					"Mcp-Param-Tenant").statusCode());
@@ -464,9 +445,7 @@ public class McpMirroredHeaderPublicRuntimeTests {
 					"Mcp-Param-Tenant").statusCode());
 			Assertions.assertEquals(0, admissions.get(),
 					"CORS preflight must not enter public admission.");
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	private static McpToolRegistration<MirroredArguments> mirroredTool(
@@ -550,6 +529,24 @@ public class McpMirroredHeaderPublicRuntimeTests {
 						.forcedShutdownTimeout(Duration.ofSeconds(1))
 						.build())
 				.build());
+	}
+
+	private static SokletConfig lifecycleSokletConfig(McpServer server, List<LogEvent> events) {
+		return SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObserver(new LifecycleObserver() {
+					@Override
+					public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
+						events.add(logEvent);
+					}
+				})
+				.lifecyclePolicy(LifecyclePolicy.builder()
+						.startupTimeout(Duration.ofSeconds(5))
+						.startupCancelationTimeout(Duration.ofSeconds(2))
+						.gracefulShutdownTimeout(Duration.ofSeconds(2))
+						.forcedShutdownTimeout(Duration.ofSeconds(1))
+						.build())
+				.build();
 	}
 
 	private static List<LogEvent> nameDiagnostics(List<LogEvent> events) {

@@ -290,7 +290,7 @@ public class StreamingOutputViewRuntimeTests {
 		};
 		ResourceMethodResolver resolver = ResourceMethodResolver.fromClasses(Set.of(WriterResource.class));
 		AtomicReference<byte[]> body = new AtomicReference<>();
-		Throwable failure = null;
+		AtomicReference<Throwable> failure = new AtomicReference<>();
 		if (simulated) {
 			SimulatorConfig config = SimulatorConfig.builder().httpServer().resourceMethodResolver(resolver)
 					.instanceProvider(provider).lifecycleObserver(observation).build();
@@ -302,7 +302,7 @@ public class StreamingOutputViewRuntimeTests {
 					if (afterScope != null)
 						afterScope.run();
 				});
-			} catch (RuntimeException exception) { failure = exception; }
+			} catch (RuntimeException exception) { failure.set(exception); }
 		} else {
 			int port = findFreePort();
 			AtomicReference<Throwable> afterScopeFailure = new AtomicReference<>();
@@ -320,27 +320,28 @@ public class StreamingOutputViewRuntimeTests {
 				serverBuilder.streamingExecutorServiceSupplier(() -> producerExecutor);
 			SokletConfig config = SokletConfig.withHttpServer(serverBuilder.build())
 					.resourceMethodResolver(resolver).instanceProvider(provider).lifecycleObserver(observation).build();
-			try (Soklet soklet = Soklet.fromConfig(config)) {
-				soklet.start();
-				HttpURLConnection connection = (HttpURLConnection) new URL("http://127.0.0.1:" + port + "/output-view").openConnection();
-				connection.setConnectTimeout(2_000);
-				connection.setReadTimeout(3_000);
-				try {
-					Assertions.assertEquals(200, connection.getResponseCode());
-					try (var input = connection.getInputStream()) { body.set(input.readAllBytes()); }
-				} catch (IOException exception) { failure = exception; }
-				finally { connection.disconnect(); }
-				Assertions.assertTrue(observation.terminated.await(3, TimeUnit.SECONDS));
-				if (afterScope != null) {
-					Assertions.assertTrue(afterScopeCompleted.await(3, TimeUnit.SECONDS));
-					Assertions.assertNull(afterScopeFailure.get());
-				}
+			try {
+				Soklet.run(config, () -> {
+					HttpURLConnection connection = (HttpURLConnection) new URL("http://127.0.0.1:" + port + "/output-view").openConnection();
+					connection.setConnectTimeout(2_000);
+					connection.setReadTimeout(3_000);
+					try {
+						Assertions.assertEquals(200, connection.getResponseCode());
+						try (var input = connection.getInputStream()) { body.set(input.readAllBytes()); }
+					} catch (IOException exception) { failure.set(exception); }
+					finally { connection.disconnect(); }
+					Assertions.assertTrue(observation.terminated.await(3, TimeUnit.SECONDS));
+					if (afterScope != null) {
+						Assertions.assertTrue(afterScopeCompleted.await(3, TimeUnit.SECONDS));
+						Assertions.assertNull(afterScopeFailure.get());
+					}
+			});
 			} finally {
 				if (producerExecutor != null)
 					producerExecutor.shutdownNow();
 			}
 		}
-		return new Outcome(body.get(), failure, observation.termination.get());
+		return new Outcome(body.get(), failure.get(), observation.termination.get());
 	}
 
 	public static final class WriterResource {

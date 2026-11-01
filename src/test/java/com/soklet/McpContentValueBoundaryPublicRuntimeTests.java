@@ -73,9 +73,8 @@ class McpContentValueBoundaryPublicRuntimeTests {
 		McpServer server = McpServer.withPort(0).host("127.0.0.1").allowedHosts(Set.of("127.0.0.1"))
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.toolRateLimiter(rateLimitContext -> McpRateLimitDecision.allowed()).build();
-		try (Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
-				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).build())) {
-			soklet.start();
+		Soklet.run(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).build(), () -> {
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			for (String kind : List.of("image", "audio", "blob")) {
 				mode.set(kind);
@@ -106,7 +105,7 @@ class McpContentValueBoundaryPublicRuntimeTests {
 			assertTrue(recovered.body().contains("recovered 😀\\n"), recovered.body());
 			assertFalse(recovered.body().contains("\"error\""), recovered.body());
 			assertEquals(9, handlerCalls.get());
-		}
+		});
 	}
 
 	private static void assertPrivateFailure(Response response, McpProtocolVersion protocolVersion) {

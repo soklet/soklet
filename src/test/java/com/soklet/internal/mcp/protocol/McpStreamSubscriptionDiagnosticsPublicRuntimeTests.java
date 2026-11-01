@@ -107,66 +107,69 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 		Duration shutdownTimeout = Duration.ofSeconds(1);
 		McpServer server = server(List.of(toolEndpoint, subscriptionEndpoint()),
 				shutdownTimeout);
-		Soklet soklet = managedSoklet(server, shutdownTimeout);
+
 		ExecutorService readerExecutor = Executors.newSingleThreadExecutor();
-		AtomicBoolean readSnapshots = new AtomicBoolean(true);
-		AtomicInteger snapshotReads = new AtomicInteger();
-		McpChunkedHttpClient ordinary = null;
-		McpChunkedHttpClient subscription = null;
-		Future<?> reader = null;
-
 		try {
-			soklet.start();
-			reader = readerExecutor.submit(() -> {
-				while (readSnapshots.get()) {
-					assertStreamInvariant(server.getDiagnostics());
-					snapshotReads.incrementAndGet();
-				}
+			Soklet.run(managedSokletConfig(server, shutdownTimeout), () -> {
+				AtomicBoolean readSnapshots = new AtomicBoolean(true);
+				AtomicInteger snapshotReads = new AtomicInteger();
+				McpChunkedHttpClient ordinary = null;
+				McpChunkedHttpClient subscription = null;
+				Future<?> reader = null;
+
+				try {
+					reader = readerExecutor.submit(() -> {
+						while (readSnapshots.get()) {
+							assertStreamInvariant(server.getDiagnostics());
+							snapshotReads.incrementAndGet();
+						}
+					});
+					awaitCondition(() -> snapshotReads.get() > 0);
+
+					int port = boundPort(server);
+					ordinary = callTool(port, TOOL_PATH, "ordinary");
+					assertSseHead(ordinary.readHead());
+					Assertions.assertTrue(ordinary.readChunkText().contains(
+							"\"progressToken\":\"ordinary-progress\""));
+					McpServerDiagnostics ordinaryOpen = awaitDiagnostics(server,
+							diagnostics -> streamPair(diagnostics, 1, 0));
+
+					subscription = listen(port, SUBSCRIPTION_PATH, "subscription");
+					assertSseHead(subscription.readHead());
+					String acknowledgment = subscription.readChunkText();
+					Assertions.assertTrue(acknowledgment.contains(
+							"\"method\":\"notifications/subscriptions/acknowledged\""),
+							acknowledgment);
+					Assertions.assertTrue(acknowledgment.contains(
+							"\"io.modelcontextprotocol/subscriptionId\":\"subscription\""),
+							acknowledgment);
+					McpServerDiagnostics aggregate = awaitDiagnostics(server,
+							diagnostics -> streamPair(diagnostics, 2, 1));
+
+					subscription.closeWithReset();
+					subscription = null;
+					awaitDiagnostics(server, diagnostics -> streamPair(diagnostics, 1, 0));
+					ordinary.closeWithReset();
+					ordinary = null;
+					Assertions.assertTrue(handlerInterrupted.await(5, TimeUnit.SECONDS));
+					awaitDiagnostics(server, diagnostics -> streamPair(diagnostics, 0, 0));
+
+					assertStreamPair(ordinaryOpen, 1, 0);
+					assertStreamPair(aggregate, 2, 1);
+					Assertions.assertEquals(McpServerStatus.RUNNING, aggregate.getStatus());
+					readSnapshots.set(false);
+					requireFuture(reader).get(5, TimeUnit.SECONDS);
+					Assertions.assertTrue(snapshotReads.get() > 0);
+				} finally {
+					readSnapshots.set(false);
+					releaseHandler.countDown();
+					if (ordinary != null)
+						ordinary.close();
+					if (subscription != null)
+						subscription.close();
+			}
 			});
-			awaitCondition(() -> snapshotReads.get() > 0);
-
-			int port = boundPort(server);
-			ordinary = callTool(port, TOOL_PATH, "ordinary");
-			assertSseHead(ordinary.readHead());
-			Assertions.assertTrue(ordinary.readChunkText().contains(
-					"\"progressToken\":\"ordinary-progress\""));
-			McpServerDiagnostics ordinaryOpen = awaitDiagnostics(server,
-					diagnostics -> streamPair(diagnostics, 1, 0));
-
-			subscription = listen(port, SUBSCRIPTION_PATH, "subscription");
-			assertSseHead(subscription.readHead());
-			String acknowledgment = subscription.readChunkText();
-			Assertions.assertTrue(acknowledgment.contains(
-					"\"method\":\"notifications/subscriptions/acknowledged\""),
-					acknowledgment);
-			Assertions.assertTrue(acknowledgment.contains(
-					"\"io.modelcontextprotocol/subscriptionId\":\"subscription\""),
-					acknowledgment);
-			McpServerDiagnostics aggregate = awaitDiagnostics(server,
-					diagnostics -> streamPair(diagnostics, 2, 1));
-
-			subscription.closeWithReset();
-			subscription = null;
-			awaitDiagnostics(server, diagnostics -> streamPair(diagnostics, 1, 0));
-			ordinary.closeWithReset();
-			ordinary = null;
-			Assertions.assertTrue(handlerInterrupted.await(5, TimeUnit.SECONDS));
-			awaitDiagnostics(server, diagnostics -> streamPair(diagnostics, 0, 0));
-
-			assertStreamPair(ordinaryOpen, 1, 0);
-			assertStreamPair(aggregate, 2, 1);
-			Assertions.assertEquals(McpServerStatus.RUNNING, aggregate.getStatus());
-			readSnapshots.set(false);
-			requireFuture(reader).get(5, TimeUnit.SECONDS);
-			Assertions.assertTrue(snapshotReads.get() > 0);
 		} finally {
-			readSnapshots.set(false);
-			releaseHandler.countDown();
-			if (ordinary != null)
-				ordinary.close();
-			if (subscription != null)
-				subscription.close();
-			soklet.close();
 			readerExecutor.shutdownNow();
 			Assertions.assertTrue(readerExecutor.awaitTermination(
 					5, TimeUnit.SECONDS));
@@ -196,7 +199,6 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 		SokletLifecycleException terminalFailure = null;
 
 		try {
-			soklet.start();
 			client = callTool(boundPort(server), TOOL_PATH, "residual");
 			assertSseHead(client.readHead());
 			client.readChunkText();
@@ -235,7 +237,9 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 					client.close();
 			} finally {
 				if (terminalFailure == null)
-					soklet.close();
+					// These cases inspect incomplete or unexpected shutdown and replay the same terminal result.
+					// These cases inspect incomplete or unexpected shutdown and replay the same terminal result.
+					com.soklet.SokletTestScope.close(soklet);
 				else
 					assertSameManagedTerminalReplay(soklet, terminalFailure);
 			}
@@ -260,7 +264,6 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 		SokletLifecycleException terminalFailure = null;
 
 		try {
-			soklet.start();
 			subscription = listen(boundPort(server), SUBSCRIPTION_PATH, "failure");
 			assertSseHead(subscription.readHead());
 			subscription.readChunkText();
@@ -317,7 +320,7 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 				try {
 					if (terminalFailure == null) {
 						try {
-							soklet.close();
+							com.soklet.SokletTestScope.close(soklet);
 						} catch (SokletLifecycleException ignored) {
 							// Preserve the primary test failure during terminal cleanup.
 						}
@@ -411,7 +414,7 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 
 	private static Soklet managedSoklet(McpServer server,
 			@NonNull Duration shutdownTimeout) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+		return Soklet.run(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecyclePolicy(LifecyclePolicy.builder()
@@ -419,6 +422,18 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 						.forcedShutdownTimeout(shutdownTimeout)
 						.build())
 				.build());
+	}
+
+	private static SokletConfig managedSokletConfig(McpServer server,
+			@NonNull Duration shutdownTimeout) {
+		return SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(
+						ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecyclePolicy(LifecyclePolicy.builder()
+						.gracefulShutdownTimeout(shutdownTimeout)
+						.forcedShutdownTimeout(shutdownTimeout)
+						.build())
+				.build();
 	}
 
 	private static int boundPort(@NonNull McpServer server) {
@@ -555,7 +570,7 @@ public class McpStreamSubscriptionDiagnosticsPublicRuntimeTests {
 	private static SokletLifecycleException captureManagedCloseFailure(
 			@NonNull Soklet soklet) {
 		return Assertions.assertThrows(SokletLifecycleException.class,
-				soklet::close);
+				() -> com.soklet.SokletTestScope.close(soklet));
 	}
 
 	private static void assertManagedTerminalFailure(

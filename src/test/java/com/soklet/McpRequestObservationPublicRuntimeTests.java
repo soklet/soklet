@@ -102,29 +102,29 @@ public class McpRequestObservationPublicRuntimeTests {
 			}).build();
 		McpServer server = serverBuilder(endpointBuilder("observation-origin-test")
 				.toolRegistrations(List.of(tool)).build()).build();
-		Soklet soklet = managedSoklet(server, List.of(first, second), new RecordingMetricsCollector());
-		try {
-			soklet.start();
-			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
-			Instant beforeRequest = Instant.now();
-			CompletableFuture<HttpResponse<String>> response = sendAsync(port, toolRequest("origin", TOOL_NAME),
-					"tools/call", Optional.of(TOOL_NAME), Optional.empty());
-			Assertions.assertTrue(firstObserverEntered.await(5, TimeUnit.SECONDS));
-			Instant origin = firstContext.get().getStartedAt().orElseThrow();
-			Assertions.assertFalse(origin.isBefore(beforeRequest));
-			Assertions.assertFalse(origin.isAfter(firstObserverEnteredAt.get()));
-			Assertions.assertNull(second.startedContext.get(), "The later observer must still be behind the blocked start callback.");
-			releaseFirstObserver.countDown();
-			assertSuccess(response.get(5, TimeUnit.SECONDS), "origin");
-			second.awaitFinished();
-			Assertions.assertSame(firstContext.get(), second.startedContext.get());
-			Assertions.assertSame(firstContext.get(), handlerContext.get());
-			Assertions.assertSame(firstContext.get(), second.finishedContext.get());
-			Assertions.assertEquals(Optional.of(origin), second.finishedContext.get().getStartedAt());
-		} finally {
-			releaseFirstObserver.countDown();
-			soklet.close();
-		}
+		Soklet.run(managedSokletConfig(server, List.of(first, second), new RecordingMetricsCollector()), () -> {
+			try {
+				int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
+				Instant beforeRequest = Instant.now();
+				CompletableFuture<HttpResponse<String>> response = sendAsync(port, toolRequest("origin", TOOL_NAME),
+						"tools/call", Optional.of(TOOL_NAME), Optional.empty());
+				Assertions.assertTrue(firstObserverEntered.await(5, TimeUnit.SECONDS));
+				Instant origin = firstContext.get().getStartedAt().orElseThrow();
+				Assertions.assertFalse(origin.isBefore(beforeRequest));
+				Assertions.assertFalse(origin.isAfter(firstObserverEnteredAt.get()));
+				Assertions.assertNull(second.startedContext.get(), "The later observer must still be behind the blocked start callback.");
+				releaseFirstObserver.countDown();
+				assertSuccess(response.get(5, TimeUnit.SECONDS), "origin");
+				second.awaitFinished();
+				Assertions.assertSame(firstContext.get(), second.startedContext.get());
+				Assertions.assertSame(firstContext.get(), handlerContext.get());
+				Assertions.assertSame(firstContext.get(), second.finishedContext.get());
+				Assertions.assertEquals(Optional.of(origin), second.finishedContext.get().getStartedAt());
+			} finally {
+				releaseFirstObserver.countDown();
+
+			}
+		});
 	}
 
 	@Test
@@ -140,10 +140,7 @@ public class McpRequestObservationPublicRuntimeTests {
 					return continuation.proceed();
 				})
 				.build();
-		Soklet soklet = managedSoklet(server, List.of(observer), collector);
-
-		try {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server, List.of(observer), collector), () -> {
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			HttpResponse<String> response = send(port, discoverRequest("discover"),
@@ -155,9 +152,7 @@ public class McpRequestObservationPublicRuntimeTests {
 			assertSingleCompleteLifecycle(observer, endpoint, "server/discover",
 					Optional.empty(), "discover");
 			assertSingleCompleteMetrics(collector, "server/discover");
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -187,10 +182,7 @@ public class McpRequestObservationPublicRuntimeTests {
 					return continuation.proceed();
 				})
 				.build();
-		Soklet soklet = managedSoklet(server, List.of(observer), collector);
-
-		try {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server, List.of(observer), collector), () -> {
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			HttpResponse<String> response = send(port,
@@ -208,9 +200,7 @@ public class McpRequestObservationPublicRuntimeTests {
 					interceptorContext.get());
 			Assertions.assertSame(observer.startedContext.get(), handlerContext.get());
 			assertSingleCompleteMetrics(collector, "tools/call");
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -246,82 +236,81 @@ public class McpRequestObservationPublicRuntimeTests {
 		McpServer server = serverBuilder(endpoint)
 				.traceCorrelationKey(traceKey("trace-first", 0))
 				.build();
-		Soklet soklet = managedSoklet(server, List.of(observer),
-				new RecordingMetricsCollector());
+		Soklet.run(managedSokletConfig(server, List.of(observer),
+				new RecordingMetricsCollector()), () -> {
+			try {
+				int port = server.getDiagnostics().getBoundAddress()
+						.orElseThrow().getPort();
+				CompletableFuture<HttpResponse<String>> firstResponse = sendAsync(
+						port, toolRequestWithTrace("trace-first", TOOL_NAME,
+								MCP_TRACEPARENT), "tools/call", Optional.of(TOOL_NAME),
+						Optional.empty());
+				Assertions.assertTrue(firstHandlerEntered.await(5, TimeUnit.SECONDS),
+						"The first trace-capture handler did not start.");
 
-		try {
-			soklet.start();
-			int port = server.getDiagnostics().getBoundAddress()
-					.orElseThrow().getPort();
-			CompletableFuture<HttpResponse<String>> firstResponse = sendAsync(
-					port, toolRequestWithTrace("trace-first", TOOL_NAME,
-							MCP_TRACEPARENT), "tools/call", Optional.of(TOOL_NAME),
-					Optional.empty());
-			Assertions.assertTrue(firstHandlerEntered.await(5, TimeUnit.SECONDS),
-					"The first trace-capture handler did not start.");
+				Assertions.assertEquals(1, observer.startedContexts.size());
+				DefaultMcpRequestContext firstContext =
+						observer.startedContexts.get(0);
+				Assertions.assertSame(firstContext, handlerContexts.get(0));
+				DefaultMcpSecurityKeyManagers.TraceCorrelationToken firstToken =
+						firstContext.traceCorrelationToken().orElseThrow();
+				Assertions.assertEquals("trace-first", firstToken.keyId());
+				Assertions.assertEquals(FIRST_TRACE_TOKEN, firstToken.token());
+				Assertions.assertSame(firstToken, handlerContexts.get(0)
+						.traceCorrelationToken().orElseThrow());
 
-			Assertions.assertEquals(1, observer.startedContexts.size());
-			DefaultMcpRequestContext firstContext =
-					observer.startedContexts.get(0);
-			Assertions.assertSame(firstContext, handlerContexts.get(0));
-			DefaultMcpSecurityKeyManagers.TraceCorrelationToken firstToken =
-					firstContext.traceCorrelationToken().orElseThrow();
-			Assertions.assertEquals("trace-first", firstToken.keyId());
-			Assertions.assertEquals(FIRST_TRACE_TOKEN, firstToken.token());
-			Assertions.assertSame(firstToken, handlerContexts.get(0)
-					.traceCorrelationToken().orElseThrow());
+				server.getTraceCorrelationKeyManager().rotateActiveKey(
+						traceKey("trace-second", 32));
+				Assertions.assertEquals(Optional.of("trace-second"),
+						server.getTraceCorrelationKeyManager().getActiveKeyId());
+				Assertions.assertSame(firstToken,
+						firstContext.traceCorrelationToken().orElseThrow());
+				releaseFirstHandler.countDown();
+				HttpResponse<String> first = firstResponse.get(5, TimeUnit.SECONDS);
+				assertSuccess(first, "trace-first");
+				observer.awaitFirstFinished();
+				Assertions.assertSame(firstContext,
+						observer.finishedContexts.get(0));
+				Assertions.assertSame(firstToken, observer.finishedContexts.get(0)
+						.traceCorrelationToken().orElseThrow());
+				Assertions.assertEquals(1, observer.logEvents.size(),
+						observer.logEvents.toString());
+				assertTraceLogEvent(observer.logEvents.get(0),
+						"tokenFormat=soklet-mcp-trace-correlation-v1;"
+								+ "keyId=trace-first;token=" + FIRST_TRACE_TOKEN);
 
-			server.getTraceCorrelationKeyManager().rotateActiveKey(
-					traceKey("trace-second", 32));
-			Assertions.assertEquals(Optional.of("trace-second"),
-					server.getTraceCorrelationKeyManager().getActiveKeyId());
-			Assertions.assertSame(firstToken,
-					firstContext.traceCorrelationToken().orElseThrow());
-			releaseFirstHandler.countDown();
-			HttpResponse<String> first = firstResponse.get(5, TimeUnit.SECONDS);
-			assertSuccess(first, "trace-first");
-			observer.awaitFirstFinished();
-			Assertions.assertSame(firstContext,
-					observer.finishedContexts.get(0));
-			Assertions.assertSame(firstToken, observer.finishedContexts.get(0)
-					.traceCorrelationToken().orElseThrow());
-			Assertions.assertEquals(1, observer.logEvents.size(),
-					observer.logEvents.toString());
-			assertTraceLogEvent(observer.logEvents.get(0),
-					"tokenFormat=soklet-mcp-trace-correlation-v1;"
-							+ "keyId=trace-first;token=" + FIRST_TRACE_TOKEN);
+				HttpResponse<String> second = send(port,
+						toolRequestWithTrace("trace-second", TOOL_NAME,
+								MCP_TRACEPARENT), "tools/call", Optional.of(TOOL_NAME));
+				assertSuccess(second, "trace-second");
+				observer.awaitAllFinished();
+				Assertions.assertEquals(2, observer.startedContexts.size());
+				Assertions.assertEquals(2, observer.finishedContexts.size());
+				Assertions.assertEquals(2, handlerContexts.size());
+				DefaultMcpRequestContext secondContext =
+						observer.startedContexts.get(1);
+				Assertions.assertSame(secondContext, handlerContexts.get(1));
+				Assertions.assertSame(secondContext,
+						observer.finishedContexts.get(1));
+				DefaultMcpSecurityKeyManagers.TraceCorrelationToken secondToken =
+						secondContext.traceCorrelationToken().orElseThrow();
+				Assertions.assertEquals("trace-second", secondToken.keyId());
+				Assertions.assertEquals(SECOND_TRACE_TOKEN, secondToken.token());
+				Assertions.assertSame(secondToken, handlerContexts.get(1)
+						.traceCorrelationToken().orElseThrow());
+				Assertions.assertSame(secondToken, observer.finishedContexts.get(1)
+						.traceCorrelationToken().orElseThrow());
+				Assertions.assertNotSame(firstToken, secondToken);
+				Assertions.assertEquals(2, observer.logEvents.size(),
+						observer.logEvents.toString());
+				assertTraceLogEvent(observer.logEvents.get(1),
+						"tokenFormat=soklet-mcp-trace-correlation-v1;"
+								+ "keyId=trace-second;token=" + SECOND_TRACE_TOKEN);
+			} finally {
+				releaseFirstHandler.countDown();
 
-			HttpResponse<String> second = send(port,
-					toolRequestWithTrace("trace-second", TOOL_NAME,
-							MCP_TRACEPARENT), "tools/call", Optional.of(TOOL_NAME));
-			assertSuccess(second, "trace-second");
-			observer.awaitAllFinished();
-			Assertions.assertEquals(2, observer.startedContexts.size());
-			Assertions.assertEquals(2, observer.finishedContexts.size());
-			Assertions.assertEquals(2, handlerContexts.size());
-			DefaultMcpRequestContext secondContext =
-					observer.startedContexts.get(1);
-			Assertions.assertSame(secondContext, handlerContexts.get(1));
-			Assertions.assertSame(secondContext,
-					observer.finishedContexts.get(1));
-			DefaultMcpSecurityKeyManagers.TraceCorrelationToken secondToken =
-					secondContext.traceCorrelationToken().orElseThrow();
-			Assertions.assertEquals("trace-second", secondToken.keyId());
-			Assertions.assertEquals(SECOND_TRACE_TOKEN, secondToken.token());
-			Assertions.assertSame(secondToken, handlerContexts.get(1)
-					.traceCorrelationToken().orElseThrow());
-			Assertions.assertSame(secondToken, observer.finishedContexts.get(1)
-					.traceCorrelationToken().orElseThrow());
-			Assertions.assertNotSame(firstToken, secondToken);
-			Assertions.assertEquals(2, observer.logEvents.size(),
-					observer.logEvents.toString());
-			assertTraceLogEvent(observer.logEvents.get(1),
-					"tokenFormat=soklet-mcp-trace-correlation-v1;"
-							+ "keyId=trace-second;token=" + SECOND_TRACE_TOKEN);
-		} finally {
-			releaseFirstHandler.countDown();
-			soklet.close();
-		}
+			}
+		});
 	}
 
 	@Test
@@ -345,11 +334,8 @@ public class McpRequestObservationPublicRuntimeTests {
 				.traceCorrelationKey(traceKey("trace-first", 0))
 				.logRawValidatedTraceIds(true)
 				.build();
-		Soklet soklet = managedSoklet(server, List.of(observer),
-				new RecordingMetricsCollector());
-
-		try {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server, List.of(observer),
+				new RecordingMetricsCollector()), () -> {
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			assertSuccess(sendWithHttpTraceparent(port,
@@ -395,9 +381,7 @@ public class McpRequestObservationPublicRuntimeTests {
 					"tokenFormat=soklet-mcp-trace-correlation-v1;"
 							+ "keyId=trace-first;token=" + FIRST_TRACE_TOKEN
 							+ ";traceId=0af7651916cd43dd8448eb211c80319c");
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -416,10 +400,8 @@ public class McpRequestObservationPublicRuntimeTests {
 		TraceRecordingLifecycleObserver defaultObserver =
 				new TraceRecordingLifecycleObserver(1);
 		McpServer defaultServer = serverBuilder(endpoint).build();
-		Soklet defaultSoklet = managedSoklet(defaultServer,
-				List.of(defaultObserver), new RecordingMetricsCollector());
-		try {
-			defaultSoklet.start();
+		Soklet.run(managedSokletConfig(defaultServer,
+				List.of(defaultObserver), new RecordingMetricsCollector()), () -> {
 			int port = defaultServer.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			assertSuccess(send(port, toolRequestWithTrace("trace-default",
@@ -432,19 +414,15 @@ public class McpRequestObservationPublicRuntimeTests {
 			Assertions.assertTrue(context.traceCorrelationToken().isEmpty());
 			Assertions.assertTrue(defaultObserver.logEvents.isEmpty(),
 					defaultObserver.logEvents.toString());
-		} finally {
-			defaultSoklet.close();
-		}
+		});
 
 		TraceRecordingLifecycleObserver rawObserver =
 				new TraceRecordingLifecycleObserver(1);
 		McpServer rawServer = serverBuilder(endpoint)
 				.logRawValidatedTraceIds(true)
 				.build();
-		Soklet rawSoklet = managedSoklet(rawServer,
-				List.of(rawObserver), new RecordingMetricsCollector());
-		try {
-			rawSoklet.start();
+		Soklet.run(managedSokletConfig(rawServer,
+				List.of(rawObserver), new RecordingMetricsCollector()), () -> {
 			int port = rawServer.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			assertSuccess(send(port, toolRequestWithTrace("trace-raw",
@@ -459,9 +437,7 @@ public class McpRequestObservationPublicRuntimeTests {
 					rawObserver.logEvents.toString());
 			assertTraceLogEvent(rawObserver.logEvents.get(0),
 					"traceId=0af7651916cd43dd8448eb211c80319c");
-		} finally {
-			rawSoklet.close();
-		}
+		});
 
 		TraceRecordingLifecycleObserver enabledObserver =
 				new TraceRecordingLifecycleObserver(1);
@@ -469,10 +445,8 @@ public class McpRequestObservationPublicRuntimeTests {
 				.traceCorrelationKey(traceKey("trace-first", 0))
 				.logRawValidatedTraceIds(true)
 				.build();
-		Soklet enabledSoklet = managedSoklet(enabledServer,
-				List.of(enabledObserver), new RecordingMetricsCollector());
-		try {
-			enabledSoklet.start();
+		Soklet.run(managedSokletConfig(enabledServer,
+				List.of(enabledObserver), new RecordingMetricsCollector()), () -> {
 			int port = enabledServer.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			assertSuccess(send(port, toolRequestWithTrace("trace-enabled",
@@ -494,9 +468,7 @@ public class McpRequestObservationPublicRuntimeTests {
 					"tokenFormat=soklet-mcp-trace-correlation-v1;"
 							+ "keyId=trace-first;token=" + FIRST_TRACE_TOKEN
 							+ ";traceId=0af7651916cd43dd8448eb211c80319c");
-		} finally {
-			enabledSoklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -534,7 +506,7 @@ public class McpRequestObservationPublicRuntimeTests {
 				.traceCorrelationKey(traceKey)
 				.logRawValidatedTraceIds(true)
 				.build();
-		Soklet soklet = managedSoklet(server, List.of(observer), collector);
+
 		List<String> mcpTraceIds = new java.util.ArrayList<>();
 		List<String> httpTraceIds = new java.util.ArrayList<>();
 		List<String> mcpTracestates = new java.util.ArrayList<>();
@@ -542,8 +514,7 @@ public class McpRequestObservationPublicRuntimeTests {
 		List<String> mcpBaggage = new java.util.ArrayList<>();
 		List<String> httpBaggage = new java.util.ArrayList<>();
 
-		try {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server, List.of(observer), collector), () -> {
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			for (int index = 0; index < TRACE_CARDINALITY_REQUEST_COUNT;
@@ -604,244 +575,242 @@ public class McpRequestObservationPublicRuntimeTests {
 			}
 			observer.awaitAllFinished();
 			collector.awaitRequestFinishes();
-			soklet.close();
-			collector.awaitServerStopped();
+		});
+		collector.awaitServerStopped();
 
-			Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
-					observer.startedContexts.size());
-			Set<String> derivedTokens = new LinkedHashSet<>();
-			List<String> expectedTraceLogMessages = new java.util.ArrayList<>();
-			for (int index = 0; index < TRACE_CARDINALITY_REQUEST_COUNT;
-					++index) {
-				DefaultMcpRequestContext context =
-						observer.startedContexts.get(index);
-				Assertions.assertSame(context,
-						observer.finishedContexts.get(index));
-				Assertions.assertEquals(mcpTraceIds.get(index),
-						context.getTraceContext().orElseThrow().getTraceId());
-				Assertions.assertEquals(mcpTracestates.get(index),
-						context.getTraceContext().orElseThrow()
-								.toTracestateHeaderValue().orElseThrow());
-				String suffix = String.format(Locale.ROOT, "%02x", index);
-				Assertions.assertEquals("mcpbagvaluecanary" + suffix,
-						context.getBaggage().get("mcpbag" + suffix));
-				Assertions.assertEquals(httpTraceIds.get(index),
-						context.getRequest().getTraceContext().orElseThrow()
-								.getTraceId());
-				Assertions.assertEquals(httpTracestates.get(index),
-						context.getRequest().getTraceContext().orElseThrow()
-								.toTracestateHeaderValue().orElseThrow());
-				Assertions.assertEquals(List.of(httpBaggage.get(index)),
-						context.getRequest().getHeaders().get("baggage"));
-				DefaultMcpSecurityKeyManagers.TraceCorrelationToken token =
-						context.traceCorrelationToken().orElseThrow();
-				Assertions.assertEquals(TRACE_CARDINALITY_KEY_ID,
-						token.keyId());
-				derivedTokens.add(token.token());
-				sensitiveCanaries.add(token.token());
-				expectedTraceLogMessages.add(
-						"tokenFormat=soklet-mcp-trace-correlation-v1;keyId="
-								+ TRACE_CARDINALITY_KEY_ID + ";token="
-								+ token.token() + ";traceId="
-								+ mcpTraceIds.get(index));
-			}
-			Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
-					derivedTokens.size());
-			Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
-					observer.logEvents.size(), observer.logEvents.toString());
-			for (int index = 0; index < observer.logEvents.size(); ++index)
-				assertTraceLogEvent(observer.logEvents.get(index),
-						expectedTraceLogMessages.get(index));
-
-			List<McpMetricsEvent> events = collector.events();
-			Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
-					countEvents(events, McpMetricsEvent.RequestAccepted.class));
-			Assertions.assertEquals(0,
-					countEvents(events, McpMetricsEvent.RequestRejected.class));
-			Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
-					countEvents(events, McpMetricsEvent.RequestStarted.class));
-			Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
-					countEvents(events,
-							McpMetricsEvent.HandlerExecutionStarted.class));
-			Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
-					countEvents(events,
-							McpMetricsEvent.HandlerExecutionFinished.class));
-			Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
-					countEvents(events, McpMetricsEvent.RequestFinished.class));
-			Assertions.assertEquals(1,
-					countEvents(events, McpMetricsEvent.ServerStarted.class));
-			Assertions.assertEquals(1,
-					countEvents(events, McpMetricsEvent.ServerStopped.class));
-			Assertions.assertEquals(0,
-					countEvents(events,
-							McpMetricsEvent.CancelationSignaled.class));
-			Assertions.assertEquals(0,
-					countEvents(events, McpMetricsEvent.ProgressEmitted.class));
-			Assertions.assertEquals(0,
-					countEvents(events, McpMetricsEvent.KeepAliveEmitted.class));
-			Assertions.assertEquals(0,
-					countEvents(events, McpMetricsEvent.ProtocolError.class));
-			Assertions.assertEquals(0,
-					countEvents(events,
-							McpMetricsEvent.UnknownMirroredHeader.class));
-			for (McpMetricsEvent event : events)
-				assertFiniteMetricProjection(event);
-
-			MetricsCollector.Snapshot snapshot = collector.snapshot()
-					.orElseThrow();
-			McpMetricsSnapshot mcpMetrics = snapshot.getMcpMetrics();
-			Assertions.assertEquals(1L, mcpMetrics.getServerStarts());
-			Assertions.assertEquals(0L,
-					mcpMetrics.getActiveHandlerExecutions());
-			Assertions.assertEquals(0L, mcpMetrics.getHandlerQueueDepth());
-			Assertions.assertEquals(0L,
-					mcpMetrics.getHandlerCapacityRejections());
-			Assertions.assertEquals(Map.of(ShutdownComponentDisposition.GRACEFUL_TERMINATION, 1L),
-					mcpMetrics.getServerStops());
-			Assertions.assertTrue(mcpMetrics.getConnectionsAccepted() > 0L);
-			Assertions.assertEquals(0L,
-					mcpMetrics.getConnectionsRejected());
-			Assertions.assertTrue(mcpMetrics.getTransportFailures().isEmpty());
-			Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
-					mcpMetrics.getRequestsAccepted());
-			Assertions.assertEquals(0L, mcpMetrics.getRequestsRejected());
-			McpMetricsSnapshot.RequestOutcomeKey requestOutcomeKey =
-					McpMetricsSnapshot.RequestOutcomeKey.fromDimensions(MCP_PATH,
-							"tools/call", McpRequestOutcome.COMPLETE);
-			Assertions.assertEquals(0L, mcpMetrics.getActiveRequests());
-			Assertions.assertEquals(Map.of(requestOutcomeKey,
-					(long) TRACE_CARDINALITY_REQUEST_COUNT),
-					mcpMetrics.getRequests());
-			MetricsCollector.HistogramSnapshot requestDurations =
-					mcpMetrics.getRequestDurations().get(requestOutcomeKey);
-			Assertions.assertNotNull(requestDurations);
-			Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
-					requestDurations.getCount());
-			Assertions.assertTrue(requestDurations.getSum() >= 0L);
-			Assertions.assertTrue(requestDurations.getMin() >= 0L);
-			Assertions.assertTrue(requestDurations.getMax()
-					>= requestDurations.getMin());
-			Assertions.assertEquals(0L,
-					mcpMetrics.getActiveRequestStreams());
-			Assertions.assertTrue(
-					mcpMetrics.getRequestStreamDurations().isEmpty());
-			Assertions.assertEquals(0L,
-					mcpMetrics.getActiveSubscriptions());
-			Assertions.assertTrue(
-					mcpMetrics.getSubscriptionDurations().isEmpty());
-			Assertions.assertTrue(
-					mcpMetrics.getCancelationsSignaled().isEmpty());
-			Assertions.assertTrue(mcpMetrics.getProgressEmitted().isEmpty());
-			Assertions.assertEquals(0L, mcpMetrics.getKeepAlivesEmitted());
-			Assertions.assertTrue(mcpMetrics.getProtocolErrors().isEmpty());
-			Assertions.assertTrue(
-					mcpMetrics.getUnknownMirroredHeaders().isEmpty());
-			List<String> filteredSamples = new CopyOnWriteArrayList<>();
-			String prometheus = collector.snapshotText(
-					MetricsCollector.SnapshotTextOptions.fromMetricsFormat(
-							MetricsCollector.MetricsFormat.PROMETHEUS))
-					.orElseThrow();
-			String filteredPrometheus = collector.snapshotText(
-					MetricsCollector.SnapshotTextOptions.withMetricsFormat(
-							MetricsCollector.MetricsFormat.PROMETHEUS)
-							.metricFilter(sample -> {
-								if (!sample.getName().startsWith("soklet_mcp_"))
-									return false;
-								filteredSamples.add(sample.getName()
-										+ sample.getLabels());
-								return true;
-							})
-							.build()).orElseThrow();
-			Set<String> expectedMcpSamples = new LinkedHashSet<>(Set.of(
-					"soklet_mcp_server_starts_total{}",
-					"soklet_mcp_connections_accepted_total{}",
-					"soklet_mcp_connections_rejected_total{}",
-					"soklet_mcp_requests_accepted_total{}",
-					"soklet_mcp_requests_rejected_total{}",
-					"soklet_mcp_handler_executions_active{}",
-					"soklet_mcp_handler_queue_depth{}",
-					"soklet_mcp_handler_capacity_rejections_total{}",
-					"soklet_mcp_shutdowns_total{outcome=graceful_termination}",
-					"soklet_mcp_requests_active{}",
-					"soklet_mcp_request_streams_active{}",
-					"soklet_mcp_subscriptions_active{}",
-					"soklet_mcp_keep_alives_emitted_total{}",
-					"soklet_mcp_requests_total{endpoint=/mcp, method=tools/call, outcome=complete}",
-					"soklet_mcp_request_duration_nanos_count{endpoint=/mcp, method=tools/call, outcome=complete}",
-					"soklet_mcp_request_duration_nanos_sum{endpoint=/mcp, method=tools/call, outcome=complete}"));
-			for (String upperBound : List.of("1000000", "2000000",
-					"5000000", "10000000", "25000000", "50000000",
-					"100000000", "200000000", "400000000",
-					"800000000", "1500000000", "3000000000",
-					"7000000000", "15000000000", "30000000000",
-					"60000000000", "120000000000", "300000000000", "+Inf"))
-				expectedMcpSamples.add(
-						"soklet_mcp_request_duration_nanos_bucket{endpoint=/mcp, method=tools/call, outcome=complete, le="
-								+ upperBound + "}");
-			Assertions.assertEquals(35, expectedMcpSamples.size());
-			Assertions.assertEquals(expectedMcpSamples.size(),
-					filteredSamples.size(), filteredSamples.toString());
-			Assertions.assertEquals(expectedMcpSamples,
-					Set.copyOf(filteredSamples));
-			String openMetrics = collector.snapshotText(
-					MetricsCollector.SnapshotTextOptions.fromMetricsFormat(
-							MetricsCollector.MetricsFormat.OPEN_METRICS_1_0))
-					.orElseThrow();
-			Assertions.assertTrue(openMetrics.endsWith("# EOF\n"));
-
-			collector.reset();
-			MetricsCollector.Snapshot resetSnapshot = collector.snapshot()
-					.orElseThrow();
-			Assertions.assertSame(McpMetricsSnapshot.emptyInstance(),
-					resetSnapshot.getMcpMetrics());
-			String resetPrometheus = collector.snapshotText(
-					MetricsCollector.SnapshotTextOptions.fromMetricsFormat(
-							MetricsCollector.MetricsFormat.PROMETHEUS))
-					.orElseThrow();
-			List<String> resetFilteredSamples = new CopyOnWriteArrayList<>();
-			String resetFilteredPrometheus = collector.snapshotText(
-					MetricsCollector.SnapshotTextOptions.withMetricsFormat(
-							MetricsCollector.MetricsFormat.PROMETHEUS)
-							.metricFilter(sample -> {
-								if (!sample.getName().startsWith("soklet_mcp_"))
-									return false;
-								resetFilteredSamples.add(sample.getName()
-										+ sample.getLabels());
-								return true;
-							})
-							.build()).orElseThrow();
-			Set<String> expectedResetMcpSamples = Set.of(
-					"soklet_mcp_server_starts_total{}",
-					"soklet_mcp_connections_accepted_total{}",
-					"soklet_mcp_connections_rejected_total{}",
-					"soklet_mcp_requests_accepted_total{}",
-					"soklet_mcp_requests_rejected_total{}",
-					"soklet_mcp_handler_executions_active{}",
-					"soklet_mcp_handler_queue_depth{}",
-					"soklet_mcp_handler_capacity_rejections_total{}",
-					"soklet_mcp_requests_active{}",
-					"soklet_mcp_request_streams_active{}",
-					"soklet_mcp_subscriptions_active{}",
-					"soklet_mcp_keep_alives_emitted_total{}");
-			Assertions.assertEquals(12, expectedResetMcpSamples.size());
-			Assertions.assertEquals(expectedResetMcpSamples.size(),
-					resetFilteredSamples.size(), resetFilteredSamples.toString());
-			Assertions.assertEquals(expectedResetMcpSamples,
-					Set.copyOf(resetFilteredSamples));
-			String resetOpenMetrics = collector.snapshotText(
-					MetricsCollector.SnapshotTextOptions.fromMetricsFormat(
-							MetricsCollector.MetricsFormat.OPEN_METRICS_1_0))
-					.orElseThrow();
-			String builtInRendering = String.join("\n",
-					events.toString(), renderSnapshotValues(snapshot),
-					prometheus, filteredPrometheus, filteredSamples.toString(),
-					openMetrics, renderSnapshotValues(resetSnapshot),
-					resetPrometheus, resetFilteredPrometheus,
-					resetFilteredSamples.toString(), resetOpenMetrics);
-			assertNoSensitiveCanaries(builtInRendering, sensitiveCanaries);
-		} finally {
-			soklet.close();
+		Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
+				observer.startedContexts.size());
+		Set<String> derivedTokens = new LinkedHashSet<>();
+		List<String> expectedTraceLogMessages = new java.util.ArrayList<>();
+		for (int index = 0; index < TRACE_CARDINALITY_REQUEST_COUNT;
+				++index) {
+			DefaultMcpRequestContext context =
+					observer.startedContexts.get(index);
+			Assertions.assertSame(context,
+					observer.finishedContexts.get(index));
+			Assertions.assertEquals(mcpTraceIds.get(index),
+					context.getTraceContext().orElseThrow().getTraceId());
+			Assertions.assertEquals(mcpTracestates.get(index),
+					context.getTraceContext().orElseThrow()
+							.toTracestateHeaderValue().orElseThrow());
+			String suffix = String.format(Locale.ROOT, "%02x", index);
+			Assertions.assertEquals("mcpbagvaluecanary" + suffix,
+					context.getBaggage().get("mcpbag" + suffix));
+			Assertions.assertEquals(httpTraceIds.get(index),
+					context.getRequest().getTraceContext().orElseThrow()
+							.getTraceId());
+			Assertions.assertEquals(httpTracestates.get(index),
+					context.getRequest().getTraceContext().orElseThrow()
+							.toTracestateHeaderValue().orElseThrow());
+			Assertions.assertEquals(List.of(httpBaggage.get(index)),
+					context.getRequest().getHeaders().get("baggage"));
+			DefaultMcpSecurityKeyManagers.TraceCorrelationToken token =
+					context.traceCorrelationToken().orElseThrow();
+			Assertions.assertEquals(TRACE_CARDINALITY_KEY_ID,
+					token.keyId());
+			derivedTokens.add(token.token());
+			sensitiveCanaries.add(token.token());
+			expectedTraceLogMessages.add(
+					"tokenFormat=soklet-mcp-trace-correlation-v1;keyId="
+							+ TRACE_CARDINALITY_KEY_ID + ";token="
+							+ token.token() + ";traceId="
+							+ mcpTraceIds.get(index));
 		}
+		Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
+				derivedTokens.size());
+		Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
+				observer.logEvents.size(), observer.logEvents.toString());
+		for (int index = 0; index < observer.logEvents.size(); ++index)
+			assertTraceLogEvent(observer.logEvents.get(index),
+					expectedTraceLogMessages.get(index));
+
+		List<McpMetricsEvent> events = collector.events();
+		Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
+				countEvents(events, McpMetricsEvent.RequestAccepted.class));
+		Assertions.assertEquals(0,
+				countEvents(events, McpMetricsEvent.RequestRejected.class));
+		Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
+				countEvents(events, McpMetricsEvent.RequestStarted.class));
+		Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
+				countEvents(events,
+						McpMetricsEvent.HandlerExecutionStarted.class));
+		Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
+				countEvents(events,
+						McpMetricsEvent.HandlerExecutionFinished.class));
+		Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
+				countEvents(events, McpMetricsEvent.RequestFinished.class));
+		Assertions.assertEquals(1,
+				countEvents(events, McpMetricsEvent.ServerStarted.class));
+		Assertions.assertEquals(1,
+				countEvents(events, McpMetricsEvent.ServerStopped.class));
+		Assertions.assertEquals(0,
+				countEvents(events,
+						McpMetricsEvent.CancelationSignaled.class));
+		Assertions.assertEquals(0,
+				countEvents(events, McpMetricsEvent.ProgressEmitted.class));
+		Assertions.assertEquals(0,
+				countEvents(events, McpMetricsEvent.KeepAliveEmitted.class));
+		Assertions.assertEquals(0,
+				countEvents(events, McpMetricsEvent.ProtocolError.class));
+		Assertions.assertEquals(0,
+				countEvents(events,
+						McpMetricsEvent.UnknownMirroredHeader.class));
+		for (McpMetricsEvent event : events)
+			assertFiniteMetricProjection(event);
+
+		MetricsCollector.Snapshot snapshot = collector.snapshot()
+				.orElseThrow();
+		McpMetricsSnapshot mcpMetrics = snapshot.getMcpMetrics();
+		Assertions.assertEquals(1L, mcpMetrics.getServerStarts());
+		Assertions.assertEquals(0L,
+				mcpMetrics.getActiveHandlerExecutions());
+		Assertions.assertEquals(0L, mcpMetrics.getHandlerQueueDepth());
+		Assertions.assertEquals(0L,
+				mcpMetrics.getHandlerCapacityRejections());
+		Assertions.assertEquals(Map.of(ShutdownComponentDisposition.GRACEFUL_TERMINATION, 1L),
+				mcpMetrics.getServerStops());
+		Assertions.assertTrue(mcpMetrics.getConnectionsAccepted() > 0L);
+		Assertions.assertEquals(0L,
+				mcpMetrics.getConnectionsRejected());
+		Assertions.assertTrue(mcpMetrics.getTransportFailures().isEmpty());
+		Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
+				mcpMetrics.getRequestsAccepted());
+		Assertions.assertEquals(0L, mcpMetrics.getRequestsRejected());
+		McpMetricsSnapshot.RequestOutcomeKey requestOutcomeKey =
+				McpMetricsSnapshot.RequestOutcomeKey.fromDimensions(MCP_PATH,
+						"tools/call", McpRequestOutcome.COMPLETE);
+		Assertions.assertEquals(0L, mcpMetrics.getActiveRequests());
+		Assertions.assertEquals(Map.of(requestOutcomeKey,
+				(long) TRACE_CARDINALITY_REQUEST_COUNT),
+				mcpMetrics.getRequests());
+		MetricsCollector.HistogramSnapshot requestDurations =
+				mcpMetrics.getRequestDurations().get(requestOutcomeKey);
+		Assertions.assertNotNull(requestDurations);
+		Assertions.assertEquals(TRACE_CARDINALITY_REQUEST_COUNT,
+				requestDurations.getCount());
+		Assertions.assertTrue(requestDurations.getSum() >= 0L);
+		Assertions.assertTrue(requestDurations.getMin() >= 0L);
+		Assertions.assertTrue(requestDurations.getMax()
+				>= requestDurations.getMin());
+		Assertions.assertEquals(0L,
+				mcpMetrics.getActiveRequestStreams());
+		Assertions.assertTrue(
+				mcpMetrics.getRequestStreamDurations().isEmpty());
+		Assertions.assertEquals(0L,
+				mcpMetrics.getActiveSubscriptions());
+		Assertions.assertTrue(
+				mcpMetrics.getSubscriptionDurations().isEmpty());
+		Assertions.assertTrue(
+				mcpMetrics.getCancelationsSignaled().isEmpty());
+		Assertions.assertTrue(mcpMetrics.getProgressEmitted().isEmpty());
+		Assertions.assertEquals(0L, mcpMetrics.getKeepAlivesEmitted());
+		Assertions.assertTrue(mcpMetrics.getProtocolErrors().isEmpty());
+		Assertions.assertTrue(
+				mcpMetrics.getUnknownMirroredHeaders().isEmpty());
+		List<String> filteredSamples = new CopyOnWriteArrayList<>();
+		String prometheus = collector.snapshotText(
+				MetricsCollector.SnapshotTextOptions.fromMetricsFormat(
+						MetricsCollector.MetricsFormat.PROMETHEUS))
+				.orElseThrow();
+		String filteredPrometheus = collector.snapshotText(
+				MetricsCollector.SnapshotTextOptions.withMetricsFormat(
+						MetricsCollector.MetricsFormat.PROMETHEUS)
+						.metricFilter(sample -> {
+							if (!sample.getName().startsWith("soklet_mcp_"))
+								return false;
+							filteredSamples.add(sample.getName()
+									+ sample.getLabels());
+							return true;
+						})
+						.build()).orElseThrow();
+		Set<String> expectedMcpSamples = new LinkedHashSet<>(Set.of(
+				"soklet_mcp_server_starts_total{}",
+				"soklet_mcp_connections_accepted_total{}",
+				"soklet_mcp_connections_rejected_total{}",
+				"soklet_mcp_requests_accepted_total{}",
+				"soklet_mcp_requests_rejected_total{}",
+				"soklet_mcp_handler_executions_active{}",
+				"soklet_mcp_handler_queue_depth{}",
+				"soklet_mcp_handler_capacity_rejections_total{}",
+				"soklet_mcp_shutdowns_total{outcome=graceful_termination}",
+				"soklet_mcp_requests_active{}",
+				"soklet_mcp_request_streams_active{}",
+				"soklet_mcp_subscriptions_active{}",
+				"soklet_mcp_keep_alives_emitted_total{}",
+				"soklet_mcp_requests_total{endpoint=/mcp, method=tools/call, outcome=complete}",
+				"soklet_mcp_request_duration_nanos_count{endpoint=/mcp, method=tools/call, outcome=complete}",
+				"soklet_mcp_request_duration_nanos_sum{endpoint=/mcp, method=tools/call, outcome=complete}"));
+		for (String upperBound : List.of("1000000", "2000000",
+				"5000000", "10000000", "25000000", "50000000",
+				"100000000", "200000000", "400000000",
+				"800000000", "1500000000", "3000000000",
+				"7000000000", "15000000000", "30000000000",
+				"60000000000", "120000000000", "300000000000", "+Inf"))
+			expectedMcpSamples.add(
+					"soklet_mcp_request_duration_nanos_bucket{endpoint=/mcp, method=tools/call, outcome=complete, le="
+							+ upperBound + "}");
+		Assertions.assertEquals(35, expectedMcpSamples.size());
+		Assertions.assertEquals(expectedMcpSamples.size(),
+				filteredSamples.size(), filteredSamples.toString());
+		Assertions.assertEquals(expectedMcpSamples,
+				Set.copyOf(filteredSamples));
+		String openMetrics = collector.snapshotText(
+				MetricsCollector.SnapshotTextOptions.fromMetricsFormat(
+						MetricsCollector.MetricsFormat.OPEN_METRICS_1_0))
+				.orElseThrow();
+		Assertions.assertTrue(openMetrics.endsWith("# EOF\n"));
+
+		collector.reset();
+		MetricsCollector.Snapshot resetSnapshot = collector.snapshot()
+				.orElseThrow();
+		Assertions.assertSame(McpMetricsSnapshot.emptyInstance(),
+				resetSnapshot.getMcpMetrics());
+		String resetPrometheus = collector.snapshotText(
+				MetricsCollector.SnapshotTextOptions.fromMetricsFormat(
+						MetricsCollector.MetricsFormat.PROMETHEUS))
+				.orElseThrow();
+		List<String> resetFilteredSamples = new CopyOnWriteArrayList<>();
+		String resetFilteredPrometheus = collector.snapshotText(
+				MetricsCollector.SnapshotTextOptions.withMetricsFormat(
+						MetricsCollector.MetricsFormat.PROMETHEUS)
+						.metricFilter(sample -> {
+							if (!sample.getName().startsWith("soklet_mcp_"))
+								return false;
+							resetFilteredSamples.add(sample.getName()
+									+ sample.getLabels());
+							return true;
+						})
+						.build()).orElseThrow();
+		Set<String> expectedResetMcpSamples = Set.of(
+				"soklet_mcp_server_starts_total{}",
+				"soklet_mcp_connections_accepted_total{}",
+				"soklet_mcp_connections_rejected_total{}",
+				"soklet_mcp_requests_accepted_total{}",
+				"soklet_mcp_requests_rejected_total{}",
+				"soklet_mcp_handler_executions_active{}",
+				"soklet_mcp_handler_queue_depth{}",
+				"soklet_mcp_handler_capacity_rejections_total{}",
+				"soklet_mcp_requests_active{}",
+				"soklet_mcp_request_streams_active{}",
+				"soklet_mcp_subscriptions_active{}",
+				"soklet_mcp_keep_alives_emitted_total{}");
+		Assertions.assertEquals(12, expectedResetMcpSamples.size());
+		Assertions.assertEquals(expectedResetMcpSamples.size(),
+				resetFilteredSamples.size(), resetFilteredSamples.toString());
+		Assertions.assertEquals(expectedResetMcpSamples,
+				Set.copyOf(resetFilteredSamples));
+		String resetOpenMetrics = collector.snapshotText(
+				MetricsCollector.SnapshotTextOptions.fromMetricsFormat(
+						MetricsCollector.MetricsFormat.OPEN_METRICS_1_0))
+				.orElseThrow();
+		String builtInRendering = String.join("\n",
+				events.toString(), renderSnapshotValues(snapshot),
+				prometheus, filteredPrometheus, filteredSamples.toString(),
+				openMetrics, renderSnapshotValues(resetSnapshot),
+				resetPrometheus, resetFilteredPrometheus,
+				resetFilteredSamples.toString(), resetOpenMetrics);
+		assertNoSensitiveCanaries(builtInRendering, sensitiveCanaries);
+
 	}
 
 	@Test
@@ -862,10 +831,7 @@ public class McpRequestObservationPublicRuntimeTests {
 				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpServer server = serverBuilder(endpoint).build();
-		Soklet soklet = managedSoklet(server, List.of(observer), collector);
-
-		try {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server, List.of(observer), collector), () -> {
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			String body = request("log-level", "tools/call",
@@ -882,9 +848,7 @@ public class McpRequestObservationPublicRuntimeTests {
 			Assertions.assertEquals(McpJsonString.fromValue("warning"),
 					context.getRequestMetadata()
 							.find("io.modelcontextprotocol/logLevel").orElseThrow());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -905,10 +869,7 @@ public class McpRequestObservationPublicRuntimeTests {
 				.toolRegistrations(java.util.List.of(tool))
 				.build();
 		McpServer server = serverBuilder(endpoint).build();
-		Soklet soklet = managedSoklet(server, List.of(observer), collector);
-
-		try {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server, List.of(observer), collector), () -> {
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			HttpResponse<String> response = send(port,
@@ -935,9 +896,7 @@ public class McpRequestObservationPublicRuntimeTests {
 							new RuntimeException("must-not-add")));
 			assertSingleMetrics(collector, "tools/call",
 					McpRequestOutcome.INTERNAL_ERROR);
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -958,10 +917,7 @@ public class McpRequestObservationPublicRuntimeTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
-		Soklet soklet = managedSoklet(server, List.of(observer), collector);
-
-		try {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server, List.of(observer), collector), () -> {
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			HttpResponse<String> response = send(port, discoverRequest("rejected"),
@@ -976,9 +932,7 @@ public class McpRequestObservationPublicRuntimeTests {
 			Assertions.assertEquals(0, observer.finishes.get());
 			Assertions.assertTrue(collector.requestStartedEvents().isEmpty());
 			Assertions.assertTrue(collector.requestFinishedEvents().isEmpty());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -995,10 +949,7 @@ public class McpRequestObservationPublicRuntimeTests {
 					return McpRateLimitDecision.denied(Duration.ofMillis(1));
 				})
 				.build();
-		Soklet soklet = managedSoklet(server, List.of(observer), collector);
-
-		try {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server, List.of(observer), collector), () -> {
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			HttpResponse<String> response = send(port,
@@ -1023,9 +974,7 @@ public class McpRequestObservationPublicRuntimeTests {
 			Assertions.assertEquals(List.of(), observer.finishThrowables.get());
 			assertSingleMetrics(collector, "server/discover",
 					McpRequestOutcome.REJECTED);
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -1039,10 +988,7 @@ public class McpRequestObservationPublicRuntimeTests {
 		McpServer server = serverBuilder(endpoint)
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.build();
-		Soklet soklet = managedSoklet(server, List.of(observer), collector);
-
-		try {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server, List.of(observer), collector), () -> {
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			HttpResponse<String> response = send(port,
@@ -1070,9 +1016,7 @@ public class McpRequestObservationPublicRuntimeTests {
 			assertSingleMetrics(collector,
 					McpMetricsEvent.UNRECOGNIZED_JSON_RPC_METHOD,
 					McpRequestOutcome.PROTOCOL_ERROR);
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -1119,11 +1063,8 @@ public class McpRequestObservationPublicRuntimeTests {
 		};
 		McpEndpoint endpoint = endpointBuilder("throwing-observation-test").build();
 		McpServer server = serverBuilder(endpoint).build();
-		Soklet soklet = managedSoklet(server,
-				List.of(throwingObserver, recordingObserver), throwingCollector);
-
-		try {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server,
+				List.of(throwingObserver, recordingObserver), throwingCollector), () -> {
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			HttpResponse<String> response = send(port,
@@ -1174,9 +1115,7 @@ public class McpRequestObservationPublicRuntimeTests {
 					startFailure.getMessage(), finishFailure.getMessage(),
 					metricsFailure.getMessage()))
 				Assertions.assertFalse(ownedLogs.contains(canary), ownedLogs);
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	private static McpEndpoint.@NonNull Builder endpointBuilder(
@@ -1195,8 +1134,7 @@ public class McpRequestObservationPublicRuntimeTests {
 				.allowedHosts(Set.of(LOOPBACK));
 	}
 
-	@NonNull
-	private static Soklet managedSoklet(@NonNull McpServer server,
+	private static SokletConfig managedSokletConfig(@NonNull McpServer server,
 			@NonNull List<@NonNull LifecycleObserver> observers,
 			@NonNull MetricsCollector collector) {
 		SokletConfig config = SokletConfig.withMcpServer(server)
@@ -1212,7 +1150,7 @@ public class McpRequestObservationPublicRuntimeTests {
 				.build();
 		if (collector instanceof RecordingDefaultMetricsCollector recording)
 			recording.initialize(config);
-		return Soklet.fromConfig(config);
+		return config;
 	}
 
 	@NonNull

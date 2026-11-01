@@ -71,8 +71,7 @@ class McpTaskInputCapabilityPublicRuntimeTests {
 
 	private void verifyModes(Case testCase) throws Exception {
 		Fixture fixture = new Fixture();
-		try (Soklet soklet = Soklet.fromConfig(fixture.config)) {
-			soklet.start();
+		Soklet.run(fixture.config, () -> {
 			int port = fixture.server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			assertEquals(200, post(port, "tools/call", "create", "\"name\":\"create\",\"arguments\":{}",
 					NONE, "owner").status());
@@ -102,14 +101,13 @@ class McpTaskInputCapabilityPublicRuntimeTests {
 			assertEquals(200, completed.status(), completed.body());
 			assertTrue(completed.body().contains("\"status\":\"completed\""), completed.body());
 			assertEquals(1, fixture.handlerCalls.get());
-		}
+		});
 	}
 
 	@Test
 	void unknownAndUnauthorizedTasksDoNotDiscloseInputCapabilityRequirements() throws Exception {
 		Fixture fixture = new Fixture();
-		try (Soklet soklet = Soklet.fromConfig(fixture.config)) {
-			soklet.start();
+		Soklet.run(fixture.config, () -> {
 			int port = fixture.server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			assertEquals(200, post(port, "tools/call", "create", "\"name\":\"create\",\"arguments\":{}",
 					NONE, "owner").status());
@@ -125,7 +123,7 @@ class McpTaskInputCapabilityPublicRuntimeTests {
 			assertFalse(unauthorized.body().contains(taskId), unauthorized.body());
 			assertSame(waiting, fixture.manager.findTask(taskId).orElseThrow());
 			assertDetailedInput(get(port, taskId, BOTH, "owner"), true, true);
-		}
+		});
 	}
 
 	@Test

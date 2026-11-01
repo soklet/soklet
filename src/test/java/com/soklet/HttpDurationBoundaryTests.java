@@ -33,8 +33,7 @@ class HttpDurationBoundaryTests {
         DefaultHttpServer server = (DefaultHttpServer) HttpServer.withPort(0).host("127.0.0.1")
                 .concurrency(1).socketSelectTimeout(Duration.ofNanos(1))
                 .requestHeaderTimeout(Duration.ofMillis(100)).build();
-        try (Soklet owner = owner(server)) {
-            owner.start();
+        Soklet.run(config(server), () -> {
             try (Socket socket = new Socket()) {
                 socket.connect(new InetSocketAddress("127.0.0.1", server.getEventLoop().orElseThrow().getPort()), 3_000);
                 socket.setSoTimeout(3_000);
@@ -42,7 +41,7 @@ class HttpDurationBoundaryTests {
                 String response = new String(socket.getInputStream().readAllBytes(), StandardCharsets.US_ASCII);
                 assertTrue(response.startsWith("HTTP/1.1 408 "), response);
             }
-        }
+        });
     }
 
     @Test
@@ -51,8 +50,7 @@ class HttpDurationBoundaryTests {
         DefaultHttpServer server = (DefaultHttpServer) HttpServer.withPort(0).host("127.0.0.1")
                 .concurrency(1).requestHeaderTimeout(huge).requestBodyTimeout(huge)
                 .responseWriteIdleTimeout(huge).streamingResponseIdleTimeout(Duration.ofSeconds(1)).build();
-        try (Soklet owner = owner(server)) {
-            owner.start();
+        Soklet.run(config(server), () -> {
             try (Socket socket = new Socket()) {
                 socket.connect(new InetSocketAddress("127.0.0.1", server.getEventLoop().orElseThrow().getPort()), 3_000);
                 socket.setSoTimeout(3_000);
@@ -62,17 +60,17 @@ class HttpDurationBoundaryTests {
                 assertTrue(response.startsWith("HTTP/1.1 200 "), response);
                 assertTrue(response.endsWith("healthy"), response);
             }
-        }
+        });
     }
 
-    private static Soklet owner(HttpServer server) {
-        return Soklet.fromConfig(SokletConfig.withHttpServer(server)
+    private static SokletConfig config(HttpServer server) {
+        return SokletConfig.withHttpServer(server)
                 .resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(HealthResource.class)))
                 .lifecycleObserver(new LifecycleObserver() {})
                 .lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(3))
                         .startupCancelationTimeout(Duration.ofSeconds(1))
                         .gracefulShutdownTimeout(Duration.ofSeconds(1))
-                        .forcedShutdownTimeout(Duration.ofSeconds(1)).build()).build());
+                        .forcedShutdownTimeout(Duration.ofSeconds(1)).build()).build();
     }
 
     public static final class HealthResource {

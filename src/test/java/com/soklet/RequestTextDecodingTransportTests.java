@@ -39,8 +39,7 @@ class RequestTextDecodingTransportTests {
 	@Test
 	void malformedClientTextReceivesRedacted400AndValidUnicodeAndRawBytesRemainUsable() throws Exception {
 		int port = TestSupport.findFreePort();
-		try (Soklet soklet = Soklet.fromConfig(config(port))) {
-			soklet.start();
+		Soklet.run(config(port), () -> {
 			assertRejected(exchange(port, "GET", "/text/secret%FF", "", new byte[0]));
 			assertRejected(exchange(port, "GET", "/query?selected=ok&secret=%FF", "", new byte[0]));
 			assertRejected(exchange(port, "GET", "/cookie", "Cookie: secret=%FF\r\n", new byte[0]));
@@ -56,14 +55,13 @@ class RequestTextDecodingTransportTests {
 			Response binary = exchange(port, "POST", "/bytes", "", new byte[]{(byte) 0xff});
 			assertEquals(200, binary.statusCode());
 			assertEquals("1", binary.body());
-		}
+		});
 	}
 
 	@Test
 	void originFormLeadingSlashesCannotSelectARouteAfterDroppingAComponent() throws Exception {
 		int port = TestSupport.findFreePort();
-		try (Soklet soklet = Soklet.fromConfig(config(port))) {
-			soklet.start();
+		Soklet.run(config(port), () -> {
 			Response response = exchange(port, "GET", "//x/admin?selected=ok", "", new byte[0]);
 			assertEquals(200, response.statusCode());
 			assertEquals("//x/admin?selected=ok|/x/admin|ok", response.body());
@@ -74,15 +72,14 @@ class RequestTextDecodingTransportTests {
 			assertEquals(200, root.statusCode());
 			assertEquals("//?selected=ok|/|ok", root.body());
 			assertRejected(exchange(port, "GET", "//x%2Fadmin", "", new byte[0]));
-		}
+		});
 	}
 
 	@Test
 	void formLiteralsAndBlankOptionalBindingSurviveRealHttpParsing() throws Exception {
 		int port = TestSupport.findFreePort();
 		String headers = "Content-Type: application/x-www-form-urlencoded\r\n";
-		try (Soklet soklet = Soklet.fromConfig(config(port))) {
-			soklet.start();
+		Soklet.run(config(port), () -> {
 			String form = "id= one#two \"{}|\\?=+%2B%26%3D&id=last&tail=three";
 			Response literal = exchange(port, "POST", "/form-pairs", headers, form.getBytes(StandardCharsets.US_ASCII));
 			assertEquals(200, literal.statusCode());
@@ -98,14 +95,13 @@ class RequestTextDecodingTransportTests {
 			for (String repeated : List.of("id&id", "id=&id=", "id=+&id=%20"))
 				assertEquals(400, exchange(port, "POST", "/optional-form", headers, repeated.getBytes(StandardCharsets.US_ASCII)).statusCode(), repeated);
 			assertRejected(exchange(port, "POST", "/form", headers, "secret=ok#tail&unselected=%FF".getBytes(StandardCharsets.US_ASCII)));
-		}
+		});
 	}
 
 	@Test
 	void realHttpUsesLateCharsetParametersAndRejectsAmbiguousCharsets() throws Exception {
 		int port = TestSupport.findFreePort();
-		try (Soklet soklet = Soklet.fromConfig(config(port))) {
-			soklet.start();
+		Soklet.run(config(port), () -> {
 			Response body = exchange(port, "POST", "/body", "Content-Type: text/plain; profile=\"x;y\"; charset=ISO-8859-1\r\n", new byte[]{(byte) 0xff});
 			assertEquals(200, body.statusCode());
 			assertEquals("ÿ", body.body());
@@ -117,7 +113,7 @@ class RequestTextDecodingTransportTests {
 			}
 			for (String charsets : List.of("charset=UTF-8; charset=UTF-8", "charset=UTF-8; charset=ISO-8859-1"))
 				assertRejected(exchange(port, "POST", "/body", "Content-Type: text/plain; " + charsets + "; secret=value\r\n", new byte[0]));
-		}
+		});
 	}
 
 	private static SokletConfig config(int port) {

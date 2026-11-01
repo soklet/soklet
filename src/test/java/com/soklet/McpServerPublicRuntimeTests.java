@@ -68,6 +68,7 @@ public class McpServerPublicRuntimeTests {
 	@Test
 	public void executionConfigurationValidatesAndOwnsOneExecutorPerGeneration()
 			throws Exception {
+		// Keep explicit owners to test executor generations and failed-start cleanup.
 		McpEndpointRegistry endpointRegistry = McpEndpointRegistry.fromEndpoints(
 				List.of(newEndpoint()));
 		McpAdmissionController admissionController =
@@ -111,8 +112,8 @@ public class McpServerPublicRuntimeTests {
 
 		List<ExecutorService> suppliedExecutors = new ArrayList<>();
 		McpServer firstServer = newExecutorConfiguredMcpServer(suppliedExecutors);
-		Soklet firstOwner = mcpOnlySoklet(firstServer,
-				quietLifecycleObserver());
+		Soklet firstOwner = Soklet.fromConfig(mcpOnlyConfig(firstServer,
+				quietLifecycleObserver()));
 
 		Assertions.assertTrue(suppliedExecutors.isEmpty(),
 				"Building a server and owner must not allocate the executor.");
@@ -127,8 +128,8 @@ public class McpServerPublicRuntimeTests {
 		Assertions.assertTrue(suppliedExecutors.get(0).isShutdown());
 
 		McpServer secondServer = newExecutorConfiguredMcpServer(suppliedExecutors);
-		Soklet secondOwner = mcpOnlySoklet(secondServer,
-				quietLifecycleObserver());
+		Soklet secondOwner = Soklet.fromConfig(mcpOnlyConfig(secondServer,
+				quietLifecycleObserver()));
 		Assertions.assertEquals(1, suppliedExecutors.size(),
 				"A fresh server and owner remain lazy until startup.");
 		boolean secondExecutorShutdownByOwner = false;
@@ -162,8 +163,8 @@ public class McpServerPublicRuntimeTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.requestHandlerExecutorServiceSupplier(() -> shutDownExecutor)
 				.build();
-		Soklet invalidOwner = mcpOnlySoklet(invalidServer,
-				quietLifecycleObserver());
+		Soklet invalidOwner = Soklet.fromConfig(mcpOnlyConfig(invalidServer,
+				quietLifecycleObserver()));
 		try {
 			SokletStartupException exception = Assertions.assertThrows(
 					SokletStartupException.class, invalidOwner::start);
@@ -196,9 +197,8 @@ public class McpServerPublicRuntimeTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.maximumRequestSizeInBytes(5 * 1_024 * 1_024)
 				.build();
-		Soklet owner = mcpOnlySoklet(server, quietLifecycleObserver());
-		try {
-			owner.start();
+		SokletConfig ownerConfig = mcpOnlyConfig(server, quietLifecycleObserver());
+		Soklet.run(ownerConfig, () -> {
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow()
 					.getPort();
 			HttpRequest request = HttpRequest.newBuilder()
@@ -217,18 +217,17 @@ public class McpServerPublicRuntimeTests {
 			Assertions.assertEquals(400, response.statusCode(), response.body());
 			Assertions.assertTrue(response.body().contains("\"code\":-32602"),
 					response.body());
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	@Test
 	public void sokletOwnedPortZeroGenerationsPublishImmutableDiagnosticSnapshots()
 			throws Exception {
+		// Keep explicit owners to inspect pre-start, running, and terminal diagnostic snapshots.
 		McpServer neverStartedServer = newMcpServer(0,
 				McpAdmissionController.acceptAllInstance(), true);
-		Soklet neverStartedOwner = mcpOnlySoklet(neverStartedServer,
-				quietLifecycleObserver());
+		Soklet neverStartedOwner = Soklet.fromConfig(mcpOnlyConfig(neverStartedServer,
+				quietLifecycleObserver()));
 		McpServerDiagnostics neverStartedSnapshot =
 				neverStartedServer.getDiagnostics();
 
@@ -243,8 +242,8 @@ public class McpServerPublicRuntimeTests {
 
 		McpServer firstServer = newMcpServer(0,
 				McpAdmissionController.acceptAllInstance(), true);
-		Soklet firstOwner = mcpOnlySoklet(firstServer,
-				quietLifecycleObserver());
+		Soklet firstOwner = Soklet.fromConfig(mcpOnlyConfig(firstServer,
+				quietLifecycleObserver()));
 		McpServerDiagnostics firstInitial = firstServer.getDiagnostics();
 		Assertions.assertEquals(McpServerStatus.NOT_STARTED,
 				firstInitial.getStatus());
@@ -294,8 +293,8 @@ public class McpServerPublicRuntimeTests {
 
 		McpServer secondServer = newMcpServer(0,
 				McpAdmissionController.acceptAllInstance(), true);
-		Soklet secondOwner = mcpOnlySoklet(secondServer,
-				quietLifecycleObserver());
+		Soklet secondOwner = Soklet.fromConfig(mcpOnlyConfig(secondServer,
+				quietLifecycleObserver()));
 		try {
 			secondOwner.start();
 			McpServerDiagnostics secondStarted = secondServer.getDiagnostics();
@@ -499,15 +498,16 @@ public class McpServerPublicRuntimeTests {
 	@Test
 	public void sokletStopCleansUnexpectedMcpListenerTermination()
 			throws Exception {
+		// Keep the owner handle to inspect normalization after unexpected listener termination.
 		List<LogEvent> events = new ArrayList<>();
 		McpServer server = newMcpServer(0,
 				McpAdmissionController.acceptAllInstance(), true);
-		Soklet owner = mcpOnlySoklet(server, new LifecycleObserver() {
+		Soklet owner = Soklet.fromConfig(mcpOnlyConfig(server, new LifecycleObserver() {
 			@Override
 			public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
 				events.add(logEvent);
 			}
-		});
+		}));
 		McpServerRuntimeBridge bridge = runtimeBridge(server);
 
 		try {
@@ -540,11 +540,12 @@ public class McpServerPublicRuntimeTests {
 	@Test
 	public void freshOwnerStartsAfterUnexpectedMcpListenerTermination()
 			throws Exception {
+		// Keep explicit owners to verify recovery after an unexpectedly terminated generation.
 		int port = findFreePort();
 		McpServer failedServer = newMcpServer(port,
 				McpAdmissionController.acceptAllInstance(), true);
-		Soklet failedOwner = mcpOnlySoklet(failedServer,
-				quietLifecycleObserver());
+		Soklet failedOwner = Soklet.fromConfig(mcpOnlyConfig(failedServer,
+				quietLifecycleObserver()));
 		McpServerRuntimeBridge failedBridge = runtimeBridge(failedServer);
 		EventLoop failedEventLoop;
 
@@ -574,8 +575,8 @@ public class McpServerPublicRuntimeTests {
 
 		McpServer freshServer = newMcpServer(port,
 				McpAdmissionController.acceptAllInstance(), true);
-		Soklet freshOwner = mcpOnlySoklet(freshServer,
-				quietLifecycleObserver());
+		Soklet freshOwner = Soklet.fromConfig(mcpOnlyConfig(freshServer,
+				quietLifecycleObserver()));
 		McpServerRuntimeBridge freshBridge = runtimeBridge(freshServer);
 		try {
 			freshOwner.start();
@@ -609,10 +610,9 @@ public class McpServerPublicRuntimeTests {
 				.build();
 		McpServer server = newMcpServer(0, endpoint,
 				McpAdmissionController.acceptAllInstance(), true);
-		Soklet owner = mcpOnlySoklet(server, quietLifecycleObserver());
+		SokletConfig ownerConfig = mcpOnlyConfig(server, quietLifecycleObserver());
 
-		try {
-			owner.start();
+		Soklet.run(ownerConfig, () -> {
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			HttpResponse<String> response = sendDiscovery(port, "discover-info", "{}");
 			String body = response.body();
@@ -634,10 +634,7 @@ public class McpServerPublicRuntimeTests {
 					"\"websiteUrl\":\"https://example.test/soklet-mcp\""), body);
 			Assertions.assertTrue(body.contains(
 					"\"instructions\":\"Use the public discovery endpoint.\""), body);
-		} finally {
-			owner.close();
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -685,13 +682,12 @@ public class McpServerPublicRuntimeTests {
 				.build();
 		McpServer server = newMcpServer(0, endpoint,
 				McpAdmissionController.acceptAllInstance(), true);
-		Soklet owner = mcpOnlySoklet(server, quietLifecycleObserver());
+		SokletConfig ownerConfig = mcpOnlyConfig(server, quietLifecycleObserver());
 
 		Assertions.assertEquals(0, listenerRegistrations.get());
 		Assertions.assertEquals(0, listenerRegistrationCloses.get());
 		Assertions.assertEquals(0, publishedEvents.get());
-		try {
-			owner.start();
+		Soklet.run(ownerConfig, () -> {
 			Assertions.assertEquals(1, listenerRegistrations.get());
 			Assertions.assertEquals(0, listenerRegistrationCloses.get());
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow()
@@ -710,10 +706,7 @@ public class McpServerPublicRuntimeTests {
 					+ "\"name\":\"phase-five-subscriptions\","
 					+ "\"version\":\"1.0\"}}}}", response.body());
 			Assertions.assertEquals(0, publishedEvents.get());
-		} finally {
-			owner.close();
-			owner.close();
-		}
+		});
 		Assertions.assertEquals(1, listenerRegistrations.get());
 		Assertions.assertEquals(1, listenerRegistrationCloses.get());
 		Assertions.assertEquals(0, publishedEvents.get());
@@ -729,10 +722,9 @@ public class McpServerPublicRuntimeTests {
 				.build();
 		McpServer server = newMcpServer(0, endpoint,
 				McpAdmissionController.acceptAllInstance(), true);
-		Soklet owner = mcpOnlySoklet(server, quietLifecycleObserver());
+		SokletConfig ownerConfig = mcpOnlyConfig(server, quietLifecycleObserver());
 
-		try {
-			owner.start();
+		Soklet.run(ownerConfig, () -> {
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow()
 					.getPort();
 			HttpResponse<String> response = sendDiscovery(port,
@@ -741,10 +733,7 @@ public class McpServerPublicRuntimeTests {
 			assertSuccessfulDiscovery(response, "discover-without-server-info");
 			Assertions.assertFalse(response.body().contains(
 					"\"io.modelcontextprotocol/serverInfo\""), response.body());
-		} finally {
-			owner.close();
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -764,10 +753,9 @@ public class McpServerPublicRuntimeTests {
 			observedContext.set(context);
 			return McpAdmissionDecision.rejected(rejection);
 		}, true);
-		Soklet owner = mcpOnlySoklet(server, quietLifecycleObserver());
+		SokletConfig ownerConfig = mcpOnlyConfig(server, quietLifecycleObserver());
 
-		try {
-			owner.start();
+		Soklet.run(ownerConfig, () -> {
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			HttpResponse<String> response = sendDiscovery(port, "admission-1",
 					"{\"roots\":{\"listChanged\":true}}");
@@ -808,10 +796,7 @@ public class McpServerPublicRuntimeTests {
 			Assertions.assertFalse(context.isResourceSubscriptionsIncluded());
 			Assertions.assertFalse(context.isTaskIdsRequested());
 			Assertions.assertTrue(context.getRequestedTaskIds().isEmpty());
-		} finally {
-			owner.close();
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -827,10 +812,9 @@ public class McpServerPublicRuntimeTests {
 				.build();
 		McpServer server = newMcpServer(0, newEndpoint(),
 				ignored -> McpAdmissionDecision.rejected(rejection), true);
-		Soklet owner = mcpOnlySoklet(server, quietLifecycleObserver());
+		SokletConfig ownerConfig = mcpOnlyConfig(server, quietLifecycleObserver());
 
-		try {
-			owner.start();
+		Soklet.run(ownerConfig, () -> {
 			HttpResponse<String> response = sendDiscovery(
 					server.getDiagnostics().getBoundAddress().orElseThrow().getPort(),
 					"invalid-admission-metadata", "{}");
@@ -842,14 +826,13 @@ public class McpServerPublicRuntimeTests {
 							+ "\"message\":\"Tenant metadata is invalid\","
 							+ "\"data\":{\"field\":\"tenant\"}}}",
 					response.body());
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	@Test
 	public void failedFixedPortBindLeavesResourceAvailableToFreshOwnerAfterRelease()
 			throws Exception {
+		// Keep explicit startup control to verify bind failure and subsequent resource reuse.
 		int port;
 		try (ServerSocket occupied = new ServerSocket()) {
 			occupied.setReuseAddress(false);
@@ -857,8 +840,8 @@ public class McpServerPublicRuntimeTests {
 			port = occupied.getLocalPort();
 			McpServer failedServer = newMcpServer(port,
 					McpAdmissionController.acceptAllInstance(), true);
-			Soklet failedOwner = mcpOnlySoklet(failedServer,
-					quietLifecycleObserver());
+			Soklet failedOwner = Soklet.fromConfig(mcpOnlyConfig(failedServer,
+					quietLifecycleObserver()));
 
 			SokletStartupException failure = Assertions.assertThrows(
 					SokletStartupException.class, failedOwner::start);
@@ -874,7 +857,7 @@ public class McpServerPublicRuntimeTests {
 
 		McpServer server = newMcpServer(port,
 				McpAdmissionController.acceptAllInstance(), true);
-		Soklet owner = mcpOnlySoklet(server, quietLifecycleObserver());
+		Soklet owner = Soklet.fromConfig(mcpOnlyConfig(server, quietLifecycleObserver()));
 		try {
 			owner.start();
 			Assertions.assertEquals(SokletStatus.RUNNING, owner.getStatus());
@@ -891,6 +874,7 @@ public class McpServerPublicRuntimeTests {
 	@Test
 	public void omittedCorsDiagnosticIsExactAndOncePerSuccessfulSokletGeneration()
 			throws Exception {
+		// Keep explicit owner generations to verify configuration diagnostics at startup.
 		List<LogEvent> events = new ArrayList<>();
 		LifecycleObserver observer = new LifecycleObserver() {
 			@Override
@@ -900,7 +884,7 @@ public class McpServerPublicRuntimeTests {
 		};
 		McpServer firstServer = newMcpServer(0,
 				McpAdmissionController.acceptAllInstance(), false);
-		Soklet firstOwner = mcpOnlySoklet(firstServer, observer);
+		Soklet firstOwner = Soklet.fromConfig(mcpOnlyConfig(firstServer, observer));
 
 		try {
 			Assertions.assertTrue(events.isEmpty());
@@ -914,7 +898,7 @@ public class McpServerPublicRuntimeTests {
 
 		McpServer secondServer = newMcpServer(0,
 				McpAdmissionController.acceptAllInstance(), false);
-		Soklet secondOwner = mcpOnlySoklet(secondServer, observer);
+		Soklet secondOwner = Soklet.fromConfig(mcpOnlyConfig(secondServer, observer));
 		try {
 			secondOwner.start();
 			assertOmittedCorsEvents(events, 2);
@@ -933,14 +917,10 @@ public class McpServerPublicRuntimeTests {
 						List.of(newEndpoint())))
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.build();
-		Soklet omittedOwner = mcpOnlySoklet(omittedServer,
+		SokletConfig omittedOwnerConfig = mcpOnlyConfig(omittedServer,
 				observerAddingTo(omittedEvents));
 
-		try {
-			omittedOwner.start();
-		} finally {
-			omittedOwner.close();
-		}
+		Soklet.run(omittedOwnerConfig, () -> {});
 		assertConfigurationDiagnostic(omittedEvents,
 				OMITTED_ADMISSION_CONTROLLER_DIAGNOSTIC, 1);
 
@@ -951,14 +931,10 @@ public class McpServerPublicRuntimeTests {
 				.admissionController(McpAdmissionController.acceptAllInstance())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.build();
-		Soklet explicitOwner = mcpOnlySoklet(explicitServer,
+		SokletConfig explicitOwnerConfig = mcpOnlyConfig(explicitServer,
 				observerAddingTo(explicitEvents));
 
-		try {
-			explicitOwner.start();
-		} finally {
-			explicitOwner.close();
-		}
+		Soklet.run(explicitOwnerConfig, () -> {});
 		assertConfigurationDiagnostic(explicitEvents,
 				OMITTED_ADMISSION_CONTROLLER_DIAGNOSTIC, 0);
 	}
@@ -966,9 +942,10 @@ public class McpServerPublicRuntimeTests {
 	@Test
 	public void freshGenerationPublishesNeverBoundAddressBeforeStartupCallbacks()
 			throws Exception {
+		// Keep explicit startup phases to inspect diagnostics from startup callbacks.
 		List<Optional<InetSocketAddress>> startupAddresses = new ArrayList<>();
 		McpServer firstServer = newDevelopmentEphemeralMcpServer();
-		Soklet firstOwner = mcpOnlySoklet(firstServer, new LifecycleObserver() {
+		Soklet firstOwner = Soklet.fromConfig(mcpOnlyConfig(firstServer, new LifecycleObserver() {
 			@Override
 			public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
 				if (DefaultMcpServer.DEVELOPMENT_EPHEMERAL_PROTECTION_DIAGNOSTIC
@@ -976,7 +953,7 @@ public class McpServerPublicRuntimeTests {
 					startupAddresses.add(firstServer.getDiagnostics()
 							.getBoundAddress());
 			}
-		});
+		}));
 
 		try {
 			firstOwner.start();
@@ -988,7 +965,7 @@ public class McpServerPublicRuntimeTests {
 				"A stopped generation retains its successfully bound address.");
 
 		McpServer secondServer = newDevelopmentEphemeralMcpServer();
-		Soklet secondOwner = mcpOnlySoklet(secondServer, new LifecycleObserver() {
+		Soklet secondOwner = Soklet.fromConfig(mcpOnlyConfig(secondServer, new LifecycleObserver() {
 			@Override
 			public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
 				if (DefaultMcpServer.DEVELOPMENT_EPHEMERAL_PROTECTION_DIAGNOSTIC
@@ -996,7 +973,7 @@ public class McpServerPublicRuntimeTests {
 					startupAddresses.add(secondServer.getDiagnostics()
 							.getBoundAddress());
 			}
-		});
+		}));
 		try {
 			secondOwner.start();
 			Assertions.assertEquals(List.of(Optional.empty(), Optional.empty()),
@@ -1011,13 +988,14 @@ public class McpServerPublicRuntimeTests {
 	@Test
 	public void startupDoesNotPublishReadyBeforeConfigurationDiagnosticsReturn()
 			throws Exception {
+		// Keep explicit startup control to hold readiness while the diagnostic callback is blocked.
 		int port = findFreePort();
 		CountDownLatch diagnosticEntered = new CountDownLatch(1);
 		CountDownLatch releaseDiagnostic = new CountDownLatch(1);
 		AtomicReference<Throwable> startFailure = new AtomicReference<>();
 		McpServer server = newMcpServer(port,
 				McpAdmissionController.acceptAllInstance(), false);
-		Soklet soklet = mcpOnlySoklet(server, new LifecycleObserver() {
+		Soklet soklet = Soklet.fromConfig(mcpOnlyConfig(server, new LifecycleObserver() {
 			@Override
 			public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
 				if (logEvent.getLogEventType()
@@ -1034,7 +1012,7 @@ public class McpServerPublicRuntimeTests {
 							"Interrupted while holding the startup diagnostic.", exception);
 				}
 			}
-		});
+		}));
 		Thread startThread = new Thread(() -> {
 			try {
 				soklet.start();
@@ -1090,36 +1068,28 @@ public class McpServerPublicRuntimeTests {
 		};
 		McpServer firstServer = newMcpServer(0,
 				McpAdmissionController.acceptAllInstance(), true);
-		Soklet firstOwner = mcpOnlySoklet(firstServer, observer);
+		SokletConfig firstOwnerConfig = mcpOnlyConfig(firstServer, observer);
 
-		try {
-			firstOwner.start();
-		} finally {
-			firstOwner.close();
-			firstOwner.close();
-		}
+		Soklet.run(firstOwnerConfig, () -> {});
 
 		McpServer secondServer = newMcpServer(0,
 				McpAdmissionController.acceptAllInstance(), true);
-		Soklet secondOwner = mcpOnlySoklet(secondServer, observer);
-		try {
-			secondOwner.start();
+		SokletConfig secondOwnerConfig = mcpOnlyConfig(secondServer, observer);
+		Soklet.run(secondOwnerConfig, () -> {
 			Assertions.assertTrue(events.stream().noneMatch(event ->
 					event.getLogEventType() == LogEventType.MCP_SERVER_CONFIGURATION),
 					events.toString());
-		} finally {
-			secondOwner.close();
-			secondOwner.close();
-		}
+		});
 	}
 
 	@Test
 	public void omittedCorsObserverFailureDoesNotChangeServerAvailability()
 			throws Exception {
+		// Keep the owner handle to assert startup and owner status after an observer failure.
 		AtomicInteger attempts = new AtomicInteger();
 		McpServer server = newMcpServer(0,
 				McpAdmissionController.acceptAllInstance(), false);
-		Soklet soklet = mcpOnlySoklet(server, new LifecycleObserver() {
+		Soklet soklet = Soklet.fromConfig(mcpOnlyConfig(server, new LifecycleObserver() {
 			@Override
 			public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
 				if (logEvent.getLogEventType()
@@ -1128,7 +1098,7 @@ public class McpServerPublicRuntimeTests {
 					throw new IllegalStateException("expected observer failure");
 				}
 			}
-		});
+		}));
 
 		try {
 			Assertions.assertDoesNotThrow(soklet::start);
@@ -1156,10 +1126,8 @@ public class McpServerPublicRuntimeTests {
 						.fromClasses(Set.of(HealthResource.class)))
 				.lifecycleObserver(quietLifecycleObserver())
 				.build();
-		Soklet soklet = Soklet.fromConfig(config);
 
-		try {
-			soklet.start();
+		Soklet.run(config, () -> {
 			int mcpPort = mcpServer.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 
@@ -1170,9 +1138,7 @@ public class McpServerPublicRuntimeTests {
 			Assertions.assertEquals("http-ok", httpResponse.body());
 			assertSuccessfulDiscovery(sendDiscovery(mcpPort,
 					"separate-listener", "{}"), "separate-listener");
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@NonNull
@@ -1235,7 +1201,7 @@ public class McpServerPublicRuntimeTests {
 	}
 
 	@NonNull
-	private static Soklet mcpOnlySoklet(@NonNull McpServer server,
+	private static SokletConfig mcpOnlyConfig(@NonNull McpServer server,
 			@NonNull LifecycleObserver lifecycleObserver) {
 		SokletConfig config = SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
@@ -1247,7 +1213,7 @@ public class McpServerPublicRuntimeTests {
 						.forcedShutdownTimeout(Duration.ofSeconds(1))
 						.build())
 				.build();
-		return Soklet.fromConfig(config);
+		return config;
 	}
 
 	@NonNull

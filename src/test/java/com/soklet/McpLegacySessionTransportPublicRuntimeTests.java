@@ -113,7 +113,8 @@ class McpLegacySessionTransportPublicRuntimeTests {
 
 	@Test
 	void methodMatrixRespectsExactRevisionConfigurationAndDoesNotFabricateRpcAdmission() throws Exception {
-		try (Fixture fixture = new Fixture(true, builder -> {})) {
+		Fixture fixture = new Fixture(true, builder -> {});
+		Soklet.run(fixture.config, () -> {
 			for (McpProtocolVersion version : LEGACY) {
 				String id = fixture.initialize("/mcp", version);
 				String cleanupId = fixture.initialize("/cleanup", version);
@@ -149,12 +150,13 @@ class McpLegacySessionTransportPublicRuntimeTests {
 				assertTrue(context.getNotificationTypes().isEmpty());
 				assertFalse(context.isReauthorization());
 			}
-		}
+		});
 	}
 
 	@Test
 	void modernInitializeFramingDoesNotAdvertiseRejectedLegacySelectors() throws Exception {
-		try (Fixture fixture = new Fixture(true, builder -> {})) {
+		Fixture fixture = new Fixture(true, builder -> {});
+		Soklet.run(fixture.config, () -> {
 			for (McpProtocolVersion version : LEGACY) {
 				String body = "{\"jsonrpc\":\"2.0\",\"id\":\"mixed-era\",\"method\":\"initialize\",\"params\":{\"protocolVersion\":\""
 						+ version.getWireValue() + "\",\"capabilities\":{},\"clientInfo\":{\"name\":\"test\",\"version\":\"1\"}}}";
@@ -165,7 +167,7 @@ class McpLegacySessionTransportPublicRuntimeTests {
 				assertTrue(response.body().contains("\"supported\":[\"2026-07-28\"]"), response.body());
 				assertEquals(0, fixture.rpcAdmissions.get());
 			}
-		}
+		});
 	}
 
 	@Test
@@ -179,7 +181,7 @@ class McpLegacySessionTransportPublicRuntimeTests {
 				finally { exited.countDown(); }
 			}
 		};
-		Fixture fixture = new Fixture(true, builder -> builder.requestHandlerConcurrency(1).requestHandlerQueueCapacity(1), null, collector);
+		ManualFixture fixture = new ManualFixture(true, builder -> builder.requestHandlerConcurrency(1).requestHandlerQueueCapacity(1), null, collector);
 		try {
 				String id = fixture.initialize("/mcp", McpProtocolVersion.V2025_11_25);
 				assertEquals(404, fixture.control("DELETE", "/mcp", McpProtocolVersion.V2025_11_25, "unknown.valid", "alice", "", List.of()).status());
@@ -217,7 +219,8 @@ class McpLegacySessionTransportPublicRuntimeTests {
 		};
 		// The deadline starts before asynchronous observer dispatch. Allow that
 		// scheduling step to complete before exercising expiry during the blocked start.
-		try (Fixture fixture = new Fixture(true, builder -> builder.requestTimeout(Duration.ofSeconds(1)), null, collector)) {
+		Fixture fixture = new Fixture(true, builder -> builder.requestTimeout(Duration.ofSeconds(1)), null, collector);
+		Soklet.run(fixture.config, () -> {
 			try (RawClient client = fixture.openControl("DELETE", "/mcp", McpProtocolVersion.V2025_11_25,
 					"unknown.valid", "alice", "", List.of())) {
 				assertTrue(entered.await(5, TimeUnit.SECONDS));
@@ -227,12 +230,13 @@ class McpLegacySessionTransportPublicRuntimeTests {
 			} finally { release.countDown(); }
 			awaitCondition(() -> finishes.get() == 1 && fixture.httpFinishes.get() == 1);
 			assertEquals(504, observedStatus.get(), "HTTP observation must report the response which won publication.");
-		}
+		});
 	}
 
 	@Test
 	void absenceOfControllerPreservesPostOnlySessions() throws Exception {
-		try (Fixture fixture = new Fixture(false, builder -> {})) {
+		Fixture fixture = new Fixture(false, builder -> {});
+		Soklet.run(fixture.config, () -> {
 			for (McpProtocolVersion version : LEGACY) {
 				String id = fixture.initialize("/mcp", version);
 				for (String method : List.of("GET", "DELETE")) {
@@ -245,12 +249,13 @@ class McpLegacySessionTransportPublicRuntimeTests {
 				assertEquals(200, fixture.ping(version, id).status());
 			}
 			assertTrue(fixture.contexts.isEmpty());
-		}
+		});
 	}
 
 	@Test
 	void oauthChallengesAreApplicationSelectedAndDoNotRenderJsonRpcErrors() throws Exception {
-		try (Fixture fixture = new Fixture(true, builder -> {})) {
+		Fixture fixture = new Fixture(true, builder -> {});
+		Soklet.run(fixture.config, () -> {
 			for (McpProtocolVersion version : LEGACY) {
 				String id = fixture.initialize("/mcp", version);
 				fixture.policy.set((context, features) -> McpSessionTransportAdmissionDecision.rejected(
@@ -277,12 +282,13 @@ class McpLegacySessionTransportPublicRuntimeTests {
 				assertEquals(200, fixture.ping(version, id).status(), "Denial does not retire the session.");
 				fixture.policy.set(Fixture::allow);
 			}
-		}
+		});
 	}
 
 	@Test
 	void expiredAndInvalidSelectionsFailWithoutCreatingGetOrDeletingSession() throws Exception {
-		try (Fixture fixture = new Fixture(true, builder -> {})) {
+		Fixture fixture = new Fixture(true, builder -> {});
+		Soklet.run(fixture.config, () -> {
 			for (McpProtocolVersion version : LEGACY) {
 				String id = fixture.initialize("/mcp", version);
 				fixture.policy.set((context, features) -> McpSessionTransportAdmissionDecision.accepted(identity("alice"),
@@ -309,57 +315,60 @@ class McpLegacySessionTransportPublicRuntimeTests {
 				assertEquals(204, fixture.control("DELETE", "/mcp", version, id, "alice", "", List.of()).status());
 				assertEquals(404, fixture.ping(version, id).status());
 			}
-		}
+		});
 	}
 
 	@Test
 	void getUsesBoundedFreshRenewalAndPhysicalHttpObservationWithoutRpcStreamMetrics() throws Exception {
-		for (McpProtocolVersion version : LEGACY)
-			try (Fixture fixture = new Fixture(true, builder -> builder
-					.maximumSubscriptionAuthorizationDuration(Duration.ofMillis(250))
-					.maximumSubscriptionDuration(Duration.ofMillis(950)))) {
-				String id = fixture.initialize("/mcp", version);
-				int rpcBefore = fixture.rpcAdmissions.get();
-				fixture.policy.set((context, features) -> McpSessionTransportAdmissionDecision.accepted(
-						identity("alice"), Instant.MAX, context.getNotificationTypes()));
-				try (RawClient get = fixture.openControl("GET", "/mcp", version, id, "alice", "", List.of())) {
-					Head head = get.readHead();
-					assertSse(head);
-					awaitCondition(() -> fixture.server.getDiagnostics().getActiveSubscriptions() == 1);
-					assertTrue(fixture.server.getDiagnostics().getActiveRequestStreams() >= 1);
-					String body = get.readBody(head);
-					assertFalse(body.contains("data:"), body);
-					assertTrue(get.terminalRead, "GET lifetime must cleanly complete HTTP framing.");
-				}
-				assertEquals(rpcBefore, fixture.rpcAdmissions.get());
-				assertTrue(fixture.contexts.size() >= 2, "Configured lease must perform fresh reauthorization.");
-				McpSessionTransportAdmissionContext original = fixture.contexts.get(0);
-				assertFalse(original.isReauthorization());
-				assertEquals(FAMILIES, original.getNotificationTypes());
-				assertFalse(original.toString().contains(id));
-				assertFalse(original.toString().contains("alice"));
-				assertThrows(UnsupportedOperationException.class, () -> original.getNotificationTypes().clear());
-				for (McpSessionTransportAdmissionContext renewal : fixture.contexts.subList(1, fixture.contexts.size())) {
-					assertTrue(renewal.isReauthorization());
-					assertSame(original.getRequest(), renewal.getRequest(), "Renewal retains original immutable HTTP credential input.");
-					assertEquals(version, renewal.getProtocolVersion());
-				}
-				awaitCondition(() -> fixture.events.stream().filter(McpMetricsEvent.SubscriptionClosed.class::isInstance).count() == 1);
-				assertEquals(1, fixture.events.stream().filter(McpMetricsEvent.SubscriptionOpened.class::isInstance).count());
-				assertEquals(0, fixture.events.stream().filter(McpMetricsEvent.RequestStreamOpened.class::isInstance).count());
-				assertEquals(0, fixture.events.stream().filter(McpMetricsEvent.RequestStreamClosed.class::isInstance).count());
-				awaitCondition(() -> fixture.httpFinishes.get() == 1);
-				assertEquals(1, fixture.httpStarts.get());
-				assertEquals(0, fixture.server.getDiagnostics().getActiveSubscriptions());
-				assertEquals(0, fixture.server.getDiagnostics().getActiveRequestStreams());
+		for (McpProtocolVersion version : LEGACY) {
+			Fixture fixture = new Fixture(true, builder -> builder
+						.maximumSubscriptionAuthorizationDuration(Duration.ofMillis(250))
+					.maximumSubscriptionDuration(Duration.ofMillis(950)));
+			Soklet.run(fixture.config, () -> {
+					String id = fixture.initialize("/mcp", version);
+					int rpcBefore = fixture.rpcAdmissions.get();
+					fixture.policy.set((context, features) -> McpSessionTransportAdmissionDecision.accepted(
+							identity("alice"), Instant.MAX, context.getNotificationTypes()));
+					try (RawClient get = fixture.openControl("GET", "/mcp", version, id, "alice", "", List.of())) {
+						Head head = get.readHead();
+						assertSse(head);
+						awaitCondition(() -> fixture.server.getDiagnostics().getActiveSubscriptions() == 1);
+						assertTrue(fixture.server.getDiagnostics().getActiveRequestStreams() >= 1);
+						String body = get.readBody(head);
+						assertFalse(body.contains("data:"), body);
+						assertTrue(get.terminalRead, "GET lifetime must cleanly complete HTTP framing.");
+					}
+					assertEquals(rpcBefore, fixture.rpcAdmissions.get());
+					assertTrue(fixture.contexts.size() >= 2, "Configured lease must perform fresh reauthorization.");
+					McpSessionTransportAdmissionContext original = fixture.contexts.get(0);
+					assertFalse(original.isReauthorization());
+					assertEquals(FAMILIES, original.getNotificationTypes());
+					assertFalse(original.toString().contains(id));
+					assertFalse(original.toString().contains("alice"));
+					assertThrows(UnsupportedOperationException.class, () -> original.getNotificationTypes().clear());
+					for (McpSessionTransportAdmissionContext renewal : fixture.contexts.subList(1, fixture.contexts.size())) {
+						assertTrue(renewal.isReauthorization());
+						assertSame(original.getRequest(), renewal.getRequest(), "Renewal retains original immutable HTTP credential input.");
+						assertEquals(version, renewal.getProtocolVersion());
+					}
+					awaitCondition(() -> fixture.events.stream().filter(McpMetricsEvent.SubscriptionClosed.class::isInstance).count() == 1);
+					assertEquals(1, fixture.events.stream().filter(McpMetricsEvent.SubscriptionOpened.class::isInstance).count());
+					assertEquals(0, fixture.events.stream().filter(McpMetricsEvent.RequestStreamOpened.class::isInstance).count());
+					assertEquals(0, fixture.events.stream().filter(McpMetricsEvent.RequestStreamClosed.class::isInstance).count());
+					awaitCondition(() -> fixture.httpFinishes.get() == 1);
+					assertEquals(1, fixture.httpStarts.get());
+					assertEquals(0, fixture.server.getDiagnostics().getActiveSubscriptions());
+					assertEquals(0, fixture.server.getDiagnostics().getActiveRequestStreams());
+			});
 			}
 	}
 
 	@Test
 	void reconciliationDuringGetAdmissionRetriesBothCooperativeAndStaleDecisions() throws Exception {
 		for (McpProtocolVersion version : LEGACY)
-			for (boolean cooperative : List.of(false, true))
-				try (Fixture fixture = new Fixture(true, builder -> builder.subscriptionAuthorizationTimeout(Duration.ofSeconds(3)))) {
+			for (boolean cooperative : List.of(false, true)) {
+				Fixture fixture = new Fixture(true, builder -> builder.subscriptionAuthorizationTimeout(Duration.ofSeconds(3)));
+				Soklet.run(fixture.config, () -> {
 					String id = fixture.initialize("/mcp", version);
 					CountDownLatch entered = new CountDownLatch(1);
 					AtomicInteger attempts = new AtomicInteger();
@@ -382,12 +391,14 @@ class McpLegacySessionTransportPublicRuntimeTests {
 						assertSse(get.readHead());
 						assertEquals(2, attempts.get(), "The obsolete admission must be reevaluated once.");
 					}
-				}
+				});
+			}
 	}
 
 	@Test
 	void repeatedlyReconciledGetAdmissionReturnsRetryable503AfterOneRetry() throws Exception {
-		try (Fixture fixture = new Fixture(true, builder -> {})) {
+		Fixture fixture = new Fixture(true, builder -> {});
+		Soklet.run(fixture.config, () -> {
 			McpProtocolVersion version = McpProtocolVersion.V2025_11_25;
 			String id = fixture.initialize("/mcp", version);
 			AtomicInteger attempts = new AtomicInteger();
@@ -400,15 +411,16 @@ class McpLegacySessionTransportPublicRuntimeTests {
 			assertEquals(503, response.status());
 			assertEquals("0", response.header("Retry-After"));
 			assertEquals(2, attempts.get());
-		}
+		});
 	}
 
 	@Test
 	@Timeout(150)
 	void reconciliationDenialAndOwnerChangeCloseOnlyTheGetAndCannotResurrectIt() throws Exception {
 		for (McpProtocolVersion version : LEGACY)
-			for (boolean ownerChange : List.of(false, true))
-				try (Fixture fixture = new Fixture(true, builder -> {})) {
+			for (boolean ownerChange : List.of(false, true)) {
+				Fixture fixture = new Fixture(true, builder -> {});
+				Soklet.run(fixture.config, () -> {
 					String id = fixture.initialize("/mcp", version);
 					try (RawClient get = fixture.openControl("GET", "/mcp", version, id, "alice", "", List.of())) {
 						Head head = get.readHead();
@@ -428,13 +440,14 @@ class McpLegacySessionTransportPublicRuntimeTests {
 					try (RawClient reconnect = fixture.openControl("GET", "/mcp", version, id, "alice", "", List.of())) {
 						assertSse(reconnect.readHead());
 					}
-				}
+				});
+			}
 	}
 
 	@Test
 	void deleteEndsAnExistingGetAndShutdownBalancesMetricsAndDiagnostics() throws Exception {
 		for (McpProtocolVersion version : LEGACY)
-			try (Fixture fixture = new Fixture(true, builder -> {})) {
+			try (ManualFixture fixture = new ManualFixture(true, builder -> {})) {
 				String id = fixture.initialize("/mcp", version);
 				try (RawClient get = fixture.openControl("GET", "/mcp", version, id, "alice", "", List.of())) {
 					Head head = get.readHead();
@@ -469,42 +482,45 @@ class McpLegacySessionTransportPublicRuntimeTests {
 			CountDownLatch entered = new CountDownLatch(1);
 			CountDownLatch release = new CountDownLatch(1);
 			AtomicReference<CancelationToken> token = new AtomicReference<>();
-			try (Fixture fixture = new Fixture(true, builder -> builder
-					.maximumSubscriptionAuthorizationDuration(Duration.ofMillis(300))
-					.subscriptionAuthorizationTimeout(Duration.ofSeconds(2)))) {
-				String id = fixture.initialize("/mcp", version);
-				fixture.policy.set((context, features) -> {
-					if (context.isReauthorization()) {
-						token.set(features.getCancelationToken());
-						entered.countDown();
-						boolean interrupted = false;
-						long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(8);
-						try {
-							while (release.getCount() != 0 && System.nanoTime() - until < 0L) {
-								try { release.await(20, TimeUnit.MILLISECONDS); }
-								catch (InterruptedException ignored) { interrupted = true; }
-							}
-							assertEquals(0, release.getCount(), "The test must release its deliberately uncooperative callback.");
-						} finally { if (interrupted) Thread.currentThread().interrupt(); }
-					}
-					return Fixture.allow(context, features);
+			try {
+				Fixture fixture = new Fixture(true, builder -> builder
+						.maximumSubscriptionAuthorizationDuration(Duration.ofMillis(300))
+					.subscriptionAuthorizationTimeout(Duration.ofSeconds(2)));
+				Soklet.run(fixture.config, () -> {
+					String id = fixture.initialize("/mcp", version);
+					fixture.policy.set((context, features) -> {
+						if (context.isReauthorization()) {
+							token.set(features.getCancelationToken());
+							entered.countDown();
+							boolean interrupted = false;
+							long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(8);
+							try {
+								while (release.getCount() != 0 && System.nanoTime() - until < 0L) {
+									try { release.await(20, TimeUnit.MILLISECONDS); }
+									catch (InterruptedException ignored) { interrupted = true; }
+								}
+								assertEquals(0, release.getCount(), "The test must release its deliberately uncooperative callback.");
+							} finally { if (interrupted) Thread.currentThread().interrupt(); }
+						}
+						return Fixture.allow(context, features);
+					});
+					try (RawClient get = fixture.openControl("GET", "/mcp", version, id, "alice", "", List.of())) {
+						Head head = get.readHead();
+						assertSse(head);
+						assertTrue(entered.await(5, TimeUnit.SECONDS));
+						assertFalse(get.readBody(head).contains("data:"));
+						assertTrue(get.terminalRead);
+						// The client can read the terminal chunk before the writer's
+						// termination callback retires subscription diagnostics.
+						awaitCondition(() -> token.get() != null && token.get().isCanceled()
+								&& fixture.server.getDiagnostics().getActiveSubscriptions() == 0);
+						assertTrue(fixture.server.getDiagnostics().getActiveHandlerExecutions() >= 1);
+						assertEquals(0, fixture.server.getDiagnostics().getActiveSubscriptions());
+						release.countDown();
+						awaitCondition(() -> fixture.server.getDiagnostics().getActiveHandlerExecutions() == 0);
+						assertEquals(200, fixture.ping(version, id).status());
+					} finally { release.countDown(); }
 				});
-				try (RawClient get = fixture.openControl("GET", "/mcp", version, id, "alice", "", List.of())) {
-					Head head = get.readHead();
-					assertSse(head);
-					assertTrue(entered.await(5, TimeUnit.SECONDS));
-					assertFalse(get.readBody(head).contains("data:"));
-					assertTrue(get.terminalRead);
-					// The client can read the terminal chunk before the writer's
-					// termination callback retires subscription diagnostics.
-					awaitCondition(() -> token.get() != null && token.get().isCanceled()
-							&& fixture.server.getDiagnostics().getActiveSubscriptions() == 0);
-					assertTrue(fixture.server.getDiagnostics().getActiveHandlerExecutions() >= 1);
-					assertEquals(0, fixture.server.getDiagnostics().getActiveSubscriptions());
-					release.countDown();
-					awaitCondition(() -> fixture.server.getDiagnostics().getActiveHandlerExecutions() == 0);
-					assertEquals(200, fixture.ping(version, id).status());
-				} finally { release.countDown(); }
 			} finally { release.countDown(); }
 		}
 	}
@@ -512,25 +528,29 @@ class McpLegacySessionTransportPublicRuntimeTests {
 	@Test
 	void sameSessionReplacementTransfersQuotaAndCapacityDenialPreservesTheExistingGet() throws Exception {
 		for (McpProtocolVersion version : LEGACY) {
-			try (Fixture fixture = new Fixture(true, builder -> builder.maximumSubscriptionsPerPartition(2))) {
-				String id = fixture.initialize("/mcp", version);
-				try (RawClient oldest = fixture.openControl("GET", "/mcp", version, id, "alice", "", List.of())) {
-					Head oldHead = oldest.readHead();
-					assertSse(oldHead);
-					awaitCondition(() -> fixture.server.getDiagnostics().getActiveSubscriptions() == 1);
-					try (RawClient newer = fixture.openControl("GET", "/mcp", version, id, "alice", "", List.of())) {
-						assertSse(newer.readHead());
-						awaitCondition(() -> fixture.server.getDiagnostics().getActiveSubscriptions() == 2);
-						try (RawClient replacement = fixture.openControl("GET", "/mcp", version, id, "alice", "", List.of())) {
-							assertSse(replacement.readHead());
-							assertFalse(oldest.readBody(oldHead).contains("data:"));
-							assertTrue(oldest.terminalRead);
-							assertEquals(2, fixture.server.getDiagnostics().getActiveSubscriptions());
+			{
+				Fixture fixture = new Fixture(true, builder -> builder.maximumSubscriptionsPerPartition(2));
+				Soklet.run(fixture.config, () -> {
+					String id = fixture.initialize("/mcp", version);
+					try (RawClient oldest = fixture.openControl("GET", "/mcp", version, id, "alice", "", List.of())) {
+						Head oldHead = oldest.readHead();
+						assertSse(oldHead);
+						awaitCondition(() -> fixture.server.getDiagnostics().getActiveSubscriptions() == 1);
+						try (RawClient newer = fixture.openControl("GET", "/mcp", version, id, "alice", "", List.of())) {
+							assertSse(newer.readHead());
+							awaitCondition(() -> fixture.server.getDiagnostics().getActiveSubscriptions() == 2);
+							try (RawClient replacement = fixture.openControl("GET", "/mcp", version, id, "alice", "", List.of())) {
+								assertSse(replacement.readHead());
+								assertFalse(oldest.readBody(oldHead).contains("data:"));
+								assertTrue(oldest.terminalRead);
+								assertEquals(2, fixture.server.getDiagnostics().getActiveSubscriptions());
+							}
 						}
 					}
-				}
+				});
 			}
-			try (Fixture fixture = new Fixture(true, builder -> builder.maximumSubscriptionsPerPartition(1))) {
+			Fixture fixture = new Fixture(true, builder -> builder.maximumSubscriptionsPerPartition(1));
+			Soklet.run(fixture.config, () -> {
 				String firstId = fixture.initialize("/mcp", version);
 				String otherId = fixture.initialize("/mcp", version);
 				try (RawClient existing = fixture.openControl("GET", "/mcp", version, firstId, "alice", "", List.of())) {
@@ -542,19 +562,20 @@ class McpLegacySessionTransportPublicRuntimeTests {
 					assertEquals(1, fixture.server.getDiagnostics().getActiveSubscriptions());
 					assertEquals(200, fixture.ping(version, firstId).status());
 				}
-			}
+			});
 		}
 	}
 
 	@Test
 	void corsPreflightOffersOnlyConfiguredHttpFacilitiesAndDoesNotAdmitSessions() throws Exception {
 		String origin = "https://client.example.test";
-		try (Fixture fixture = new Fixture(true, builder -> builder.corsAuthorizer(CorsAuthorizer.fromWhitelistedOrigins(Set.of(origin))))) {
+		Fixture fixture = new Fixture(true, builder -> builder.corsAuthorizer(CorsAuthorizer.fromWhitelistedOrigins(Set.of(origin))));
+		Soklet.run(fixture.config, () -> {
 			java.net.http.HttpClient client = java.net.http.HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
 			for (String path : List.of("/mcp", "/cleanup", "/stateless"))
 				for (String method : List.of("GET", "DELETE")) {
 					java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder(
-							java.net.URI.create("http://127.0.0.1:" + fixture.port + path)).timeout(Duration.ofSeconds(5))
+							java.net.URI.create("http://127.0.0.1:" + fixture.port() + path)).timeout(Duration.ofSeconds(5))
 							.method("OPTIONS", java.net.http.HttpRequest.BodyPublishers.noBody())
 							.header("Origin", origin).header("Access-Control-Request-Method", method)
 							.header("Access-Control-Request-Headers", "Mcp-Session-Id, MCP-Protocol-Version").build();
@@ -563,12 +584,13 @@ class McpLegacySessionTransportPublicRuntimeTests {
 				}
 			assertEquals(0, fixture.rpcAdmissions.get());
 			assertTrue(fixture.contexts.isEmpty());
-		}
+		});
 	}
 
 	@Test
 	void authorizationExpiryIsRecheckedAfterOwnerResolutionBeforeGetOrDeleteMutation() throws Exception {
-		try (Fixture fixture = new Fixture(true, builder -> {})) {
+		Fixture fixture = new Fixture(true, builder -> {});
+		Soklet.run(fixture.config, () -> {
 			for (McpProtocolVersion version : LEGACY) {
 				String id = fixture.initialize("/mcp", version);
 				fixture.policy.set((context, features) -> McpSessionTransportAdmissionDecision.accepted(identity("alice"),
@@ -584,7 +606,7 @@ class McpLegacySessionTransportPublicRuntimeTests {
 				fixture.policy.set(Fixture::allow);
 				assertEquals(200, fixture.ping(version, id).status());
 			}
-		}
+		});
 	}
 
 	private static void assertSse(Head head) {
@@ -605,7 +627,7 @@ class McpLegacySessionTransportPublicRuntimeTests {
 		assertTrue(condition.getAsBoolean(), "Expected bounded runtime transition did not complete.");
 	}
 
-	static final class Fixture implements AutoCloseable {
+	static class Fixture {
 		final McpSubscriptionEventPublisher publisher = McpSubscriptionEventPublisher.fromInMemoryDefaults();
 		final AtomicInteger rpcAdmissions = new AtomicInteger();
 		final AtomicInteger httpStarts = new AtomicInteger();
@@ -615,8 +637,7 @@ class McpLegacySessionTransportPublicRuntimeTests {
 		final AtomicReference<McpSessionTransportAdmissionController> policy = new AtomicReference<>(Fixture::allow);
 		final AtomicReference<McpSessionOwnerKeyResolver> ownerResolver = new AtomicReference<>(identity -> identity.getPrincipal().orElseThrow().toString());
 		final McpServer server;
-		final Soklet soklet;
-		final int port;
+		final SokletConfig config;
 		final boolean toolCatalogIncluded;
 
 		Fixture(boolean controller, Consumer<McpServer.Builder> configure) throws Exception {
@@ -663,11 +684,11 @@ class McpLegacySessionTransportPublicRuntimeTests {
 					.admissionController(context -> {
 						rpcAdmissions.incrementAndGet();
 						return McpAdmissionDecision.accepted(identity(context.getRequest().getHeader("X-Subject").orElse("alice")));
-					});
+			});
 			if (handler != null) builder.toolRateLimiter(context -> McpRateLimitDecision.allowed());
 			configure.accept(builder);
 			this.server = builder.build();
-			this.soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+			this.config = SokletConfig.withMcpServer(server)
 					.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).lifecyclePolicy(LIFECYCLE)
 					.metricsCollector(metricsCollector != null ? metricsCollector : new MetricsCollector() {
 						@Override public void didRecordMcpMetricsEvent(McpMetricsEvent event) { events.add(event); }
@@ -681,12 +702,10 @@ class McpLegacySessionTransportPublicRuntimeTests {
 							assertTrue(Set.of(HttpMethod.GET, HttpMethod.DELETE).contains(request.getHttpMethod()));
 							assertTrue(response.getStatusCode() >= 200); httpFinishes.incrementAndGet();
 						}
-					}).build());
-			try {
-				soklet.start();
-				this.port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
-			} catch (Throwable failure) { soklet.close(); throw failure; }
+					}).build();
 		}
+
+		int port() { return server.getDiagnostics().getBoundAddress().orElseThrow().getPort(); }
 
 		static McpSessionTransportAdmissionDecision allow(McpSessionTransportAdmissionContext context, McpInvocationFeatures features) {
 			return McpSessionTransportAdmissionDecision.accepted(identity(context.getRequest().getHeader("X-Subject").orElse("alice")),
@@ -720,7 +739,7 @@ class McpLegacySessionTransportPublicRuntimeTests {
 			if (version != null) headers.add(new HeaderValue("MCP-Protocol-Version", version.getWireValue()));
 			if (id != null) headers.add(new HeaderValue("Mcp-Session-Id", id));
 			headers.add(new HeaderValue("X-Subject", subject)); headers.addAll(extra);
-			return new RawClient(port, method, path, body, headers);
+			return new RawClient(port(), method, path, body, headers);
 		}
 
 		Response control(String method, String path, McpProtocolVersion version, String id, String subject,
@@ -732,12 +751,28 @@ class McpLegacySessionTransportPublicRuntimeTests {
 		}
 
 		Response exchange(String method, String path, String body, List<HeaderValue> headers) throws Exception {
-			try (RawClient client = new RawClient(port, method, path, body, headers)) {
+			try (RawClient client = new RawClient(port(), method, path, body, headers)) {
 				Head head = client.readHead();
 				return new Response(head.status(), head.headers(), client.readBody(head));
 			}
 		}
-		@Override public void close() { soklet.close(); }
+	}
+
+	/** These cases stop the listener while an observation or GET remains live. */
+	private static final class ManualFixture extends Fixture implements AutoCloseable {
+		final Soklet soklet;
+
+		ManualFixture(boolean controller, Consumer<McpServer.Builder> configure) throws Exception {
+			this(controller, configure, null, null);
+		}
+
+		ManualFixture(boolean controller, Consumer<McpServer.Builder> configure,
+				McpToolHandler<McpJsonObject> handler, MetricsCollector metricsCollector) throws Exception {
+			super(controller, configure, handler, metricsCollector);
+			this.soklet = Soklet.run(this.config);
+		}
+
+		@Override public void close() { this.soklet.close(); }
 	}
 
 	record HeaderValue(String name, String value) {}

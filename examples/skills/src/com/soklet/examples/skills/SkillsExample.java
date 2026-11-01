@@ -87,16 +87,31 @@ public final class SkillsExample {
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.build();
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
+		Soklet soklet = Soklet.run(config);
+		Throwable failure = null;
+		try {
 			InetSocketAddress address = runningAddress(server);
 			control("{\"event\":\"ready\",\"host\":\"" + HOST + "\",\"port\":"
 					+ address.getPort() + ",\"path\":\"" + ENDPOINT_PATH + "\"}");
 			awaitNewlineOrEndOfFile();
 
-			ShutdownResult result = soklet.shutdown().toCompletableFuture()
+			soklet.requestShutdown();
+			ShutdownResult result = soklet.awaitShutdownAsync().toCompletableFuture()
 					.get(10, TimeUnit.SECONDS);
 			verifyCleanShutdown(server, result);
+		} catch (Exception | Error thrown) {
+			failure = thrown;
+			throw thrown;
+		} finally {
+			soklet.requestShutdown();
+			try {
+				soklet.awaitShutdownAsync().toCompletableFuture().join();
+			} catch (RuntimeException | Error shutdownFailure) {
+				if (failure == null)
+					throw shutdownFailure;
+				if (failure != shutdownFailure)
+					failure.addSuppressed(shutdownFailure);
+			}
 		}
 
 		control("{\"event\":\"stopped\",\"clean\":true}");

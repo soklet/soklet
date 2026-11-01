@@ -34,7 +34,7 @@ import java.util.List;
  * retain the inline behavior documented on their individual methods.
  * <p>
  * Transition callbacks are delivered serially by a daemon observer worker;
- * returning from shutdown or {@link SokletApplication#run(SokletConfig)} does
+ * returning from {@link Soklet#awaitShutdown()} does
  * not join their delivery. They may be lost when the JVM exits. Essential
  * application cleanup belongs in bounded {@link ShutdownCleanup}, with an
  * application-owned delivery barrier if it depends on observer state.
@@ -62,7 +62,7 @@ public interface LifecycleObserver {
 	 * Called before a {@link Soklet} instance starts.
 	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 */
-	default void willStartSoklet(@NonNull Soklet soklet) {
+	default void willStartSoklet() {
 		// No-op by default
 	}
 
@@ -70,7 +70,7 @@ public interface LifecycleObserver {
 	 * Called after a {@link Soklet} instance starts.
 	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 */
-	default void didStartSoklet(@NonNull Soklet soklet) {
+	default void didStartSoklet() {
 		// No-op by default
 	}
 
@@ -78,17 +78,15 @@ public interface LifecycleObserver {
 	 * Called after a {@link Soklet} instance was asked to start but did not reach
 	 * readiness because startup failed, timed out, or was canceled. The
 	 * {@code throwable} is the same cause exposed by
-	 * {@link ShutdownResult#getStartupFailureCause()} and, when startup is driven
-	 * directly, by {@link SokletStartupException#getCause()}. The subsequent
-	 * {@link #didStopSoklet(Soklet, ShutdownResult)} callback supplies the
+	 * {@link ShutdownResult#getStartupFailureCause()} and
+	 * {@link SokletStartupException#getCause()}. The subsequent
+	 * {@link #didStopSoklet(ShutdownResult)} callback supplies the
 	 * structured {@link StartupDisposition}.
 	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 *
-	 * @param soklet Soklet whose startup did not reach readiness
 	 * @param throwable failed, timed-out, or canceled startup cause
 	 */
-	default void didFailToStartSoklet(@NonNull Soklet soklet,
-																		@NonNull Throwable throwable) {
+	default void didFailToStartSoklet(@NonNull Throwable throwable) {
 		// No-op by default
 	}
 
@@ -96,7 +94,7 @@ public interface LifecycleObserver {
 	 * Called before a {@link Soklet} instance stops.
 	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 */
-	default void willStopSoklet(@NonNull Soklet soklet) {
+	default void willStopSoklet() {
 		// No-op by default
 	}
 
@@ -104,11 +102,9 @@ public interface LifecycleObserver {
 	 * Called after a {@link Soklet} instance publishes its immutable result.
 	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 *
-	 * @param soklet stopped Soklet
 	 * @param shutdownResult aggregate lifecycle result
 	 */
-	default void didStopSoklet(@NonNull Soklet soklet,
-			@NonNull ShutdownResult shutdownResult) {
+	default void didStopSoklet(@NonNull ShutdownResult shutdownResult) {
 		// No-op by default
 	}
 

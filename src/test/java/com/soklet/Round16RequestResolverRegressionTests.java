@@ -88,8 +88,7 @@ class Round16RequestResolverRegressionTests {
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override public void didReceiveLogEvent(LogEvent event) {}
 				}).build();
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
+		Soklet.run(config, () -> {
 			for (String target : malformedTargets()) {
 				String wire = exchange(port, target);
 				assertTrue(wire.startsWith("HTTP/1.1 400"), wire);
@@ -102,7 +101,7 @@ class Round16RequestResolverRegressionTests {
 				assertEquals("one#two", wire.substring(wire.indexOf("\r\n\r\n") + 4));
 			}
 			assertEquals(2, TARGET_INVOCATIONS.get());
-		}
+		});
 	}
 
 	@Test

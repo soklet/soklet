@@ -36,7 +36,7 @@ class StreamingCallbackSelfWaitTests {
 		SseRoutes resource = new SseRoutes(() -> {
 			callbackThread.set(Thread.currentThread());
 			try {
-				if (close) owner.get().close(); else owner.get().awaitShutdown();
+				if (close) owner.get().close(); else owner.get().awaitCoreShutdown();
 				outcome.complete(null);
 			} catch (Throwable failure) { outcome.complete(failure); }
 		});
@@ -84,7 +84,7 @@ class StreamingCallbackSelfWaitTests {
 		Runnable callback = () -> {
 			callbackThread.set(Thread.currentThread());
 			try {
-				if (close) owner.get().close(); else owner.get().awaitShutdown();
+				if (close) owner.get().close(); else owner.get().awaitCoreShutdown();
 				outcome.complete(null);
 			} catch (Throwable failure) { outcome.complete(failure); }
 		};

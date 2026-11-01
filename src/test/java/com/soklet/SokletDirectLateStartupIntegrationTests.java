@@ -484,11 +484,11 @@ final class SokletDirectLateStartupIntegrationTests {
 			InternalLifecycleComponentShutdownResult sseResult = assertParticipant(result,
 					InternalLifecycleComponentType.SSE,
 					InternalLifecycleComponentShutdownDisposition.GRACEFUL_TERMINATION);
-			Assertions.assertEquals(List.of(startFailure), sseResult.failures());
-			Throwable[] suppressed = startFailure.getSuppressed();
-			Assertions.assertEquals(1, suppressed.length);
-			Assertions.assertSame(catchUpFailure, suppressed[0],
+			Assertions.assertEquals(List.of(startFailure, catchUpFailure),
+					sseResult.failures(),
 					"Catch-up failure must remain secondary participant evidence");
+			Assertions.assertEquals(0, startFailure.getSuppressed().length,
+					"Recording catch-up evidence must not mutate the startup cause");
 			Assertions.assertTrue(sseResult.residualActivity().isEmpty());
 			Assertions.assertEquals(1, sse.runtime().startCalls());
 			Assertions.assertEquals(1, sse.runtime().quiesceCalls());

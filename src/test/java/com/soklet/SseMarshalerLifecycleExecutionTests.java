@@ -97,7 +97,8 @@ class SseMarshalerLifecycleExecutionTests {
 			DefaultSseServer server = (DefaultSseServer) SseServer.withPort(port).host("127.0.0.1")
 					.concurrentConnectionLimit(1).requestHandlerTimeout(Duration.ofSeconds(30))
 					.verifyConnectionOnceEstablished(false).build();
-			try (Soklet owner = Soklet.fromConfig(SokletConfig.withSseServer(server)
+			// Callbacks must attempt self-waits against this exact owner to exercise the lifecycle guard.
+			try (SokletTestScope ownerScope = SokletTestScope.of(Soklet.fromConfig(SokletConfig.withSseServer(server)
 						.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Resource.class)))
 						.instanceProvider(new InstanceProvider() {
 							@Override public <T> T provide(Class<T> type) { return type.cast(resource); }
@@ -108,7 +109,8 @@ class SseMarshalerLifecycleExecutionTests {
 							@Override public void didEstablishSseConnection(SseConnection connection) { established.countDown(); }
 						})
 						.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(3))
-								.gracefulShutdownTimeout(Duration.ofSeconds(1)).forcedShutdownTimeout(Duration.ofSeconds(1)).build()).build())) {
+								.gracefulShutdownTimeout(Duration.ofSeconds(1)).forcedShutdownTimeout(Duration.ofSeconds(1)).build()).build()))) {
+				Soklet owner = ownerScope.soklet();
 				ownerReference.set(owner);
 				owner.start();
 				try (Socket first = request(port, invalidBody)) {

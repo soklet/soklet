@@ -157,12 +157,15 @@ class McpRemainingSpiLifecycleExecutionTests {
 			}
 		}
 		McpServer server = builder.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint.build()))).build();
-		try (Soklet owner = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+		// The SPI callbacks must inspect the exact owner token and verify owner-scoped self-wait guards.
+		// The SPI callbacks must inspect the exact owner token and verify owner-scoped self-wait guards.
+		try (SokletTestScope ownerScope = SokletTestScope.of(Soklet.fromConfig(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(new LifecycleObserver() { @Override public void didReceiveLogEvent(LogEvent event) {} })
 				.lifecyclePolicy(LifecyclePolicy.builder().gracefulShutdownTimeout(Duration.ofSeconds(1))
-						.forcedShutdownTimeout(Duration.ofSeconds(1)).build()).build());
+						.forcedShutdownTimeout(Duration.ofSeconds(1)).build()).build()));
 				HttpClient client = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build()) {
+			Soklet owner = ownerScope.soklet();
 			ownerReference.set(owner);
 			owner.start();
 			if (callback.endsWith("source-close")) {

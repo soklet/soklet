@@ -120,8 +120,7 @@ public class McpLegacyProgressPublicRuntimeTests {
 							completeResult.toBuilder().payload(((McpToolOutput) completeResult.getPayload())
 									.toBuilder().content(List.of(McpTextContent.fromText("safe"))).build()).build())
 					.build();
-			try (Soklet soklet = managed(server, new MetricsCollector() { })) {
-				soklet.start();
+			Soklet.run(managedConfig(server, new MetricsCollector() { }), () -> {
 				try (McpChunkedHttpClient client = call(port(server), version,
 						"tools/call", toolParams("progress"), "\"progress\"", "9007199254740991")) {
 					assertSseHead(client.readHead());
@@ -145,7 +144,7 @@ public class McpLegacyProgressPublicRuntimeTests {
 				assertFalse(retainedToken.get().isCanceled());
 				assertDoesNotThrow(() -> retainedReporter.get().report(McpProgressUpdate.withProgress(0.0).build()));
 				awaitCleanup(server);
-			}
+			});
 		}
 	}
 
@@ -203,8 +202,7 @@ public class McpLegacyProgressPublicRuntimeTests {
 			return McpCompleteResult.fromToolText("quiet");
 		}));
 		McpServer server = configure(McpServer.withPort(0), endpoint).build();
-		try (Soklet soklet = managed(server, new MetricsCollector() { })) {
-			soklet.start();
+		Soklet.run(managedConfig(server, new MetricsCollector() { }), () -> {
 			for (McpProtocolVersion version : LEGACY) {
 				for (String token : new String[] { null, "\"valid\"" }) {
 					List<McpChunkedHttpClient.RequestHeader> headers = token == null
@@ -230,7 +228,7 @@ public class McpLegacyProgressPublicRuntimeTests {
 				}
 			}
 			assertEquals(4, entries.get(), "Malformed tokens must fail before application execution.");
-		}
+		});
 	}
 
 	@Test
@@ -263,8 +261,7 @@ public class McpLegacyProgressPublicRuntimeTests {
 				"resources/read", "\"uri\":\"catalog://item\"",
 				"completion/complete", "\"ref\":{\"type\":\"ref/prompt\",\"name\":\"prompt\"},"
 						+ "\"argument\":{\"name\":\"value\",\"value\":\"v\"}");
-		try (Soklet soklet = managed(server, new MetricsCollector() { })) {
-			soklet.start();
+		Soklet.run(managedConfig(server, new MetricsCollector() { }), () -> {
 			for (McpProtocolVersion version : LEGACY)
 				for (Map.Entry<String, String> operation : calls.entrySet()) {
 					String json;
@@ -284,7 +281,7 @@ public class McpLegacyProgressPublicRuntimeTests {
 						assertNull(client.readChunk());
 					}
 				}
-		}
+		});
 	}
 
 	@Test
@@ -299,8 +296,7 @@ public class McpLegacyProgressPublicRuntimeTests {
 			throw new IllegalStateException("exception-secret");
 		}));
 		McpServer server = configure(McpServer.withPort(0), endpoint).build();
-		try (Soklet soklet = managed(server, new MetricsCollector() { })) {
-			soklet.start();
+		Soklet.run(managedConfig(server, new MetricsCollector() { }), () -> {
 			for (McpProtocolVersion version : LEGACY)
 				for (String name : List.of("intentional", "unexpected"))
 					for (boolean reports : List.of(false, true)) {
@@ -327,7 +323,7 @@ public class McpLegacyProgressPublicRuntimeTests {
 							assertFalse(terminal.contains("exception-secret"), terminal);
 						}
 					}
-		}
+		});
 	}
 
 	@Test
@@ -349,15 +345,14 @@ public class McpLegacyProgressPublicRuntimeTests {
 			AtomicInteger progressEvents = new AtomicInteger();
 			McpEndpoint endpoint = endpoint(tool("held", gate.handler(true)));
 			McpServer server = configure(McpServer.withPort(0), endpoint).build();
-			try (Soklet soklet = managed(server, new MetricsCollector() {
+			Soklet.run(managedConfig(server, new MetricsCollector() {
 				@Override public void didRecordMcpMetricsEvent(McpMetricsEvent event) {
 					if (event instanceof McpMetricsEvent.RequestStreamClosed)
 						streamClosed.countDown();
 					if (event instanceof McpMetricsEvent.ProgressEmitted)
 						progressEvents.incrementAndGet();
 				}
-			})) {
-				soklet.start();
+			}), () -> {
 				try (McpChunkedHttpClient client = call(port(server), version, "tools/call",
 						toolParams("held"), "\"held\"", "\"token\"")) {
 					assertSseHead(client.readHead());
@@ -376,7 +371,7 @@ public class McpLegacyProgressPublicRuntimeTests {
 				assertTrue(gate.exited.await(5, TimeUnit.SECONDS));
 				awaitCleanup(server);
 				assertFalse(gate.token.get().isCanceled());
-			}
+			});
 		}
 	}
 
@@ -387,8 +382,7 @@ public class McpLegacyProgressPublicRuntimeTests {
 				Gate gate = new Gate();
 				McpEndpoint endpoint = endpoint(tool("held", gate.handler(false)));
 				McpServer server = configure(McpServer.withPort(0), endpoint).build();
-				try (Soklet soklet = managed(server, new MetricsCollector() { })) {
-					soklet.start();
+				Soklet.run(managedConfig(server, new MetricsCollector() { }), () -> {
 					try (McpChunkedHttpClient client = call(port(server), version, "tools/call",
 							toolParams("held"), "\"finite\"", token)) {
 						assertTrue(gate.entered.await(5, TimeUnit.SECONDS));
@@ -402,7 +396,7 @@ public class McpLegacyProgressPublicRuntimeTests {
 					}
 					assertTrue(gate.exited.await(5, TimeUnit.SECONDS));
 					awaitCleanup(server);
-				}
+				});
 			}
 	}
 
@@ -415,13 +409,12 @@ public class McpLegacyProgressPublicRuntimeTests {
 			McpEndpoint endpoint = endpoint(tool("held", gate.handler(true, true)));
 			McpServer server = configure(McpServer.withPort(0), endpoint)
 					.requestTimeout(Duration.ofSeconds(2)).build();
-			try (Soklet soklet = managed(server, new MetricsCollector() {
+			Soklet.run(managedConfig(server, new MetricsCollector() {
 				@Override public void didRecordMcpMetricsEvent(McpMetricsEvent event) {
 					if (event instanceof McpMetricsEvent.RequestStreamClosed)
 						streamClosed.countDown();
 				}
-			})) {
-				soklet.start();
+			}), () -> {
 				try (McpChunkedHttpClient client = call(port(server), version, "tools/call",
 						toolParams("held"), "\"deadline\"", "\"token\"")) {
 					assertSseHead(client.readHead());
@@ -440,7 +433,7 @@ public class McpLegacyProgressPublicRuntimeTests {
 				}
 				assertTrue(gate.exited.await(5, TimeUnit.SECONDS));
 				awaitCleanup(server);
-			}
+			});
 		}
 	}
 
@@ -552,10 +545,10 @@ public class McpLegacyProgressPublicRuntimeTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).lifecyclePolicy(LIFECYCLE).build();
 	}
 
-	private static Soklet managed(McpServer server, MetricsCollector metricsCollector) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+	private static SokletConfig managedConfig(McpServer server, MetricsCollector metricsCollector) {
+		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.metricsCollector(metricsCollector).lifecyclePolicy(LIFECYCLE).build());
+				.metricsCollector(metricsCollector).lifecyclePolicy(LIFECYCLE).build();
 	}
 
 	private static McpJsonObject metadata() {

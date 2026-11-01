@@ -75,8 +75,9 @@ class McpTasksFleetPublicRuntimeTests {
 				NodeAOutput.class, "nodeAValue");
 		McpServer secondServer = server("node-b", taskManager,
 				NodeBOutput.class, "nodeBValue");
-		Soklet first = managedSoklet(firstServer);
-		Soklet second = managedSoklet(secondServer);
+		// Direct node control is needed to remove the first node while its peer stays available.
+		Soklet first = Soklet.fromConfig(config(firstServer));
+		Soklet second = Soklet.fromConfig(config(secondServer));
 		Soklet replacement = null;
 
 		try {
@@ -109,7 +110,7 @@ class McpTasksFleetPublicRuntimeTests {
 
 			McpServer replacementServer = serverWithoutTool("node-a-replacement",
 					taskManager);
-			replacement = managedSoklet(replacementServer);
+			replacement = Soklet.fromConfig(config(replacementServer));
 			replacement.start();
 			McpTask persisted = taskManager.requireTask("task-from-a");
 			assertTaskReadUnavailable(taskRequest(boundPort(replacementServer), MAIN_PATH,
@@ -138,50 +139,44 @@ class McpTasksFleetPublicRuntimeTests {
 				NodeAOutput.class, "nodeAValue");
 		McpServer secondServer = server("node-b", taskManager,
 				NodeBOutput.class, "nodeBValue");
-		Soklet first = managedSoklet(firstServer);
-		Soklet second = managedSoklet(secondServer);
+		Soklet.run(config(firstServer), () -> {
+			Soklet.run(config(secondServer), () -> {
+				assertTaskHandle(callTool(boundPort(firstServer), "create-private",
+						"private-task", TENANT_ALPHA), "private-task");
+				int secondPort = boundPort(secondServer);
 
-		try {
-			first.start();
-			second.start();
-			assertTaskHandle(callTool(boundPort(firstServer), "create-private",
-					"private-task", TENANT_ALPHA), "private-task");
-			int secondPort = boundPort(secondServer);
+				for (String method : List.of("tasks/get", "tasks/update",
+						"tasks/cancel")) {
+					HttpResponse<String> wrongTenant = taskRequest(secondPort,
+							MAIN_PATH, method, "isolated", "private-task",
+							TENANT_BETA);
+					HttpResponse<String> wrongEndpoint = taskRequest(secondPort,
+							OTHER_PATH, method, "isolated", "private-task",
+							TENANT_ALPHA);
+					HttpResponse<String> unknown = taskRequest(secondPort, MAIN_PATH,
+							method, "isolated", "unknown-task", TENANT_ALPHA);
+					assertUnknownWithoutDisclosure(wrongTenant, "private-task");
+					assertUnknownWithoutDisclosure(wrongEndpoint, "private-task");
+					assertUnknownWithoutDisclosure(unknown, "unknown-task");
+					Assertions.assertEquals(unknown.body(), wrongTenant.body());
+					Assertions.assertEquals(unknown.body(), wrongEndpoint.body());
+				}
 
-			for (String method : List.of("tasks/get", "tasks/update",
-					"tasks/cancel")) {
-				HttpResponse<String> wrongTenant = taskRequest(secondPort,
-						MAIN_PATH, method, "isolated", "private-task",
-						TENANT_BETA);
-				HttpResponse<String> wrongEndpoint = taskRequest(secondPort,
-						OTHER_PATH, method, "isolated", "private-task",
-						TENANT_ALPHA);
-				HttpResponse<String> unknown = taskRequest(secondPort, MAIN_PATH,
-						method, "isolated", "unknown-task", TENANT_ALPHA);
-				assertUnknownWithoutDisclosure(wrongTenant, "private-task");
-				assertUnknownWithoutDisclosure(wrongEndpoint, "private-task");
-				assertUnknownWithoutDisclosure(unknown, "unknown-task");
-				Assertions.assertEquals(unknown.body(), wrongTenant.body());
-				Assertions.assertEquals(unknown.body(), wrongEndpoint.body());
-			}
-
-			Assertions.assertEquals(0, taskManager.updateInvocations.get());
-			Assertions.assertEquals(0, taskManager.cancelInvocations.get());
-			assertTaskResult(taskRequest(secondPort, MAIN_PATH, "tasks/get",
-					"authorized-get", "private-task", TENANT_ALPHA),
-					"nodeAValue", "node-a");
-			assertEmptyAcknowledgment(taskRequest(secondPort, MAIN_PATH,
-					"tasks/update", "authorized-update", "private-task",
-					TENANT_ALPHA));
-			assertEmptyAcknowledgment(taskRequest(secondPort, MAIN_PATH,
-					"tasks/cancel", "authorized-cancel", "private-task",
-					TENANT_ALPHA));
-			Assertions.assertEquals(1, taskManager.updateInvocations.get());
-			Assertions.assertEquals(1, taskManager.cancelInvocations.get());
-		} finally {
-			second.close();
-			first.close();
-		}
+				Assertions.assertEquals(0, taskManager.updateInvocations.get());
+				Assertions.assertEquals(0, taskManager.cancelInvocations.get());
+				assertTaskResult(taskRequest(secondPort, MAIN_PATH, "tasks/get",
+						"authorized-get", "private-task", TENANT_ALPHA),
+						"nodeAValue", "node-a");
+				assertEmptyAcknowledgment(taskRequest(secondPort, MAIN_PATH,
+						"tasks/update", "authorized-update", "private-task",
+						TENANT_ALPHA));
+				assertEmptyAcknowledgment(taskRequest(secondPort, MAIN_PATH,
+						"tasks/cancel", "authorized-cancel", "private-task",
+						TENANT_ALPHA));
+				Assertions.assertEquals(1, taskManager.updateInvocations.get());
+				Assertions.assertEquals(1, taskManager.cancelInvocations.get());
+			});
+		});
 	}
 
 	@Test
@@ -193,73 +188,67 @@ class McpTasksFleetPublicRuntimeTests {
 				NodeAOutput.class, "nodeAValue");
 		McpServer secondServer = server("node-b", taskManager,
 				NodeBOutput.class, "nodeBValue");
-		Soklet first = managedSoklet(firstServer);
-		Soklet second = managedSoklet(secondServer);
+		Soklet.run(config(firstServer), () -> {
+			Soklet.run(config(secondServer), () -> {
+				assertTaskHandle(callTool(boundPort(firstServer), "create-versioned",
+						"versioned-task", TENANT_ALPHA), "versioned-task");
+				int secondPort = boundPort(secondServer);
 
-		try {
-			first.start();
-			second.start();
-			assertTaskHandle(callTool(boundPort(firstServer), "create-versioned",
-					"versioned-task", TENANT_ALPHA), "versioned-task");
-			int secondPort = boundPort(secondServer);
+				HttpResponse<String> original = taskRequest(secondPort, MAIN_PATH,
+						"tasks/get", "ttl-original", "versioned-task",
+						TENANT_ALPHA);
+				assertTaskResult(original, "nodeAValue", "node-a");
+				Assertions.assertTrue(original.body().contains("\"ttlMs\":30000"),
+						original.body());
 
-			HttpResponse<String> original = taskRequest(secondPort, MAIN_PATH,
-					"tasks/get", "ttl-original", "versioned-task",
-					TENANT_ALPHA);
-			assertTaskResult(original, "nodeAValue", "node-a");
-			Assertions.assertTrue(original.body().contains("\"ttlMs\":30000"),
-					original.body());
+				McpTask source = taskManager.requireTask("versioned-task");
+				taskManager.replaceTask(completedTask(source.getTaskId(),
+						source.getTaskOrigin(), "nodeAValue", "node-a",
+						Duration.ofMinutes(5), LAST_UPDATED_AT.plusSeconds(1)));
+				HttpResponse<String> extended = taskRequest(secondPort, MAIN_PATH,
+						"tasks/get", "ttl-extended", "versioned-task",
+						TENANT_ALPHA);
+				Assertions.assertTrue(extended.body().contains("\"ttlMs\":300000"),
+						extended.body());
 
-			McpTask source = taskManager.requireTask("versioned-task");
-			taskManager.replaceTask(completedTask(source.getTaskId(),
-					source.getTaskOrigin(), "nodeAValue", "node-a",
-					Duration.ofMinutes(5), LAST_UPDATED_AT.plusSeconds(1)));
-			HttpResponse<String> extended = taskRequest(secondPort, MAIN_PATH,
-					"tasks/get", "ttl-extended", "versioned-task",
-					TENANT_ALPHA);
-			Assertions.assertTrue(extended.body().contains("\"ttlMs\":300000"),
-					extended.body());
+				taskManager.replaceTask(completedTask(source.getTaskId(),
+						source.getTaskOrigin(), "nodeAValue", "node-a", null,
+						LAST_UPDATED_AT.plusSeconds(2)));
+				HttpResponse<String> unlimited = taskRequest(secondPort, MAIN_PATH,
+						"tasks/get", "ttl-unlimited", "versioned-task",
+						TENANT_ALPHA);
+				Assertions.assertTrue(unlimited.body().contains("\"ttlMs\":null"),
+						unlimited.body());
 
-			taskManager.replaceTask(completedTask(source.getTaskId(),
-					source.getTaskOrigin(), "nodeAValue", "node-a", null,
-					LAST_UPDATED_AT.plusSeconds(2)));
-			HttpResponse<String> unlimited = taskRequest(secondPort, MAIN_PATH,
-					"tasks/get", "ttl-unlimited", "versioned-task",
-					TENANT_ALPHA);
-			Assertions.assertTrue(unlimited.body().contains("\"ttlMs\":null"),
-					unlimited.body());
+				McpTaskOrigin additiveOrigin = taskOriginWith(source.getTaskOrigin(),
+						"futureOriginMember", McpJsonObject.builder()
+								.put("revision", "future-additive").build());
+				taskManager.putTaskLike("versioned-task", completedTask(
+						"additive-origin-task", additiveOrigin, "nodeAValue",
+						"additive", Duration.ofSeconds(30), LAST_UPDATED_AT));
+				assertTaskResult(taskRequest(secondPort, MAIN_PATH, "tasks/get",
+						"additive-origin", "additive-origin-task", TENANT_ALPHA),
+						"nodeAValue", "additive");
 
-			McpTaskOrigin additiveOrigin = taskOriginWith(source.getTaskOrigin(),
-					"futureOriginMember", McpJsonObject.builder()
-							.put("revision", "future-additive").build());
-			taskManager.putTaskLike("versioned-task", completedTask(
-					"additive-origin-task", additiveOrigin, "nodeAValue",
-					"additive", Duration.ofSeconds(30), LAST_UPDATED_AT));
-			assertTaskResult(taskRequest(secondPort, MAIN_PATH, "tasks/get",
-					"additive-origin", "additive-origin-task", TENANT_ALPHA),
-					"nodeAValue", "additive");
-
-			McpTaskOrigin unsupportedOrigin = taskOriginWith(
-					source.getTaskOrigin(), "formatVersion",
-					McpJsonNumber.fromValue(java.math.BigDecimal.valueOf(2)));
-			taskManager.putTaskLike("versioned-task", completedTask(
-					"unsupported-origin-task", unsupportedOrigin, "nodeAValue",
-					"unsupported-origin-canary", Duration.ofSeconds(30),
-					LAST_UPDATED_AT));
-			HttpResponse<String> unsupported = taskRequest(secondPort, MAIN_PATH,
-					"tasks/get", "unsupported-origin", "unsupported-origin-task",
-					TENANT_ALPHA);
-			assertNoStore(unsupported, 200);
-			Assertions.assertTrue(unsupported.body().contains("\"code\":-32603"),
-					unsupported.body());
-			Assertions.assertFalse(unsupported.body().contains(
-					"unsupported-origin-task"), unsupported.body());
-			Assertions.assertFalse(unsupported.body().contains(
-					"unsupported-origin-canary"), unsupported.body());
-		} finally {
-			second.close();
-			first.close();
-		}
+				McpTaskOrigin unsupportedOrigin = taskOriginWith(
+						source.getTaskOrigin(), "formatVersion",
+						McpJsonNumber.fromValue(java.math.BigDecimal.valueOf(2)));
+				taskManager.putTaskLike("versioned-task", completedTask(
+						"unsupported-origin-task", unsupportedOrigin, "nodeAValue",
+						"unsupported-origin-canary", Duration.ofSeconds(30),
+						LAST_UPDATED_AT));
+				HttpResponse<String> unsupported = taskRequest(secondPort, MAIN_PATH,
+						"tasks/get", "unsupported-origin", "unsupported-origin-task",
+						TENANT_ALPHA);
+				assertNoStore(unsupported, 200);
+				Assertions.assertTrue(unsupported.body().contains("\"code\":-32603"),
+						unsupported.body());
+				Assertions.assertFalse(unsupported.body().contains(
+						"unsupported-origin-task"), unsupported.body());
+				Assertions.assertFalse(unsupported.body().contains(
+						"unsupported-origin-canary"), unsupported.body());
+			});
+		});
 	}
 
 	@Test
@@ -272,85 +261,77 @@ class McpTasksFleetPublicRuntimeTests {
 		McpServer emptyServer = server("node-empty", taskManager,
 				NodeBOutput.class, "nodeBValue");
 		McpServer removedServer = serverWithoutTool("node-removed", taskManager);
-		Soklet roots = managedSoklet(rootsServer);
-		Soklet empty = managedSoklet(emptyServer);
-		Soklet removed = managedSoklet(removedServer);
+		Soklet.run(config(rootsServer), () -> {
+			Soklet.run(config(emptyServer), () -> {
+				Soklet.run(config(removedServer), () -> {
+					assertTaskHandle(callTool(boundPort(rootsServer), "roots-origin",
+							"roots-origin-source", TENANT_ALPHA), "roots-origin-source");
+					McpTask rootsSource = taskManager.requireTask("roots-origin-source");
+					taskManager.putTaskLike(rootsSource.getTaskId(), inputRequiredTask(
+							"persisted-roots-task", rootsSource.getTaskOrigin(),
+							ELICITATION_URL_DECLARATION, "persisted-roots-canary"));
 
-		try {
-			roots.start();
-			empty.start();
-			removed.start();
+					assertRootsInputRequired(taskRequest(boundPort(emptyServer), MAIN_PATH,
+							"tasks/get", "narrower-current-registration",
+							"persisted-roots-task", TENANT_ALPHA, true));
+					assertRootsInputRequired(taskRequest(boundPort(removedServer), MAIN_PATH,
+							"tasks/get", "removed-current-registration",
+							"persisted-roots-task", TENANT_ALPHA, true));
 
-			assertTaskHandle(callTool(boundPort(rootsServer), "roots-origin",
-					"roots-origin-source", TENANT_ALPHA), "roots-origin-source");
-			McpTask rootsSource = taskManager.requireTask("roots-origin-source");
-			taskManager.putTaskLike(rootsSource.getTaskId(), inputRequiredTask(
-					"persisted-roots-task", rootsSource.getTaskOrigin(),
-					ELICITATION_URL_DECLARATION, "persisted-roots-canary"));
+					assertTaskHandle(callTool(boundPort(emptyServer), "empty-origin",
+							"empty-origin-source", TENANT_ALPHA), "empty-origin-source");
+					McpTask emptySource = taskManager.requireTask("empty-origin-source");
+					taskManager.putTaskLike(emptySource.getTaskId(), inputRequiredTask(
+							"current-registration-must-not-broaden",
+							emptySource.getTaskOrigin(), ELICITATION_URL_DECLARATION,
+							"broadened-contract-canary"));
+					assertInvalidOriginWithoutDisclosure(taskRequest(boundPort(rootsServer),
+							MAIN_PATH, "tasks/get", "broader-current-registration",
+							"current-registration-must-not-broaden", TENANT_ALPHA, true),
+							"current-registration-must-not-broaden",
+							"broadened-contract-canary");
 
-			assertRootsInputRequired(taskRequest(boundPort(emptyServer), MAIN_PATH,
-					"tasks/get", "narrower-current-registration",
-					"persisted-roots-task", TENANT_ALPHA, true));
-			assertRootsInputRequired(taskRequest(boundPort(removedServer), MAIN_PATH,
-					"tasks/get", "removed-current-registration",
-					"persisted-roots-task", TENANT_ALPHA, true));
+					McpTaskOrigin missingDeclarations = taskOriginWithout(
+							rootsSource.getTaskOrigin(), "inputRequestDeclarations");
+					taskManager.putTaskLike(rootsSource.getTaskId(), inputRequiredTask(
+							"missing-declarations-task", missingDeclarations,
+							ELICITATION_URL_DECLARATION, "missing-declarations-canary"));
+					assertInvalidOriginWithoutDisclosure(taskRequest(boundPort(rootsServer),
+							MAIN_PATH, "tasks/get", "missing-declarations",
+							"missing-declarations-task", TENANT_ALPHA, true),
+							"missing-declarations-task", "missing-declarations-canary");
 
-			assertTaskHandle(callTool(boundPort(emptyServer), "empty-origin",
-					"empty-origin-source", TENANT_ALPHA), "empty-origin-source");
-			McpTask emptySource = taskManager.requireTask("empty-origin-source");
-			taskManager.putTaskLike(emptySource.getTaskId(), inputRequiredTask(
-					"current-registration-must-not-broaden",
-					emptySource.getTaskOrigin(), ELICITATION_URL_DECLARATION,
-					"broadened-contract-canary"));
-			assertInvalidOriginWithoutDisclosure(taskRequest(boundPort(rootsServer),
-					MAIN_PATH, "tasks/get", "broader-current-registration",
-					"current-registration-must-not-broaden", TENANT_ALPHA, true),
-					"current-registration-must-not-broaden",
-					"broadened-contract-canary");
+					McpTaskOrigin malformedDeclarations = taskOriginWith(
+							rootsSource.getTaskOrigin(), "inputRequestDeclarations",
+							McpJsonObject.emptyInstance());
+					taskManager.putTaskLike(rootsSource.getTaskId(), inputRequiredTask(
+							"malformed-declarations-task", malformedDeclarations,
+							ELICITATION_URL_DECLARATION, "malformed-declarations-canary"));
+					assertInvalidOriginWithoutDisclosure(taskRequest(boundPort(rootsServer),
+							MAIN_PATH, "tasks/get", "malformed-declarations",
+							"malformed-declarations-task", TENANT_ALPHA, true),
+							"malformed-declarations-task", "malformed-declarations-canary");
 
-			McpTaskOrigin missingDeclarations = taskOriginWithout(
-					rootsSource.getTaskOrigin(), "inputRequestDeclarations");
-			taskManager.putTaskLike(rootsSource.getTaskId(), inputRequiredTask(
-					"missing-declarations-task", missingDeclarations,
-					ELICITATION_URL_DECLARATION, "missing-declarations-canary"));
-			assertInvalidOriginWithoutDisclosure(taskRequest(boundPort(rootsServer),
-					MAIN_PATH, "tasks/get", "missing-declarations",
-					"missing-declarations-task", TENANT_ALPHA, true),
-					"missing-declarations-task", "missing-declarations-canary");
-
-			McpTaskOrigin malformedDeclarations = taskOriginWith(
-					rootsSource.getTaskOrigin(), "inputRequestDeclarations",
-					McpJsonObject.emptyInstance());
-			taskManager.putTaskLike(rootsSource.getTaskId(), inputRequiredTask(
-					"malformed-declarations-task", malformedDeclarations,
-					ELICITATION_URL_DECLARATION, "malformed-declarations-canary"));
-			assertInvalidOriginWithoutDisclosure(taskRequest(boundPort(rootsServer),
-					MAIN_PATH, "tasks/get", "malformed-declarations",
-					"malformed-declarations-task", TENANT_ALPHA, true),
-					"malformed-declarations-task", "malformed-declarations-canary");
-
-			for (String retiredType : List.of("roots", "sampling")) {
-				String taskId = "retired-" + retiredType + "-task";
-				String canary = "retired-" + retiredType + "-canary";
-				McpJsonObject retiredDeclaration = McpJsonObject.builder()
-						.put("inputRequestType", retiredType)
-						.put("capabilities", McpJsonArray.builder().add(retiredType).build())
-						.put("requirement", "conditional")
-						.build();
-				McpTaskOrigin retiredOrigin = taskOriginWith(rootsSource.getTaskOrigin(),
-						"inputRequestDeclarations",
-						McpJsonArray.builder().add(retiredDeclaration).build());
-				taskManager.putTaskLike(rootsSource.getTaskId(), inputRequiredTask(
-						taskId, retiredOrigin, ELICITATION_URL_DECLARATION, canary));
-				assertInvalidOriginWithoutDisclosure(taskRequest(boundPort(rootsServer),
-						MAIN_PATH, "tasks/get", "retired-" + retiredType,
-						taskId, TENANT_ALPHA, true), taskId, canary);
-			}
-		} finally {
-			removed.close();
-			empty.close();
-			roots.close();
-		}
+					for (String retiredType : List.of("roots", "sampling")) {
+						String taskId = "retired-" + retiredType + "-task";
+						String canary = "retired-" + retiredType + "-canary";
+						McpJsonObject retiredDeclaration = McpJsonObject.builder()
+								.put("inputRequestType", retiredType)
+								.put("capabilities", McpJsonArray.builder().add(retiredType).build())
+								.put("requirement", "conditional")
+								.build();
+						McpTaskOrigin retiredOrigin = taskOriginWith(rootsSource.getTaskOrigin(),
+								"inputRequestDeclarations",
+								McpJsonArray.builder().add(retiredDeclaration).build());
+						taskManager.putTaskLike(rootsSource.getTaskId(), inputRequiredTask(
+								taskId, retiredOrigin, ELICITATION_URL_DECLARATION, canary));
+						assertInvalidOriginWithoutDisclosure(taskRequest(boundPort(rootsServer),
+								MAIN_PATH, "tasks/get", "retired-" + retiredType,
+								taskId, TENANT_ALPHA, true), taskId, canary);
+					}
+				});
+			});
+		});
 	}
 
 	@NonNull
@@ -427,11 +408,11 @@ class McpTasksFleetPublicRuntimeTests {
 	}
 
 	@NonNull
-	private static Soklet managedSoklet(@NonNull McpServer server) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+	private static SokletConfig config(@NonNull McpServer server) {
+		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
-				.build());
+				.build();
 	}
 
 	private static int boundPort(@NonNull McpServer server) {

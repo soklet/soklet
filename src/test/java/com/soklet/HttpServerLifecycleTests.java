@@ -90,7 +90,7 @@ public class HttpServerLifecycleTests {
 				readAll(connection.getInputStream()), StandardCharsets.UTF_8));
 
 		CompletionStage<ShutdownResult> stage = soklet.shutdown();
-		ShutdownResult result = soklet.awaitShutdown();
+		ShutdownResult result = soklet.awaitCoreShutdown();
 		Assertions.assertSame(result, stage.toCompletableFuture().join());
 		Assertions.assertSame(result, soklet.getShutdownResult().orElseThrow());
 		Assertions.assertEquals(SokletStatus.CLOSED, soklet.getStatus());
@@ -145,7 +145,7 @@ public class HttpServerLifecycleTests {
 		Field selectorField = EventLoop.class.getDeclaredField("selector");
 		selectorField.setAccessible(true);
 		((Selector) selectorField.get(eventLoop)).close();
-		ShutdownResult result = soklet.awaitShutdown();
+		ShutdownResult result = soklet.awaitCoreShutdown();
 		Assertions.assertEquals(SokletStatus.CLOSED, soklet.getStatus());
 		Assertions.assertEquals(ShutdownComponentType.HTTP,
 				result.getUnexpectedShutdownComponentTermination().orElseThrow()
@@ -180,7 +180,7 @@ public class HttpServerLifecycleTests {
 		selectorField.setAccessible(true);
 		((Selector) selectorField.get(eventLoop)).close();
 
-		ShutdownResult result = soklet.awaitShutdown();
+		ShutdownResult result = soklet.awaitCoreShutdown();
 		Assertions.assertEquals(SokletStatus.CLOSED, soklet.getStatus());
 		Assertions.assertEquals(StartupDisposition.READY,
 				result.getStartupDisposition());
@@ -284,9 +284,8 @@ public class HttpServerLifecycleTests {
 				.requestHeaderTimeout(Duration.ofSeconds(5))
 				.requestHandlerExecutorServiceSupplier(() -> executor)
 				.build();
-		try (Soklet soklet = Soklet.fromConfig(configuration(server,
-				HealthResource.class))) {
-			soklet.start();
+		Soklet.run(configuration(server,
+				HealthResource.class), () -> {
 			HttpURLConnection connection = open("GET",
 					new URL("http://127.0.0.1:" + port + "/health"), Map.of());
 			Assertions.assertEquals(503, connection.getResponseCode());
@@ -295,7 +294,7 @@ public class HttpServerLifecycleTests {
 				input = connection.getInputStream();
 			Assertions.assertTrue(new String(readAll(input),
 					StandardCharsets.UTF_8).contains("HTTP 503"));
-		}
+		});
 	}
 
 	@Test
@@ -306,13 +305,14 @@ public class HttpServerLifecycleTests {
 		ThreadRecordingResource.HANDLER_THREAD_VIRTUAL.set(handlerThreadVirtual);
 		HttpServer server = HttpServer.withPort(port)
 				.requestHeaderTimeout(Duration.ofSeconds(5)).build();
-		try (Soklet soklet = Soklet.fromConfig(configuration(server,
-				ThreadRecordingResource.class))) {
-			soklet.start();
-			HttpURLConnection connection = open("GET",
-					new URL("http://127.0.0.1:" + port + "/thread"), Map.of());
-			Assertions.assertEquals(200, connection.getResponseCode());
-			Assertions.assertEquals(Boolean.TRUE, handlerThreadVirtual.get());
+		try {
+			Soklet.run(configuration(server,
+				ThreadRecordingResource.class), () -> {
+				HttpURLConnection connection = open("GET",
+						new URL("http://127.0.0.1:" + port + "/thread"), Map.of());
+				Assertions.assertEquals(200, connection.getResponseCode());
+				Assertions.assertEquals(Boolean.TRUE, handlerThreadVirtual.get());
+		});
 		} finally {
 			ThreadRecordingResource.HANDLER_THREAD_VIRTUAL.set(null);
 		}
@@ -334,8 +334,7 @@ public class HttpServerLifecycleTests {
 				})
 				.metricsCollector(metrics).build();
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
+		Soklet.run(config, () -> {
 			AssertionError throwable = new AssertionError("boom");
 			Logger logger = ((DefaultHttpServer) server).transportLogger();
 			logger.logFailure(throwable,
@@ -364,7 +363,7 @@ public class HttpServerLifecycleTests {
 									ServerType.HTTP,
 									MetricsCollector.TransportFailureReason
 											.RESPONSE_WRITE_IDLE_TIMEOUT)));
-		}
+		});
 	}
 
 	@Test

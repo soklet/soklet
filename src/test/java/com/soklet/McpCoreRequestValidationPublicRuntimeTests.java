@@ -44,8 +44,7 @@ class McpCoreRequestValidationPublicRuntimeTests {
 		};
 		SokletConfig config = SokletConfig.withMcpServer(server).resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.metricsCollector(collector).lifecycleObserver(observer).build();
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start(); int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
+		Soklet.run(config, () -> { int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			for (McpProtocolVersion version : List.of(McpProtocolVersion.V2026_07_28, McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25)) {
 				String revision = version.getWireValue();
 				String body = body(revision);
@@ -62,7 +61,7 @@ class McpCoreRequestValidationPublicRuntimeTests {
 			String control = send(port, "/mcp?value=%C3%A9", "application/json", "2026-07-28", body("2026-07-28"));
 			assertTrue(control.startsWith("HTTP/1.1 200"), control); assertTrue(control.contains("\"text\":\"ok\""), control);
 			assertEquals(1, admissions.get()); assertEquals(1, handlers.get());
-		}
+		});
 	}
 
 	private static String body(String revision) {

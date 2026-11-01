@@ -806,10 +806,8 @@ public final class SokletSimulator {
 		private List<Throwable> mergedFailures(
 				InternalTerminationGroup.@NonNull EvidenceSnapshot evidence,
 				@NonNull List<? extends Throwable> infrastructureFailures) {
-			List<Throwable> merged = new ArrayList<>();
-			for (InternalTerminationEvent event
-					: requireNonNull(evidence).primaryEvents())
-				event.cause().ifPresent(merged::add);
+			List<Throwable> merged = new ArrayList<>(
+					requireNonNull(evidence).failures());
 			for (Throwable failure : requireNonNull(infrastructureFailures))
 				if (merged.stream().noneMatch(candidate -> sameInstance(candidate, failure)))
 					merged.add(failure);

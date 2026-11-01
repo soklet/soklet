@@ -259,6 +259,7 @@ public class McpRequestMetricOrderingTests {
 	private static void runtimeCase(String producer) throws Exception {
 		RecordingCollector collector = new RecordingCollector();
 		DefaultMcpServer server = server(collector);
+		// The ordering race installs a proxy into the attached runtime before startup.
 		Soklet owner = Soklet.fromConfig(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.metricsCollector(collector).lifecyclePolicy(LifecyclePolicy.builder()

@@ -132,10 +132,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 		};
 		McpServer server = server(List.of(ordinaryTool, shortCircuitedTool),
 				interceptor, sanitizer);
-		Soklet soklet = managedSoklet(server);
-
-		try {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = boundPort(server);
 
 			HttpResponse<String> ordinary = call(port, "ordered-ordinary",
@@ -163,9 +160,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 					"sanitizer:short-circuited"), stages);
 			Assertions.assertEquals(0,
 					shortCircuitedHandlerInvocations.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -217,10 +212,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 						: completeResult;
 		McpServer server = server(tools,
 				McpHandlerInterceptor.passThroughInstance(), sanitizer);
-		Soklet soklet = managedSoklet(server);
-
-		try {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = boundPort(server);
 			for (String toolName : List.of("deep-handler", "deep-metadata",
 					"deep-sanitizer", "wide-content")) {
@@ -237,9 +229,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 					"healthy", "{}");
 			assertSuccess(healthy, "bounded-healthy");
 			assertContains(healthy.body(), "HEALTHY-AFTER-BOUNDS");
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -298,10 +288,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 		};
 		McpServer server = server(List.of(tool, toolWithoutMirror),
 				McpHandlerInterceptor.passThroughInstance(), sanitizer);
-		Soklet soklet = managedSoklet(server);
-
-		try {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = boundPort(server);
 
 			HttpResponse<String> validReplacement = call(port,
@@ -375,9 +362,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 					.contains("INVALID-SANITIZED-VALUE"), invalidError.body());
 
 			Assertions.assertEquals(8, sanitizerInvocations.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	private static void assertSanitizerFailure(String suffix,
@@ -392,10 +377,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 				.build();
 		McpServer server = server(List.of(tool),
 				McpHandlerInterceptor.passThroughInstance(), sanitizer);
-		Soklet soklet = managedSoklet(server);
-
-		try {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			String requestId = "failure-" + suffix;
 			HttpResponse<String> response = call(boundPort(server), requestId,
 					toolName, "{}");
@@ -405,9 +387,7 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 			Assertions.assertFalse(response.body()
 					.contains("SANITIZER-EXCEPTION-MUST-NOT-LEAK"),
 					response.body());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	private static McpToolRegistration<McpJsonObject> jsonTool(String name,
@@ -432,12 +412,12 @@ public class McpToolOutputSanitizerPublicRuntimeTests {
 		return (McpJsonObject) value;
 	}
 
-	private static Soklet managedSoklet(McpServer server) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+	private static SokletConfig managedSokletConfig(McpServer server) {
+		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
-				.build());
+				.build();
 	}
 
 	private static McpServer server(List<McpToolRegistration<?>> tools,

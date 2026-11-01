@@ -47,7 +47,6 @@ import javax.tools.JavaCompiler;
 import javax.tools.JavaFileObject;
 import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
-import java.lang.reflect.AnnotatedArrayType;
 import java.lang.reflect.AnnotatedParameterizedType;
 import java.lang.reflect.AnnotatedType;
 import java.lang.reflect.AnnotatedWildcardType;
@@ -189,7 +188,7 @@ class PublicApiContractTests {
 				.getAnnotatedReturnType(), 0, NonNull.class);
 		assertTypeArgument(SokletConfig.class.getMethod("getSseServer")
 				.getAnnotatedReturnType(), 0, NonNull.class);
-		assertTypeArgument(Soklet.class.getMethod("shutdown")
+		assertTypeArgument(Soklet.class.getMethod("awaitShutdownAsync")
 				.getAnnotatedReturnType(), 0, NonNull.class);
 		assertTypeArgument(TransportDelegateAttachment.class
 				.getMethod("whenTerminated").getAnnotatedReturnType(), 0,
@@ -208,13 +207,11 @@ class PublicApiContractTests {
 		assertSupplierPayload(HttpServer.Builder.class);
 		assertSupplierPayload(SseServer.Builder.class);
 
-		Method run = SokletApplication.class.getMethod("run",
-				ShutdownTrigger[].class);
-		AnnotatedArrayType triggers = Assertions.assertInstanceOf(
-				AnnotatedArrayType.class, run.getAnnotatedParameterTypes()[0]);
-		assertExactNullness(triggers, NonNull.class);
-		assertExactNullness(triggers.getAnnotatedGenericComponentType(),
-				NonNull.class);
+		Method run = Soklet.class.getMethod("run",
+				SokletConfig.class, Soklet.RunAction.class);
+		AnnotatedType action = run.getAnnotatedParameterTypes()[1];
+		assertExactNullness(action, NonNull.class);
+		assertTypeArgument(action, 0, NonNull.class);
 
 		AnnotatedType observers = SimulatorConfig.Builder.class.getMethod(
 				"lifecycleObservers", java.util.Collection.class)

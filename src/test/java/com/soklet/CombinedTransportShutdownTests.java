@@ -74,7 +74,7 @@ class CombinedTransportShutdownTests {
 			assertEquals(StreamTerminationReason.COMPLETED, fixture.httpTermination.get().getReason());
 			assertNull(fixture.httpPhases.forced.get());
 			assertNull(fixture.ssePhases.forced.get());
-			assertSame(result, fixture.soklet.awaitShutdown());
+			assertSame(result, fixture.soklet.awaitCoreShutdown());
 			fixture.assertPhysicalTermination();
 		}
 	}

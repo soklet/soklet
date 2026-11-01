@@ -132,7 +132,7 @@ class ResidualWorkerProcessTests {
 			Thread client = new Thread(() -> fixture.drive(config), "residual-fixture-client");
 			client.setDaemon(true); client.start();
 			try {
-				SokletApplication.fromConfig(config).run(ShutdownCleanup.fromTimeoutAndAction(Duration.ofMillis(100),
+				SokletProcessLifecycle.fromConfig(config).run(ShutdownCleanup.fromTimeoutAndAction(Duration.ofMillis(100),
 						result -> fixture.write("cleanup", "unexpected")));
 				throw new AssertionError("Blocked runtime must not report complete shutdown");
 			} catch (SokletShutdownIncompleteException failure) {
@@ -194,7 +194,7 @@ class ResidualWorkerProcessTests {
 				stream.write("body".getBytes(StandardCharsets.UTF_8));
 			}).build();
 		}
-		@Override public void didStartSoklet(@NonNull Soklet soklet) { this.ready.countDown(); }
+		@Override public void didStartSoklet() { this.ready.countDown(); }
 		@Override public void didTerminateResponseStream(@NonNull StreamingResponseHandle handle, @NonNull StreamTermination termination) {
 			if (this.mode.equals("STREAM_TERMINATION")) block();
 		}

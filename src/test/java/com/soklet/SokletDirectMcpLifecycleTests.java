@@ -271,13 +271,11 @@ final class SokletDirectMcpLifecycleTests {
 			Assertions.assertSame(startupFailure, thrown.getCause());
 			Assertions.assertTrue(applicationExecutor.awaitShutdownAttempted(),
 					"Failed-start unwind did not reach executor cleanup");
-			Throwable[] suppressed = startupFailure.getSuppressed();
-			Assertions.assertEquals(1, suppressed.length);
-			Assertions.assertSame(cleanupFailure, suppressed[0]);
+			Assertions.assertEquals(0, startupFailure.getSuppressed().length);
 			InternalLifecycleComponentShutdownResult mcp = thrown
 					.getInternalShutdownResult()
 					.participantResult(InternalLifecycleComponentType.MCP).orElseThrow();
-			Assertions.assertSame(startupFailure, mcp.failures().get(0));
+			Assertions.assertEquals(List.of(startupFailure, cleanupFailure), mcp.failures());
 			Assertions.assertSame(thrown.getInternalShutdownResult(),
 					soklet.getDirectLifecycle().result().orElseThrow());
 		} finally {

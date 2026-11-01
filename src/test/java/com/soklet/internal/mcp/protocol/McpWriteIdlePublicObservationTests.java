@@ -152,97 +152,97 @@ class McpWriteIdlePublicObservationTests {
 					transportFailureRecorded.countDown();
 			}
 		};
-		Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+		Soklet.run(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObservers(List.of(observer)).metricsCollector(collector)
 				.lifecyclePolicy(LifecyclePolicy.builder()
 						.startupTimeout(Duration.ofSeconds(10))
 						.startupCancelationTimeout(Duration.ofSeconds(1))
 						.gracefulShutdownTimeout(Duration.ofSeconds(2))
-						.forcedShutdownTimeout(Duration.ofSeconds(1)).build()).build());
-		WritableSource source = null;
-		try {
-			soklet.start();
-			InetSocketAddress address = server.getDiagnostics().getBoundAddress().orElseThrow();
-			McpHttpServerRuntime runtime = (McpHttpServerRuntime)
-					field(field(server, "runtimeBridge"), "runtime");
-			MicrohttpRequest request = request(address, version);
-			Method submit = McpHttpServerRuntime.class.getDeclaredMethod("submitRequest",
-					ThreadPoolExecutor.class, McpApplicationExecution.class,
-					InetSocketAddress.class, MicrohttpRequest.class, Request.class,
-					McpSimulationRuntime.class, Runnable.class, Consumer.class);
-			submit.setAccessible(true);
-			submit.invoke(runtime, field(runtime, "requestProcessor"),
-					field(runtime, "applicationExecution"), address, request, null, null,
-					null, (Consumer<MicrohttpResponse>) offered -> {
-						response.set(offered);
-						responseOffered.countDown();
-					});
-			assertTrue(responseOffered.await(5, TimeUnit.SECONDS));
-			assertTrue(response.get().streaming());
-			Method newBodySource = MicrohttpResponse.class.getDeclaredMethod("newBodySource");
-			newBodySource.setAccessible(true);
-			source = (WritableSource) newBodySource.invoke(response.get());
-			source.writeReadyCallback(() -> {});
-			source.start();
-			assertEquals(1, runtime.diagnosticsSnapshot().activeRequestStreams());
-			assertFalse(token.get().isCanceled());
-			Object control = ((Map<?, ?>) field(runtime, "requestControls")).get(request);
-			assertNotNull(control);
-			long deadline = (Long) field(control, "deadlineNanos");
-			long now;
-			if (expireRequestDeadline) {
-				assertTrue(handlerExited.await(5, TimeUnit.SECONDS));
-				// The terminal result must be reserved before the protocol timer owns
-				// the request deadline; the unwritten body still holds the stream open.
-				awaitTerminalReservation(control);
-				now = deadline;
-			} else {
-				now = System.nanoTime() + WRITE_TIMEOUT.toNanos();
-				assertTrue(now - deadline < 0L, "The request deadline must remain open");
+						.forcedShutdownTimeout(Duration.ofSeconds(1)).build()).build(), () -> {
+			WritableSource source = null;
+			try {
+				InetSocketAddress address = server.getDiagnostics().getBoundAddress().orElseThrow();
+				McpHttpServerRuntime runtime = (McpHttpServerRuntime)
+						field(field(server, "runtimeBridge"), "runtime");
+				MicrohttpRequest request = request(address, version);
+				Method submit = McpHttpServerRuntime.class.getDeclaredMethod("submitRequest",
+						ThreadPoolExecutor.class, McpApplicationExecution.class,
+						InetSocketAddress.class, MicrohttpRequest.class, Request.class,
+						McpSimulationRuntime.class, Runnable.class, Consumer.class);
+				submit.setAccessible(true);
+				submit.invoke(runtime, field(runtime, "requestProcessor"),
+						field(runtime, "applicationExecution"), address, request, null, null,
+						null, (Consumer<MicrohttpResponse>) offered -> {
+							response.set(offered);
+							responseOffered.countDown();
+						});
+				assertTrue(responseOffered.await(5, TimeUnit.SECONDS));
+				assertTrue(response.get().streaming());
+				Method newBodySource = MicrohttpResponse.class.getDeclaredMethod("newBodySource");
+				newBodySource.setAccessible(true);
+				source = (WritableSource) newBodySource.invoke(response.get());
+				source.writeReadyCallback(() -> {});
+				source.start();
+				assertEquals(1, runtime.diagnosticsSnapshot().activeRequestStreams());
+				assertFalse(token.get().isCanceled());
+				Object control = ((Map<?, ?>) field(runtime, "requestControls")).get(request);
+				assertNotNull(control);
+				long deadline = (Long) field(control, "deadlineNanos");
+				long now;
+				if (expireRequestDeadline) {
+					assertTrue(handlerExited.await(5, TimeUnit.SECONDS));
+					// The terminal result must be reserved before the protocol timer owns
+					// the request deadline; the unwritten body still holds the stream open.
+					awaitTerminalReservation(control);
+					now = deadline;
+				} else {
+					now = System.nanoTime() + WRITE_TIMEOUT.toNanos();
+					assertTrue(now - deadline < 0L, "The request deadline must remain open");
+				}
+				// Start the writer but never write a byte. Drive the real control's timer forward
+				// rather than allocating enough output to fill an OS socket buffer.
+				Method timer = control.getClass().getDeclaredMethod("onTimer", long.class);
+				timer.setAccessible(true);
+				timer.invoke(control, now);
+				assertTrue(requestFinished.await(5, TimeUnit.SECONDS));
+				assertTrue(metricsFinished.await(5, TimeUnit.SECONDS));
+				McpStreamTerminationReason expectedReason = expireRequestDeadline
+						? McpStreamTerminationReason.DEADLINE_EXCEEDED
+						: McpStreamTerminationReason.WRITE_FAILED;
+				McpRequestOutcome expectedOutcome = expireRequestDeadline
+						? McpRequestOutcome.DEADLINE_EXCEEDED : McpRequestOutcome.WRITE_FAILED;
+				assertEquals(List.of(expectedOutcome), outcomes);
+				List<McpMetricsEvent.RequestStreamClosed> closes = events.stream()
+						.filter(McpMetricsEvent.RequestStreamClosed.class::isInstance)
+						.map(McpMetricsEvent.RequestStreamClosed.class::cast).toList();
+				assertEquals(1, closes.size());
+				assertEquals(expectedReason, closes.get(0).getReason());
+				assertEquals(List.of(expectedOutcome), events.stream()
+						.filter(McpMetricsEvent.RequestFinished.class::isInstance)
+						.map(McpMetricsEvent.RequestFinished.class::cast)
+						.map(McpMetricsEvent.RequestFinished::getOutcome).toList());
+				assertEquals(0, runtime.diagnosticsSnapshot().activeRequestStreams());
+				if (!expireRequestDeadline) {
+					assertTrue(handlerExited.await(5, TimeUnit.SECONDS));
+					assertTrue(transportFailureRecorded.await(5, TimeUnit.SECONDS));
+					assertEquals(Optional.of(StreamTerminationReason.RESPONSE_IDLE_TIMEOUT),
+							token.get().getCancelationReason());
+					assertEquals(List.of(MetricsCollector.TransportFailureReason.WRITE_TIMEOUT),
+							events.stream().filter(McpMetricsEvent.TransportFailure.class::isInstance)
+									.map(McpMetricsEvent.TransportFailure.class::cast)
+									.map(McpMetricsEvent.TransportFailure::getReason).toList());
+				} else {
+					assertTrue(events.stream().noneMatch(
+							McpMetricsEvent.TransportFailure.class::isInstance));
+				}
+			} finally {
+				releaseHandler.countDown();
+				if (source != null)
+					source.close(StreamTerminationReason.SERVER_STOPPING, null);
+
 			}
-			// Start the writer but never write a byte. Drive the real control's timer forward
-			// rather than allocating enough output to fill an OS socket buffer.
-			Method timer = control.getClass().getDeclaredMethod("onTimer", long.class);
-			timer.setAccessible(true);
-			timer.invoke(control, now);
-			assertTrue(requestFinished.await(5, TimeUnit.SECONDS));
-			assertTrue(metricsFinished.await(5, TimeUnit.SECONDS));
-			McpStreamTerminationReason expectedReason = expireRequestDeadline
-					? McpStreamTerminationReason.DEADLINE_EXCEEDED
-					: McpStreamTerminationReason.WRITE_FAILED;
-			McpRequestOutcome expectedOutcome = expireRequestDeadline
-					? McpRequestOutcome.DEADLINE_EXCEEDED : McpRequestOutcome.WRITE_FAILED;
-			assertEquals(List.of(expectedOutcome), outcomes);
-			List<McpMetricsEvent.RequestStreamClosed> closes = events.stream()
-					.filter(McpMetricsEvent.RequestStreamClosed.class::isInstance)
-					.map(McpMetricsEvent.RequestStreamClosed.class::cast).toList();
-			assertEquals(1, closes.size());
-			assertEquals(expectedReason, closes.get(0).getReason());
-			assertEquals(List.of(expectedOutcome), events.stream()
-					.filter(McpMetricsEvent.RequestFinished.class::isInstance)
-					.map(McpMetricsEvent.RequestFinished.class::cast)
-					.map(McpMetricsEvent.RequestFinished::getOutcome).toList());
-			assertEquals(0, runtime.diagnosticsSnapshot().activeRequestStreams());
-			if (!expireRequestDeadline) {
-				assertTrue(handlerExited.await(5, TimeUnit.SECONDS));
-				assertTrue(transportFailureRecorded.await(5, TimeUnit.SECONDS));
-				assertEquals(Optional.of(StreamTerminationReason.RESPONSE_IDLE_TIMEOUT),
-						token.get().getCancelationReason());
-				assertEquals(List.of(MetricsCollector.TransportFailureReason.WRITE_TIMEOUT),
-						events.stream().filter(McpMetricsEvent.TransportFailure.class::isInstance)
-								.map(McpMetricsEvent.TransportFailure.class::cast)
-								.map(McpMetricsEvent.TransportFailure::getReason).toList());
-			} else {
-				assertTrue(events.stream().noneMatch(
-						McpMetricsEvent.TransportFailure.class::isInstance));
-			}
-		} finally {
-			releaseHandler.countDown();
-			if (source != null)
-				source.close(StreamTerminationReason.SERVER_STOPPING, null);
-			soklet.close();
-		}
+		});
 	}
 
 	private static MicrohttpRequest request(InetSocketAddress address,

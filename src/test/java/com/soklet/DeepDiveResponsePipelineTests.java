@@ -97,16 +97,15 @@ class DeepDiveResponsePipelineTests {
 				planned.add(new String(response.bodyBytesOrEmpty(), StandardCharsets.UTF_8));
 				return ResponseCompressionPlan.compress(ResponseCompressionCodec.gzipInstance());
 			}).build();
-			try (Soklet owner = Soklet.fromConfig(config(new Resource(), server)
-					.responseMarshaler(decorated ? forwarding(delegate) : delegate).build())) {
-				owner.start();
+			Soklet.run(config(new Resource(), server)
+					.responseMarshaler(decorated ? forwarding(delegate) : delegate).build(), () -> {
 				String get = exchange(port, "GET /body HTTP/1.1\r\nHost: localhost\r\nAccept-Encoding: gzip\r\nConnection: close\r\n\r\n");
 				String head = exchange(port, "HEAD /body HTTP/1.1\r\nHost: localhost\r\nAccept-Encoding: gzip\r\nConnection: close\r\n\r\n");
 				assertTrue(get.contains("Content-Encoding: gzip\r\n"), get);
 				assertTrue(head.contains("Content-Encoding: gzip\r\n"), head);
 				assertEquals(List.of("post:body", "post:body"), planned);
 				assertEquals(2, calls.get());
-			}
+			});
 		}
 	}
 
@@ -181,10 +180,9 @@ class DeepDiveResponsePipelineTests {
 			assertEquals(500, ((SseRequestResult.RequestFailed) result).getHttpRequestResult().getMarshaledResponse().getStatusCode());
 		});
 		int port = TestSupport.findFreePort();
-		try (Soklet owner = Soklet.fromConfig(sseConfig(new Events(), port).responseMarshaler(marshaler).build())) {
-			owner.start();
+		Soklet.run(sseConfig(new Events(), port).responseMarshaler(marshaler).build(), () -> {
 			assertTrue(exchange(port, "GET /events HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n").startsWith("HTTP/1.1 500 "));
-		}
+		});
 	}
 
 	@Test
@@ -253,18 +251,17 @@ class DeepDiveResponsePipelineTests {
 		int port = TestSupport.findFreePort();
 		HttpServer server = HttpServer.withPort(port).host("127.0.0.1")
 				.requestHandlerTimeout(Duration.ofMillis(200)).build();
-		try (Soklet owner = Soklet.fromConfig(config(resource, server).responseMarshaler(ResponseMarshaler.builder()
+		Soklet.run(config(resource, server).responseMarshaler(ResponseMarshaler.builder()
 				.postProcessor(response -> { postprocessed.incrementAndGet(); return response; })
 				.serviceUnavailableHandler((request, method) -> { unavailable.incrementAndGet(); return MarshaledResponse.fromStatusCode(503); })
-				.build()).build())) {
-			owner.start();
+				.build()).build(), () -> {
 			try {
 				String wire = exchange(port, "GET /body HTTP/1.1\r\nHost: localhost\r\nOrigin: https://example.test\r\n\r\n");
 				assertTrue(wire.startsWith("HTTP/1.1 503 "), wire);
 				assertEquals(0, postprocessed.get());
 				assertEquals(0, unavailable.get());
 			} finally { resource.block.countDown(); }
-		}
+		});
 	}
 
 	@Test
@@ -275,8 +272,7 @@ class DeepDiveResponsePipelineTests {
 		try (ThreadPoolExecutor workers = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.SECONDS, new ArrayBlockingQueue<>(1))) {
 			HttpServer server = HttpServer.withPort(port).host("127.0.0.1").requestHandlerTimeout(Duration.ofSeconds(10))
 					.requestHandlerExecutorServiceSupplier(() -> workers).build();
-			try (Soklet owner = Soklet.fromConfig(config(resource, server).responseMarshaler(prefixing(postprocessed)).build())) {
-				owner.start();
+			Soklet.run(config(resource, server).responseMarshaler(prefixing(postprocessed)).build(), () -> {
 				try (Socket first = new Socket("127.0.0.1", port); Socket second = new Socket("127.0.0.1", port)) {
 					String request = "GET /body HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
 					first.getOutputStream().write(request.getBytes(StandardCharsets.US_ASCII));
@@ -289,7 +285,7 @@ class DeepDiveResponsePipelineTests {
 					assertTrue(wire.startsWith("HTTP/1.1 503 "), wire);
 					assertEquals(0, postprocessed.get());
 				} finally { resource.block.countDown(); }
-			}
+			});
 		}
 	}
 

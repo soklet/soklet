@@ -103,25 +103,26 @@ public class SimulatorStreamingContractTests {
 			Assertions.assertTrue(releaseFailure.await(3, TimeUnit.SECONDS)); throw failure;
 		});
 		int port = findFreePort();
-		try (Soklet soklet = Soklet.fromConfig(config(HttpServer.withPort(port).host("127.0.0.1")
-				.streamingResponseTimeout(Duration.ofSeconds(5)).streamingResponseIdleTimeout(Duration.ofSeconds(5)).build(), resource, observation))) {
-			soklet.start();
-			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000)) {
-				socket.setSoTimeout(3000);
-				socket.getOutputStream().write("GET /contract HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n".getBytes(StandardCharsets.ISO_8859_1));
-				InputStream input = socket.getInputStream(); String head = readHead(input);
-				Assertions.assertTrue(head.startsWith("HTTP/1.1 200 OK\r\n"), head);
-				String prefixChunk = "6\r\nprefix\r\n";
-				Assertions.assertEquals(prefixChunk, new String(input.readNBytes(prefixChunk.length()), StandardCharsets.ISO_8859_1));
-				releaseFailure.countDown();
-				Assertions.assertEquals(0, input.readAllBytes().length, "A failed body must not send the successful final chunk");
-			}
-			Assertions.assertTrue(observation.finished.await(3, TimeUnit.SECONDS));
-			Assertions.assertTrue(closeFinished.await(3, TimeUnit.SECONDS), "Termination observation can precede physical cleanup");
-			Assertions.assertEquals(1, closed.get());
-			Assertions.assertEquals(1, observation.calls.get());
-			Assertions.assertEquals(StreamTerminationReason.PRODUCER_FAILED, observation.termination.get().getReason());
-			Assertions.assertSame(failure, observation.termination.get().getCause().orElseThrow());
+		try {
+			Soklet.run(config(HttpServer.withPort(port).host("127.0.0.1")
+					.streamingResponseTimeout(Duration.ofSeconds(5)).streamingResponseIdleTimeout(Duration.ofSeconds(5)).build(), resource, observation), () -> {
+				try (Socket socket = connectWithRetry("127.0.0.1", port, 2000)) {
+					socket.setSoTimeout(3000);
+					socket.getOutputStream().write("GET /contract HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n".getBytes(StandardCharsets.ISO_8859_1));
+					InputStream input = socket.getInputStream(); String head = readHead(input);
+					Assertions.assertTrue(head.startsWith("HTTP/1.1 200 OK\r\n"), head);
+					String prefixChunk = "6\r\nprefix\r\n";
+					Assertions.assertEquals(prefixChunk, new String(input.readNBytes(prefixChunk.length()), StandardCharsets.ISO_8859_1));
+					releaseFailure.countDown();
+					Assertions.assertEquals(0, input.readAllBytes().length, "A failed body must not send the successful final chunk");
+				}
+				Assertions.assertTrue(observation.finished.await(3, TimeUnit.SECONDS));
+				Assertions.assertTrue(closeFinished.await(3, TimeUnit.SECONDS), "Termination observation can precede physical cleanup");
+				Assertions.assertEquals(1, closed.get());
+				Assertions.assertEquals(1, observation.calls.get());
+				Assertions.assertEquals(StreamTerminationReason.PRODUCER_FAILED, observation.termination.get().getReason());
+				Assertions.assertSame(failure, observation.termination.get().getCause().orElseThrow());
+			});
 		} finally { releaseFailure.countDown(); }
 	}
 
@@ -151,8 +152,7 @@ public class SimulatorStreamingContractTests {
 					Assertions.assertEquals("ok", new String(result.getMarshaledResponse().bodyBytesOrEmpty(), StandardCharsets.UTF_8));
 				});
 			} else {
-				try (Soklet soklet = Soklet.fromConfig(config)) {
-					soklet.start();
+				Soklet.run(config, () -> {
 					try (Socket socket = connectWithRetry("127.0.0.1", port, 2000)) {
 						socket.setSoTimeout(3000);
 						socket.getOutputStream().write("GET /contract HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n".getBytes(StandardCharsets.ISO_8859_1));
@@ -161,7 +161,7 @@ public class SimulatorStreamingContractTests {
 						Assertions.assertTrue(wire.endsWith("2\r\nok\r\n0\r\n\r\n"), wire);
 					}
 					Assertions.assertTrue(observation.finished.await(3, TimeUnit.SECONDS));
-				}
+				});
 			}
 			Assertions.assertEquals(1, producers.get());
 			Assertions.assertEquals(1, observation.calls.get());

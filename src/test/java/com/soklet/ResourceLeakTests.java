@@ -34,6 +34,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.TimeUnit;
 
 import static com.soklet.TestSupport.connectWithRetry;
@@ -61,12 +62,10 @@ public class ResourceLeakTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ChurnResource.class)))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
-		ResourceSnapshot runningBaseline;
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
+		Soklet.run(config, () -> {
 			assertOkResponse(port);
-			runningBaseline = ResourceSnapshot.captureAfterGc();
+			ResourceSnapshot runningBaseline = ResourceSnapshot.captureAfterGc();
 
 			for (int i = 0; i < 75; i++)
 				assertOkResponse(port);
@@ -76,7 +75,7 @@ public class ResourceLeakTests {
 					runningBaseline,
 					Duration.ofSeconds(5),
 					new ResourceSnapshot.ResourceTolerance(2L, 16L * 1024L * 1024L, 8));
-		}
+		});
 
 		DefaultHttpServer defaultHttpServer = (DefaultHttpServer) httpServer;
 		Assertions.assertTrue(defaultHttpServer.getEventLoop().isEmpty(), "Event loop should be cleared after stop");
@@ -101,8 +100,7 @@ public class ResourceLeakTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
+		Soklet.run(config, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2_000)) {
 				socket.setSoTimeout(2_000);
 				socket.getOutputStream().write(("""
@@ -133,7 +131,7 @@ public class ResourceLeakTests {
 				Assertions.assertTrue(defaultSseServer.getActiveConnectionCount() > 0,
 						"SSE connection did not register");
 			}
-		}
+		});
 
 		Assertions.assertTrue(defaultSseServer.getGlobalConnections().isEmpty(),
 				"Global SSE connections should be cleared after stop");
@@ -175,17 +173,17 @@ public class ResourceLeakTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
-		InetSocketAddress address;
+		AtomicReference<InetSocketAddress> address = new AtomicReference<>();
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
-			address = server.getDiagnostics().getBoundAddress().orElseThrow();
-			assertMcpDiscovery(address.getPort());
-		}
+		Soklet.run(config, () -> {
+			InetSocketAddress boundAddress = server.getDiagnostics().getBoundAddress().orElseThrow();
+			address.set(boundAddress);
+			assertMcpDiscovery(boundAddress.getPort());
+		});
 
 		Assertions.assertEquals(McpServerStatus.TERMINATED,
 				server.getDiagnostics().getStatus());
-		Assertions.assertEquals(address,
+		Assertions.assertEquals(address.get(),
 				server.getDiagnostics().getBoundAddress().orElseThrow());
 		McpServerRuntimeBridge.LifecycleEvidence evidence = bridge(server)
 				.getLifecycleEvidence();

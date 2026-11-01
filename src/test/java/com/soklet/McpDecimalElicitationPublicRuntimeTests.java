@@ -40,7 +40,8 @@ class McpDecimalElicitationPublicRuntimeTests {
 
 	@Test
 	void protectedRetryAcceptsDecimalsWithoutBypassingCapabilitiesOrTheResponseUnion() throws Exception {
-		try (Fixture fixture = new Fixture()) {
+		Fixture fixture = new Fixture();
+		Soklet.run(fixture.config, () -> {
 			String initial = fixture.post("tools/call", "amount", "initial", "\"name\":\"amount\",\"arguments\":{}", CAPABILITIES, 200);
 			assertTrue(initial.contains("\"resultType\":\"input_required\""), initial);
 			assertTrue(initial.contains("\"default\":3.50"), initial);
@@ -60,12 +61,13 @@ class McpDecimalElicitationPublicRuntimeTests {
 			assertEquals(new BigDecimal("3.50"), fixture.receivedAmount.get());
 			assertEquals(2, fixture.handlerCalls.get());
 			assertTrue(missingCapability.contains("\"code\":-32021"), missingCapability);
-		}
+		});
 	}
 
 	@Test
 	void durableTaskConsumesDecimalInputOnceAndIgnoresAnInvalidUnionValue() throws Exception {
-		try (Fixture fixture = new Fixture()) {
+		Fixture fixture = new Fixture();
+		Soklet.run(fixture.config, () -> {
 			String created = fixture.post("tools/call", "task.amount", "create", "\"name\":\"task.amount\",\"arguments\":{}", CAPABILITIES, 200);
 			assertTrue(created.contains("\"resultType\":\"task\""), created);
 			String taskId = fixture.createdTaskId.get();
@@ -89,7 +91,7 @@ class McpDecimalElicitationPublicRuntimeTests {
 			String completed = fixture.post("tasks/get", taskId, "completed", taskFields, CAPABILITIES, 200);
 			assertTrue(completed.contains("\"status\":\"completed\""), completed);
 			assertTrue(completed.contains("decimal task completed"), completed);
-		}
+		});
 	}
 
 	private static BigDecimal amount(McpJsonValue response) {
@@ -98,14 +100,14 @@ class McpDecimalElicitationPublicRuntimeTests {
 		return assertInstanceOf(McpJsonNumber.class, content.find("amount").orElseThrow()).getValue();
 	}
 
-	private static final class Fixture implements AutoCloseable {
+	private static final class Fixture {
 		private final McpInMemoryTaskManager taskManager = McpTaskManager.fromInMemoryDefaults();
 		private final AtomicInteger handlerCalls = new AtomicInteger();
 		private final AtomicReference<BigDecimal> receivedAmount = new AtomicReference<>();
 		private final AtomicReference<String> createdTaskId = new AtomicReference<>();
 		private final McpInputRequest formRequest;
 		private final McpServer server;
-		private final Soklet soklet;
+		private final SokletConfig config;
 
 		private Fixture() {
 			McpInputRequestDeclaration form = McpInputRequestDeclaration.fromElicitationForm(McpInputRequirement.REQUIRED);
@@ -147,12 +149,11 @@ class McpDecimalElicitationPublicRuntimeTests {
 					.protectionConfig(McpProtectionConfig.withKeyring(keyring).build())
 					.admissionController(admissionContext -> McpAdmissionDecision.accepted(identity))
 					.toolRateLimiter(rateLimitContext -> McpRateLimitDecision.allowed()).build();
-			soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+			config = SokletConfig.withMcpServer(server)
 					.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 					.lifecycleObserver(new LifecycleObserver() { @Override public void didReceiveLogEvent(LogEvent logEvent) {} })
 					.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(5))
-							.gracefulShutdownTimeout(Duration.ofSeconds(1)).forcedShutdownTimeout(Duration.ofSeconds(1)).build()).build());
-			soklet.start();
+							.gracefulShutdownTimeout(Duration.ofSeconds(1)).forcedShutdownTimeout(Duration.ofSeconds(1)).build()).build();
 		}
 
 		private String post(String method, String operationName, String id, String fields, String capabilities, int expectedStatus) throws Exception {
@@ -168,7 +169,5 @@ class McpDecimalElicitationPublicRuntimeTests {
 				return response;
 			}
 		}
-
-		@Override public void close() { soklet.close(); }
 	}
 }

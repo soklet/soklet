@@ -47,7 +47,8 @@ class McpLegacySessionHttpRouteMetricsTests {
 	void acceptedGetAndDeleteUseTheSelectedEndpointAndReleaseTheActiveGauge() throws Exception {
 		for (McpProtocolVersion version : LEGACY) {
 			MetricsCollector collector = MetricsCollector.defaultInstance();
-			try (var fixture = new McpLegacySessionTransportPublicRuntimeTests.Fixture(true, builder -> {}, null, collector)) {
+			var fixture = new McpLegacySessionTransportPublicRuntimeTests.Fixture(true, builder -> {}, null, collector);
+			Soklet.run(fixture.config, () -> {
 				String id = fixture.initialize("/mcp", version);
 				assertTrue(collector.snapshot().orElseThrow().getHttpRequestDurations().isEmpty(), "POST uses semantic MCP metrics");
 				try (var get = fixture.openControl("GET", "/mcp?credential=" + SECRET, version, id, "alice", "", List.of())) {
@@ -63,7 +64,7 @@ class McpLegacySessionHttpRouteMetricsTests {
 				assertCompletedPoint(collector, HttpMethod.GET, "/mcp", "2xx", 1L);
 				assertCompletedPoint(collector, HttpMethod.DELETE, "/mcp", "2xx", 1L);
 				assertSafeExports(collector, Set.of("/mcp"));
-			}
+			});
 		}
 	}
 
@@ -72,9 +73,10 @@ class McpLegacySessionHttpRouteMetricsTests {
 	void idleGetsDoNotConsumeTheTransientObservationBudget() throws Exception {
 		MetricsCollector collector = MetricsCollector.defaultInstance();
 		List<McpLegacySessionTransportPublicRuntimeTests.RawClient> gets = new ArrayList<>();
-		try (var fixture = new McpLegacySessionTransportPublicRuntimeTests.Fixture(true,
+		var fixture = new McpLegacySessionTransportPublicRuntimeTests.Fixture(true,
 				builder -> builder.requestHandlerConcurrency(1).requestHandlerQueueCapacity(1)
-						.maximumSubscriptionDuration(Duration.ofSeconds(30)), null, collector)) {
+						.maximumSubscriptionDuration(Duration.ofSeconds(30)), null, collector);
+		Soklet.run(fixture.config, () -> {
 			List<String> ids = new ArrayList<>();
 			try {
 				for (int index = 0; index < 8; index++) {
@@ -91,7 +93,7 @@ class McpLegacySessionHttpRouteMetricsTests {
 				assertEquals(16, fixture.httpStarts.get());
 				assertEquals(0L, collector.snapshot().orElseThrow().getActiveRequests());
 			} finally { for (var get : gets) get.close(); }
-		}
+		});
 	}
 
 	@Test
@@ -99,7 +101,8 @@ class McpLegacySessionHttpRouteMetricsTests {
 	void rejectedControlsRetainMatchedRoutesAndSeparateEndpoints() throws Exception {
 		for (McpProtocolVersion version : LEGACY) {
 			MetricsCollector collector = MetricsCollector.defaultInstance();
-			try (var fixture = new McpLegacySessionTransportPublicRuntimeTests.Fixture(true, builder -> {}, null, collector)) {
+			var fixture = new McpLegacySessionTransportPublicRuntimeTests.Fixture(true, builder -> {}, null, collector);
+			Soklet.run(fixture.config, () -> {
 				String id = fixture.initialize("/mcp", version);
 				String otherId = fixture.initialize("/other", version);
 				assertEquals(404, fixture.control("GET", "/mcp?credential=" + SECRET, version,
@@ -113,14 +116,15 @@ class McpLegacySessionHttpRouteMetricsTests {
 				assertCompletedPoint(collector, HttpMethod.GET, "/stateless", "4xx", 1L);
 				assertCompletedPoint(collector, HttpMethod.DELETE, "/other", "2xx", 1L);
 				assertSafeExports(collector, Set.of("/mcp", "/stateless", "/other"));
-			}
+			});
 		}
 	}
 
 	@Test
 	void ordinaryUnmatchedHttpRequestsKeepTheirOwnRouteEvenAtTheSamePath() throws Exception {
 		MetricsCollector collector = MetricsCollector.defaultInstance();
-		try (var fixture = new McpLegacySessionTransportPublicRuntimeTests.Fixture(true, builder -> {}, null, collector)) {
+		var fixture = new McpLegacySessionTransportPublicRuntimeTests.Fixture(true, builder -> {}, null, collector);
+		Soklet.run(fixture.config, () -> {
 			assertEquals(404, fixture.control("GET", "/mcp", LEGACY.get(0), "unknown", "alice", "", List.of()).status());
 			awaitFinished(fixture, 1);
 			Request request = Request.withPath(HttpMethod.GET, "/mcp")
@@ -138,7 +142,7 @@ class McpLegacySessionHttpRouteMetricsTests {
 				assertTrue(text.contains("route=\"unmatched\""));
 				assertFalse(text.contains(SECRET));
 			}
-		}
+		});
 	}
 
 	@Test
@@ -158,7 +162,8 @@ class McpLegacySessionHttpRouteMetricsTests {
 				if (resourceMethod != null) unexpectedMethods.add(resourceMethod);
 			}
 		};
-		try (var fixture = new McpLegacySessionTransportPublicRuntimeTests.Fixture(true, builder -> {}, null, collector)) {
+		var fixture = new McpLegacySessionTransportPublicRuntimeTests.Fixture(true, builder -> {}, null, collector);
+		Soklet.run(fixture.config, () -> {
 			assertEquals(404, fixture.control("GET", "/mcp?credential=" + SECRET, LEGACY.get(0), "unknown", "alice", "", List.of()).status());
 			awaitFinished(fixture, 1);
 			assertEquals(1, starts.size()); assertEquals(1, finishes.size());
@@ -167,7 +172,7 @@ class McpLegacySessionHttpRouteMetricsTests {
 			assertTrue(unexpectedMethods.isEmpty());
 			assertEquals(List.of(ServerType.HTTP, ServerType.HTTP), serverTypes);
 			assertEquals(0, fixture.rpcAdmissions.get());
-		}
+		});
 	}
 
 	private static void assertRequestBodyPoint(MetricsCollector collector, HttpMethod method, String route, long count) {

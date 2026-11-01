@@ -100,13 +100,10 @@ public class McpTaskInputUpdateRuntimeTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
-		Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+		Soklet.run(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
-				.build());
-
-		try {
-			soklet.start();
+				.build(), () -> {
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow()
 					.getPort();
 			HttpResponse<String> creation = post(port, "tools/call", TOOL_NAME,
@@ -216,9 +213,7 @@ public class McpTaskInputUpdateRuntimeTests {
 					undeclared.body());
 			Assertions.assertFalse(undeclared.body().contains(undeclaredTaskId),
 					undeclared.body());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@NonNull

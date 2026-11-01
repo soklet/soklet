@@ -51,12 +51,12 @@ public class SseInitializerRuntimeTests {
 	@Test
 	public void synchronousInitializerQueuesCatchupBeforeBroadcast() throws Exception {
 		AtomicReference<SseUnicaster> initializerHandle = new AtomicReference<>();
-		try (Fixture fixture = new Fixture(2, null)) {
-			fixture.initializer("catchup", sseUnicaster -> {
-				initializerHandle.set(sseUnicaster);
-				sseUnicaster.unicastEvent(SseEvent.withData("catch-up").build());
-			});
-			fixture.start();
+		Fixture fixture = new Fixture(2, null);
+		fixture.initializer("catchup", sseUnicaster -> {
+			initializerHandle.set(sseUnicaster);
+			sseUnicaster.unicastEvent(SseEvent.withData("catch-up").build());
+		});
+		Soklet.run(fixture.config, () -> {
 			try (Socket socket = fixture.request("catchup")) {
 				assertStatus(socket, 200);
 				fixture.awaitClients(1);
@@ -69,48 +69,48 @@ public class SseInitializerRuntimeTests {
 				Assertions.assertThrows(IllegalStateException.class,
 						() -> initializerHandle.get().unicastEvent(SseEvent.withData("late").build()));
 			}
-		}
+		});
 	}
 
 	@Test
 	public void checkedInitializerFailureTerminatesWithoutActivation() throws Exception {
 		IOException failure = new IOException("setup failed");
-		try (Fixture fixture = new Fixture(1, null)) {
-			fixture.initializer("failure", ignored -> { throw failure; });
-			fixture.start();
+		Fixture fixture = new Fixture(1, null);
+		fixture.initializer("failure", ignored -> { throw failure; });
+		Soklet.run(fixture.config, () -> {
 			try (Socket socket = fixture.request("failure")) {
 				assertStatus(socket, 200);
 				Assertions.assertEquals(-1, socket.getInputStream().read());
 			}
 			eventually(() -> fixture.coordinator().snapshot().reservations() == 0);
 			Assertions.assertEquals(0, fixture.server.getActiveConnectionCount());
-		}
+		});
 	}
 
 	@Test
 	public void caughtInitializerOverflowStillTerminatesWithoutActivation() throws Exception {
-		try (Fixture fixture = new Fixture(1, null)) {
-			fixture.initializer("overflow", sseUnicaster -> {
-				sseUnicaster.unicastEvent(SseEvent.withData("first").build());
-				Assertions.assertThrows(IllegalStateException.class,
-						() -> sseUnicaster.unicastEvent(SseEvent.withData("second").build()));
-			});
-			fixture.start();
+		Fixture fixture = new Fixture(1, null);
+		fixture.initializer("overflow", sseUnicaster -> {
+			sseUnicaster.unicastEvent(SseEvent.withData("first").build());
+			Assertions.assertThrows(IllegalStateException.class,
+					() -> sseUnicaster.unicastEvent(SseEvent.withData("second").build()));
+		});
+		Soklet.run(fixture.config, () -> {
 			try (Socket socket = fixture.request("overflow")) {
 				assertStatus(socket, 200);
 				Assertions.assertEquals(-1, socket.getInputStream().read());
 			}
 			eventually(() -> fixture.coordinator().snapshot().reservations() == 0);
 			Assertions.assertEquals(0, fixture.server.getActiveConnectionCount());
-		}
+		});
 	}
 
 	@Test
 	public void lifecycleCapacityRejectsBeforeAcceptedHeadersAndInitializer() throws Exception {
 		AtomicInteger initialized = new AtomicInteger();
-		try (Fixture fixture = new Fixture(1, null)) {
-			fixture.initializer("capacity", ignored -> initialized.incrementAndGet());
-			fixture.start();
+		Fixture fixture = new Fixture(1, null);
+		fixture.initializer("capacity", ignored -> initialized.incrementAndGet());
+		Soklet.run(fixture.config, () -> {
 			try (Socket accepted = fixture.request("capacity")) {
 				assertStatus(accepted, 200);
 				fixture.awaitClients(1);
@@ -120,7 +120,7 @@ public class SseInitializerRuntimeTests {
 				}
 				Assertions.assertEquals(1, initialized.get());
 			}
-		}
+		});
 	}
 
 	@Test
@@ -128,17 +128,19 @@ public class SseInitializerRuntimeTests {
 		CountDownLatch entered = new CountDownLatch(1);
 		CountDownLatch release = new CountDownLatch(1);
 		Fixture fixture = new Fixture(1, null);
+		// Keep the manual owner to freeze and inspect an incomplete shutdown result.
+		Soklet soklet = Soklet.fromConfig(fixture.config);
 		try {
 			fixture.initializer("blocked", ignored -> {
 				entered.countDown();
 				awaitUninterruptibly(release);
 			});
-			fixture.start();
+			soklet.start();
 			StreamLifecycleCoordinator coordinator = fixture.coordinator();
 			try (Socket socket = fixture.request("blocked")) {
 				assertStatus(socket, 200);
 				await(entered);
-				ShutdownResult report = fixture.soklet.shutdown().toCompletableFuture().get(3, SECONDS);
+				ShutdownResult report = soklet.shutdown().toCompletableFuture().get(3, SECONDS);
 				Assertions.assertFalse(report.isComplete());
 				Set<ResidualActivityType> residual = report.getShutdownComponentResult(ShutdownComponentType.SSE)
 						.orElseThrow().getResidualActivityEvidence().orElseThrow().getResidualActivityTypes();
@@ -149,10 +151,10 @@ public class SseInitializerRuntimeTests {
 			}
 		} finally {
 			release.countDown();
-			if (fixture.soklet.getShutdownResult().map(result -> !result.isComplete()).orElse(false))
-				Assertions.assertThrows(SokletShutdownIncompleteException.class, fixture.soklet::close);
+			if (soklet.getShutdownResult().map(result -> !result.isComplete()).orElse(false))
+				Assertions.assertThrows(SokletShutdownIncompleteException.class, soklet::close);
 			else
-				fixture.soklet.close();
+				soklet.close();
 		}
 	}
 
@@ -181,26 +183,26 @@ public class SseInitializerRuntimeTests {
 		CountDownLatch interrupted = new CountDownLatch(1);
 		CountDownLatch release = new CountDownLatch(1);
 		AtomicReference<StreamTerminationReason> reason = new AtomicReference<>();
-		try (Fixture fixture = new Fixture(1, queuedWriter ? new QueuedExecutor() : null,
+		Fixture fixture = new Fixture(1, queuedWriter ? new QueuedExecutor() : null,
 				Duration.ofHours(1), new LifecycleObserver() {
 			@Override public void didReceiveLogEvent(@NonNull LogEvent event) {}
 			@Override public void didTerminateSseConnection(SseConnection connection, StreamTermination termination) {
 				reason.set(termination.getReason());
 			}
-		})) {
-			fixture.initializer("disconnect-initializer", ignored -> {
-				entered.countDown();
-				try {
-					release.await();
-				} catch (InterruptedException failure) {
-					interrupted.countDown();
-					// Logical cancelation must not release the capacity while this
-					// deliberately delayed physical initializer still owns work.
-					awaitUninterruptibly(release);
-					throw failure;
-				}
-			});
-			fixture.start();
+		});
+		fixture.initializer("disconnect-initializer", ignored -> {
+			entered.countDown();
+			try {
+				release.await();
+			} catch (InterruptedException failure) {
+				interrupted.countDown();
+				// Logical cancelation must not release the capacity while this
+				// deliberately delayed physical initializer still owns work.
+				awaitUninterruptibly(release);
+				throw failure;
+			}
+		});
+		Soklet.run(fixture.config, () -> {
 			try {
 				try (Socket socket = fixture.request("disconnect-initializer")) {
 					assertStatus(socket, 200);
@@ -221,7 +223,7 @@ public class SseInitializerRuntimeTests {
 			Assertions.assertEquals(0, fixture.server.getActiveConnectionCount());
 			Assertions.assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED, reason.get());
 			Assertions.assertTrue(fixture.server.getGlobalConnections().isEmpty());
-		}
+		});
 	}
 
 	@Test
@@ -230,7 +232,7 @@ public class SseInitializerRuntimeTests {
 		CountDownLatch releaseObserver = new CountDownLatch(1);
 		AtomicInteger initialized = new AtomicInteger();
 		AtomicReference<StreamTerminationReason> reason = new AtomicReference<>();
-		try (Fixture fixture = new Fixture(1, null, Duration.ofHours(1), new LifecycleObserver() {
+		Fixture fixture = new Fixture(1, null, Duration.ofHours(1), new LifecycleObserver() {
 			@Override public void didReceiveLogEvent(@NonNull LogEvent event) {}
 			@Override public void willEstablishSseConnection(Request request, ResourceMethod resourceMethod) {
 				observing.countDown();
@@ -239,9 +241,9 @@ public class SseInitializerRuntimeTests {
 			@Override public void didTerminateSseConnection(SseConnection connection, StreamTermination termination) {
 				reason.set(termination.getReason());
 			}
-		})) {
-			fixture.initializer("before-initializer", ignored -> initialized.incrementAndGet());
-			fixture.start();
+		});
+		fixture.initializer("before-initializer", ignored -> initialized.incrementAndGet());
+		Soklet.run(fixture.config, () -> {
 			try {
 				try (Socket socket = fixture.request("before-initializer")) {
 					assertStatus(socket, 200);
@@ -259,29 +261,32 @@ public class SseInitializerRuntimeTests {
 			Assertions.assertEquals(0, initialized.get());
 			Assertions.assertEquals(0, fixture.server.getActiveConnectionCount());
 			Assertions.assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED, reason.get());
-		}
+		});
 	}
 
 	@Test
 	public void shutdownInterruptsCooperativeInitializerWithEarlyDisconnectMonitor() throws Exception {
 		CountDownLatch entered = new CountDownLatch(1);
 		CountDownLatch interrupted = new CountDownLatch(1);
-		try (Fixture fixture = new Fixture(1, null)) {
-			fixture.initializer("shutdown-initializer", ignored -> {
-				entered.countDown();
-				try {
-					new CountDownLatch(1).await();
-				} catch (InterruptedException failure) {
-					interrupted.countDown();
-					throw failure;
-				}
-			});
-			fixture.start();
+		Fixture fixture = new Fixture(1, null);
+		fixture.initializer("shutdown-initializer", ignored -> {
+			entered.countDown();
+			try {
+				new CountDownLatch(1).await();
+			} catch (InterruptedException failure) {
+				interrupted.countDown();
+				throw failure;
+			}
+		});
+		// Keep explicit lifecycle control for the shutdown assertions below.
+		try (SokletTestScope lifecycle = SokletTestScope.of(Soklet.fromConfig(fixture.config))) {
+			Soklet soklet = lifecycle.soklet();
+			soklet.start();
 			StreamLifecycleCoordinator coordinator = fixture.coordinator();
 			try (Socket socket = fixture.request("shutdown-initializer")) {
 				assertStatus(socket, 200);
 				await(entered);
-				Assertions.assertTrue(fixture.soklet.shutdown().toCompletableFuture().get(3, SECONDS).isComplete());
+				Assertions.assertTrue(soklet.shutdown().toCompletableFuture().get(3, SECONDS).isComplete());
 				await(interrupted);
 				Assertions.assertTrue(coordinator.isTerminated());
 				Assertions.assertEquals(0, coordinator.snapshot().retainedWork());
@@ -291,30 +296,33 @@ public class SseInitializerRuntimeTests {
 
 	@Test
 	public void rejectedConnectionExecutorReleasesAdmission() throws Exception {
-		try (Fixture fixture = new Fixture(1, new RejectingExecutor())) {
-			fixture.initializer("rejected", ignored -> {});
-			fixture.start();
+		Fixture fixture = new Fixture(1, new RejectingExecutor());
+		fixture.initializer("rejected", ignored -> {});
+		Soklet.run(fixture.config, () -> {
 			try (Socket socket = fixture.request("rejected")) {
 				assertStatus(socket, 200);
 				Assertions.assertEquals(-1, socket.getInputStream().read());
 			}
 			eventually(() -> fixture.coordinator().snapshot().reservations() == 0);
 			Assertions.assertEquals(0, fixture.server.getActiveConnectionCount());
-		}
+		});
 	}
 
 	@Test
 	public void queuedConnectionEnvelopeIsRetiredOnlyWhenShutdownRemovesIt() throws Exception {
 		QueuedExecutor executor = new QueuedExecutor();
-		try (Fixture fixture = new Fixture(1, executor)) {
-			fixture.initializer("queued", ignored -> {});
-			fixture.start();
+		Fixture fixture = new Fixture(1, executor);
+		fixture.initializer("queued", ignored -> {});
+		// Keep explicit lifecycle control for the shutdown assertions below.
+		try (SokletTestScope lifecycle = SokletTestScope.of(Soklet.fromConfig(fixture.config))) {
+			Soklet soklet = lifecycle.soklet();
+			soklet.start();
 			StreamLifecycleCoordinator coordinator = fixture.coordinator();
 			try (Socket socket = fixture.request("queued")) {
 				assertStatus(socket, 200);
 				eventually(() -> executor.pending != null);
 				Assertions.assertEquals(1, coordinator.snapshot().reservations());
-				Assertions.assertTrue(fixture.soklet.shutdown().toCompletableFuture().get(3, SECONDS).isComplete());
+				Assertions.assertTrue(soklet.shutdown().toCompletableFuture().get(3, SECONDS).isComplete());
 				Assertions.assertNull(executor.pending);
 				Assertions.assertTrue(coordinator.isTerminated());
 				Assertions.assertEquals(0, fixture.server.getActiveConnectionCount());
@@ -324,9 +332,9 @@ public class SseInitializerRuntimeTests {
 
 	@Test
 	public void passiveClientDisconnectReleasesAdmissionOnHeartbeat() throws Exception {
-		try (Fixture fixture = new Fixture(1, null, Duration.ofMillis(50))) {
-			fixture.initializer("disconnect", ignored -> {});
-			fixture.start();
+		Fixture fixture = new Fixture(1, null, Duration.ofMillis(50));
+		fixture.initializer("disconnect", ignored -> {});
+		Soklet.run(fixture.config, () -> {
 			try (Socket socket = fixture.request("disconnect")) {
 				assertStatus(socket, 200);
 				fixture.awaitClients(1);
@@ -334,13 +342,13 @@ public class SseInitializerRuntimeTests {
 			}
 			eventually(() -> fixture.coordinator().snapshot().reservations() == 0);
 			Assertions.assertEquals(0, fixture.server.getActiveConnectionCount());
-		}
+		});
 	}
 
-	private static final class Fixture implements AutoCloseable {
+	private static final class Fixture {
 		private final int port = findFreePort();
 		private final DefaultSseServer server;
-		private final Soklet soklet;
+		private final SokletConfig config;
 		private final Map<String, SseClientInitializer> initializers = new ConcurrentHashMap<>();
 		private Fixture(int capacity, ExecutorService connectionExecutor) throws Exception {
 			this(capacity, connectionExecutor, Duration.ofSeconds(30));
@@ -361,7 +369,7 @@ public class SseInitializerRuntimeTests {
 				supplier.set(this.server, (Supplier<ExecutorService>) () -> connectionExecutor);
 			}
 			Resource resource = new Resource(this.initializers);
-			this.soklet = Soklet.fromConfig(SokletConfig.withHttpServer(HttpServer.withPort(findFreePort()).build())
+			this.config = SokletConfig.withHttpServer(HttpServer.withPort(findFreePort()).build())
 					.sseServer(this.server).resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Resource.class)))
 					.instanceProvider(new InstanceProvider() {
 						@Override public <T> T provide(Class<T> type) {
@@ -369,10 +377,9 @@ public class SseInitializerRuntimeTests {
 						}
 					}).lifecycleObserver(observer)
 					.lifecyclePolicy(LifecyclePolicy.builder().gracefulShutdownTimeout(Duration.ofMillis(100))
-							.forcedShutdownTimeout(Duration.ofMillis(100)).build()).build());
+							.forcedShutdownTimeout(Duration.ofMillis(100)).build()).build();
 		}
 		private void initializer(String name, SseClientInitializer initializer) { this.initializers.put("/ownership/" + name, initializer); }
-		private void start() { this.soklet.start(); }
 		private StreamLifecycleCoordinator coordinator() { return this.server.getStreamLifecycleCoordinatorForTests().orElseThrow(); }
 		private void awaitClients(int count) throws Exception { eventually(() -> this.server.getGlobalConnections().size() == count); }
 		private Socket request(String name) throws Exception {
@@ -380,7 +387,6 @@ public class SseInitializerRuntimeTests {
 			socket.getOutputStream().write(("GET /ownership/" + name + " HTTP/1.1\r\nHost: localhost\r\nAccept: text/event-stream\r\n\r\n").getBytes(StandardCharsets.ISO_8859_1));
 			return socket;
 		}
-		@Override public void close() throws Exception { this.soklet.close(); }
 	}
 
 	public static final class Resource {

@@ -406,9 +406,7 @@ public class MetricsCollectorTests {
 		HttpServerRouteStatusKey statusKey = new HttpServerRouteStatusKey(HttpMethod.POST, RouteType.MATCHED, httpMetricsRoute, "2xx");
 		HttpServerRouteKey routeKey = new HttpServerRouteKey(HttpMethod.POST, RouteType.MATCHED, httpMetricsRoute);
 
-		try (Soklet app = Soklet.fromConfig(config)) {
-			app.start();
-
+		Soklet.run(config, () -> {
 			URL url = new URL("http://127.0.0.1:" + port + "/metrics/http/123");
 			HttpURLConnection connection = (HttpURLConnection) url.openConnection();
 			connection.setRequestMethod("POST");
@@ -425,7 +423,7 @@ public class MetricsCollectorTests {
 			assertEquals(201, connection.getResponseCode());
 			readAll(connection.getInputStream());
 			connection.disconnect();
-		}
+		});
 
 		MetricsCollector.Snapshot snapshot = awaitSnapshot(collector,
 				(metricsSnapshot) -> metricsSnapshot.getHttpRequestDurations().get(statusKey) != null,
@@ -479,9 +477,7 @@ public class MetricsCollectorTests {
 		SseCommentRouteKey commentKey = new SseCommentRouteKey(RouteType.MATCHED, sseMetricsRoute,
 				SseComment.CommentType.COMMENT);
 
-		try (Soklet app = Soklet.fromConfig(config)) {
-			app.start();
-
+		Soklet.run(config, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(3000);
 				writeSseHttpGet(socket, "/metrics/sse/abc", ssePort);
@@ -510,7 +506,7 @@ public class MetricsCollectorTests {
 				assertTrue(sawData, "Did not receive SSE data");
 				assertTrue(sawComment, "Did not receive SSE comment");
 			}
-		}
+		});
 
 		MetricsCollector.Snapshot snapshot = awaitSnapshot(collector,
 				(metricsSnapshot) -> metricsSnapshot.getSseEventWriteDurations().get(routeKey) != null

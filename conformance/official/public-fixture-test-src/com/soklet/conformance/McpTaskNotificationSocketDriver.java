@@ -152,7 +152,6 @@ public final class McpTaskNotificationSocketDriver {
 		McpChunkedHttpClient client = null;
 
 		try {
-			soklet.start();
 			int port = boundPort(server);
 			seedTask(port, "task-first", ALPHA);
 			seedTask(port, "task-second", ALPHA);
@@ -181,7 +180,8 @@ public final class McpTaskNotificationSocketDriver {
 		} finally {
 			if (client != null)
 				client.closeWithReset();
-			soklet.close();
+			soklet.requestShutdown();
+			soklet.awaitShutdownAsync().toCompletableFuture().join();
 		}
 	}
 
@@ -193,7 +193,6 @@ public final class McpTaskNotificationSocketDriver {
 		McpChunkedHttpClient client = null;
 
 		try {
-			soklet.start();
 			int port = boundPort(server);
 			seedTask(port, "task-stale", ALPHA);
 			seedTask(port, "task-revoked", ALPHA);
@@ -224,7 +223,8 @@ public final class McpTaskNotificationSocketDriver {
 		} finally {
 			if (client != null)
 				client.closeWithReset();
-			soklet.close();
+			soklet.requestShutdown();
+			soklet.awaitShutdownAsync().toCompletableFuture().join();
 		}
 	}
 
@@ -237,7 +237,6 @@ public final class McpTaskNotificationSocketDriver {
 		McpChunkedHttpClient withForm = null;
 
 		try {
-			soklet.start();
 			int port = boundPort(server);
 			seedTask(port, "task-input-initial", ALPHA);
 			seedTask(port, "task-input-transition", ALPHA);
@@ -280,7 +279,8 @@ public final class McpTaskNotificationSocketDriver {
 				withoutForm.closeWithReset();
 			if (withForm != null)
 				withForm.closeWithReset();
-			soklet.close();
+			soklet.requestShutdown();
+			soklet.awaitShutdownAsync().toCompletableFuture().join();
 		}
 	}
 
@@ -293,7 +293,6 @@ public final class McpTaskNotificationSocketDriver {
 		McpChunkedHttpClient second = null;
 
 		try {
-			soklet.start();
 			int port = boundPort(server);
 			seedTask(port, "task-missed", ALPHA);
 			seedTask(port, "task-after-reconnect", ALPHA);
@@ -332,7 +331,8 @@ public final class McpTaskNotificationSocketDriver {
 				first.closeWithReset();
 			if (second != null)
 				second.closeWithReset();
-			soklet.close();
+			soklet.requestShutdown();
+			soklet.awaitShutdownAsync().toCompletableFuture().join();
 		}
 	}
 
@@ -344,7 +344,6 @@ public final class McpTaskNotificationSocketDriver {
 		McpChunkedHttpClient client = null;
 
 		try {
-			soklet.start();
 			int port = boundPort(server);
 			seedTask(port, "task-race", ALPHA);
 			seedTask(port, "task-race-control", ALPHA);
@@ -392,7 +391,8 @@ public final class McpTaskNotificationSocketDriver {
 			taskManager.releaseBlockedFind();
 			if (client != null)
 				client.closeWithReset();
-			soklet.close();
+			soklet.requestShutdown();
+			soklet.awaitShutdownAsync().toCompletableFuture().join();
 		}
 	}
 
@@ -407,7 +407,6 @@ public final class McpTaskNotificationSocketDriver {
 		McpChunkedHttpClient client = null;
 
 		try {
-			soklet.start();
 			int port = boundPort(server);
 			seedTask(port, "task-storm-origin", ALPHA);
 			McpTaskOrigin origin = taskManager
@@ -474,7 +473,8 @@ public final class McpTaskNotificationSocketDriver {
 			taskManager.releaseBlockedTaskFinds();
 			if (client != null)
 				client.closeWithReset();
-			soklet.close();
+			soklet.requestShutdown();
+			soklet.awaitShutdownAsync().toCompletableFuture().join();
 		}
 	}
 
@@ -488,7 +488,6 @@ public final class McpTaskNotificationSocketDriver {
 		McpChunkedHttpClient client = null;
 
 		try {
-			soklet.start();
 			int port = boundPort(server);
 			seedTask(port, "task-disconnect-active", ALPHA);
 			seedTask(port, "task-disconnect-recovered", ALPHA);
@@ -518,15 +517,20 @@ public final class McpTaskNotificationSocketDriver {
 			taskManager.releaseBlockedTaskFinds();
 			if (client != null)
 				client.closeWithReset();
-			soklet.close();
+			soklet.requestShutdown();
+			soklet.awaitShutdownAsync().toCompletableFuture().join();
 		}
 	}
 
+	@SuppressWarnings("try") // The cleanup scope is intentionally not referenced by its body.
 	private void cancelAcknowledgesAndPublishesTerminalSnapshot() throws Exception {
 		ScriptedTaskManager manager = new ScriptedTaskManager();
 		McpServer server = server(manager, new AtomicInteger());
-		try (Soklet owner = managedSoklet(server)) {
-			owner.start();
+		Soklet owner = managedSoklet(server);
+		try (AutoCloseable ownerShutdown = () -> {
+			owner.requestShutdown();
+			owner.awaitShutdownAsync().toCompletableFuture().join();
+		}) {
 			int port = boundPort(server);
 			seedTask(port, "task-cancel", ALPHA);
 			try (McpChunkedHttpClient subscription = listen(port, "\"cancel-stream\"",
@@ -646,7 +650,7 @@ public final class McpTaskNotificationSocketDriver {
 
 	private static Soklet managedSoklet(McpServer server,
 			MetricsCollector metricsCollector) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+		return Soklet.run(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
 				.metricsCollector(metricsCollector)

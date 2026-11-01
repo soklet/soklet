@@ -50,7 +50,8 @@ final class SokletDirectHttpCompositionTests {
 		TransparentHttpDecorator outer = new TransparentHttpDecorator("outer", engine);
 		SokletConfig config = config(outer);
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
+		try (SokletTestScope sokletScope = SokletTestScope.of(Soklet.fromConfig(config))) {
+			Soklet soklet = sokletScope.soklet();
 			soklet.start();
 
 			Assertions.assertSame(engine.getTransportIdentity(),

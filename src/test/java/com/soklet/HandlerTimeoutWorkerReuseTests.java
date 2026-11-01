@@ -54,32 +54,37 @@ class HandlerTimeoutWorkerReuseTests {
 	}
 
 	private void exerciseWorkerReuse(boolean sse) throws Exception {
-		try (Fixture fixture = new Fixture(sse)) {
-			fixture.owner.start();
-			try (Socket first = fixture.request("a")) {
-				assertTrue(fixture.resource.enteredA.await(3, TimeUnit.SECONDS));
-				fixture.armInterrupt.set(true);
-				if (sse)
-					fixture.startSseTimeout();
-				assertTrue(fixture.interruptClaimed.await(5, TimeUnit.SECONDS), "A's timeout must claim its worker");
+		Fixture fixture = new Fixture(sse);
+		ShutdownResult result = Soklet.run(fixture.config, () -> {
+			try {
+				try (Socket first = fixture.request("a")) {
+					assertTrue(fixture.resource.enteredA.await(3, TimeUnit.SECONDS));
+					fixture.armInterrupt.set(true);
+					if (sse)
+						fixture.startSseTimeout();
+					assertTrue(fixture.interruptClaimed.await(5, TimeUnit.SECONDS), "A's timeout must claim its worker");
 
-				fixture.resource.releaseA.countDown();
-				assertTrue(fixture.finishedA.await(3, TimeUnit.SECONDS), "A must finish application handling");
-				try (Socket second = fixture.request("b")) {
-					// Pause interrupt delivery exactly after the timeout has chosen A's
-					// worker. A must wait at retirement, rather than letting B reuse it.
-					awaitRetirement(fixture);
-					assertEquals(1L, fixture.resource.enteredB.getCount(), "B cannot start while A's interrupt is in flight");
-					fixture.releaseInterrupt.countDown();
-					assertTrue(fixture.resource.enteredB.await(3, TimeUnit.SECONDS));
-					fixture.resource.releaseB.countDown();
-					assertTrue(fixture.finishedB.await(3, TimeUnit.SECONDS));
-					assertSame(fixture.resource.workerA.get(), fixture.resource.workerB.get(), "Exercise actual pooled worker reuse");
-					assertFalse(fixture.resource.interruptedB.get(), "A's timeout must never interrupt B");
-					assertNull(fixture.timerFailure.get());
+					fixture.resource.releaseA.countDown();
+					assertTrue(fixture.finishedA.await(3, TimeUnit.SECONDS), "A must finish application handling");
+					try (Socket second = fixture.request("b")) {
+						// Pause interrupt delivery exactly after the timeout has chosen A's
+						// worker. A must wait at retirement, rather than letting B reuse it.
+						awaitRetirement(fixture);
+						assertEquals(1L, fixture.resource.enteredB.getCount(), "B cannot start while A's interrupt is in flight");
+						fixture.releaseInterrupt.countDown();
+						assertTrue(fixture.resource.enteredB.await(3, TimeUnit.SECONDS));
+						fixture.resource.releaseB.countDown();
+						assertTrue(fixture.finishedB.await(3, TimeUnit.SECONDS));
+						assertSame(fixture.resource.workerA.get(), fixture.resource.workerB.get(), "Exercise actual pooled worker reuse");
+						assertFalse(fixture.resource.interruptedB.get(), "A's timeout must never interrupt B");
+						assertNull(fixture.timerFailure.get());
+					}
 				}
+			} finally {
+				fixture.release();
 			}
-		}
+		});
+		assertTrue(result.isComplete());
 	}
 
 	private static void awaitRetirement(Fixture fixture) throws InterruptedException {
@@ -93,7 +98,7 @@ class HandlerTimeoutWorkerReuseTests {
 		fail("A's worker did not wait for its claimed interrupt before retirement");
 	}
 
-	private static final class Fixture implements AutoCloseable {
+	private static final class Fixture {
 		final int port = TestSupport.findFreePort();
 		final Resource resource;
 		final AtomicBoolean armInterrupt = new AtomicBoolean();
@@ -113,7 +118,7 @@ class HandlerTimeoutWorkerReuseTests {
 			}
 		});
 		final DefaultSseServer sseServer;
-		final Soklet owner;
+		final SokletConfig config;
 		Thread timeoutThread;
 
 		Fixture(boolean sse) throws Exception {
@@ -130,7 +135,7 @@ class HandlerTimeoutWorkerReuseTests {
 						.requestHandlerExecutorServiceSupplier(() -> executor)
 						.requestHandlerTimeout(Duration.ofSeconds(2)).build());
 			}
-			owner = Soklet.fromConfig(builder.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(resource.getClass())))
+			config = builder.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(resource.getClass())))
 					.instanceProvider(new InstanceProvider() {
 						@Override public <T> T provide(Class<T> type) {
 							return type == resource.getClass() ? type.cast(resource) : InstanceProvider.defaultInstance().provide(type);
@@ -146,7 +151,7 @@ class HandlerTimeoutWorkerReuseTests {
 							if (request.getRawPathAndQuery().endsWith("/a")) finishedA.countDown();
 							if (request.getRawPathAndQuery().endsWith("/b")) finishedB.countDown();
 						}
-					}).build());
+					}).build();
 		}
 
 		Socket request(String path) throws Exception {
@@ -181,7 +186,7 @@ class HandlerTimeoutWorkerReuseTests {
 			timeoutThread.start();
 		}
 
-		@Override public void close() throws Exception {
+		void release() throws Exception {
 			armInterrupt.set(false);
 			resource.releaseA.countDown();
 			resource.releaseB.countDown();
@@ -190,8 +195,6 @@ class HandlerTimeoutWorkerReuseTests {
 				timeoutThread.join(3_000);
 				assertFalse(timeoutThread.isAlive());
 			}
-			owner.close();
-			assertTrue(owner.getShutdownResult().orElseThrow().isComplete());
 		}
 	}
 

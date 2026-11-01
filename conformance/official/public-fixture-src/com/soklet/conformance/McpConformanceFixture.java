@@ -215,6 +215,7 @@ public final class McpConformanceFixture {
 	private McpConformanceFixture() {
 	}
 
+	@SuppressWarnings("try") // The cleanup scope is intentionally not referenced by its body.
 	public static void main(String[] arguments) throws Exception {
 		if (arguments.length != 2 || !"--scenario".equals(arguments[0])
 				|| !SUPPORTED_SCENARIOS.contains(arguments[1]))
@@ -231,8 +232,11 @@ public final class McpConformanceFixture {
 		McpServer mcpServer = config.getMcpServer().orElseThrow();
 		ShutdownResult shutdownResult;
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
+		Soklet soklet = Soklet.run(config);
+		try (AutoCloseable sokletShutdown = () -> {
+			soklet.requestShutdown();
+			soklet.awaitShutdownAsync().toCompletableFuture().join();
+		}) {
 			InetSocketAddress address = mcpServer.getDiagnostics().getBoundAddress()
 					.orElseThrow(() -> new IllegalStateException(
 							"The public MCP server did not publish its bound address."));
@@ -247,7 +251,7 @@ public final class McpConformanceFixture {
 			while (System.in.read() >= 0) {
 				// The parent owns this pipe. EOF is the graceful shutdown request.
 			}
-			soklet.shutdown();
+			soklet.requestShutdown();
 			shutdownResult = soklet.awaitShutdown();
 		}
 

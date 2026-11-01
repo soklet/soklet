@@ -61,8 +61,7 @@ public class HeadFallbackObservationTests {
 	void realHeadReportsGetFallbackAndSendsOnlyTheResponseHead() throws Exception {
 		Fixture fixture = new Fixture(false, false);
 		int port = findFreePort();
-		try (Soklet soklet = Soklet.fromConfig(fixture.config(port))) {
-			soklet.start();
+		Soklet.run(fixture.config(port), () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000)) {
 				socket.setSoTimeout(3000);
 				socket.getOutputStream().write("HEAD /fallback HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
@@ -76,7 +75,7 @@ public class HeadFallbackObservationTests {
 			fixture.assertHooks("fallback", HttpMethod.HEAD);
 			Assertions.assertEquals(1, fixture.resource.getCalls.get());
 			Assertions.assertEquals(HttpMethod.HEAD, fixture.resource.handlerMethod);
-		}
+		});
 	}
 
 	@Test

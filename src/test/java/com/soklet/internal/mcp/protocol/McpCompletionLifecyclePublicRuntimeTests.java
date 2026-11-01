@@ -109,16 +109,15 @@ public class McpCompletionLifecyclePublicRuntimeTests {
 					intercepted.incrementAndGet();
 					return continuation.proceed();
 				});
-		Soklet soklet = managed(server, new MetricsCollector() {
+		Soklet.run(managedConfig(server, new MetricsCollector() {
 			@Override
 			public void didRecordMcpMetricsEvent(McpMetricsEvent event) {
 				events.add(event);
 				if (event instanceof McpMetricsEvent.RequestFinished)
 					finished.countDown();
 			}
-		});
-		try {
-			soklet.start();
+		}), () -> {
+
 			int port = port(server);
 			for (boolean prompt : List.of(true, false)) {
 				String id = prompt ? "prompt-progress" : "resource-progress";
@@ -167,9 +166,7 @@ public class McpCompletionLifecyclePublicRuntimeTests {
 							event.getJsonRpcMethod())
 							&& event.getOutcome()
 							== com.soklet.McpRequestOutcome.COMPLETE).count());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -200,27 +197,27 @@ public class McpCompletionLifecyclePublicRuntimeTests {
 						lateContinuations.countDown();
 					}
 				});
-		Soklet soklet = managed(server, new MetricsCollector() { });
-		try {
-			soklet.start();
-			for (boolean prompt : List.of(true, false)) {
-				try (McpChunkedHttpClient client = complete(port(server),
-						prompt ? "prompt-deadline" : "resource-deadline",
-						prompt, null)) {
-					McpChunkedHttpClient.HttpResponseHead head = client.readHead();
-					assertEquals(200, head.status(), head.raw());
-					assertTrue(client.readFixedBody(head).contains(
-							"\"message\":\"Internal error\""));
+		Soklet.run(managedConfig(server, new MetricsCollector() { }), () -> {
+			try {
+				for (boolean prompt : List.of(true, false)) {
+					try (McpChunkedHttpClient client = complete(port(server),
+							prompt ? "prompt-deadline" : "resource-deadline",
+							prompt, null)) {
+						McpChunkedHttpClient.HttpResponseHead head = client.readHead();
+						assertEquals(200, head.status(), head.raw());
+						assertTrue(client.readFixedBody(head).contains(
+								"\"message\":\"Internal error\""));
+					}
 				}
+				assertTrue(lateContinuations.await(5, TimeUnit.SECONDS));
+				assertEquals(2, interceptorEntries.get());
+				assertEquals(0, handlerEntries.get(),
+						"Expired Completion requests must not enter handlers.");
+			} finally {
+				lateContinuations.await(5, TimeUnit.SECONDS);
+
 			}
-			assertTrue(lateContinuations.await(5, TimeUnit.SECONDS));
-			assertEquals(2, interceptorEntries.get());
-			assertEquals(0, handlerEntries.get(),
-					"Expired Completion requests must not enter handlers.");
-		} finally {
-			lateContinuations.await(5, TimeUnit.SECONDS);
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -248,34 +245,34 @@ public class McpCompletionLifecyclePublicRuntimeTests {
 			}
 		};
 		McpServer server = server(handler, null, null);
-		Soklet soklet = managed(server, new MetricsCollector() { });
-		McpChunkedHttpClient client = null;
-		try {
-			soklet.start();
-			for (boolean prompt : List.of(true, false)) {
-				client = complete(port(server),
-						prompt ? "prompt-disconnect" : "resource-disconnect",
-						prompt, "\"disconnect-token\"");
-				assertEquals(200, client.readHead().status());
-				assertTrue(client.readChunkText().contains(
-						"\"method\":\"notifications/progress\""));
-				client.closeWithReset();
-				client = null;
+		Soklet.run(managedConfig(server, new MetricsCollector() { }), () -> {
+			McpChunkedHttpClient client = null;
+			try {
+				for (boolean prompt : List.of(true, false)) {
+					client = complete(port(server),
+							prompt ? "prompt-disconnect" : "resource-disconnect",
+							prompt, "\"disconnect-token\"");
+					assertEquals(200, client.readHead().status());
+					assertTrue(client.readChunkText().contains(
+							"\"method\":\"notifications/progress\""));
+					client.closeWithReset();
+					client = null;
+				}
+				assertTrue(canceled.await(5, TimeUnit.SECONDS));
+				assertTrue(exited.await(5, TimeUnit.SECONDS));
+				assertEquals(2, correctlyCanceled.get());
+				awaitHandlerCleanup(server);
+				assertEquals(0, server.getDiagnostics()
+						.getActiveHandlerExecutions());
+				assertEquals(0, server.getDiagnostics()
+						.getActiveRequestStreams());
+			} finally {
+				released.get().countDown();
+				if (client != null)
+					client.close();
+
 			}
-			assertTrue(canceled.await(5, TimeUnit.SECONDS));
-			assertTrue(exited.await(5, TimeUnit.SECONDS));
-			assertEquals(2, correctlyCanceled.get());
-			awaitHandlerCleanup(server);
-			assertEquals(0, server.getDiagnostics()
-					.getActiveHandlerExecutions());
-			assertEquals(0, server.getDiagnostics()
-					.getActiveRequestStreams());
-		} finally {
-			released.get().countDown();
-			if (client != null)
-				client.close();
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -286,9 +283,8 @@ public class McpCompletionLifecyclePublicRuntimeTests {
 			handlerEntries.incrementAndGet();
 			return McpArgumentCompletionResult.fromValues(List.of("never"));
 		}, null, null);
-		Soklet soklet = managed(server, new MetricsCollector() { });
-		try {
-			soklet.start();
+		Soklet.run(managedConfig(server, new MetricsCollector() { }), () -> {
+
 			for (boolean prompt : List.of(true, false)) {
 				try (McpChunkedHttpClient client = complete(port(server),
 						prompt ? "bad-prompt-token" : "bad-resource-token",
@@ -300,9 +296,7 @@ public class McpCompletionLifecyclePublicRuntimeTests {
 				}
 			}
 			assertEquals(0, handlerEntries.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -338,7 +332,6 @@ public class McpCompletionLifecyclePublicRuntimeTests {
 		McpChunkedHttpClient resourceClient = null;
 		Future<?> stop = null;
 		try {
-			soklet.start();
 			promptClient = complete(port(server), "prompt-stop", true,
 					"\"prompt-stop-token\"");
 			assertEquals(200, promptClient.readHead().status());
@@ -352,7 +345,9 @@ public class McpCompletionLifecyclePublicRuntimeTests {
 			assertEquals(2, server.getDiagnostics().getActiveHandlerExecutions(),
 					"Both Completion handlers must be active before shutdown.");
 
-			stop = stopExecutor.submit(soklet::close);
+			// Shutdown is deliberately initiated while Completion handlers remain active.
+			// Shutdown is deliberately initiated while Completion handlers remain active.
+			stop = stopExecutor.submit(() -> com.soklet.SokletTestScope.close(soklet));
 			assertTrue(canceled.await(5, TimeUnit.SECONDS),
 					"Shutdown did not cancel both active Completion requests.");
 			assertEquals(2, shutdownReasons.get());
@@ -369,7 +364,7 @@ public class McpCompletionLifecyclePublicRuntimeTests {
 				resourceClient.close();
 			try {
 				if (stop == null)
-					soklet.close();
+					com.soklet.SokletTestScope.close(soklet);
 				else
 					stop.get(5, TimeUnit.SECONDS);
 			} finally {
@@ -416,10 +411,17 @@ public class McpCompletionLifecyclePublicRuntimeTests {
 	}
 
 	private static Soklet managed(McpServer server, MetricsCollector collector) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+		return Soklet.run(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.metricsCollector(collector)
 				.lifecyclePolicy(TEST_LIFECYCLE_POLICY).build());
+	}
+
+	private static SokletConfig managedConfig(McpServer server, MetricsCollector collector) {
+		return SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.metricsCollector(collector)
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY).build();
 	}
 
 	private static int port(McpServer server) {

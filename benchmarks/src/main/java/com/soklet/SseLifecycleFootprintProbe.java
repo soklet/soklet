@@ -175,7 +175,7 @@ public final class SseLifecycleFootprintProbe {
 			this.server = (DefaultSseServer) builder.build();
 			check(this.server.getStreamingLifecycleCapacity() == options.connections, "Unexpected lifecycle default");
 			check(this.server.getConnectionQueueCapacity() == QUEUE_CAPACITY, "Unexpected queue default");
-			this.app = Soklet.fromConfig(SokletConfig.withSseServer(this.server)
+			this.app = Soklet.run(SokletConfig.withSseServer(this.server)
 					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Resource.class)))
 					.instanceProvider(this.fixture).lifecycleObserver(this.fixture)
 					.lifecyclePolicy(LifecyclePolicy.builder().gracefulShutdownTimeout(Duration.ofSeconds(10))
@@ -183,7 +183,6 @@ public final class SseLifecycleFootprintProbe {
 		}
 
 		private void start() {
-			this.app.start();
 			this.started = true;
 			this.coordinator = this.server.getStreamLifecycleCoordinatorForTests().orElseThrow();
 			this.handlers = this.server.getRequestHandlerExecutorService().orElseThrow();
@@ -292,7 +291,8 @@ public final class SseLifecycleFootprintProbe {
 			this.fixture.stopping = true;
 			try {
 				if (this.started) {
-					var shutdown = this.app.shutdown().toCompletableFuture();
+					this.app.requestShutdown();
+					var shutdown = this.app.awaitShutdownAsync().toCompletableFuture();
 					// Termination closes sockets/clears queues first. Releasing the held
 					// observers afterward avoids draining bodies into unread client sockets.
 					try { awaitCondition(this::allKnownClientsTerminal, "terminal clients before writer release"); }
@@ -302,7 +302,8 @@ public final class SseLifecycleFootprintProbe {
 			} finally {
 				this.fixture.releaseWriters.countDown();
 				for (Socket client : this.clients) if (client != null) client.close();
-				this.app.close();
+				this.app.requestShutdown();
+				this.app.awaitShutdownAsync().toCompletableFuture().join();
 				this.stopped = true;
 			}
 		}

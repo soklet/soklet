@@ -121,83 +121,86 @@ public class McpSubscriptionAuthorizationPublicRuntimeTests {
 				McpSubscriptionEventPublisher.fromInMemoryDefaults();
 		McpServer server = server(publisher, authorizer,
 				admissionApplicationContext, observedAdmission::set);
-		Soklet owner = managedSoklet(server,
-				MetricsCollector.disabledInstance());
+
 		ExecutorService reader = Executors.newSingleThreadExecutor();
-		McpChunkedHttpClient client = null;
-		Future<McpChunkedHttpClient.HttpResponseHead> responseHead = null;
-
 		try {
-			owner.start();
-			client = listen(boundPort(server), "\"initial-allow\"");
-			McpChunkedHttpClient activeClient = client;
-			responseHead = reader.submit(activeClient::readHead);
-			Assertions.assertTrue(authorizerEntered.await(5, TimeUnit.SECONDS),
-					"The initial authorizer did not run.");
-			Assertions.assertFalse(responseHead.isDone(),
-					"A subscription acknowledgment escaped before authorization.");
-			McpAdmissionContext admission = observedAdmission.get();
-			Assertions.assertNotNull(admission);
-			Assertions.assertFalse(admission.isToolsListChangedIncluded());
-			Assertions.assertFalse(admission.isPromptsListChangedIncluded());
-			Assertions.assertTrue(admission.isResourcesListChangedIncluded());
-			Assertions.assertTrue(admission.isResourceSubscriptionsIncluded());
-			Assertions.assertEquals(List.of(FIRST_RESOURCE_URI, SECOND_RESOURCE_URI),
-					admission.getRequestedResourceSubscriptionUris());
-			Assertions.assertFalse(admission.isTaskIdsRequested());
-			Assertions.assertTrue(admission.getRequestedTaskIds().isEmpty());
-			Assertions.assertThrows(UnsupportedOperationException.class,
-					() -> admission.getRequestedResourceSubscriptionUris()
-							.add(URI.create("test://subscription/mutated")));
-			McpSubscriptionAuthorizationContext context = observedContext.get();
-			Assertions.assertNotNull(context);
-			Assertions.assertSame(admissionApplicationContext,
-					context.getApplicationContext().orElseThrow());
-			Assertions.assertTrue(context.getPreviousValidUntil().isEmpty());
-			Assertions.assertTrue(context.getDeadline().isAfter(Instant.now()));
-			Assertions.assertEquals(Boolean.FALSE,
-					context.isToolsListChangedIncluded());
-			Assertions.assertEquals(Boolean.FALSE,
-					context.isPromptsListChangedIncluded());
-			Assertions.assertEquals(Boolean.TRUE,
-					context.isResourcesListChangedIncluded());
-			Assertions.assertEquals(Set.of(FIRST_RESOURCE_URI,
-					SECOND_RESOURCE_URI), context.getResourceSubscriptionUris());
-			Assertions.assertTrue(context.getTaskIds().isEmpty());
-			Assertions.assertThrows(UnsupportedOperationException.class,
-					() -> context.getResourceSubscriptionUris().add(
-							URI.create("test://subscription/authorization/mutated")));
-			Assertions.assertThrows(UnsupportedOperationException.class,
-					() -> context.getTaskIds().add("mutated"));
-			McpInvocationFeatures features = observedFeatures.get();
-			Assertions.assertNotNull(features);
-			Assertions.assertNotNull(features.getCancelationToken());
-			Assertions.assertTrue(features.getProgressReporter().isEmpty());
-			Assertions.assertTrue(features.getTaskCreationContext().isEmpty());
-			Assertions.assertTrue(features.find(McpLocalizationContext.class)
-					.isEmpty());
-			McpRequestContext initialRequest = context.getInitialRequestContext();
-			Assertions.assertEquals("Bearer admission-secret",
-					initialRequest.getRequest().getHeader("Authorization")
-							.orElseThrow());
-			Assertions.assertSame(admissionApplicationContext,
-					initialRequest.getAdmissionIdentity().getApplicationContext()
-							.orElseThrow());
-			Assertions.assertNotSame(Thread.currentThread(), authorizerThread.get());
-			releaseAuthorizer.countDown();
+			Soklet.run(managedSokletConfig(server,
+				MetricsCollector.disabledInstance()), () -> {
+				McpChunkedHttpClient client = null;
+				Future<McpChunkedHttpClient.HttpResponseHead> responseHead = null;
 
-			assertSseHead(responseHead.get(5, TimeUnit.SECONDS));
-			Assertions.assertEquals(acknowledgment("\"initial-allow\""),
-					client.readChunkText());
-			Assertions.assertEquals(1,
-					server.getDiagnostics().getActiveSubscriptions());
+				try {
+					client = listen(boundPort(server), "\"initial-allow\"");
+					McpChunkedHttpClient activeClient = client;
+					responseHead = reader.submit(activeClient::readHead);
+					Assertions.assertTrue(authorizerEntered.await(5, TimeUnit.SECONDS),
+							"The initial authorizer did not run.");
+					Assertions.assertFalse(responseHead.isDone(),
+							"A subscription acknowledgment escaped before authorization.");
+					McpAdmissionContext admission = observedAdmission.get();
+					Assertions.assertNotNull(admission);
+					Assertions.assertFalse(admission.isToolsListChangedIncluded());
+					Assertions.assertFalse(admission.isPromptsListChangedIncluded());
+					Assertions.assertTrue(admission.isResourcesListChangedIncluded());
+					Assertions.assertTrue(admission.isResourceSubscriptionsIncluded());
+					Assertions.assertEquals(List.of(FIRST_RESOURCE_URI, SECOND_RESOURCE_URI),
+							admission.getRequestedResourceSubscriptionUris());
+					Assertions.assertFalse(admission.isTaskIdsRequested());
+					Assertions.assertTrue(admission.getRequestedTaskIds().isEmpty());
+					Assertions.assertThrows(UnsupportedOperationException.class,
+							() -> admission.getRequestedResourceSubscriptionUris()
+									.add(URI.create("test://subscription/mutated")));
+					McpSubscriptionAuthorizationContext context = observedContext.get();
+					Assertions.assertNotNull(context);
+					Assertions.assertSame(admissionApplicationContext,
+							context.getApplicationContext().orElseThrow());
+					Assertions.assertTrue(context.getPreviousValidUntil().isEmpty());
+					Assertions.assertTrue(context.getDeadline().isAfter(Instant.now()));
+					Assertions.assertEquals(Boolean.FALSE,
+							context.isToolsListChangedIncluded());
+					Assertions.assertEquals(Boolean.FALSE,
+							context.isPromptsListChangedIncluded());
+					Assertions.assertEquals(Boolean.TRUE,
+							context.isResourcesListChangedIncluded());
+					Assertions.assertEquals(Set.of(FIRST_RESOURCE_URI,
+							SECOND_RESOURCE_URI), context.getResourceSubscriptionUris());
+					Assertions.assertTrue(context.getTaskIds().isEmpty());
+					Assertions.assertThrows(UnsupportedOperationException.class,
+							() -> context.getResourceSubscriptionUris().add(
+									URI.create("test://subscription/authorization/mutated")));
+					Assertions.assertThrows(UnsupportedOperationException.class,
+							() -> context.getTaskIds().add("mutated"));
+					McpInvocationFeatures features = observedFeatures.get();
+					Assertions.assertNotNull(features);
+					Assertions.assertNotNull(features.getCancelationToken());
+					Assertions.assertTrue(features.getProgressReporter().isEmpty());
+					Assertions.assertTrue(features.getTaskCreationContext().isEmpty());
+					Assertions.assertTrue(features.find(McpLocalizationContext.class)
+							.isEmpty());
+					McpRequestContext initialRequest = context.getInitialRequestContext();
+					Assertions.assertEquals("Bearer admission-secret",
+							initialRequest.getRequest().getHeader("Authorization")
+									.orElseThrow());
+					Assertions.assertSame(admissionApplicationContext,
+							initialRequest.getAdmissionIdentity().getApplicationContext()
+									.orElseThrow());
+					Assertions.assertNotSame(Thread.currentThread(), authorizerThread.get());
+					releaseAuthorizer.countDown();
+
+					assertSseHead(responseHead.get(5, TimeUnit.SECONDS));
+					Assertions.assertEquals(acknowledgment("\"initial-allow\""),
+							client.readChunkText());
+					Assertions.assertEquals(1,
+							server.getDiagnostics().getActiveSubscriptions());
+				} finally {
+					releaseAuthorizer.countDown();
+					if (responseHead != null)
+						responseHead.cancel(true);
+					if (client != null)
+						client.closeWithReset();
+			}
+			});
 		} finally {
-			releaseAuthorizer.countDown();
-			if (responseHead != null)
-				responseHead.cancel(true);
-			if (client != null)
-				client.closeWithReset();
-			owner.close();
 			reader.shutdownNow();
 			Assertions.assertTrue(reader.awaitTermination(5, TimeUnit.SECONDS));
 		}
@@ -295,89 +298,92 @@ public class McpSubscriptionAuthorizationPublicRuntimeTests {
 				McpSubscriptionEventPublisher.fromInMemoryDefaults();
 		McpServer server = server(publisher, authorizer,
 				admissionApplicationContext);
-		Soklet owner = managedSoklet(server, metrics);
+
 		ExecutorService reader = Executors.newSingleThreadExecutor();
-		McpChunkedHttpClient client = null;
-		Future<McpChunkedHttpClient.HttpResponseHead> responseHead = null;
-		Future<String> eventFrame = null;
-
 		try {
-			owner.start();
-			client = listen(boundPort(server), "\"establishing-reconcile\"");
-			McpChunkedHttpClient activeClient = client;
-			responseHead = reader.submit(activeClient::readHead);
-			Assertions.assertTrue(initialEntered.await(5, TimeUnit.SECONDS),
-					"The initial authorization did not enter.");
-			Assertions.assertFalse(responseHead.isDone(),
-					"The stream opened while initial authorization was blocked.");
+			Soklet.run(managedSokletConfig(server, metrics), () -> {
+				McpChunkedHttpClient client = null;
+				Future<McpChunkedHttpClient.HttpResponseHead> responseHead = null;
+				Future<String> eventFrame = null;
 
-			server.getSubscriptionReconciler().reconcileSubscriptions();
-			metrics.awaitMaintenance(
-					McpMetricsEvent.SubscriptionMaintenance.Work.RECONCILIATION,
-					McpMetricsEvent.SubscriptionMaintenance.Outcome.COALESCED, 1);
-			Assertions.assertTrue(staleToken.get().isCanceled(),
-					"Reconciliation did not cancel the establishing generation.");
-			Assertions.assertTrue(cancellationHookEntered.await(5, TimeUnit.SECONDS),
-					"The establishing authorization cancellation hook did not enter.");
-			publisher.publishResourceUpdated(FIRST_RESOURCE_URI);
-			releaseInitial.countDown();
-			Assertions.assertFalse(freshEntered.await(100, TimeUnit.MILLISECONDS),
-					"Fresh initial authorization overlapped the canceled callback chain.");
-			Assertions.assertEquals(1, authorizations.get());
-			Assertions.assertFalse(responseHead.isDone(),
-					"The stale authorization acknowledged before its cancel hook exited.");
-			releaseCancellationHook.countDown();
-			Assertions.assertTrue(cancellationHookExited.await(5, TimeUnit.SECONDS),
-					"The establishing authorization cancellation hook did not exit.");
+				try {
+					client = listen(boundPort(server), "\"establishing-reconcile\"");
+					McpChunkedHttpClient activeClient = client;
+					responseHead = reader.submit(activeClient::readHead);
+					Assertions.assertTrue(initialEntered.await(5, TimeUnit.SECONDS),
+							"The initial authorization did not enter.");
+					Assertions.assertFalse(responseHead.isDone(),
+							"The stream opened while initial authorization was blocked.");
 
-			Assertions.assertTrue(freshEntered.await(5, TimeUnit.SECONDS),
-					"A fresh authorization generation did not run.");
-			metrics.awaitMaintenance(
-					McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
-					McpMetricsEvent.SubscriptionMaintenance.Outcome
-							.STALE_RESULT_DISCARDED, 1);
-			Assertions.assertFalse(responseHead.isDone(),
-					"A stale pre-reconciliation grant acknowledged the stream.");
-			Assertions.assertEquals(2, contexts.size());
-			McpSubscriptionAuthorizationContext initial = contexts.get(0);
-			McpSubscriptionAuthorizationContext fresh = contexts.get(1);
-			Assertions.assertSame(initial.getInitialRequestContext(),
-					fresh.getInitialRequestContext());
-			Assertions.assertSame(admissionApplicationContext,
-					fresh.getApplicationContext().orElseThrow(),
-					"A stale replacement context reached the fresh generation.");
-			Assertions.assertTrue(fresh.getPreviousValidUntil().isEmpty(),
-					"A stale grant became historical authorization state.");
-			Assertions.assertEquals(1, maximumActiveAuthorizers.get(),
-					"Establishment ran overlapping authorization callbacks.");
+					server.getSubscriptionReconciler().reconcileSubscriptions();
+					metrics.awaitMaintenance(
+							McpMetricsEvent.SubscriptionMaintenance.Work.RECONCILIATION,
+							McpMetricsEvent.SubscriptionMaintenance.Outcome.COALESCED, 1);
+					Assertions.assertTrue(staleToken.get().isCanceled(),
+							"Reconciliation did not cancel the establishing generation.");
+					Assertions.assertTrue(cancellationHookEntered.await(5, TimeUnit.SECONDS),
+							"The establishing authorization cancellation hook did not enter.");
+					publisher.publishResourceUpdated(FIRST_RESOURCE_URI);
+					releaseInitial.countDown();
+					Assertions.assertFalse(freshEntered.await(100, TimeUnit.MILLISECONDS),
+							"Fresh initial authorization overlapped the canceled callback chain.");
+					Assertions.assertEquals(1, authorizations.get());
+					Assertions.assertFalse(responseHead.isDone(),
+							"The stale authorization acknowledged before its cancel hook exited.");
+					releaseCancellationHook.countDown();
+					Assertions.assertTrue(cancellationHookExited.await(5, TimeUnit.SECONDS),
+							"The establishing authorization cancellation hook did not exit.");
 
-			releaseFresh.countDown();
-			assertSseHead(responseHead.get(5, TimeUnit.SECONDS));
-			Assertions.assertEquals(acknowledgment(
-					"\"establishing-reconcile\""), client.readChunkText());
-			metrics.awaitMaintenance(
-					McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
-					McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED, 1);
-			Assertions.assertEquals(2, authorizations.get());
+					Assertions.assertTrue(freshEntered.await(5, TimeUnit.SECONDS),
+							"A fresh authorization generation did not run.");
+					metrics.awaitMaintenance(
+							McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
+							McpMetricsEvent.SubscriptionMaintenance.Outcome
+									.STALE_RESULT_DISCARDED, 1);
+					Assertions.assertFalse(responseHead.isDone(),
+							"A stale pre-reconciliation grant acknowledged the stream.");
+					Assertions.assertEquals(2, contexts.size());
+					McpSubscriptionAuthorizationContext initial = contexts.get(0);
+					McpSubscriptionAuthorizationContext fresh = contexts.get(1);
+					Assertions.assertSame(initial.getInitialRequestContext(),
+							fresh.getInitialRequestContext());
+					Assertions.assertSame(admissionApplicationContext,
+							fresh.getApplicationContext().orElseThrow(),
+							"A stale replacement context reached the fresh generation.");
+					Assertions.assertTrue(fresh.getPreviousValidUntil().isEmpty(),
+							"A stale grant became historical authorization state.");
+					Assertions.assertEquals(1, maximumActiveAuthorizers.get(),
+							"Establishment ran overlapping authorization callbacks.");
 
-			eventFrame = reader.submit(activeClient::readChunkText);
-			Assertions.assertFalse(eventFrame.isDone(),
-					"An event published before activation was replayed.");
-			publisher.publishResourceUpdated(SECOND_RESOURCE_URI);
-			Assertions.assertEquals(resourceUpdated(
-					"\"establishing-reconcile\"", SECOND_RESOURCE_URI),
-					eventFrame.get(5, TimeUnit.SECONDS));
+					releaseFresh.countDown();
+					assertSseHead(responseHead.get(5, TimeUnit.SECONDS));
+					Assertions.assertEquals(acknowledgment(
+							"\"establishing-reconcile\""), client.readChunkText());
+					metrics.awaitMaintenance(
+							McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
+							McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED, 1);
+					Assertions.assertEquals(2, authorizations.get());
+
+					eventFrame = reader.submit(activeClient::readChunkText);
+					Assertions.assertFalse(eventFrame.isDone(),
+							"An event published before activation was replayed.");
+					publisher.publishResourceUpdated(SECOND_RESOURCE_URI);
+					Assertions.assertEquals(resourceUpdated(
+							"\"establishing-reconcile\"", SECOND_RESOURCE_URI),
+							eventFrame.get(5, TimeUnit.SECONDS));
+				} finally {
+					releaseInitial.countDown();
+					releaseCancellationHook.countDown();
+					releaseFresh.countDown();
+					if (responseHead != null)
+						responseHead.cancel(true);
+					if (eventFrame != null)
+						eventFrame.cancel(true);
+					if (client != null)
+						client.closeWithReset();
+			}
+			});
 		} finally {
-			releaseInitial.countDown();
-			releaseCancellationHook.countDown();
-			releaseFresh.countDown();
-			if (responseHead != null)
-				responseHead.cancel(true);
-			if (eventFrame != null)
-				eventFrame.cancel(true);
-			if (client != null)
-				client.closeWithReset();
-			owner.close();
 			reader.shutdownNow();
 			Assertions.assertTrue(reader.awaitTermination(5, TimeUnit.SECONDS));
 		}
@@ -395,37 +401,37 @@ public class McpSubscriptionAuthorizationPublicRuntimeTests {
 		McpSubscriptionEventPublisher publisher =
 				McpSubscriptionEventPublisher.fromInMemoryDefaults();
 		McpServer server = server(publisher, authorizer, null);
-		Soklet owner = managedSoklet(server, metrics);
-		McpChunkedHttpClient admitted = null;
+		Soklet.run(managedSokletConfig(server, metrics), () -> {
+			McpChunkedHttpClient admitted = null;
 
-		try {
-			owner.start();
-			int port = boundPort(server);
-			try (McpChunkedHttpClient denied = listen(port, "\"denied\"")) {
-				McpChunkedHttpClient.HttpResponseHead head = denied.readHead();
-				Assertions.assertNotEquals(200, head.status(), head.raw());
-				String body = denied.readFixedBody(head);
-				Assertions.assertFalse(body.contains(
-						"notifications/subscriptions/acknowledged"), body);
+			try {
+				int port = boundPort(server);
+				try (McpChunkedHttpClient denied = listen(port, "\"denied\"")) {
+					McpChunkedHttpClient.HttpResponseHead head = denied.readHead();
+					Assertions.assertNotEquals(200, head.status(), head.raw());
+					String body = denied.readFixedBody(head);
+					Assertions.assertFalse(body.contains(
+							"notifications/subscriptions/acknowledged"), body);
+				}
+				metrics.awaitMaintenance(
+						McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
+						McpMetricsEvent.SubscriptionMaintenance.Outcome.DENIED, 1);
+				Assertions.assertEquals(0,
+						server.getDiagnostics().getActiveSubscriptions());
+
+				admitted = listen(port, "\"after-denial\"");
+				assertSseHead(admitted.readHead());
+				Assertions.assertEquals(acknowledgment("\"after-denial\""),
+						admitted.readChunkText());
+				Assertions.assertEquals(2, authorizations.get());
+				Assertions.assertEquals(1,
+						server.getDiagnostics().getActiveSubscriptions());
+			} finally {
+				if (admitted != null)
+					admitted.closeWithReset();
+
 			}
-			metrics.awaitMaintenance(
-					McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
-					McpMetricsEvent.SubscriptionMaintenance.Outcome.DENIED, 1);
-			Assertions.assertEquals(0,
-					server.getDiagnostics().getActiveSubscriptions());
-
-			admitted = listen(port, "\"after-denial\"");
-			assertSseHead(admitted.readHead());
-			Assertions.assertEquals(acknowledgment("\"after-denial\""),
-					admitted.readChunkText());
-			Assertions.assertEquals(2, authorizations.get());
-			Assertions.assertEquals(1,
-					server.getDiagnostics().getActiveSubscriptions());
-		} finally {
-			if (admitted != null)
-				admitted.closeWithReset();
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -511,82 +517,85 @@ public class McpSubscriptionAuthorizationPublicRuntimeTests {
 				McpSubscriptionEventPublisher.fromInMemoryDefaults();
 		McpServer server = server(publisher, authorizer,
 				admissionApplicationContext);
-		Soklet owner = managedSoklet(server, metrics);
+
 		ExecutorService reader = Executors.newSingleThreadExecutor();
-		McpChunkedHttpClient client = null;
-		Future<String> nextFrame = null;
-
 		try {
-			owner.start();
-			client = listen(boundPort(server), "\"reconcile\"");
-			assertSseHead(client.readHead());
-			Assertions.assertEquals(acknowledgment("\"reconcile\""),
-					client.readChunkText());
-			metrics.awaitMaintenance(
-					McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
-					McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED, 1);
+			Soklet.run(managedSokletConfig(server, metrics), () -> {
+				McpChunkedHttpClient client = null;
+				Future<String> nextFrame = null;
 
-			server.getSubscriptionReconciler().reconcileSubscriptions();
-			Assertions.assertTrue(reconciliationEntered.await(5, TimeUnit.SECONDS),
-					"Reconciliation did not schedule authorization.");
-			publisher.publishResourceUpdated(FIRST_RESOURCE_URI);
-			McpChunkedHttpClient activeClient = client;
-			nextFrame = reader.submit(activeClient::readChunkText);
-			Assertions.assertFalse(nextFrame.isDone(),
-					"Delivery was not fenced during reconciliation.");
+				try {
+					client = listen(boundPort(server), "\"reconcile\"");
+					assertSseHead(client.readHead());
+					Assertions.assertEquals(acknowledgment("\"reconcile\""),
+							client.readChunkText());
+					metrics.awaitMaintenance(
+							McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
+							McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED, 1);
 
-			server.getSubscriptionReconciler().reconcileSubscriptions();
-			Assertions.assertTrue(cancellationHookEntered.await(5, TimeUnit.SECONDS),
-					"The superseded authorization cancellation hook did not enter.");
-			metrics.awaitMaintenance(
-					McpMetricsEvent.SubscriptionMaintenance.Work.RECONCILIATION,
-					McpMetricsEvent.SubscriptionMaintenance.Outcome.COALESCED, 1);
-			releaseReconciliation.countDown();
-			metrics.awaitMaintenance(
-					McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
-					McpMetricsEvent.SubscriptionMaintenance.Outcome
-							.STALE_RESULT_DISCARDED, 1);
-			Assertions.assertFalse(replacementEntered.await(100, TimeUnit.MILLISECONDS),
-					"A replacement authorizer overlapped the canceled callback chain.");
-			Assertions.assertEquals(2, authorizations.get());
-			releaseCancellationHook.countDown();
-			Assertions.assertTrue(cancellationHookExited.await(5, TimeUnit.SECONDS),
-					"The authorization cancellation hook did not exit.");
-			metrics.awaitMaintenance(
-					McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
-					McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED, 2);
-			Assertions.assertTrue(staleToken.get().isCanceled(),
-					"Superseded reconciliation did not cancel its public token.");
+					server.getSubscriptionReconciler().reconcileSubscriptions();
+					Assertions.assertTrue(reconciliationEntered.await(5, TimeUnit.SECONDS),
+							"Reconciliation did not schedule authorization.");
+					publisher.publishResourceUpdated(FIRST_RESOURCE_URI);
+					McpChunkedHttpClient activeClient = client;
+					nextFrame = reader.submit(activeClient::readChunkText);
+					Assertions.assertFalse(nextFrame.isDone(),
+							"Delivery was not fenced during reconciliation.");
 
-			Assertions.assertEquals(resourceUpdated("\"reconcile\"",
-					FIRST_RESOURCE_URI), nextFrame.get(5, TimeUnit.SECONDS),
-					"The fenced invalidation must catch up only after the fresh grant is accepted.");
-			publisher.publishResourceUpdated(SECOND_RESOURCE_URI);
-			Assertions.assertEquals(resourceUpdated("\"reconcile\"", SECOND_RESOURCE_URI),
-					client.readChunkText());
-			Assertions.assertEquals(1, maximumActiveAuthorizers.get(),
-					"One subscription ran overlapping authorization callbacks.");
-			Assertions.assertEquals(3, authorizations.get());
+					server.getSubscriptionReconciler().reconcileSubscriptions();
+					Assertions.assertTrue(cancellationHookEntered.await(5, TimeUnit.SECONDS),
+							"The superseded authorization cancellation hook did not enter.");
+					metrics.awaitMaintenance(
+							McpMetricsEvent.SubscriptionMaintenance.Work.RECONCILIATION,
+							McpMetricsEvent.SubscriptionMaintenance.Outcome.COALESCED, 1);
+					releaseReconciliation.countDown();
+					metrics.awaitMaintenance(
+							McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
+							McpMetricsEvent.SubscriptionMaintenance.Outcome
+									.STALE_RESULT_DISCARDED, 1);
+					Assertions.assertFalse(replacementEntered.await(100, TimeUnit.MILLISECONDS),
+							"A replacement authorizer overlapped the canceled callback chain.");
+					Assertions.assertEquals(2, authorizations.get());
+					releaseCancellationHook.countDown();
+					Assertions.assertTrue(cancellationHookExited.await(5, TimeUnit.SECONDS),
+							"The authorization cancellation hook did not exit.");
+					metrics.awaitMaintenance(
+							McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
+							McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED, 2);
+					Assertions.assertTrue(staleToken.get().isCanceled(),
+							"Superseded reconciliation did not cancel its public token.");
 
-			server.getSubscriptionReconciler().reconcileSubscriptions();
-			Assertions.assertTrue(clearedContextObserved.await(5, TimeUnit.SECONDS),
-					"The cleared application context was not observed.");
-			metrics.awaitMaintenance(
-					McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
-					McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED, 3);
-			Assertions.assertEquals(4, contexts.size());
-			McpRequestContext initial = contexts.get(0).getInitialRequestContext();
-			for (McpSubscriptionAuthorizationContext context : contexts)
-				Assertions.assertSame(initial, context.getInitialRequestContext(),
-						"Renewal replaced the historical admission context.");
+					Assertions.assertEquals(resourceUpdated("\"reconcile\"",
+							FIRST_RESOURCE_URI), nextFrame.get(5, TimeUnit.SECONDS),
+							"The fenced invalidation must catch up only after the fresh grant is accepted.");
+					publisher.publishResourceUpdated(SECOND_RESOURCE_URI);
+					Assertions.assertEquals(resourceUpdated("\"reconcile\"", SECOND_RESOURCE_URI),
+							client.readChunkText());
+					Assertions.assertEquals(1, maximumActiveAuthorizers.get(),
+							"One subscription ran overlapping authorization callbacks.");
+					Assertions.assertEquals(3, authorizations.get());
+
+					server.getSubscriptionReconciler().reconcileSubscriptions();
+					Assertions.assertTrue(clearedContextObserved.await(5, TimeUnit.SECONDS),
+							"The cleared application context was not observed.");
+					metrics.awaitMaintenance(
+							McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
+							McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED, 3);
+					Assertions.assertEquals(4, contexts.size());
+					McpRequestContext initial = contexts.get(0).getInitialRequestContext();
+					for (McpSubscriptionAuthorizationContext context : contexts)
+						Assertions.assertSame(initial, context.getInitialRequestContext(),
+								"Renewal replaced the historical admission context.");
+				} finally {
+					releaseReconciliation.countDown();
+					releaseCancellationHook.countDown();
+					if (nextFrame != null)
+						nextFrame.cancel(true);
+					if (client != null)
+						client.closeWithReset();
+			}
+			});
 		} finally {
-			releaseReconciliation.countDown();
-			releaseCancellationHook.countDown();
-			if (nextFrame != null)
-				nextFrame.cancel(true);
-			if (client != null)
-				client.closeWithReset();
-			owner.close();
 			reader.shutdownNow();
 			Assertions.assertTrue(reader.awaitTermination(5, TimeUnit.SECONDS));
 		}
@@ -624,40 +633,40 @@ public class McpSubscriptionAuthorizationPublicRuntimeTests {
 		McpServer server = server(publisher, authorizer, null,
 				Duration.ofSeconds(5), maximumAuthorizationDuration,
 				Duration.ofSeconds(30));
-		Soklet owner = managedSoklet(server, metrics);
-		McpChunkedHttpClient client = null;
+		Soklet.run(managedSokletConfig(server, metrics), () -> {
+			McpChunkedHttpClient client = null;
 
-		try {
-			owner.start();
-			client = listen(boundPort(server), "\"maximum-lease\"");
-			assertSseHead(client.readHead());
-			Assertions.assertEquals(acknowledgment("\"maximum-lease\""),
-					client.readChunkText());
-			Assertions.assertTrue(renewalEntered.await(5, TimeUnit.SECONDS),
-					"The server-capped authorization did not renew.");
-			metrics.awaitMaintenance(
-					McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
-					McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED, 2);
+			try {
+				client = listen(boundPort(server), "\"maximum-lease\"");
+				assertSseHead(client.readHead());
+				Assertions.assertEquals(acknowledgment("\"maximum-lease\""),
+						client.readChunkText());
+				Assertions.assertTrue(renewalEntered.await(5, TimeUnit.SECONDS),
+						"The server-capped authorization did not renew.");
+				metrics.awaitMaintenance(
+						McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
+						McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED, 2);
 
-			Instant previousValidUntil = renewalContext.get()
-					.getPreviousValidUntil().orElseThrow();
-			Assertions.assertTrue(previousValidUntil.isBefore(
-					requestedValidUntil.get()),
-					"The application lease was not capped by the server maximum.");
-			Duration remainingAtRenewal = Duration.between(
-					renewalObservedAt.get(), previousValidUntil);
-			Assertions.assertFalse(remainingAtRenewal.isNegative(),
-					"Renewal began after the effective authorization expired.");
-			Assertions.assertTrue(remainingAtRenewal.compareTo(
-					maximumAuthorizationDuration) <= 0,
-					"The historical expiration exceeds the configured maximum: "
-							+ remainingAtRenewal);
-			Assertions.assertEquals(2, authorizations.get());
-		} finally {
-			if (client != null)
-				client.closeWithReset();
-			owner.close();
-		}
+				Instant previousValidUntil = renewalContext.get()
+						.getPreviousValidUntil().orElseThrow();
+				Assertions.assertTrue(previousValidUntil.isBefore(
+						requestedValidUntil.get()),
+						"The application lease was not capped by the server maximum.");
+				Duration remainingAtRenewal = Duration.between(
+						renewalObservedAt.get(), previousValidUntil);
+				Assertions.assertFalse(remainingAtRenewal.isNegative(),
+						"Renewal began after the effective authorization expired.");
+				Assertions.assertTrue(remainingAtRenewal.compareTo(
+						maximumAuthorizationDuration) <= 0,
+						"The historical expiration exceeds the configured maximum: "
+								+ remainingAtRenewal);
+				Assertions.assertEquals(2, authorizations.get());
+			} finally {
+				if (client != null)
+					client.closeWithReset();
+
+			}
+		});
 	}
 
 	@Test
@@ -700,62 +709,62 @@ public class McpSubscriptionAuthorizationPublicRuntimeTests {
 		McpServer server = server(publisher, authorizer,
 				admissionApplicationContext, Duration.ofSeconds(2),
 				Duration.ofSeconds(5), Duration.ofSeconds(10));
-		Soklet owner = managedSoklet(server, metrics);
-		McpChunkedHttpClient client = null;
+		Soklet.run(managedSokletConfig(server, metrics), () -> {
+			McpChunkedHttpClient client = null;
 
-		try {
-			owner.start();
-			client = listen(boundPort(server), "\"automatic-renewal\"");
-			assertSseHead(client.readHead());
-			Assertions.assertEquals(acknowledgment("\"automatic-renewal\""),
-					client.readChunkText());
-			Assertions.assertTrue(renewalEntered.await(5, TimeUnit.SECONDS),
-					"The automatic renewal did not run.");
+			try {
+				client = listen(boundPort(server), "\"automatic-renewal\"");
+				assertSseHead(client.readHead());
+				Assertions.assertEquals(acknowledgment("\"automatic-renewal\""),
+						client.readChunkText());
+				Assertions.assertTrue(renewalEntered.await(5, TimeUnit.SECONDS),
+						"The automatic renewal did not run.");
 
-			long renewalDelayNanos = renewalEnteredAtNanos.get()
-					- initialGrantReturnedAtNanos.get();
-			Assertions.assertTrue(
-					renewalDelayNanos >= Duration.ofMillis(350).toNanos(),
-					"Renewal ran before the approximate half-lease boundary: "
-							+ Duration.ofNanos(renewalDelayNanos));
-			metrics.awaitMaintenance(
-					McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
-					McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED, 2);
+				long renewalDelayNanos = renewalEnteredAtNanos.get()
+						- initialGrantReturnedAtNanos.get();
+				Assertions.assertTrue(
+						renewalDelayNanos >= Duration.ofMillis(350).toNanos(),
+						"Renewal ran before the approximate half-lease boundary: "
+								+ Duration.ofNanos(renewalDelayNanos));
+				metrics.awaitMaintenance(
+						McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
+						McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED, 2);
 
-			McpSubscriptionAuthorizationContext initial = contexts.get(0);
-			McpSubscriptionAuthorizationContext renewal = contexts.get(1);
-			Assertions.assertSame(admissionApplicationContext,
-					initial.getApplicationContext().orElseThrow());
-			Assertions.assertSame(initialReplacementContext,
-					renewal.getApplicationContext().orElseThrow());
-			Assertions.assertEquals(initialValidUntil.get(),
-					renewal.getPreviousValidUntil().orElseThrow());
-			assertAcknowledgedResourceFilter(renewal);
-			Assertions.assertSame(initial.getInitialRequestContext(),
-					renewal.getInitialRequestContext());
+				McpSubscriptionAuthorizationContext initial = contexts.get(0);
+				McpSubscriptionAuthorizationContext renewal = contexts.get(1);
+				Assertions.assertSame(admissionApplicationContext,
+						initial.getApplicationContext().orElseThrow());
+				Assertions.assertSame(initialReplacementContext,
+						renewal.getApplicationContext().orElseThrow());
+				Assertions.assertEquals(initialValidUntil.get(),
+						renewal.getPreviousValidUntil().orElseThrow());
+				assertAcknowledgedResourceFilter(renewal);
+				Assertions.assertSame(initial.getInitialRequestContext(),
+						renewal.getInitialRequestContext());
 
-			server.getSubscriptionReconciler().reconcileSubscriptions();
-			Assertions.assertTrue(reconciliationEntered.await(5, TimeUnit.SECONDS),
-					"Reconciliation did not observe the renewal grant.");
-			metrics.awaitMaintenance(
-					McpMetricsEvent.SubscriptionMaintenance.Work.RECONCILIATION,
-					McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED, 1);
-			McpSubscriptionAuthorizationContext reconciliation = contexts.get(2);
-			Assertions.assertTrue(reconciliation.getApplicationContext().isEmpty(),
-					"Omitting renewal application context must clear the prior value.");
-			assertAcknowledgedResourceFilter(reconciliation);
-			Assertions.assertSame(initial.getInitialRequestContext(),
-					reconciliation.getInitialRequestContext());
-			Assertions.assertEquals(3, authorizations.get());
+				server.getSubscriptionReconciler().reconcileSubscriptions();
+				Assertions.assertTrue(reconciliationEntered.await(5, TimeUnit.SECONDS),
+						"Reconciliation did not observe the renewal grant.");
+				metrics.awaitMaintenance(
+						McpMetricsEvent.SubscriptionMaintenance.Work.RECONCILIATION,
+						McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED, 1);
+				McpSubscriptionAuthorizationContext reconciliation = contexts.get(2);
+				Assertions.assertTrue(reconciliation.getApplicationContext().isEmpty(),
+						"Omitting renewal application context must clear the prior value.");
+				assertAcknowledgedResourceFilter(reconciliation);
+				Assertions.assertSame(initial.getInitialRequestContext(),
+						reconciliation.getInitialRequestContext());
+				Assertions.assertEquals(3, authorizations.get());
 
-			publisher.publishResourceUpdated(SECOND_RESOURCE_URI);
-			Assertions.assertEquals(resourceUpdated("\"automatic-renewal\"",
-					SECOND_RESOURCE_URI), client.readChunkText());
-		} finally {
-			if (client != null)
-				client.closeWithReset();
-			owner.close();
-		}
+				publisher.publishResourceUpdated(SECOND_RESOURCE_URI);
+				Assertions.assertEquals(resourceUpdated("\"automatic-renewal\"",
+						SECOND_RESOURCE_URI), client.readChunkText());
+			} finally {
+				if (client != null)
+					client.closeWithReset();
+
+			}
+		});
 	}
 
 	@Test
@@ -789,41 +798,44 @@ public class McpSubscriptionAuthorizationPublicRuntimeTests {
 		McpServer server = server(publisher, authorizer, null,
 				Duration.ofSeconds(5), Duration.ofSeconds(10),
 				Duration.ofSeconds(30));
-		Soklet owner = managedSoklet(server, metrics);
+
 		ExecutorService reader = Executors.newSingleThreadExecutor();
-		McpChunkedHttpClient client = null;
-		Future<String> eventFrame = null;
-
 		try {
-			owner.start();
-			client = listen(boundPort(server), "\"ordinary-renewal\"");
-			assertSseHead(client.readHead());
-			Assertions.assertEquals(acknowledgment("\"ordinary-renewal\""),
-					client.readChunkText());
-			Assertions.assertTrue(renewalEntered.await(5, TimeUnit.SECONDS),
-					"The ordinary renewal did not enter.");
+			Soklet.run(managedSokletConfig(server, metrics), () -> {
+				McpChunkedHttpClient client = null;
+				Future<String> eventFrame = null;
 
-			McpChunkedHttpClient activeClient = client;
-			eventFrame = reader.submit(activeClient::readChunkText);
-			publisher.publishResourceUpdated(FIRST_RESOURCE_URI);
-			Assertions.assertEquals(resourceUpdated("\"ordinary-renewal\"",
-					FIRST_RESOURCE_URI), eventFrame.get(1, TimeUnit.SECONDS),
-					"Ordinary renewal fenced delivery under a still-valid grant.");
-			Assertions.assertEquals(1L, renewalExited.getCount(),
-					"The renewal callback exited before the delivery assertion.");
+				try {
+					client = listen(boundPort(server), "\"ordinary-renewal\"");
+					assertSseHead(client.readHead());
+					Assertions.assertEquals(acknowledgment("\"ordinary-renewal\""),
+							client.readChunkText());
+					Assertions.assertTrue(renewalEntered.await(5, TimeUnit.SECONDS),
+							"The ordinary renewal did not enter.");
 
-			releaseRenewal.countDown();
-			metrics.awaitMaintenance(
-					McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
-					McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED, 2);
-			Assertions.assertEquals(2, authorizations.get());
+					McpChunkedHttpClient activeClient = client;
+					eventFrame = reader.submit(activeClient::readChunkText);
+					publisher.publishResourceUpdated(FIRST_RESOURCE_URI);
+					Assertions.assertEquals(resourceUpdated("\"ordinary-renewal\"",
+							FIRST_RESOURCE_URI), eventFrame.get(1, TimeUnit.SECONDS),
+							"Ordinary renewal fenced delivery under a still-valid grant.");
+					Assertions.assertEquals(1L, renewalExited.getCount(),
+							"The renewal callback exited before the delivery assertion.");
+
+					releaseRenewal.countDown();
+					metrics.awaitMaintenance(
+							McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
+							McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED, 2);
+					Assertions.assertEquals(2, authorizations.get());
+				} finally {
+					releaseRenewal.countDown();
+					if (eventFrame != null)
+						eventFrame.cancel(true);
+					if (client != null)
+						client.closeWithReset();
+			}
+			});
 		} finally {
-			releaseRenewal.countDown();
-			if (eventFrame != null)
-				eventFrame.cancel(true);
-			if (client != null)
-				client.closeWithReset();
-			owner.close();
 			reader.shutdownNow();
 			Assertions.assertTrue(reader.awaitTermination(5, TimeUnit.SECONDS));
 		}
@@ -873,44 +885,44 @@ public class McpSubscriptionAuthorizationPublicRuntimeTests {
 		McpServer server = server(publisher, authorizer, null,
 				Duration.ofSeconds(2), Duration.ofSeconds(5),
 				Duration.ofSeconds(5));
-		Soklet owner = managedSoklet(server, metrics);
-		McpChunkedHttpClient client = null;
+		Soklet.run(managedSokletConfig(server, metrics), () -> {
+			McpChunkedHttpClient client = null;
 
-		try {
-			owner.start();
-			client = listen(boundPort(server), "\"resistant-renewal\"");
-			assertSseHead(client.readHead());
-			Assertions.assertEquals(acknowledgment("\"resistant-renewal\""),
-					client.readChunkText());
-			Assertions.assertTrue(renewalEntered.await(5, TimeUnit.SECONDS),
-					"The renewal callback did not enter.");
+			try {
+				client = listen(boundPort(server), "\"resistant-renewal\"");
+				assertSseHead(client.readHead());
+				Assertions.assertEquals(acknowledgment("\"resistant-renewal\""),
+						client.readChunkText());
+				Assertions.assertTrue(renewalEntered.await(5, TimeUnit.SECONDS),
+						"The renewal callback did not enter.");
 
-			server.getSubscriptionReconciler().reconcileSubscriptions();
-			long cancellationDeadline = System.nanoTime()
-					+ TimeUnit.SECONDS.toNanos(2);
-			while (!renewalToken.get().isCanceled()
-					&& System.nanoTime() - cancellationDeadline < 0L)
-				Thread.sleep(1L);
-			Assertions.assertTrue(renewalToken.get().isCanceled(),
-					"Reconciliation did not cancel the resistant renewal token.");
-			metrics.awaitSubscriptionClosed(
-					McpStreamTerminationReason.SUBSCRIPTION_AUTHORIZATION_EXPIRED);
-			Assertions.assertEquals(terminal("\"resistant-renewal\""), client.readChunkText());
-			Assertions.assertNull(client.readChunk());
-			Assertions.assertEquals(2, authorizations.get(),
-					"A replacement callback overlapped the resistant renewal.");
-			Assertions.assertEquals(1, maximumActiveAuthorizers.get(),
-					"One subscription ran overlapping authorizer callbacks.");
-			Assertions.assertEquals(0,
-					server.getDiagnostics().getActiveSubscriptions());
-		} finally {
-			releaseRenewal.countDown();
-			Assertions.assertTrue(renewalExited.await(5, TimeUnit.SECONDS),
-					"The resistant renewal did not exit after release.");
-			if (client != null)
-				client.closeWithReset();
-			owner.close();
-		}
+				server.getSubscriptionReconciler().reconcileSubscriptions();
+				long cancellationDeadline = System.nanoTime()
+						+ TimeUnit.SECONDS.toNanos(2);
+				while (!renewalToken.get().isCanceled()
+						&& System.nanoTime() - cancellationDeadline < 0L)
+					Thread.sleep(1L);
+				Assertions.assertTrue(renewalToken.get().isCanceled(),
+						"Reconciliation did not cancel the resistant renewal token.");
+				metrics.awaitSubscriptionClosed(
+						McpStreamTerminationReason.SUBSCRIPTION_AUTHORIZATION_EXPIRED);
+				Assertions.assertEquals(terminal("\"resistant-renewal\""), client.readChunkText());
+				Assertions.assertNull(client.readChunk());
+				Assertions.assertEquals(2, authorizations.get(),
+						"A replacement callback overlapped the resistant renewal.");
+				Assertions.assertEquals(1, maximumActiveAuthorizers.get(),
+						"One subscription ran overlapping authorizer callbacks.");
+				Assertions.assertEquals(0,
+						server.getDiagnostics().getActiveSubscriptions());
+			} finally {
+				releaseRenewal.countDown();
+				Assertions.assertTrue(renewalExited.await(5, TimeUnit.SECONDS),
+						"The resistant renewal did not exit after release.");
+				if (client != null)
+					client.closeWithReset();
+
+			}
+		});
 	}
 
 	@Test
@@ -943,33 +955,33 @@ public class McpSubscriptionAuthorizationPublicRuntimeTests {
 		McpServer server = server(publisher, authorizer, null,
 				Duration.ofSeconds(2), Duration.ofSeconds(5),
 				Duration.ofSeconds(5));
-		Soklet owner = managedSoklet(server, metrics);
-		McpChunkedHttpClient client = null;
+		Soklet.run(managedSokletConfig(server, metrics), () -> {
+			McpChunkedHttpClient client = null;
 
-		try {
-			owner.start();
-			client = listen(boundPort(server), "\"same-expiration-renewal\"");
-			assertSseHead(client.readHead());
-			Assertions.assertEquals(acknowledgment(
-					"\"same-expiration-renewal\""), client.readChunkText());
-			Assertions.assertTrue(renewalEntered.await(5, TimeUnit.SECONDS),
-					"The same-expiration renewal did not run.");
-			Assertions.assertEquals(initialValidUntil.get(),
-					renewalPreviousValidUntil.get());
-			metrics.awaitMaintenance(
-					McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
-					McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED, 2);
-			metrics.awaitSubscriptionClosed(
-					McpStreamTerminationReason.SUBSCRIPTION_AUTHORIZATION_EXPIRED);
-			Assertions.assertEquals(terminal("\"same-expiration-renewal\""), client.readChunkText());
-			Assertions.assertNull(client.readChunk());
-			Assertions.assertEquals(2, authorizations.get(),
-					"A same-expiration grant scheduled another renewal.");
-		} finally {
-			if (client != null)
-				client.closeWithReset();
-			owner.close();
-		}
+			try {
+				client = listen(boundPort(server), "\"same-expiration-renewal\"");
+				assertSseHead(client.readHead());
+				Assertions.assertEquals(acknowledgment(
+						"\"same-expiration-renewal\""), client.readChunkText());
+				Assertions.assertTrue(renewalEntered.await(5, TimeUnit.SECONDS),
+						"The same-expiration renewal did not run.");
+				Assertions.assertEquals(initialValidUntil.get(),
+						renewalPreviousValidUntil.get());
+				metrics.awaitMaintenance(
+						McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
+						McpMetricsEvent.SubscriptionMaintenance.Outcome.SUCCEEDED, 2);
+				metrics.awaitSubscriptionClosed(
+						McpStreamTerminationReason.SUBSCRIPTION_AUTHORIZATION_EXPIRED);
+				Assertions.assertEquals(terminal("\"same-expiration-renewal\""), client.readChunkText());
+				Assertions.assertNull(client.readChunk());
+				Assertions.assertEquals(2, authorizations.get(),
+						"A same-expiration grant scheduled another renewal.");
+			} finally {
+				if (client != null)
+					client.closeWithReset();
+
+			}
+		});
 	}
 
 	@Test
@@ -1033,41 +1045,41 @@ public class McpSubscriptionAuthorizationPublicRuntimeTests {
 		McpServer server = server(McpSubscriptionEventPublisher.fromInMemoryDefaults(),
 				(authorizationContext, invocationFeatures) -> authorizations.incrementAndGet() == 1
 						? allowed(null) : McpSubscriptionAuthorization.deniedInstance(), null);
-		Soklet owner = managedSoklet(server, metrics);
-		McpChunkedHttpClient client = null;
-		McpRequestSseStream.setTestHooks(() -> {
-			terminalReady.countDown();
+		Soklet.run(managedSokletConfig(server, metrics), () -> {
+			McpChunkedHttpClient client = null;
+			McpRequestSseStream.setTestHooks(() -> {
+				terminalReady.countDown();
+				try {
+					Assertions.assertTrue(releaseTerminal.await(10, TimeUnit.SECONDS));
+				} catch (InterruptedException exception) {
+					Thread.currentThread().interrupt();
+					throw new AssertionError(exception);
+				} finally {
+					terminalResumed.countDown();
+				}
+			});
 			try {
-				Assertions.assertTrue(releaseTerminal.await(10, TimeUnit.SECONDS));
-			} catch (InterruptedException exception) {
-				Thread.currentThread().interrupt();
-				throw new AssertionError(exception);
+				client = listen(boundPort(server), "\"disconnect-at-terminal\"");
+				assertSseHead(client.readHead());
+				Assertions.assertEquals(acknowledgment("\"disconnect-at-terminal\""), client.readChunkText());
+				server.getSubscriptionReconciler().reconcileSubscriptions();
+				Assertions.assertTrue(terminalReady.await(5, TimeUnit.SECONDS));
+				client.closeWithReset();
+				client = null;
+				metrics.awaitSubscriptionClosed(McpStreamTerminationReason.CLIENT_DISCONNECTED);
+				releaseTerminal.countDown();
+				Assertions.assertTrue(terminalResumed.await(5, TimeUnit.SECONDS));
+				Assertions.assertEquals(1L, metrics.subscriptionClosedCount());
+				Assertions.assertFalse(metrics.hasSubscriptionClose(McpStreamTerminationReason.SUBSCRIPTION_AUTHORIZATION_DENIED),
+						"A closing-frame attempt must not overwrite the winning physical disconnect.");
+				Assertions.assertEquals(0, server.getDiagnostics().getActiveSubscriptions());
 			} finally {
-				terminalResumed.countDown();
+				releaseTerminal.countDown();
+				McpRequestSseStream.setTestHooks(null);
+				if (client != null) client.closeWithReset();
+
 			}
 		});
-		try {
-			owner.start();
-			client = listen(boundPort(server), "\"disconnect-at-terminal\"");
-			assertSseHead(client.readHead());
-			Assertions.assertEquals(acknowledgment("\"disconnect-at-terminal\""), client.readChunkText());
-			server.getSubscriptionReconciler().reconcileSubscriptions();
-			Assertions.assertTrue(terminalReady.await(5, TimeUnit.SECONDS));
-			client.closeWithReset();
-			client = null;
-			metrics.awaitSubscriptionClosed(McpStreamTerminationReason.CLIENT_DISCONNECTED);
-			releaseTerminal.countDown();
-			Assertions.assertTrue(terminalResumed.await(5, TimeUnit.SECONDS));
-			Assertions.assertEquals(1L, metrics.subscriptionClosedCount());
-			Assertions.assertFalse(metrics.hasSubscriptionClose(McpStreamTerminationReason.SUBSCRIPTION_AUTHORIZATION_DENIED),
-					"A closing-frame attempt must not overwrite the winning physical disconnect.");
-			Assertions.assertEquals(0, server.getDiagnostics().getActiveSubscriptions());
-		} finally {
-			releaseTerminal.countDown();
-			McpRequestSseStream.setTestHooks(null);
-			if (client != null) client.closeWithReset();
-			owner.close();
-		}
 	}
 
 	@Test
@@ -1103,9 +1115,8 @@ public class McpSubscriptionAuthorizationPublicRuntimeTests {
 				}
 				return allowed(null);
 			}, null);
-			Soklet owner = managedSoklet(server, metrics);
-			try {
-				owner.start();
+			Soklet.run(managedSokletConfig(server, metrics), () -> {
+
 				try (McpChunkedHttpClient client = listen(boundPort(server), id)) {
 					assertSseHead(client.readHead());
 					Assertions.assertEquals(acknowledgment(id), client.readChunkText());
@@ -1136,9 +1147,7 @@ public class McpSubscriptionAuthorizationPublicRuntimeTests {
 					Assertions.assertEquals(3, authorizations.get(),
 							"The closed listen must release capacity without reviving authorization.");
 				}
-			} finally {
-				owner.close();
-			}
+			});
 		}
 	}
 
@@ -1162,44 +1171,44 @@ public class McpSubscriptionAuthorizationPublicRuntimeTests {
 		McpSubscriptionEventPublisher publisher =
 				McpSubscriptionEventPublisher.fromInMemoryDefaults();
 		McpServer server = server(publisher, authorizer, null);
-		Soklet owner = managedSoklet(server, metrics);
-		McpChunkedHttpClient admitted = null;
+		Soklet.run(managedSokletConfig(server, metrics), () -> {
+			McpChunkedHttpClient admitted = null;
 
-		try {
-			owner.start();
-			int port = boundPort(server);
-			try (McpChunkedHttpClient failed = listen(port,
-					"\"" + subscriptionId + "\"")) {
-				McpChunkedHttpClient.HttpResponseHead head = failed.readHead();
-				Assertions.assertEquals(500, head.status(), head.raw());
-				String body = failed.readFixedBody(head);
-				Assertions.assertFalse(body.contains(
-						"notifications/subscriptions/acknowledged"), body);
+			try {
+				int port = boundPort(server);
+				try (McpChunkedHttpClient failed = listen(port,
+						"\"" + subscriptionId + "\"")) {
+					McpChunkedHttpClient.HttpResponseHead head = failed.readHead();
+					Assertions.assertEquals(500, head.status(), head.raw());
+					String body = failed.readFixedBody(head);
+					Assertions.assertFalse(body.contains(
+							"notifications/subscriptions/acknowledged"), body);
+				}
+				metrics.awaitMaintenance(
+						McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
+						McpMetricsEvent.SubscriptionMaintenance.Outcome.FAILED, 1);
+				Assertions.assertEquals(1L, metrics.maintenanceCount(
+						McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
+						McpMetricsEvent.SubscriptionMaintenance.Outcome.FAILED));
+				Assertions.assertEquals(0L, metrics.subscriptionClosedCount(),
+						"Initial authorization failure opened a subscription lifecycle.");
+				Assertions.assertEquals(0,
+						server.getDiagnostics().getActiveSubscriptions());
+
+				String admittedId = "\"" + subscriptionId + "-after-failure\"";
+				admitted = listen(port, admittedId);
+				assertSseHead(admitted.readHead());
+				Assertions.assertEquals(acknowledgment(admittedId),
+						admitted.readChunkText());
+				Assertions.assertEquals(2, authorizations.get());
+				Assertions.assertEquals(1,
+						server.getDiagnostics().getActiveSubscriptions());
+			} finally {
+				if (admitted != null)
+					admitted.closeWithReset();
+
 			}
-			metrics.awaitMaintenance(
-					McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
-					McpMetricsEvent.SubscriptionMaintenance.Outcome.FAILED, 1);
-			Assertions.assertEquals(1L, metrics.maintenanceCount(
-					McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
-					McpMetricsEvent.SubscriptionMaintenance.Outcome.FAILED));
-			Assertions.assertEquals(0L, metrics.subscriptionClosedCount(),
-					"Initial authorization failure opened a subscription lifecycle.");
-			Assertions.assertEquals(0,
-					server.getDiagnostics().getActiveSubscriptions());
-
-			String admittedId = "\"" + subscriptionId + "-after-failure\"";
-			admitted = listen(port, admittedId);
-			assertSseHead(admitted.readHead());
-			Assertions.assertEquals(acknowledgment(admittedId),
-					admitted.readChunkText());
-			Assertions.assertEquals(2, authorizations.get());
-			Assertions.assertEquals(1,
-					server.getDiagnostics().getActiveSubscriptions());
-		} finally {
-			if (admitted != null)
-				admitted.closeWithReset();
-			owner.close();
-		}
+		});
 	}
 
 	private static void assertAcknowledgedResourceFilter(
@@ -1326,10 +1335,9 @@ public class McpSubscriptionAuthorizationPublicRuntimeTests {
 				.build();
 	}
 
-	@NonNull
-	private static Soklet managedSoklet(@NonNull McpServer server,
+	private static SokletConfig managedSokletConfig(@NonNull McpServer server,
 			@NonNull MetricsCollector metricsCollector) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.metricsCollector(metricsCollector)
 				.lifecyclePolicy(LifecyclePolicy.builder()
@@ -1338,7 +1346,7 @@ public class McpSubscriptionAuthorizationPublicRuntimeTests {
 						.gracefulShutdownTimeout(Duration.ofSeconds(2))
 						.forcedShutdownTimeout(Duration.ofSeconds(1))
 						.build())
-				.build());
+				.build();
 	}
 
 	@NonNull

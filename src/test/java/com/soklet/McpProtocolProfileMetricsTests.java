@@ -49,13 +49,12 @@ public class McpProtocolProfileMetricsTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(HOST))
 				.build();
-		Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.metricsCollector(metrics)
-				.build());
+				.build();
 
-		try {
-			soklet.start();
+		Soklet.run(sokletConfig, () -> {
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			String body = "{\"jsonrpc\":\"2.0\",\"id\":\"metrics\","
 					+ "\"method\":\"server/discover\",\"params\":{}}";
@@ -77,9 +76,7 @@ public class McpProtocolProfileMetricsTests {
 			Map<Integer, Long> protocolErrors = awaitProtocolErrors(metrics, -32022);
 			Assertions.assertEquals(1L, protocolErrors.get(-32022));
 			Assertions.assertFalse(protocolErrors.containsKey(-32602));
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	private static Map<Integer, Long> awaitProtocolErrors(

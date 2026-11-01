@@ -1051,7 +1051,7 @@ public sealed interface McpServer permits DefaultMcpServer {
 
 		/**
 		 * Sets a supplier for the application handler executor used by each
-		 * listener generation. The supplier is invoked during {@link Soklet#start()}
+		 * listener generation. The supplier is invoked during {@link Soklet#run(SokletConfig)}
 		 * and must return a fresh, running executor each time. Soklet owns and shuts
 		 * down every returned executor. Its own handler-slot and queue bounds remain
 		 * authoritative regardless of executor capacity.

@@ -71,9 +71,10 @@ class McpLegacySessionPublicRuntimeTests {
 
 	@Test
 	void correlatedLegacyDeadlineErrorsUseHttp200WithAndWithoutSessions() throws Exception {
-		try (Fixture fixture = new Fixture((context, arguments, features) -> {
+		Fixture fixture = new Fixture((context, arguments, features) -> {
 			new CountDownLatch(1).await(); return McpCompleteResult.fromToolText("unreachable");
-		}, builder -> builder, builder -> builder.requestTimeout(Duration.ofSeconds(1)))) {
+		}, builder -> builder, builder -> builder.requestTimeout(Duration.ofSeconds(1)));
+		Soklet.run(fixture.config, () -> {
 			for (McpProtocolVersion version : LEGACY) {
 				String id = sessionId(fixture.initialize(version, "alice", null, "{}", "deadline"));
 				for (String path : List.of("/mcp", "/stateless")) {
@@ -84,12 +85,13 @@ class McpLegacySessionPublicRuntimeTests {
 					assertTrue(response.body().contains("\"code\":-32603"), response.body());
 				}
 			}
-		}
+		});
 	}
 
 	@Test
 	void deadSessionPrecedesRegistrationErrorsAfterSuccessfulAdmission() throws Exception {
-		try (Fixture fixture = new Fixture(QUIET)) {
+		Fixture fixture = new Fixture(QUIET);
+		Soklet.run(fixture.config, () -> {
 			for (McpProtocolVersion version : LEGACY) {
 				String liveId = sessionId(fixture.initialize(version, "alice", null, "{}", "precedence"));
 				for (String method : List.of("unknown/call", "tasks/list", "prompts/list", "resources/list", "tools/call")) {
@@ -111,12 +113,13 @@ class McpLegacySessionPublicRuntimeTests {
 				Response malformed = fixture.post("/mcp", version, "tools/call", "", "1", "unknown-session", "alice", List.of());
 				assertEquals(404, malformed.status(), "Operation fields must not hide a dead session: " + malformed.body());
 			}
-		}
+		});
 	}
 
 	@Test
 	void operationParameterFailuresFollowAdmissionLimiterAndSessionBinding() throws Exception {
-		try (Fixture fixture = new Fixture(QUIET)) {
+		Fixture fixture = new Fixture(QUIET);
+		Soklet.run(fixture.config, () -> {
 			for (McpProtocolVersion version : LEGACY) {
 				String live = sessionId(fixture.initialize(version, "alice", null, "{}", "parameters"));
 				for (String[] operation : List.of(
@@ -141,16 +144,17 @@ class McpLegacySessionPublicRuntimeTests {
 					assertTrue(admitted.body().contains("\"code\":" + operation[2]), method + ": " + admitted.body());
 				}
 			}
-		}
+		});
 	}
 
 	@Test
 	void deferredParameterFailuresRetainOnlyValidatedOperationMetadataForPolicyHooks() throws Exception {
 		AtomicInteger handlers = new AtomicInteger();
-		try (Fixture fixture = new Fixture((context, arguments, features) -> {
+		Fixture fixture = new Fixture((context, arguments, features) -> {
 			handlers.incrementAndGet();
 			return McpCompleteResult.fromToolText("unexpected");
-		})) {
+		});
+		Soklet.run(fixture.config, () -> {
 			for (McpProtocolVersion version : LEGACY) {
 				String live = sessionId(fixture.initialize(version, "alice", null, "{}", "metadata"));
 				for (String[] operation : List.of(
@@ -186,7 +190,7 @@ class McpLegacySessionPublicRuntimeTests {
 				}
 			}
 			assertEquals(0, handlers.get(), "Deferred validation must never enter the application handler.");
-		}
+		});
 	}
 
 	@Test
@@ -198,10 +202,9 @@ class McpLegacySessionPublicRuntimeTests {
 		McpServer server = McpServer.withPort(0).host("127.0.0.1")
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed()).build();
-		try (Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+		Soklet.run(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.lifecyclePolicy(LIFECYCLE).build())) {
-			soklet.start();
+				.lifecyclePolicy(LIFECYCLE).build(), () -> {
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			for (McpProtocolVersion version : LEGACY) {
 				try (RawClient initialize = new RawClient(port, "/mcp",
@@ -218,7 +221,7 @@ class McpLegacySessionPublicRuntimeTests {
 					assertTrue(call.readBody(head).contains("\"text\":\"ok\""));
 				}
 			}
-		}
+		});
 	}
 
 	@Test
@@ -229,9 +232,10 @@ class McpLegacySessionPublicRuntimeTests {
 				identity -> "x".repeat(257),
 				identity -> "bad\ud800key",
 				identity -> { throw new Exception("owner-resolution-secret"); });
-		for (McpSessionOwnerKeyResolver resolver : resolvers)
-			try (Fixture fixture = new Fixture(QUIET, builder -> builder,
-					builder -> builder.sessionConfig(McpSessionConfig.withOwnerKeyResolver(resolver).build()))) {
+		for (McpSessionOwnerKeyResolver resolver : resolvers) {
+			Fixture fixture = new Fixture(QUIET, builder -> builder,
+				builder -> builder.sessionConfig(McpSessionConfig.withOwnerKeyResolver(resolver).build()));
+			Soklet.run(fixture.config, () -> {
 				for (McpProtocolVersion version : LEGACY) {
 					Response failure = fixture.initialize(version, "alice", null, "{}", "test");
 					assertEquals(200, failure.status(), failure.body());
@@ -239,7 +243,8 @@ class McpLegacySessionPublicRuntimeTests {
 					assertNull(failure.header("Mcp-Session-Id"));
 					assertFalse(failure.body().contains("owner-resolution-secret"));
 				}
-			}
+			});
+		}
 	}
 
 	@Test
@@ -251,18 +256,21 @@ class McpLegacySessionPublicRuntimeTests {
 			release.await(5, TimeUnit.SECONDS);
 			return "alice";
 		};
-		try (Fixture fixture = new Fixture(QUIET, builder -> builder,
-				builder -> builder.requestTimeout(Duration.ofMillis(250))
-						.sessionConfig(McpSessionConfig.withOwnerKeyResolver(resolver).build()))) {
-			try {
-				Response response = fixture.initialize(McpProtocolVersion.V2025_11_25, "alice", null, "{}", "timeout");
-				assertTrue(entered.await(5, TimeUnit.SECONDS));
-				assertTrue(Set.of(503, 504).contains(response.status()), response.body());
-				assertNull(response.header("Mcp-Session-Id"));
-			} finally {
-				release.countDown();
-			}
-			awaitCondition(() -> fixture.server.getDiagnostics().getActiveHandlerExecutions() == 0);
+		try {
+			Fixture fixture = new Fixture(QUIET, builder -> builder,
+					builder -> builder.requestTimeout(Duration.ofMillis(250))
+						.sessionConfig(McpSessionConfig.withOwnerKeyResolver(resolver).build()));
+			Soklet.run(fixture.config, () -> {
+				try {
+					Response response = fixture.initialize(McpProtocolVersion.V2025_11_25, "alice", null, "{}", "timeout");
+					assertTrue(entered.await(5, TimeUnit.SECONDS));
+					assertTrue(Set.of(503, 504).contains(response.status()), response.body());
+					assertNull(response.header("Mcp-Session-Id"));
+				} finally {
+					release.countDown();
+				}
+				awaitCondition(() -> fixture.server.getDiagnostics().getActiveHandlerExecutions() == 0);
+			});
 		} finally {
 			release.countDown();
 		}
@@ -273,38 +281,41 @@ class McpLegacySessionPublicRuntimeTests {
 		for (McpProtocolVersion version : LEGACY)
 			for (boolean reports : List.of(false, true)) {
 				Held held = new Held(reports);
-				try (Fixture fixture = new Fixture(held::handle)) {
-					String id = sessionId(fixture.initialize(version, "alice", null, "{}", "test"));
-					try (RawClient target = fixture.open("/mcp", version, "tools/call",
-							toolParams(reports ? "\"_meta\":{\"progressToken\":\"progress\"}" : ""),
-							"\"pending\"", id, "alice", List.of(), 0)) {
-						assertTrue(held.entered.await(5, TimeUnit.SECONDS));
-						Head head = null;
-						if (reports) {
-							head = target.readHead();
+				try {
+				Fixture fixture = new Fixture(held::handle);
+				Soklet.run(fixture.config, () -> {
+						String id = sessionId(fixture.initialize(version, "alice", null, "{}", "test"));
+						try (RawClient target = fixture.open("/mcp", version, "tools/call",
+								toolParams(reports ? "\"_meta\":{\"progressToken\":\"progress\"}" : ""),
+								"\"pending\"", id, "alice", List.of(), 0)) {
+							assertTrue(held.entered.await(5, TimeUnit.SECONDS));
+							Head head = null;
+							if (reports) {
+								head = target.readHead();
+								assertSse(head);
+								String progress = new String(target.readChunk(), StandardCharsets.UTF_8);
+								assertTrue(progress.contains("\"method\":\"notifications/progress\""), progress);
+							}
+							Response cancellation = fixture.cancel(version, id, "alice", "\"pending\"");
+							assertEquals(202, cancellation.status(), cancellation.body());
+							assertEquals("", cancellation.body());
+							assertTrue(held.canceled.await(5, TimeUnit.SECONDS));
+							assertEquals(StreamTerminationReason.CLIENT_CANCELED,
+									held.token.get().getCancelationReason().orElseThrow());
+							if (head == null) head = target.readHead();
 							assertSse(head);
-							String progress = new String(target.readChunk(), StandardCharsets.UTF_8);
-							assertTrue(progress.contains("\"method\":\"notifications/progress\""), progress);
+							assertEquals("", target.readBody(head), "A canceled RPC emits no result or empty JSON document.");
+							assertTrue(target.terminalRead, "The body must end at a real HTTP terminal chunk.");
+							assertEquals(1, fixture.server.getDiagnostics().getActiveHandlerExecutions(),
+									"Logical cancellation cannot release the blocked physical worker.");
+							assertEquals(202, fixture.cancel(version, id, "alice", "\"pending\"").status(),
+									"Completed/unknown targets have the same empty cancellation acknowledgement.");
+						} finally {
+							held.release.countDown();
 						}
-						Response cancellation = fixture.cancel(version, id, "alice", "\"pending\"");
-						assertEquals(202, cancellation.status(), cancellation.body());
-						assertEquals("", cancellation.body());
-						assertTrue(held.canceled.await(5, TimeUnit.SECONDS));
-						assertEquals(StreamTerminationReason.CLIENT_CANCELED,
-								held.token.get().getCancelationReason().orElseThrow());
-						if (head == null) head = target.readHead();
-						assertSse(head);
-						assertEquals("", target.readBody(head), "A canceled RPC emits no result or empty JSON document.");
-						assertTrue(target.terminalRead, "The body must end at a real HTTP terminal chunk.");
-						assertEquals(1, fixture.server.getDiagnostics().getActiveHandlerExecutions(),
-								"Logical cancellation cannot release the blocked physical worker.");
-						assertEquals(202, fixture.cancel(version, id, "alice", "\"pending\"").status(),
-								"Completed/unknown targets have the same empty cancellation acknowledgement.");
-					} finally {
-						held.release.countDown();
-					}
-					assertTrue(held.exited.await(5, TimeUnit.SECONDS));
-					awaitCondition(() -> fixture.server.getDiagnostics().getActiveHandlerExecutions() == 0);
+						assertTrue(held.exited.await(5, TimeUnit.SECONDS));
+						awaitCondition(() -> fixture.server.getDiagnostics().getActiveHandlerExecutions() == 0);
+				});
 				} finally {
 					held.release.countDown();
 				}
@@ -312,6 +323,7 @@ class McpLegacySessionPublicRuntimeTests {
 	}
 
 	@Test
+	@Timeout(180)
 	void blockedCancellationCallbacksDoNotHoldHttpCompletionButRetainTheirPhysicalExecutionSlot() throws Exception {
 		for (McpProtocolVersion version : LEGACY) {
 			CountDownLatch entered = new CountDownLatch(1);
@@ -321,60 +333,63 @@ class McpLegacySessionPublicRuntimeTests {
 			CountDownLatch callbackExited = new CountDownLatch(1);
 			AtomicInteger handlerEntries = new AtomicInteger();
 			AtomicReference<CancelationToken> token = new AtomicReference<>();
-			try (Fixture fixture = new Fixture((requestContext, toolArguments, invocationFeatures) -> {
-				handlerEntries.incrementAndGet();
-				if (requestContext.getRequest().getHeader("X-Call-Tag").filter("probe"::equals).isPresent())
-					return McpCompleteResult.fromToolText("probe-result");
-				CancelationToken cancelationToken = invocationFeatures.getCancelationToken();
-				token.set(cancelationToken);
-				cancelationToken.onCancel(() -> {
-					callbackEntered.countDown();
-					try { awaitTestRelease(callbackRelease); }
-					finally { callbackExited.countDown(); }
-				});
-				entered.countDown();
-				boolean interrupted = false;
-				try {
-					long deadline = System.nanoTime() + Duration.ofSeconds(8).toNanos();
-					while (!cancelationToken.isCanceled() && System.nanoTime() - deadline < 0L) {
-						try { Thread.sleep(5); }
-						catch (InterruptedException ignored) { interrupted = true; }
+			try {
+				Fixture fixture = new Fixture((requestContext, toolArguments, invocationFeatures) -> {
+					handlerEntries.incrementAndGet();
+					if (requestContext.getRequest().getHeader("X-Call-Tag").filter("probe"::equals).isPresent())
+						return McpCompleteResult.fromToolText("probe-result");
+					CancelationToken cancelationToken = invocationFeatures.getCancelationToken();
+					token.set(cancelationToken);
+					cancelationToken.onCancel(() -> {
+						callbackEntered.countDown();
+						try { awaitTestRelease(callbackRelease); }
+						finally { callbackExited.countDown(); }
+					});
+					entered.countDown();
+					boolean interrupted = false;
+					try {
+						long deadline = System.nanoTime() + Duration.ofSeconds(8).toNanos();
+						while (!cancelationToken.isCanceled() && System.nanoTime() - deadline < 0L) {
+							try { Thread.sleep(5); }
+							catch (InterruptedException ignored) { interrupted = true; }
+						}
+						assertTrue(cancelationToken.isCanceled());
+						return McpCompleteResult.fromToolText("suppressed-result");
+					} finally {
+						if (interrupted) Thread.currentThread().interrupt();
+						handlerReturned.countDown();
 					}
-					assertTrue(cancelationToken.isCanceled());
-					return McpCompleteResult.fromToolText("suppressed-result");
-				} finally {
-					if (interrupted) Thread.currentThread().interrupt();
-					handlerReturned.countDown();
-				}
-			}, builder -> builder, builder -> builder.requestHandlerConcurrency(1).requestHandlerQueueCapacity(1))) {
-				String id = sessionId(fixture.initialize(version, "alice", null, "{}", "callbacks"));
-				try (RawClient target = fixture.open("/mcp", version, "tools/call", toolParams(""),
-						"\"callback-target\"", id, "alice", List.of(), 0)) {
-					assertTrue(entered.await(5, TimeUnit.SECONDS));
-					Response canceled = fixture.cancel(version, id, "alice", "\"callback-target\"");
-					assertEquals(202, canceled.status(), canceled.body());
-					assertEquals("", canceled.body());
-					assertSseEmpty(target);
-					assertTrue(callbackEntered.await(5, TimeUnit.SECONDS));
-					assertTrue(handlerReturned.await(5, TimeUnit.SECONDS));
-					assertEquals(StreamTerminationReason.CLIENT_CANCELED,
-							token.get().getCancelationReason().orElseThrow());
-					assertEquals(1, fixture.server.getDiagnostics().getActiveHandlerExecutions(),
-							"The blocked callback retains its request's physical reservation after HTTP completion.");
-					try (RawClient probe = fixture.open("/mcp", version, "tools/call", toolParams(""),
-							"\"queued-probe\"", id, "alice", List.of(new HeaderValue("X-Call-Tag", "probe")), 0)) {
-						awaitCondition(() -> fixture.server.getDiagnostics().getRequestHandlerQueueDepth() == 1);
-						assertEquals(1, handlerEntries.get(), "The occupied physical slot cannot be reused while its callback runs.");
+			}, builder -> builder, builder -> builder.requestHandlerConcurrency(1).requestHandlerQueueCapacity(1));
+				Soklet.run(fixture.config, () -> {
+					String id = sessionId(fixture.initialize(version, "alice", null, "{}", "callbacks"));
+					try (RawClient target = fixture.open("/mcp", version, "tools/call", toolParams(""),
+							"\"callback-target\"", id, "alice", List.of(), 0)) {
+						assertTrue(entered.await(5, TimeUnit.SECONDS));
+						Response canceled = fixture.cancel(version, id, "alice", "\"callback-target\"");
+						assertEquals(202, canceled.status(), canceled.body());
+						assertEquals("", canceled.body());
+						assertSseEmpty(target);
+						assertTrue(callbackEntered.await(5, TimeUnit.SECONDS));
+						assertTrue(handlerReturned.await(5, TimeUnit.SECONDS));
+						assertEquals(StreamTerminationReason.CLIENT_CANCELED,
+								token.get().getCancelationReason().orElseThrow());
+						assertEquals(1, fixture.server.getDiagnostics().getActiveHandlerExecutions(),
+								"The blocked callback retains its request's physical reservation after HTTP completion.");
+						try (RawClient probe = fixture.open("/mcp", version, "tools/call", toolParams(""),
+								"\"queued-probe\"", id, "alice", List.of(new HeaderValue("X-Call-Tag", "probe")), 0)) {
+							awaitCondition(() -> fixture.server.getDiagnostics().getRequestHandlerQueueDepth() == 1);
+							assertEquals(1, handlerEntries.get(), "The occupied physical slot cannot be reused while its callback runs.");
+							callbackRelease.countDown();
+							assertTrue(callbackExited.await(5, TimeUnit.SECONDS));
+							Head head = probe.readHead();
+							assertEquals(200, head.status());
+							assertTrue(probe.readBody(head).contains("probe-result"));
+						}
+					} finally {
 						callbackRelease.countDown();
-						assertTrue(callbackExited.await(5, TimeUnit.SECONDS));
-						Head head = probe.readHead();
-						assertEquals(200, head.status());
-						assertTrue(probe.readBody(head).contains("probe-result"));
 					}
-				} finally {
-					callbackRelease.countDown();
-				}
-				awaitCondition(() -> fixture.server.getDiagnostics().getActiveHandlerExecutions() == 0);
+					awaitCondition(() -> fixture.server.getDiagnostics().getActiveHandlerExecutions() == 0);
+				});
 			} finally {
 				callbackRelease.countDown();
 			}
@@ -392,46 +407,49 @@ class McpLegacySessionPublicRuntimeTests {
 			calls.put("string", string);
 			calls.put("other", otherSession);
 			AtomicInteger entries = new AtomicInteger();
-			try (Fixture fixture = new Fixture((requestContext, toolArguments, invocationFeatures) -> {
-				entries.incrementAndGet();
-				Held call = calls.get(requestContext.getRequest().getHeader("X-Call-Tag").orElseThrow());
-				return call.handle(requestContext, toolArguments, invocationFeatures);
-			})) {
-				String first = sessionId(fixture.initialize(version, "alice", null, "{}", "first"));
-				String second = sessionId(fixture.initialize(version, "alice", null, "{}", "second"));
-				try (RawClient integerTarget = fixture.open("/mcp", version, "tools/call", toolParams(""), "1",
-						first, "alice", List.of(new HeaderValue("X-Call-Tag", "integer")), 0)) {
-					assertTrue(integer.entered.await(5, TimeUnit.SECONDS));
-					Response collision = fixture.post("/mcp", version, "tools/call", toolParams(""), "1",
-							first, "alice", List.of(new HeaderValue("X-Call-Tag", "integer")));
-					assertTrue(collision.body().contains("\"code\":-32600"), collision.body());
-					assertEquals(1, entries.get());
-					try (RawClient stringTarget = fixture.open("/mcp", version, "tools/call", toolParams(""), "\"1\"",
-							first, "alice", List.of(new HeaderValue("X-Call-Tag", "string")), 0);
-							RawClient otherTarget = fixture.open("/mcp", version, "tools/call", toolParams(""), "1",
-									second, "alice", List.of(new HeaderValue("X-Call-Tag", "other")), 0)) {
-						assertTrue(string.entered.await(5, TimeUnit.SECONDS));
-						assertTrue(otherSession.entered.await(5, TimeUnit.SECONDS));
-						assertEquals(3, entries.get());
-						assertEquals(404, fixture.cancel(version, first, "bob", "1").status());
-						assertFalse(integer.token.get().isCanceled());
-						assertEquals(202, fixture.cancel(version, first, "alice", "1").status());
-						assertTrue(integer.canceled.await(5, TimeUnit.SECONDS));
-						assertFalse(string.token.get().isCanceled());
-						assertFalse(otherSession.token.get().isCanceled());
-						assertSseEmpty(integerTarget);
-						assertEquals(202, fixture.cancel(version, first, "alice", "\"1\"").status());
-						assertEquals(202, fixture.cancel(version, second, "alice", "1").status());
-						assertTrue(string.canceled.await(5, TimeUnit.SECONDS));
-						assertTrue(otherSession.canceled.await(5, TimeUnit.SECONDS));
-						assertSseEmpty(stringTarget);
-						assertSseEmpty(otherTarget);
+			try {
+				Fixture fixture = new Fixture((requestContext, toolArguments, invocationFeatures) -> {
+					entries.incrementAndGet();
+					Held call = calls.get(requestContext.getRequest().getHeader("X-Call-Tag").orElseThrow());
+					return call.handle(requestContext, toolArguments, invocationFeatures);
+				});
+				Soklet.run(fixture.config, () -> {
+					String first = sessionId(fixture.initialize(version, "alice", null, "{}", "first"));
+					String second = sessionId(fixture.initialize(version, "alice", null, "{}", "second"));
+					try (RawClient integerTarget = fixture.open("/mcp", version, "tools/call", toolParams(""), "1",
+							first, "alice", List.of(new HeaderValue("X-Call-Tag", "integer")), 0)) {
+						assertTrue(integer.entered.await(5, TimeUnit.SECONDS));
+						Response collision = fixture.post("/mcp", version, "tools/call", toolParams(""), "1",
+								first, "alice", List.of(new HeaderValue("X-Call-Tag", "integer")));
+						assertTrue(collision.body().contains("\"code\":-32600"), collision.body());
+						assertEquals(1, entries.get());
+						try (RawClient stringTarget = fixture.open("/mcp", version, "tools/call", toolParams(""), "\"1\"",
+								first, "alice", List.of(new HeaderValue("X-Call-Tag", "string")), 0);
+								RawClient otherTarget = fixture.open("/mcp", version, "tools/call", toolParams(""), "1",
+										second, "alice", List.of(new HeaderValue("X-Call-Tag", "other")), 0)) {
+							assertTrue(string.entered.await(5, TimeUnit.SECONDS));
+							assertTrue(otherSession.entered.await(5, TimeUnit.SECONDS));
+							assertEquals(3, entries.get());
+							assertEquals(404, fixture.cancel(version, first, "bob", "1").status());
+							assertFalse(integer.token.get().isCanceled());
+							assertEquals(202, fixture.cancel(version, first, "alice", "1").status());
+							assertTrue(integer.canceled.await(5, TimeUnit.SECONDS));
+							assertFalse(string.token.get().isCanceled());
+							assertFalse(otherSession.token.get().isCanceled());
+							assertSseEmpty(integerTarget);
+							assertEquals(202, fixture.cancel(version, first, "alice", "\"1\"").status());
+							assertEquals(202, fixture.cancel(version, second, "alice", "1").status());
+							assertTrue(string.canceled.await(5, TimeUnit.SECONDS));
+							assertTrue(otherSession.canceled.await(5, TimeUnit.SECONDS));
+							assertSseEmpty(stringTarget);
+							assertSseEmpty(otherTarget);
+						}
+					} finally {
+						integer.release.countDown();
+						string.release.countDown();
+						otherSession.release.countDown();
 					}
-				} finally {
-					integer.release.countDown();
-					string.release.countDown();
-					otherSession.release.countDown();
-				}
+				});
 			} finally {
 				integer.release.countDown();
 				string.release.countDown();
@@ -447,31 +465,34 @@ class McpLegacySessionPublicRuntimeTests {
 			CountDownLatch release = new CountDownLatch(1);
 			AtomicReference<CancelationToken> token = new AtomicReference<>();
 			String payload = "x".repeat(512 * 1024) + "END-OF-RESULT";
-			try (Fixture fixture = new Fixture((requestContext, toolArguments, invocationFeatures) -> {
-				token.set(invocationFeatures.getCancelationToken());
-				invocationFeatures.getProgressReporter().orElseThrow().report(McpProgressUpdate.withProgress(1.0).build());
-				entered.countDown();
-				assertTrue(release.await(5, TimeUnit.SECONDS));
-				return McpCompleteResult.fromToolText(payload);
-			})) {
-				String id = sessionId(fixture.initialize(version, "alice", null, "{}", "test"));
-				try (RawClient target = fixture.open("/mcp", version, "tools/call",
-						toolParams("\"_meta\":{\"progressToken\":\"progress\"}"), "\"result\"",
-						id, "alice", List.of(), 1024)) {
-					assertTrue(entered.await(5, TimeUnit.SECONDS));
-					Head head = target.readHead();
-					assertSse(head);
-					assertTrue(new String(target.readChunk(), StandardCharsets.UTF_8).contains("notifications/progress"));
-					release.countDown();
-					awaitCondition(() -> fixture.server.getDiagnostics().getActiveHandlerExecutions() == 0);
-					assertEquals(202, fixture.cancel(version, id, "alice", "\"result\"").status());
-					assertFalse(token.get().isCanceled(), "A reserved result wins against later client cancellation.");
-					String terminal = target.readBody(head);
-					assertTrue(terminal.contains("\"id\":\"result\""), terminal.substring(0, Math.min(128, terminal.length())));
-					assertTrue(terminal.contains(payload), "Queued bytes must retain the entire final result.");
-					assertTrue(terminal.endsWith("}\n\n"));
-					assertTrue(target.terminalRead);
-				}
+			try {
+				Fixture fixture = new Fixture((requestContext, toolArguments, invocationFeatures) -> {
+					token.set(invocationFeatures.getCancelationToken());
+					invocationFeatures.getProgressReporter().orElseThrow().report(McpProgressUpdate.withProgress(1.0).build());
+					entered.countDown();
+					assertTrue(release.await(5, TimeUnit.SECONDS));
+					return McpCompleteResult.fromToolText(payload);
+				});
+				Soklet.run(fixture.config, () -> {
+					String id = sessionId(fixture.initialize(version, "alice", null, "{}", "test"));
+					try (RawClient target = fixture.open("/mcp", version, "tools/call",
+							toolParams("\"_meta\":{\"progressToken\":\"progress\"}"), "\"result\"",
+							id, "alice", List.of(), 1024)) {
+						assertTrue(entered.await(5, TimeUnit.SECONDS));
+						Head head = target.readHead();
+						assertSse(head);
+						assertTrue(new String(target.readChunk(), StandardCharsets.UTF_8).contains("notifications/progress"));
+						release.countDown();
+						awaitCondition(() -> fixture.server.getDiagnostics().getActiveHandlerExecutions() == 0);
+						assertEquals(202, fixture.cancel(version, id, "alice", "\"result\"").status());
+						assertFalse(token.get().isCanceled(), "A reserved result wins against later client cancellation.");
+						String terminal = target.readBody(head);
+						assertTrue(terminal.contains("\"id\":\"result\""), terminal.substring(0, Math.min(128, terminal.length())));
+						assertTrue(terminal.contains(payload), "Queued bytes must retain the entire final result.");
+						assertTrue(terminal.endsWith("}\n\n"));
+						assertTrue(target.terminalRead);
+					}
+				});
 			} finally {
 				release.countDown();
 			}
@@ -482,26 +503,29 @@ class McpLegacySessionPublicRuntimeTests {
 	void hardSessionExpiryCancelsPhysicalWorkAndCompletesItsUsablePostWithACorrelatedError() throws Exception {
 		for (McpProtocolVersion version : LEGACY) {
 			Held held = new Held(false);
-			try (Fixture fixture = new Fixture(held::handle, builder -> builder
-					.maximumSessionIdleDuration(Duration.ofMillis(250))
-					.maximumSessionDuration(Duration.ofMillis(500)), builder -> {})) {
-				String id = sessionId(fixture.initialize(version, "alice", null, "{}", "test"));
-				try (RawClient target = fixture.open("/mcp", version, "tools/call", toolParams(""),
-						"\"expire\"", id, "alice", List.of(), 0)) {
-					assertTrue(held.entered.await(5, TimeUnit.SECONDS));
-					assertTrue(held.canceled.await(5, TimeUnit.SECONDS));
-					assertEquals(StreamTerminationReason.RESPONSE_TIMEOUT, held.token.get().getCancelationReason().orElseThrow());
-					Head head = target.readHead();
-					String error = target.readBody(head);
-					assertTrue(error.contains("\"id\":\"expire\""), error);
-					assertTrue(error.contains("\"code\":-32603"), error);
-					assertFalse(error.contains("late-result"));
-					assertEquals(1, fixture.server.getDiagnostics().getActiveHandlerExecutions());
-					assertEquals(404, fixture.call(version, id, "alice", "\"expired\"", "").status());
-				} finally {
-					held.release.countDown();
-				}
-				assertTrue(held.exited.await(5, TimeUnit.SECONDS));
+			try {
+				Fixture fixture = new Fixture(held::handle, builder -> builder
+						.maximumSessionIdleDuration(Duration.ofMillis(250))
+					.maximumSessionDuration(Duration.ofMillis(500)), builder -> {});
+				Soklet.run(fixture.config, () -> {
+					String id = sessionId(fixture.initialize(version, "alice", null, "{}", "test"));
+					try (RawClient target = fixture.open("/mcp", version, "tools/call", toolParams(""),
+							"\"expire\"", id, "alice", List.of(), 0)) {
+						assertTrue(held.entered.await(5, TimeUnit.SECONDS));
+						assertTrue(held.canceled.await(5, TimeUnit.SECONDS));
+						assertEquals(StreamTerminationReason.RESPONSE_TIMEOUT, held.token.get().getCancelationReason().orElseThrow());
+						Head head = target.readHead();
+						String error = target.readBody(head);
+						assertTrue(error.contains("\"id\":\"expire\""), error);
+						assertTrue(error.contains("\"code\":-32603"), error);
+						assertFalse(error.contains("late-result"));
+						assertEquals(1, fixture.server.getDiagnostics().getActiveHandlerExecutions());
+						assertEquals(404, fixture.call(version, id, "alice", "\"expired\"", "").status());
+					} finally {
+						held.release.countDown();
+					}
+					assertTrue(held.exited.await(5, TimeUnit.SECONDS));
+				});
 			} finally {
 				held.release.countDown();
 			}
@@ -575,10 +599,11 @@ class McpLegacySessionPublicRuntimeTests {
 	@Test
 	void initializationPublishesAUsableIdBeforeAcknowledgementAndKeepsMetadataSeparate() throws Exception {
 		List<McpRequestContext> contexts = new CopyOnWriteArrayList<>();
-		try (Fixture fixture = new Fixture((requestContext, toolArguments, invocationFeatures) -> {
+		Fixture fixture = new Fixture((requestContext, toolArguments, invocationFeatures) -> {
 			contexts.add(requestContext);
 			return McpCompleteResult.fromToolText("ok");
-		})) {
+		});
+		Soklet.run(fixture.config, () -> {
 			for (McpProtocolVersion version : LEGACY) {
 				Response initialized = fixture.initialize(version, "alice", null,
 						"{\"experimental\":{\"example.test/capability\":{\"enabled\":true}}}", "client-" + version.getWireValue());
@@ -611,12 +636,13 @@ class McpLegacySessionPublicRuntimeTests {
 			}
 			assertEquals(10, fixture.admissions.get());
 			assertEquals(6, fixture.limits.get(), "Verified acknowledgement uses the bounded cleanup path.");
-		}
+		});
 	}
 
 	@Test
 	void ownerPathAndExistenceFailuresAreNeutralAfterFreshAdmissionWhileRevisionMismatchPreservesTheSession() throws Exception {
-		try (Fixture fixture = new Fixture(QUIET)) {
+		Fixture fixture = new Fixture(QUIET);
+		Soklet.run(fixture.config, () -> {
 			for (McpProtocolVersion version : LEGACY) {
 				String id = sessionId(fixture.initialize(version, "alice", null, "{}", "test"));
 				Response foreign = fixture.call(version, id, "bob", "\"same\"", "");
@@ -635,12 +661,13 @@ class McpLegacySessionPublicRuntimeTests {
 			}
 			assertEquals(12, fixture.admissions.get());
 			assertEquals(12, fixture.limits.get());
-		}
+		});
 	}
 
 	@Test
 	void sessionFramingCannotDowngradeAndDuplicateOrMalformedHeadersDoNotUseTheStore() throws Exception {
-		try (Fixture fixture = new Fixture(QUIET)) {
+		Fixture fixture = new Fixture(QUIET);
+		Soklet.run(fixture.config, () -> {
 			for (McpProtocolVersion version : LEGACY) {
 				String id = sessionId(fixture.initialize(version, "alice", null, "{}", "test"));
 				assertEquals(400, fixture.call(version, null, "alice", "\"missing\"", "").status());
@@ -650,12 +677,13 @@ class McpLegacySessionPublicRuntimeTests {
 						id, "alice", List.of(new HeaderValue("Mcp-Session-Id", id))).status());
 				assertEquals(200, fixture.call(version, id, "alice", "\"valid\"", "").status());
 			}
-		}
+		});
 	}
 
 	@Test
 	void modernAndStatelessPathsStayIndependentOfConfiguredSessions() throws Exception {
-		try (Fixture fixture = new Fixture(QUIET)) {
+		Fixture fixture = new Fixture(QUIET);
+		Soklet.run(fixture.config, () -> {
 			for (McpProtocolVersion version : LEGACY) {
 				Response initialize = fixture.post("/stateless", version, "initialize", initParams(version, "{}", "plain"),
 						"\"init\"", null, "alice", List.of());
@@ -670,12 +698,13 @@ class McpLegacySessionPublicRuntimeTests {
 			assertNull(modern.header("Mcp-Session-Id"));
 			assertEquals(200, fixture.post("/mcp", McpProtocolVersion.V2026_07_28, "tools/call", toolParams(""),
 					"\"modern-tool\"", null, "alice", List.of()).status());
-		}
+		});
 	}
 
 	@Test
 	void initializationWithAStaleOrExistingWellFormedIdAllocatesANewRecord() throws Exception {
-		try (Fixture fixture = new Fixture(QUIET)) {
+		Fixture fixture = new Fixture(QUIET);
+		Soklet.run(fixture.config, () -> {
 			for (McpProtocolVersion version : LEGACY) {
 				String first = sessionId(fixture.initialize(version, "alice", "old-node.token", "{}", "first"));
 				String second = sessionId(fixture.initialize(version, "alice", first, "{}", "second"));
@@ -683,19 +712,20 @@ class McpLegacySessionPublicRuntimeTests {
 				assertEquals(200, fixture.call(version, first, "alice", "\"first\"", "").status());
 				assertEquals(200, fixture.call(version, second, "alice", "\"second\"", "").status());
 			}
-		}
+		});
 	}
 
 	@Test
 	void corsAllowsAndExposesSessionHeadersOnlyOnExplicitSessionEndpoints() throws Exception {
 		String origin = "https://client.example.test";
-		try (Fixture fixture = new Fixture(QUIET, builder -> builder,
-				builder -> builder.corsAuthorizer(CorsAuthorizer.fromWhitelistedOrigins(Set.of(origin))))) {
+		Fixture fixture = new Fixture(QUIET, builder -> builder,
+				builder -> builder.corsAuthorizer(CorsAuthorizer.fromWhitelistedOrigins(Set.of(origin))));
+		Soklet.run(fixture.config, () -> {
 			java.net.http.HttpClient client = java.net.http.HttpClient.newBuilder()
 					.connectTimeout(Duration.ofSeconds(2)).build();
 			for (String path : List.of("/mcp", "/stateless")) {
 				java.net.http.HttpRequest preflight = java.net.http.HttpRequest.newBuilder(
-						java.net.URI.create("http://127.0.0.1:" + fixture.port + path))
+						java.net.URI.create("http://127.0.0.1:" + fixture.port() + path))
 						.timeout(Duration.ofSeconds(5)).method("OPTIONS", java.net.http.HttpRequest.BodyPublishers.noBody())
 						.header("Origin", origin).header("Access-Control-Request-Method", "POST")
 						.header("Access-Control-Request-Headers", "Mcp-Session-Id, MCP-Protocol-Version").build();
@@ -711,32 +741,35 @@ class McpLegacySessionPublicRuntimeTests {
 				assertEquals(path.equals("/mcp"), response.header("Access-Control-Expose-Headers")
 						.toLowerCase(Locale.ROOT).contains("mcp-session-id"));
 			}
-		}
+		});
 	}
 
 	@Test
 	void anonymousAllocationRequiresExplicitOptInAndUsesFreshAdmission() throws Exception {
-		try (Fixture fixture = new Fixture(QUIET)) {
+		Fixture privateSessions = new Fixture(QUIET);
+		Soklet.run(privateSessions.config, () -> {
 			for (McpProtocolVersion version : LEGACY) {
-				Response denied = fixture.initialize(version, "anonymous", null, "{}", "public");
+				Response denied = privateSessions.initialize(version, "anonymous", null, "{}", "public");
 				assertEquals(403, denied.status(), denied.body());
 				assertNull(denied.header("Mcp-Session-Id"));
 			}
-			assertEquals(0, fixture.owners.get());
-		}
-		try (Fixture fixture = new Fixture(QUIET, builder -> builder.anonymousSessionsAllowed(true), builder -> {})) {
+			assertEquals(0, privateSessions.owners.get());
+		});
+		Fixture publicSessions = new Fixture(QUIET, builder -> builder.anonymousSessionsAllowed(true), builder -> {});
+		Soklet.run(publicSessions.config, () -> {
 			for (McpProtocolVersion version : LEGACY) {
-				String id = sessionId(fixture.initialize(version, "anonymous", null, "{}", "public"));
-				assertEquals(200, fixture.call(version, id, "anonymous", "\"public\"", "").status());
-				assertEquals(404, fixture.call(version, id, "alice", "\"public\"", "").status());
+				String id = sessionId(publicSessions.initialize(version, "anonymous", null, "{}", "public"));
+				assertEquals(200, publicSessions.call(version, id, "anonymous", "\"public\"", "").status());
+				assertEquals(404, publicSessions.call(version, id, "alice", "\"public\"", "").status());
 			}
-		}
+		});
 	}
 
 	@Test
 	void ownerAndGlobalCapacityFailuresPreserveSessionsWithoutInventingRetryTimes() throws Exception {
-		try (Fixture fixture = new Fixture(QUIET,
-				builder -> builder.maximumSessions(2).maximumSessionsPerOwner(1), builder -> {})) {
+		Fixture fixture = new Fixture(QUIET,
+				builder -> builder.maximumSessions(2).maximumSessionsPerOwner(1), builder -> {});
+		Soklet.run(fixture.config, () -> {
 			String alice = sessionId(fixture.initialize(McpProtocolVersion.V2025_06_18, "alice", null, "{}", "a"));
 			Response ownerFull = fixture.initialize(McpProtocolVersion.V2025_11_25, "alice", null, "{}", "a2");
 			assertEquals(429, ownerFull.status(), ownerFull.body());
@@ -746,12 +779,13 @@ class McpLegacySessionPublicRuntimeTests {
 			assertEquals(503, globalFull.status(), globalFull.body());
 			assertNull(globalFull.header("Retry-After"));
 			assertEquals(200, fixture.call(McpProtocolVersion.V2025_06_18, alice, "alice", "\"alive\"", "").status());
-		}
+		});
 	}
 
 	@Test
 	void oversizedClientSnapshotDoesNotPublishASessionId() throws Exception {
-		try (Fixture fixture = new Fixture(QUIET, builder -> builder.maximumClientMetadataSizeInBytes(128), builder -> {})) {
+		Fixture fixture = new Fixture(QUIET, builder -> builder.maximumClientMetadataSizeInBytes(128), builder -> {});
+		Soklet.run(fixture.config, () -> {
 			for (McpProtocolVersion version : LEGACY) {
 				Response oversized = fixture.initialize(version, "alice", null,
 						"{\"experimental\":{\"example.test/padding\":{\"value\":\"" + "x".repeat(256) + "\"}}}", "large");
@@ -759,7 +793,7 @@ class McpLegacySessionPublicRuntimeTests {
 				assertTrue(oversized.body().contains("\"error\""), oversized.body());
 				sessionId(fixture.initialize(version, "alice", null, "{}", "small"));
 			}
-		}
+		});
 	}
 
 	@Test
@@ -767,40 +801,43 @@ class McpLegacySessionPublicRuntimeTests {
 		List<HeaderValue> limited = List.of(new HeaderValue("X-Limit", "deny"));
 		for (McpProtocolVersion version : LEGACY) {
 			Held held = new Held(false);
-			try (Fixture fixture = new Fixture(held::handle, builder -> builder, builder -> builder
-					.requestHandlerConcurrency(1).requestHandlerQueueCapacity(1))) {
-				String id = sessionId(fixture.initialize(version, "alice", null, "{}", "test"));
-				try (RawClient active = fixture.open("/mcp", version, "tools/call", toolParams(""),
-						"\"active\"", id, "alice", List.of(), 0)) {
-					assertTrue(held.entered.await(5, TimeUnit.SECONDS));
-					try (RawClient queued = fixture.open("/mcp", version, "tools/call", toolParams(""),
-							"\"queued\"", id, "alice", List.of(), 0)) {
-						awaitCondition(() -> fixture.server.getDiagnostics().getRequestHandlerQueueDepth() == 1);
-						assertEquals(200, fixture.post("/mcp", version, "ping", "", "\"ping\"", id, "alice", limited).status());
-						assertEquals(202, fixture.post("/mcp", version, "notifications/initialized", "", null, id, "alice", limited).status());
-						Response collision = fixture.post("/mcp", version, "ping", "", "\"active\"", id, "alice", limited);
-						assertEquals(200, collision.status()); assertTrue(collision.body().contains("\"code\":-32600"), collision.body());
-						assertEquals(404, fixture.post("/mcp", version, "notifications/cancelled", "\"requestId\":\"active\"",
-								null, id, "bob", limited).status());
-						assertEquals(403, fixture.post("/mcp", version, "notifications/cancelled", "\"requestId\":\"active\"",
-								null, id, "alice", List.of(new HeaderValue("X-Limit", "deny"), new HeaderValue("X-Admission-Status", "403"))).status());
-						assertFalse(held.token.get().isCanceled());
-						assertEquals(429, fixture.post("/mcp", version, "notifications/cancelled", "\"requestId\":1.5",
-								null, id, "alice", limited).status(), "Malformed cancellation receives no cleanup exemption.");
-						assertEquals(429, fixture.post("/mcp", version, "notifications/cancelled", "\"requestId\":1e256",
-								null, id, "alice", limited).status(), "Exponent notation cannot expand an unbounded ID.");
-						assertEquals(429, fixture.post("/mcp", version, "notifications/cancelled", "\"requestId\":\"active\",\"reason\":\"" + "x".repeat(17000) + "\"",
-								null, id, "alice", limited).status(), "Oversized controls retain the ordinary quota path.");
-						assertEquals(202, fixture.post("/mcp", version, "notifications/cancelled", "\"requestId\":\"queued\"",
-								null, id, "alice", limited).status());
-						assertSseEmpty(queued);
-						assertEquals(202, fixture.post("/mcp", version, "notifications/cancelled", "\"requestId\":\"active\"",
-								null, id, "alice", limited).status());
-						assertTrue(held.canceled.await(5, TimeUnit.SECONDS)); assertSseEmpty(active);
-						assertEquals(1, fixture.server.getDiagnostics().getActiveHandlerExecutions(), "Ignored physical work stays charged.");
-					} finally { held.release.countDown(); }
-				}
-				assertTrue(held.exited.await(5, TimeUnit.SECONDS));
+			try {
+				Fixture fixture = new Fixture(held::handle, builder -> builder, builder -> builder
+					.requestHandlerConcurrency(1).requestHandlerQueueCapacity(1));
+				Soklet.run(fixture.config, () -> {
+					String id = sessionId(fixture.initialize(version, "alice", null, "{}", "test"));
+					try (RawClient active = fixture.open("/mcp", version, "tools/call", toolParams(""),
+							"\"active\"", id, "alice", List.of(), 0)) {
+						assertTrue(held.entered.await(5, TimeUnit.SECONDS));
+						try (RawClient queued = fixture.open("/mcp", version, "tools/call", toolParams(""),
+								"\"queued\"", id, "alice", List.of(), 0)) {
+							awaitCondition(() -> fixture.server.getDiagnostics().getRequestHandlerQueueDepth() == 1);
+							assertEquals(200, fixture.post("/mcp", version, "ping", "", "\"ping\"", id, "alice", limited).status());
+							assertEquals(202, fixture.post("/mcp", version, "notifications/initialized", "", null, id, "alice", limited).status());
+							Response collision = fixture.post("/mcp", version, "ping", "", "\"active\"", id, "alice", limited);
+							assertEquals(200, collision.status()); assertTrue(collision.body().contains("\"code\":-32600"), collision.body());
+							assertEquals(404, fixture.post("/mcp", version, "notifications/cancelled", "\"requestId\":\"active\"",
+									null, id, "bob", limited).status());
+							assertEquals(403, fixture.post("/mcp", version, "notifications/cancelled", "\"requestId\":\"active\"",
+									null, id, "alice", List.of(new HeaderValue("X-Limit", "deny"), new HeaderValue("X-Admission-Status", "403"))).status());
+							assertFalse(held.token.get().isCanceled());
+							assertEquals(429, fixture.post("/mcp", version, "notifications/cancelled", "\"requestId\":1.5",
+									null, id, "alice", limited).status(), "Malformed cancellation receives no cleanup exemption.");
+							assertEquals(429, fixture.post("/mcp", version, "notifications/cancelled", "\"requestId\":1e256",
+									null, id, "alice", limited).status(), "Exponent notation cannot expand an unbounded ID.");
+							assertEquals(429, fixture.post("/mcp", version, "notifications/cancelled", "\"requestId\":\"active\",\"reason\":\"" + "x".repeat(17000) + "\"",
+									null, id, "alice", limited).status(), "Oversized controls retain the ordinary quota path.");
+							assertEquals(202, fixture.post("/mcp", version, "notifications/cancelled", "\"requestId\":\"queued\"",
+									null, id, "alice", limited).status());
+							assertSseEmpty(queued);
+							assertEquals(202, fixture.post("/mcp", version, "notifications/cancelled", "\"requestId\":\"active\"",
+									null, id, "alice", limited).status());
+							assertTrue(held.canceled.await(5, TimeUnit.SECONDS)); assertSseEmpty(active);
+							assertEquals(1, fixture.server.getDiagnostics().getActiveHandlerExecutions(), "Ignored physical work stays charged.");
+						} finally { held.release.countDown(); }
+					}
+					assertTrue(held.exited.await(5, TimeUnit.SECONDS));
+				});
 			} finally { held.release.countDown(); }
 		}
 	}
@@ -809,40 +846,44 @@ class McpLegacySessionPublicRuntimeTests {
 	void verifiedDeleteTerminatesActiveAndQueuedCallsWhileOrdinaryHandlersAreFull() throws Exception {
 		for (McpProtocolVersion version : LEGACY) {
 			Held held = new Held(false);
-			try (Fixture fixture = new Fixture(held::handle, builder -> builder.transportAdmissionController((context, features) ->
-					McpSessionTransportAdmissionDecision.accepted(McpAdmissionIdentity.withRateLimitPartitionKey("shared-quota")
-							.authorizationPartitionKey("shared-authorization").principal(context.getRequest().getHeader("X-Subject").orElse("alice")).build(),
-							java.time.Instant.now().plusSeconds(30), Set.of())),
-					builder -> builder.requestHandlerConcurrency(1).requestHandlerQueueCapacity(1))) {
-				String id = sessionId(fixture.initialize(version, "alice", null, "{}", "test"));
-				try (RawClient active = fixture.open("/mcp", version, "tools/call", toolParams(""), "\"active\"", id, "alice", List.of(), 0);
-						RawClient queued = fixture.open("/mcp", version, "tools/call", toolParams(""), "\"queued\"", id, "alice", List.of(), 0)) {
-					assertTrue(held.entered.await(5, TimeUnit.SECONDS));
-					awaitCondition(() -> fixture.server.getDiagnostics().getRequestHandlerQueueDepth() == 1);
-					for (String subject : List.of("bob", "alice")) {
-						try (RawClient deletion = new RawClient(fixture.port, "DELETE", "/mcp", "", List.of(
-								new HeaderValue("MCP-Protocol-Version", version.getWireValue()), new HeaderValue("Mcp-Session-Id", id),
-								new HeaderValue("X-Subject", subject)), 0)) {
-							Head head = deletion.readHead(); assertEquals(subject.equals("alice") ? 204 : 404, head.status());
-							assertEquals("", deletion.readBody(head));
+			try {
+				Fixture fixture = new Fixture(held::handle, builder -> builder.transportAdmissionController((context, features) ->
+						McpSessionTransportAdmissionDecision.accepted(McpAdmissionIdentity.withRateLimitPartitionKey("shared-quota")
+								.authorizationPartitionKey("shared-authorization").principal(context.getRequest().getHeader("X-Subject").orElse("alice")).build(),
+								java.time.Instant.now().plusSeconds(30), Set.of())),
+					builder -> builder.requestHandlerConcurrency(1).requestHandlerQueueCapacity(1));
+				Soklet.run(fixture.config, () -> {
+					String id = sessionId(fixture.initialize(version, "alice", null, "{}", "test"));
+					try (RawClient active = fixture.open("/mcp", version, "tools/call", toolParams(""), "\"active\"", id, "alice", List.of(), 0);
+							RawClient queued = fixture.open("/mcp", version, "tools/call", toolParams(""), "\"queued\"", id, "alice", List.of(), 0)) {
+						assertTrue(held.entered.await(5, TimeUnit.SECONDS));
+						awaitCondition(() -> fixture.server.getDiagnostics().getRequestHandlerQueueDepth() == 1);
+						for (String subject : List.of("bob", "alice")) {
+						try (RawClient deletion = new RawClient(fixture.port(), "DELETE", "/mcp", "", List.of(
+									new HeaderValue("MCP-Protocol-Version", version.getWireValue()), new HeaderValue("Mcp-Session-Id", id),
+									new HeaderValue("X-Subject", subject)), 0)) {
+								Head head = deletion.readHead(); assertEquals(subject.equals("alice") ? 204 : 404, head.status());
+								assertEquals("", deletion.readBody(head));
+							}
+							if (subject.equals("bob")) assertFalse(held.token.get().isCanceled());
 						}
-						if (subject.equals("bob")) assertFalse(held.token.get().isCanceled());
-					}
-					assertTrue(held.canceled.await(5, TimeUnit.SECONDS));
-					for (RawClient call : List.of(active, queued)) {
-						Head head = call.readHead(); assertFalse(call.readBody(head).contains("late-result"));
-					}
-					assertEquals(404, fixture.cancel(version, id, "alice", "\"active\"").status());
-					assertEquals(1, fixture.server.getDiagnostics().getActiveHandlerExecutions());
-				} finally { held.release.countDown(); }
-				assertTrue(held.exited.await(5, TimeUnit.SECONDS));
+						assertTrue(held.canceled.await(5, TimeUnit.SECONDS));
+						for (RawClient call : List.of(active, queued)) {
+							Head head = call.readHead(); assertFalse(call.readBody(head).contains("late-result"));
+						}
+						assertEquals(404, fixture.cancel(version, id, "alice", "\"active\"").status());
+						assertEquals(1, fixture.server.getDiagnostics().getActiveHandlerExecutions());
+					} finally { held.release.countDown(); }
+					assertTrue(held.exited.await(5, TimeUnit.SECONDS));
+				});
 			} finally { held.release.countDown(); }
 		}
 	}
 
 	@Test
 	void currentLimiterAndAdmissionRunBeforeSessionLookupAndReservedPolicyStatusesAreRemapped() throws Exception {
-		try (Fixture fixture = new Fixture(QUIET)) {
+		Fixture fixture = new Fixture(QUIET);
+		Soklet.run(fixture.config, () -> {
 			for (McpProtocolVersion version : LEGACY) {
 				String id = sessionId(fixture.initialize(version, "alice", null, "{}", "test"));
 				for (int status : List.of(400, 404, 405)) {
@@ -858,14 +899,15 @@ class McpLegacySessionPublicRuntimeTests {
 			}
 			assertEquals(14, fixture.admissions.get());
 			assertEquals(6, fixture.limits.get(), "Rejected admission does not charge the current request limiter.");
-		}
+		});
 	}
 
 	@Test
 	void quiescentExpiryReturnsTheSameNeutralUnknownResponseAndAllowsReinitialization() throws Exception {
-		try (Fixture fixture = new Fixture(QUIET, builder -> builder
+		Fixture fixture = new Fixture(QUIET, builder -> builder
 				.maximumSessionIdleDuration(Duration.ofMillis(250))
-				.maximumSessionDuration(Duration.ofSeconds(2)), builder -> {})) {
+				.maximumSessionDuration(Duration.ofSeconds(2)), builder -> {});
+		Soklet.run(fixture.config, () -> {
 			for (McpProtocolVersion version : LEGACY) {
 				String id = sessionId(fixture.initialize(version, "alice", null, "{}", "test"));
 				assertEquals(200, fixture.call(version, id, "alice", "\"evidence\"", "").status());
@@ -876,7 +918,7 @@ class McpLegacySessionPublicRuntimeTests {
 				assertEquals(unknown.body(), expired.body());
 				sessionId(fixture.initialize(version, "alice", null, "{}", "reconnected"));
 			}
-		}
+		});
 	}
 
 	private static String sessionId(Response response) {
@@ -906,14 +948,13 @@ class McpLegacySessionPublicRuntimeTests {
 				+ "\"method\":\"" + method + "\",\"params\":{" + fields + "}}";
 	}
 
-	private static final class Fixture implements AutoCloseable {
+	private static final class Fixture {
 		final AtomicInteger admissions = new AtomicInteger();
 		final AtomicInteger limits = new AtomicInteger();
 		final AtomicInteger owners = new AtomicInteger();
 		final List<String> policyOperations = new CopyOnWriteArrayList<>();
 		final McpServer server;
-		final Soklet soklet;
-		final int port;
+		final SokletConfig config;
 
 		Fixture(McpToolHandler<McpJsonObject> handler) throws Exception {
 			this(handler, builder -> builder, builder -> {});
@@ -961,17 +1002,12 @@ class McpLegacySessionPublicRuntimeTests {
 					.toolRateLimiter(context -> McpRateLimitDecision.allowed());
 			configureServer.accept(builder);
 			this.server = builder.build();
-			this.soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+			this.config = SokletConfig.withMcpServer(server)
 					.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-					.lifecyclePolicy(LIFECYCLE).build());
-			try {
-				this.soklet.start();
-				this.port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
-			} catch (Throwable failure) {
-				this.soklet.close();
-				throw failure;
-			}
+					.lifecyclePolicy(LIFECYCLE).build();
 		}
+
+		int port() { return server.getDiagnostics().getBoundAddress().orElseThrow().getPort(); }
 
 		Response initialize(McpProtocolVersion version, String subject, String sessionId,
 				String capabilities, String clientName) throws Exception {
@@ -1008,10 +1044,8 @@ class McpLegacySessionPublicRuntimeTests {
 			if (sessionId != null) headers.add(new HeaderValue("Mcp-Session-Id", sessionId));
 			headers.add(new HeaderValue("X-Subject", subject));
 			headers.addAll(extra);
-			return new RawClient(port, path, body(version, method, params, idJson), headers, receiveBuffer);
+			return new RawClient(port(), path, body(version, method, params, idJson), headers, receiveBuffer);
 		}
-
-		@Override public void close() { this.soklet.close(); }
 	}
 
 	private record HeaderValue(String name, String value) {}

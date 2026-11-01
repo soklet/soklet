@@ -747,17 +747,17 @@ class McpLifecycleB3Tests {
 			Throwable exactFailure = requireNonNull(startupFailure.getCause());
 			Assertions.assertEquals(InternalStartupDisposition.FAILED,
 					startupFailure.getInternalStartupDisposition());
-			Assertions.assertTrue(List.of(exactFailure.getSuppressed()).stream()
-					.anyMatch(failure -> failure == synchronousFailure),
-					"The losing synchronous startup failure must remain suppressed.");
+			Assertions.assertEquals(0, exactFailure.getSuppressed().length,
+					"Recording competing evidence must not mutate the elected startup cause.");
 			InternalShutdownResult result = startupFailure.getInternalShutdownResult();
 			Assertions.assertSame(result, adapter(server).result().orElseThrow());
 			Assertions.assertSame(result,
 					owner.getDirectLifecycle().result().orElseThrow());
 			Assertions.assertEquals(InternalStartupDisposition.FAILED,
 					result.startupDisposition());
-			Assertions.assertSame(exactFailure,
-					mcpParticipant(result).failures().get(0));
+			Assertions.assertEquals(List.of(exactFailure, synchronousFailure),
+					mcpParticipant(result).failures(),
+					"The losing synchronous startup failure must remain secondary result evidence.");
 		} finally {
 			releaseSubscription.countDown();
 			starter.join(WAIT.toMillis());
@@ -2814,8 +2814,7 @@ class McpLifecycleB3Tests {
 		}
 
 		@Override
-		public void didStopSoklet(@NonNull Soklet soklet,
-				@NonNull ShutdownResult result) {
+		public void didStopSoklet(@NonNull ShutdownResult result) {
 			this.globalResult.set(requireNonNull(result));
 			this.terminal.countDown();
 		}

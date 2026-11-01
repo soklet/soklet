@@ -169,8 +169,11 @@ public final class EndToEndHttpBenchmark {
 				.metricsCollector(config.metricsEnabled() ? MetricsCollector.defaultInstance() : MetricsCollector.disabledInstance())
 				.build();
 
-		try (Soklet soklet = Soklet.fromConfig(sokletConfig)) {
-			soklet.start();
+		Soklet soklet = Soklet.run(sokletConfig);
+		try (@SuppressWarnings("try") AutoCloseable sokletShutdown = () -> {
+			soklet.requestShutdown();
+			soklet.awaitShutdownAsync().toCompletableFuture().join();
+		}) {
 			Thread.sleep(250L);
 
 			System.out.printf(Locale.ROOT,

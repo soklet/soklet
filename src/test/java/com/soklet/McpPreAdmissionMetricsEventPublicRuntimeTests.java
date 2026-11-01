@@ -71,8 +71,7 @@ public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 		RecordingLifecycleObserver observer = new RecordingLifecycleObserver(0);
 		McpServer server = serverBuilder(endpoint("admission-failure-diagnostics"))
 				.admissionController(context -> { throw failure; }).build();
-		try (Soklet soklet = managedSoklet(server, new RecordingMetricsCollector(1), observer)) {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server, new RecordingMetricsCollector(1), observer), () -> {
 			HttpResponse<String> response = send(boundPort(server), discoveryRequest("admission-failed"),
 					"server/discover", Map.of("Authorization", "Bearer " + secret));
 			Assertions.assertEquals(500, response.statusCode());
@@ -88,7 +87,7 @@ public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 				Assertions.assertFalse(event.getMessage().contains(secret));
 				Assertions.assertTrue(event.getThrowable().isEmpty());
 			}
-		}
+		});
 	}
 
 	@Test
@@ -98,10 +97,8 @@ public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 		RecordingLifecycleObserver observer = new RecordingLifecycleObserver(0);
 		McpServer server = serverBuilder(endpoint("malformed-metrics-test"))
 				.build();
-		Soklet soklet = managedSoklet(server, collector, observer);
+		Soklet.run(managedSokletConfig(server, collector, observer), () -> {
 
-		try {
-			soklet.start();
 			HttpResponse<String> response = send(boundPort(server), "{",
 					"server/discover", Map.of());
 			collector.awaitRequestRejections();
@@ -117,9 +114,7 @@ public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 					collector.quartetEvents());
 			Assertions.assertEquals(0, observer.starts());
 			Assertions.assertEquals(0, observer.finishes());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -149,10 +144,8 @@ public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 				.requestRateLimiter(context ->
 						McpRateLimitDecision.denied(Duration.ofMillis(1)))
 				.build();
-		Soklet soklet = managedSoklet(server, collector, observer);
+		Soklet.run(managedSokletConfig(server, collector, observer), () -> {
 
-		try {
-			soklet.start();
 			int port = boundPort(server);
 			HttpResponse<String> malformed = send(port, "{",
 					"server/discover", Map.of());
@@ -243,9 +236,7 @@ public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 			Assertions.assertFalse(ownedLogs.contains("fixed-rejected"), ownedLogs);
 			Assertions.assertEquals(1, collector.maximumConcurrentCallbacks(),
 					"Collector failure containment must preserve serialized delivery.");
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -312,10 +303,8 @@ public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 		RecordingLifecycleObserver observer = new RecordingLifecycleObserver(0);
 		McpServer server = serverBuilder(endpoint("reentrant-quartet-test"))
 				.build();
-		Soklet soklet = managedSoklet(server, collector, observer);
+		Soklet.run(managedSokletConfig(server, collector, observer), () -> {
 
-		try {
-			soklet.start();
 			port.set(boundPort(server));
 			HttpResponse<String> outerResponse = send(port.get(), "{",
 					"server/discover", Map.of());
@@ -346,9 +335,7 @@ public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 					"A nested request must enqueue without recursively entering the collector.");
 			Assertions.assertEquals(0, observer.starts());
 			Assertions.assertEquals(0, observer.finishes());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@NonNull
@@ -366,20 +353,18 @@ public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 				})
 				.unknownMirroredHeaderPolicy(policy)
 				.build();
-		Soklet soklet = managedSoklet(server, collector, observer);
+		AtomicReference<UnknownCase> result = new AtomicReference<>();
+		Soklet.run(managedSokletConfig(server, collector, observer), () -> {
 
-		try {
-			soklet.start();
 			HttpResponse<String> response = send(boundPort(server),
 					request(id, method), method, headers);
 			collector.awaitRequestRejections();
 			Assertions.assertEquals(0, observer.starts());
 			Assertions.assertEquals(0, observer.finishes());
-			return new UnknownCase(response, collector.quartetEvents(),
-					observer.logEvents(), admissions.get());
-		} finally {
-			soklet.close();
-		}
+			result.set(new UnknownCase(response, collector.quartetEvents(),
+					observer.logEvents(), admissions.get()));
+		});
+		return java.util.Objects.requireNonNull(result.get());
 	}
 
 	private static void assertAbsentFromObservability(
@@ -414,16 +399,16 @@ public class McpPreAdmissionMetricsEventPublicRuntimeTests {
 				.allowedHosts(Set.of(LOOPBACK));
 	}
 
-	@NonNull
-	private static Soklet managedSoklet(@NonNull McpServer server,
+
+	private static SokletConfig managedSokletConfig(@NonNull McpServer server,
 			@NonNull MetricsCollector collector,
 			@NonNull LifecycleObserver observer) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.metricsCollector(collector)
 				.lifecycleObserver(observer)
 				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
-				.build());
+				.build();
 	}
 
 	private static int boundPort(@NonNull McpServer server) {

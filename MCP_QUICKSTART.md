@@ -155,14 +155,13 @@ package example;
 
 import com.soklet.CorsAuthorizer;
 import com.soklet.McpServer;
-import com.soklet.ShutdownTrigger;
-import com.soklet.SokletApplication;
+import com.soklet.Soklet;
 import com.soklet.SokletConfig;
 
 import java.util.Set;
 
 public final class CatalogMcpApp {
-  public static void main(String[] args) {
+  public static void main(String[] args) throws InterruptedException {
     McpServer mcpServer = McpServer.withPort(8081)
         .host("127.0.0.1")
         .corsAuthorizer(CorsAuthorizer.rejectAllInstance())
@@ -170,10 +169,9 @@ public final class CatalogMcpApp {
         .build();
 
     SokletConfig config = SokletConfig.withMcpServer(mcpServer).build();
-    System.out.println(
-        "Starting MCP at http://127.0.0.1:8081/catalog/mcp; "
-            + "press Enter to stop once ready");
-    SokletApplication.run(config, ShutdownTrigger.ENTER_KEY);
+    System.out.println("Starting MCP at http://127.0.0.1:8081/catalog/mcp");
+    Soklet soklet = Soklet.run(config);
+    soklet.awaitShutdown();
   }
 }
 ```

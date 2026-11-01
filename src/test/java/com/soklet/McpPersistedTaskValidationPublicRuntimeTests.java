@@ -47,8 +47,7 @@ class McpPersistedTaskValidationPublicRuntimeTests {
 					return repair.get() ? McpCompleteResult.fromToolOutput(McpToolOutput.fromStructuredContent(
 							McpJsonObject.builder().put("answer", "safe").build())) : completeResult;
 				}).build();
-		try (Soklet soklet = managed(server)) {
-			soklet.start();
+		Soklet.run(managedConfig(server), () -> {
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			create(port);
 			AtomicInteger changes = new AtomicInteger();
@@ -76,7 +75,7 @@ class McpPersistedTaskValidationPublicRuntimeTests {
 				assertEquals(1, changes.get());
 				assertEquals(3, sanitizations.get());
 			}
-		}
+		});
 	}
 
 	@Test
@@ -84,8 +83,7 @@ class McpPersistedTaskValidationPublicRuntimeTests {
 		McpInMemoryTaskManager manager = McpTaskManager.fromInMemoryDefaults();
 		AtomicReference<String> taskId = new AtomicReference<>();
 		McpServer server = server(manager, taskId).build();
-		try (Soklet soklet = managed(server)) {
-			soklet.start();
+		Soklet.run(managedConfig(server), () -> {
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			create(port);
 			McpInputRequest request = McpInputRequest.fromDeclaration(
@@ -103,7 +101,7 @@ class McpPersistedTaskValidationPublicRuntimeTests {
 			assertTrue(recovered.body().contains("\"status\":\"working\""), recovered.body());
 			assertTrue(resumed.getInputRequests().isEmpty());
 			assertSame(resumed, manager.findTask(taskId.get()).orElseThrow());
-		}
+		});
 	}
 
 	private static McpServer.Builder server(McpInMemoryTaskManager manager, AtomicReference<String> taskId) {
@@ -122,9 +120,9 @@ class McpPersistedTaskValidationPublicRuntimeTests {
 				.toolRateLimiter(rateLimitContext -> McpRateLimitDecision.allowed());
 	}
 
-	private static Soklet managed(McpServer server) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
-				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).build());
+	private static SokletConfig managedConfig(McpServer server) {
+		return SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).build();
 	}
 
 	private static void create(int port) throws Exception {

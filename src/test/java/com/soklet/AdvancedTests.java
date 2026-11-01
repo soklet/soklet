@@ -70,6 +70,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static com.soklet.TestSupport.connectWithRetry;
 import static com.soklet.TestSupport.findFreePort;
@@ -106,9 +107,7 @@ public class AdvancedTests {
 				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 				.build();
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
-
+		Soklet.run(config, () -> {
 			// Simulate multiple concurrent connections
 			ExecutorService executor = Executors.newFixedThreadPool(50);
 			CountDownLatch startLatch = new CountDownLatch(1);
@@ -168,7 +167,7 @@ public class AdvancedTests {
 			// Verify all connections were properly cleaned up
 			// This would require access to internal state, but in practice
 			// we'd check for memory leaks or orphaned connections
-		}
+		});
 	}
 
 	@Test
@@ -442,7 +441,9 @@ public class AdvancedTests {
 				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 				.build();
 
-		try (Soklet soklet = Soklet.fromConfig(liveConfig)) {
+		// Keep the live owner handle to verify simulator scopes leave its lifecycle status unchanged.
+		try (SokletTestScope sokletScope = SokletTestScope.of(Soklet.fromConfig(liveConfig))) {
+			Soklet soklet = sokletScope.soklet();
 			soklet.start();
 
 			int simulatorScopeCount = 2;
@@ -657,9 +658,7 @@ public class AdvancedTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SSEMemoryTestResource.class)))
 				.build();
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
-
+		Soklet.run(config, () -> {
 			List<WeakReference<Object>> references = new ArrayList<>();
 
 			// Create many SSE connections and close them
@@ -701,10 +700,11 @@ public class AdvancedTests {
 			int broadcastersByResourcePathSize = ((DefaultSseServer) sseServer).getBroadcastersByResourcePath().size();
 
 			Assertions.assertTrue(broadcastersByResourcePathSize <= 10, "Expected broadcastersByResourcePathSize of <= 10 but was " + broadcastersByResourcePathSize);
-		}
+		});
 	}
 
 	@Test
+	@Timeout(90)
 	public void testDefaultHttpServerReleasesExecutorsOnStop() throws Exception {
 		int port = findFreePort();
 		HttpServer httpServer = HttpServer.withPort(port).build();
@@ -713,9 +713,7 @@ public class AdvancedTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(TestResource.class)))
 				.build();
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
-
+		Soklet.run(config, () -> {
 			for (int i = 0; i < 5; i++) {
 				try (Socket socket = connectWithRetry("127.0.0.1", port, 2000)) {
 					socket.setSoTimeout(2000);
@@ -728,7 +726,7 @@ public class AdvancedTests {
 							"Unexpected response: " + firstLine(response));
 				}
 			}
-		}
+		});
 
 		DefaultHttpServer defaultServer = (DefaultHttpServer) httpServer;
 		Assertions.assertTrue(defaultServer.getEventLoop().isEmpty(), "Event loop should be cleared after stop");
@@ -754,9 +752,7 @@ public class AdvancedTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SSETestResource.class)))
 				.build();
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
-
+		Soklet.run(config, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(2000);
 				write(socket, "GET /events HTTP/1.1\r\n" +
@@ -772,7 +768,7 @@ public class AdvancedTests {
 				Assertions.assertTrue(defaultSseServer.getActiveConnectionCount() > 0,
 						"SSE connection did not register");
 			}
-		}
+		});
 
 		Assertions.assertTrue(defaultSseServer.getGlobalConnections().isEmpty(),
 				"Global SSE connections should be cleared after stop");
@@ -802,9 +798,7 @@ public class AdvancedTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(TestResource.class)))
 				.build();
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
-
+		Soklet.run(config, () -> {
 			forceGc();
 			long memoryBefore = usedMemory();
 
@@ -825,7 +819,7 @@ public class AdvancedTests {
 
 			Assertions.assertTrue(memoryIncrease < 64L * 1024 * 1024,
 					"Unexpected memory growth: " + (memoryIncrease / 1024 / 1024) + "MB");
-		}
+		});
 	}
 
 	@Disabled("Long-running memory stability test")
@@ -845,11 +839,11 @@ public class AdvancedTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SSETestResource.class)))
 				.build();
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
-
+		// Measure retained memory after the scoped runtime has fully shut down.
+		AtomicLong memoryBefore = new AtomicLong();
+		ShutdownResult result = Soklet.run(config, () -> {
 			forceGc();
-			long memoryBefore = usedMemory();
+			memoryBefore.set(usedMemory());
 
 			for (int i = 0; i < 500; i++) {
 				try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
@@ -866,16 +860,15 @@ public class AdvancedTests {
 			while (defaultSseServer.getActiveConnectionCount() > 0 && System.nanoTime() < deadline)
 				Thread.sleep(10);
 
-			soklet.shutdown();
-			Assertions.assertTrue(soklet.awaitShutdown().isComplete());
+		});
+		Assertions.assertTrue(result.isComplete());
 
-			forceGc();
-			long memoryAfter = usedMemory();
-			long memoryIncrease = memoryAfter - memoryBefore;
+		forceGc();
+		long memoryAfter = usedMemory();
+		long memoryIncrease = memoryAfter - memoryBefore.get();
 
-			Assertions.assertTrue(memoryIncrease < 64L * 1024 * 1024,
-					"Unexpected memory growth: " + (memoryIncrease / 1024 / 1024) + "MB");
-		}
+		Assertions.assertTrue(memoryIncrease < 64L * 1024 * 1024,
+				"Unexpected memory growth: " + (memoryIncrease / 1024 / 1024) + "MB");
 
 		Assertions.assertTrue(defaultSseServer.getGlobalConnections().isEmpty(),
 				"SSE connections should be drained after load test");
@@ -899,9 +892,7 @@ public class AdvancedTests {
 		ConcurrentHashMap<String, AtomicInteger> errorCounts = new ConcurrentHashMap<>();
 		ConcurrentHashMap<String, String> errorSamples = new ConcurrentHashMap<>();
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
-
+		Soklet.run(config, () -> {
 			ExecutorService executor = Executors.newFixedThreadPool(loadThreads);
 			long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(durationSeconds);
 
@@ -947,7 +938,7 @@ public class AdvancedTests {
 
 			executor.shutdown();
 			executor.awaitTermination(durationSeconds + 10L, TimeUnit.SECONDS);
-		}
+		});
 
 		Assertions.assertTrue(requestCount.get() > 0, "No requests completed");
 		Assertions.assertEquals(0, errors.get(),
@@ -976,35 +967,35 @@ public class AdvancedTests {
 		List<Socket> sockets = Collections.synchronizedList(new ArrayList<>());
 		AtomicInteger errors = new AtomicInteger();
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
+		try {
+			Soklet.run(config, () -> {
+				ExecutorService executor = Executors.newFixedThreadPool(Math.min(loadThreads, concurrentConnections));
+				CountDownLatch latch = new CountDownLatch(concurrentConnections);
 
-			ExecutorService executor = Executors.newFixedThreadPool(Math.min(loadThreads, concurrentConnections));
-			CountDownLatch latch = new CountDownLatch(concurrentConnections);
+				for (int i = 0; i < concurrentConnections; i++) {
+					executor.submit(() -> {
+						try {
+							Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000);
+							socket.setSoTimeout(2000);
+							write(socket, "GET /events HTTP/1.1\r\n" +
+									"Host: 127.0.0.1:" + ssePort + "\r\n" +
+									"Accept: text/event-stream\r\n" +
+									"\r\n");
+							readResponse(socket);
+							sockets.add(socket);
+						} catch (Exception e) {
+							errors.incrementAndGet();
+						} finally {
+							latch.countDown();
+						}
+					});
+				}
 
-			for (int i = 0; i < concurrentConnections; i++) {
-				executor.submit(() -> {
-					try {
-						Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000);
-						socket.setSoTimeout(2000);
-						write(socket, "GET /events HTTP/1.1\r\n" +
-								"Host: 127.0.0.1:" + ssePort + "\r\n" +
-								"Accept: text/event-stream\r\n" +
-								"\r\n");
-						readResponse(socket);
-						sockets.add(socket);
-					} catch (Exception e) {
-						errors.incrementAndGet();
-					} finally {
-						latch.countDown();
-					}
-				});
-			}
+				latch.await(Math.max(10L, durationSeconds / 2L), TimeUnit.SECONDS);
+				executor.shutdown();
 
-			latch.await(Math.max(10L, durationSeconds / 2L), TimeUnit.SECONDS);
-			executor.shutdown();
-
-			Thread.sleep(TimeUnit.SECONDS.toMillis(durationSeconds));
+				Thread.sleep(TimeUnit.SECONDS.toMillis(durationSeconds));
+			});
 		} finally {
 			for (Socket socket : sockets) {
 				try {
@@ -1032,9 +1023,7 @@ public class AdvancedTests {
 				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 				.build();
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
-
+		Soklet.run(config, () -> {
 			// Track memory usage
 			Runtime runtime = Runtime.getRuntime();
 			long memoryBefore = runtime.totalMemory() - runtime.freeMemory();
@@ -1071,7 +1060,7 @@ public class AdvancedTests {
 					"Excessive memory usage detected. Increase: " +
 							(memoryIncrease / 1024 / 1024) + "MB"
 			);
-		}
+		});
 	}
 
 	// ==================== Value Converter Edge Cases ====================
@@ -1602,8 +1591,7 @@ public class AdvancedTests {
 		int port = findFreePort();
 		SokletConfig config = config(port);
 
-		try (Soklet app = Soklet.fromConfig(config)) {
-			app.start();
+		Soklet.run(config, () -> {
 			try (Socket socket = connectWithRetry("localhost", port, 2000)) {
 				// RFC 7230: A server MUST accept the absolute-form in requests
 				String request = "GET http://localhost:" + port + "/test HTTP/1.1\r\n" +
@@ -1615,7 +1603,7 @@ public class AdvancedTests {
 				Assertions.assertTrue(response.startsWith("HTTP/1.1 200"),
 						"HttpServer rejected absolute URI form: " + firstLine(response));
 			}
-		}
+		});
 	}
 
 	@Test
@@ -1623,8 +1611,7 @@ public class AdvancedTests {
 		int port = findFreePort();
 		SokletConfig config = config(port);
 
-		try (Soklet app = Soklet.fromConfig(config)) {
-			app.start();
+		Soklet.run(config, () -> {
 			try (Socket socket = connectWithRetry("localhost", port, 2000)) {
 				// Standard server health check
 				String request = "OPTIONS * HTTP/1.1\r\n" +
@@ -1635,7 +1622,7 @@ public class AdvancedTests {
 
 				Assertions.assertFalse(response.startsWith("HTTP/1.1 500"), "HttpServer did not handle OPTIONS *");
 			}
-		}
+		});
 	}
 
 	@Test
@@ -1643,8 +1630,7 @@ public class AdvancedTests {
 		int port = findFreePort();
 		SokletConfig config = config(port);
 
-		try (Soklet app = Soklet.fromConfig(config)) {
-			app.start();
+		Soklet.run(config, () -> {
 			try (Socket socket = connectWithRetry("localhost", port, 2000)) {
 				// Attack: try to access file with null byte terminator
 				String request = "GET /hello%00.png HTTP/1.1\r\n" +
@@ -1656,7 +1642,7 @@ public class AdvancedTests {
 				Assertions.assertTrue(response.startsWith("HTTP/1.1 400"),
 						"HttpServer should reject paths containing null bytes with 400 Bad Request");
 			}
-		}
+		});
 	}
 
 	@Test
@@ -1697,9 +1683,7 @@ public class AdvancedTests {
 				})
 				.build();
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
-
+		Soklet.run(config, () -> {
 			String sseUrl = "http://localhost:" + ssePort + "/limit-test";
 			CountDownLatch clientAConnected = new CountDownLatch(1);
 
@@ -1746,7 +1730,7 @@ public class AdvancedTests {
 
 			Assertions.assertEquals("true", responseB.headers().firstValue("X-Soklet-Overload").orElse(null),
 					"Expected custom header from serviceOverloadedHandler");
-		}
+		});
 	}
 
 	// Helper Resource for the test

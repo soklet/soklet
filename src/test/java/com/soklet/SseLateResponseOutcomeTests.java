@@ -73,49 +73,56 @@ class SseLateResponseOutcomeTests {
     }
 
     private void exerciseTimeout(boolean finishTimeoutFirst, MarshaledResponse lateResponse) throws Exception {
-        try (Fixture fixture = new Fixture(lateResponse); Socket socket = new Socket()) {
-            fixture.owner.start();
-            socket.connect(new InetSocketAddress("127.0.0.1", fixture.port), 3_000);
-            socket.setSoTimeout(3_000);
-            socket.getOutputStream().write("GET /late HTTP/1.1\r\nHost: localhost\r\n\r\n"
-                    .getBytes(StandardCharsets.US_ASCII));
-            assertTrue(fixture.resource.entered.await(3, TimeUnit.SECONDS));
-            fixture.timeoutHandshake();
-            assertTrue(fixture.timeoutEntered.await(3, TimeUnit.SECONDS));
-            String wire = null;
-            if (finishTimeoutFirst) {
-                fixture.releaseTimeout.countDown();
-                wire = new String(socket.getInputStream().readAllBytes(), StandardCharsets.US_ASCII);
+        Fixture fixture = new Fixture(lateResponse);
+        ShutdownResult result = Soklet.run(fixture.config, () -> {
+            try {
+                try (Socket socket = new Socket()) {
+                    socket.connect(new InetSocketAddress("127.0.0.1", fixture.port), 3_000);
+                    socket.setSoTimeout(3_000);
+                    socket.getOutputStream().write("GET /late HTTP/1.1\r\nHost: localhost\r\n\r\n"
+                            .getBytes(StandardCharsets.US_ASCII));
+                    assertTrue(fixture.resource.entered.await(3, TimeUnit.SECONDS));
+                    fixture.timeoutHandshake();
+                    assertTrue(fixture.timeoutEntered.await(3, TimeUnit.SECONDS));
+                    String wire = null;
+                    if (finishTimeoutFirst) {
+                        fixture.releaseTimeout.countDown();
+                        wire = new String(socket.getInputStream().readAllBytes(), StandardCharsets.US_ASCII);
+                    }
+                    fixture.resource.release.countDown();
+                    assertTrue(fixture.finished.await(3, TimeUnit.SECONDS),
+                            "A suppressed handler must not wait for the timeout marshaler");
+                    if (!finishTimeoutFirst) {
+                        fixture.releaseTimeout.countDown();
+                        wire = new String(socket.getInputStream().readAllBytes(), StandardCharsets.US_ASCII);
+                    }
+                    assertNotNull(wire);
+                    assertTrue(wire.startsWith("HTTP/1.1 429 "), wire);
+                    assertTrue(wire.contains("X-Final: once\r\n"), wire);
+                    assertTrue(wire.endsWith("timeout winner"), wire);
+                    assertEquals(1, fixture.timeoutPostProcesses.get());
+                    assertEquals(1, wire.split("HTTP/1.1 ", -1).length - 1, "Only the timeout response may reach the wire");
+                    assertEquals(0, fixture.written.get());
+                    assertEquals(0, fixture.metricWritten.get());
+                    assertEquals(1, fixture.writeFailures.size());
+                    Throwable failure = assertInstanceOf(java.util.concurrent.RejectedExecutionException.class,
+                            fixture.writeFailures.get(0));
+                    assertEquals(List.of(failure), fixture.metricWriteFailures);
+                    assertEquals(List.of(failure), fixture.finishedFailures);
+                    assertEquals(List.of(lateResponse == null ? 200 : lateResponse.getStatusCode()), fixture.finishedStatuses,
+                            "Finish describes the failed attempt, not an invented timeout response");
+                    assertEquals(List.of(SseConnection.HandshakeFailureReason.HANDSHAKE_TIMEOUT), fixture.handshakeFailures);
+                    assertEquals(0, fixture.resource.initializers.get());
+                    assertEquals(0, fixture.established.get());
+                }
+            } finally {
+                fixture.release();
             }
-            fixture.resource.release.countDown();
-            assertTrue(fixture.finished.await(3, TimeUnit.SECONDS),
-                    "A suppressed handler must not wait for the timeout marshaler");
-            if (!finishTimeoutFirst) {
-                fixture.releaseTimeout.countDown();
-                wire = new String(socket.getInputStream().readAllBytes(), StandardCharsets.US_ASCII);
-            }
-            assertNotNull(wire);
-            assertTrue(wire.startsWith("HTTP/1.1 429 "), wire);
-            assertTrue(wire.contains("X-Final: once\r\n"), wire);
-            assertTrue(wire.endsWith("timeout winner"), wire);
-            assertEquals(1, fixture.timeoutPostProcesses.get());
-            assertEquals(1, wire.split("HTTP/1.1 ", -1).length - 1, "Only the timeout response may reach the wire");
-            assertEquals(0, fixture.written.get());
-            assertEquals(0, fixture.metricWritten.get());
-            assertEquals(1, fixture.writeFailures.size());
-            Throwable failure = assertInstanceOf(java.util.concurrent.RejectedExecutionException.class,
-                    fixture.writeFailures.get(0));
-            assertEquals(List.of(failure), fixture.metricWriteFailures);
-            assertEquals(List.of(failure), fixture.finishedFailures);
-            assertEquals(List.of(lateResponse == null ? 200 : lateResponse.getStatusCode()), fixture.finishedStatuses,
-                    "Finish describes the failed attempt, not an invented timeout response");
-            assertEquals(List.of(SseConnection.HandshakeFailureReason.HANDSHAKE_TIMEOUT), fixture.handshakeFailures);
-            assertEquals(0, fixture.resource.initializers.get());
-            assertEquals(0, fixture.established.get());
-        }
+        });
+        fixture.verifyShutdown(result);
     }
 
-    private static final class Fixture implements AutoCloseable {
+    private static final class Fixture {
         final int port = TestSupport.findFreePort();
         final BlockingResource resource = new BlockingResource();
         final CountDownLatch timeoutEntered = new CountDownLatch(1);
@@ -132,10 +139,10 @@ class SseLateResponseOutcomeTests {
         final List<SseConnection.HandshakeFailureReason> handshakeFailures = new CopyOnWriteArrayList<>();
         final DefaultSseServer server = (DefaultSseServer) SseServer.withPort(port).host("127.0.0.1")
                 .requestHandlerTimeout(Duration.ofSeconds(30)).verifyConnectionOnceEstablished(false).build();
-        final Soklet owner;
+        final SokletConfig config;
 
         Fixture(MarshaledResponse lateResponse) throws Exception {
-            owner = Soklet.fromConfig(SokletConfig.withSseServer(server)
+            config = SokletConfig.withSseServer(server)
                     .resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(BlockingResource.class)))
                     .instanceProvider(new InstanceProvider() {
                         @Override public <T> T provide(Class<T> type) {
@@ -182,7 +189,7 @@ class SseLateResponseOutcomeTests {
                                 MarshaledResponse response, Duration duration) { metricWritten.incrementAndGet(); }
                         @Override public void didFailToWriteResponse(ServerType type, Request request, ResourceMethod method,
                                 MarshaledResponse response, Duration duration, Throwable failure) { metricWriteFailures.add(failure); }
-                    }).build());
+                    }).build();
         }
 
         void timeoutHandshake() throws Exception {
@@ -200,11 +207,13 @@ class SseLateResponseOutcomeTests {
             timeoutMethod.invoke(server, admission.getKey(), context);
         }
 
-        @Override public void close() {
+        void release() {
             resource.release.countDown();
             releaseTimeout.countDown();
-            owner.close();
-            assertTrue(owner.getShutdownResult().orElseThrow().isComplete());
+        }
+
+        void verifyShutdown(ShutdownResult result) {
+            assertTrue(result.isComplete());
         }
     }
 

@@ -64,108 +64,124 @@ class McpLegacyRpcStatusTests {
 
 	@Test
 	void legacyOperationErrorsUseHttp200WithAndWithoutSessions() throws Exception {
-		for (boolean sessions : List.of(false, true))
-			try (Fixture fixture = new Fixture(sessions)) {
-				for (McpProtocolVersion version : LEGACY) {
-					String session = sessions ? fixture.initialize(version) : null;
-					assertError(fixture.call(version, session, "tools/call",
-							"\"name\":\"missing\",\"arguments\":{}"), 200, -32602);
-					assertError(fixture.call(version, session, "tools/call",
-							"\"name\":\"work\",\"arguments\":[]"), 200, -32602);
-					assertError(fixture.call(version, session, "resources/read",
-							"\"uri\":\"test://missing\""), 200, -32002);
-					assertError(fixture.call(version, session, "tools/list",
-							"\"cursor\":\"invalid\""), 200, -32602);
-					assertError(fixture.call(version, session, "tools/call",
-							"\"name\":\"fail\",\"arguments\":{}"), 200, -32603);
-					Capture streamed = fixture.call(version, session, "tools/call",
-							"\"name\":\"fail\",\"arguments\":{},\"_meta\":{\"progressToken\":\"p\"}");
-					assertError(streamed, 200, -32603);
-					assertEquals("text/event-stream", streamed.contentType());
-					assertTrue(streamed.body().contains("notifications/progress"), streamed.body());
-					assertFalse(streamed.body().contains("handler-private-detail"), streamed.body());
-					assertEquals(200, fixture.call(version, session, "tools/call",
-							"\"name\":\"work\",\"arguments\":{}").status(),
-							"An RPC failure must leave the endpoint/session usable.");
-				}
+		for (boolean sessions : List.of(false, true)) {
+				Fixture fixture = new Fixture(sessions);
+				Soklet.run(fixture.config, () -> {
+					for (McpProtocolVersion version : LEGACY) {
+						String session = sessions ? fixture.initialize(version) : null;
+						assertError(fixture.call(version, session, "tools/call",
+								"\"name\":\"missing\",\"arguments\":{}"), 200, -32602);
+						assertError(fixture.call(version, session, "tools/call",
+								"\"name\":\"work\",\"arguments\":[]"), 200, -32602);
+						assertError(fixture.call(version, session, "resources/read",
+								"\"uri\":\"test://missing\""), 200, -32002);
+						assertError(fixture.call(version, session, "tools/list",
+								"\"cursor\":\"invalid\""), 200, -32602);
+						assertError(fixture.call(version, session, "tools/call",
+								"\"name\":\"fail\",\"arguments\":{}"), 200, -32603);
+						Capture streamed = fixture.call(version, session, "tools/call",
+								"\"name\":\"fail\",\"arguments\":{},\"_meta\":{\"progressToken\":\"p\"}");
+						assertError(streamed, 200, -32603);
+						assertEquals("text/event-stream", streamed.contentType());
+						assertTrue(streamed.body().contains("notifications/progress"), streamed.body());
+						assertFalse(streamed.body().contains("handler-private-detail"), streamed.body());
+						assertEquals(200, fixture.call(version, session, "tools/call",
+								"\"name\":\"work\",\"arguments\":{}").status(),
+								"An RPC failure must leave the endpoint/session usable.");
+					}
+				});
 			}
 	}
 
 	@Test
 	void legacyIconProjectionPreservesCompletedResultsAndRunsTheHandlerOnce() throws Exception {
-		for (boolean sessions : List.of(false, true))
-			try (Fixture fixture = new Fixture(sessions)) {
-				for (McpProtocolVersion version : LEGACY) {
-					String session = sessions ? fixture.initialize(version) : null;
-					int before = fixture.linkCalls.get();
-					Capture response = fixture.call(version, session, "tools/call", "\"name\":\"link\",\"arguments\":{}");
-					assertEquals(200, response.status(), response.body());
-					assertTrue(response.body().contains("\"type\":\"resource_link\""), response.body());
-					assertFalse(response.body().contains("\"error\""), response.body());
-					assertEquals(version == McpProtocolVersion.V2025_11_25, response.body().contains("\"icons\""), response.body());
-					assertEquals(before + 1, fixture.linkCalls.get());
-				}
+		for (boolean sessions : List.of(false, true)) {
+				Fixture fixture = new Fixture(sessions);
+				Soklet.run(fixture.config, () -> {
+					for (McpProtocolVersion version : LEGACY) {
+						String session = sessions ? fixture.initialize(version) : null;
+						int before = fixture.linkCalls.get();
+						Capture response = fixture.call(version, session, "tools/call", "\"name\":\"link\",\"arguments\":{}");
+						assertEquals(200, response.status(), response.body());
+						assertTrue(response.body().contains("\"type\":\"resource_link\""), response.body());
+						assertFalse(response.body().contains("\"error\""), response.body());
+						assertEquals(version == McpProtocolVersion.V2025_11_25, response.body().contains("\"icons\""), response.body());
+						assertEquals(before + 1, fixture.linkCalls.get());
+					}
+				});
 			}
 	}
 
 	@Test
 	void statelessAdmissionAndRateRejectionsKeepTheirHttpStatus() throws Exception {
-		try (Fixture fixture = new Fixture(false)) {
-			for (McpProtocolVersion version : LEGACY) {
-				for (int status : List.of(400, 401, 403, 404, 405, 500, 503)) {
-					Capture rejection = fixture.call(version, null, "tools/call",
+		{
+			Fixture fixture = new Fixture(false);
+			Soklet.run(fixture.config, () -> {
+				for (McpProtocolVersion version : LEGACY) {
+					for (int status : List.of(400, 401, 403, 404, 405, 500, 503)) {
+						Capture rejection = fixture.call(version, null, "tools/call",
+								"\"name\":\"work\",\"arguments\":{}",
+								List.of(new McpChunkedHttpClient.RequestHeader("X-Reject", Integer.toString(status))));
+						assertEquals(status, rejection.status(), rejection.body());
+					}
+					assertEquals(429, fixture.call(version, null, "tools/call",
 							"\"name\":\"work\",\"arguments\":{}",
-							List.of(new McpChunkedHttpClient.RequestHeader("X-Reject", Integer.toString(status))));
-					assertEquals(status, rejection.status(), rejection.body());
+							List.of(new McpChunkedHttpClient.RequestHeader("X-Limit", "deny"))).status());
 				}
-				assertEquals(429, fixture.call(version, null, "tools/call",
-						"\"name\":\"work\",\"arguments\":{}",
-						List.of(new McpChunkedHttpClient.RequestHeader("X-Limit", "deny"))).status());
-			}
+			});
 		}
 	}
 
 	@Test
 	void admissionHookFailuresRemainHttpFailures() throws Exception {
-		try (Fixture fixture = new Fixture(false)) {
-			for (McpProtocolVersion version : LEGACY)
-				for (String failure : List.of("throw", "null")) {
-					assertEquals(500, fixture.call(version, null, "tools/call",
-							"\"name\":\"work\",\"arguments\":{}",
-							List.of(new McpChunkedHttpClient.RequestHeader("X-Reject", failure))).status());
-					assertEquals(500, fixture.call(version, null, "tools/call",
-							"\"name\":\"work\",\"arguments\":{}",
-							List.of(new McpChunkedHttpClient.RequestHeader("X-Limit", failure))).status());
-				}
+		{
+			Fixture fixture = new Fixture(false);
+			Soklet.run(fixture.config, () -> {
+				for (McpProtocolVersion version : LEGACY)
+					for (String failure : List.of("throw", "null")) {
+						assertEquals(500, fixture.call(version, null, "tools/call",
+								"\"name\":\"work\",\"arguments\":{}",
+								List.of(new McpChunkedHttpClient.RequestHeader("X-Reject", failure))).status());
+						assertEquals(500, fixture.call(version, null, "tools/call",
+								"\"name\":\"work\",\"arguments\":{}",
+								List.of(new McpChunkedHttpClient.RequestHeader("X-Limit", failure))).status());
+					}
+			});
 		}
 	}
 
 	@Test
 	void framingAndSessionFailuresRemainTransportErrors() throws Exception {
-		try (Fixture fixture = new Fixture(true)) {
-			for (McpProtocolVersion version : LEGACY) {
-				assertEquals(400, fixture.call(version, null, "tools/call",
-						"\"name\":\"work\",\"arguments\":{}").status());
-				assertEquals(404, fixture.call(version, "unknown-valid", "tools/call",
-						"\"name\":\"work\",\"arguments\":{}").status());
-				assertEquals(400, fixture.post("{", List.of(new McpChunkedHttpClient.RequestHeader(
-						"MCP-Protocol-Version", version.getWireValue()))).status());
-			}
-			assertEquals(400, fixture.post("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}",
-					List.of(new McpChunkedHttpClient.RequestHeader("MCP-Protocol-Version", "2025-03-26"))).status());
+		{
+			Fixture fixture = new Fixture(true);
+			Soklet.run(fixture.config, () -> {
+				for (McpProtocolVersion version : LEGACY) {
+					assertEquals(400, fixture.call(version, null, "tools/call",
+							"\"name\":\"work\",\"arguments\":{}").status());
+					assertEquals(404, fixture.call(version, "unknown-valid", "tools/call",
+							"\"name\":\"work\",\"arguments\":{}").status());
+					assertEquals(400, fixture.post("{", List.of(new McpChunkedHttpClient.RequestHeader(
+							"MCP-Protocol-Version", version.getWireValue()))).status());
+				}
+				assertEquals(400, fixture.post("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}",
+						List.of(new McpChunkedHttpClient.RequestHeader("MCP-Protocol-Version", "2025-03-26"))).status());
+			});
 		}
 	}
 
 	@Test
 	void modernOperationErrorsKeepIntentionalErrorsAt400AndHandlerFailuresInBand() throws Exception {
-		try (Fixture fixture = new Fixture(false)) {
-			McpProtocolVersion version = McpProtocolVersion.V2026_07_28;
-			assertError(fixture.call(version, null, "tools/call",
-					"\"name\":\"missing\",\"arguments\":{}"), 400, -32602);
-			assertError(fixture.call(version, null, "resources/read",
-					"\"uri\":\"test://missing\""), 400, -32602);
-			assertError(fixture.call(version, null, "tools/call",
-					"\"name\":\"fail\",\"arguments\":{}"), 200, -32603);
+		{
+			Fixture fixture = new Fixture(false);
+			Soklet.run(fixture.config, () -> {
+				McpProtocolVersion version = McpProtocolVersion.V2026_07_28;
+				assertError(fixture.call(version, null, "tools/call",
+						"\"name\":\"missing\",\"arguments\":{}"), 400, -32602);
+				assertError(fixture.call(version, null, "resources/read",
+						"\"uri\":\"test://missing\""), 400, -32602);
+				assertError(fixture.call(version, null, "tools/call",
+						"\"name\":\"fail\",\"arguments\":{}"), 200, -32603);
+			});
 		}
 	}
 
@@ -177,9 +193,9 @@ class McpLegacyRpcStatusTests {
 
 	private record Capture(int status, String contentType, String sessionId, String body) {}
 
-	private static final class Fixture implements AutoCloseable {
+	private static final class Fixture {
 		private final McpServer server;
-		private final Soklet soklet;
+		private final SokletConfig config;
 		private final AtomicInteger linkCalls = new AtomicInteger();
 
 		Fixture(boolean sessions) {
@@ -235,12 +251,11 @@ class McpLegacyRpcStatusTests {
 						return limit == null ? McpRateLimitDecision.allowed() : McpRateLimitDecision.denied(Duration.ofSeconds(1));
 					})
 					.toolRateLimiter(rateLimitContext -> McpRateLimitDecision.allowed()).build();
-			soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+			config = SokletConfig.withMcpServer(server)
 					.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 					.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(5))
 							.gracefulShutdownTimeout(Duration.ofSeconds(1))
-							.forcedShutdownTimeout(Duration.ofSeconds(1)).build()).build());
-			soklet.start();
+							.forcedShutdownTimeout(Duration.ofSeconds(1)).build()).build();
 		}
 
 		String initialize(McpProtocolVersion version) throws Exception {
@@ -296,6 +311,5 @@ class McpLegacyRpcStatusTests {
 			}
 		}
 
-		@Override public void close() { soklet.close(); }
 	}
 }

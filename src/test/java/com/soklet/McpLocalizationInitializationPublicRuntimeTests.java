@@ -49,7 +49,8 @@ class McpLocalizationInitializationPublicRuntimeTests {
 				lookedUp.add(text);
 				return McpLocalizationResult.localized("FR:" + text.getDefaultText());
 			}), McpLocalizationFailurePolicy.FAIL_REQUEST);
-			try (Fixture fixture = new Fixture(version, localizer, false, false)) {
+			Fixture fixture = new Fixture(version, localizer, false, false);
+			Soklet.run(fixture.config, () -> {
 				Captured response = fixture.initialize();
 				assertLocalized(response, version);
 				assertEquals(version == McpProtocolVersion.V2025_06_18 ? 2 : 3, lookedUp.size());
@@ -60,7 +61,7 @@ class McpLocalizationInitializationPublicRuntimeTests {
 						.map(text -> text.getCoordinate().getMemberPath()).collect(java.util.stream.Collectors.toSet()));
 				assertEquals("Canonical title", fixture.endpoint.getServerInfo().getTitle().orElseThrow());
 				assertEquals("Canonical description", fixture.endpoint.getServerInfo().getDescription().orElseThrow());
-			}
+			});
 		})));
 	}
 
@@ -73,7 +74,8 @@ class McpLocalizationInitializationPublicRuntimeTests {
 				return context(text -> mode.get().equals("lookup") ? McpLocalizationResult.failure()
 						: McpLocalizationResult.localized("FR:" + text.getDefaultText()));
 			}, McpLocalizationFailurePolicy.FAIL_REQUEST);
-			try (Fixture fixture = new Fixture(version, localizer, true, true)) {
+			Fixture fixture = new Fixture(version, localizer, true, true);
+			Soklet.run(fixture.config, () -> {
 				for (String failure : List.of("provider", "lookup", "provider", "lookup")) {
 					mode.set(failure);
 					Captured response = fixture.initialize();
@@ -93,27 +95,29 @@ class McpLocalizationInitializationPublicRuntimeTests {
 						List.of(new HeaderValue("Mcp-Session-Id", sessionId)));
 				assertEquals(200, ping.status(), ping.body());
 				assertTrue(ping.body().contains("\"result\":{}"), ping.body());
-			}
+			});
 		})));
 	}
 
 	@TestFactory
 	Stream<DynamicTest> wholeResponseFallbackAndNoLocalizerPreserveCanonicalBytes() {
 		return LEGACY.stream().map(version -> DynamicTest.dynamicTest(version.getWireValue(), () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
-			Captured canonical;
-			try (Fixture fixture = new Fixture(version, null, false, true)) { canonical = fixture.initialize(); }
+			AtomicReference<Captured> canonical = new AtomicReference<>();
+			Fixture canonicalFixture = new Fixture(version, null, false, true);
+			Soklet.run(canonicalFixture.config, () -> canonical.set(canonicalFixture.initialize()));
 			for (boolean providerFailure : List.of(true, false)) {
 				McpLocalizer localizer = localizer(request -> {
 					if (providerFailure) throw new IllegalStateException("private-initialize-canary");
 					return context(text -> text.getDefaultText().equals("Canonical title")
 							? McpLocalizationResult.localized("partial") : McpLocalizationResult.failure());
 				}, McpLocalizationFailurePolicy.USE_DEFAULT_TEXT);
-				try (Fixture fixture = new Fixture(version, localizer, false, true)) {
+				Fixture fixture = new Fixture(version, localizer, false, true);
+				Soklet.run(fixture.config, () -> {
 					Captured fallback = fixture.initialize();
-					assertEquals(canonical.body(), fallback.body());
+					assertEquals(canonical.get().body(), fallback.body());
 					assertEquals("en", fallback.header("Content-Language"));
 					assertEquals("Accept-Language", fallback.header("Vary"));
-				}
+				});
 			}
 		})));
 	}
@@ -234,25 +238,23 @@ class McpLocalizationInitializationPublicRuntimeTests {
 		}
 	}
 
-	private static final class Fixture implements AutoCloseable {
+	private static final class Fixture {
 		private final McpProtocolVersion version;
 		private final McpEndpoint endpoint;
-		private final Soklet soklet;
-		private final int port;
+		private final SokletConfig config;
+		private final McpServer server;
 
 		Fixture(McpProtocolVersion version, McpLocalizer localizer, boolean sessions, boolean serverInfoIncluded) {
 			this.version = version;
 			this.endpoint = endpoint(version, sessions, serverInfoIncluded);
 			McpServer.Builder builder = McpServer.withPort(0);
 			configure(builder, endpoint, localizer, sessions);
-			McpServer server = builder.build();
-			this.soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+			this.server = builder.build();
+			this.config = SokletConfig.withMcpServer(server)
 					.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(10))
 							.startupCancelationTimeout(Duration.ofSeconds(1)).gracefulShutdownTimeout(Duration.ofSeconds(1))
 							.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
-					.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).build());
-			soklet.start();
-			this.port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
+					.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).build();
 		}
 
 		Captured initialize() throws Exception { return exchange(initializeBody(version), List.of()); }
@@ -261,12 +263,11 @@ class McpLocalizationInitializationPublicRuntimeTests {
 			List<HeaderValue> headers = new ArrayList<>(additional);
 			headers.add(new HeaderValue("MCP-Protocol-Version", version.getWireValue()));
 			headers.add(new HeaderValue("Accept-Language", "fr"));
-			try (RawClient client = new RawClient(port, "POST", "/mcp", body, headers)) {
+			try (RawClient client = new RawClient(server.getDiagnostics().getBoundAddress().orElseThrow().getPort(), "POST", "/mcp", body, headers)) {
 				Head head = client.readHead();
 				return new Captured(head.status(), head.headers(), client.readBody(head));
 			}
 		}
 
-		@Override public void close() { soklet.close(); }
 	}
 }

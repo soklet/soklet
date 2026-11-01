@@ -82,9 +82,7 @@ public class McpSkillPublicRuntimeTests {
 					skillCallbacks.incrementAndGet();
 					return true;
 				})).build();
-		Soklet owner = managedSoklet(server);
-		try {
-			owner.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = port(server);
 			for (McpProtocolVersion version : List.of(McpProtocolVersion.V2025_06_18,
 					McpProtocolVersion.V2025_11_25)) {
@@ -132,9 +130,7 @@ public class McpSkillPublicRuntimeTests {
 					assertSuccess(resourceRead(port, "modern-read", resource.getUri()), "modern-read");
 			}
 			Assertions.assertTrue(skillCallbacks.get() > 0);
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -145,9 +141,7 @@ public class McpSkillPublicRuntimeTests {
 				Map.of("SKILL.md", root, "assets/sample.bin", binary));
 		McpEndpoint endpoint = endpointBuilder().skillRegistrations(List.of(registration)).build();
 		McpServer server = serverBuilder(endpoint).build();
-		Soklet owner = managedSoklet(server);
-		try {
-			owner.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = port(server);
 			HttpResponse<String> discover = send(port, "discover", "server/discover", "", null, null);
 			assertSuccess(discover, "discover");
@@ -190,9 +184,7 @@ public class McpSkillPublicRuntimeTests {
 			HttpResponse<String> binaryRead = resourceRead(port, "binary-read", binaryUri);
 			assertSuccess(binaryRead, "binary-read");
 			assertContains(binaryRead.body(), "\"blob\":\"AAH/Aw==\"");
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -214,9 +206,7 @@ public class McpSkillPublicRuntimeTests {
 				(request, candidate, features) -> true);
 		McpEndpoint endpoint = endpointBuilder().skillRegistrations(List.of(parent, child)).build();
 		McpServer server = serverBuilder(endpoint).skillAccessPolicy(policy).build();
-		Soklet owner = managedSoklet(server);
-		try {
-			owner.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = port(server);
 			assertSuccess(resourceRead(port, "child-grant", child.getUri()), "child-grant");
 			parentAllowed.set(true);
@@ -236,9 +226,7 @@ public class McpSkillPublicRuntimeTests {
 			HttpResponse<String> hiddenList = send(port, "hidden", "skills/list", "", null, null);
 			assertSuccess(hiddenList, "hidden");
 			assertContains(hiddenList.body(), "\"skills\":[]");
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -259,9 +247,7 @@ public class McpSkillPublicRuntimeTests {
 		McpEndpoint endpoint = endpointBuilder().skillGroups(List.of(group))
 				.skillListCachePolicy(McpCachePolicy.fromPublicTimeToLive(Duration.ofMinutes(1))).build();
 		McpServer server = serverBuilder(endpoint).skillVariantSelector(selector).build();
-		Soklet owner = managedSoklet(server);
-		try {
-			owner.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = port(server);
 			HttpResponse<String> selected = send(port, "selected", "skills/list", "", null, "fr");
 			assertSuccess(selected, "selected");
@@ -273,9 +259,7 @@ public class McpSkillPublicRuntimeTests {
 			Assertions.assertEquals(1, selections.get());
 			assertSuccess(skillGet(port, "direct-other", english.getUri()), "direct-other");
 			Assertions.assertEquals(1, selections.get(), "Direct lookup must bypass selection");
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -311,9 +295,7 @@ public class McpSkillPublicRuntimeTests {
 			selections.incrementAndGet();
 			return Optional.of(french);
 		}).build();
-		Soklet owner = managedSoklet(server);
-		try {
-			owner.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = port(server);
 			HttpResponse<String> first = send(port, "first", "skills/list", "", null, "fr");
 			assertSuccess(first, "first");
@@ -327,9 +309,7 @@ public class McpSkillPublicRuntimeTests {
 			Assertions.assertEquals(1, selections.get());
 			Assertions.assertEquals(List.of(Optional.empty(), Optional.of("")), observedCursors);
 			Assertions.assertEquals(List.of(true, false), observedFirstPages);
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -342,17 +322,13 @@ public class McpSkillPublicRuntimeTests {
 				}, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		McpServer server = serverBuilder(endpoint).build();
-		Soklet owner = managedSoklet(server);
-		try {
-			owner.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			HttpResponse<String> response = send(port(server), "intentional-error", "skills/list",
 					"", null, null);
 			assertError(response, 400, -32602, "intentional-error");
 			assertContains(response.body(), "\"message\":\"Application Skills cursor canary\"");
 			assertContains(response.body(), "\"reason\":\"application-detail-canary\"");
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -397,9 +373,7 @@ public class McpSkillPublicRuntimeTests {
 					return Optional.of(french);
 				})
 				.build();
-		Soklet owner = managedSoklet(server);
-		try {
-			owner.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = port(server);
 			HttpResponse<String> first = send(port, "first", "skills/list", "", null, "fr");
 			assertSuccess(first, "first");
@@ -424,9 +398,7 @@ public class McpSkillPublicRuntimeTests {
 			Assertions.assertEquals(3, handlerCalls.get());
 			Assertions.assertEquals(4, accessChecks.get());
 			Assertions.assertEquals(3, discoveryChecks.get());
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -441,17 +413,13 @@ public class McpSkillPublicRuntimeTests {
 						.build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		McpServer server = serverBuilder(endpoint).build();
-		Soklet owner = managedSoklet(server);
-		try {
-			owner.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			HttpResponse<String> response = send(port(server), "cache", "skills/list", "", null, null);
 			assertSuccess(response, "cache");
 			assertContains(response.body(), "\"ttlMs\":0");
 			assertContains(response.body(), "\"cacheScope\":\"private\"");
 			Assertions.assertFalse(response.body().contains("\"ttlMs\":3600000"), response.body());
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -474,9 +442,7 @@ public class McpSkillPublicRuntimeTests {
 				}, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		McpServer server = serverBuilder(endpoint).maximumCursorSizeInBytes(8).build();
-		Soklet owner = managedSoklet(server);
-		try {
-			owner.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = port(server);
 			HttpResponse<String> oversizedInput = send(port, "oversized-input", "skills/list",
 					",\"cursor\":\"世界語\"", null, null);
@@ -500,9 +466,7 @@ public class McpSkillPublicRuntimeTests {
 			Assertions.assertFalse(malformedOutput.body().contains("private-cursor-canary"),
 					malformedOutput.body());
 			Assertions.assertEquals(3, handlerCalls.get());
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -522,9 +486,7 @@ public class McpSkillPublicRuntimeTests {
 					return McpSkillPage.builder().skillRegistrations(List.of(registration)).build();
 				}, Set.of(McpProtocolVersion.V2026_07_28)).build();
 		McpServer server = serverBuilder(endpoint).build();
-		Soklet owner = managedSoklet(server);
-		try {
-			owner.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = port(server);
 			for (String id : List.of("metadata-failure", "path-failure"))
 				assertFixedInternalError(send(port, id, "skills/list", "", null, null), id);
@@ -532,9 +494,7 @@ public class McpSkillPublicRuntimeTests {
 			assertSuccess(recovered, "recovered");
 			assertContains(recovered.body(), registration.getUri().toString());
 			Assertions.assertEquals(3, handlerCalls.get());
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -552,18 +512,14 @@ public class McpSkillPublicRuntimeTests {
 				}, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		McpServer server = serverBuilder(endpoint).build();
-		Soklet owner = managedSoklet(server);
-		try {
-			owner.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			HttpResponse<String> response = send(port(server), "ordinary", "resources/list", "", null, null);
 			assertError(response, 200, -32603, "ordinary");
 			Assertions.assertFalse(response.body().contains("private-resource-list-canary"), response.body());
 			Assertions.assertFalse(response.body().contains("private-resource-canary"), response.body());
 			Assertions.assertFalse(response.body().contains(registration.getUri().toString()), response.body());
 			Assertions.assertEquals(1, handlerCalls.get());
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -597,9 +553,7 @@ public class McpSkillPublicRuntimeTests {
 					};
 				})
 				.build();
-		Soklet owner = managedSoklet(server);
-		try {
-			owner.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = port(server);
 			assertSuccess(send(port, "list", "skills/list", "", null, null), "list");
 			assertSuccess(skillGet(port, "get", registration.getUri()), "get");
@@ -630,9 +584,7 @@ public class McpSkillPublicRuntimeTests {
 			Assertions.assertFalse(denied.body().contains("fabricated-access-canary"), denied.body());
 			Assertions.assertEquals(3, interceptorCalls.get(),
 					"Denied Skill files must not enter an interceptor that could fabricate access");
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -656,9 +608,7 @@ public class McpSkillPublicRuntimeTests {
 		McpEndpoint endpoint = endpointBuilder().skillRegistrations(List.of(first, second))
 				.skillListHandler(handler, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build();
 		McpServer server = serverBuilder(endpoint).build();
-		Soklet owner = managedSoklet(server);
-		try {
-			owner.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = port(server);
 			for (String invalid : List.of("foreign", "reordered", "duplicate")) {
 				mode.set(invalid);
@@ -668,9 +618,7 @@ public class McpSkillPublicRuntimeTests {
 				Assertions.assertFalse(response.body().contains("First"), response.body());
 				Assertions.assertFalse(response.body().contains("Second"), response.body());
 			}
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -690,9 +638,7 @@ public class McpSkillPublicRuntimeTests {
 						: McpSkillPage.builder().build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		McpServer server = serverBuilder(endpoint).localizer(localizer).build();
-		Soklet owner = managedSoklet(server);
-		try {
-			owner.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = port(server);
 			HttpResponse<String> first = send(port, "first", "skills/list", "", null, "en");
 			assertSuccess(first, "first");
@@ -704,9 +650,7 @@ public class McpSkillPublicRuntimeTests {
 			Assertions.assertTrue(continuation.headers().allValues("Content-Language").isEmpty(),
 					continuation.headers().map().toString());
 			Assertions.assertEquals(List.of(Optional.empty(), Optional.of("")), providerCursors);
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	private static byte[] skillDocument(String name, String description) {
@@ -751,10 +695,10 @@ public class McpSkillPublicRuntimeTests {
 				.allowedHosts(Set.of(LOOPBACK));
 	}
 
-	private static Soklet managedSoklet(McpServer server) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+	private static SokletConfig managedSokletConfig(McpServer server) {
+		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.build());
+				.build();
 	}
 
 	private static int port(McpServer server) {

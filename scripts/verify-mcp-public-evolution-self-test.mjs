@@ -72,7 +72,8 @@ const reviewedLedgers = inventory.reviewedIncludeFiles.flatMap((path) =>
   readFileSync(resolve(root, path.replace('.includes', '.signatures.jsonl')),
     'utf8').trim().split(/\r?\n/u).map((line) => JSON.parse(line)));
 verifyStructuralOwners(root, inventory, reviewedIncludes, reviewedLedgers);
-assert.equal(verifyCoreStructuralOwners(root), 41);
+// SokletStatus is internal and the console-only ShutdownTrigger has been removed.
+assert.equal(verifyCoreStructuralOwners(root), 39);
 assert.deepEqual(coreStructuralOwnersInSource(`
   public interface Fixture {
     enum Visible { VALUE }

@@ -116,7 +116,7 @@ class TransportLateStartupCleanupTests {
 			if (blockForce) {
 				assertTrue(fixture.startThread.get().isAlive());
 				assertFalse(fixture.listener.get().isClosed());
-				assertSame(result, soklet.awaitShutdown(), "Blocked cleanup cannot reopen the completed result");
+				assertSame(result, soklet.awaitCoreShutdown(), "Blocked cleanup cannot reopen the completed result");
 				assertEquals(1L, fixture.forceFinished.getCount());
 			}
 			fixture.releaseForce.countDown();
@@ -127,7 +127,7 @@ class TransportLateStartupCleanupTests {
 			assertEquals(1, fixture.forceCalls.get());
 			assertEquals(0, fixture.gracefulCalls.get());
 			assertSame(stage, soklet.shutdown());
-			assertSame(result, soklet.awaitShutdown());
+			assertSame(result, soklet.awaitCoreShutdown());
 			assertSame(component, result.getShutdownComponentResult(type).orElseThrow());
 			assertEquals(ShutdownComponentDisposition.TERMINATION_UNKNOWN, component.getShutdownComponentDisposition());
 			assertEquals(failures, component.getThrowables());
@@ -146,7 +146,7 @@ class TransportLateStartupCleanupTests {
 			ServerSocket listener = fixture.listener.get();
 			if (listener != null) listener.close();
 			soklet.shutdown();
-			soklet.awaitShutdown();
+			soklet.awaitCoreShutdown();
 		}
 	}
 

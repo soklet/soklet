@@ -82,7 +82,8 @@ public class SseLastEventIdTests {
 	@Test
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
 	public void utf8LastEventIdsReachTheResourceIncludingSupplementaryCharacters() throws Exception {
-		try (ReplayFixture fixture = new ReplayFixture()) {
+		ReplayFixture fixture = new ReplayFixture();
+		Soklet.run(fixture.config, () -> {
 			for (String id : List.of("123", "caf\u00e9-\u96ea-\ud83d\ude80", "\u00a0cursor\u3000")) {
 				try (Socket socket = connectWithRetry("127.0.0.1", fixture.port, 2000)) {
 					socket.setSoTimeout(2000);
@@ -95,13 +96,14 @@ public class SseLastEventIdTests {
 					Assertions.assertEquals(List.of("\u00e9"), request.getHeaders().get("X-Latin1"));
 				}
 			}
-		}
+		});
 	}
 
 	@Test
 	@Timeout(value = 60, unit = TimeUnit.SECONDS)
 	public void malformedUtf8LastEventIdsGet400WithoutReachingTheResource() throws Exception {
-		try (ReplayFixture fixture = new ReplayFixture()) {
+		ReplayFixture fixture = new ReplayFixture();
+		Soklet.run(fixture.config, () -> {
 			for (byte[] invalid : invalidLastEventIds()) {
 				try (Socket socket = connectWithRetry("127.0.0.1", fixture.port, 2000)) {
 					socket.setSoTimeout(2000);
@@ -111,7 +113,7 @@ public class SseLastEventIdTests {
 				}
 			}
 			Assertions.assertTrue(ReplayResource.requests.isEmpty(), "Malformed replay cursors must not reach application code");
-		}
+		});
 	}
 
 	private static List<byte[]> invalidLastEventIds() {
@@ -138,13 +140,13 @@ public class SseLastEventIdTests {
 		}
 	}
 
-	private static final class ReplayFixture implements AutoCloseable {
+	private static final class ReplayFixture {
 		private final int port;
-		private final Soklet soklet;
+		private final SokletConfig config;
 		private ReplayFixture() throws Exception {
 			ReplayResource.requests.clear();
 			this.port = findFreePort();
-			this.soklet = Soklet.fromConfig(SokletConfig.withSseServer(SseServer.withPort(this.port)
+			this.config = SokletConfig.withSseServer(SseServer.withPort(this.port)
 					.host("127.0.0.1").verifyConnectionOnceEstablished(false).build())
 					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(ReplayResource.class)))
 					.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(5))
@@ -152,10 +154,8 @@ public class SseLastEventIdTests {
 							.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
 					.lifecycleObserver(new LifecycleObserver() {
 						@Override public void didReceiveLogEvent(LogEvent event) { /* quiet malformed-input checks */ }
-					}).build());
-			this.soklet.start();
+					}).build();
 		}
-		@Override public void close() { this.soklet.close(); }
 	}
 
 	@Test
@@ -171,9 +171,7 @@ public class SseLastEventIdTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseResource.class)))
 				.build();
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
-
+		Soklet.run(config, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				writeHttpGet(socket, "/sse/abc", ssePort,
 						"Accept: text/event-stream\r\n" +
@@ -199,7 +197,7 @@ public class SseLastEventIdTests {
 
 				Assertions.assertTrue(sawEcho, "HttpServer did not receive Last-Event-ID");
 			}
-		}
+		});
 	}
 
 	public static class SseResource {

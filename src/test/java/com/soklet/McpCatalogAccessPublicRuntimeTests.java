@@ -89,10 +89,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 						McpCatalogAccessPublicRuntimeTests::admitCaller)
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.build();
-		Soklet owner = managedSoklet(server);
-
-		try {
-			owner.start();
+		Soklet.run(config(server), () -> {
 			for (CallerCase callerCase : List.of(
 					new CallerCase(ANONYMOUS,
 							List.of("catalog.shared"),
@@ -120,9 +117,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 			}
 			Assertions.assertEquals(0, handlerInvocations.get(),
 					"Catalog listing must not dispatch registrations.");
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -148,10 +143,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 				.admissionController(context -> McpAdmissionDecision.accepted())
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.build();
-		Soklet owner = managedSoklet(server);
-
-		try {
-			owner.start();
+		Soklet.run(config(server), () -> {
 			HttpResponse<String> tools = send(server, "empty-tools",
 					"tools/list", null, ANONYMOUS, "");
 			assertSuccess(tools, "empty-tools");
@@ -171,9 +163,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 			Assertions.assertEquals(1, toolPolicyInvocations.get());
 			Assertions.assertEquals(1, promptPolicyInvocations.get());
 			Assertions.assertEquals(0, handlerInvocations.get());
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -218,31 +208,26 @@ public class McpCatalogAccessPublicRuntimeTests {
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.requestTimeout(Duration.ofMillis(50))
 				.build();
-		Soklet owner = managedSoklet(server);
-
-		try {
-			owner.start();
-			HttpResponse<String> response = send(server, "deadline-list",
-					"tools/list", null, ANONYMOUS, "");
-
-			Assertions.assertEquals(504, response.statusCode(), response.body());
-			Assertions.assertTrue(firstReturned.await(5, TimeUnit.SECONDS),
-					"The first evaluator did not return after the deadline.");
-			Assertions.assertTrue(canceledBeforeFirstReturned.get(),
-					"The shared catalog cancellation token was not canceled.");
-			Assertions.assertFalse(secondEntered.await(500,
-					TimeUnit.MILLISECONDS),
-					"A later evaluator entered after cancellation.");
-			Assertions.assertEquals(1, firstInvocations.get());
-			Assertions.assertEquals(0, secondInvocations.get());
-			Assertions.assertEquals(0, handlerInvocations.get());
-		} finally {
+		Soklet.run(config(server), () -> {
 			try {
-				firstReturned.await(5, TimeUnit.SECONDS);
+				HttpResponse<String> response = send(server, "deadline-list",
+						"tools/list", null, ANONYMOUS, "");
+
+				Assertions.assertEquals(504, response.statusCode(), response.body());
+				Assertions.assertTrue(firstReturned.await(5, TimeUnit.SECONDS),
+						"The first evaluator did not return after the deadline.");
+				Assertions.assertTrue(canceledBeforeFirstReturned.get(),
+						"The shared catalog cancellation token was not canceled.");
+				Assertions.assertFalse(secondEntered.await(500,
+						TimeUnit.MILLISECONDS),
+						"A later evaluator entered after cancellation.");
+				Assertions.assertEquals(1, firstInvocations.get());
+				Assertions.assertEquals(0, secondInvocations.get());
+				Assertions.assertEquals(0, handlerInvocations.get());
 			} finally {
-				owner.close();
+				firstReturned.await(5, TimeUnit.SECONDS);
 			}
-		}
+		});
 	}
 
 	@Test
@@ -282,10 +267,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.localizer(localizer)
 				.build();
-		Soklet owner = managedSoklet(server);
-
-		try {
-			owner.start();
+		Soklet.run(config(server), () -> {
 			HttpResponse<String> tenantATools = send(server, "allow-a-tools",
 					"tools/list", null, TENANT_A, "");
 			HttpResponse<String> tenantBTools = send(server, "allow-b-tools",
@@ -316,9 +298,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 			Assertions.assertEquals(4, providerInvocations.get(),
 					"Explicit allow-all must still use one request-local context per list.");
 			Assertions.assertEquals(4, lookupInvocations.get());
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -381,10 +361,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 					return output;
 				})
 				.build();
-		Soklet owner = managedSoklet(server);
-
-		try {
-			owner.start();
+		Soklet.run(config(server), () -> {
 			HttpResponse<String> toolResponse = send(server, "tool-order",
 					"tools/call", tool.getName(), ANONYMOUS,
 					",\"name\":\"" + tool.getName() + "\",\"arguments\":{}");
@@ -412,9 +389,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 					"interceptor-before:prompts/get",
 					"handler:prompts/get",
 					"interceptor-after:prompts/get"), stages);
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -461,10 +436,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 					return output;
 				})
 				.build();
-		Soklet owner = managedSoklet(server);
-
-		try {
-			owner.start();
+		Soklet.run(config(server), () -> {
 			HttpResponse<String> response = send(server, "null-tool-limiter",
 					"tools/call", tool.getName(), TENANT_A,
 					",\"name\":\"" + tool.getName()
@@ -475,9 +447,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 			Assertions.assertEquals(0, interceptorInvocations.get());
 			Assertions.assertEquals(0, handlerInvocations.get());
 			Assertions.assertEquals(0, sanitizerInvocations.get());
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -550,10 +520,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.localizer(localizer)
 				.build();
-		Soklet owner = managedSoklet(server);
-
-		try {
-			owner.start();
+		Soklet.run(config(server), () -> {
 			HttpResponse<String> toolResponse = send(server, "context-tool",
 					"tools/call", tool.getName(), ANONYMOUS,
 					",\"name\":\"" + tool.getName() + "\",\"arguments\":{}");
@@ -574,9 +541,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 					promptPolicyContext.get());
 			Assertions.assertEquals(2, providerInvocations.get(),
 					"Each direct request must create exactly one context.");
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -630,10 +595,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 					return continuation.proceed();
 				})
 				.build();
-		Soklet owner = managedSoklet(server);
-
-		try {
-			owner.start();
+		Soklet.run(config(server), () -> {
 			HttpResponse<String> hiddenResponse = send(server, "neutral-id",
 					"tools/call", hiddenName, ANONYMOUS,
 					",\"name\":\"" + hiddenName + "\",\"arguments\":{}");
@@ -662,9 +624,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 					"policy:" + hiddenName,
 					"admission:" + unknownName,
 					"request:" + unknownName), stages);
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -714,10 +674,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 					return continuation.proceed();
 				})
 				.build();
-		Soklet owner = managedSoklet(server);
-
-		try {
-			owner.start();
+		Soklet.run(config(server), () -> {
 			HttpResponse<String> hiddenResponse = send(server, "neutral-prompt-id",
 					"prompts/get", hiddenName, ANONYMOUS,
 					",\"name\":\"" + hiddenName + "\",\"arguments\":{}");
@@ -742,9 +699,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 					"policy:" + hiddenName,
 					"admission:" + unknownName,
 					"request:" + unknownName), stages);
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -780,10 +735,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 					return McpRateLimitDecision.allowed();
 				})
 				.build();
-		Soklet owner = managedSoklet(server);
-
-		try {
-			owner.start();
+		Soklet.run(config(server), () -> {
 			HttpResponse<String> setup = send(server, "limit-setup",
 					"server/discover", null, ANONYMOUS, "");
 			assertSuccess(setup, "limit-setup");
@@ -813,9 +765,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 			Assertions.assertEquals(0, promptPolicyInvocations.get());
 			Assertions.assertEquals(0, toolLimiterInvocations.get());
 			Assertions.assertEquals(0, handlerInvocations.get());
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -847,10 +797,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 				.admissionController(context -> McpAdmissionDecision.accepted())
 				.requestRateLimiter(context -> McpRateLimitDecision.allowed())
 				.build();
-		Soklet owner = managedSoklet(server);
-
-		try {
-			owner.start();
+		Soklet.run(config(server), () -> {
 			HttpResponse<String> nullResponse = send(server, "null-list",
 					"tools/list", null, ANONYMOUS, "");
 			assertInternalError(nullResponse, "null-list");
@@ -870,9 +817,7 @@ public class McpCatalogAccessPublicRuntimeTests {
 			Assertions.assertEquals(List.of("failure.prompt.first",
 					"failure.prompt.second"), promptEvaluations);
 			Assertions.assertEquals(0, handlerInvocations.get());
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	private static McpToolRegistration<McpJsonObject> tool(
@@ -919,11 +864,11 @@ public class McpCatalogAccessPublicRuntimeTests {
 				.allowedHosts(Set.of(LOOPBACK));
 	}
 
-	private static Soklet managedSoklet(@NonNull McpServer server) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+	private static SokletConfig config(@NonNull McpServer server) {
+		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
-				.build());
+				.build();
 	}
 
 	private static McpAdmissionDecision admitCaller(

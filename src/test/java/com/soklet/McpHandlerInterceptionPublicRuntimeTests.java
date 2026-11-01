@@ -164,10 +164,8 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 		McpServer server = serverBuilder(endpoint)
 				.handlerInterceptor(outerInterceptor)
 				.build();
-		Soklet owner = managedSoklet(server);
+		Soklet.run(managedSokletConfig(server), () -> {
 
-		try {
-			owner.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 
@@ -217,9 +215,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 					"before:resources/read", "handler:resources/read",
 					"after:resources/read", "before:resources/list",
 					"handler:resources/list", "after:resources/list"), stages);
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -250,10 +246,8 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 					default -> continuation.proceed();
 				})
 				.build();
-		Soklet owner = managedSoklet(server);
+		Soklet.run(managedSokletConfig(server), () -> {
 
-		try {
-			owner.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 
@@ -272,9 +266,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 				Assertions.assertFalse(failure.body().contains("secret"),
 						failure.body());
 			}
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -296,10 +288,8 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 					return continuation.proceed();
 				})
 				.build();
-		Soklet owner = managedSoklet(server);
+		Soklet.run(managedSokletConfig(server), () -> {
 
-		try {
-			owner.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			HttpResponse<String> response = send(port,
@@ -310,9 +300,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 			assertContains(response.body(),
 					"\"uri\":\"" + RESOURCE_URI + "\"");
 			Assertions.assertEquals(0, interceptorInvocations.get());
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -335,10 +323,8 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 							1_001, "interceptor-secret-must-not-leak"));
 				})
 				.build();
-		Soklet owner = managedSoklet(server);
+		Soklet.run(managedSokletConfig(server), () -> {
 
-		try {
-			owner.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			HttpResponse<String> read = send(port,
@@ -355,9 +341,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 					read.body());
 			Assertions.assertFalse(list.body().contains("interceptor-secret"),
 					list.body());
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -391,10 +375,8 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 				.promptRegistrations(java.util.List.of(prompt))
 				.build();
 		McpServer server = serverBuilder(endpoint).build();
-		Soklet owner = managedSoklet(server);
+		Soklet.run(managedSokletConfig(server), () -> {
 
-		try {
-			owner.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			HttpResponse<String> toolResponse = callTool(port, "tool-error",
@@ -409,9 +391,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 					"Tool precondition failed", "tool");
 			assertApplicationError(promptResponse, "prompt-error", 1_002,
 					"Prompt precondition failed", "prompt");
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -440,8 +420,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 							throw exception;
 						}
 					}).build();
-			try (Soklet owner = managedSoklet(server)) {
-				owner.start();
+			Soklet.run(managedSokletConfig(server), () -> {
 				int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 				List<ErrorOperation> operations = errorOperations(protocolVersion);
 				Assertions.assertAll(operations.stream().map(operation -> () -> {
@@ -460,7 +439,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 						+ (protocolVersion == McpProtocolVersion.V2026_07_28 ? -32602 : -32002));
 				assertContains(missingResource.body(), "\"uri\":\"" + RESOURCE_URI + "\"");
 				Assertions.assertEquals((operations.size() + 1) * 2, observed.get());
-			}
+			});
 		}
 	}
 
@@ -485,8 +464,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 						sanitized.incrementAndGet();
 						return McpCompleteResult.fromToolText("sanitized-recovery");
 					}).build();
-			try (Soklet owner = managedSoklet(server)) {
-				owner.start();
+			Soklet.run(managedSokletConfig(server), () -> {
 				int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 				Assertions.assertAll(errorOperations(protocolVersion).stream().map(operation -> () -> {
 					recovery.set(operation.recovery());
@@ -502,7 +480,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 				recovery.set(McpCompleteResult.fromToolText("wrong-operation-recovery"));
 				ErrorOperation completion = errorOperations(protocolVersion).get(4);
 				assertPrivateError(sendErrorOperation(port, protocolVersion, completion), protocolVersion);
-			}
+			});
 		}
 	}
 
@@ -536,8 +514,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 							throw new McpJsonRpcException(McpJsonRpcError.fromApplication(3002, "Private interceptor error"));
 						return result;
 					}).build();
-			try (Soklet owner = managedSoklet(server)) {
-				owner.start();
+			Soklet.run(managedSokletConfig(server), () -> {
 				int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 				List<ErrorOperation> operations = errorOperations(protocolVersion);
 				// Establish the old object's real handler origin in an earlier invocation.
@@ -550,7 +527,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 							assertPrivateError(sendErrorOperation(port, protocolVersion, operation), protocolVersion)));
 				}
 				Assertions.assertEquals(1 + operations.size() * 3, interceptedFailures.get());
-			}
+			});
 		}
 	}
 
@@ -727,10 +704,8 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 					default -> throw new AssertionError("Unexpected tool");
 				})
 				.build();
-		Soklet owner = managedSoklet(server);
+		Soklet.run(managedSokletConfig(server), () -> {
 
-		try {
-			owner.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			for (String toolName : List.of("one-shot", "wrong-thread", "retained")) {
@@ -746,9 +721,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 					() -> retainedContinuation.get().proceed());
 			Assertions.assertEquals(1,
 					handlerInvocations.get("retained").get());
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -792,37 +765,32 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 					}
 				})
 				.build();
-		Soklet owner = managedSoklet(server);
-
-		try {
-			owner.start();
-			int port = server.getDiagnostics().getBoundAddress()
-					.orElseThrow().getPort();
-			HttpResponse<String> response = callTool(port, "late", "late", "{}");
-
-			Assertions.assertEquals(200, response.statusCode(), response.body());
-			Assertions.assertEquals(
-					"{\"jsonrpc\":\"2.0\",\"id\":\"late\","
-							+ "\"error\":{\"code\":-32603,"
-							+ "\"message\":\"Internal error\"}}",
-					response.body());
-			Assertions.assertEquals("application/json",
-					response.headers().firstValue("Content-Type").orElseThrow());
-			Assertions.assertEquals(1, interceptorInvocations.get());
-			Assertions.assertTrue(lateContinuationCompleted.await(5,
-					TimeUnit.SECONDS),
-					"The noncooperative interceptor did not attempt late continuation.");
-			Assertions.assertInstanceOf(InterruptedException.class,
-					lateContinuationFailure.get());
-			Assertions.assertEquals(0, handlerInvocations.get(),
-					"An expired request must not enter the public handler.");
-		} finally {
+		Soklet.run(managedSokletConfig(server), () -> {
 			try {
-				lateContinuationCompleted.await(5, TimeUnit.SECONDS);
+				int port = server.getDiagnostics().getBoundAddress()
+						.orElseThrow().getPort();
+				HttpResponse<String> response = callTool(port, "late", "late", "{}");
+
+				Assertions.assertEquals(200, response.statusCode(), response.body());
+				Assertions.assertEquals(
+						"{\"jsonrpc\":\"2.0\",\"id\":\"late\","
+								+ "\"error\":{\"code\":-32603,"
+								+ "\"message\":\"Internal error\"}}",
+						response.body());
+				Assertions.assertEquals("application/json",
+						response.headers().firstValue("Content-Type").orElseThrow());
+				Assertions.assertEquals(1, interceptorInvocations.get());
+				Assertions.assertTrue(lateContinuationCompleted.await(5,
+						TimeUnit.SECONDS),
+						"The noncooperative interceptor did not attempt late continuation.");
+				Assertions.assertInstanceOf(InterruptedException.class,
+						lateContinuationFailure.get());
+				Assertions.assertEquals(0, handlerInvocations.get(),
+						"An expired request must not enter the public handler.");
 			} finally {
-				owner.close();
+				lateContinuationCompleted.await(5, TimeUnit.SECONDS);
 			}
-		}
+		});
 	}
 
 	private static McpToolRegistration<McpJsonObject> rawTool(String name) {
@@ -848,8 +816,8 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 				.allowedHosts(Set.of(LOOPBACK));
 	}
 
-	private static Soklet managedSoklet(McpServer server) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+	private static SokletConfig managedSokletConfig(McpServer server) {
+		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecyclePolicy(LifecyclePolicy.builder()
@@ -858,7 +826,7 @@ public class McpHandlerInterceptionPublicRuntimeTests {
 					.gracefulShutdownTimeout(Duration.ofSeconds(1))
 					.forcedShutdownTimeout(Duration.ofSeconds(1))
 					.build())
-				.build());
+				.build();
 	}
 
 	private static HttpResponse<String> callTool(int port, String id,

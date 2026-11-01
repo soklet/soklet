@@ -23,13 +23,17 @@ class Round2HttpStreamingRuntimeTests {
 		try (java.io.RandomAccessFile sparse = new java.io.RandomAccessFile(file.toFile(), "rw")) { sparse.setLength(64L * 1024 * 1024); }
 		for (boolean reset : List.of(false, true)) {
 			Fixture fixture = new Fixture(false, Duration.ofSeconds(3));
-			try (fixture) {
-				fixture.resource.file = file;
-				try (Socket client = fixture.request("/file", "HTTP/1.1")) {
-					assertTrue(readHeaders(client).startsWith("HTTP/1.1 200"));
-					if (reset) client.setSoLinger(true, 0);
+			Soklet.run(fixture.config, () -> {
+				try {
+					fixture.resource.file = file;
+					try (Socket client = fixture.request("/file", "HTTP/1.1")) {
+						assertTrue(readHeaders(client).startsWith("HTTP/1.1 200"));
+						if (reset) client.setSoLinger(true, 0);
+					}
+				} finally {
+					fixture.release();
 				}
-			}
+			});
 			assertTrue(fixture.logs.stream().noneMatch(event -> event.getLogEventType() == LogEventType.SERVER_TRANSPORT_FAILURE), fixture.logs.toString());
 		}
 	}
@@ -39,53 +43,66 @@ class Round2HttpStreamingRuntimeTests {
 	void zipCleanupAndInterruptibleUpstreamRemainQuietAfterLiveDisconnect() throws Exception {
 		for (String path : List.of("/zip", "/zip", "/zip", "/pipe")) {
 			Fixture fixture = new Fixture(false, Duration.ofSeconds(3));
-			try (fixture; Socket client = fixture.request(path, "HTTP/1.1")) {
-				assertTrue(readHeaders(client).startsWith("HTTP/1.1 200"));
-				assertTrue(fixture.resource.producerEntered.await(2, TimeUnit.SECONDS));
-				client.setSoLinger(true, 0); client.close();
-				if (path.equals("/zip")) {
-					await(() -> fixture.resource.token != null && fixture.resource.token.isCanceled());
-					fixture.resource.releaseProducer.countDown();
+			Soklet.run(fixture.config, () -> {
+				try (Socket client = fixture.request(path, "HTTP/1.1")) {
+					assertTrue(readHeaders(client).startsWith("HTTP/1.1 200"));
+					assertTrue(fixture.resource.producerEntered.await(2, TimeUnit.SECONDS));
+					client.setSoLinger(true, 0); client.close();
+					if (path.equals("/zip")) {
+						await(() -> fixture.resource.token != null && fixture.resource.token.isCanceled());
+						fixture.resource.releaseProducer.countDown();
+					}
+					await(() -> !fixture.terminals.isEmpty());
+					assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED, fixture.terminals.get(0).getReason());
+					assertFalse(fixture.terminals.get(0).getCause().orElseThrow().getClass().getName().contains("SocketIoException"));
+				} finally {
+					fixture.release();
 				}
-				await(() -> !fixture.terminals.isEmpty());
-				assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED, fixture.terminals.get(0).getReason());
-				assertFalse(fixture.terminals.get(0).getCause().orElseThrow().getClass().getName().contains("SocketIoException"));
-			}
+			});
 			assertTrue(fixture.logs.stream().noneMatch(event -> event.getLogEventType() == LogEventType.RESPONSE_STREAM_FAILED
 					|| event.getLogEventType() == LogEventType.RESPONSE_STREAM_CLOSE_FAILED), fixture.logs.toString());
 		}
 	}
 	@Test void lateFiniteAndStreamingHandlersObserveTheTimeoutResponseWithoutStreamAdmission() throws Exception {
 		for (boolean streaming : List.of(false, true)) {
-			try (Fixture fixture = new Fixture(false, Duration.ofMillis(100)); Socket client = fixture.request("/late", "HTTP/1.1")) {
-				fixture.resource.lateStreaming = streaming;
-				assertTrue(fixture.resource.handlerEntered.await(2, TimeUnit.SECONDS));
-				assertTrue(read(client).startsWith("HTTP/1.1 503"));
-				fixture.resource.releaseHandler.countDown();
-				await(() -> fixture.finishes.size() == 1);
-				assertEquals(List.of(503), fixture.writes);
-				assertEquals(List.of(503), fixture.finishes);
-				assertTrue(fixture.terminals.isEmpty());
-				assertEquals(0, fixture.resource.producerCalls.get());
-				assertEquals(0, fixture.server.getStreamLifecycleCoordinatorForTests().orElseThrow().snapshot().reservations());
-				assertEquals(0L, fixture.metrics.snapshot().orElseThrow().getActiveRequests());
-				assertTrue(fixture.metrics.snapshot().orElseThrow().getHttpResponseStreamTerminations().isEmpty());
-				assertTrue(fixture.logs.stream().noneMatch(event -> event.getLogEventType() == LogEventType.RESPONSE_STREAM_CANCELED));
-			}
+			Fixture fixture = new Fixture(false, Duration.ofMillis(100));
+			Soklet.run(fixture.config, () -> {
+				try (Socket client = fixture.request("/late", "HTTP/1.1")) {
+					fixture.resource.lateStreaming = streaming;
+					assertTrue(fixture.resource.handlerEntered.await(2, TimeUnit.SECONDS));
+					assertTrue(read(client).startsWith("HTTP/1.1 503"));
+					fixture.resource.releaseHandler.countDown();
+					await(() -> fixture.finishes.size() == 1);
+					assertEquals(List.of(503), fixture.writes);
+					assertEquals(List.of(503), fixture.finishes);
+					assertTrue(fixture.terminals.isEmpty());
+					assertEquals(0, fixture.resource.producerCalls.get());
+					assertEquals(0, fixture.server.getStreamLifecycleCoordinatorForTests().orElseThrow().snapshot().reservations());
+					assertEquals(0L, fixture.metrics.snapshot().orElseThrow().getActiveRequests());
+					assertTrue(fixture.metrics.snapshot().orElseThrow().getHttpResponseStreamTerminations().isEmpty());
+					assertTrue(fixture.logs.stream().noneMatch(event -> event.getLogEventType() == LogEventType.RESPONSE_STREAM_CANCELED));
+				} finally {
+					fixture.release();
+				}
+			});
 		}
 	}
 
 	@Test
 	void classicSocketUpstreamInterruptRemainsQuietAfterLiveDisconnect() throws Exception {
 		Fixture fixture = new Fixture(false, Duration.ofSeconds(3));
-		try (fixture; Socket client = fixture.request("/socket", "HTTP/1.1")) {
-			assertTrue(readHeaders(client).startsWith("HTTP/1.1 200"));
-			assertTrue(fixture.resource.producerEntered.await(2, TimeUnit.SECONDS));
-			client.setSoLinger(true, 0);
-			client.close();
-			await(() -> !fixture.terminals.isEmpty());
-			assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED, fixture.terminals.get(0).getReason());
-		}
+		Soklet.run(fixture.config, () -> {
+			try (Socket client = fixture.request("/socket", "HTTP/1.1")) {
+				assertTrue(readHeaders(client).startsWith("HTTP/1.1 200"));
+				assertTrue(fixture.resource.producerEntered.await(2, TimeUnit.SECONDS));
+				client.setSoLinger(true, 0);
+				client.close();
+				await(() -> !fixture.terminals.isEmpty());
+				assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED, fixture.terminals.get(0).getReason());
+			} finally {
+				fixture.release();
+			}
+		});
 		assertTrue(fixture.logs.stream().noneMatch(event -> event.getLogEventType() == LogEventType.RESPONSE_STREAM_FAILED
 				|| event.getLogEventType() == LogEventType.RESPONSE_STREAM_CLOSE_FAILED
 				|| event.getLogEventType() == LogEventType.SERVER_INTERNAL_ERROR), fixture.logs.toString());
@@ -93,49 +110,64 @@ class Round2HttpStreamingRuntimeTests {
 
 	@Test void throwingWillWriteObserverStillWritesBeforeFinishForNormalAndProtocolReplacedStreams() throws Exception {
 		for (String version : List.of("HTTP/1.1", "HTTP/1.0")) {
-			try (Fixture fixture = new Fixture(true, Duration.ofSeconds(3)); Socket client = fixture.request("/stream", version)) {
-				String wire = read(client);
-				int status = version.equals("HTTP/1.0") ? 505 : 200;
-				assertTrue(wire.startsWith(version + " " + status), wire);
-				await(() -> fixture.metrics.snapshot().orElseThrow().getActiveRequests() == 0 && fixture.finishes.size() == 1);
-				assertEquals(List.of(status), fixture.writes);
-				assertEquals(List.of(status), fixture.finishes);
-				assertEquals(List.of("write", "finish"), fixture.order);
-				assertTrue(fixture.logs.stream().anyMatch(event -> event.getLogEventType() == LogEventType.LIFECYCLE_OBSERVER_WILL_WRITE_RESPONSE_FAILED));
-				assertTrue(fixture.logs.stream().noneMatch(event -> event.getLogEventType() == LogEventType.REQUEST_INTERCEPTOR_WRAP_REQUEST_FAILED));
-				assertEquals(status == 200 ? 1 : 0, fixture.resource.producerCalls.get());
-				assertEquals(status == 200 ? 1 : 0, fixture.metrics.snapshot().orElseThrow().getHttpResponseStreamTerminations().size());
-			}
+			Fixture fixture = new Fixture(true, Duration.ofSeconds(3));
+			Soklet.run(fixture.config, () -> {
+				try (Socket client = fixture.request("/stream", version)) {
+					String wire = read(client);
+					int status = version.equals("HTTP/1.0") ? 505 : 200;
+					assertTrue(wire.startsWith(version + " " + status), wire);
+					await(() -> fixture.metrics.snapshot().orElseThrow().getActiveRequests() == 0 && fixture.finishes.size() == 1);
+					assertEquals(List.of(status), fixture.writes);
+					assertEquals(List.of(status), fixture.finishes);
+					assertEquals(List.of("write", "finish"), fixture.order);
+					assertTrue(fixture.logs.stream().anyMatch(event -> event.getLogEventType() == LogEventType.LIFECYCLE_OBSERVER_WILL_WRITE_RESPONSE_FAILED));
+					assertTrue(fixture.logs.stream().noneMatch(event -> event.getLogEventType() == LogEventType.REQUEST_INTERCEPTOR_WRAP_REQUEST_FAILED));
+					assertEquals(status == 200 ? 1 : 0, fixture.resource.producerCalls.get());
+					assertEquals(status == 200 ? 1 : 0, fixture.metrics.snapshot().orElseThrow().getHttpResponseStreamTerminations().size());
+				} finally {
+					fixture.release();
+				}
+			});
 		}
 	}
 
 	@Test void throwingWillWriteObserverDoesNotLeakMetricsOnCapacityReplacement() throws Exception {
-		try (Fixture fixture = new Fixture(true, Duration.ofSeconds(3)); Socket held = fixture.request("/held", "HTTP/1.1")) {
-			assertTrue(readHeaders(held).startsWith("HTTP/1.1 200"));
-			assertTrue(fixture.resource.producerEntered.await(2, TimeUnit.SECONDS));
-			try (Socket rejected = fixture.request("/stream", "HTTP/1.1")) {
-				assertTrue(read(rejected).startsWith("HTTP/1.1 503"));
+		Fixture fixture = new Fixture(true, Duration.ofSeconds(3));
+		Soklet.run(fixture.config, () -> {
+			try (Socket held = fixture.request("/held", "HTTP/1.1")) {
+				assertTrue(readHeaders(held).startsWith("HTTP/1.1 200"));
+				assertTrue(fixture.resource.producerEntered.await(2, TimeUnit.SECONDS));
+				try (Socket rejected = fixture.request("/stream", "HTTP/1.1")) {
+					assertTrue(read(rejected).startsWith("HTTP/1.1 503"));
+				}
+				await(() -> fixture.finishes.size() == 2);
+				assertEquals(List.of(200, 503), fixture.writes);
+				assertEquals(1L, fixture.metrics.snapshot().orElseThrow().getActiveRequests());
+				fixture.resource.releaseProducer.countDown();
+				read(held);
+				await(() -> fixture.metrics.snapshot().orElseThrow().getActiveRequests() == 0);
+				assertEquals(1L, fixture.metrics.snapshot().orElseThrow().getHttpResponseStreamTerminations().values().stream().mapToLong(Long::longValue).sum());
+			} finally {
+				fixture.release();
 			}
-			await(() -> fixture.finishes.size() == 2);
-			assertEquals(List.of(200, 503), fixture.writes);
-			assertEquals(1L, fixture.metrics.snapshot().orElseThrow().getActiveRequests());
-			fixture.resource.releaseProducer.countDown();
-			read(held);
-			await(() -> fixture.metrics.snapshot().orElseThrow().getActiveRequests() == 0);
-			assertEquals(1L, fixture.metrics.snapshot().orElseThrow().getHttpResponseStreamTerminations().values().stream().mapToLong(Long::longValue).sum());
-		}
+		});
 	}
 
 	@Test void routineDisconnectRetainsItsTerminationWithoutCancelationStackTraceLog() throws Exception {
-		try (Fixture fixture = new Fixture(false, Duration.ofSeconds(3)); Socket client = fixture.request("/writing", "HTTP/1.1")) {
-			assertTrue(readHeaders(client).startsWith("HTTP/1.1 200"));
-			assertTrue(fixture.resource.producerEntered.await(2, TimeUnit.SECONDS));
-			client.setSoLinger(true, 0);
-			client.close();
-			await(() -> !fixture.terminals.isEmpty());
-			assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED, fixture.terminals.get(0).getReason());
-			assertTrue(fixture.logs.stream().noneMatch(event -> event.getLogEventType() == LogEventType.RESPONSE_STREAM_CANCELED));
-		}
+		Fixture fixture = new Fixture(false, Duration.ofSeconds(3));
+		Soklet.run(fixture.config, () -> {
+			try (Socket client = fixture.request("/writing", "HTTP/1.1")) {
+				assertTrue(readHeaders(client).startsWith("HTTP/1.1 200"));
+				assertTrue(fixture.resource.producerEntered.await(2, TimeUnit.SECONDS));
+				client.setSoLinger(true, 0);
+				client.close();
+				await(() -> !fixture.terminals.isEmpty());
+				assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED, fixture.terminals.get(0).getReason());
+				assertTrue(fixture.logs.stream().noneMatch(event -> event.getLogEventType() == LogEventType.RESPONSE_STREAM_CANCELED));
+			} finally {
+				fixture.release();
+			}
+		});
 	}
 
 	private static String read(Socket socket) throws Exception {
@@ -251,11 +283,11 @@ class Round2HttpStreamingRuntimeTests {
 			return lateStreaming ? stream() : MarshaledResponse.withStatusCode(200).body(new byte[]{1}).build();
 		}
 	}
-	private static final class Fixture implements AutoCloseable {
+	private static final class Fixture {
 		final int port = findFreePort();
 		final Resource resource = new Resource();
 		final DefaultHttpServer server;
-		final Soklet soklet;
+		final SokletConfig config;
 		final DefaultMetricsCollector metrics = DefaultMetricsCollector.defaultInstance();
 		final List<Integer> writes = new CopyOnWriteArrayList<>(), finishes = new CopyOnWriteArrayList<>();
 		final List<String> order = new CopyOnWriteArrayList<>();
@@ -264,7 +296,7 @@ class Round2HttpStreamingRuntimeTests {
 		Fixture(boolean throwWillWrite, Duration timeout) throws Exception {
 			server = (DefaultHttpServer) HttpServer.withPort(port).host("127.0.0.1").concurrency(2)
 					.requestHandlerTimeout(timeout).streamingLifecycleCapacity(1).streamingCallbackConcurrency(1).build();
-			soklet = Soklet.fromConfig(SokletConfig.withHttpServer(server)
+			config = SokletConfig.withHttpServer(server)
 					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Resource.class)))
 					.instanceProvider(new InstanceProvider() { @Override public <T> T provide(Class<T> type) {
 						return type == Resource.class ? type.cast(resource) : InstanceProvider.defaultInstance().provide(type);
@@ -282,14 +314,13 @@ class Round2HttpStreamingRuntimeTests {
 						@Override public void didTerminateResponseStream(StreamingResponseHandle handle, StreamTermination termination) { terminals.add(termination); }
 					}).lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(10))
 							.startupCancelationTimeout(Duration.ofSeconds(1)).gracefulShutdownTimeout(Duration.ofSeconds(1))
-							.forcedShutdownTimeout(Duration.ofSeconds(1)).build()).build());
-			soklet.start();
+							.forcedShutdownTimeout(Duration.ofSeconds(1)).build()).build();
 		}
 		Socket request(String path, String version) throws Exception {
 			Socket socket = connectWithRetry("127.0.0.1", port, 2000); socket.setSoTimeout(3000);
 			socket.getOutputStream().write(("GET " + path + " " + version + "\r\nHost: localhost\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.ISO_8859_1));
 			return socket;
 		}
-		@Override public void close() { resource.releaseHandler.countDown(); resource.releaseProducer.countDown(); soklet.close(); }
+		void release() { resource.releaseHandler.countDown(); resource.releaseProducer.countDown(); }
 	}
 }

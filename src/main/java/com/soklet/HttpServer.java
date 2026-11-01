@@ -44,8 +44,9 @@ import static java.util.Objects.requireNonNull;
  *   HttpServer.fromPort(8080)
  * ).build();
  *
- * System.out.println("Soklet starting; press [enter] to exit");
- * SokletApplication.run(config, ShutdownTrigger.ENTER_KEY);}</pre>
+ * System.out.println("Soklet starting");
+ * Soklet soklet = Soklet.run(config);
+ * ShutdownResult result = soklet.awaitShutdown();}</pre>
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */

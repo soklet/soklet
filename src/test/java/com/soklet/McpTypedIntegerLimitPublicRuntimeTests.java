@@ -66,9 +66,8 @@ class McpTypedIntegerLimitPublicRuntimeTests {
 		McpServer server = McpServer.withPort(0).host("127.0.0.1").allowedHosts(Set.of("127.0.0.1"))
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.toolRateLimiter(rateLimitContext -> McpRateLimitDecision.allowed()).build();
-		try (Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
-				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).build())) {
-			soklet.start();
+		Soklet.run(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).build(), () -> {
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			assertSuccess(call(port, version, "exact", "1e1023,-1e1022"), 2);
 			assertEquals(List.of(BigInteger.TEN.pow(1023), BigInteger.TEN.pow(1022).negate()), observed.get());
@@ -90,7 +89,7 @@ class McpTypedIntegerLimitPublicRuntimeTests {
 			assertSuccess(call(port, version, "recovery", "1.0,0e9999"), 2);
 			assertEquals(List.of(BigInteger.ONE, BigInteger.ZERO), observed.get());
 			assertEquals(3, calls.get());
-		}
+		});
 	}
 
 	private static Response call(int port, McpProtocolVersion version, String id,

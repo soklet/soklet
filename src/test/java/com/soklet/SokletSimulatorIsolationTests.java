@@ -1117,12 +1117,12 @@ public class SokletSimulatorIsolationTests {
 		LifecycleWorkers workers = new LifecycleWorkers();
 		LifecycleObserver observer = new LifecycleObserver() {
 			@Override
-			public void willStartSoklet(@NonNull Soklet soklet) {
+			public void willStartSoklet() {
 				serverTransitions.incrementAndGet();
 			}
 
 			@Override
-			public void didStartSoklet(@NonNull Soklet soklet) {
+			public void didStartSoklet() {
 				serverTransitions.incrementAndGet();
 			}
 
@@ -1137,13 +1137,12 @@ public class SokletSimulatorIsolationTests {
 			}
 
 			@Override
-			public void willStopSoklet(@NonNull Soklet soklet) {
+			public void willStopSoklet() {
 				serverTransitions.incrementAndGet();
 			}
 
 			@Override
-			public void didStopSoklet(@NonNull Soklet soklet,
-					@NonNull ShutdownResult result) {
+			public void didStopSoklet(@NonNull ShutdownResult result) {
 				serverTransitions.incrementAndGet();
 			}
 
@@ -1522,23 +1521,22 @@ public class SokletSimulatorIsolationTests {
 					.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 					.lifecycleObserver(new LifecycleObserver() {
 						@Override
-						public void willStartSoklet(@NonNull Soklet soklet) {
+						public void willStartSoklet() {
 							probe.serverTransitions.incrementAndGet();
 						}
 
 						@Override
-						public void didStartSoklet(@NonNull Soklet soklet) {
+						public void didStartSoklet() {
 							probe.serverTransitions.incrementAndGet();
 						}
 
 						@Override
-						public void willStopSoklet(@NonNull Soklet soklet) {
+						public void willStopSoklet() {
 							probe.serverTransitions.incrementAndGet();
 						}
 
 						@Override
-						public void didStopSoklet(@NonNull Soklet soklet,
-								@NonNull ShutdownResult result) {
+						public void didStopSoklet(@NonNull ShutdownResult result) {
 							probe.serverTransitions.incrementAndGet();
 						}
 

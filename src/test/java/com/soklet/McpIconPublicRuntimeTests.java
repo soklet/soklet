@@ -94,9 +94,8 @@ class McpIconPublicRuntimeTests {
 		McpServer server = McpServer.withPort(0).host("127.0.0.1").allowedHosts(Set.of("127.0.0.1"))
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.toolRateLimiter(rateLimitContext -> McpRateLimitDecision.allowed()).build();
-		try (Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
-				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).build())) {
-			soklet.start();
+		Soklet.run(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).build(), () -> {
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			for (String method : List.of("tools/list", "prompts/list", "resources/list", "resources/templates/list"))
 				assertIcons(call(port, protocolVersion, method), protocolVersion);
@@ -121,7 +120,7 @@ class McpIconPublicRuntimeTests {
 			assertEquals(SOURCE, declared.getSource());
 			assertEquals(MIME_TYPE, declared.getMimeType().orElseThrow());
 			assertEquals(List.of("001x02", "any", "001x02"), declared.getSizes());
-		}
+		});
 	}
 
 	private static void assertIcons(Response response, McpProtocolVersion protocolVersion) {

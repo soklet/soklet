@@ -250,13 +250,12 @@ class McpAppProjectionPublicRuntimeTests {
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed())
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.subscriptionAuthorizer(McpSubscriptionAuthorizer.denyAllInstance()).build();
-		Soklet owner = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+		Soklet.run(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.lifecyclePolicy(TEST_LIFECYCLE_POLICY).build());
-		HttpClient client = HttpClient.newBuilder().connectTimeout(WAIT)
-				.version(HttpClient.Version.HTTP_1_1).build();
-		try {
-			owner.start();
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY).build(), () -> {
+			HttpClient client = HttpClient.newBuilder().connectTimeout(WAIT)
+					.version(HttpClient.Version.HTTP_1_1).build();
+
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			for (int index = 0; index < 4; ++index) {
 				Request request = request("tools/list", null, capabilities.get(index), "allowed", "fr");
@@ -271,9 +270,7 @@ class McpAppProjectionPublicRuntimeTests {
 				assertEquals(simulated.get(index), new Capture(response.statusCode(), response.body()));
 			}
 			assertEquals(0, calls.get());
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	private static void assertMissingApps(Capture capture) {

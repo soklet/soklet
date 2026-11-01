@@ -200,9 +200,8 @@ class ExternallyCoordinatedTransportLifecycleAdapterTests {
 		Assertions.assertEquals(1, eventsAtCallback.get().size());
 		Assertions.assertSame(firstFailure,
 				eventsAtCallback.get().get(0).cause().orElseThrow());
-		Assertions.assertArrayEquals(new Throwable[] { competingFailure },
-				firstFailure.getSuppressed(),
-				"Exactly one pre-freeze competing failure is retained by identity");
+		Assertions.assertEquals(0, firstFailure.getSuppressed().length,
+				"Competing failure evidence must not mutate the primary failure");
 		Assertions.assertFalse(generation.admissionFence().isOpen());
 		Assertions.assertEquals(0, operations.quiesceCount.get());
 		Assertions.assertTrue(adapter.result(generation).isEmpty(),
@@ -221,7 +220,8 @@ class ExternallyCoordinatedTransportLifecycleAdapterTests {
 		Assertions.assertEquals(
 				InternalLifecycleComponentShutdownDisposition.UNEXPECTED_TERMINATION,
 				participant.disposition());
-		Assertions.assertEquals(List.of(firstFailure), participant.failures());
+		Assertions.assertEquals(List.of(firstFailure, competingFailure), participant.failures(),
+				"Exactly one pre-freeze competing failure is retained by identity");
 		Assertions.assertTrue(adapter.finalizeExternallyCoordinatedEvidence(
 				generation, participant).isEmpty());
 		adapter.publishExternallyCoordinatedResult(generation, exactResult);

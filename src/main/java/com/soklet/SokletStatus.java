@@ -21,7 +21,7 @@ package com.soklet;
  * <p>
  * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
  */
-public enum SokletStatus {
+enum SokletStatus {
 	/** No start or shutdown intent has been claimed. */
 	NEW,
 	/** Startup has been claimed but readiness has not been published. */

@@ -59,7 +59,9 @@ class DecoratedSseQueuedAdmissionTests {
 				.lifecycleObserver(new LifecycleObserver() { @Override public void didReceiveLogEvent(LogEvent event) {} })
 				.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(2)).startupCancelationTimeout(Duration.ofSeconds(1))
 						.gracefulShutdownTimeout(Duration.ofSeconds(4)).forcedShutdownTimeout(Duration.ofMillis(200)).build()).build();
-		try (Soklet soklet = Soklet.fromConfig(config)) {
+		// Shutdown intentionally overlaps a queued handshake, so this test needs its owner handle.
+		try (SokletTestScope sokletScope = SokletTestScope.of(Soklet.fromConfig(config))) {
+			Soklet soklet = sokletScope.soklet();
 			soklet.start();
 			try (Socket socket = new Socket("127.0.0.1", port)) {
 				socket.setSoTimeout(5000);

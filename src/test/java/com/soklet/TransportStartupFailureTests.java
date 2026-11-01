@@ -83,7 +83,7 @@ class TransportStartupFailureTests {
 				SokletStartupException failure = assertThrows(SokletStartupException.class, soklet::start);
 				ShutdownResult result = failure.getShutdownResult();
 				assertEquals(StartupDisposition.FAILED, result.getStartupDisposition());
-				assertSame(result, soklet.awaitShutdown());
+				assertSame(result, soklet.awaitCoreShutdown());
 				assertSame(failure.getCause(), result.getStartupFailureCause().orElseThrow());
 				assertTrue(hasBindCause(failure.getCause()), () -> String.valueOf(failure.getCause()));
 				assertTrue(result.isComplete());
@@ -98,7 +98,7 @@ class TransportStartupFailureTests {
 				soklet.close();
 			} finally {
 				soklet.shutdown();
-				soklet.awaitShutdown();
+				soklet.awaitCoreShutdown();
 			}
 		}
 	}
@@ -117,7 +117,7 @@ class TransportStartupFailureTests {
 			assertTrue(failure.getShutdownResult().getUnexpectedShutdownComponentTermination().isEmpty());
 			assertTrue(failure.getShutdownResult().isComplete());
 			soklet.close();
-		} finally { soklet.shutdown(); soklet.awaitShutdown(); }
+		} finally { soklet.shutdown(); soklet.awaitCoreShutdown(); }
 	}
 
 	@Test
@@ -143,7 +143,7 @@ class TransportStartupFailureTests {
 		assertSame(expected, result.getStartupFailureCause().orElseThrow());
 		assertEquals(StartupDisposition.FAILED, result.getStartupDisposition());
 		assertFalse(result.isComplete());
-		assertSame(result, soklet.awaitShutdown());
+		assertSame(result, soklet.awaitCoreShutdown());
 		assertSame(result, assertThrows(SokletShutdownIncompleteException.class, soklet::close).getShutdownResult());
 	}
 
@@ -159,7 +159,7 @@ class TransportStartupFailureTests {
 				.getShutdownComponentResult(ShutdownComponentType.HTTP).orElseThrow().getShutdownComponentDisposition());
 		assertSame(independent, result.getUnexpectedShutdownComponentTermination().orElseThrow().getCause().orElseThrow());
 		soklet.shutdown();
-		soklet.awaitShutdown();
+		soklet.awaitCoreShutdown();
 	}
 
 	private static Soklet custom(RuntimeException startFailure, RuntimeException independentFailure) throws Exception {

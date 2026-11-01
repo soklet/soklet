@@ -126,11 +126,8 @@ public class McpHandlerMetricsObservabilityTests {
 		DefaultMetricsCollector collector = DefaultMetricsCollector.defaultInstance();
 		McpServer server = serverFor(List.of(emptyEndpoint("/mcp/collector")),
 				1, 1, Duration.ofSeconds(5));
-		Soklet soklet = newSoklet(server, collector,
-				new SilentLifecycleObserver());
-
-		try {
-			soklet.start();
+		Soklet.run(config(server, collector,
+				new SilentLifecycleObserver()), () -> {
 			McpMetricsSnapshot empty = collector.snapshot().orElseThrow()
 					.getMcpMetrics();
 			assertHandlerSnapshot(empty, 0L, 0L, 0L);
@@ -233,9 +230,7 @@ public class McpHandlerMetricsObservabilityTests {
 			assertSample(resetText, HANDLER_QUEUE_METRIC_NAME, 0L);
 			assertSample(resetText, HANDLER_REJECTION_METRIC_NAME, 0L);
 			assertHandlerSnapshot(retained, 1L, 1L, 3L);
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -264,65 +259,63 @@ public class McpHandlerMetricsObservabilityTests {
 		McpServer server = serverFor(List.of(firstEndpoint, secondEndpoint),
 				1, 1, Duration.ofSeconds(5));
 		RecordingMetricsCollector collector = new RecordingMetricsCollector();
-		Soklet soklet = newSoklet(server, collector,
-				new SilentLifecycleObserver());
-		CompletableFuture<HttpResponse<String>> first = null;
-		CompletableFuture<HttpResponse<String>> second = null;
+		Soklet.run(config(server, collector,
+				new SilentLifecycleObserver()), () -> {
+			CompletableFuture<HttpResponse<String>> first = null;
+			CompletableFuture<HttpResponse<String>> second = null;
 
-		try {
-			soklet.start();
-			int port = port(server);
-			first = callTool(port, "/mcp/capacity-first", "capacity-first",
-					"metrics.first");
-			Assertions.assertTrue(firstEntered.await(5, TimeUnit.SECONDS),
-					"The first capacity handler did not enter.");
+			try {
+				int port = port(server);
+				first = callTool(port, "/mcp/capacity-first", "capacity-first",
+						"metrics.first");
+				Assertions.assertTrue(firstEntered.await(5, TimeUnit.SECONDS),
+						"The first capacity handler did not enter.");
 
-			second = callTool(port, "/mcp/capacity-first", "capacity-second",
-					"metrics.first");
-			awaitMetrics(collector, metrics ->
-					metrics.getActiveHandlerExecutions() == 1L
-							&& metrics.getHandlerQueueDepth() == 1L);
-			McpServerDiagnostics queuedDiagnostics = server.getDiagnostics();
-			assertHandlerDiagnostics(queuedDiagnostics, 1, 1);
-			HttpResponse<String> rejected = callTool(port,
-					"/mcp/capacity-second", "capacity-third", "metrics.second")
-					.get(5, TimeUnit.SECONDS);
-			Assertions.assertEquals(503, rejected.statusCode(), rejected.body());
-			assertContains(rejected.body(), "\"code\":-32603");
-			assertContains(rejected.body(), "\"message\":\"Internal error\"");
-			Assertions.assertEquals(1, invocations.get(),
-					"A capacity-rejected request must not enter a handler.");
+				second = callTool(port, "/mcp/capacity-first", "capacity-second",
+						"metrics.first");
+				awaitMetrics(collector, metrics ->
+						metrics.getActiveHandlerExecutions() == 1L
+								&& metrics.getHandlerQueueDepth() == 1L);
+				McpServerDiagnostics queuedDiagnostics = server.getDiagnostics();
+				assertHandlerDiagnostics(queuedDiagnostics, 1, 1);
+				HttpResponse<String> rejected = callTool(port,
+						"/mcp/capacity-second", "capacity-third", "metrics.second")
+						.get(5, TimeUnit.SECONDS);
+				Assertions.assertEquals(503, rejected.statusCode(), rejected.body());
+				assertContains(rejected.body(), "\"code\":-32603");
+				assertContains(rejected.body(), "\"message\":\"Internal error\"");
+				Assertions.assertEquals(1, invocations.get(),
+						"A capacity-rejected request must not enter a handler.");
 
-			releaseFirst.countDown();
-			Assertions.assertEquals(200,
-					requireNonNull(first).get(5, TimeUnit.SECONDS).statusCode());
-			Assertions.assertEquals(200,
-					requireNonNull(second).get(5, TimeUnit.SECONDS).statusCode());
-			awaitMetrics(collector, metrics ->
-					metrics.getActiveHandlerExecutions() == 0L
-							&& metrics.getHandlerQueueDepth() == 0L
-							&& metrics.getHandlerCapacityRejections() == 1L);
-			assertHandlerDiagnostics(server.getDiagnostics(), 0, 0);
-			assertHandlerDiagnostics(queuedDiagnostics, 1, 1);
-			Assertions.assertEquals(2, invocations.get());
-			Assertions.assertEquals(List.of(
-					"HandlerExecutionStarted",
-					"HandlerQueued",
-					"HandlerCapacityRejected",
-					"HandlerExecutionFinished",
-					"HandlerDequeued",
-					"HandlerExecutionStarted",
-					"HandlerExecutionFinished"),
-					collector.handlerTransitionNames());
-		} finally {
-			releaseFirst.countDown();
-			if (first != null)
-				first.cancel(true);
-			if (second != null)
-				second.cancel(true);
-			soklet.close();
-			soklet.close();
-		}
+				releaseFirst.countDown();
+				Assertions.assertEquals(200,
+						requireNonNull(first).get(5, TimeUnit.SECONDS).statusCode());
+				Assertions.assertEquals(200,
+						requireNonNull(second).get(5, TimeUnit.SECONDS).statusCode());
+				awaitMetrics(collector, metrics ->
+						metrics.getActiveHandlerExecutions() == 0L
+								&& metrics.getHandlerQueueDepth() == 0L
+								&& metrics.getHandlerCapacityRejections() == 1L);
+				assertHandlerDiagnostics(server.getDiagnostics(), 0, 0);
+				assertHandlerDiagnostics(queuedDiagnostics, 1, 1);
+				Assertions.assertEquals(2, invocations.get());
+				Assertions.assertEquals(List.of(
+						"HandlerExecutionStarted",
+						"HandlerQueued",
+						"HandlerCapacityRejected",
+						"HandlerExecutionFinished",
+						"HandlerDequeued",
+						"HandlerExecutionStarted",
+						"HandlerExecutionFinished"),
+						collector.handlerTransitionNames());
+			} finally {
+				releaseFirst.countDown();
+				if (first != null)
+					first.cancel(true);
+				if (second != null)
+					second.cancel(true);
+			}
+		});
 	}
 
 	@Test
@@ -351,8 +344,9 @@ public class McpHandlerMetricsObservabilityTests {
 		AtomicReference<Soklet> sokletReference = new AtomicReference<>();
 		LockProbingMetricsCollector collector = new LockProbingMetricsCollector(
 				probeExecutor, server, sokletReference);
-		Soklet soklet = newSoklet(server, collector,
-				new SilentLifecycleObserver());
+		// Metrics callbacks probe this owner to verify delivery occurs outside its lifecycle lock.
+		Soklet soklet = Soklet.fromConfig(config(server, collector,
+				new SilentLifecycleObserver()));
 		sokletReference.set(soklet);
 		CompletableFuture<HttpResponse<String>> active = null;
 		CompletableFuture<HttpResponse<String>> queued = null;
@@ -455,8 +449,9 @@ public class McpHandlerMetricsObservabilityTests {
 		AtomicReference<Soklet> sokletReference = new AtomicReference<>();
 		LockProbingMetricsCollector collector = new LockProbingMetricsCollector(
 				probeExecutor, server, sokletReference);
-		Soklet soklet = newSoklet(server, collector,
-				new SilentLifecycleObserver());
+		// Metrics callbacks probe this owner to verify delivery occurs outside its lifecycle lock.
+		Soklet soklet = Soklet.fromConfig(config(server, collector,
+				new SilentLifecycleObserver()));
 		sokletReference.set(soklet);
 		CompletableFuture<HttpResponse<String>> active = null;
 		Socket queued = null;
@@ -549,8 +544,9 @@ public class McpHandlerMetricsObservabilityTests {
 				Duration.ofSeconds(10));
 		RecordingMetricsCollector collector = new RecordingMetricsCollector();
 		RecordingLifecycleObserver observer = new RecordingLifecycleObserver();
-		Soklet soklet = newSoklet(server, collector, observer,
-				shortShutdownPolicy());
+		// Direct control is needed to inspect and replay the immutable incomplete-shutdown result.
+		Soklet soklet = Soklet.fromConfig(config(server, collector, observer,
+				shortShutdownPolicy()));
 		CompletableFuture<HttpResponse<String>> active = null;
 		CompletableFuture<HttpResponse<String>> queued = null;
 
@@ -699,8 +695,9 @@ public class McpHandlerMetricsObservabilityTests {
 		LockProbingMetricsCollector collector = new LockProbingMetricsCollector(
 				probeExecutor, server, sokletReference);
 		RecordingLifecycleObserver observer = new RecordingLifecycleObserver();
-		Soklet soklet = newSoklet(server, collector, observer,
-				managedLockProbeShutdownPolicy());
+		// The owner is stopped with work held so callbacks can probe lifecycle locks during shutdown.
+		Soklet soklet = Soklet.fromConfig(config(server, collector, observer,
+				managedLockProbeShutdownPolicy()));
 		sokletReference.set(soklet);
 		CompletableFuture<HttpResponse<String>> active = null;
 		CompletableFuture<HttpResponse<String>> queued = null;
@@ -783,8 +780,9 @@ public class McpHandlerMetricsObservabilityTests {
 		AtomicReference<Soklet> sokletReference = new AtomicReference<>();
 		LockProbingMetricsCollector collector = new LockProbingMetricsCollector(
 				probeExecutor, server, sokletReference);
-		Soklet soklet = newSoklet(server, collector,
-				new SilentLifecycleObserver(), shortShutdownPolicy());
+		// The owner is retained to inspect and replay its unexpected-termination result.
+		Soklet soklet = Soklet.fromConfig(config(server, collector,
+				new SilentLifecycleObserver(), shortShutdownPolicy()));
 		sokletReference.set(soklet);
 		CompletableFuture<HttpResponse<String>> active = null;
 		CompletableFuture<HttpResponse<String>> queued = null;
@@ -942,10 +940,7 @@ public class McpHandlerMetricsObservabilityTests {
 						McpCompleteResult.fromToolText("complete"));
 		McpServer server = serverFor(List.of(endpoint), 1, 1,
 				Duration.ofSeconds(5));
-		Soklet soklet = newSoklet(server, collector, observer);
-
-		try {
-			soklet.start();
+		Soklet.run(config(server, collector, observer), () -> {
 			HttpResponse<String> response = callTool(port(server),
 					"/mcp/failing-handler-metrics", "failing-metrics",
 					"metrics.failure").get(5, TimeUnit.SECONDS);
@@ -974,9 +969,7 @@ public class McpHandlerMetricsObservabilityTests {
 			}
 			Assertions.assertFalse(failures.toString().contains(
 					expectedFailure.getMessage()), failures.toString());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	private static void assertBoxedSnapshotMethod(@NonNull String getterName,
@@ -1218,24 +1211,24 @@ public class McpHandlerMetricsObservabilityTests {
 	}
 
 	@NonNull
-	private static Soklet newSoklet(@NonNull McpServer server,
+	private static SokletConfig config(@NonNull McpServer server,
 			@NonNull MetricsCollector collector,
 			@NonNull LifecycleObserver observer) {
-		return newSoklet(server, collector, observer,
+		return config(server, collector, observer,
 				LifecyclePolicy.defaultInstance());
 	}
 
 	@NonNull
-	private static Soklet newSoklet(@NonNull McpServer server,
+	private static SokletConfig config(@NonNull McpServer server,
 			@NonNull MetricsCollector collector,
 			@NonNull LifecycleObserver observer,
 			@NonNull LifecyclePolicy lifecyclePolicy) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(requireNonNull(server))
+		return SokletConfig.withMcpServer(requireNonNull(server))
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.metricsCollector(requireNonNull(collector))
 				.lifecycleObserver(requireNonNull(observer))
 				.lifecyclePolicy(requireNonNull(lifecyclePolicy))
-				.build());
+				.build();
 	}
 
 	@NonNull
@@ -1650,9 +1643,7 @@ public class McpHandlerMetricsObservabilityTests {
 		}
 
 		@Override
-		public void didStopSoklet(@NonNull Soklet soklet,
-				@NonNull ShutdownResult result) {
-			requireNonNull(soklet);
+		public void didStopSoklet(@NonNull ShutdownResult result) {
 			requireNonNull(result);
 			this.terminal.countDown();
 		}

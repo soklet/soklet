@@ -45,8 +45,7 @@ public class StreamingReaderTinyBufferTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(TinyReaderResource.class)))
 				.build();
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
+		Soklet.run(config, () -> {
 			HttpURLConnection connection = (HttpURLConnection)
 					new URL("http://127.0.0.1:" + port + "/tiny-reader").openConnection();
 			connection.setConnectTimeout(2_000);
@@ -59,7 +58,7 @@ public class StreamingReaderTinyBufferTests {
 				connection.disconnect();
 			}
 			Assertions.assertEquals(1, TinyReaderResource.closed.get());
-		}
+		});
 	}
 
 	@Test

@@ -88,7 +88,7 @@ records which exact request, diagnostic, metric, exception, and simulator
 surfaces are core-redacted or deliberately application- and operator-owned.
 
 The current-source privacy inventory semantic SHA-256 is
-`2976301c58b8e5821e5fab7dac9a4254f9477737ba4dc21b89a55f4c3e29877b`.
+`e252f7cc90fcdcf34229bf992a449930eb8c8327c0da1bcca3e84fd72b57e4f6`.
 It preserves strict MCP log redaction, including admission failures, while
 generic HTTP/SSE stream callbacks and logs retain their documented exact
 application boundaries. The current finite-bound inventory semantic SHA-256 is
@@ -2634,7 +2634,9 @@ The corresponding Phase 6 values are
 `69b008b685dead8e1ae66691f0e9955688b9e43740281ea0f82497df22a4dda0`
 and
 `d829563b135bae5a0e97559ecf5d1a8dd280c4b7792a74a2f10fcf8d8017d18b`.
-Phase 5 remains byte-identical. The final application-runner shape has no
+> Historical checkpoint, superseded by the [2026-10-31 unified lifecycle amendment](#2026-10-31-unified-soklet-lifecycle-api-amendment): the public runner is now `Soklet.run(...)`, and `SokletApplication` is removed. Counts and hashes below describe the earlier checkpoint.
+
+Phase 5 remains byte-identical. The then-current application-runner shape has no
 application builder: `SokletApplication.fromConfig(...)` returns the
 configured one-shot value, whose `run(...)` overloads accept shutdown triggers
 and an optional immutable `ShutdownCleanup`. `ShutdownCleanup` exposes
@@ -3529,3 +3531,91 @@ The Phase 4 reflection/nullability digest is
 `127d61399990bdc65c3a87fc37ad787006b1c5a338f9a2835c78a94fda0121db`.
 No API owner is added or removed. Other phase snapshots are unchanged. These
 records document the owner's local API change, not immutable candidate CI evidence.
+
+
+## 2026-10-31 unified Soklet lifecycle API amendment
+
+> The trigger-bearing overloads in this historical amendment are superseded by the [2026-11-01 scoped execution amendment](#2026-11-01-scoped-execution-and-application-owned-input).
+
+The public `SokletApplication` runner is removed. `Soklet.run(config,
+additionalShutdownTriggers...)` and its `ShutdownCleanup` overload now return
+one `Soklet` after all configured transports reach readiness. Every run owns a
+JVM shutdown hook. `ENTER_KEY` remains an optional additional trigger; there is
+no public process-hook opt-out or `JVM_SHUTDOWN` enum constant.
+
+`requestShutdown()` is the sole public shutdown command and returns promptly.
+`awaitShutdown()` and `awaitShutdownAsync()` observe the same full finalized
+outcome synchronously or through a read-only completion stage. Neither initiates
+shutdown. Startup failures are synchronous after attempted teardown; interruption
+of a post-start blocking wait only stops waiting. Both terminal observation APIs
+include configured cleanup and release of process registrations, and expose the
+same lifecycle failure through a thrown exception or exceptional completion.
+
+Public `fromConfig`, `start`, `shutdown`, `getStatus`, `getShutdownResult`, and
+`AutoCloseable`/`close` are removed. `SokletStatus` becomes implementation-only.
+The five aggregate `LifecycleObserver` callbacks no longer receive `Soklet`:
+`willStartSoklet()`, `didStartSoklet()`, `didFailToStartSoklet(Throwable)`,
+`willStopSoklet()`, and `didStopSoklet(ShutdownResult)`. They remain asynchronous
+observations and do not replace readiness or finalization synchronization.
+
+The Phase 4 signature snapshot records the five approved aggregate-observer
+parameter removals. The non-MCP public owner allowlist and core public-evolution
+inventory exclude the removed application runner and implementation-only status
+enum. Historical phase decisions remain historical; the current incompatibility ledger records
+the newly removed or narrowed public/protected members against 3.5.1.
+
+At this checkpoint, the released-3.5.1 incompatibility ledger contained 785 records with
+SHA-256 `554c4b3198830fbd962a0a571f5fb96563cddc53c678b231399508961ad145a0`. The Phase 4
+snapshot retains 1,382 records; its five aggregate-observer descriptors now use
+the reduced argument lists.
+
+The lifecycle follow-up keeps the public surface unchanged. A daemon completion
+handoff is reserved before transport claims; finalization signals it without
+starting a worker or invoking application callbacks on the lifecycle owner. The
+JVM hook joins bounded core shutdown, eligible cleanup, and terminal reporting,
+without an unbounded join on a process owner blocked in application logging.
+Ordinary await methods retain full process-registration release semantics.
+
+
+### 2026-10-31 aggregate lifecycle-observer parameter removal
+
+The five `LifecycleObserver` aggregate callbacks no longer expose a `Soklet`
+parameter. This approved amendment updates the current Phase 4 signature
+snapshot and the canonical reflection/nullability digest to
+`d9f6c8b0efbab759e7097ad94851d8bbcbe42145d6b503815d4568f5c97c631c`.
+Restoring only those five parameters and the shifted remaining parameter indices
+reproduces the earlier digest
+`127d61399990bdc65c3a87fc37ad787006b1c5a338f9a2835c78a94fda0121db`;
+other historical checkpoint digests remain historical.
+
+
+## 2026-11-01 scoped execution and application-owned input
+
+The public `ShutdownTrigger` type and trigger-bearing `Soklet.run` signatures
+are removed. Every run still owns its automatic JVM shutdown hook; console input
+is application-owned and no framework stdin listener or Enter-key registration
+is installed.
+
+The explicit overloads are now `Soklet run(SokletConfig)` and
+`Soklet run(SokletConfig, ShutdownCleanup)`. New scoped overloads accept the nested
+no-argument `Soklet.RunAction<E extends Throwable>` with or without a cleanup
+specification and return `ShutdownResult`, declaring the callback-selected
+`throws E`. The callback runs once on the caller after readiness. Its return or
+failure requests shutdown and joins full finalization, preserving interruption
+while joining. Startup failure skips the callback. A callback exception or Error
+is rethrown by identity after teardown, with lifecycle failure suppressed; without
+a callback failure, existing lifecycle exceptions report finalization failure.
+Complete forced shutdown can still return successfully. The callback itself is
+not deadline-bounded or forcibly stopped by an external shutdown event.
+
+The scoped form is recommended for tests and finite embedded work. Standalone
+servers may use `Soklet.run(config).awaitShutdown()`, and asynchronous hosts retain
+the existing explicit handle, request, and terminal observation APIs. `Soklet`
+remains non-`AutoCloseable`; the earlier application-runner and observer-parameter
+removals remain in force. This amendment describes source/API evolution, not a
+candidate validation receipt.
+
+The current released-3.5.1 incompatibility ledger contains 789 records with
+SHA-256 `e47bcc1cb00811cf5c903418922a1dfb4b20e4a984f7e0f6c85542eaf9e817a5`. The reviewed current API has 399 owners,
+including `Soklet.RunAction` and excluding `ShutdownTrigger`. The core structural
+API inventory has 39 owners; immutable phase signature snapshots remain unchanged.

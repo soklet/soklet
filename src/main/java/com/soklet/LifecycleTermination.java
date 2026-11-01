@@ -720,16 +720,20 @@ final class InternalTerminationGroup {
 		private final InternalTerminationEvent controllingEvent;
 		@NonNull
 		private final List<InternalTerminationEvent> primaryEvents;
+		@NonNull
+		private final List<Throwable> failures;
 
 		private EvidenceSnapshot(boolean barrierComplete,
 				int trackedLifecycleCalls, int admittedWork,
 				@Nullable InternalTerminationEvent controllingEvent,
-				@NonNull List<InternalTerminationEvent> primaryEvents) {
+				@NonNull List<InternalTerminationEvent> primaryEvents,
+				@NonNull List<Throwable> failures) {
 			this.barrierComplete = barrierComplete;
 			this.trackedLifecycleCalls = trackedLifecycleCalls;
 			this.admittedWork = admittedWork;
 			this.controllingEvent = controllingEvent;
 			this.primaryEvents = List.copyOf(requireNonNull(primaryEvents));
+			this.failures = List.copyOf(requireNonNull(failures));
 		}
 
 		boolean barrierComplete() {
@@ -752,6 +756,11 @@ final class InternalTerminationGroup {
 		@NonNull
 		List<InternalTerminationEvent> primaryEvents() {
 			return this.primaryEvents;
+		}
+
+		@NonNull
+		List<Throwable> failures() {
+			return this.failures;
 		}
 	}
 
@@ -937,8 +946,8 @@ final class InternalTerminationGroup {
 		}
 	}
 
-	/** Retains one bounded competing failure without racing evidence freeze. */
-	synchronized boolean trySuppressFailureBeforeFreeze(@NonNull Member member,
+	/** Retains one bounded competing failure without locking application throwables. */
+	synchronized boolean tryRetainFailureBeforeFreeze(@NonNull Member member,
 			@NonNull Throwable primary, @NonNull Throwable secondary) {
 		requireMember(member);
 		Throwable exactPrimary = requireNonNull(primary);
@@ -951,7 +960,6 @@ final class InternalTerminationGroup {
 		member.failureDiagnostic = new InternalTerminationEvent(
 				++this.nextSequence, InternalTerminationEvent.Type.FAILURE,
 				member, exactSecondary);
-		exactPrimary.addSuppressed(exactSecondary);
 		return true;
 	}
 
@@ -1074,6 +1082,19 @@ final class InternalTerminationGroup {
 	}
 
 	@NonNull
+	private List<Throwable> failuresInSequence() {
+		List<InternalTerminationEvent> events = new ArrayList<>();
+		for (Member member : this.members) {
+			if (member.failure != null)
+				events.add(member.failure);
+			if (member.failureDiagnostic != null)
+				events.add(member.failureDiagnostic);
+		}
+		events.sort(Comparator.comparingLong(InternalTerminationEvent::sequence));
+		return events.stream().flatMap(event -> event.cause().stream()).toList();
+	}
+
+	@NonNull
 	Optional<InternalTerminationEvent> controllingEvent() {
 		return Optional.ofNullable(this.controllingEvent.get());
 	}
@@ -1104,7 +1125,8 @@ final class InternalTerminationGroup {
 		boolean barrierComplete = barrierComplete(admittedWork);
 		this.frozenEvidence = new EvidenceSnapshot(barrierComplete,
 				this.trackedLifecycleCalls, admittedWork,
-				this.controllingEvent.get(), primaryEventsInSequence());
+				this.controllingEvent.get(), primaryEventsInSequence(),
+				failuresInSequence());
 		return this.frozenEvidence;
 	}
 

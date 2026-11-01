@@ -44,8 +44,7 @@ class HttpValueListTransportTests {
 	void realHttpPreservesRequestAndResponseOccurrencesAndRejectsRepeatedScalarParameters() throws Exception {
 		int port = TestSupport.findFreePort();
 		SokletConfig config = config(port);
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
+		Soklet.run(config, () -> {
 			String wire = exchange(port, "GET", "/lists?id=one&id=one&id=two",
 					"X-Value: one\r\nx-value: one\r\nX-Value: two\r\nCookie: id=one; id=one; id=two\r\n", "");
 			assertTrue(wire.startsWith("HTTP/1.1 200"), wire);
@@ -58,15 +57,14 @@ class HttpValueListTransportTests {
 			String form = exchange(port, "POST", "/form-lists", "Content-Type: application/x-www-form-urlencoded\r\n", "id=one&id=one&id=two");
 			assertEquals("one,one,two", body(form));
 			assertTrue(exchange(port, "POST", "/scalar-form", "Content-Type: application/x-www-form-urlencoded\r\n", "id=one&id=one").startsWith("HTTP/1.1 400"));
-		}
+		});
 	}
 
 	@Test
 	void singleCommaFieldsAndRepeatedBlankFieldsAgreeBetweenHttpAndSimulation() throws Exception {
 		int port = TestSupport.findFreePort();
 		SokletConfig config = config(port);
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
+		Soklet.run(config, () -> {
 			SokletSimulator.run(config, simulator -> {
 				for (Map.Entry<String, String> entry : Map.of("Accept", "text/plain, application/json", "Accept-Encoding", "gzip, deflate, br",
 						"Accept-Language", "en-US,en;q=0.9", "Warning", "199 example \"quoted,comma\", 299 example \"other\"", "X-Empty", "").entrySet()) {
@@ -108,7 +106,7 @@ class HttpValueListTransportTests {
 							.headers(Map.of("X-Blank", values)).build()).getMarshaledResponse().getStatusCode().intValue());
 				}
 			});
-		}
+		});
 	}
 
 	private static SokletConfig config(int port) {

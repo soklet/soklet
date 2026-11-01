@@ -157,11 +157,9 @@ public class McpCompletionWireParityTests {
 						.completionHandler(handler, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build())).build();
 		McpServer server = configure(McpServer.withPort(0), endpoint).build();
 		AtomicReference<Capture> listener = new AtomicReference<>();
-		Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+		Soklet.run(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.lifecyclePolicy(TEST_LIFECYCLE_POLICY).build());
-		try {
-			soklet.start();
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY).build(), () -> {
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			HttpClient client = HttpClient.newHttpClient();
 			String body = body(prompt, name);
@@ -179,9 +177,7 @@ public class McpCompletionWireParityTests {
 			Capture capture = new Capture(response.statusCode(), response.body());
 			assertEnvelope(name, capture);
 			listener.set(capture);
-		} finally {
-			soklet.close();
-		}
+		});
 		SokletSimulator.run(SimulatorConfig.builder()
 				.configureMcpServer(builder -> configure(builder.port(0), endpoint))
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))

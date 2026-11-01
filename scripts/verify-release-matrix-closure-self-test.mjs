@@ -2117,6 +2117,124 @@ sealed interface SyntheticDispatchOutcome {
   assert.deepEqual(privacyBaseline.candidates, privacyCandidates);
   assert.deepEqual(privacyBaseline.exclusions, []);
 
+  // A lifecycle facade migration must change exact ownership/signatures in
+  // the inventory; package-private helpers are not application declarations,
+  // while new private completion failures remain explicit Throwable sinks.
+  const lifecycleFixtureFiles = [
+    'Soklet.java',
+    'LifecycleObserver.java',
+    'SokletApplication.java',
+    'SokletProcessLifecycle.java',
+    'SokletRunCompletion.java',
+  ].map((name) => join(privacySourceDirectory, name));
+  for (const path of lifecycleFixtureFiles) {
+    assert.throws(() => readFileSync(path), { code: 'ENOENT' });
+  }
+  const lifecycleProcessSource = `package com.soklet;
+final class SokletApplication {
+  private void fail(Throwable failure) {
+    throw new IllegalStateException("Soklet lifecycle failed", failure);
+  }
+}
+`;
+  try {
+    writeFileSync(lifecycleFixtureFiles[0], `package com.soklet;
+public final class Soklet {
+  protected void handle(Request request) {}
+}
+`);
+    writeFileSync(lifecycleFixtureFiles[1], `package com.soklet;
+public interface LifecycleObserver {
+  default void didFailToStartSoklet(Soklet soklet, Throwable failure) {}
+}
+`);
+    writeFileSync(lifecycleFixtureFiles[2], lifecycleProcessSource);
+    const beforeLifecycleMigration = derivePrivacyBoundaryCandidates(
+      privacyProjectRoot, privacyScanRoots, privacyArtifactRoots,
+      semanticGitExecutable(),
+    );
+    const oldLifecycleInventory = privacyFixture(beforeLifecycleMigration);
+    const oldLifecycleInventoryPath = writePrivacyFixture(
+      'old-lifecycle-owner', oldLifecycleInventory,
+    );
+    verifyPrivacyFixture(oldLifecycleInventoryPath, {
+      expectedSemanticsSha256: privacySemanticsSha256(oldLifecycleInventory),
+    });
+
+    writeFileSync(lifecycleFixtureFiles[0], `package com.soklet;
+public final class Soklet {
+  void handle(Request request) {}
+  public interface RunAction<E extends Throwable> { void run() throws E; }
+  public static <E extends Throwable> ShutdownResult run(
+      SokletConfig config, RunAction<E> action) throws E {
+    action.run(); return null;
+  }
+  public static <E extends Throwable> ShutdownResult run(
+      SokletConfig config, ShutdownCleanup cleanup, RunAction<E> action) throws E {
+    action.run(); return null;
+  }
+}
+`);
+    writeFileSync(lifecycleFixtureFiles[1], `package com.soklet;
+public interface LifecycleObserver {
+  default void didFailToStartSoklet(Throwable failure) {}
+}
+`);
+    rmSync(lifecycleFixtureFiles[2]);
+    writeFileSync(lifecycleFixtureFiles[3], lifecycleProcessSource.replaceAll(
+      'SokletApplication', 'SokletProcessLifecycle',
+    ));
+    writeFileSync(lifecycleFixtureFiles[4], `package com.soklet;
+final class SokletRunCompletion {
+  void finish(ShutdownResult result, Throwable failure) {
+    throw new IllegalStateException("Finalization was already published");
+  }
+  private void throwFailure(Throwable failure) {
+    throw new IllegalStateException("Soklet lifecycle failed", failure);
+  }
+}
+`);
+    const afterLifecycleMigration = derivePrivacyBoundaryCandidates(
+      privacyProjectRoot, privacyScanRoots, privacyArtifactRoots,
+      semanticGitExecutable(),
+    );
+    assert.equal(beforeLifecycleMigration.some(({ owner, member, sink }) =>
+      owner === 'com.soklet.Soklet' && member === 'handle(Request)'
+        && sink === 'RequestOrThrowable.declaration'), true);
+    assert.equal(afterLifecycleMigration.some(({ owner, member }) =>
+      owner === 'com.soklet.Soklet' && member === 'handle(Request)'), false);
+    for (const signature of ['run(SokletConfig,RunAction<E>)',
+      'run(SokletConfig,ShutdownCleanup,RunAction<E>)'])
+      assert.equal(afterLifecycleMigration.some(({ owner, member, sink }) =>
+        owner === 'com.soklet.Soklet' && member === signature
+          && sink === 'RequestOrThrowable.declaration'), true,
+      'Checked scoped callback failures remain exact application declarations');
+    assert.equal(afterLifecycleMigration.some(({ owner, member, sink }) =>
+      owner === 'com.soklet.LifecycleObserver'
+        && member === 'didFailToStartSoklet(Throwable)'
+        && sink === 'RequestOrThrowable.declaration'), true);
+    assert.equal(afterLifecycleMigration.some(({ owner }) =>
+      owner === 'com.soklet.SokletApplication'), false);
+    assert.equal(afterLifecycleMigration.some(({ owner, matcherRuleId }) =>
+      owner === 'com.soklet.SokletProcessLifecycle'
+        && matcherRuleId === 'PRIV-MATCH-011'), true);
+    assert.equal(afterLifecycleMigration.filter(({ owner, matcherRuleId }) =>
+      owner === 'com.soklet.SokletRunCompletion'
+        && matcherRuleId === 'PRIV-MATCH-011').length, 2);
+    assert.throws(() => verifyPrivacyFixture(oldLifecycleInventoryPath, {
+      expectedSemanticsSha256: privacySemanticsSha256(oldLifecycleInventory),
+    }), /Privacy-boundary inventory differs from source derivation/);
+    const currentLifecycleInventory = privacyFixture(afterLifecycleMigration);
+    const currentLifecycleInventoryPath = writePrivacyFixture(
+      'current-lifecycle-owner', currentLifecycleInventory,
+    );
+    verifyPrivacyFixture(currentLifecycleInventoryPath, {
+      expectedSemanticsSha256: privacySemanticsSha256(currentLifecycleInventory),
+    });
+  } finally {
+    for (const path of lifecycleFixtureFiles) rmSync(path, { force: true });
+  }
+
   expectPrivacyInvalid(
     'balanced-boundary-prose-attribution-swap',
     privacyInventory,

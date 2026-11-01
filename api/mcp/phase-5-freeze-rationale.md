@@ -276,7 +276,9 @@ localization smoke test.
 
 ## 2026-09-01 non-MCP direct-run and cleanup-value amendment
 
-The final application-runner shape uses `SokletApplication.fromConfig(...)`
+> Historical checkpoint, superseded by the [2026-10-31 unified lifecycle amendment](README.md#2026-10-31-unified-soklet-lifecycle-api-amendment): the public runner is now `Soklet.run(...)`, and `SokletApplication` is removed. Counts and hashes below describe the earlier checkpoint.
+
+The then-current application-runner shape uses `SokletApplication.fromConfig(...)`
 to create the configured one-shot value and exposes direct `run(...)`
 overloads for shutdown triggers and optional bounded cleanup.
 `ShutdownCleanup` is an immutable value with `fromTimeoutAndAction(...)`,

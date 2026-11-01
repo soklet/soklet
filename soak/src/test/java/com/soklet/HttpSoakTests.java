@@ -62,8 +62,11 @@ public class HttpSoakTests {
 		SokletConfig config = sokletConfig(httpServer, metricsCollector);
 		SoakResourceSnapshot baseline;
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
+		Soklet soklet = Soklet.run(config);
+		try (@SuppressWarnings("try") AutoCloseable sokletShutdown = () -> {
+			soklet.requestShutdown();
+			soklet.awaitShutdownAsync().toCompletableFuture().join();
+		}) {
 			assertOkResponse(port);
 			assertActiveRequestsReturnToZero(metricsCollector, Duration.ofSeconds(3));
 			baseline = SoakResourceSnapshot.captureAfterGc();
@@ -107,8 +110,11 @@ public class HttpSoakTests {
 		SokletConfig config = sokletConfig(httpServer, metricsCollector);
 		SoakResourceSnapshot baseline;
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
+		Soklet soklet = Soklet.run(config);
+		try (@SuppressWarnings("try") AutoCloseable sokletShutdown = () -> {
+			soklet.requestShutdown();
+			soklet.awaitShutdownAsync().toCompletableFuture().join();
+		}) {
 			assertOkResponse(port);
 			assertActiveRequestsReturnToZero(metricsCollector, Duration.ofSeconds(3));
 			baseline = SoakResourceSnapshot.captureAfterGc();

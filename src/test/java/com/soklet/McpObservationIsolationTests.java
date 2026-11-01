@@ -65,16 +65,19 @@ class McpObservationIsolationTests {
 					finished.countDown();
 				}
 			};
-			try (Fixture fixture = new Fixture(builder -> builder.requestHandlerConcurrency(2).requestHandlerQueueCapacity(2)
-					.logRawValidatedTraceIds(blockTraceLog), observer)) {
-				try {
-					assertEquals(200, fixture.call("first", "tools/call", ",\"name\":\"ok\",\"arguments\":{}").statusCode());
-					assertTrue(entered.await(5, TimeUnit.SECONDS));
-					assertTrue(callbackThread.get().startsWith("soklet-mcp-observer-"), callbackThread.get());
-					assertFalse(virtualCallback.get(), "Java 21 observation callbacks must not pin virtual-thread carriers.");
-					assertEquals(200, fixture.call("second", "tools/call", ",\"name\":\"ok\",\"arguments\":{}").statusCode());
-				} finally { release.countDown(); }
-				assertTrue(finished.await(5, TimeUnit.SECONDS));
+			Fixture fixture = new Fixture(builder -> builder.requestHandlerConcurrency(2).requestHandlerQueueCapacity(2)
+					.logRawValidatedTraceIds(blockTraceLog), observer);
+			try (HttpClient client = fixture.client) {
+				Soklet.run(fixture.config, () -> {
+					try {
+						assertEquals(200, fixture.call("first", "tools/call", ",\"name\":\"ok\",\"arguments\":{}").statusCode());
+						assertTrue(entered.await(5, TimeUnit.SECONDS));
+						assertTrue(callbackThread.get().startsWith("soklet-mcp-observer-"), callbackThread.get());
+						assertFalse(virtualCallback.get(), "Java 21 observation callbacks must not pin virtual-thread carriers.");
+						assertEquals(200, fixture.call("second", "tools/call", ",\"name\":\"ok\",\"arguments\":{}").statusCode());
+					} finally { release.countDown(); }
+					assertTrue(finished.await(5, TimeUnit.SECONDS));
+				});
 			}
 		}
 	}
@@ -98,6 +101,9 @@ class McpObservationIsolationTests {
 			}
 		};
 		Fixture fixture = new Fixture(builder -> builder.requestHandlerConcurrency(1).requestHandlerQueueCapacity(1), observer);
+		// Incomplete shutdown must be asserted while an admitted observation remains blocked.
+		SokletTestScope scope = SokletTestScope.of(Soklet.run(fixture.config));
+		Soklet soklet = scope.soklet();
 		try {
 			assertEquals(200, fixture.call("first", "tools/call", ",\"name\":\"ok\",\"arguments\":{}").statusCode());
 			assertTrue(entered.await(5, TimeUnit.SECONDS));
@@ -110,7 +116,7 @@ class McpObservationIsolationTests {
 			assertTrue(starts.get() > 2 && starts.get() < 128, "Only a bounded set of paired observations may be retained.");
 			assertEquals(1, omissions.get(), "Capacity diagnostics must be rate limited.");
 			assertEquals(0, finishes.get());
-			SokletShutdownIncompleteException failure = assertThrows(SokletShutdownIncompleteException.class, fixture.soklet::close);
+			SokletShutdownIncompleteException failure = assertThrows(SokletShutdownIncompleteException.class, soklet::close);
 			assertTrue(failure.getInternalShutdownResult().participantResult(InternalLifecycleComponentType.MCP)
 					.orElseThrow().residualActivity().contains(InternalResidualActivityType.CALLBACK));
 		} finally {
@@ -118,7 +124,8 @@ class McpObservationIsolationTests {
 			long until = System.nanoTime() + WAIT.toNanos();
 			while (finishes.get() != starts.get() && System.nanoTime() < until) Thread.sleep(5);
 			assertEquals(starts.get(), finishes.get(), "Every admitted start needs exactly one retained finish.");
-			try { fixture.close(); } catch (SokletShutdownIncompleteException ignored) {}
+			try { scope.close(); } catch (SokletShutdownIncompleteException ignored) {}
+			fixture.client.close();
 		}
 	}
 
@@ -126,23 +133,26 @@ class McpObservationIsolationTests {
 	void protocolConcurrencyAndQueueOptionsBoundAdmissionIndependentlyOfHandlerPool() throws Exception {
 		CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
 		AtomicInteger admissions = new AtomicInteger();
-		try (Fixture fixture = new Fixture(builder -> builder.protocolExecutorConcurrency(1).protocolExecutorQueueCapacity(1)
+		Fixture fixture = new Fixture(builder -> builder.protocolExecutorConcurrency(1).protocolExecutorQueueCapacity(1)
 				.requestHandlerConcurrency(8).admissionController(context -> {
 					admissions.incrementAndGet(); entered.countDown(); awaitIgnoringInterrupts(release);
 					return McpAdmissionDecision.accepted();
-				}), new LifecycleObserver() { @Override public void didReceiveLogEvent(LogEvent event) {} })) {
-			try {
-				var first = fixture.client.sendAsync(fixture.request("first", "tools/call", ",\"name\":\"ok\",\"arguments\":{}"), HttpResponse.BodyHandlers.ofString());
-				assertTrue(entered.await(5, TimeUnit.SECONDS));
-				var second = fixture.client.sendAsync(fixture.request("second", "tools/call", ",\"name\":\"ok\",\"arguments\":{}"), HttpResponse.BodyHandlers.ofString());
-				long until = System.nanoTime() + WAIT.toNanos();
-				while (fixture.accepted.get() < 2 && System.nanoTime() < until) Thread.sleep(5);
-				assertEquals(503, fixture.call("third", "tools/call", ",\"name\":\"ok\",\"arguments\":{}").statusCode());
-				assertEquals(1, admissions.get());
-				release.countDown();
-				assertEquals(200, first.get(5, TimeUnit.SECONDS).statusCode());
-				assertEquals(200, second.get(5, TimeUnit.SECONDS).statusCode());
-			} finally { release.countDown(); }
+				}), new LifecycleObserver() { @Override public void didReceiveLogEvent(LogEvent event) {} });
+		try (HttpClient client = fixture.client) {
+			Soklet.run(fixture.config, () -> {
+				try {
+					var first = fixture.client.sendAsync(fixture.request("first", "tools/call", ",\"name\":\"ok\",\"arguments\":{}"), HttpResponse.BodyHandlers.ofString());
+					assertTrue(entered.await(5, TimeUnit.SECONDS));
+					var second = fixture.client.sendAsync(fixture.request("second", "tools/call", ",\"name\":\"ok\",\"arguments\":{}"), HttpResponse.BodyHandlers.ofString());
+					long until = System.nanoTime() + WAIT.toNanos();
+					while (fixture.accepted.get() < 2 && System.nanoTime() < until) Thread.sleep(5);
+					assertEquals(503, fixture.call("third", "tools/call", ",\"name\":\"ok\",\"arguments\":{}").statusCode());
+					assertEquals(1, admissions.get());
+					release.countDown();
+					assertEquals(200, first.get(5, TimeUnit.SECONDS).statusCode());
+					assertEquals(200, second.get(5, TimeUnit.SECONDS).statusCode());
+				} finally { release.countDown(); }
+			});
 		}
 		assertThrows(IllegalArgumentException.class, () -> McpServer.withPort(0).protocolExecutorConcurrency(0));
 		assertThrows(IllegalArgumentException.class, () -> McpServer.withPort(0).protocolExecutorQueueCapacity(-1));
@@ -150,9 +160,12 @@ class McpObservationIsolationTests {
 
 	@Test
 	void maximumProtocolQueueCapacityDoesNotEagerlyAllocateAnArray() throws Exception {
-		try (Fixture fixture = new Fixture(builder -> builder.protocolExecutorQueueCapacity(Integer.MAX_VALUE),
-				new LifecycleObserver() { @Override public void didReceiveLogEvent(LogEvent event) {} })) {
-			assertEquals(200, fixture.call("queue", "tools/call", ",\"name\":\"ok\",\"arguments\":{}").statusCode());
+		Fixture fixture = new Fixture(builder -> builder.protocolExecutorQueueCapacity(Integer.MAX_VALUE),
+				new LifecycleObserver() { @Override public void didReceiveLogEvent(LogEvent event) {} });
+		try (HttpClient client = fixture.client) {
+			Soklet.run(fixture.config, () -> {
+				assertEquals(200, fixture.call("queue", "tools/call", ",\"name\":\"ok\",\"arguments\":{}").statusCode());
+			});
 		}
 	}
 
@@ -192,16 +205,19 @@ class McpObservationIsolationTests {
 			@Override public Optional<CorsPreflightResponse> authorizePreflight(Request request, CorsPreflight context,
 					Map<HttpMethod, ResourceMethod> methods) { return Optional.empty(); }
 		};
-		try (Fixture fixture = new Fixture(builder -> builder.corsAuthorizer(cors),
-				new LifecycleObserver() { @Override public void didReceiveLogEvent(LogEvent event) {} })) {
-			HttpRequest request = HttpRequest.newBuilder(fixture.request("cors", "tools/call", ",\"name\":\"ok\",\"arguments\":{}"),
-					(name, value) -> true).header("Origin", origin).build();
-			HttpResponse<String> response = fixture.client.send(request, HttpResponse.BodyHandlers.ofString());
-			assertEquals(200, response.statusCode());
-			String exposed = response.headers().firstValue("Access-Control-Expose-Headers").orElseThrow();
-			assertTrue(exposed.contains("X-Application"), exposed);
-			assertTrue(exposed.contains("MCP-Protocol-Version"), exposed);
-			assertEquals(1, response.headers().allValues("Access-Control-Expose-Headers").size());
+		Fixture fixture = new Fixture(builder -> builder.corsAuthorizer(cors),
+				new LifecycleObserver() { @Override public void didReceiveLogEvent(LogEvent event) {} });
+		try (HttpClient client = fixture.client) {
+			Soklet.run(fixture.config, () -> {
+				HttpRequest request = HttpRequest.newBuilder(fixture.request("cors", "tools/call", ",\"name\":\"ok\",\"arguments\":{}"),
+						(name, value) -> true).header("Origin", origin).build();
+				HttpResponse<String> response = fixture.client.send(request, HttpResponse.BodyHandlers.ofString());
+				assertEquals(200, response.statusCode());
+				String exposed = response.headers().firstValue("Access-Control-Expose-Headers").orElseThrow();
+				assertTrue(exposed.contains("X-Application"), exposed);
+				assertTrue(exposed.contains("MCP-Protocol-Version"), exposed);
+				assertEquals(1, response.headers().allValues("Access-Control-Expose-Headers").size());
+			});
 		}
 	}
 
@@ -241,7 +257,7 @@ class McpObservationIsolationTests {
 				pairedFinishes.countDown();
 			}
 		};
-		try (Fixture fixture = new Fixture(builder -> builder.requestHandlerConcurrency(1).requestHandlerQueueCapacity(1)
+		Fixture fixture = new Fixture(builder -> builder.requestHandlerConcurrency(1).requestHandlerQueueCapacity(1)
 				.protocolExecutorConcurrency(1).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.admissionController(context -> {
 					admittedRequests.put(context.getRequestId().orElseThrow().asString().orElseThrow(), context.getRequest());
@@ -249,22 +265,25 @@ class McpObservationIsolationTests {
 				}).catalogAccessPolicy(McpCatalogAccessPolicy.fromEvaluators((context, registration, features) -> {
 					policyContexts.put(context.getRequestId().orElseThrow().asString().orElseThrow(), context);
 					return true;
-				}, (context, registration, features) -> true)), observer)) {
-			try {
-				for (String id : List.of("first", "second", "third", "omitted")) {
-					HttpResponse<String> response = fixture.call(id, "tools/call", ",\"name\":\"ok\",\"arguments\":{}");
-					assertEquals(200, response.statusCode(), response.body());
-					assertTrue(response.body().contains("\"text\":\"ok\""), response.body());
-					if (id.equals("first")) assertTrue(finishEntered.await(5, TimeUnit.SECONDS));
-				}
-				HttpResponse<String> catalog = fixture.call("omitted-list", "tools/list", "");
-				assertEquals(200, catalog.statusCode(), catalog.body());
-				assertTrue(catalog.body().contains("\"name\":\"ok\""), catalog.body());
-				assertSame(admittedRequests.get("omitted-list"), policyContexts.get("omitted-list").getRequest());
-				assertEquals(List.of("first", "second", "third"), observedRequests,
-						"Omitted execution contexts must not emit an unpaired observation start.");
-			} finally { release.countDown(); }
-			assertTrue(pairedFinishes.await(5, TimeUnit.SECONDS));
+				}, (context, registration, features) -> true)), observer);
+		try (HttpClient client = fixture.client) {
+			Soklet.run(fixture.config, () -> {
+				try {
+					for (String id : List.of("first", "second", "third", "omitted")) {
+						HttpResponse<String> response = fixture.call(id, "tools/call", ",\"name\":\"ok\",\"arguments\":{}");
+						assertEquals(200, response.statusCode(), response.body());
+						assertTrue(response.body().contains("\"text\":\"ok\""), response.body());
+						if (id.equals("first")) assertTrue(finishEntered.await(5, TimeUnit.SECONDS));
+					}
+					HttpResponse<String> catalog = fixture.call("omitted-list", "tools/list", "");
+					assertEquals(200, catalog.statusCode(), catalog.body());
+					assertTrue(catalog.body().contains("\"name\":\"ok\""), catalog.body());
+					assertSame(admittedRequests.get("omitted-list"), policyContexts.get("omitted-list").getRequest());
+					assertEquals(List.of("first", "second", "third"), observedRequests,
+							"Omitted execution contexts must not emit an unpaired observation start.");
+				} finally { release.countDown(); }
+				assertTrue(pairedFinishes.await(5, TimeUnit.SECONDS));
+			});
 		}
 	}
 
@@ -277,23 +296,26 @@ class McpObservationIsolationTests {
 			@Override public void didFinishMcpRequestHandling(McpRequestContext request, McpRequestOutcome outcome,
 					McpJsonRpcError error, Duration duration, List<Throwable> failures) { finished.countDown(); }
 		};
-		try (Fixture fixture = new Fixture(builder -> {}, observer)) {
-			HttpResponse<String> crashedTool = fixture.call("tool", "tools/call", ",\"name\":\"crash\",\"arguments\":{}");
-			assertTrue(Set.of(200, 500).contains(crashedTool.statusCode()), crashedTool.statusCode() + " " + crashedTool.body());
-			HttpResponse<String> crashedPrompt = fixture.call("prompt", "prompts/get", ",\"name\":\"crash\",\"arguments\":{}");
-			assertTrue(Set.of(200, 500).contains(crashedPrompt.statusCode()), crashedPrompt.statusCode() + " " + crashedPrompt.body());
-			HttpResponse<String> crashedResource = fixture.call("resource", "resources/read", ",\"uri\":\"test:///crash\"");
-			assertTrue(Set.of(200, 500).contains(crashedResource.statusCode()), crashedResource.statusCode() + " " + crashedResource.body());
-			HttpResponse<String> expected = fixture.call("expected", "tools/call", ",\"name\":\"expected\",\"arguments\":{}");
-			assertEquals(400, expected.statusCode(), expected.body());
-			assertTrue(finished.await(5, TimeUnit.SECONDS));
-			List<LogEvent> failures = logs.stream().filter(event -> event.getLogEventType() == LogEventType.MCP_REQUEST_PROCESSING_FAILED).toList();
-			assertEquals(3, failures.size());
-			for (LogEvent failure : failures) {
-				assertFalse(failure.toString().contains("secret-canary"));
-				assertTrue(failure.getThrowable().isEmpty()); assertTrue(failure.getRequest().isEmpty());
-				assertTrue(failure.getResourceMethod().isEmpty()); assertTrue(failure.getMarshaledResponse().isEmpty());
-			}
+		Fixture fixture = new Fixture(builder -> {}, observer);
+		try (HttpClient client = fixture.client) {
+			Soklet.run(fixture.config, () -> {
+				HttpResponse<String> crashedTool = fixture.call("tool", "tools/call", ",\"name\":\"crash\",\"arguments\":{}");
+				assertTrue(Set.of(200, 500).contains(crashedTool.statusCode()), crashedTool.statusCode() + " " + crashedTool.body());
+				HttpResponse<String> crashedPrompt = fixture.call("prompt", "prompts/get", ",\"name\":\"crash\",\"arguments\":{}");
+				assertTrue(Set.of(200, 500).contains(crashedPrompt.statusCode()), crashedPrompt.statusCode() + " " + crashedPrompt.body());
+				HttpResponse<String> crashedResource = fixture.call("resource", "resources/read", ",\"uri\":\"test:///crash\"");
+				assertTrue(Set.of(200, 500).contains(crashedResource.statusCode()), crashedResource.statusCode() + " " + crashedResource.body());
+				HttpResponse<String> expected = fixture.call("expected", "tools/call", ",\"name\":\"expected\",\"arguments\":{}");
+				assertEquals(400, expected.statusCode(), expected.body());
+				assertTrue(finished.await(5, TimeUnit.SECONDS));
+				List<LogEvent> failures = logs.stream().filter(event -> event.getLogEventType() == LogEventType.MCP_REQUEST_PROCESSING_FAILED).toList();
+				assertEquals(3, failures.size());
+				for (LogEvent failure : failures) {
+					assertFalse(failure.toString().contains("secret-canary"));
+					assertTrue(failure.getThrowable().isEmpty()); assertTrue(failure.getRequest().isEmpty());
+					assertTrue(failure.getResourceMethod().isEmpty()); assertTrue(failure.getMarshaledResponse().isEmpty());
+				}
+			});
 		}
 	}
 
@@ -302,12 +324,11 @@ class McpObservationIsolationTests {
 			try { latch.await(20, TimeUnit.MILLISECONDS); } catch (InterruptedException ignored) {}
 	}
 
-	private static final class Fixture implements AutoCloseable {
+	private static final class Fixture {
 		final HttpClient client = HttpClient.newBuilder().connectTimeout(WAIT).build();
 		final AtomicInteger accepted = new AtomicInteger();
 		final McpServer server;
-		final Soklet soklet;
-		final URI uri;
+		final SokletConfig config;
 		Fixture(Consumer<McpServer.Builder> configure, LifecycleObserver observer) {
 			McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion("observation-tests", "1").build(), VERSIONS)
 					.toolRegistrations(List.of(
@@ -320,7 +341,7 @@ class McpObservationIsolationTests {
 					.corsAuthorizer(CorsAuthorizer.rejectAllInstance()).admissionController(McpAdmissionController.acceptAllInstance())
 					.toolRateLimiter(context -> McpRateLimitDecision.allowed()).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)));
 			configure.accept(builder); server = builder.build();
-			soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server).lifecycleObserver(observer)
+			config = SokletConfig.withMcpServer(server).lifecycleObserver(observer)
 					.metricsCollector(new MetricsCollector() {
 						@Override public void didRecordMcpMetricsEvent(McpMetricsEvent event) {
 							if (event instanceof McpMetricsEvent.RequestAccepted) accepted.incrementAndGet();
@@ -328,14 +349,13 @@ class McpObservationIsolationTests {
 					})
 					.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 					.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(WAIT).startupCancelationTimeout(Duration.ofSeconds(2))
-							.gracefulShutdownTimeout(Duration.ofSeconds(1)).forcedShutdownTimeout(Duration.ofSeconds(1)).build()).build());
-			soklet.start(); uri = URI.create("http://127.0.0.1:" + server.getDiagnostics().getBoundAddress().orElseThrow().getPort() + "/mcp");
+							.gracefulShutdownTimeout(Duration.ofSeconds(1)).forcedShutdownTimeout(Duration.ofSeconds(1)).build()).build();
 		}
 		HttpRequest request(String id, String method, String params) {
 			String json = "{\"jsonrpc\":\"2.0\",\"id\":\"" + id + "\",\"method\":\"" + method + "\",\"params\":{\"_meta\":{"
 					+ "\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\",\"io.modelcontextprotocol/clientCapabilities\":{},"
 					+ "\"traceparent\":\"00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01\"}" + params + "}}";
-			HttpRequest.Builder builder = HttpRequest.newBuilder(uri).timeout(WAIT).header("Content-Type", "application/json")
+			HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + server.getDiagnostics().getBoundAddress().orElseThrow().getPort() + "/mcp")).timeout(WAIT).header("Content-Type", "application/json")
 					.header("Accept", "application/json, text/event-stream").header("MCP-Protocol-Version", "2026-07-28").header("Mcp-Method", method);
 			if (method.equals("tools/call") || method.equals("prompts/get")) builder.header("Mcp-Name", id.equals("expected") ? "expected" : id.equals("tool") || method.equals("prompts/get") ? "crash" : "ok");
 			if (method.equals("resources/read")) builder.header("Mcp-Name", "test:///crash");
@@ -344,6 +364,5 @@ class McpObservationIsolationTests {
 		HttpResponse<String> call(String id, String method, String params) throws Exception {
 			return client.send(request(id, method, params), HttpResponse.BodyHandlers.ofString());
 		}
-		@Override public void close() { soklet.close(); client.close(); }
 	}
 }

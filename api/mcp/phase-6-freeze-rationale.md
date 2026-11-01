@@ -509,7 +509,9 @@ The released-3.5.1 compatibility ledger remains 618 records with SHA-256
 `3d9d68bbbdeabae63a78d40a50c9896d3f11f6d0d2305beff0c94bd86476928c`.
 Phase 5 remains byte-identical at 179 records.
 
-The same-day final non-MCP application-runner shape uses
+> Historical checkpoint, superseded by the [2026-10-31 unified lifecycle amendment](README.md#2026-10-31-unified-soklet-lifecycle-api-amendment): the public runner is now `Soklet.run(...)`, and `SokletApplication` is removed. Counts and hashes below describe the earlier checkpoint.
+
+The same-day then-current non-MCP application-runner shape uses
 `SokletApplication.fromConfig(...)` to create the configured one-shot value
 and exposes direct `run(...)` overloads for shutdown triggers and optional
 bounded cleanup. `ShutdownCleanup` is an immutable value with

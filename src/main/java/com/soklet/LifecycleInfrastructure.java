@@ -21,7 +21,6 @@ import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.ThreadSafe;
-import java.io.InputStream;
 import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -56,6 +55,7 @@ final class LifecycleWorkers {
 	enum Role {
 		COORDINATOR,
 		LIFECYCLE_CALL,
+		INTERRUPT_DELIVERY,
 		PUBLIC_STAGE_HANDOFF,
 		MCP_METRICS_HANDOFF,
 		SUBTREE_PROOF_HANDOFF,
@@ -66,6 +66,8 @@ final class LifecycleWorkers {
 
 	@NonNull
 	private final Launcher launcher;
+	@NonNull
+	private final Launcher interruptLauncher;
 	@NonNull
 	private final Map<Role, Integer> limits;
 	@NonNull
@@ -78,10 +80,17 @@ final class LifecycleWorkers {
 	}
 
 	LifecycleWorkers(@NonNull Launcher launcher) {
+		this(launcher, LifecycleWorkers::launchDaemon);
+	}
+
+	LifecycleWorkers(@NonNull Launcher launcher,
+			@NonNull Launcher interruptLauncher) {
 		this.launcher = requireNonNull(launcher);
+		this.interruptLauncher = requireNonNull(interruptLauncher);
 		EnumMap<Role, Integer> limits = new EnumMap<>(Role.class);
 		limits.put(Role.COORDINATOR, 1);
 		limits.put(Role.LIFECYCLE_CALL, 24);
+		limits.put(Role.INTERRUPT_DELIVERY, 25);
 		limits.put(Role.PUBLIC_STAGE_HANDOFF, 1);
 		limits.put(Role.MCP_METRICS_HANDOFF, 2);
 		limits.put(Role.SUBTREE_PROOF_HANDOFF, 16);
@@ -114,7 +123,9 @@ final class LifecycleWorkers {
 		this.created.get(role).incrementAndGet();
 		AtomicBoolean roleReleased = new AtomicBoolean();
 		try {
-			this.launcher.launch(name, () -> {
+			Launcher roleLauncher = role == Role.INTERRUPT_DELIVERY
+					? this.interruptLauncher : this.launcher;
+			roleLauncher.launch(name, () -> {
 				Throwable taskFailure = null;
 				try {
 					runnable.run();
@@ -805,15 +816,35 @@ final class TrackedLifecycleCallRunner {
 	@NonNull
 	<T> Call<T> submit(@NonNull String name,
 			@NonNull InternalTerminationGroup group, @NonNull Callable<T> callable) {
+		requireNonNull(name);
 		requireNonNull(group);
+		requireNonNull(callable);
 		InternalTerminationGroup.TrackedLifecycleCall tracked =
 				group.trackLifecycleCall();
-		Call<T> call = new Call<>(name, group, callable, tracked);
+		LifecycleInterruptDelivery interruptDelivery = null;
 		try {
+			InternalTerminationGroup.TrackedLifecycleCall trackedDelivery =
+					group.trackLifecycleCall();
+			interruptDelivery = new LifecycleInterruptDelivery(this.workers,
+					name + "-interrupt", trackedDelivery::close);
+			Call<T> call = new Call<>(name, group, callable, tracked, interruptDelivery);
 			this.workers.start(LifecycleWorkers.Role.LIFECYCLE_CALL, name, call::run);
 			return call;
 		} catch (RuntimeException | Error throwable) {
-			tracked.close();
+			if (interruptDelivery != null) {
+				try {
+					interruptDelivery.retire();
+				} catch (Throwable retirementFailure) {
+					if (!sameInstance(throwable, retirementFailure))
+						throwable.addSuppressed(retirementFailure);
+				}
+			}
+			try {
+				tracked.close();
+			} catch (Throwable closeFailure) {
+				if (!sameInstance(throwable, closeFailure))
+					throwable.addSuppressed(closeFailure);
+			}
 			throw throwable;
 		}
 	}
@@ -830,27 +861,22 @@ final class TrackedLifecycleCallRunner {
 		@NonNull
 		private final CompletableFuture<T> completion;
 		@NonNull
-		private final AtomicReference<Thread> thread;
-		@NonNull
-		private final AtomicBoolean cancellationRequested;
+		private final LifecycleInterruptDelivery interruptDelivery;
 
 		private Call(@NonNull String name,
 				@NonNull InternalTerminationGroup group, @NonNull Callable<T> callable,
-				InternalTerminationGroup.@NonNull TrackedLifecycleCall tracked) {
+				InternalTerminationGroup.@NonNull TrackedLifecycleCall tracked,
+				@NonNull LifecycleInterruptDelivery interruptDelivery) {
 			this.name = requireNonNull(name);
 			this.group = requireNonNull(group);
 			this.callable = requireNonNull(callable);
 			this.tracked = requireNonNull(tracked);
 			this.completion = new CompletableFuture<>();
-			this.thread = new AtomicReference<>();
-			this.cancellationRequested = new AtomicBoolean();
+			this.interruptDelivery = requireNonNull(interruptDelivery);
 		}
 
 		void cancel() {
-			this.cancellationRequested.set(true);
-			Thread active = this.thread.get();
-			if (active != null)
-				active.interrupt();
+			this.interruptDelivery.request();
 		}
 
 		boolean isDone() {
@@ -868,15 +894,13 @@ final class TrackedLifecycleCallRunner {
 		}
 
 		private void run() {
-			this.thread.set(Thread.currentThread());
-			if (this.cancellationRequested.get())
-				Thread.currentThread().interrupt();
 			T value = null;
 			Throwable failure = null;
 			try (LifecycleExecutionContext.Scope ignoredContext =
 							 LifecycleExecutionContext.enter(
 									 this.group.executionOwnerToken())) {
 				try {
+					this.interruptDelivery.bind(Thread.currentThread());
 					value = this.callable.call();
 				} catch (Throwable throwable) {
 					failure = throwable;
@@ -899,7 +923,14 @@ final class TrackedLifecycleCallRunner {
 						failure.addSuppressed(signalFailure);
 				}
 			} finally {
-				this.thread.set(null);
+				try {
+					this.interruptDelivery.retire();
+				} catch (Throwable retirementFailure) {
+					if (failure == null)
+						failure = retirementFailure;
+					else if (!sameInstance(failure, retirementFailure))
+						failure.addSuppressed(retirementFailure);
+				}
 				try {
 					this.tracked.close();
 				} catch (Throwable closeFailure) {
@@ -1069,9 +1100,7 @@ final class InternalLifecycleCoordinator {
 			} else {
 				disposition = InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN;
 			}
-			List<Throwable> failures = evidence.primaryEvents().stream()
-					.flatMap(event -> event.cause().stream())
-					.toList();
+			List<Throwable> failures = evidence.failures();
 			results.add(new InternalLifecycleComponentShutdownResult(participant.kind(), disposition,
 					failures, residual));
 		}
@@ -1082,14 +1111,10 @@ final class InternalLifecycleCoordinator {
 
 /** Process/finalization seams established additively for the later runner. */
 interface LifecycleProcessAccess {
-	@NonNull
-	Optional<InputStream> standardInput();
-
 	void addShutdownHook(@NonNull Thread hook);
 
 	boolean removeShutdownHook(@NonNull Thread hook);
 
-	void reportConfigurationWarning(@NonNull String message);
 }
 
 interface LifecycleFinalizationAction {

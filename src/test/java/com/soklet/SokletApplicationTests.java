@@ -32,7 +32,7 @@ class SokletApplicationTests {
 	@Test
 	void factoryRejectsNullConfigImmediately() {
 		Assertions.assertThrows(NullPointerException.class,
-				() -> SokletApplication.fromConfig(null));
+				() -> SokletProcessLifecycle.fromConfig(null));
 	}
 
 	@Test
@@ -70,35 +70,19 @@ class SokletApplicationTests {
 
 	@Test
 	void malformedRunArgumentsDoNotConsumeTheApplicationRunClaim() {
-		SokletApplication application = SokletApplication.fromConfig(config());
-		ShutdownCleanup cleanup = ShutdownCleanup.fromTimeoutAndAction(
-				Duration.ofSeconds(1), shutdownResult -> { });
-
+		SokletProcessLifecycle application = SokletProcessLifecycle.fromConfig(config());
 		Assertions.assertThrows(NullPointerException.class,
-				() -> application.run((ShutdownTrigger[]) null));
-		Assertions.assertThrows(NullPointerException.class,
-				() -> application.run(ShutdownTrigger.ENTER_KEY, null));
-		Assertions.assertThrows(NullPointerException.class,
-				() -> application.run((ShutdownCleanup) null,
-						ShutdownTrigger.ENTER_KEY));
-		Assertions.assertThrows(NullPointerException.class,
-				() -> application.run(cleanup, (ShutdownTrigger[]) null));
-		Assertions.assertThrows(NullPointerException.class,
-				() -> application.run(cleanup, ShutdownTrigger.ENTER_KEY, null));
-
+				() -> application.run((ShutdownCleanup) null));
 		RuntimeException exactFailure = new RuntimeException("factory failed");
-		RuntimeException firstAttempt = Assertions.assertThrows(
-				RuntimeException.class, () -> application.run(environment(
-						(config, services, publisher) -> { throw exactFailure; }),
-						ShutdownTrigger.ENTER_KEY,
-						ShutdownTrigger.ENTER_KEY));
+		RuntimeException firstAttempt = Assertions.assertThrows(RuntimeException.class,
+				() -> application.run(environment((config, services, publisher) -> { throw exactFailure; })));
 		Assertions.assertSame(exactFailure, firstAttempt);
 	}
 
 	@Test
 	void failedAttemptStillConsumesTheApplicationRunClaim() {
 		RuntimeException exactFailure = new RuntimeException("factory failed");
-		SokletApplication application = SokletApplication.fromConfig(config());
+		SokletProcessLifecycle application = SokletProcessLifecycle.fromConfig(config());
 		SokletApplicationEnvironment environment = environment(
 				(config, services, publisher) -> { throw exactFailure; });
 
@@ -113,7 +97,7 @@ class SokletApplicationTests {
 
 	@Test
 	void invalidInjectedEnvironmentStillConsumesTheApplicationRunClaim() {
-		SokletApplication application = SokletApplication.fromConfig(config());
+		SokletProcessLifecycle application = SokletProcessLifecycle.fromConfig(config());
 
 		Assertions.assertThrows(NullPointerException.class,
 				() -> application.run((SokletApplicationEnvironment) null));
@@ -129,7 +113,7 @@ class SokletApplicationTests {
 		CountDownLatch factoryEntered = new CountDownLatch(1);
 		CountDownLatch releaseFactory = new CountDownLatch(1);
 		RuntimeException exactFailure = new RuntimeException("factory released");
-		SokletApplication application = SokletApplication.fromConfig(config());
+		SokletProcessLifecycle application = SokletProcessLifecycle.fromConfig(config());
 		SokletApplicationEnvironment environment = environment(
 				(config, services, publisher) -> {
 					factoryEntered.countDown();
@@ -175,8 +159,8 @@ class SokletApplicationTests {
 	private static SokletApplicationEnvironment environment(
 			@NonNull SokletApplicationRuntimeFactory runtimeFactory) {
 		return new SokletApplicationEnvironment(
-				LifecycleRuntimeServices.system(), SokletApplication.SYSTEM_PROCESS,
-				SokletApplication.SYSTEM_INPUT, snapshot -> { }, runtimeFactory,
+				LifecycleRuntimeServices.system(), SokletProcessLifecycle.SYSTEM_PROCESS,
+				snapshot -> { }, runtimeFactory,
 				(name, task) -> new Thread(task, name));
 	}
 

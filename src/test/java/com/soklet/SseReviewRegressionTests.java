@@ -46,7 +46,7 @@ class SseReviewRegressionTests {
 			SseServer server = SseServer.withPort(port).host("127.0.0.1")
 					.heartbeatInterval(Duration.ofHours(1)).streamingLifecycleCapacity(2)
 					.concurrentConnectionLimit(1).build();
-			try (Soklet app = Soklet.fromConfig(SokletConfig.withSseServer(server)
+			Soklet.run(SokletConfig.withSseServer(server)
 					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Events.class)))
 					.lifecyclePolicy(shortLifecyclePolicy())
 					.metricsCollector(metrics).lifecycleObserver(new LifecycleObserver() {
@@ -54,8 +54,7 @@ class SseReviewRegressionTests {
 						@Override public void didTerminateSseConnection(SseConnection connection, StreamTermination termination) {
 							reasons.add(termination.getReason());
 						}
-					}).build())) {
-				app.start();
+					}).build(), () -> {
 				for (int index = 1; index <= 4; index++) {
 					try (Socket client = open(port, "/events")) {
 						assertTrue(readUntil(client.getInputStream(), "\r\n\r\n").startsWith("HTTP/1.1 200"));
@@ -69,7 +68,7 @@ class SseReviewRegressionTests {
 				}
 				assertEquals(4, reasons.size());
 				assertTrue(reasons.stream().allMatch(reason -> reason == StreamTerminationReason.CLIENT_DISCONNECTED), reasons.toString());
-			}
+			});
 		}
 	}
 
@@ -95,7 +94,8 @@ class SseReviewRegressionTests {
 		supplier.setAccessible(true);
 		supplier.set(server, (java.util.function.Supplier<java.util.concurrent.ExecutorService>) () -> executor);
 		CountDownLatch established = new CountDownLatch(1), terminated = new CountDownLatch(1);
-		try (Soklet app = Soklet.fromConfig(SokletConfig.withSseServer(server)
+		try {
+			Soklet.run(SokletConfig.withSseServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Events.class)))
 				.lifecyclePolicy(shortLifecyclePolicy()).lifecycleObserver(new LifecycleObserver() {
 					@Override public void didReceiveLogEvent(LogEvent event) { }
@@ -104,17 +104,17 @@ class SseReviewRegressionTests {
 						assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED, termination.getReason());
 						terminated.countDown();
 					}
-				}).build())) {
-			app.start();
-			try (Socket client = open(port, "/events")) {
-				assertTrue(readUntil(client.getInputStream(), "\r\n\r\n").startsWith("HTTP/1.1 200"));
-				assertEquals(":\n\n", readUntil(client.getInputStream(), "\n\n"));
-				assertTrue(established.await(3, TimeUnit.SECONDS));
-				server.acquireBroadcaster(ResourcePath.fromPath("/events")).orElseThrow()
-						.broadcastEvent(SseEvent.withData("writer-available").build());
-				assertEquals("data: writer-available\n\n", readUntil(client.getInputStream(), "\n\n"));
-			}
-			assertTrue(terminated.await(3, TimeUnit.SECONDS), "The writer executor must not delay peer-close monitoring");
+				}).build(), () -> {
+				try (Socket client = open(port, "/events")) {
+					assertTrue(readUntil(client.getInputStream(), "\r\n\r\n").startsWith("HTTP/1.1 200"));
+					assertEquals(":\n\n", readUntil(client.getInputStream(), "\n\n"));
+					assertTrue(established.await(3, TimeUnit.SECONDS));
+					server.acquireBroadcaster(ResourcePath.fromPath("/events")).orElseThrow()
+							.broadcastEvent(SseEvent.withData("writer-available").build());
+					assertEquals("data: writer-available\n\n", readUntil(client.getInputStream(), "\n\n"));
+				}
+				assertTrue(terminated.await(3, TimeUnit.SECONDS), "The writer executor must not delay peer-close monitoring");
+			});
 		} finally {
 			executor.shutdownNow();
 			assertTrue(executor.awaitTermination(2, TimeUnit.SECONDS));
@@ -128,14 +128,13 @@ class SseReviewRegressionTests {
 		AtomicReference<Request> willEstablishRequest = new AtomicReference<>();
 		AtomicReference<SseConnection> connection = new AtomicReference<>();
 		SseServer server = SseServer.withPort(port).host("127.0.0.1").build();
-		try (Soklet app = Soklet.fromConfig(SokletConfig.withSseServer(server)
+		Soklet.run(SokletConfig.withSseServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Events.class)))
 				.lifecyclePolicy(shortLifecyclePolicy()).requestInterceptor(REWRITE).lifecycleObserver(new LifecycleObserver() {
 					@Override public void didReceiveLogEvent(LogEvent event) { }
 					@Override public void willEstablishSseConnection(Request request, ResourceMethod method) { willEstablishRequest.set(request); }
 					@Override public void didEstablishSseConnection(SseConnection current) { connection.set(current); established.countDown(); }
-				}).build())) {
-			app.start();
+				}).build(), () -> {
 			try (Socket client = open(port, "/v1/events")) {
 				assertTrue(readUntil(client.getInputStream(), "\r\n\r\n").startsWith("HTTP/1.1 200"));
 				assertTrue(established.await(3, TimeUnit.SECONDS));
@@ -146,7 +145,7 @@ class SseReviewRegressionTests {
 				assertEquals(":\n\n", readUntil(client.getInputStream(), "\n\n"));
 				assertEquals("data: rewritten\n\n", readUntil(client.getInputStream(), "\n\n"));
 			}
-		}
+		});
 	}
 
 	@Test
@@ -186,14 +185,13 @@ class SseReviewRegressionTests {
 		int port = TestSupport.findFreePort();
 		SseServer server = SseServer.withPort(port).host("127.0.0.1")
 				.concurrentConnectionLimit(Integer.MAX_VALUE).connectionQueueCapacity(Integer.MAX_VALUE).build();
-		try (Soklet app = Soklet.fromConfig(SokletConfig.withSseServer(server)
-				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Events.class))).build())) {
-			app.start();
+		Soklet.run(SokletConfig.withSseServer(server)
+				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Events.class))).build(), () -> {
 			try (Socket client = open(port, "/events")) {
 				assertTrue(readUntil(client.getInputStream(), "\r\n\r\n").startsWith("HTTP/1.1 200"));
 				assertEquals(":\n\n", readUntil(client.getInputStream(), "\n\n"));
 			}
-		}
+		});
 	}
 
 	@Test
@@ -240,25 +238,26 @@ class SseReviewRegressionTests {
 		CountDownLatch writing = new CountDownLatch(1);
 		AtomicInteger written = new AtomicInteger();
 		SseServer server = SseServer.withPort(port).host("127.0.0.1").writeTimeout(Duration.ofSeconds(8)).build();
-		try (Soklet app = Soklet.fromConfig(SokletConfig.withSseServer(server)
+		Soklet.run(SokletConfig.withSseServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(LargeRejection.class)))
 				.lifecycleObserver(new LifecycleObserver() {
 					@Override public void didReceiveLogEvent(LogEvent event) { }
 					@Override public void willWriteResponse(ServerType type, Request request, ResourceMethod method, MarshaledResponse response) { writing.countDown(); }
 					@Override public void didWriteResponse(ServerType type, Request request, ResourceMethod method, MarshaledResponse response, Duration duration) { written.incrementAndGet(); }
-				}).build()); Socket client = new Socket()) {
-			app.start();
-			client.setReceiveBufferSize(1024);
-			client.connect(new java.net.InetSocketAddress("127.0.0.1", port));
-			send(client, "/reject");
-			assertTrue(writing.await(3, TimeUnit.SECONDS));
-			Thread.sleep(250);
-			assertEquals(0, written.get(), "The nonreading client must still be blocking its response");
-			CountDownLatch ran = new CountDownLatch(1);
-			Thread probe = Thread.ofVirtual().start(ran::countDown);
-			assertTrue(ran.await(1, TimeUnit.SECONDS), "A stalled SSE write pinned the sole virtual-thread carrier");
-			probe.join();
-		}
+				}).build(), () -> {
+			try (Socket client = new Socket()) {
+				client.setReceiveBufferSize(1024);
+				client.connect(new java.net.InetSocketAddress("127.0.0.1", port));
+				send(client, "/reject");
+				assertTrue(writing.await(3, TimeUnit.SECONDS));
+				Thread.sleep(250);
+				assertEquals(0, written.get(), "The nonreading client must still be blocking its response");
+				CountDownLatch ran = new CountDownLatch(1);
+				Thread probe = Thread.ofVirtual().start(ran::countDown);
+				assertTrue(ran.await(1, TimeUnit.SECONDS), "A stalled SSE write pinned the sole virtual-thread carrier");
+				probe.join();
+			}
+		});
 	}
 
 

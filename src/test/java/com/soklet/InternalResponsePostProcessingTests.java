@@ -51,9 +51,11 @@ class InternalResponsePostProcessingTests {
 			return response.copy().headers(headers -> headers.put("X-Final", List.of("once")))
 					.body("final503".getBytes(StandardCharsets.US_ASCII)).finish();
 		}).build();
-		try (Soklet owner = Soklet.fromConfig(SokletConfig.withHttpServer(endpoint)
+		// Stop the owner before probing its sealed admission handler.
+		try (SokletTestScope ownerScope = SokletTestScope.of(Soklet.fromConfig(SokletConfig.withHttpServer(endpoint)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(HttpResource.class)))
-				.responseMarshaler(marshaler).build())) {
+				.responseMarshaler(marshaler).build()))) {
+			Soklet owner = ownerScope.soklet();
 			owner.start();
 			owner.shutdown().toCompletableFuture().join();
 			for (HttpMethod method : List.of(HttpMethod.GET, HttpMethod.HEAD)) {
@@ -83,9 +85,11 @@ class InternalResponsePostProcessingTests {
 						calls.incrementAndGet();
 						throw new IllegalStateException("postprocessor failed");
 					}).build();
-			try (Soklet owner = Soklet.fromConfig(SokletConfig.withHttpServer(endpoint)
+			// Stop the owner before testing cleanup of a rejected post-shutdown response.
+			try (SokletTestScope ownerScope = SokletTestScope.of(Soklet.fromConfig(SokletConfig.withHttpServer(endpoint)
 					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(HttpResource.class)))
-					.responseMarshaler(marshaler).build())) {
+					.responseMarshaler(marshaler).build()))) {
+				Soklet owner = ownerScope.soklet();
 				owner.start();
 				owner.shutdown().toCompletableFuture().join();
 				AtomicReference<HttpRequestResult> result = new AtomicReference<>();
@@ -104,34 +108,40 @@ class InternalResponsePostProcessingTests {
 	@Test
 	void liveSseRejectionsFinalizeInvalidBodyAndBothCapacityPathsOnce() throws Exception {
 		for (boolean fastCapacity : List.of(true, false)) {
-			try (SseFixture fixture = new SseFixture(fastCapacity); Socket accepted = fixture.connect(false)) {
-				assertTrue(readHeaders(accepted).startsWith("HTTP/1.1 200 "));
-				long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
-				while (fixture.server.getGlobalConnections().size() != 1 && System.nanoTime() - deadline < 0)
-					Thread.sleep(5);
-				assertEquals(1, fixture.server.getGlobalConnections().size());
-				try (Socket rejected = fixture.connect(false)) {
-					String wire = new String(rejected.getInputStream().readAllBytes(), StandardCharsets.US_ASCII);
-					assertTrue(wire.startsWith("HTTP/1.1 503 "), wire);
-					assertTrue(wire.contains("X-Final: once\r\n"), wire);
-					assertTrue(wire.contains("Content-Length: 8\r\n"), wire);
-					assertTrue(wire.endsWith("final503"), wire);
+			SseFixture fixture = new SseFixture(fastCapacity);
+			Soklet.run(fixture.config, () -> {
+				try (Socket accepted = fixture.connect(false)) {
+					assertTrue(readHeaders(accepted).startsWith("HTTP/1.1 200 "));
+					long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+					while (fixture.server.getGlobalConnections().size() != 1 && System.nanoTime() - deadline < 0)
+						Thread.sleep(5);
+					assertEquals(1, fixture.server.getGlobalConnections().size());
+					try (Socket rejected = fixture.connect(false)) {
+						String wire = new String(rejected.getInputStream().readAllBytes(), StandardCharsets.US_ASCII);
+						assertTrue(wire.startsWith("HTTP/1.1 503 "), wire);
+						assertTrue(wire.contains("X-Final: once\r\n"), wire);
+						assertTrue(wire.contains("Content-Length: 8\r\n"), wire);
+						assertTrue(wire.endsWith("final503"), wire);
+					}
+					assertEquals(1, fixture.rejectionPostProcesses.get());
+					assertEquals(fastCapacity ? 1 : 2, fixture.resource.invocations.get(),
+							"Exercise the pre-handler connection check and the post-handler lifecycle check separately");
+					accepted.setSoLinger(true, 0);
 				}
+			});
+		}
+		SseFixture fixture = new SseFixture(false);
+		Soklet.run(fixture.config, () -> {
+			try (Socket rejected = fixture.connect(true)) {
+				String wire = new String(rejected.getInputStream().readAllBytes(), StandardCharsets.US_ASCII);
+				assertTrue(wire.startsWith("HTTP/1.1 400 "), wire);
+				assertTrue(wire.contains("X-Final: once\r\n"), wire);
+				assertTrue(wire.endsWith("final400"), wire);
 				assertEquals(1, fixture.rejectionPostProcesses.get());
-				assertEquals(fastCapacity ? 1 : 2, fixture.resource.invocations.get(),
-						"Exercise the pre-handler connection check and the post-handler lifecycle check separately");
-				accepted.setSoLinger(true, 0);
+				assertEquals(1, fixture.throwableCalls.get(), "Exercise the transport's forThrowable path after parsing");
+				assertEquals(0, fixture.resource.invocations.get());
 			}
-		}
-		try (SseFixture fixture = new SseFixture(false); Socket rejected = fixture.connect(true)) {
-			String wire = new String(rejected.getInputStream().readAllBytes(), StandardCharsets.US_ASCII);
-			assertTrue(wire.startsWith("HTTP/1.1 400 "), wire);
-			assertTrue(wire.contains("X-Final: once\r\n"), wire);
-			assertTrue(wire.endsWith("final400"), wire);
-			assertEquals(1, fixture.rejectionPostProcesses.get());
-			assertEquals(1, fixture.throwableCalls.get(), "Exercise the transport's forThrowable path after parsing");
-			assertEquals(0, fixture.resource.invocations.get());
-		}
+		});
 	}
 
 	@Test
@@ -172,18 +182,18 @@ class InternalResponsePostProcessingTests {
 		throw new AssertionError("Handshake headers exceeded test bound");
 	}
 
-	private static final class SseFixture implements AutoCloseable {
+	private static final class SseFixture {
 		private final int port = TestSupport.findFreePort();
 		private final Events resource = new Events();
 		private final AtomicInteger rejectionPostProcesses = new AtomicInteger();
 		private final AtomicInteger throwableCalls = new AtomicInteger();
 		private final DefaultSseServer server;
-		private final Soklet owner;
+		private final SokletConfig config;
 		private SseFixture(boolean fastCapacity) throws Exception {
 			server = (DefaultSseServer) SseServer.withPort(port).host("127.0.0.1")
 					.concurrentConnectionLimit(fastCapacity ? 1 : 0).streamingLifecycleCapacity(1)
 					.verifyConnectionOnceEstablished(false).build();
-			owner = Soklet.fromConfig(SokletConfig.withSseServer(server)
+			config = SokletConfig.withSseServer(server)
 					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Events.class)))
 					.instanceProvider(new InstanceProvider() {
 						@Override public <T> T provide(Class<T> type) { return type.cast(resource); }
@@ -202,8 +212,7 @@ class InternalResponsePostProcessingTests {
 					.lifecycleObserver(new LifecycleObserver() { @Override public void didReceiveLogEvent(LogEvent event) {} })
 					.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(5)).startupCancelationTimeout(Duration.ofSeconds(1))
 							.gracefulShutdownTimeout(Duration.ofMillis(100))
-							.forcedShutdownTimeout(Duration.ofSeconds(1)).build()).build());
-			owner.start();
+							.forcedShutdownTimeout(Duration.ofSeconds(1)).build()).build();
 		}
 		private Socket connect(boolean invalidBody) throws Exception {
 			Socket socket = TestSupport.connectWithRetry("127.0.0.1", port, 2000);
@@ -213,7 +222,6 @@ class InternalResponsePostProcessingTests {
 					+ (invalidBody ? "x" : "")).getBytes(StandardCharsets.US_ASCII));
 			return socket;
 		}
-		@Override public void close() { owner.close(); }
 	}
 
 	public static final class HttpResource {

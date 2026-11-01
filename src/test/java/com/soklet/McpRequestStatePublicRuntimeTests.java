@@ -118,10 +118,9 @@ public class McpRequestStatePublicRuntimeTests {
 				.getProtectionKeyringFingerprint().isEmpty());
 		Assertions.assertTrue(configuredDiagnostics
 				.getTraceCorrelationFingerprint().isEmpty());
-		Soklet soklet = managedSoklet(server, observer);
+		SokletConfig sokletConfig = config(server, observer);
 
-		try {
-			soklet.start();
+		Soklet.run(sokletConfig, () -> {
 			int port = boundPort(server);
 			HttpResponse<String> initial = callTool(port, "application-initial",
 					APPLICATION_TOOL, "", "");
@@ -175,9 +174,7 @@ public class McpRequestStatePublicRuntimeTests {
 			Assertions.assertEquals(0, protector.opens.get());
 			Assertions.assertFalse(server.getDiagnostics().toString()
 					.contains(APPLICATION_STATE));
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -233,10 +230,9 @@ public class McpRequestStatePublicRuntimeTests {
 					return continuation.proceed();
 				})
 				.build();
-		Soklet soklet = managedSoklet(server);
+		SokletConfig sokletConfig = config(server);
 
-		try {
-			soklet.start();
+		Soklet.run(sokletConfig, () -> {
 			int port = boundPort(server);
 			HttpResponse<String> initial = callTool(port, "framework-initial",
 					FRAMEWORK_TOOL, "", ELICITATION_URL_CAPABILITY);
@@ -262,9 +258,7 @@ public class McpRequestStatePublicRuntimeTests {
 			Assertions.assertEquals(2, protector.opens.get());
 			Assertions.assertEquals(2, handlerInvocations.get());
 			Assertions.assertEquals(2, interceptorInvocations.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -322,70 +316,58 @@ public class McpRequestStatePublicRuntimeTests {
 
 		McpServer emittingServer = stateServer(endpoint, sharedKeyring,
 				sharedPartition, interceptor);
-		Soklet emittingSoklet = managedSoklet(emittingServer);
-		String protectedState;
-		try {
-			emittingSoklet.start();
+		SokletConfig emittingSokletConfig = config(emittingServer);
+		AtomicReference<String> protectedState = new AtomicReference<>();
+		Soklet.run(emittingSokletConfig, () -> {
 			HttpResponse<String> initial = callTool(boundPort(emittingServer),
 					"fleet-initial", FRAMEWORK_TOOL, "", ELICITATION_URL_CAPABILITY);
 			assertSuccess(initial, "fleet-initial");
 			assertContains(initial.body(), "\"resultType\":\"input_required\"");
-			protectedState = extractRequestState(initial.body());
-			Assertions.assertTrue(protectedState.startsWith(
+			protectedState.set(extractRequestState(initial.body()));
+			Assertions.assertTrue(protectedState.get().startsWith(
 					"soklet-mcp-request-state-v1."));
-		} finally {
-			emittingSoklet.close();
-		}
+		});
 		Assertions.assertEquals(1, handlerInvocations.get());
 		Assertions.assertEquals(1, interceptorInvocations.get());
 
 		McpServer acceptingServer = stateServer(endpoint, sharedKeyring,
 				sharedPartition, interceptor);
-		Soklet acceptingSoklet = managedSoklet(acceptingServer);
-		try {
-			acceptingSoklet.start();
+		SokletConfig acceptingSokletConfig = config(acceptingServer);
+		Soklet.run(acceptingSokletConfig, () -> {
 			HttpResponse<String> retry = callTool(boundPort(acceptingServer),
 					"fleet-retry", FRAMEWORK_TOOL,
-					",\"requestState\":\"" + protectedState + "\"",
+					",\"requestState\":\"" + protectedState.get() + "\"",
 					ELICITATION_URL_CAPABILITY);
 			assertSuccess(retry, "fleet-retry");
 			assertContains(retry.body(), "\"resultType\":\"complete\"");
 			assertContains(retry.body(), "cross-instance state accepted");
-		} finally {
-			acceptingSoklet.close();
-		}
+		});
 		Assertions.assertEquals(2, handlerInvocations.get());
 		Assertions.assertEquals(2, interceptorInvocations.get());
 
 		McpServer wrongKeyServer = stateServer(endpoint, mismatchedKeyring,
 				sharedPartition, interceptor);
-		Soklet wrongKeySoklet = managedSoklet(wrongKeyServer);
-		try {
-			wrongKeySoklet.start();
+		SokletConfig wrongKeySokletConfig = config(wrongKeyServer);
+		Soklet.run(wrongKeySokletConfig, () -> {
 			HttpResponse<String> retry = callTool(boundPort(wrongKeyServer),
 					"wrong-key-retry", FRAMEWORK_TOOL,
-					",\"requestState\":\"" + protectedState + "\"",
+					",\"requestState\":\"" + protectedState.get() + "\"",
 					ELICITATION_URL_CAPABILITY);
 			assertError(retry, 400, -32602, "wrong-key-retry");
-		} finally {
-			wrongKeySoklet.close();
-		}
+		});
 		Assertions.assertEquals(2, handlerInvocations.get());
 		Assertions.assertEquals(2, interceptorInvocations.get());
 
 		McpServer wrongPartitionServer = stateServer(endpoint, sharedKeyring,
 				mismatchedPartition, interceptor);
-		Soklet wrongPartitionSoklet = managedSoklet(wrongPartitionServer);
-		try {
-			wrongPartitionSoklet.start();
+		SokletConfig wrongPartitionSokletConfig = config(wrongPartitionServer);
+		Soklet.run(wrongPartitionSokletConfig, () -> {
 			HttpResponse<String> retry = callTool(boundPort(wrongPartitionServer),
 					"wrong-partition-retry", FRAMEWORK_TOOL,
-					",\"requestState\":\"" + protectedState + "\"",
+					",\"requestState\":\"" + protectedState.get() + "\"",
 					ELICITATION_URL_CAPABILITY);
 			assertError(retry, 400, -32602, "wrong-partition-retry");
-		} finally {
-			wrongPartitionSoklet.close();
-		}
+		});
 		Assertions.assertEquals(2, handlerInvocations.get());
 		Assertions.assertEquals(2, interceptorInvocations.get());
 	}
@@ -424,10 +406,9 @@ public class McpRequestStatePublicRuntimeTests {
 					return continuation.proceed();
 				})
 				.build();
-		Soklet soklet = managedSoklet(server);
+		SokletConfig sokletConfig = config(server);
 
-		try {
-			soklet.start();
+		Soklet.run(sokletConfig, () -> {
 			int port = boundPort(server);
 			HttpResponse<String> malformed = callTool(port, "malformed",
 					FRAMEWORK_TOOL, ",\"requestState\":7", "");
@@ -462,9 +443,7 @@ public class McpRequestStatePublicRuntimeTests {
 			assertStageCounts(4, 2, 0, 0, admissionInvocations,
 					protector, interceptorInvocations, handlerInvocations);
 			Assertions.assertEquals(0, protector.seals.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -505,10 +484,9 @@ public class McpRequestStatePublicRuntimeTests {
 				.protectionConfig(McpProtectionConfig
 						.withRequestStateProtector(protector).build())
 				.build();
-		Soklet soklet = managedSoklet(server);
+		SokletConfig sokletConfig = config(server);
 
-		try {
-			soklet.start();
+		Soklet.run(sokletConfig, () -> {
 			int port = boundPort(server);
 			HttpResponse<String> denied = callTool(port, "tampered-denied",
 					FRAMEWORK_TOOL, ",\"requestState\":\"tampered\"",
@@ -531,9 +509,7 @@ public class McpRequestStatePublicRuntimeTests {
 			Assertions.assertEquals(1, toolLimiterInvocations.get());
 			Assertions.assertEquals(1, protector.opens.get());
 			Assertions.assertEquals(0, handlerInvocations.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -571,10 +547,9 @@ public class McpRequestStatePublicRuntimeTests {
 				.protectionConfig(McpProtectionConfig
 						.withRequestStateProtector(protector).build())
 				.build();
-		Soklet soklet = managedSoklet(server);
+		SokletConfig sokletConfig = config(server);
 
-		try {
-			soklet.start();
+		Soklet.run(sokletConfig, () -> {
 			int port = boundPort(server);
 			HttpResponse<String> denied = callTool(port, "tool-tampered-denied",
 					FRAMEWORK_TOOL, ",\"requestState\":\"tampered\"",
@@ -594,9 +569,7 @@ public class McpRequestStatePublicRuntimeTests {
 			Assertions.assertEquals(2, toolLimiterInvocations.get());
 			Assertions.assertEquals(1, protector.opens.get());
 			Assertions.assertEquals(0, handlerInvocations.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -645,10 +618,9 @@ public class McpRequestStatePublicRuntimeTests {
 				.protectionConfig(McpProtectionConfig
 						.withRequestStateProtector(protector).build())
 				.build();
-		Soklet soklet = managedSoklet(server);
+		SokletConfig sokletConfig = config(server);
 
-		try {
-			soklet.start();
+		Soklet.run(sokletConfig, () -> {
 			String requestId = caseName + "-tool-limiter";
 			HttpResponse<String> response = callTool(boundPort(server), requestId,
 					FRAMEWORK_TOOL, ",\"requestState\":\"tampered\"",
@@ -659,9 +631,7 @@ public class McpRequestStatePublicRuntimeTests {
 			Assertions.assertEquals(0, protector.opens.get(),
 					"A failed tool limiter must not invoke the request-state protector.");
 			Assertions.assertEquals(0, handlerInvocations.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -725,10 +695,9 @@ public class McpRequestStatePublicRuntimeTests {
 				.resourceRegistrations(java.util.List.of(resource))
 				.build();
 		McpServer server = serverBuilder(endpoint).build();
-		Soklet soklet = managedSoklet(server);
+		SokletConfig sokletConfig = config(server);
 
-		try {
-			soklet.start();
+		Soklet.run(sokletConfig, () -> {
 			int port = boundPort(server);
 			HttpResponse<String> response = send(port,
 					request("resource-retry", "resources/read",
@@ -744,9 +713,7 @@ public class McpRequestStatePublicRuntimeTests {
 			Assertions.assertEquals("no-store",
 					response.headers().firstValue("Cache-Control").orElseThrow());
 			Assertions.assertNotNull(handlerContext.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	private static McpEndpoint.Builder endpointBuilder(String implementationName) {
@@ -801,15 +768,15 @@ public class McpRequestStatePublicRuntimeTests {
 				.build();
 	}
 
-	private static Soklet managedSoklet(McpServer server) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+	private static SokletConfig config(McpServer server) {
+		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecyclePolicy(testLifecyclePolicy())
-				.build());
+				.build();
 	}
 
-	private static Soklet managedSoklet(McpServer server,
+	private static SokletConfig config(McpServer server,
 			LifecycleObserver observer) {
 		SokletConfig config = SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
@@ -817,7 +784,7 @@ public class McpRequestStatePublicRuntimeTests {
 				.lifecycleObservers(List.of(observer))
 				.lifecyclePolicy(testLifecyclePolicy())
 				.build();
-		return Soklet.fromConfig(config);
+		return config;
 	}
 
 	private static LifecyclePolicy testLifecyclePolicy() {

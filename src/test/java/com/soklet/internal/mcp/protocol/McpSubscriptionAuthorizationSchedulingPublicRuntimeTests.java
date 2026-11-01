@@ -95,36 +95,36 @@ public class McpSubscriptionAuthorizationSchedulingPublicRuntimeTests {
 			}
 			return McpSubscriptionAuthorization.Allowed.fromValidUntil(Instant.now().plusSeconds(4));
 		}, builder -> builder.requestHandlerConcurrency(10));
-		Soklet owner = managedSoklet(server, new RecordingMetrics());
-		List<McpChunkedHttpClient> clients = new ArrayList<>();
-		try {
-			owner.start();
-			for (int index = 0; index < 8; index++) {
-				McpChunkedHttpClient client = listen(boundPort(server)); clients.add(client);
-				assertSseHead(client.readHead()); Assertions.assertEquals(acknowledgment(), client.readChunkText());
+		Soklet.run(managedSokletConfig(server, new RecordingMetrics()), () -> {
+			List<McpChunkedHttpClient> clients = new ArrayList<>();
+			try {
+				for (int index = 0; index < 8; index++) {
+					McpChunkedHttpClient client = listen(boundPort(server)); clients.add(client);
+					assertSseHead(client.readHead()); Assertions.assertEquals(acknowledgment(), client.readChunkText());
+				}
+				server.getSubscriptionReconciler().reconcileSubscriptions();
+				Assertions.assertTrue(renewalsEntered.await(3, TimeUnit.SECONDS),
+						"Five renewals must enter while five handler slots remain for ordinary requests.");
+				String toolBody = "{\"jsonrpc\":\"2.0\",\"id\":\"normal-call\",\"method\":\"tools/call\","
+						+ "\"params\":{\"name\":\"scheduling.probe\",\"arguments\":{},\"_meta\":{"
+						+ "\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\","
+						+ "\"io.modelcontextprotocol/clientCapabilities\":{}}}}";
+				try (McpChunkedHttpClient tool = McpChunkedHttpClient.postMcpMessage(boundPort(server), toolBody, List.of(
+						new McpChunkedHttpClient.RequestHeader("MCP-Protocol-Version", PROTOCOL_VERSION),
+						new McpChunkedHttpClient.RequestHeader("Mcp-Method", "tools/call"),
+						new McpChunkedHttpClient.RequestHeader("Mcp-Name", "scheduling.probe")))) {
+					var head = tool.readHead();
+					Assertions.assertEquals(200, head.status());
+					Assertions.assertTrue(tool.readFixedBody(head).contains("unused"));
+				}
+				Assertions.assertEquals(8, server.getDiagnostics().getActiveSubscriptions());
+				Assertions.assertTrue(maximumActiveRenewals.get() <= 5, "Maintenance must reserve half the handler pool.");
+			} finally {
+				releaseRenewals.countDown();
+				for (McpChunkedHttpClient client : clients) client.closeWithReset();
+
 			}
-			server.getSubscriptionReconciler().reconcileSubscriptions();
-			Assertions.assertTrue(renewalsEntered.await(3, TimeUnit.SECONDS),
-					"Five renewals must enter while five handler slots remain for ordinary requests.");
-			String toolBody = "{\"jsonrpc\":\"2.0\",\"id\":\"normal-call\",\"method\":\"tools/call\","
-					+ "\"params\":{\"name\":\"scheduling.probe\",\"arguments\":{},\"_meta\":{"
-					+ "\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\","
-					+ "\"io.modelcontextprotocol/clientCapabilities\":{}}}}";
-			try (McpChunkedHttpClient tool = McpChunkedHttpClient.postMcpMessage(boundPort(server), toolBody, List.of(
-					new McpChunkedHttpClient.RequestHeader("MCP-Protocol-Version", PROTOCOL_VERSION),
-					new McpChunkedHttpClient.RequestHeader("Mcp-Method", "tools/call"),
-					new McpChunkedHttpClient.RequestHeader("Mcp-Name", "scheduling.probe")))) {
-				var head = tool.readHead();
-				Assertions.assertEquals(200, head.status());
-				Assertions.assertTrue(tool.readFixedBody(head).contains("unused"));
-			}
-			Assertions.assertEquals(8, server.getDiagnostics().getActiveSubscriptions());
-			Assertions.assertTrue(maximumActiveRenewals.get() <= 5, "Maintenance must reserve half the handler pool.");
-		} finally {
-			releaseRenewals.countDown();
-			for (McpChunkedHttpClient client : clients) client.closeWithReset();
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -167,14 +167,13 @@ public class McpSubscriptionAuthorizationSchedulingPublicRuntimeTests {
 			return McpSubscriptionAuthorization.Allowed.fromValidUntil(Instant.now().plusSeconds(30));
 		});
 		reference.set(server);
-		try (Soklet owner = managedSoklet(server, new RecordingMetrics())) {
-			owner.start();
+		Soklet.run(managedSokletConfig(server, new RecordingMetrics()), () -> {
 			try (McpChunkedHttpClient client = listen(boundPort(server))) {
 				Assertions.assertEquals(503, client.readHead().status());
 				Assertions.assertEquals(3, calls.get(), "Continually stale authorization must not retry until request timeout.");
 			}
 			Assertions.assertEquals(0, server.getDiagnostics().getActiveSubscriptions());
-		}
+		});
 	}
 
 	@Test
@@ -216,41 +215,44 @@ public class McpSubscriptionAuthorizationSchedulingPublicRuntimeTests {
 			}
 			throw new AssertionError("Unexpected authorization invocation " + invocation);
 		});
-		Soklet owner = managedSoklet(server, metrics);
+
 		ExecutorService reconciliationExecutor = Executors.newSingleThreadExecutor();
-		McpChunkedHttpClient client = null;
-
 		try {
-			owner.start();
-			client = listen(boundPort(server));
-			assertSseHead(client.readHead());
-			Assertions.assertEquals(acknowledgment(), client.readChunkText());
-			await(renewalReadyToSchedule,
-					"The automatic renewal did not reach its scheduling boundary.");
+			Soklet.run(managedSokletConfig(server, metrics), () -> {
+				McpChunkedHttpClient client = null;
 
-			Future<?> reconciliation = reconciliationExecutor.submit(() -> server
-					.getSubscriptionReconciler().reconcileSubscriptions());
-			await(reconciliationReadyToSchedule,
-					"Reconciliation did not establish its delivery fence.");
-			releaseRenewalSchedule.countDown();
-			await(racedCheckEntered,
-					"The renewal-side scheduler did not reserve the raced check.");
-			releaseReconciliationSchedule.countDown();
-			await(reconciliation,
-					"The reconciliation call did not return.");
+				try {
+					client = listen(boundPort(server));
+					assertSseHead(client.readHead());
+					Assertions.assertEquals(acknowledgment(), client.readChunkText());
+					await(renewalReadyToSchedule,
+							"The automatic renewal did not reach its scheduling boundary.");
 
-			metrics.awaitMaintenance(
-					McpMetricsEvent.SubscriptionMaintenance.Work.RECONCILIATION,
-					McpMetricsEvent.SubscriptionMaintenance.Outcome.DENIED);
-			metrics.awaitSubscriptionClosed(McpStreamTerminationReason
-					.SUBSCRIPTION_AUTHORIZATION_DENIED);
-			Assertions.assertEquals(2, authorizations.get());
+					Future<?> reconciliation = reconciliationExecutor.submit(() -> server
+							.getSubscriptionReconciler().reconcileSubscriptions());
+					await(reconciliationReadyToSchedule,
+							"Reconciliation did not establish its delivery fence.");
+					releaseRenewalSchedule.countDown();
+					await(racedCheckEntered,
+							"The renewal-side scheduler did not reserve the raced check.");
+					releaseReconciliationSchedule.countDown();
+					await(reconciliation,
+							"The reconciliation call did not return.");
+
+					metrics.awaitMaintenance(
+							McpMetricsEvent.SubscriptionMaintenance.Work.RECONCILIATION,
+							McpMetricsEvent.SubscriptionMaintenance.Outcome.DENIED);
+					metrics.awaitSubscriptionClosed(McpStreamTerminationReason
+							.SUBSCRIPTION_AUTHORIZATION_DENIED);
+					Assertions.assertEquals(2, authorizations.get());
+				} finally {
+					releaseRenewalSchedule.countDown();
+					releaseReconciliationSchedule.countDown();
+					if (client != null)
+						client.closeWithReset();
+			}
+			});
 		} finally {
-			releaseRenewalSchedule.countDown();
-			releaseReconciliationSchedule.countDown();
-			if (client != null)
-				client.closeWithReset();
-			owner.close();
 			reconciliationExecutor.shutdownNow();
 			Assertions.assertTrue(reconciliationExecutor.awaitTermination(
 					WAIT.toNanos(), TimeUnit.NANOSECONDS));
@@ -300,9 +302,10 @@ public class McpSubscriptionAuthorizationSchedulingPublicRuntimeTests {
 	}
 
 	@NonNull
-	private static Soklet managedSoklet(@NonNull McpServer server,
+
+	private static SokletConfig managedSokletConfig(@NonNull McpServer server,
 			@NonNull MetricsCollector metrics) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.metricsCollector(metrics)
 				.lifecyclePolicy(LifecyclePolicy.builder()
@@ -311,7 +314,7 @@ public class McpSubscriptionAuthorizationSchedulingPublicRuntimeTests {
 						.gracefulShutdownTimeout(Duration.ofSeconds(2))
 						.forcedShutdownTimeout(Duration.ofSeconds(1))
 						.build())
-				.build());
+				.build();
 	}
 
 	@NonNull

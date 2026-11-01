@@ -95,52 +95,59 @@ class McpLocalizationFleetPublicRuntimeTests {
 	void failedFleetReloadPreservesBothOldSnapshotsAndPublishesNoInvalidation()
 			throws Exception {
 		TwoNodeFleet fleet = new TwoNodeFleet();
-		LiveSubscription firstSubscription = null;
-		LiveSubscription secondSubscription = null;
 
 		try {
-			fleet.start();
-			LiveSubscription first =
-					fleet.first().subscribe("failed-reload", "fr-CA");
-			LiveSubscription second =
-					fleet.second().subscribe("failed-reload", "fr-CA");
-			firstSubscription = first;
-			secondSubscription = second;
-			assertAcknowledgment(first.nextFrame(WAIT));
-			assertAcknowledgment(second.nextFrame(WAIT));
-			awaitRuntime(first.node(), 1, 1);
-			awaitRuntime(second.node(), 1, 1);
-			CatalogSnapshot oldFirst = fleet.first().activeSnapshot();
-			CatalogSnapshot oldSecond = fleet.second().activeSnapshot();
-			assertNotSame(oldFirst, oldSecond);
-			assertEquals(oldFirst, oldSecond);
+			Soklet.run(fleet.first().config, () -> {
+				Soklet.run(fleet.second().config, () -> {
+					LiveSubscription firstSubscription = null;
+					LiveSubscription secondSubscription = null;
+					try {
+						LiveSubscription first =
+								fleet.first().subscribe("failed-reload", "fr-CA");
+						LiveSubscription second =
+								fleet.second().subscribe("failed-reload", "fr-CA");
+						firstSubscription = first;
+						secondSubscription = second;
+						assertAcknowledgment(first.nextFrame(WAIT));
+						assertAcknowledgment(second.nextFrame(WAIT));
+						awaitRuntime(first.node(), 1, 1);
+						awaitRuntime(second.node(), 1, 1);
+						CatalogSnapshot oldFirst = fleet.first().activeSnapshot();
+						CatalogSnapshot oldSecond = fleet.second().activeSnapshot();
+						assertNotSame(oldFirst, oldSecond);
+						assertEquals(oldFirst, oldSecond);
 
-			CatalogSnapshot validForFirst = CatalogSnapshot.valid("R42");
-			CatalogSnapshot invalidForSecond = CatalogSnapshot.invalid("R42");
-			assertThrows(CatalogValidationException.class,
-					() -> fleet.stage(validForFirst, invalidForSecond));
+						CatalogSnapshot validForFirst = CatalogSnapshot.valid("R42");
+						CatalogSnapshot invalidForSecond = CatalogSnapshot.invalid("R42");
+						assertThrows(CatalogValidationException.class,
+								() -> fleet.stage(validForFirst, invalidForSecond));
 
-			assertSame(oldFirst, fleet.first().activeSnapshot());
-			assertSame(oldSecond, fleet.second().activeSnapshot());
-			assertEquals(1, fleet.first().validationCount());
-			assertEquals(1, fleet.second().validationCount());
-			assertEquals(0, fleet.first().invalidationCount());
-			assertEquals(0, fleet.second().invalidationCount());
-			assertThrows(SocketTimeoutException.class,
-					() -> first.nextFrame(NO_EVENT_WAIT));
-			assertThrows(SocketTimeoutException.class,
-					() -> second.nextFrame(NO_EVENT_WAIT));
+						assertSame(oldFirst, fleet.first().activeSnapshot());
+						assertSame(oldSecond, fleet.second().activeSnapshot());
+						assertEquals(1, fleet.first().validationCount());
+						assertEquals(1, fleet.second().validationCount());
+						assertEquals(0, fleet.first().invalidationCount());
+						assertEquals(0, fleet.second().invalidationCount());
+						assertThrows(SocketTimeoutException.class,
+								() -> first.nextFrame(NO_EVENT_WAIT));
+						assertThrows(SocketTimeoutException.class,
+								() -> second.nextFrame(NO_EVENT_WAIT));
 
-			assertCoherentRevision(fleet.first().toolsList("failed-first"),
-					oldFirst, validForFirst);
-			assertCoherentRevision(fleet.second().toolsList("failed-second"),
-					oldSecond, invalidForSecond);
-			assertLatestContextRevision(fleet.first(), oldFirst);
-			assertLatestContextRevision(fleet.second(), oldSecond);
+						assertCoherentRevision(fleet.first().toolsList("failed-first"),
+								oldFirst, validForFirst);
+						assertCoherentRevision(fleet.second().toolsList("failed-second"),
+								oldSecond, invalidForSecond);
+						assertLatestContextRevision(fleet.first(), oldFirst);
+						assertLatestContextRevision(fleet.second(), oldSecond);
+					} finally {
+						close(firstSubscription);
+						close(secondSubscription);
+						fleet.closeSubscriptions();
+					}
+				});
+			});
 		} finally {
-			close(firstSubscription);
-			close(secondSubscription);
-			fleet.close();
+			fleet.clearContexts();
 			assertStoppedWithRetainedAddress(fleet.first());
 			assertStoppedWithRetainedAddress(fleet.second());
 		}
@@ -150,72 +157,79 @@ class McpLocalizationFleetPublicRuntimeTests {
 	void rollingActivationAllowsRevisionDriftBetweenNodesButNeverWithinAResponse()
 			throws Exception {
 		TwoNodeFleet fleet = new TwoNodeFleet();
-		LiveSubscription firstSubscription = null;
-		LiveSubscription secondSubscription = null;
 
 		try {
-			fleet.start();
-			LiveSubscription first =
-					fleet.first().subscribe("rolling-first", "fr-CA");
-			LiveSubscription second =
-					fleet.second().subscribe("rolling-second", "fr-CA");
-			firstSubscription = first;
-			secondSubscription = second;
-			assertAcknowledgment(first.nextFrame(WAIT));
-			assertAcknowledgment(second.nextFrame(WAIT));
-			awaitRuntime(fleet.first(), 1, 1);
-			awaitRuntime(fleet.second(), 1, 1);
-			CatalogSnapshot firstR41 = fleet.first().activeSnapshot();
-			CatalogSnapshot secondR41 = fleet.second().activeSnapshot();
-			CatalogSnapshot firstR42 = CatalogSnapshot.valid("R42");
-			CatalogSnapshot secondR42 = CatalogSnapshot.valid("R42");
-			assertNotSame(firstR41, secondR41);
-			assertNotSame(firstR42, secondR42);
+			Soklet.run(fleet.first().config, () -> {
+				Soklet.run(fleet.second().config, () -> {
+					LiveSubscription firstSubscription = null;
+					LiveSubscription secondSubscription = null;
+					try {
+						LiveSubscription first =
+								fleet.first().subscribe("rolling-first", "fr-CA");
+						LiveSubscription second =
+								fleet.second().subscribe("rolling-second", "fr-CA");
+						firstSubscription = first;
+						secondSubscription = second;
+						assertAcknowledgment(first.nextFrame(WAIT));
+						assertAcknowledgment(second.nextFrame(WAIT));
+						awaitRuntime(fleet.first(), 1, 1);
+						awaitRuntime(fleet.second(), 1, 1);
+						CatalogSnapshot firstR41 = fleet.first().activeSnapshot();
+						CatalogSnapshot secondR41 = fleet.second().activeSnapshot();
+						CatalogSnapshot firstR42 = CatalogSnapshot.valid("R42");
+						CatalogSnapshot secondR42 = CatalogSnapshot.valid("R42");
+						assertNotSame(firstR41, secondR41);
+						assertNotSame(firstR42, secondR42);
 
-			assertCoherentRevision(fleet.first().toolsList("baseline-first"),
-					firstR41, firstR42);
-			assertCoherentRevision(fleet.second().toolsList("baseline-second"),
-					secondR41, secondR42);
-			fleet.stage(firstR42, secondR42);
+						assertCoherentRevision(fleet.first().toolsList("baseline-first"),
+								firstR41, firstR42);
+						assertCoherentRevision(fleet.second().toolsList("baseline-second"),
+								secondR41, secondR42);
+						fleet.stage(firstR42, secondR42);
 
-			RenderPause pause = fleet.first().pauseAfterFirstLocalizationLookup();
-			CompletableFuture<String> parkedResponse = CompletableFuture.supplyAsync(
-					() -> toolsListUnchecked(fleet.first(), "parked-old-response"));
-			pause.awaitFirstLookup();
-			ContextObservation parkedContext = fleet.first().latestContext();
-			try {
-				fleet.activateFirst();
-			} finally {
-				pause.release();
-			}
-			assertCoherentRevision(await(parkedResponse), firstR41, firstR42);
-			assertEquals(firstR41.revision(), parkedContext.context()
-					.getRevision().orElseThrow());
-			assertListChanged(first.nextFrame(WAIT));
-			assertThrows(SocketTimeoutException.class,
-					() -> second.nextFrame(NO_EVENT_WAIT));
+						RenderPause pause = fleet.first().pauseAfterFirstLocalizationLookup();
+						CompletableFuture<String> parkedResponse = CompletableFuture.supplyAsync(
+								() -> toolsListUnchecked(fleet.first(), "parked-old-response"));
+						pause.awaitFirstLookup();
+						ContextObservation parkedContext = fleet.first().latestContext();
+						try {
+							fleet.activateFirst();
+						} finally {
+							pause.release();
+						}
+						assertCoherentRevision(await(parkedResponse), firstR41, firstR42);
+						assertEquals(firstR41.revision(), parkedContext.context()
+								.getRevision().orElseThrow());
+						assertListChanged(first.nextFrame(WAIT));
+						assertThrows(SocketTimeoutException.class,
+								() -> second.nextFrame(NO_EVENT_WAIT));
 
-			assertCoherentRevision(fleet.first().toolsList("drift-first"),
-					firstR42, firstR41);
-			assertCoherentRevision(fleet.second().toolsList("drift-second"),
-					secondR41, secondR42);
-			assertLatestContextRevision(fleet.first(), firstR42);
-			assertLatestContextRevision(fleet.second(), secondR41);
+						assertCoherentRevision(fleet.first().toolsList("drift-first"),
+								firstR42, firstR41);
+						assertCoherentRevision(fleet.second().toolsList("drift-second"),
+								secondR41, secondR42);
+						assertLatestContextRevision(fleet.first(), firstR42);
+						assertLatestContextRevision(fleet.second(), secondR41);
 
-			fleet.activateSecond();
-			assertListChanged(second.nextFrame(WAIT));
-			assertThrows(SocketTimeoutException.class,
-					() -> first.nextFrame(NO_EVENT_WAIT));
-			assertCoherentRevision(fleet.first().toolsList("converged-first"),
-					firstR42, firstR41);
-			assertCoherentRevision(fleet.second().toolsList("converged-second"),
-					secondR42, secondR41);
-			assertLatestContextRevision(fleet.first(), firstR42);
-			assertLatestContextRevision(fleet.second(), secondR42);
+						fleet.activateSecond();
+						assertListChanged(second.nextFrame(WAIT));
+						assertThrows(SocketTimeoutException.class,
+								() -> first.nextFrame(NO_EVENT_WAIT));
+						assertCoherentRevision(fleet.first().toolsList("converged-first"),
+								firstR42, firstR41);
+						assertCoherentRevision(fleet.second().toolsList("converged-second"),
+								secondR42, secondR41);
+						assertLatestContextRevision(fleet.first(), firstR42);
+						assertLatestContextRevision(fleet.second(), secondR42);
+					} finally {
+						close(firstSubscription);
+						close(secondSubscription);
+						fleet.closeSubscriptions();
+					}
+				});
+			});
 		} finally {
-			close(firstSubscription);
-			close(secondSubscription);
-			fleet.close();
+			fleet.clearContexts();
 			assertStoppedWithRetainedAddress(fleet.first());
 			assertStoppedWithRetainedAddress(fleet.second());
 		}
@@ -224,7 +238,8 @@ class McpLocalizationFleetPublicRuntimeTests {
 	@Test
 	void nodeLossAndSubscriptionReconnectNeedNoSessionRecoveryAndReleaseFleetResources()
 			throws Exception {
-		TwoNodeFleet fleet = new TwoNodeFleet();
+		// Keep explicit owners to stop a node while its subscription remains open.
+		ManualTwoNodeFleet fleet = new ManualTwoNodeFleet();
 		LiveSubscription firstSubscription = null;
 		LiveSubscription reconnectedSubscription = null;
 
@@ -239,7 +254,7 @@ class McpLocalizationFleetPublicRuntimeTests {
 			assertEquals(0, fleet.second().server().getDiagnostics()
 					.getActiveSubscriptions());
 
-			fleet.first().stop();
+			fleet.stopFirst();
 			firstSubscription.awaitTransportClosed(WAIT);
 			assertStoppedWithRetainedAddress(fleet.first());
 			assertEquals(0, fleet.second().server().getDiagnostics()
@@ -274,7 +289,7 @@ class McpLocalizationFleetPublicRuntimeTests {
 			assertListChanged(reconnectedSubscription.nextFrame(WAIT));
 			reconnectedSubscription.close();
 			awaitRuntime(fleet.second(), 0, 0);
-			fleet.second().stop();
+			fleet.stopSecond();
 			assertStoppedWithRetainedAddress(fleet.second());
 		} finally {
 			close(firstSubscription);
@@ -290,139 +305,146 @@ class McpLocalizationFleetPublicRuntimeTests {
 	void applicationBrokerRecoveryCoversDelayedDuplicateMissedAndRevokedFleetState()
 			throws Exception {
 		TwoNodeFleet fleet = new TwoNodeFleet();
-		LiveSubscription firstAlpha = null;
-		LiveSubscription firstBeta = null;
-		LiveSubscription secondAlpha = null;
-		LiveSubscription reconnectedAlpha = null;
 
 		try {
-			fleet.start();
-			LiveSubscription alphaOnFirst = fleet.first().subscribe(
-					"fleet-alpha-a", "fr-CA", TENANT_ALPHA);
-			LiveSubscription betaOnFirst = fleet.first().subscribe(
-					"fleet-beta-a", "fr-CA", TENANT_BETA);
-			LiveSubscription alphaOnSecond = fleet.second().subscribe(
-					"fleet-alpha-b", "fr-CA", TENANT_ALPHA);
-			firstAlpha = alphaOnFirst;
-			firstBeta = betaOnFirst;
-			secondAlpha = alphaOnSecond;
-			assertAcknowledgment(alphaOnFirst.nextFrame(WAIT));
-			assertAcknowledgment(betaOnFirst.nextFrame(WAIT));
-			assertAcknowledgment(alphaOnSecond.nextFrame(WAIT));
-			awaitRuntime(fleet.first(), 2, 2);
-			awaitRuntime(fleet.second(), 1, 1);
+			Soklet.run(fleet.first().config, () -> {
+				Soklet.run(fleet.second().config, () -> {
+					LiveSubscription firstAlpha = null;
+					LiveSubscription firstBeta = null;
+					LiveSubscription secondAlpha = null;
+					LiveSubscription reconnectedAlpha = null;
+					try {
+						LiveSubscription alphaOnFirst = fleet.first().subscribe(
+								"fleet-alpha-a", "fr-CA", TENANT_ALPHA);
+						LiveSubscription betaOnFirst = fleet.first().subscribe(
+								"fleet-beta-a", "fr-CA", TENANT_BETA);
+						LiveSubscription alphaOnSecond = fleet.second().subscribe(
+								"fleet-alpha-b", "fr-CA", TENANT_ALPHA);
+						firstAlpha = alphaOnFirst;
+						firstBeta = betaOnFirst;
+						secondAlpha = alphaOnSecond;
+						assertAcknowledgment(alphaOnFirst.nextFrame(WAIT));
+						assertAcknowledgment(betaOnFirst.nextFrame(WAIT));
+						assertAcknowledgment(alphaOnSecond.nextFrame(WAIT));
+						awaitRuntime(fleet.first(), 2, 2);
+						awaitRuntime(fleet.second(), 1, 1);
 
-			CatalogSnapshot r41 = CatalogSnapshot.valid("R41");
-			CatalogSnapshot r42 = CatalogSnapshot.valid("R42");
-			assertTenantCatalog(fleet.first().toolsList(
-					"initial-alpha-a", TENANT_ALPHA), r41,
-					Set.of(SHARED_TOOL, ALPHA_TOOL));
-			assertTenantCatalog(fleet.first().toolsList(
-					"initial-beta-a", TENANT_BETA), r41,
-					Set.of(SHARED_TOOL, BETA_TOOL));
-			assertTenantCatalog(fleet.second().toolsList(
-					"initial-alpha-b", TENANT_ALPHA), r41,
-					Set.of(SHARED_TOOL, ALPHA_TOOL));
+						CatalogSnapshot r41 = CatalogSnapshot.valid("R41");
+						CatalogSnapshot r42 = CatalogSnapshot.valid("R42");
+						assertTenantCatalog(fleet.first().toolsList(
+								"initial-alpha-a", TENANT_ALPHA), r41,
+								Set.of(SHARED_TOOL, ALPHA_TOOL));
+						assertTenantCatalog(fleet.first().toolsList(
+								"initial-beta-a", TENANT_BETA), r41,
+								Set.of(SHARED_TOOL, BETA_TOOL));
+						assertTenantCatalog(fleet.second().toolsList(
+								"initial-alpha-b", TENANT_ALPHA), r41,
+								Set.of(SHARED_TOOL, ALPHA_TOOL));
 
-			// One tenant loses a tool on both nodes. The application broker
-			// reaches node A first; node-local comparison suppresses the broad
-			// invalidation for beta and node B remains untouched until delivery.
-			fleet.first().visibleTools(TENANT_ALPHA, Set.of(SHARED_TOOL));
-			fleet.second().visibleTools(TENANT_ALPHA, Set.of(SHARED_TOOL));
-			fleet.broker().publishToolsListChanged(fleet.first());
-			assertListChanged(alphaOnFirst.nextFrame(WAIT));
-			assertThrows(SocketTimeoutException.class,
-					() -> betaOnFirst.nextFrame(NO_EVENT_WAIT));
-			assertThrows(SocketTimeoutException.class,
-					() -> alphaOnSecond.nextFrame(NO_EVENT_WAIT));
-			assertTenantCatalog(fleet.first().toolsList(
-					"filtered-alpha-a", TENANT_ALPHA), r41,
-					Set.of(SHARED_TOOL));
+						// One tenant loses a tool on both nodes. The application broker
+						// reaches node A first; node-local comparison suppresses the broad
+						// invalidation for beta and node B remains untouched until delivery.
+						fleet.first().visibleTools(TENANT_ALPHA, Set.of(SHARED_TOOL));
+						fleet.second().visibleTools(TENANT_ALPHA, Set.of(SHARED_TOOL));
+						fleet.broker().publishToolsListChanged(fleet.first());
+						assertListChanged(alphaOnFirst.nextFrame(WAIT));
+						assertThrows(SocketTimeoutException.class,
+								() -> betaOnFirst.nextFrame(NO_EVENT_WAIT));
+						assertThrows(SocketTimeoutException.class,
+								() -> alphaOnSecond.nextFrame(NO_EVENT_WAIT));
+						assertTenantCatalog(fleet.first().toolsList(
+								"filtered-alpha-a", TENANT_ALPHA), r41,
+								Set.of(SHARED_TOOL));
 
-			fleet.broker().publishToolsListChanged(fleet.second());
-			assertListChanged(alphaOnSecond.nextFrame(WAIT));
+						fleet.broker().publishToolsListChanged(fleet.second());
+						assertListChanged(alphaOnSecond.nextFrame(WAIT));
 
-			// At-least-once broker delivery is safe: the exact current visible
-			// projection matches each accepted baseline, so no duplicate wire
-			// notification is emitted.
-			fleet.broker().publishToolsListChanged(fleet.first(), fleet.second());
-			assertThrows(SocketTimeoutException.class,
-					() -> alphaOnFirst.nextFrame(NO_EVENT_WAIT));
-			assertThrows(SocketTimeoutException.class,
-					() -> betaOnFirst.nextFrame(NO_EVENT_WAIT));
-			assertThrows(SocketTimeoutException.class,
-					() -> alphaOnSecond.nextFrame(NO_EVENT_WAIT));
+						// At-least-once broker delivery is safe: the exact current visible
+						// projection matches each accepted baseline, so no duplicate wire
+						// notification is emitted.
+						fleet.broker().publishToolsListChanged(fleet.first(), fleet.second());
+						assertThrows(SocketTimeoutException.class,
+								() -> alphaOnFirst.nextFrame(NO_EVENT_WAIT));
+						assertThrows(SocketTimeoutException.class,
+								() -> betaOnFirst.nextFrame(NO_EVENT_WAIT));
+						assertThrows(SocketTimeoutException.class,
+								() -> alphaOnSecond.nextFrame(NO_EVENT_WAIT));
 
-			// Translation state reaches node A while node B is still stale.
-			// The application installs the snapshot before invoking the public
-			// node-local localization invalidator.
-			fleet.first().install(r42);
-			fleet.broker().publishLocalizationChanged(fleet.first());
-			assertListChanged(alphaOnFirst.nextFrame(WAIT));
-			assertListChanged(betaOnFirst.nextFrame(WAIT));
-			assertThrows(SocketTimeoutException.class,
-					() -> alphaOnSecond.nextFrame(NO_EVENT_WAIT));
-			assertTenantCatalog(fleet.first().toolsList(
-					"translated-alpha-a", TENANT_ALPHA), r42,
-					Set.of(SHARED_TOOL));
-			assertTenantCatalog(fleet.second().toolsList(
-					"delayed-alpha-b", TENANT_ALPHA), r41,
-					Set.of(SHARED_TOOL));
+						// Translation state reaches node A while node B is still stale.
+						// The application installs the snapshot before invoking the public
+						// node-local localization invalidator.
+						fleet.first().install(r42);
+						fleet.broker().publishLocalizationChanged(fleet.first());
+						assertListChanged(alphaOnFirst.nextFrame(WAIT));
+						assertListChanged(betaOnFirst.nextFrame(WAIT));
+						assertThrows(SocketTimeoutException.class,
+								() -> alphaOnSecond.nextFrame(NO_EVENT_WAIT));
+						assertTenantCatalog(fleet.first().toolsList(
+								"translated-alpha-a", TENANT_ALPHA), r42,
+								Set.of(SHARED_TOOL));
+						assertTenantCatalog(fleet.second().toolsList(
+								"delayed-alpha-b", TENANT_ALPHA), r41,
+								Set.of(SHARED_TOOL));
 
-			// Node B catches up its application snapshot while the broker is
-			// interrupted, so its invalidation is deliberately missed. Recovery
-			// uses only the public server-local reconciler; fresh authorization
-			// and catalog projection discover the missed translation change.
-			fleet.broker().interrupt();
-			fleet.second().install(r42);
-			fleet.broker().publishLocalizationChanged(fleet.second());
-			assertThrows(SocketTimeoutException.class,
-					() -> alphaOnSecond.nextFrame(NO_EVENT_WAIT));
-			fleet.broker().recover();
-			assertListChanged(alphaOnSecond.nextFrame(WAIT));
-			assertTenantCatalog(fleet.second().toolsList(
-					"reconciled-alpha-b", TENANT_ALPHA), r42,
-					Set.of(SHARED_TOOL));
+						// Node B catches up its application snapshot while the broker is
+						// interrupted, so its invalidation is deliberately missed. Recovery
+						// uses only the public server-local reconciler; fresh authorization
+						// and catalog projection discover the missed translation change.
+						fleet.broker().interrupt();
+						fleet.second().install(r42);
+						fleet.broker().publishLocalizationChanged(fleet.second());
+						assertThrows(SocketTimeoutException.class,
+								() -> alphaOnSecond.nextFrame(NO_EVENT_WAIT));
+						fleet.broker().recover();
+						assertListChanged(alphaOnSecond.nextFrame(WAIT));
+						assertTenantCatalog(fleet.second().toolsList(
+								"reconciled-alpha-b", TENANT_ALPHA), r42,
+								Set.of(SHARED_TOOL));
 
-			// A whole-subscription revocation is authoritative on both nodes.
-			// Explicit reconciliation observes the denied authorization and closes
-			// each local stream as an authorization denial; the unrelated beta
-			// stream on node A remains live.
-			fleet.first().authorized(TENANT_ALPHA, false);
-			fleet.second().authorized(TENANT_ALPHA, false);
-			fleet.broker().recover();
-			fleet.first().metrics().awaitSubscriptionClosed(
-					McpStreamTerminationReason.SUBSCRIPTION_AUTHORIZATION_DENIED);
-			fleet.second().metrics().awaitSubscriptionClosed(
-					McpStreamTerminationReason.SUBSCRIPTION_AUTHORIZATION_DENIED);
-			alphaOnFirst.awaitTransportClosed(WAIT);
-			alphaOnSecond.awaitTransportClosed(WAIT);
-			awaitRuntime(fleet.first(), 1, 1);
-			awaitRuntime(fleet.second(), 0, 0);
-			fleet.first().visibleTools(TENANT_BETA, Set.of(SHARED_TOOL));
-			fleet.first().publisher().publishToolsListChanged();
-			assertListChanged(betaOnFirst.nextFrame(WAIT));
+						// A whole-subscription revocation is authoritative on both nodes.
+						// Explicit reconciliation observes the denied authorization and closes
+						// each local stream as an authorization denial; the unrelated beta
+						// stream on node A remains live.
+						fleet.first().authorized(TENANT_ALPHA, false);
+						fleet.second().authorized(TENANT_ALPHA, false);
+						fleet.broker().recover();
+						fleet.first().metrics().awaitSubscriptionClosed(
+								McpStreamTerminationReason.SUBSCRIPTION_AUTHORIZATION_DENIED);
+						fleet.second().metrics().awaitSubscriptionClosed(
+								McpStreamTerminationReason.SUBSCRIPTION_AUTHORIZATION_DENIED);
+						alphaOnFirst.awaitTransportClosed(WAIT);
+						alphaOnSecond.awaitTransportClosed(WAIT);
+						awaitRuntime(fleet.first(), 1, 1);
+						awaitRuntime(fleet.second(), 0, 0);
+						fleet.first().visibleTools(TENANT_BETA, Set.of(SHARED_TOOL));
+						fleet.first().publisher().publishToolsListChanged();
+						assertListChanged(betaOnFirst.nextFrame(WAIT));
 
-			// Reconnection is a new admission. After the application restores
-			// access on node B, the client acknowledges there and explicitly
-			// refetches; baseline creation itself is not a replay signal.
-			fleet.second().authorized(TENANT_ALPHA, true);
-			LiveSubscription reconnectedOnSecond = fleet.second().subscribe(
-					"fleet-alpha-reconnected", "fr-CA", TENANT_ALPHA);
-			reconnectedAlpha = reconnectedOnSecond;
-			assertAcknowledgment(reconnectedOnSecond.nextFrame(WAIT));
-			awaitRuntime(fleet.second(), 1, 1);
-			assertThrows(SocketTimeoutException.class,
-					() -> reconnectedOnSecond.nextFrame(NO_EVENT_WAIT));
-			assertTenantCatalog(fleet.second().toolsList(
-					"refetch-on-node-b", TENANT_ALPHA), r42,
-					Set.of(SHARED_TOOL));
+						// Reconnection is a new admission. After the application restores
+						// access on node B, the client acknowledges there and explicitly
+						// refetches; baseline creation itself is not a replay signal.
+						fleet.second().authorized(TENANT_ALPHA, true);
+						LiveSubscription reconnectedOnSecond = fleet.second().subscribe(
+								"fleet-alpha-reconnected", "fr-CA", TENANT_ALPHA);
+						reconnectedAlpha = reconnectedOnSecond;
+						assertAcknowledgment(reconnectedOnSecond.nextFrame(WAIT));
+						awaitRuntime(fleet.second(), 1, 1);
+						assertThrows(SocketTimeoutException.class,
+								() -> reconnectedOnSecond.nextFrame(NO_EVENT_WAIT));
+						assertTenantCatalog(fleet.second().toolsList(
+								"refetch-on-node-b", TENANT_ALPHA), r42,
+								Set.of(SHARED_TOOL));
+					} finally {
+						close(firstAlpha);
+						close(firstBeta);
+						close(secondAlpha);
+						close(reconnectedAlpha);
+						fleet.closeSubscriptions();
+					}
+				});
+			});
 		} finally {
-			close(firstAlpha);
-			close(firstBeta);
-			close(secondAlpha);
-			close(reconnectedAlpha);
-			fleet.close();
+			fleet.clearContexts();
 			assertStoppedWithRetainedAddress(fleet.first());
 			assertStoppedWithRetainedAddress(fleet.second());
 		}
@@ -554,7 +576,7 @@ class McpLocalizationFleetPublicRuntimeTests {
 		}
 	}
 
-	private static final class TwoNodeFleet implements AutoCloseable {
+	private static final class TwoNodeFleet {
 		private final FleetNode first = new FleetNode("node-a",
 				CatalogSnapshot.valid("R41"));
 		private final FleetNode second = new FleetNode("node-b",
@@ -573,16 +595,6 @@ class McpLocalizationFleetPublicRuntimeTests {
 
 		private FleetBroker broker() {
 			return this.broker;
-		}
-
-		private void start() {
-			try {
-				this.first.start();
-				this.second.start();
-			} catch (RuntimeException exception) {
-				close();
-				throw exception;
-			}
 		}
 
 		private void stage(CatalogSnapshot firstCandidate,
@@ -613,10 +625,52 @@ class McpLocalizationFleetPublicRuntimeTests {
 						"Catalog validation failed for " + node.name());
 		}
 
+		private void closeSubscriptions() {
+			this.first.closeSubscriptions();
+			this.second.closeSubscriptions();
+		}
+
+		private void clearContexts() {
+			this.first.clearContexts();
+			this.second.clearContexts();
+		}
+	}
+
+	// This fixture is used only where node loss is the behavior under test.
+	private static final class ManualTwoNodeFleet implements AutoCloseable {
+		private final TwoNodeFleet fleet = new TwoNodeFleet();
+		private final Soklet firstOwner;
+		private final Soklet secondOwner;
+
+		private ManualTwoNodeFleet() {
+			this.firstOwner = Soklet.fromConfig(this.fleet.first().config);
+			this.secondOwner = Soklet.fromConfig(this.fleet.second().config);
+		}
+
+		private FleetNode first() { return this.fleet.first(); }
+		private FleetNode second() { return this.fleet.second(); }
+
+		private void start() {
+			try {
+				this.firstOwner.start();
+				this.secondOwner.start();
+			} catch (RuntimeException exception) {
+				close();
+				throw exception;
+			}
+		}
+
+		private void stopFirst() { this.firstOwner.close(); }
+		private void stopSecond() { this.secondOwner.close(); }
+
 		@Override
 		public void close() {
-			this.first.close();
-			this.second.close();
+			this.fleet.first().closeSubscriptions();
+			this.firstOwner.close();
+			this.fleet.first().clearContexts();
+			this.fleet.second().closeSubscriptions();
+			this.secondOwner.close();
+			this.fleet.second().clearContexts();
 		}
 	}
 
@@ -654,7 +708,7 @@ class McpLocalizationFleetPublicRuntimeTests {
 		}
 	}
 
-	private static final class FleetNode implements AutoCloseable {
+	private static final class FleetNode {
 		private final String name;
 		private final AtomicReference<CatalogSnapshot> activeSnapshot;
 		private final McpSubscriptionEventPublisher publisher =
@@ -673,7 +727,7 @@ class McpLocalizationFleetPublicRuntimeTests {
 				new CopyOnWriteArrayList<>();
 		private final RecordingMetrics metrics = new RecordingMetrics();
 		private final McpServer server;
-		private final Soklet soklet;
+		private final SokletConfig config;
 
 		private FleetNode(String name, CatalogSnapshot initialSnapshot) {
 			this.name = name;
@@ -687,12 +741,12 @@ class McpLocalizationFleetPublicRuntimeTests {
 			this.authorizedTenants.addAll(
 					Set.of(ANONYMOUS, TENANT_ALPHA, TENANT_BETA));
 			this.server = buildServer();
-			this.soklet = Soklet.fromConfig(SokletConfig.withMcpServer(this.server)
+			this.config = SokletConfig.withMcpServer(this.server)
 					.resourceMethodResolver(
 							ResourceMethodResolver.fromMethods(Set.of()))
 					.metricsCollector(this.metrics)
 					.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
-					.build());
+					.build();
 		}
 
 		private String name() {
@@ -737,14 +791,6 @@ class McpLocalizationFleetPublicRuntimeTests {
 
 		private void recordValidation() {
 			this.validations.incrementAndGet();
-		}
-
-		private void start() {
-			this.soklet.start();
-		}
-
-		private void stop() {
-			this.soklet.close();
 		}
 
 		private void activate(CatalogSnapshot snapshot) {
@@ -942,11 +988,12 @@ class McpLocalizationFleetPublicRuntimeTests {
 					.build();
 		}
 
-		@Override
-		public void close() {
+		private void closeSubscriptions() {
 			for (LiveSubscription subscription : this.subscriptions)
 				subscription.close();
-			this.soklet.close();
+		}
+
+		private void clearContexts() {
 			this.contexts.clear();
 		}
 	}

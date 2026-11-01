@@ -63,12 +63,12 @@ public class StreamingCleanupDiagnosticsTests {
 				Assertions.assertSame(failure, exception.getCause());
 			});
 		} else {
-			try (HttpFixture fixture = new HttpFixture(resource, observation, Duration.ofSeconds(5))) {
-				fixture.start();
+			HttpFixture fixture = new HttpFixture(resource, observation, Duration.ofSeconds(5));
+			Soklet.run(fixture.config, () -> {
 				String wire = fixture.request("/stream");
 				Assertions.assertTrue(wire.startsWith("HTTP/1.1 200 OK"), wire);
 				Assertions.assertFalse(wire.endsWith("0\r\n\r\n"), "Failed cleanup must not report a complete body");
-			}
+			});
 		}
 		Assertions.assertTrue(observation.terminated.await(3, TimeUnit.SECONDS));
 		Assertions.assertEquals(1, closes.get());
@@ -91,7 +91,7 @@ public class StreamingCleanupDiagnosticsTests {
 			entered.countDown();
 			awaitUninterruptibly(releaseWriter);
 		}));
-		HttpFixture fixture = new HttpFixture(resource, observation, Duration.ofMillis(150));
+		ManualHttpFixture fixture = new ManualHttpFixture(resource, observation, Duration.ofMillis(150));
 		try (fixture) {
 			fixture.start();
 			String wire = fixture.request("/stream");
@@ -120,10 +120,10 @@ public class StreamingCleanupDiagnosticsTests {
 						Assertions.assertThrows(IllegalStateException.class,
 								() -> simulator.performHttpRequest(Request.fromPath(HttpMethod.GET, "/stream"))));
 			} else {
-				try (HttpFixture fixture = new HttpFixture(resource, observation, Duration.ofSeconds(5))) {
-					fixture.start();
+				HttpFixture fixture = new HttpFixture(resource, observation, Duration.ofSeconds(5));
+				Soklet.run(fixture.config, () -> {
 					Assertions.assertTrue(fixture.request("/stream").startsWith("HTTP/1.1 200 OK"));
-				}
+				});
 			}
 			Assertions.assertTrue(observation.terminated.await(3, TimeUnit.SECONDS));
 			Assertions.assertEquals(StreamTerminationReason.PRODUCER_FAILED, observation.termination.get().getReason());
@@ -163,7 +163,7 @@ public class StreamingCleanupDiagnosticsTests {
 		Observation observation = new Observation(false);
 		TestResource resource = new TestResource(StreamingResponseBody.fromWriter(stream ->
 				stream.open(() -> (AutoCloseable) () -> { closeEntered.countDown(); awaitUninterruptibly(releaseClose); })));
-		HttpFixture fixture = new HttpFixture(resource, observation, Duration.ofSeconds(5), Duration.ofMillis(100));
+		ManualHttpFixture fixture = new ManualHttpFixture(resource, observation, Duration.ofSeconds(5), Duration.ofMillis(100));
 		try (fixture) {
 			fixture.start();
 			Assertions.assertTrue(fixture.request("/stream").startsWith("HTTP/1.1 200 OK"));
@@ -191,8 +191,7 @@ public class StreamingCleanupDiagnosticsTests {
 			throw failure;
 		}));
 		HttpFixture fixture = new HttpFixture(resource, observation, Duration.ofMillis(150));
-		try (fixture) {
-			fixture.start();
+		Soklet.run(fixture.config, () -> {
 			Assertions.assertTrue(fixture.request("/stream").startsWith("HTTP/1.1 200 OK"));
 			Assertions.assertTrue(observation.terminated.await(3, TimeUnit.SECONDS));
 			Assertions.assertEquals(StreamTerminationReason.RESPONSE_TIMEOUT, observation.termination.get().getReason());
@@ -207,7 +206,7 @@ public class StreamingCleanupDiagnosticsTests {
 			Assertions.assertSame(failure, producerFailures.get(0).getThrowable().orElseThrow());
 			Assertions.assertSame(resource.request.get(), producerFailures.get(0).getRequest().orElseThrow());
 			Assertions.assertEquals(StreamTerminationReason.RESPONSE_TIMEOUT, observation.termination.get().getReason());
-		}
+		});
 	}
 
 	@Test
@@ -221,8 +220,7 @@ public class StreamingCleanupDiagnosticsTests {
 			throw failure;
 		}));
 		HttpFixture fixture = new HttpFixture(resource, observation, Duration.ofMillis(150));
-		try (fixture) {
-			fixture.start();
+		Soklet.run(fixture.config, () -> {
 			Assertions.assertTrue(fixture.request("/stream").startsWith("HTTP/1.1 200 OK"));
 			Assertions.assertTrue(observation.terminated.await(3, TimeUnit.SECONDS));
 			fixture.coordinator().requestGracefulShutdown();
@@ -232,7 +230,7 @@ public class StreamingCleanupDiagnosticsTests {
 			Assertions.assertEquals(1, producerFailures.size());
 			Assertions.assertSame(failure, producerFailures.get(0).getThrowable().orElseThrow());
 			Assertions.assertTrue(observation.logs(LogEventType.RESPONSE_STREAM_CLOSE_FAILED).isEmpty());
-		}
+		});
 	}
 
 	@Test
@@ -264,8 +262,8 @@ public class StreamingCleanupDiagnosticsTests {
 					}
 				}
 			}));
-			try (HttpFixture fixture = new HttpFixture(resource, observation, Duration.ofMillis(150))) {
-				fixture.start();
+			HttpFixture fixture = new HttpFixture(resource, observation, Duration.ofMillis(150));
+			Soklet.run(fixture.config, () -> {
 				Assertions.assertTrue(fixture.request("/stream").startsWith("HTTP/1.1 200 OK"));
 				Assertions.assertTrue(observation.terminated.await(3, TimeUnit.SECONDS));
 				fixture.coordinator().requestGracefulShutdown();
@@ -280,7 +278,7 @@ public class StreamingCleanupDiagnosticsTests {
 				Assertions.assertEquals(StreamTerminationReason.RESPONSE_TIMEOUT, observation.termination.get().getReason());
 				Assertions.assertTrue(observation.logs(LogEventType.RESPONSE_STREAM_FAILED).isEmpty());
 				Assertions.assertTrue(observation.logs(LogEventType.RESPONSE_STREAM_CLOSE_FAILED).isEmpty());
-			}
+			});
 		}
 	}
 
@@ -308,8 +306,7 @@ public class StreamingCleanupDiagnosticsTests {
 			}
 		}));
 		HttpFixture fixture = new HttpFixture(resource, observation, Duration.ofMillis(150));
-		try (fixture) {
-			fixture.start();
+		Soklet.run(fixture.config, () -> {
 			Assertions.assertTrue(fixture.request("/stream").startsWith("HTTP/1.1 200 OK"));
 			Assertions.assertTrue(observation.terminated.await(3, TimeUnit.SECONDS));
 			fixture.coordinator().requestGracefulShutdown();
@@ -321,7 +318,7 @@ public class StreamingCleanupDiagnosticsTests {
 			if (!interruptedConnect)
 				Assertions.assertSame(failure.get(), producerFailures.get(0).getThrowable().orElseThrow());
 			Assertions.assertTrue(observation.logs(LogEventType.RESPONSE_STREAM_CLOSE_FAILED).isEmpty());
-		}
+		});
 	}
 
 	/** Exercises JDK 21 Socket.connect translation; newer JDKs retain the typed fixture cause. */
@@ -354,7 +351,7 @@ public class StreamingCleanupDiagnosticsTests {
 		Observation observation = new Observation(true);
 		TestResource resource = new TestResource(StreamingResponseBody.fromWriter(stream ->
 				stream.open(() -> (AutoCloseable) () -> { throw failure; })));
-		HttpFixture fixture = new HttpFixture(resource, observation, Duration.ofSeconds(5));
+		ManualHttpFixture fixture = new ManualHttpFixture(resource, observation, Duration.ofSeconds(5));
 		try (fixture) {
 			fixture.start();
 			Assertions.assertTrue(fixture.request("/stream").startsWith("HTTP/1.1 200 OK"));
@@ -411,11 +408,10 @@ public class StreamingCleanupDiagnosticsTests {
 		if (interrupted) Thread.currentThread().interrupt();
 	}
 
-	private static final class HttpFixture implements AutoCloseable {
+	private static class HttpFixture {
 		private final int port = findFreePort();
-		private final DefaultHttpServer server;
-		private final Soklet soklet;
-		private StreamLifecycleCoordinator coordinator;
+		final DefaultHttpServer server;
+		final SokletConfig config;
 		private HttpFixture(TestResource resource, Observation observation, Duration responseTimeout) throws IOException {
 			this(resource, observation, responseTimeout, Duration.ofSeconds(5));
 		}
@@ -423,18 +419,14 @@ public class StreamingCleanupDiagnosticsTests {
 			this.server = (DefaultHttpServer) HttpServer.withPort(this.port).host("127.0.0.1").concurrency(1)
 					.streamingLifecycleCapacity(1).streamingCallbackConcurrency(1)
 					.streamingResponseTimeout(responseTimeout).streamingCleanupTimeout(cleanupTimeout).build();
-			this.soklet = Soklet.fromConfig(SokletConfig.withHttpServer(this.server)
+			this.config = SokletConfig.withHttpServer(this.server)
 					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(TestResource.class)))
 					.instanceProvider(provider(resource)).lifecycleObserver(observation)
 					.lifecyclePolicy(LifecyclePolicy.builder().gracefulShutdownTimeout(Duration.ofMillis(100))
-							.forcedShutdownTimeout(Duration.ofMillis(100)).build()).build());
+							.forcedShutdownTimeout(Duration.ofMillis(100)).build()).build();
 		}
-		private void start() {
-			this.soklet.start();
-			this.coordinator = this.server.getStreamLifecycleCoordinatorForTests().orElseThrow();
-		}
-		private StreamLifecycleCoordinator coordinator() { return this.coordinator; }
-		private String request(String path) throws Exception {
+		StreamLifecycleCoordinator coordinator() { return this.server.getStreamLifecycleCoordinatorForTests().orElseThrow(); }
+		String request(String path) throws Exception {
 			try (Socket socket = connectWithRetry("127.0.0.1", this.port, 3_000)) {
 				socket.setSoTimeout(3_000);
 				socket.getOutputStream().write(("GET " + path + " HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
@@ -442,9 +434,22 @@ public class StreamingCleanupDiagnosticsTests {
 				return new String(socket.getInputStream().readAllBytes(), StandardCharsets.ISO_8859_1);
 			}
 		}
-		private void awaitPhysicalExit() throws Exception {
+		void awaitPhysicalExit() throws Exception {
 			Assertions.assertTrue(coordinator().awaitTermination(System.nanoTime() + TimeUnit.SECONDS.toNanos(5)));
 		}
+	}
+
+	/** Tests that seal shutdown while physical work is held need direct owner control. */
+	private static final class ManualHttpFixture extends HttpFixture implements AutoCloseable {
+		private final Soklet soklet;
+		private ManualHttpFixture(TestResource resource, Observation observation, Duration responseTimeout) throws IOException {
+			this(resource, observation, responseTimeout, Duration.ofSeconds(5));
+		}
+		private ManualHttpFixture(TestResource resource, Observation observation, Duration responseTimeout, Duration cleanupTimeout) throws IOException {
+			super(resource, observation, responseTimeout, cleanupTimeout);
+			this.soklet = Soklet.fromConfig(this.config);
+		}
+		private void start() { this.soklet.start(); }
 		@Override public void close() throws Exception {
 			this.soklet.shutdown().toCompletableFuture().get(3, TimeUnit.SECONDS);
 		}

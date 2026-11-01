@@ -55,47 +55,48 @@ public class SseLifecycleAdmissionTests {
 		AtomicInteger initializerCalls = new AtomicInteger();
 		List<Socket> sockets = new ArrayList<>();
 		Fixture fixture = new Fixture(Duration.ofSeconds(2));
-		try {
-			fixture.initializer("saturation", ignored -> initializerCalls.incrementAndGet());
-			fixture.start();
-			fixture.assertDefaults();
-			StreamLifecycleCoordinator coordinator = fixture.coordinator();
-			for (int index = 0; index < capacity; index++) {
-				Socket socket = fixture.request("saturation");
-				sockets.add(socket);
-				assertStatus(socket, 200);
+		fixture.initializer("saturation", ignored -> initializerCalls.incrementAndGet());
+		ShutdownResult result = Soklet.run(fixture.config, () -> {
+			try {
+				fixture.assertDefaults();
+				StreamLifecycleCoordinator coordinator = fixture.coordinator();
+				for (int index = 0; index < capacity; index++) {
+					Socket socket = fixture.request("saturation");
+					sockets.add(socket);
+					assertStatus(socket, 200);
+				}
+				eventually(() -> fixture.server.getGlobalConnections().size() == capacity);
+				Assertions.assertEquals(capacity, initializerCalls.get());
+				Assertions.assertEquals(capacity, coordinator.snapshot().reservations());
+				try (Socket rejected = fixture.request("saturation")) {
+					String headers = assertStatus(rejected, 503);
+					Assertions.assertFalse(headers.contains("text/event-stream"));
+				}
+				Assertions.assertEquals(capacity, initializerCalls.get());
+				for (Socket socket : sockets) {
+					socket.setSoLinger(true, 0);
+					socket.close();
+				}
+				fixture.server.acquireBroadcaster(ResourcePath.fromPath("/saturation/saturation")).orElseThrow()
+						.broadcastEvent(SseEvent.withData("detect reset").build());
+				eventually(() -> coordinator.snapshot().reservations() == 0, Duration.ofSeconds(10));
+				Assertions.assertEquals(0, coordinator.snapshot().callbacks());
+				try (Socket recovered = fixture.request("saturation")) {
+					assertStatus(recovered, 200);
+					eventually(() -> initializerCalls.get() == capacity + 1);
+				}
+			} finally {
+				for (Socket socket : sockets)
+					socket.close();
 			}
-			eventually(() -> fixture.server.getGlobalConnections().size() == capacity);
-			Assertions.assertEquals(capacity, initializerCalls.get());
-			Assertions.assertEquals(capacity, coordinator.snapshot().reservations());
-			try (Socket rejected = fixture.request("saturation")) {
-				String headers = assertStatus(rejected, 503);
-				Assertions.assertFalse(headers.contains("text/event-stream"));
-			}
-			Assertions.assertEquals(capacity, initializerCalls.get());
-			for (Socket socket : sockets) {
-				socket.setSoLinger(true, 0);
-				socket.close();
-			}
-			fixture.server.acquireBroadcaster(ResourcePath.fromPath("/saturation/saturation")).orElseThrow()
-					.broadcastEvent(SseEvent.withData("detect reset").build());
-			eventually(() -> coordinator.snapshot().reservations() == 0, Duration.ofSeconds(10));
-			Assertions.assertEquals(0, coordinator.snapshot().callbacks());
-			try (Socket recovered = fixture.request("saturation")) {
-				assertStatus(recovered, 200);
-				eventually(() -> initializerCalls.get() == capacity + 1);
-			}
-		} finally {
-			for (Socket socket : sockets)
-				socket.close();
-			fixture.close();
-		}
+		});
+		Assertions.assertTrue(result.isComplete());
 	}
 
-	private static final class Fixture implements AutoCloseable {
+	private static final class Fixture {
 		private final int port = findFreePort();
 		private final DefaultSseServer server;
-		private final Soklet soklet;
+		private final SokletConfig config;
 		private final Map<String, SseClientInitializer> initializers = new ConcurrentHashMap<>();
 		private Fixture(Duration shutdownTimeout) throws Exception {
 			// Lifecycle capacity is deliberately omitted: this test qualifies its default.
@@ -105,7 +106,7 @@ public class SseLifecycleAdmissionTests {
 					.connectionQueueCapacity(8).verifyConnectionOnceEstablished(false)
 					.heartbeatInterval(Duration.ofMillis(200)).build();
 			Resource resource = new Resource(this.initializers);
-			this.soklet = Soklet.fromConfig(SokletConfig.withSseServer(this.server)
+			this.config = SokletConfig.withSseServer(this.server)
 					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Resource.class)))
 					.instanceProvider(new InstanceProvider() {
 						@Override public <T> T provide(Class<T> type) {
@@ -114,12 +115,11 @@ public class SseLifecycleAdmissionTests {
 					}).lifecycleObserver(new LifecycleObserver() {
 						@Override public void didReceiveLogEvent(@NonNull LogEvent event) {}
 					}).lifecyclePolicy(LifecyclePolicy.builder().gracefulShutdownTimeout(shutdownTimeout)
-							.forcedShutdownTimeout(shutdownTimeout).build()).build());
+							.forcedShutdownTimeout(shutdownTimeout).build()).build();
 		}
 		private void initializer(String name, SseClientInitializer initializer) {
 			this.initializers.put("/saturation/" + name, initializer);
 		}
-		private void start() { this.soklet.start(); }
 		private void assertDefaults() {
 			Assertions.assertEquals(256, this.server.getStreamingLifecycleCapacity());
 		}
@@ -133,12 +133,6 @@ public class SseLifecycleAdmissionTests {
 					+ " HTTP/1.1\r\nHost: localhost\r\nAccept: text/event-stream\r\n\r\n")
 					.getBytes(StandardCharsets.ISO_8859_1));
 			return socket;
-		}
-		@Override public void close() throws Exception {
-			if (this.soklet.getShutdownResult().map(result -> !result.isComplete()).orElse(false))
-				Assertions.assertThrows(SokletShutdownIncompleteException.class, this.soklet::close);
-			else
-				this.soklet.close();
 		}
 	}
 

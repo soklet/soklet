@@ -108,67 +108,67 @@ public class McpTypedToolPublicRuntimeTests {
 					return executor;
 				})
 				.build();
-		Soklet soklet = managedSoklet(server);
+		SokletConfig sokletConfig = config(server);
 
 		try {
-			soklet.start();
-			int port = server.getDiagnostics().getBoundAddress()
-					.orElseThrow().getPort();
-			CompletableFuture<HttpResponse<String>> first = sendAsync(port,
-					request("capacity-1", "tools/call",
-							",\"name\":\"bounded\",\"arguments\":{}"),
-					"tools/call", "bounded");
-			Assertions.assertTrue(firstHandlerEntered.await(5, TimeUnit.SECONDS),
-					"The first bounded handler did not start.");
+			Soklet.run(sokletConfig, () -> {
+				try {
+					int port = server.getDiagnostics().getBoundAddress()
+							.orElseThrow().getPort();
+					CompletableFuture<HttpResponse<String>> first = sendAsync(port,
+							request("capacity-1", "tools/call",
+									",\"name\":\"bounded\",\"arguments\":{}"),
+							"tools/call", "bounded");
+					Assertions.assertTrue(firstHandlerEntered.await(5, TimeUnit.SECONDS),
+							"The first bounded handler did not start.");
 
-			CompletableFuture<HttpResponse<String>> second = sendAsync(port,
-					request("capacity-2", "tools/call",
-							",\"name\":\"bounded\",\"arguments\":{}"),
-					"tools/call", "bounded");
-			CompletableFuture<HttpResponse<String>> third = sendAsync(port,
-					request("capacity-3", "tools/call",
-							",\"name\":\"bounded\",\"arguments\":{}"),
-					"tools/call", "bounded");
+					CompletableFuture<HttpResponse<String>> second = sendAsync(port,
+							request("capacity-2", "tools/call",
+									",\"name\":\"bounded\",\"arguments\":{}"),
+							"tools/call", "bounded");
+					CompletableFuture<HttpResponse<String>> third = sendAsync(port,
+							request("capacity-3", "tools/call",
+									",\"name\":\"bounded\",\"arguments\":{}"),
+							"tools/call", "bounded");
 
-			HttpResponse<String> rejected = second.applyToEither(third,
-					response -> response).get(5, TimeUnit.SECONDS);
-			Assertions.assertEquals(503, rejected.statusCode(), rejected.body());
-			assertContains(rejected.body(), "\"code\":-32603");
-			assertContains(rejected.body(), "\"message\":\"Internal error\"");
-			Assertions.assertFalse(rejected.body().contains("\"data\""),
-					rejected.body());
-			Assertions.assertTrue(rejected.headers().firstValue("Retry-After").isEmpty());
-			Assertions.assertTrue(rejected.body().contains("\"id\":\"capacity-2\"")
-					|| rejected.body().contains("\"id\":\"capacity-3\""),
-					rejected.body());
+					HttpResponse<String> rejected = second.applyToEither(third,
+							response -> response).get(5, TimeUnit.SECONDS);
+					Assertions.assertEquals(503, rejected.statusCode(), rejected.body());
+					assertContains(rejected.body(), "\"code\":-32603");
+					assertContains(rejected.body(), "\"message\":\"Internal error\"");
+					Assertions.assertFalse(rejected.body().contains("\"data\""),
+							rejected.body());
+					Assertions.assertTrue(rejected.headers().firstValue("Retry-After").isEmpty());
+					Assertions.assertTrue(rejected.body().contains("\"id\":\"capacity-2\"")
+							|| rejected.body().contains("\"id\":\"capacity-3\""),
+							rejected.body());
 
-			releaseFirstHandler.countDown();
-			HttpResponse<String> firstResponse = first.get(5, TimeUnit.SECONDS);
-			HttpResponse<String> secondResponse = second.get(5, TimeUnit.SECONDS);
-			HttpResponse<String> thirdResponse = third.get(5, TimeUnit.SECONDS);
-			Assertions.assertEquals(2, List.of(firstResponse, secondResponse,
-					thirdResponse).stream()
-					.filter(response -> response.statusCode() == 200)
-					.count());
-			Assertions.assertEquals(1, List.of(firstResponse, secondResponse,
-					thirdResponse).stream()
-					.filter(response -> response.statusCode() == 503)
-					.count());
-			Assertions.assertEquals(2, handlerInvocations.get());
-			Assertions.assertEquals(2, handlerInterceptorInvocations.get(),
-					"A capacity-rejected request must not reach public interception.");
-			Assertions.assertEquals(1, maximumActiveHandlers.get(),
-					"A roomy custom executor must not bypass Soklet's slot bound.");
-			Assertions.assertEquals(1, supplierInvocations.get());
+					releaseFirstHandler.countDown();
+					HttpResponse<String> firstResponse = first.get(5, TimeUnit.SECONDS);
+					HttpResponse<String> secondResponse = second.get(5, TimeUnit.SECONDS);
+					HttpResponse<String> thirdResponse = third.get(5, TimeUnit.SECONDS);
+					Assertions.assertEquals(2, List.of(firstResponse, secondResponse,
+							thirdResponse).stream()
+							.filter(response -> response.statusCode() == 200)
+							.count());
+					Assertions.assertEquals(1, List.of(firstResponse, secondResponse,
+							thirdResponse).stream()
+							.filter(response -> response.statusCode() == 503)
+							.count());
+					Assertions.assertEquals(2, handlerInvocations.get());
+					Assertions.assertEquals(2, handlerInterceptorInvocations.get(),
+							"A capacity-rejected request must not reach public interception.");
+					Assertions.assertEquals(1, maximumActiveHandlers.get(),
+							"A roomy custom executor must not bypass Soklet's slot bound.");
+					Assertions.assertEquals(1, supplierInvocations.get());
+				} finally {
+					releaseFirstHandler.countDown();
+				}
+			});
 		} finally {
-			releaseFirstHandler.countDown();
-			try {
-				soklet.close();
-			} finally {
-				ExecutorService executor = suppliedExecutor.get();
-				if (executor != null)
-					executor.shutdownNow();
-			}
+			ExecutorService executor = suppliedExecutor.get();
+			if (executor != null)
+				executor.shutdownNow();
 		}
 		Assertions.assertTrue(suppliedExecutor.get().isShutdown());
 	}
@@ -234,10 +234,9 @@ public class McpTypedToolPublicRuntimeTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
-		Soklet soklet = managedSoklet(server);
+		SokletConfig sokletConfig = config(server);
 
-		try {
-			soklet.start();
+		Soklet.run(sokletConfig, () -> {
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 
@@ -332,9 +331,7 @@ public class McpTypedToolPublicRuntimeTests {
 			assertError(unknownResponse, 400, -32602, "unknown-1");
 			Assertions.assertEquals(List.of("admission:catalog.absent"), stages);
 			Assertions.assertEquals(1, handlerInvocations.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -374,10 +371,9 @@ public class McpTypedToolPublicRuntimeTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
-		Soklet soklet = managedSoklet(server);
+		SokletConfig sokletConfig = config(server);
 
-		try {
-			soklet.start();
+		Soklet.run(sokletConfig, () -> {
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			String body = "{\"jsonrpc\":\"2.0\",\"id\":\"propagation-1\","
@@ -402,16 +398,14 @@ public class McpTypedToolPublicRuntimeTests {
 					handlerHttpTraceContext.get().getTraceId());
 			Assertions.assertEquals(Map.of("userId", "Amélie", "serverNode", "DF 28"),
 					handlerBaggage.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
-	private static Soklet managedSoklet(McpServer server) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+	private static SokletConfig config(McpServer server) {
+		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
-				.build());
+				.build();
 	}
 
 	private static HttpResponse<String> send(int port, String body,

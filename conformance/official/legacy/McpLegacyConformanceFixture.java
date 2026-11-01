@@ -75,6 +75,7 @@ public final class McpLegacyConformanceFixture {
 	private McpLegacyConformanceFixture() {
 	}
 
+	@SuppressWarnings("try") // The cleanup scope is intentionally not referenced by its body.
 	public static void main(String[] arguments) throws Exception {
 		if ((arguments.length != 2 && arguments.length != 4) || !"--version".equals(arguments[0])
 				|| (arguments.length == 4 && !"--profile".equals(arguments[2])))
@@ -167,8 +168,11 @@ public final class McpLegacyConformanceFixture {
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.build();
 
-		try (Soklet soklet = Soklet.fromConfig(configuration)) {
-			soklet.start();
+		Soklet soklet = Soklet.run(configuration);
+		try (AutoCloseable sokletShutdown = () -> {
+			soklet.requestShutdown();
+			soklet.awaitShutdownAsync().toCompletableFuture().join();
+		}) {
 			InetSocketAddress address = server.getDiagnostics().getBoundAddress()
 					.orElseThrow();
 			if (!address.getAddress().isLoopbackAddress())
@@ -183,7 +187,7 @@ public final class McpLegacyConformanceFixture {
 			while (System.in.read() >= 0) {
 				// EOF from the supervised runner requests graceful shutdown.
 			}
-			soklet.shutdown();
+			soklet.requestShutdown();
 			soklet.awaitShutdown();
 		}
 		System.out.println("{\"format\":1,\"event\":\"stopped\",\"clean\":true}");

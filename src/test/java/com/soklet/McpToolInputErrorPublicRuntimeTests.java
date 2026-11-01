@@ -95,9 +95,8 @@ class McpToolInputErrorPublicRuntimeTests {
 						throw new IllegalStateException(SECRET);
 					return result;
 				}).build();
-		try (Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
-				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).build())) {
-			soklet.start();
+		Soklet.run(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).build(), () -> {
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			int invalidCalls = 0;
 			for (String arguments : List.of("{}", "{\"count\":\"" + SECRET + "\"}",
@@ -151,7 +150,7 @@ class McpToolInputErrorPublicRuntimeTests {
 			assertEquals(200, validAuthored.status(), validAuthored.body());
 			assertTrue(validAuthored.body().contains("\"text\":\"accepted\""), validAuthored.body());
 			assertEquals(2, handlerCalls.get());
-		}
+		});
 	}
 
 	private static Response call(int port, McpProtocolVersion version, String id,

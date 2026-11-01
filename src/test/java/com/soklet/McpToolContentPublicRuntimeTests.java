@@ -110,10 +110,9 @@ public class McpToolContentPublicRuntimeTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
-		Soklet owner = managedSoklet(server);
+		SokletConfig ownerConfig = config(server);
 
-		try {
-			owner.start();
+		Soklet.run(ownerConfig, () -> {
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 
@@ -164,16 +163,14 @@ public class McpToolContentPublicRuntimeTests {
 			Assertions.assertFalse(nodeBoundaryStructured.contains("\"text\":"),
 					"A compatibility mirror that crosses the JSON node limit must be omitted.");
 			assertSuccessfulToolOutput(nodeBoundaryStructured);
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
-	private static Soklet managedSoklet(McpServer server) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+	private static SokletConfig config(McpServer server) {
+		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
-				.build());
+				.build();
 	}
 
 	private static McpToolRegistration<McpJsonObject> tool(String name,

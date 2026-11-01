@@ -70,19 +70,22 @@ public class StreamingLifecycleTests {
 		Fixture fixture = new Fixture(1, 1, Duration.ofSeconds(2), Duration.ZERO, null);
 		fixture.body("held", StreamingResponseBody.fromWriter(stream -> release.await()));
 		fixture.body("rejected", StreamingResponseBody.fromWriter(stream -> Assertions.fail("Rejected writer entered")));
-		try {
-			fixture.start();
-			try (Socket held = fixture.request("/stream/held")) {
-				assertStatus(held, 200);
-				try (Socket rejected = fixture.request("/stream/rejected")) {
-					assertStatus(rejected, 503); readRemainder(rejected);
+		Soklet.run(fixture.config, () -> {
+			try {
+				try (Socket held = fixture.request("/stream/held")) {
+					assertStatus(held, 200);
+					try (Socket rejected = fixture.request("/stream/rejected")) {
+						assertStatus(rejected, 503); readRemainder(rejected);
+					}
+					assertEventually(() -> fixture.finishedResponses.containsKey("/stream/rejected")
+							&& fixture.terminations.containsKey("/stream/rejected"), "No rejection evidence");
+					assertRejectedResponseEvidence(fixture);
+					release.countDown(); readRemainder(held);
 				}
-				assertEventually(() -> fixture.finishedResponses.containsKey("/stream/rejected")
-						&& fixture.terminations.containsKey("/stream/rejected"), "No rejection evidence");
-				assertRejectedResponseEvidence(fixture);
-				release.countDown(); readRemainder(held);
+			} finally {
+				release.countDown();
 			}
-		} finally { release.countDown(); fixture.shutdown(); }
+		});
 		Assertions.assertEquals(1, fixture.terminationCounts.get("/stream/rejected").get());
 	}
 
@@ -105,7 +108,7 @@ public class StreamingLifecycleTests {
 		LifecyclePolicy drainingPolicy = LifecyclePolicy.builder()
 				.gracefulShutdownTimeout(Duration.ofSeconds(3))
 				.forcedShutdownTimeout(Duration.ofSeconds(1)).build();
-		Fixture fixture = new Fixture(1, 1, Duration.ofSeconds(5), Duration.ZERO,
+		ManualFixture fixture = new ManualFixture(1, 1, Duration.ofSeconds(5), Duration.ZERO,
 				null, Duration.ofSeconds(2), drainingPolicy);
 		fixture.body("draining", StreamingResponseBody.fromWriter(responseStream -> {
 			responseStream.write("first".getBytes(StandardCharsets.UTF_8));
@@ -161,27 +164,27 @@ public class StreamingLifecycleTests {
 			stream.flush();
 			release.await();
 		}));
-		try {
-			fixture.start();
-			for (int i = 0; i < heldCount; i++) {
-				Socket socket = fixture.request("/stream/held");
-				heldSockets.add(socket);
-				assertStatus(socket, 200);
-				Assertions.assertEquals("5\r\nready\r\n", new String(socket.getInputStream().readNBytes(10),
-						StandardCharsets.ISO_8859_1));
+		Soklet.run(fixture.config, () -> {
+			try {
+				for (int i = 0; i < heldCount; i++) {
+					Socket socket = fixture.request("/stream/held");
+					heldSockets.add(socket);
+					assertStatus(socket, 200);
+					Assertions.assertEquals("5\r\nready\r\n", new String(socket.getInputStream().readNBytes(10),
+							StandardCharsets.ISO_8859_1));
+				}
+				try (Socket extra = fixture.request("/stream/held")) {
+					assertStatus(extra, 200);
+					Assertions.assertEquals("5\r\nready\r\n", new String(extra.getInputStream().readNBytes(10),
+							StandardCharsets.ISO_8859_1));
+				}
+				Assertions.assertEquals(heldCount + 1, entered.get());
+			} finally {
+				release.countDown();
+				for (Socket socket : heldSockets)
+					socket.close();
 			}
-			try (Socket extra = fixture.request("/stream/held")) {
-				assertStatus(extra, 200);
-				Assertions.assertEquals("5\r\nready\r\n", new String(extra.getInputStream().readNBytes(10),
-						StandardCharsets.ISO_8859_1));
-			}
-			Assertions.assertEquals(heldCount + 1, entered.get());
-		} finally {
-			release.countDown();
-			for (Socket socket : heldSockets)
-				socket.close();
-			fixture.shutdown();
-		}
+		});
 	}
 
 	@Test
@@ -203,29 +206,29 @@ public class StreamingLifecycleTests {
 		}));
 		fixture.body("rejected", StreamingResponseBody.fromWriter(responseStream ->
 				rejectedWriterCalls.incrementAndGet()));
-		try {
-			fixture.start();
-			try (Socket held = fixture.request("/stream/held")) {
-				assertStatus(held, 200);
-				await(entered, "The custom executor's one worker did not enter production");
-				try (Socket rejected = fixture.request("/stream/rejected")) {
-					String headers = assertStatus(rejected, 503);
-					Assertions.assertFalse(headers.toLowerCase().contains("transfer-encoding:"), headers);
-					readRemainder(rejected);
+		Soklet.run(fixture.config, () -> {
+			try {
+				try (Socket held = fixture.request("/stream/held")) {
+					assertStatus(held, 200);
+					await(entered, "The custom executor's one worker did not enter production");
+					try (Socket rejected = fixture.request("/stream/rejected")) {
+						String headers = assertStatus(rejected, 503);
+						Assertions.assertFalse(headers.toLowerCase().contains("transfer-encoding:"), headers);
+						readRemainder(rejected);
+					}
+					Assertions.assertEquals(0, rejectedWriterCalls.get());
+					assertEventually(() -> fixture.finishedResponses.containsKey("/stream/rejected")
+							&& fixture.terminations.containsKey("/stream/rejected"), "No rejection evidence");
+					assertRejectedResponseEvidence(fixture);
+					assertEventually(() -> fixture.coordinator().snapshot().reservations() == 1,
+							"Executor rejection leaked the rejected response's reservation");
+					release.countDown();
+					readRemainder(held);
 				}
-				Assertions.assertEquals(0, rejectedWriterCalls.get());
-				assertEventually(() -> fixture.finishedResponses.containsKey("/stream/rejected")
-						&& fixture.terminations.containsKey("/stream/rejected"), "No rejection evidence");
-				assertRejectedResponseEvidence(fixture);
-				assertEventually(() -> fixture.coordinator().snapshot().reservations() == 1,
-						"Executor rejection leaked the rejected response's reservation");
+			} finally {
 				release.countDown();
-				readRemainder(held);
 			}
-		} finally {
-			release.countDown();
-			fixture.shutdown();
-		}
+		});
 	}
 
 	@Test
@@ -239,24 +242,24 @@ public class StreamingLifecycleTests {
 			producerCalls.incrementAndGet();
 			awaitUninterruptibly(releaseUnexpectedProducer);
 		}));
-		try {
-			fixture.start();
-			try (Socket rejected = fixture.request("/stream/inline")) {
-				assertStatus(rejected, 503);
-				readRemainder(rejected);
+		Soklet.run(fixture.config, () -> {
+			try {
+				try (Socket rejected = fixture.request("/stream/inline")) {
+					assertStatus(rejected, 503);
+					readRemainder(rejected);
+				}
+				Assertions.assertEquals(0, producerCalls.get(),
+						"Inline executor entry must be rejected before any application code runs");
+				assertEventually(() -> fixture.coordinator().snapshot().reservations() == 0,
+						"Inline execution rejection leaked lifecycle capacity");
+				try (Socket health = fixture.request("/health")) {
+					assertStatus(health, 200);
+					Assertions.assertEquals("ok", readRemainder(health));
+				}
+			} finally {
+				releaseUnexpectedProducer.countDown();
 			}
-			Assertions.assertEquals(0, producerCalls.get(),
-					"Inline executor entry must be rejected before any application code runs");
-			assertEventually(() -> fixture.coordinator().snapshot().reservations() == 0,
-					"Inline execution rejection leaked lifecycle capacity");
-			try (Socket health = fixture.request("/health")) {
-				assertStatus(health, 200);
-				Assertions.assertEquals("ok", readRemainder(health));
-			}
-		} finally {
-			releaseUnexpectedProducer.countDown();
-			fixture.shutdown();
-		}
+		});
 	}
 
 	@Test
@@ -268,8 +271,7 @@ public class StreamingLifecycleTests {
 			sourceCalls.incrementAndGet();
 			return new ByteArrayInputStream(new byte[0]);
 		}));
-		try {
-			fixture.start();
+		Soklet.run(fixture.config, () -> {
 			try (Socket head = request(fixture.port, "/stream/suppressed", "HEAD", "HTTP/1.1")) {
 				assertStatus(head, 200);
 				Assertions.assertEquals("", readRemainder(head));
@@ -284,9 +286,7 @@ public class StreamingLifecycleTests {
 			assertEventually(() -> fixture.coordinator().snapshot().reservations() == 0,
 					"Protocol rejection leaked a reservation or an accepted producer envelope");
 			Assertions.assertEquals(0, sourceCalls.get());
-		} finally {
-			fixture.shutdown();
-		}
+		});
 	}
 
 	@Test
@@ -318,45 +318,45 @@ public class StreamingLifecycleTests {
 		fixture.body("publisher", StreamingResponseBody.fromPublisher(subscriber ->
 				publisherCalls.incrementAndGet()));
 
-		try {
-			fixture.start();
-			try (Socket held = fixture.request("/stream/held")) {
-				assertStatus(held, 200);
-				await(entered, "The admitted writer did not start");
-				Assertions.assertEquals(1, fixture.coordinator().snapshot().reservations());
-				for (String name : new String[]{"writer", "input", "reader", "publisher"}) {
-					try (Socket rejected = fixture.request("/stream/" + name)) {
-						String headers = assertStatus(rejected, 503);
-						Assertions.assertFalse(headers.toLowerCase().contains("transfer-encoding:"),
-								"A rejected stream must not commit streaming headers: " + headers);
-						readRemainder(rejected);
+		Soklet.run(fixture.config, () -> {
+			try {
+				try (Socket held = fixture.request("/stream/held")) {
+					assertStatus(held, 200);
+					await(entered, "The admitted writer did not start");
+					Assertions.assertEquals(1, fixture.coordinator().snapshot().reservations());
+					for (String name : new String[]{"writer", "input", "reader", "publisher"}) {
+						try (Socket rejected = fixture.request("/stream/" + name)) {
+							String headers = assertStatus(rejected, 503);
+							Assertions.assertFalse(headers.toLowerCase().contains("transfer-encoding:"),
+									"A rejected stream must not commit streaming headers: " + headers);
+							readRemainder(rejected);
+						}
 					}
+					Assertions.assertEquals(0, writerCalls.get(), "Rejected writer was invoked");
+					Assertions.assertEquals(0, inputStreamCalls.get(), "Rejected source was acquired");
+					Assertions.assertEquals(0, readerCalls.get(), "Rejected reader was acquired");
+					Assertions.assertEquals(0, publisherCalls.get(), "Rejected publisher was subscribed");
+					release.countDown();
+					readRemainder(held);
 				}
-				Assertions.assertEquals(0, writerCalls.get(), "Rejected writer was invoked");
-				Assertions.assertEquals(0, inputStreamCalls.get(), "Rejected source was acquired");
-				Assertions.assertEquals(0, readerCalls.get(), "Rejected reader was acquired");
-				Assertions.assertEquals(0, publisherCalls.get(), "Rejected publisher was subscribed");
+				assertEventually(() -> fixture.coordinator().snapshot().reservations() == 0,
+						"Normal completion did not release lifecycle capacity");
+				try (Socket accepted = fixture.request("/stream/writer")) {
+					assertStatus(accepted, 200);
+					Assertions.assertTrue(readRemainder(accepted).contains("accepted"));
+				}
+				Assertions.assertEquals(1, writerCalls.get());
+			} finally {
 				release.countDown();
-				readRemainder(held);
 			}
-			assertEventually(() -> fixture.coordinator().snapshot().reservations() == 0,
-					"Normal completion did not release lifecycle capacity");
-			try (Socket accepted = fixture.request("/stream/writer")) {
-				assertStatus(accepted, 200);
-				Assertions.assertTrue(readRemainder(accepted).contains("accepted"));
-			}
-			Assertions.assertEquals(1, writerCalls.get());
-		} finally {
-			release.countDown();
-			fixture.shutdown();
-		}
+		});
 	}
 
 	@Test
 	public void blockedSourceFinalizerDoesNotHoldTransportOrShutdownPastDeadline()
 			throws Exception {
 		BlockingCloseSource source = new BlockingCloseSource();
-		Fixture fixture = new Fixture(1, 1, Duration.ofMillis(100), Duration.ZERO);
+		ManualFixture fixture = new ManualFixture(1, 1, Duration.ofMillis(100), Duration.ZERO);
 		fixture.body("blocked-close", StreamingResponseBody.fromInputStream(() -> source));
 		StreamLifecycleCoordinator coordinator = null;
 		try {
@@ -452,46 +452,46 @@ public class StreamingLifecycleTests {
 			}
 		}));
 
-		try {
-			fixture.start();
-			try (Socket first = fixture.request("/stream/blocked-callback")) {
-				assertStatus(first, 200);
-				await(callbackEntered, "The cancelation callback did not start");
-				readRemainder(first);
-				await(firstProducerExited, "Blocked callback prevented producer interruption");
-				Assertions.assertNotSame(firstProducerThread.get(), callbackThread.get());
+		Soklet.run(fixture.config, () -> {
+			try {
+				try (Socket first = fixture.request("/stream/blocked-callback")) {
+					assertStatus(first, 200);
+					await(callbackEntered, "The cancelation callback did not start");
+					readRemainder(first);
+					await(firstProducerExited, "Blocked callback prevented producer interruption");
+					Assertions.assertNotSame(firstProducerThread.get(), callbackThread.get());
 
-				try (Socket second = fixture.request("/stream/second-timeout")) {
-					assertStatus(second, 200);
-					readRemainder(second);
-					await(secondProducerExited, "Another stream's timeout stopped making progress");
+					try (Socket second = fixture.request("/stream/second-timeout")) {
+						assertStatus(second, 200);
+						readRemainder(second);
+						await(secondProducerExited, "Another stream's timeout stopped making progress");
+					}
+					Assertions.assertEquals(1L, releaseCallback.getCount());
+					Assertions.assertEquals(0, secondCallbackCalls.get());
+					assertEventually(() -> fixture.terminations.containsKey("/stream/second-timeout"),
+							"A blocked cancel batch queued another stream's termination");
+					Assertions.assertEquals(2, fixture.coordinator().snapshot().reservations(),
+							"Queued or running terminal callbacks must retain their lifetime slots");
+					try (Socket rejected = fixture.request("/stream/capacity-rejected")) {
+						assertStatus(rejected, 503);
+						readRemainder(rejected);
+					}
+					try (Socket health = fixture.request("/health")) {
+						assertStatus(health, 200);
+						Assertions.assertEquals("ok", readRemainder(health));
+					}
 				}
-				Assertions.assertEquals(1L, releaseCallback.getCount());
-				Assertions.assertEquals(0, secondCallbackCalls.get());
-				assertEventually(() -> fixture.terminations.containsKey("/stream/second-timeout"),
-						"A blocked cancel batch queued another stream's termination");
-				Assertions.assertEquals(2, fixture.coordinator().snapshot().reservations(),
-						"Queued or running terminal callbacks must retain their lifetime slots");
-				try (Socket rejected = fixture.request("/stream/capacity-rejected")) {
-					assertStatus(rejected, 503);
-					readRemainder(rejected);
-				}
-				try (Socket health = fixture.request("/health")) {
-					assertStatus(health, 200);
-					Assertions.assertEquals("ok", readRemainder(health));
-				}
+
+				releaseCallback.countDown();
+				assertEventually(() -> fixture.coordinator().snapshot().reservations() == 0,
+						"Released callbacks did not drain the bounded terminal queue");
+				Assertions.assertEquals(1, secondCallbackCalls.get());
+				Assertions.assertEquals(StreamTerminationReason.RESPONSE_TIMEOUT,
+						fixture.terminations.get("/stream/second-timeout").getReason());
+			} finally {
+				releaseCallback.countDown();
 			}
-
-			releaseCallback.countDown();
-			assertEventually(() -> fixture.coordinator().snapshot().reservations() == 0,
-					"Released callbacks did not drain the bounded terminal queue");
-			Assertions.assertEquals(1, secondCallbackCalls.get());
-			Assertions.assertEquals(StreamTerminationReason.RESPONSE_TIMEOUT,
-					fixture.terminations.get("/stream/second-timeout").getReason());
-		} finally {
-			releaseCallback.countDown();
-			fixture.shutdown();
-		}
+		});
 	}
 
 	@Test
@@ -549,13 +549,13 @@ public class StreamingLifecycleTests {
 		}
 	}
 
-	private static final class Fixture {
+	private static class Fixture {
 		private final int port;
-		private final DefaultHttpServer server;
-		private final Soklet soklet;
+		final DefaultHttpServer server;
+		final SokletConfig config;
 		private final Map<String, StreamingResponseBody> bodies = new ConcurrentHashMap<>();
-		private final Map<String, StreamTermination> terminations = new ConcurrentHashMap<>();
-		private final ConcurrentLinkedQueue<Throwable> diagnostics = new ConcurrentLinkedQueue<>();
+		final Map<String, StreamTermination> terminations = new ConcurrentHashMap<>();
+		final ConcurrentLinkedQueue<Throwable> diagnostics = new ConcurrentLinkedQueue<>();
 		private final Map<String, AtomicInteger> terminationCounts = new ConcurrentHashMap<>();
 		private final Map<String, MarshaledResponse> writtenResponses = new ConcurrentHashMap<>();
 		private final Map<String, MarshaledResponse> finishedResponses = new ConcurrentHashMap<>();
@@ -585,7 +585,7 @@ public class StreamingLifecycleTests {
 					new StreamLifecycleCoordinator(capacity, callbackConcurrency, cleanupGrace,
 							this.diagnostics::add));
 			StreamingResource resource = new StreamingResource(this.bodies);
-			this.soklet = Soklet.fromConfig(SokletConfig.withHttpServer(this.server)
+			this.config = SokletConfig.withHttpServer(this.server)
 					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))
 					.instanceProvider(new InstanceProvider() {
 						@Override
@@ -621,25 +621,38 @@ public class StreamingLifecycleTests {
 							terminations.put(handle.getRequest().getPath(), termination);
 							terminationCounts.computeIfAbsent(handle.getRequest().getPath(), ignored -> new AtomicInteger()).incrementAndGet();
 						}
-					}).build());
+					}).build();
 		}
 
-		private void body(String name, StreamingResponseBody body) {
+		void body(String name, StreamingResponseBody body) {
 			this.bodies.put("/stream/" + name, body);
 		}
 
-		private void start() {
-			this.soklet.start();
-		}
 
-		private Socket request(String path) throws Exception {
+		Socket request(String path) throws Exception {
 			return StreamingLifecycleTests.request(this.port, path);
 		}
 
-		private StreamLifecycleCoordinator coordinator() {
+		StreamLifecycleCoordinator coordinator() {
 			return this.server.getStreamLifecycleCoordinatorForTests().orElseThrow();
 		}
+	}
 
+	/** Explicit drain and immutable terminal-result assertions require a retained owner. */
+	private static final class ManualFixture extends Fixture {
+		private final Soklet soklet;
+		private ManualFixture(int capacity, int callbackConcurrency, Duration cleanupGrace,
+				Duration responseTimeout) throws IOException {
+			super(capacity, callbackConcurrency, cleanupGrace, responseTimeout);
+			this.soklet = Soklet.fromConfig(this.config);
+		}
+		private ManualFixture(int capacity, int callbackConcurrency, Duration cleanupGrace,
+				Duration responseTimeout, Supplier<ExecutorService> executorSupplier,
+				Duration idleTimeout, LifecyclePolicy lifecyclePolicy) throws IOException {
+			super(capacity, callbackConcurrency, cleanupGrace, responseTimeout, executorSupplier, idleTimeout, lifecyclePolicy);
+			this.soklet = Soklet.fromConfig(this.config);
+		}
+		private void start() { this.soklet.start(); }
 		private ShutdownResult shutdown() throws Exception {
 			return this.soklet.shutdown().toCompletableFuture().get(WAIT.toMillis(), TimeUnit.MILLISECONDS);
 		}

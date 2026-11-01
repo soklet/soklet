@@ -233,8 +233,10 @@ const JAVA_MEMBER_PATTERN = /^[A-Za-z_$][\w$]*(?:\([^\r\n#]*\))?$/u;
 const BOUND_NAME_PATTERN = /^(?:maximum|minimum)[A-Z].*|^.*(?:Capacity|Concurrency|Timeout|Deadline|Duration|Interval|Resolution|Backlog|BufferSize)$/u;
 const PRIVACY_BOUNDARY_INVENTORY_PATH =
   'conformance/mcp-privacy-boundary-inventory.json';
+// 2026-11-01 scoped run: retain exact callback Throwable declarations and
+// retire the removed console-input/warning sinks; matcher policy is unchanged.
 const EXPECTED_PRIVACY_SEMANTICS_SHA256 =
-  'f44c844594e040aa6b7722d38669aaf055a34f330983744d944b2050c9166559';
+  'f53baf3ddac31becd10b8771a2d7eb7d8665058fcf8be12c1cf47a6e910b8642';
 const PRIVACY_TOP_LEVEL_KEYS = Object.freeze([
   'artifactRoots',
   'boundaries',

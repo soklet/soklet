@@ -46,7 +46,7 @@ public class SetCookieHeaderWritingTests {
 	@Test
 	public void multipleCookiesAreSeparateHeaders() throws Exception {
 		int port = findFreePort();
-		try (Soklet app = startApp(port, Set.of(CookieResource.class))) {
+		Soklet.run(config(port, Set.of(CookieResource.class)), () -> {
 			URL url = new URL("http://127.0.0.1:" + port + "/set-cookies");
 			HttpURLConnection c = (HttpURLConnection) url.openConnection();
 			c.setRequestMethod("GET");
@@ -67,7 +67,7 @@ public class SetCookieHeaderWritingTests {
 					"Missing 'a' cookie among: " + setCookies);
 			assertTrue(setCookies.stream().anyMatch(value -> value.startsWith("b=")),
 					"Missing 'b' cookie among: " + setCookies);
-		}
+		});
 	}
 
 	public static class CookieResource {
@@ -393,13 +393,11 @@ public class SetCookieHeaderWritingTests {
 		assertTrue(serialized.contains("Max-Age=0"));
 	}
 
-	private static Soklet startApp(int port, Set<Class<?>> resourceClasses) {
+	private static SokletConfig config(int port, Set<Class<?>> resourceClasses) {
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(port).build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(resourceClasses))
 				.build();
-		Soklet app = Soklet.fromConfig(cfg);
-		app.start();
-		return app;
+		return cfg;
 	}
 
 }

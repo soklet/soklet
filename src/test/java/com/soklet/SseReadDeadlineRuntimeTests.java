@@ -55,14 +55,23 @@ class SseReadDeadlineRuntimeTests {
 	Stream<DynamicTest> headerDeadlineWinsRegardlessOfHandlerTimeoutOrdering() {
 		return Stream.of(80, 250, 700).map(handlerMillis -> DynamicTest.dynamicTest(
 				"partial headers / handler " + handlerMillis + "ms", () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
-			try (Fixture fixture = new Fixture(250, handlerMillis); Socket socket = fixture.open()) {
-				fixture.send(socket, "GET /events HTTP/1.1\r\nHost: localhost\r\n");
-				assertStatus(readResponse(socket), 408);
-				assertEquals(List.of(RequestReadFailureReason.REQUEST_READ_TIMEOUT), fixture.readFailures);
-				assertEquals(List.of(ConnectionRejectionReason.REQUEST_READ_TIMEOUT), fixture.connectionFailures);
-				assertEquals(1L, fixture.failureCount(MetricsCollector.TransportFailureReason.REQUEST_READ_TIMEOUT));
-				assertEquals(0, fixture.resource.calls.get());
-				fixture.assertNoInternalNoise();
+			try (Fixture fixture = new Fixture(250, handlerMillis)) {
+				ShutdownResult result = Soklet.run(fixture.config, () -> {
+					try {
+						try (Socket socket = fixture.open()) {
+							fixture.send(socket, "GET /events HTTP/1.1\r\nHost: localhost\r\n");
+							assertStatus(readResponse(socket), 408);
+							assertEquals(List.of(RequestReadFailureReason.REQUEST_READ_TIMEOUT), fixture.readFailures);
+							assertEquals(List.of(ConnectionRejectionReason.REQUEST_READ_TIMEOUT), fixture.connectionFailures);
+							assertEquals(1L, fixture.failureCount(MetricsCollector.TransportFailureReason.REQUEST_READ_TIMEOUT));
+							assertEquals(0, fixture.resource.calls.get());
+							fixture.assertNoInternalNoise();
+						}
+					} finally {
+						fixture.releaseWork();
+					}
+				});
+				fixture.verifyShutdown(result);
 			}
 		})));
 	}
@@ -71,9 +80,18 @@ class SseReadDeadlineRuntimeTests {
 	Stream<DynamicTest> idleReadDeadlineClosesWithoutFailureEvents() {
 		return Stream.of(80, 250).map(handlerMillis -> DynamicTest.dynamicTest(
 				"idle headers / handler " + handlerMillis + "ms", () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
-			try (Fixture fixture = new Fixture(250, handlerMillis); Socket socket = fixture.open()) {
-				assertEquals("", readResponse(socket));
-				fixture.assertQuietReadClose();
+			try (Fixture fixture = new Fixture(250, handlerMillis)) {
+				ShutdownResult result = Soklet.run(fixture.config, () -> {
+					try {
+						try (Socket socket = fixture.open()) {
+							assertEquals("", readResponse(socket));
+							fixture.assertQuietReadClose();
+						}
+					} finally {
+						fixture.releaseWork();
+					}
+				});
+				fixture.verifyShutdown(result);
 			}
 		})));
 	}
@@ -82,106 +100,147 @@ class SseReadDeadlineRuntimeTests {
 	Stream<DynamicTest> eofBeforeCompleteHeadersIsAQuietClientDisconnect() {
 		return Stream.of("", "GET /events HTTP/1.1\r\nX-Secret: eof-input-canary").map(prefix ->
 				DynamicTest.dynamicTest(prefix.isEmpty() ? "zero-byte EOF" : "partial-header EOF", () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
-			try (Fixture fixture = new Fixture(1000, 1000); Socket socket = fixture.open()) {
-				fixture.send(socket, prefix);
-				socket.shutdownOutput();
-				assertEquals("", readResponse(socket), "A disconnected client must not receive a synthetic 500");
-				fixture.assertQuietReadClose();
+			try (Fixture fixture = new Fixture(1000, 1000)) {
+				ShutdownResult result = Soklet.run(fixture.config, () -> {
+					try {
+						try (Socket socket = fixture.open()) {
+							fixture.send(socket, prefix);
+							socket.shutdownOutput();
+							assertEquals("", readResponse(socket), "A disconnected client must not receive a synthetic 500");
+							fixture.assertQuietReadClose();
+						}
+					} finally {
+						fixture.releaseWork();
+					}
+				});
+				fixture.verifyShutdown(result);
 			}
 		})));
 	}
 
 	@Test
 	void completingHeadersAfterHandlerBudgetDoesNotLoseTheIndependentReadBudget() throws Exception {
-		try (Fixture fixture = new Fixture(1000, 150); Socket socket = fixture.open()) {
-			fixture.send(socket, "GET /events HTTP/1.1\r\nHost: localhost\r\n");
-			assertTrue(fixture.readStarted.await(2, TimeUnit.SECONDS));
-			Thread.sleep(350);
-			fixture.send(socket, "Accept: text/event-stream\r\n\r\n");
-			assertStatus(readResponse(socket), 200);
-			assertEquals(1, fixture.resource.calls.get());
-			fixture.assertNoInternalNoise();
+		try (Fixture fixture = new Fixture(1000, 150)) {
+			ShutdownResult result = Soklet.run(fixture.config, () -> {
+				try {
+					try (Socket socket = fixture.open()) {
+						fixture.send(socket, "GET /events HTTP/1.1\r\nHost: localhost\r\n");
+						assertTrue(fixture.readStarted.await(2, TimeUnit.SECONDS));
+						Thread.sleep(350);
+						fixture.send(socket, "Accept: text/event-stream\r\n\r\n");
+						assertStatus(readResponse(socket), 200);
+						assertEquals(1, fixture.resource.calls.get());
+						fixture.assertNoInternalNoise();
+					}
+				} finally {
+					fixture.releaseWork();
+				}
+			});
+			fixture.verifyShutdown(result);
 		}
 	}
 
 	@Test
 	void applicationHandlingStillTimesOutAndInterruptsItsOwnWorker() throws Exception {
-		try (Fixture fixture = new Fixture(1000, 150); Socket socket = fixture.open()) {
-			fixture.resource.block = true;
-			fixture.sendComplete(socket);
-			assertTrue(fixture.resource.entered.await(2, TimeUnit.SECONDS));
-			assertStatus(readResponse(socket), 503);
-			assertTrue(fixture.resource.interrupted.await(2, TimeUnit.SECONDS));
-			assertEquals(List.of(SseConnection.HandshakeFailureReason.HANDSHAKE_TIMEOUT), fixture.handshakeFailures);
-			assertTrue(fixture.readFailures.isEmpty());
-			fixture.assertNoInternalNoise();
+		try (Fixture fixture = new Fixture(1000, 150)) {
+			ShutdownResult result = Soklet.run(fixture.config, () -> {
+				try {
+					try (Socket socket = fixture.open()) {
+						fixture.resource.block = true;
+						fixture.sendComplete(socket);
+						assertTrue(fixture.resource.entered.await(2, TimeUnit.SECONDS));
+						assertStatus(readResponse(socket), 503);
+						assertTrue(fixture.resource.interrupted.await(2, TimeUnit.SECONDS));
+						assertEquals(List.of(SseConnection.HandshakeFailureReason.HANDSHAKE_TIMEOUT), fixture.handshakeFailures);
+						assertTrue(fixture.readFailures.isEmpty());
+						fixture.assertNoInternalNoise();
+					}
+				} finally {
+					fixture.releaseWork();
+				}
+			});
+			fixture.verifyShutdown(result);
 		}
 	}
 
 	@Test
 	void queuedHandshakeRetainsItsBoundAndNeverEntersAfterQueueExpiry() throws Exception {
 		try (Fixture fixture = new Fixture(1000, 150)) {
-			fixture.occupyWorker();
-			try (Socket socket = fixture.open()) {
-				fixture.sendComplete(socket);
-				await(() -> fixture.executor.getQueue().size() == 1, "The handshake must be queued");
-				assertStatus(readResponse(socket), 503);
-				assertEquals(0, fixture.resource.calls.get());
-				// Both parsed requests expire, while the first application handler remains
-				// physically held. The queued target must never enter application code.
-				await(() -> fixture.handshakeFailures.size() == 2, "Both parsed handshake deadlines must be observed");
-				assertEquals(List.of(SseConnection.HandshakeFailureReason.HANDSHAKE_TIMEOUT,
-						SseConnection.HandshakeFailureReason.HANDSHAKE_TIMEOUT), fixture.handshakeFailures);
-				fixture.assertTargetHandshakeTimeout();
-				assertTrue(fixture.requestRejections.isEmpty());
-				assertTrue(fixture.readFailures.isEmpty());
-				// A queue/active-count snapshot can look idle between dequeue and
-				// task entry. A FIFO marker on this single-worker executor proves
-				// the expired handshake has actually returned before we check calls.
-				CountDownLatch queuedWorkRetired = new CountDownLatch(1);
-				fixture.executor.execute(queuedWorkRetired::countDown);
-				fixture.releaseWorker.countDown();
-				assertTrue(queuedWorkRetired.await(2, TimeUnit.SECONDS),
-						"Expired queued work must retire without resource entry");
-				assertEquals(0, fixture.resource.calls.get());
-				fixture.assertNoInternalNoise();
-			}
+			ShutdownResult result = Soklet.run(fixture.config, () -> {
+				try {
+					fixture.occupyWorker();
+					try (Socket socket = fixture.open()) {
+						fixture.sendComplete(socket);
+						await(() -> fixture.executor.getQueue().size() == 1, "The handshake must be queued");
+						assertStatus(readResponse(socket), 503);
+						assertEquals(0, fixture.resource.calls.get());
+						// Both parsed requests expire, while the first application handler remains
+						// physically held. The queued target must never enter application code.
+						await(() -> fixture.handshakeFailures.size() == 2, "Both parsed handshake deadlines must be observed");
+						assertEquals(List.of(SseConnection.HandshakeFailureReason.HANDSHAKE_TIMEOUT,
+								SseConnection.HandshakeFailureReason.HANDSHAKE_TIMEOUT), fixture.handshakeFailures);
+						fixture.assertTargetHandshakeTimeout();
+						assertTrue(fixture.requestRejections.isEmpty());
+						assertTrue(fixture.readFailures.isEmpty());
+						// A queue/active-count snapshot can look idle between dequeue and
+						// task entry. A FIFO marker on this single-worker executor proves
+						// the expired handshake has actually returned before we check calls.
+						CountDownLatch queuedWorkRetired = new CountDownLatch(1);
+						fixture.executor.execute(queuedWorkRetired::countDown);
+						fixture.releaseWorker.countDown();
+						assertTrue(queuedWorkRetired.await(2, TimeUnit.SECONDS),
+								"Expired queued work must retire without resource entry");
+						assertEquals(0, fixture.resource.calls.get());
+						fixture.assertNoInternalNoise();
+					}
+				} finally {
+					fixture.releaseWork();
+				}
+			});
+			fixture.verifyShutdown(result);
 		}
 	}
 
 	@Test
 	void queueWaitRemainsDeductedWhenApplicationHandlingResumes() throws Exception {
 		try (Fixture fixture = new Fixture(1500, 1800)) {
-			fixture.occupyWorker();
-			fixture.resource.block = true;
-			try (Socket socket = fixture.open()) {
-				fixture.send(socket, "GET /events HTTP/1.1\r\nHost: localhost\r\n");
-				await(() -> fixture.readStarts.get() == 2, "The target header reader must be admitted independently");
-				Thread.sleep(400);
-				fixture.send(socket, "Accept: text/event-stream\r\n\r\n");
-				await(() -> fixture.executor.getQueue().size() == 1, "The handshake must be queued");
-				Thread.sleep(1000);
-				fixture.releaseWorker.countDown();
-				assertTrue(fixture.resource.entered.await(2, TimeUnit.SECONDS));
-				assertEquals(1, fixture.resource.calls.get());
-				// A fresh 1800ms application budget would exceed this socket deadline;
-				// the original budget has at most 800ms left after queue wait.
-				socket.setSoTimeout(1200);
-				assertStatus(readResponse(socket), 503);
-				assertTrue(fixture.resource.interrupted.await(2, TimeUnit.SECONDS));
-				assertEquals(1, fixture.resource.calls.get());
-				assertEquals(2, fixture.handshakeFailures.size());
-				assertEquals(Set.of(SseConnection.HandshakeFailureReason.HANDSHAKE_REJECTED,
-						SseConnection.HandshakeFailureReason.HANDSHAKE_TIMEOUT), Set.copyOf(fixture.handshakeFailures));
-				List<HandshakeFailure> driverFailures = fixture.handshakeFailureDetails.stream()
-						.filter(failure -> failure.path().equals("/worker")).toList();
-				assertEquals(1, driverFailures.size());
-				assertEquals(SseConnection.HandshakeFailureReason.HANDSHAKE_REJECTED, driverFailures.get(0).reason());
-				assertNull(driverFailures.get(0).cause());
-				fixture.assertTargetHandshakeTimeout();
-				assertTrue(fixture.requestRejections.isEmpty());
-				fixture.assertNoInternalNoise();
-			}
+			ShutdownResult result = Soklet.run(fixture.config, () -> {
+				try {
+					fixture.occupyWorker();
+					fixture.resource.block = true;
+					try (Socket socket = fixture.open()) {
+						fixture.send(socket, "GET /events HTTP/1.1\r\nHost: localhost\r\n");
+						await(() -> fixture.readStarts.get() == 2, "The target header reader must be admitted independently");
+						Thread.sleep(400);
+						fixture.send(socket, "Accept: text/event-stream\r\n\r\n");
+						await(() -> fixture.executor.getQueue().size() == 1, "The handshake must be queued");
+						Thread.sleep(1000);
+						fixture.releaseWorker.countDown();
+						assertTrue(fixture.resource.entered.await(2, TimeUnit.SECONDS));
+						assertEquals(1, fixture.resource.calls.get());
+						// A fresh 1800ms application budget would exceed this socket deadline;
+						// the original budget has at most 800ms left after queue wait.
+						socket.setSoTimeout(1200);
+						assertStatus(readResponse(socket), 503);
+						assertTrue(fixture.resource.interrupted.await(2, TimeUnit.SECONDS));
+						assertEquals(1, fixture.resource.calls.get());
+						assertEquals(2, fixture.handshakeFailures.size());
+						assertEquals(Set.of(SseConnection.HandshakeFailureReason.HANDSHAKE_REJECTED,
+								SseConnection.HandshakeFailureReason.HANDSHAKE_TIMEOUT), Set.copyOf(fixture.handshakeFailures));
+						List<HandshakeFailure> driverFailures = fixture.handshakeFailureDetails.stream()
+								.filter(failure -> failure.path().equals("/worker")).toList();
+						assertEquals(1, driverFailures.size());
+						assertEquals(SseConnection.HandshakeFailureReason.HANDSHAKE_REJECTED, driverFailures.get(0).reason());
+						assertNull(driverFailures.get(0).cause());
+						fixture.assertTargetHandshakeTimeout();
+						assertTrue(fixture.requestRejections.isEmpty());
+						fixture.assertNoInternalNoise();
+					}
+				} finally {
+					fixture.releaseWork();
+				}
+			});
+			fixture.verifyShutdown(result);
 		}
 	}
 
@@ -248,15 +307,25 @@ class SseReadDeadlineRuntimeTests {
 
 	@Test
 	void completeMalformedHeadersStillUseTheParseFailurePath() throws Exception {
-		try (Fixture fixture = new Fixture(1000, 150); Socket socket = fixture.open()) {
-			fixture.send(socket, "GET /events HTTP/1.1\r\nHost: localhost\r\nBroken-Header\r\n\r\n");
-			assertStatus(readResponse(socket), 400);
-			assertEquals(List.of(RequestReadFailureReason.UNPARSEABLE_REQUEST), fixture.readFailures);
-			assertEquals(1L, fixture.failureCount(MetricsCollector.TransportFailureReason.MALFORMED_REQUEST));
-			assertEquals(0, fixture.resource.calls.get());
+		try (Fixture fixture = new Fixture(1000, 150)) {
+			ShutdownResult result = Soklet.run(fixture.config, () -> {
+				try {
+					try (Socket socket = fixture.open()) {
+						fixture.send(socket, "GET /events HTTP/1.1\r\nHost: localhost\r\nBroken-Header\r\n\r\n");
+						assertStatus(readResponse(socket), 400);
+						assertEquals(List.of(RequestReadFailureReason.UNPARSEABLE_REQUEST), fixture.readFailures);
+						assertEquals(1L, fixture.failureCount(MetricsCollector.TransportFailureReason.MALFORMED_REQUEST));
+						assertEquals(0, fixture.resource.calls.get());
+					}
+				} finally {
+					fixture.releaseWork();
+				}
+			});
+			fixture.verifyShutdown(result);
 		}
 	}
 
+	// Owns only the driver socket and executor; Soklet.run owns the server lifetime.
 	private static final class Fixture implements AutoCloseable {
 		final int port = findFreePort();
 		final ThreadPoolExecutor executor = new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS,
@@ -276,7 +345,7 @@ class SseReadDeadlineRuntimeTests {
 		final List<SseConnection.HandshakeFailureReason> handshakeFailures = new CopyOnWriteArrayList<>();
 		final List<HandshakeFailure> handshakeFailureDetails = new CopyOnWriteArrayList<>();
 		final DefaultMetricsCollector metrics = DefaultMetricsCollector.defaultInstance();
-		final Soklet soklet;
+		final SokletConfig config;
 		Socket occupiedWorker;
 
 		Fixture(int headerMillis, int handlerMillis) throws Exception {
@@ -284,7 +353,7 @@ class SseReadDeadlineRuntimeTests {
 					.requestHeaderTimeout(Duration.ofMillis(headerMillis))
 					.requestHandlerTimeout(Duration.ofMillis(handlerMillis))
 					.requestHandlerExecutorServiceSupplier(() -> this.executor).build();
-			this.soklet = Soklet.fromConfig(SokletConfig.withSseServer(server)
+			this.config = SokletConfig.withSseServer(server)
 					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Resource.class)))
 					.instanceProvider(new InstanceProvider() {
 						@Override public <T> T provide(Class<T> instanceClass) {
@@ -311,8 +380,7 @@ class SseReadDeadlineRuntimeTests {
 							handshakeFailureDetails.add(new HandshakeFailure(request.getPath(), reason, throwable));
 							handshakeFailures.add(reason);
 						}
-					}).build());
-			this.soklet.start();
+					}).build();
 		}
 
 		Socket open() throws Exception {
@@ -359,14 +427,16 @@ class SseReadDeadlineRuntimeTests {
 			assertEquals(0, this.resource.calls.get());
 			assertNoInternalNoise();
 		}
-		@Override public void close() throws Exception {
+		void releaseWork() {
 			this.releaseWorker.countDown();
 			this.resource.release.countDown();
-			try { this.soklet.close(); assertTrue(this.soklet.getShutdownResult().orElseThrow().isComplete()); }
-			finally {
-				try { if (this.occupiedWorker != null) this.occupiedWorker.close(); }
-				finally { this.executor.shutdownNow(); assertTrue(this.executor.awaitTermination(2, TimeUnit.SECONDS)); }
-			}
+		}
+		void verifyShutdown(ShutdownResult result) {
+			assertTrue(result.isComplete());
+		}
+		@Override public void close() throws Exception {
+			try { if (this.occupiedWorker != null) this.occupiedWorker.close(); }
+			finally { this.executor.shutdownNow(); assertTrue(this.executor.awaitTermination(2, TimeUnit.SECONDS)); }
 		}
 	}
 

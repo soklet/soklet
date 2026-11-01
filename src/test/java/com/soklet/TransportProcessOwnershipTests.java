@@ -86,47 +86,7 @@ public class TransportProcessOwnershipTests {
 		}
 	}
 
-	@Test
-	void enterKeyEofDoesNotStopTheRunnerOrDisableItsSignalHook(@TempDir Path directory) throws Exception {
-		assumeUnixSignal();
-		try (Child child = start("RUNNER_EOF", directory)) {
-			awaitMarker(child, "ready");
-			child.process.getOutputStream().close();
-			awaitMarker(child, "unsupported");
-			assertFalse(child.process.waitFor(200, TimeUnit.MILLISECONDS), child.log());
-			child.process.destroy();
-			assertTrue(child.process.waitFor(5, TimeUnit.SECONDS), child.log());
-			assertEquals("true", Files.readString(directory.resolve("cleanup")), child.log());
-		}
-	}
 
-	@Test
-	void enterKeyRunLeavesTheFollowingLineAvailable(@TempDir Path directory) throws Exception {
-		assertInputHandoff("RUNNER_INPUT_LINE", directory);
-	}
-
-	@Test
-	void interruptedRunRetiresThePendingByteWithoutDrainingTheFollowingLine(@TempDir Path directory) throws Exception {
-		assertInputHandoff("RUNNER_INPUT_INTERRUPT", directory);
-	}
-
-	private static void assertInputHandoff(String mode, Path directory) throws Exception {
-		try (Child child = start(mode, directory)) {
-			awaitMarker(child, "ready");
-			awaitMarker(child, "reading");
-			if (mode.endsWith("INTERRUPT")) {
-				Files.writeString(directory.resolve("interrupt"), "interrupt");
-				awaitMarker(child, "run-ended");
-			}
-			child.process.getOutputStream().write(((mode.endsWith("INTERRUPT") ? "X" : "\n") + "follow-up\n")
-					.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-			child.process.getOutputStream().close();
-			assertTrue(child.process.waitFor(5, TimeUnit.SECONDS), child.log());
-			assertEquals(0, child.process.exitValue(), child.log());
-			assertEquals("follow-up", Files.readString(directory.resolve("following-line")), child.log());
-			assertEquals("true", Files.readString(directory.resolve("cleanup")), child.log());
-		}
-	}
 
 	@Test
 	void httpAuxiliaryThreadsRemainDaemonRegardlessOfTheirCaller() {
@@ -181,24 +141,11 @@ public class TransportProcessOwnershipTests {
 		public static void main(String[] args) throws Exception {
 			String mode = args[0];
 			Path directory = Path.of(args[1]);
-			if (mode.startsWith("RUNNER_INPUT")) {
-				System.setIn(new java.io.FilterInputStream(System.in) {
-					private final java.util.concurrent.atomic.AtomicBoolean first = new java.util.concurrent.atomic.AtomicBoolean(true);
-					private void recordRead() { if (this.first.compareAndSet(true, false)) write(directory, "reading", "true"); }
-					@Override public int read() throws java.io.IOException { recordRead(); return super.read(); }
-					@Override public int read(byte[] bytes, int offset, int length) throws java.io.IOException {
-						recordRead(); return super.read(bytes, offset, length);
-					}
-				});
-			}
 			LifecycleObserver observer = new LifecycleObserver() {
-				@Override public void didStartSoklet(Soklet soklet) {
+				@Override public void didStartSoklet() {
 					if (mode.startsWith("RUNNER")) write(directory, "ready", snapshot());
 				}
-				@Override public void didReceiveLogEvent(LogEvent event) {
-					if (event.getLogEventType() == LogEventType.CONFIGURATION_UNSUPPORTED)
-						write(directory, "unsupported", "true");
-				}
+
 			};
 			SokletConfig.Builder builder = mode.equals("SSE")
 					? SokletConfig.withSseServer(SseServer.withPort(0).host("127.0.0.1").build())
@@ -236,26 +183,7 @@ public class TransportProcessOwnershipTests {
 			if (mode.startsWith("RUNNER")) {
 				ShutdownCleanup cleanup = ShutdownCleanup.fromTimeoutAndAction(Duration.ofSeconds(1),
 						result -> write(directory, "cleanup", result.isComplete().toString()));
-				if (mode.startsWith("RUNNER_INPUT")) {
-					Thread runner = Thread.currentThread();
-					if (mode.endsWith("INTERRUPT")) {
-						Thread command = new Thread(() -> {
-							try {
-								while (!Files.exists(directory.resolve("interrupt"))) Thread.sleep(10);
-								runner.interrupt();
-							} catch (InterruptedException failure) { throw new RuntimeException(failure); }
-						}, "input-handoff-interrupt-command");
-						command.setDaemon(true); command.start();
-					}
-					SokletApplication.fromConfig(config).run(cleanup, ShutdownTrigger.ENTER_KEY);
-					Thread.interrupted(); // The following application code owns its own wait.
-					write(directory, "run-ended", "true");
-					while (SokletApplication.SYSTEM_INPUT.isListenerStarted()) Thread.sleep(10);
-					String line = new java.io.BufferedReader(new java.io.InputStreamReader(System.in,
-							java.nio.charset.StandardCharsets.UTF_8)).readLine();
-					write(directory, "following-line", String.valueOf(line));
-				} else if (mode.equals("RUNNER_EOF")) SokletApplication.fromConfig(config).run(cleanup, ShutdownTrigger.ENTER_KEY);
-				else SokletApplication.fromConfig(config).run(cleanup);
+				SokletProcessLifecycle.fromConfig(config).run(cleanup);
 				return;
 			}
 			Soklet soklet = Soklet.fromConfig(config);
@@ -271,7 +199,7 @@ public class TransportProcessOwnershipTests {
 				}, "test-blocking-close-hook"));
 				soklet.start();
 				write(directory, "ready", snapshot());
-				soklet.awaitShutdown();
+				soklet.awaitCoreShutdown();
 				return;
 			}
 			soklet.start();

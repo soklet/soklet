@@ -97,10 +97,7 @@ public class McpDeferredTaskOutputSafetyTests {
 			return result;
 		};
 		McpServer server = server(tool, taskManager, interceptor, sanitizer);
-		Soklet soklet = managedSoklet(server);
-
-		try {
-			soklet.start();
+		Soklet.run(config(server), () -> {
 			int port = boundPort(server);
 			HttpResponse<String> creation = createTask(port);
 			assertSuccess(creation);
@@ -131,9 +128,7 @@ public class McpDeferredTaskOutputSafetyTests {
 			Assertions.assertFalse(completed.body().contains(ORIGINAL_CANARY),
 					completed.body());
 			Assertions.assertEquals(1, sanitizerInvocations.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -148,10 +143,7 @@ public class McpDeferredTaskOutputSafetyTests {
 		McpServer server = server(tool, taskManager,
 				McpHandlerInterceptor.passThroughInstance(),
 				sanitizer(sanitizerMode, sanitizerInvocations));
-		Soklet soklet = managedSoklet(server);
-
-		try {
-			soklet.start();
+		Soklet.run(config(server), () -> {
 			int port = boundPort(server);
 			assertSuccess(createTask(port));
 
@@ -176,9 +168,7 @@ public class McpDeferredTaskOutputSafetyTests {
 			assertSuccess(recovered);
 			assertContains(recovered.body(), "\"message\":\"sanitized\"");
 			Assertions.assertEquals(9, sanitizerInvocations.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -193,10 +183,7 @@ public class McpDeferredTaskOutputSafetyTests {
 		McpServer server = server(tool, taskManager,
 				McpHandlerInterceptor.passThroughInstance(),
 				sanitizer(sanitizerMode, sanitizerInvocations));
-		Soklet soklet = managedSoklet(server);
-
-		try {
-			soklet.start();
+		Soklet.run(config(server), () -> {
 			int port = boundPort(server);
 			assertSuccess(createTask(port));
 			HttpResponse<String> response = getTask(port, "error-result");
@@ -208,9 +195,7 @@ public class McpDeferredTaskOutputSafetyTests {
 			Assertions.assertFalse(response.body().contains(ORIGINAL_CANARY),
 					response.body());
 			Assertions.assertEquals(1, sanitizerInvocations.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -229,10 +214,7 @@ public class McpDeferredTaskOutputSafetyTests {
 				McpHandlerInterceptor.passThroughInstance(),
 				sanitizer(sanitizerMode, sanitizerInvocations),
 				catalogAccessPolicy(tool, policyMode, policyInvocations));
-		Soklet soklet = managedSoklet(server);
-
-		try {
-			soklet.start();
+		Soklet.run(config(server), () -> {
 			int port = boundPort(server);
 			assertSuccess(createTask(port));
 			Assertions.assertEquals(1, policyInvocations.get());
@@ -260,9 +242,7 @@ public class McpDeferredTaskOutputSafetyTests {
 			Assertions.assertEquals(3, policyInvocations.get());
 			Assertions.assertEquals(1, sanitizerInvocations.get());
 			Assertions.assertSame(persisted, taskManager.task.orElseThrow());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -281,10 +261,7 @@ public class McpDeferredTaskOutputSafetyTests {
 				McpHandlerInterceptor.passThroughInstance(),
 				sanitizer(sanitizerMode, sanitizerInvocations),
 				catalogAccessPolicy(tool, policyMode, policyInvocations));
-		Soklet soklet = managedSoklet(server);
-
-		try {
-			soklet.start();
+		Soklet.run(config(server), () -> {
 			int port = boundPort(server);
 			assertSuccess(createTask(port));
 
@@ -299,9 +276,7 @@ public class McpDeferredTaskOutputSafetyTests {
 					"Creation and both retrievals must each evaluate policy once.");
 			Assertions.assertEquals(0, sanitizerInvocations.get(),
 					"A failed policy check must precede deferred-output sanitization.");
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -319,37 +294,36 @@ public class McpDeferredTaskOutputSafetyTests {
 				McpHandlerInterceptor.passThroughInstance(),
 				sanitizer(sanitizerMode, sanitizerInvocations),
 				policyProbe.policy(), Duration.ofSeconds(1));
-		Soklet soklet = managedSoklet(server);
-		ExecutorService clientExecutor = Executors.newSingleThreadExecutor();
-		Future<HttpResponse<String>> retrieval = null;
+		Soklet.run(config(server), () -> {
+			ExecutorService clientExecutor = Executors.newSingleThreadExecutor();
+			Future<HttpResponse<String>> retrieval = null;
 
-		try {
-			soklet.start();
-			int port = boundPort(server);
-			assertSuccess(createTask(port));
-			policyProbe.block();
-			retrieval = clientExecutor.submit(() ->
-					getTask(port, "reauthorization-deadline"));
-			policyProbe.awaitEntered();
+			try {
+				int port = boundPort(server);
+				assertSuccess(createTask(port));
+				policyProbe.block();
+				retrieval = clientExecutor.submit(() ->
+						getTask(port, "reauthorization-deadline"));
+				policyProbe.awaitEntered();
 
-			HttpResponse<String> response = retrieval.get(5, TimeUnit.SECONDS);
-			assertActiveDeadline(response, "reauthorization-deadline");
-			policyProbe.awaitCanceled();
-			policyProbe.assertCanceledWith(
-					StreamTerminationReason.RESPONSE_TIMEOUT);
-			policyProbe.awaitExited();
-			awaitNoActiveHandlerExecutions(server);
-			Assertions.assertEquals(2, policyProbe.invocations());
-			Assertions.assertEquals(0, sanitizerInvocations.get(),
-					"A timed-out task reauthorization must bypass sanitization.");
-		} finally {
-			policyProbe.release();
-			if (retrieval != null)
-				retrieval.cancel(true);
-			clientExecutor.shutdownNow();
-			clientExecutor.awaitTermination(5, TimeUnit.SECONDS);
-			soklet.close();
-		}
+				HttpResponse<String> response = retrieval.get(5, TimeUnit.SECONDS);
+				assertActiveDeadline(response, "reauthorization-deadline");
+				policyProbe.awaitCanceled();
+				policyProbe.assertCanceledWith(
+						StreamTerminationReason.RESPONSE_TIMEOUT);
+				policyProbe.awaitExited();
+				awaitNoActiveHandlerExecutions(server);
+				Assertions.assertEquals(2, policyProbe.invocations());
+				Assertions.assertEquals(0, sanitizerInvocations.get(),
+						"A timed-out task reauthorization must bypass sanitization.");
+			} finally {
+				policyProbe.release();
+				if (retrieval != null)
+					retrieval.cancel(true);
+				clientExecutor.shutdownNow();
+				clientExecutor.awaitTermination(5, TimeUnit.SECONDS);
+			}
+		});
 	}
 
 	@Test
@@ -366,7 +340,8 @@ public class McpDeferredTaskOutputSafetyTests {
 				McpHandlerInterceptor.passThroughInstance(),
 				sanitizer(sanitizerMode, sanitizerInvocations),
 				policyProbe.policy(), Duration.ofSeconds(30));
-		Soklet soklet = managedSoklet(server);
+		// The test forces the active runtime to stop while the policy is still executing.
+		Soklet soklet = Soklet.fromConfig(config(server));
 		ExecutorService clientExecutor = Executors.newSingleThreadExecutor();
 		Future<HttpResponse<String>> retrieval = null;
 
@@ -411,14 +386,9 @@ public class McpDeferredTaskOutputSafetyTests {
 				sanitizerInvocations);
 		McpServer creatorServer = server(originTool, taskManager,
 				McpHandlerInterceptor.passThroughInstance(), sanitizer);
-		Soklet creator = managedSoklet(creatorServer);
-
-		try {
-			creator.start();
+		Soklet.run(config(creatorServer), () -> {
 			assertSuccess(createTask(boundPort(creatorServer)));
-		} finally {
-			creator.close();
-		}
+		});
 
 		AtomicReference<CatalogPolicyMode> policyMode =
 				new AtomicReference<>(CatalogPolicyMode.ALLOW);
@@ -435,10 +405,7 @@ public class McpDeferredTaskOutputSafetyTests {
 		McpServer readerServer = server(replacementTool, taskManager,
 				McpHandlerInterceptor.passThroughInstance(), sanitizer,
 				catalogAccessPolicy(originTool, policyMode, policyInvocations));
-		Soklet reader = managedSoklet(readerServer);
-
-		try {
-			reader.start();
+		Soklet.run(config(readerServer), () -> {
 			HttpResponse<String> response = getTask(boundPort(readerServer),
 					"removed-origin-tool");
 			assertFixedInternalError(response, "removed-origin-tool");
@@ -451,9 +418,7 @@ public class McpDeferredTaskOutputSafetyTests {
 					"A missing current registration must short-circuit policy.");
 			Assertions.assertEquals(0, sanitizerInvocations.get(),
 					"A missing current registration must suppress output before sanitization.");
-		} finally {
-			reader.close();
-		}
+		});
 	}
 
 	@Test
@@ -485,10 +450,7 @@ public class McpDeferredTaskOutputSafetyTests {
 								policyInvocations),
 						localizer(localizationMode,
 								localizationProviderInvocations));
-				Soklet soklet = managedSoklet(server);
-
-				try {
-					soklet.start();
+				Soklet.run(config(server), () -> {
 					int port = boundPort(server);
 					assertSuccess(createTask(port));
 					Assertions.assertEquals(1, policyInvocations.get());
@@ -529,9 +491,7 @@ public class McpDeferredTaskOutputSafetyTests {
 					Assertions.assertEquals(0, sanitizerInvocations.get(),
 							"A non-completed task must not invoke the sanitizer for "
 									+ requestId + ".");
-				} finally {
-					soklet.close();
-				}
+				});
 			}
 		}
 	}
@@ -742,11 +702,11 @@ public class McpDeferredTaskOutputSafetyTests {
 				});
 	}
 
-	private static Soklet managedSoklet(@NonNull McpServer server) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+	private static SokletConfig config(@NonNull McpServer server) {
+		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
-					.build());
+					.build();
 	}
 
 	@NonNull

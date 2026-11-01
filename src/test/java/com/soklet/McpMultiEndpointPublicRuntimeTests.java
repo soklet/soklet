@@ -82,10 +82,9 @@ public class McpMultiEndpointPublicRuntimeTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
-		Soklet soklet = managedSoklet(server);
+		SokletConfig sokletConfig = config(server);
 
-		try {
-			soklet.start();
+		Soklet.run(sokletConfig, () -> {
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 
@@ -159,9 +158,7 @@ public class McpMultiEndpointPublicRuntimeTests {
 			Assertions.assertEquals(1, secondHandlerInvocations.get());
 			Assertions.assertSame(firstEndpoint, firstObservedEndpoint.get());
 			Assertions.assertSame(secondEndpoint, secondObservedEndpoint.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -198,10 +195,9 @@ public class McpMultiEndpointPublicRuntimeTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
-		Soklet soklet = managedSoklet(server);
+		SokletConfig sokletConfig = config(server);
 
-		try {
-			soklet.start();
+		Soklet.run(sokletConfig, () -> {
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			assertSuccess(send(port, FIRST_PATH,
@@ -224,9 +220,7 @@ public class McpMultiEndpointPublicRuntimeTests {
 					secondEndpoint);
 			assertEndpointSequence(toolLimitedEndpoints, firstEndpoint,
 					secondEndpoint);
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -259,10 +253,9 @@ public class McpMultiEndpointPublicRuntimeTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
-		Soklet soklet = managedSoklet(server);
+		SokletConfig sokletConfig = config(server);
 
-		try {
-			soklet.start();
+		Soklet.run(sokletConfig, () -> {
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 
@@ -322,16 +315,14 @@ public class McpMultiEndpointPublicRuntimeTests {
 			Assertions.assertSame(secondEndpoint, secondPromptEndpoint.get());
 			Assertions.assertSame(firstEndpoint, firstResourceEndpoint.get());
 			Assertions.assertSame(secondEndpoint, secondResourceEndpoint.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
-	private static Soklet managedSoklet(McpServer server) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+	private static SokletConfig config(McpServer server) {
+		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
-				.build());
+				.build();
 	}
 
 	@NonNull

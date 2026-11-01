@@ -89,6 +89,7 @@ public class McpStreamTests {
 					new McpJsonCodec(McpJsonLimits.productionDefaults()));
 
 	@Test
+	@Timeout(61)
 	public void neverWritesIndependentRequest() throws Exception {
 		RecordingPublisher publisher = new RecordingPublisher();
 		McpInputRequestDeclaration roots = McpInputRequestDeclaration
@@ -138,7 +139,6 @@ public class McpStreamTests {
 		Thread stopThread = null;
 
 		try {
-			soklet.start();
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow()
 					.getPort();
 
@@ -173,7 +173,9 @@ public class McpStreamTests {
 				publisher.publishResourcesListChanged();
 				envelopes.add(readNextSseEnvelope(client));
 
-				stopThread = new Thread(soklet::close,
+				// The test controls shutdown while request streams are live and checks stop ordering.
+				// The test controls shutdown while request streams are live and checks stop ordering.
+				stopThread = new Thread(() -> com.soklet.SokletTestScope.close(soklet),
 						"mcp-no-independent-request-stop");
 				stopThread.start();
 				envelopes.addAll(readAllSseEnvelopes(client));
@@ -200,7 +202,7 @@ public class McpStreamTests {
 						terminal.id());
 			}
 		} finally {
-			soklet.close();
+			com.soklet.SokletTestScope.close(soklet);
 			if (stopThread != null && stopThread.isAlive())
 				stopThread.join(5_000L);
 		}
@@ -303,7 +305,7 @@ public class McpStreamTests {
 	}
 
 	private static Soklet managedSoklet(McpServer server) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+		return Soklet.run(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
 				.build());

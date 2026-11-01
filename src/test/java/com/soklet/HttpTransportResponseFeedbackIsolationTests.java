@@ -53,40 +53,44 @@ class HttpTransportResponseFeedbackIsolationTests {
 				.requestHandlerExecutorServiceSupplier(() -> executor).build());
 		Observation observation = new Observation();
 		AtomicInteger rejectionResponses = new AtomicInteger();
-		try (Soklet outerApp = Soklet.fromConfig(httpConfig(outer).lifecycleObserver(observation).build());
-				Soklet innerApp = Soklet.fromConfig(httpConfig(inner)
+		try {
+			Soklet.run(httpConfig(outer).lifecycleObserver(observation).build(), () -> {
+				// This owner is stopped explicitly while the admitted inner dispatch is held.
+				try (SokletTestScope innerAppScope = SokletTestScope.of(Soklet.fromConfig(httpConfig(inner)
 						.responseMarshaler(ResponseMarshaler.builder().serviceUnavailableHandler((request, method) -> {
 							rejectionResponses.incrementAndGet();
 							// Force the built-in transport to replace this admission rejection.
 							return MarshaledResponse.fromStatusCode(100);
-						}).build()).build())) {
-			outerApp.start();
-			innerApp.start();
-			try (Socket socket = request(inner.delegate.getEventLoop().orElseThrow().getPort(), "/outcome")) {
-				await(inner.received);
-				var shutdown = innerApp.shutdown().toCompletableFuture();
-				await(quiesced);
-				outer.handler.handleRequest(Request.fromPath(HttpMethod.GET, "/outcome"), result -> {
-					try {
-						// The fresh Request has no admission belonging to the held network dispatch.
-						inner.upstream.handleRequest(Request.fromPath(HttpMethod.GET, "/outcome"), inner.writer.get());
-					} catch (RuntimeException independentInnerFailure) {
-						// This independent operation contains its own transport failures. With
-						// the legacy exception signal, this also kept replacement feedback local.
+						}).build()).build()))) {
+					Soklet innerApp = innerAppScope.soklet();
+					innerApp.start();
+					try (Socket socket = request(inner.delegate.getEventLoop().orElseThrow().getPort(), "/outcome")) {
+						await(inner.received);
+						var shutdown = innerApp.shutdown().toCompletableFuture();
+						await(quiesced);
+						outer.handler.handleRequest(Request.fromPath(HttpMethod.GET, "/outcome"), result -> {
+							try {
+								// The fresh Request has no admission belonging to the held network dispatch.
+								inner.upstream.handleRequest(Request.fromPath(HttpMethod.GET, "/outcome"), inner.writer.get());
+							} catch (RuntimeException independentInnerFailure) {
+								// This independent operation contains its own transport failures. With
+								// the legacy exception signal, this also kept replacement feedback local.
+							}
+							// The outer transport accepts its own response unchanged.
+						});
+						String wire = new String(socket.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+						assertTrue(wire.startsWith("HTTP/1.1 500"), wire);
+						assertEquals(1, rejectionResponses.get());
+						assertEquals(200, observation.written.get().getStatusCode());
+						assertEquals(200, observation.finished.get().getStatusCode());
+						assertTrue(observation.failures.get().isEmpty(), observation.failures.get().toString());
+						inner.release.countDown();
+						assertTrue(shutdown.get(5, TimeUnit.SECONDS).isComplete());
+					} finally {
+						inner.release.countDown();
 					}
-					// The outer transport accepts its own response unchanged.
-				});
-				String wire = new String(socket.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-				assertTrue(wire.startsWith("HTTP/1.1 500"), wire);
-				assertEquals(1, rejectionResponses.get());
-				assertEquals(200, observation.written.get().getStatusCode());
-				assertEquals(200, observation.finished.get().getStatusCode());
-				assertTrue(observation.failures.get().isEmpty(), observation.failures.get().toString());
-				inner.release.countDown();
-				assertTrue(shutdown.get(5, TimeUnit.SECONDS).isComplete());
-			} finally {
-				inner.release.countDown();
-			}
+				}
+			});
 		} finally {
 			inner.release.countDown();
 			executor.shutdownNow();
@@ -171,8 +175,7 @@ class HttpTransportResponseFeedbackIsolationTests {
 						return type == SseResource.class ? type.cast(resource) : InstanceProvider.defaultInstance().provide(type);
 					}
 				}).lifecycleObserver(observation).lifecyclePolicy(lifecyclePolicy()).build();
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
+		ShutdownResult shutdownResult = Soklet.run(config, () -> {
 			try (Socket socket = request(port, redispatchFresh ? "/missing" : "/events")) {
 				String wire = new String(socket.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
 				assertTrue(wire.startsWith("HTTP/1.1 500"), wire);
@@ -193,8 +196,8 @@ class HttpTransportResponseFeedbackIsolationTests {
 				assertEquals(0, resource.initializers.get());
 				assertEquals(0, observation.established.get());
 			}
-			assertTrue(soklet.shutdown().toCompletableFuture().get(5, TimeUnit.SECONDS).isComplete());
-		}
+		});
+		assertTrue(shutdownResult.isComplete());
 	}
 
 	private static void runOnJoinedThread(Runnable action) {

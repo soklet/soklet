@@ -51,6 +51,7 @@ public final class TransportCompositionFixtureContractTest {
 			runGraph(composition);
 	}
 
+	@SuppressWarnings("try") // The cleanup scope is intentionally not referenced by its body.
 	private static void runGraph(Composition composition) throws Exception {
 		HttpGraph http = TransportCompositionFixture.httpGraph(composition);
 		SseGraph sse = TransportCompositionFixture.sseGraph(composition);
@@ -78,12 +79,15 @@ public final class TransportCompositionFixtureContractTest {
 				.build();
 
 		ShutdownResult result;
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
+		Soklet soklet = Soklet.run(config);
+		try (AutoCloseable sokletShutdown = () -> {
+			soklet.requestShutdown();
+			soklet.awaitShutdownAsync().toCompletableFuture().join();
+		}) {
 			http.leaf().dispatchTestRequest();
 			sse.leaf().dispatchTestRequest();
 			sse.outer().acquireBroadcaster(null);
-			soklet.shutdown();
+			soklet.requestShutdown();
 			result = soklet.awaitShutdown();
 		}
 

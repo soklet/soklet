@@ -129,10 +129,9 @@ public class McpInputRequiredPublicRuntimeTests {
 					return output;
 				});
 
-		Soklet soklet = managedSoklet(server);
+		SokletConfig sokletConfig = config(server);
 
-		try {
-			soklet.start();
+		Soklet.run(sokletConfig, () -> {
 			int port = boundPort(server);
 
 			HttpResponse<String> toolResponse = send(port, "tool-input",
@@ -185,9 +184,7 @@ public class McpInputRequiredPublicRuntimeTests {
 					resourceResponse.body().contains("\"cacheScope\""),
 					resourceResponse.body());
 			Assertions.assertEquals(0, sanitizerInvocations.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -256,10 +253,9 @@ public class McpInputRequiredPublicRuntimeTests {
 					return output;
 				});
 
-		Soklet soklet = managedSoklet(server);
+		SokletConfig sokletConfig = config(server);
 
-		try {
-			soklet.start();
+		Soklet.run(sokletConfig, () -> {
 			int port = boundPort(server);
 
 			HttpResponse<String> formResponse = callTool(port,
@@ -307,9 +303,7 @@ public class McpInputRequiredPublicRuntimeTests {
 					additionalFormResponse.body().contains("\"cacheScope\""),
 					additionalFormResponse.body());
 			Assertions.assertEquals(0, sanitizerInvocations.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -412,10 +406,9 @@ public class McpInputRequiredPublicRuntimeTests {
 					return output;
 				});
 
-		Soklet soklet = managedSoklet(server);
+		SokletConfig sokletConfig = config(server);
 
-		try {
-			soklet.start();
+		Soklet.run(sokletConfig, () -> {
 			int port = boundPort(server);
 			HttpResponse<String> toolResponse = callTool(port,
 					"invalid-form", "invalid-form-input", ALL_INPUT_CAPABILITIES);
@@ -442,9 +435,7 @@ public class McpInputRequiredPublicRuntimeTests {
 					resourceResponse.body());
 			Assertions.assertEquals(3, handlerInvocations.get());
 			Assertions.assertEquals(0, sanitizerInvocations.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -507,10 +498,9 @@ public class McpInputRequiredPublicRuntimeTests {
 			return output;
 		});
 
-		Soklet soklet = managedSoklet(server);
+		SokletConfig sokletConfig = config(server);
 
-		try {
-			soklet.start();
+		Soklet.run(sokletConfig, () -> {
 			int port = boundPort(server);
 
 			HttpResponse<String> missingRequired = callTool(port,
@@ -555,9 +545,7 @@ public class McpInputRequiredPublicRuntimeTests {
 			Assertions.assertEquals(4, toolLimiterInvocations.get());
 			Assertions.assertEquals(2, conditionalInputHandlerInvocations.get());
 			Assertions.assertEquals(1, sanitizerInvocations.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -652,10 +640,9 @@ public class McpInputRequiredPublicRuntimeTests {
 				.subscriptionAuthorizer(
 						McpSubscriptionAuthorizer.denyAllInstance())
 				.build();
-		Soklet soklet = managedSoklet(server);
+		SokletConfig sokletConfig = config(server);
 
-		try {
-			soklet.start();
+		Soklet.run(sokletConfig, () -> {
 			int port = boundPort(server);
 			HttpResponse<String> alphaList = sendAsCaller(port,
 					"caller-neutral-tools", "tools/list", "", "", "{}",
@@ -735,9 +722,7 @@ public class McpInputRequiredPublicRuntimeTests {
 			Assertions.assertEquals(1, handlerInvocations.get());
 			Assertions.assertEquals(0, promptHandlerInvocations.get());
 			Assertions.assertEquals(1, sanitizerInvocations.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -784,10 +769,9 @@ public class McpInputRequiredPublicRuntimeTests {
 					return output;
 				});
 
-		Soklet soklet = managedSoklet(server);
+		SokletConfig sokletConfig = config(server);
 
-		try {
-			soklet.start();
+		Soklet.run(sokletConfig, () -> {
 			int port = boundPort(server);
 			HttpResponse<String> missingCapability = callTool(port,
 					"missing-before-malformed", "conditional-malformed-input", "{}");
@@ -816,9 +800,7 @@ public class McpInputRequiredPublicRuntimeTests {
 					supportedButMalformed.body());
 			Assertions.assertEquals(2, handlerInvocations.get());
 			Assertions.assertEquals(0, sanitizerInvocations.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -859,10 +841,9 @@ public class McpInputRequiredPublicRuntimeTests {
 					return output;
 				});
 
-		Soklet soklet = managedSoklet(server);
+		SokletConfig sokletConfig = config(server);
 
-		try {
-			soklet.start();
+		Soklet.run(sokletConfig, () -> {
 			HttpResponse<String> response = callTool(boundPort(server),
 					"undeclared", "undeclared-input",
 					FORM_AND_URL_INPUT_CAPABILITIES);
@@ -880,9 +861,7 @@ public class McpInputRequiredPublicRuntimeTests {
 					response.body());
 			Assertions.assertEquals(1, handlerInvocations.get());
 			Assertions.assertEquals(0, sanitizerInvocations.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -959,10 +938,9 @@ public class McpInputRequiredPublicRuntimeTests {
 					return output;
 				});
 
-		Soklet soklet = managedSoklet(server);
+		SokletConfig sokletConfig = config(server);
 
-		try {
-			soklet.start();
+		Soklet.run(sokletConfig, () -> {
 			int port = boundPort(server);
 			HttpResponse<String> toolResponse = callTool(port,
 					"interceptor-undeclared-tool-response",
@@ -1002,9 +980,7 @@ public class McpInputRequiredPublicRuntimeTests {
 			Assertions.assertEquals(3, interceptorInvocations.get());
 			Assertions.assertEquals(0, handlerInvocations.get());
 			Assertions.assertEquals(0, sanitizerInvocations.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -1077,10 +1053,9 @@ public class McpInputRequiredPublicRuntimeTests {
 					return output;
 				});
 
-		Soklet soklet = managedSoklet(server);
+		SokletConfig sokletConfig = config(server);
 
-		try {
-			soklet.start();
+		Soklet.run(sokletConfig, () -> {
 			int port = boundPort(server);
 			HttpResponse<String> valid = callTool(port, "interceptor-valid",
 					"interceptor-valid-input", URL_INPUT_CAPABILITY);
@@ -1127,9 +1102,7 @@ public class McpInputRequiredPublicRuntimeTests {
 			Assertions.assertEquals(4, interceptorInvocations.get());
 			Assertions.assertEquals(0, handlerInvocations.get());
 			Assertions.assertEquals(0, sanitizerInvocations.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -1190,10 +1163,9 @@ public class McpInputRequiredPublicRuntimeTests {
 					sanitizerInvocations.incrementAndGet();
 					return output;
 				});
-		Soklet soklet = managedSoklet(server);
+		SokletConfig sokletConfig = config(server);
 
-		try {
-			soklet.start();
+		Soklet.run(sokletConfig, () -> {
 			int port = boundPort(server);
 			HttpResponse<String> missingCapability = callTool(port,
 					"aggregate-input-missing-capability",
@@ -1226,9 +1198,7 @@ public class McpInputRequiredPublicRuntimeTests {
 			Assertions.assertEquals(2, aggregateInvocations.get());
 			Assertions.assertEquals(1, legalInvocations.get());
 			Assertions.assertEquals(0, sanitizerInvocations.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	private static McpEndpoint.Builder endpointBuilder() {
@@ -1238,11 +1208,11 @@ public class McpInputRequiredPublicRuntimeTests {
 				.serverInfoIncluded(false);
 	}
 
-	private static Soklet managedSoklet(McpServer server) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+	private static SokletConfig config(McpServer server) {
+		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
-				.build());
+				.build();
 	}
 
 	private static McpServer server(McpEndpoint endpoint,

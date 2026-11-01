@@ -34,8 +34,7 @@ class HttpResponseStreamEnrollmentTests {
 		CustomTransport transport = new CustomTransport();
 		AtomicInteger producers = new AtomicInteger();
 		SokletConfig config = config(transport, collector, silent(), new Resource(stream -> producers.incrementAndGet()));
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
+		Soklet.run(config, () -> {
 			for (int i = 0; i < 4; i++) {
 				HttpRequestResult result = transport.dispatch(request(), false);
 				assertTrue(result.getMarshaledResponse().isStreaming());
@@ -46,7 +45,7 @@ class HttpResponseStreamEnrollmentTests {
 			assertEquals(0D, responseBytes(snapshot));
 			assertTrue(snapshot.getHttpResponseStreamTerminations().isEmpty());
 			assertEquals(0, producers.get());
-		}
+		});
 	}
 
 	@Test
@@ -58,8 +57,7 @@ class HttpResponseStreamEnrollmentTests {
 			@Override public void didReceiveLogEvent(LogEvent event) { fail(event.getMessage()); }
 			@Override public void willWriteResponseStream(StreamingResponseHandle handle) { prepared.incrementAndGet(); }
 		};
-		try (Soklet soklet = Soklet.fromConfig(config(transport, collector, observer, new Resource(stream -> {})))) {
-			soklet.start();
+		Soklet.run(config(transport, collector, observer, new Resource(stream -> {})), () -> {
 			Request original = request();
 			transport.dispatch(original, true);
 			assertSame(original, transport.handle.getRequest());
@@ -73,7 +71,7 @@ class HttpResponseStreamEnrollmentTests {
 					.stream().mapToDouble(histogram -> histogram.getSum()).sum());
 			transport.reportTerminal();
 			assertEquals(1L, terminationCount(collector.snapshot().orElseThrow()));
-		}
+		});
 	}
 
 	@Test
@@ -153,9 +151,8 @@ class HttpResponseStreamEnrollmentTests {
 				}).lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(2))
 						.startupCancelationTimeout(Duration.ofMillis(200)).gracefulShutdownTimeout(Duration.ofMillis(200))
 						.forcedShutdownTimeout(Duration.ofMillis(200)).build()).build();
-		try (Soklet soklet = Soklet.fromConfig(config)) {
+		Soklet.run(config, () -> {
 			try {
-				soklet.start();
 				String wire;
 				try (Socket socket = new Socket()) {
 					socket.connect(new java.net.InetSocketAddress("127.0.0.1", delegate.getEventLoop().orElseThrow().getPort()), 1000);
@@ -181,10 +178,11 @@ class HttpResponseStreamEnrollmentTests {
 			} finally {
 				releaseHandling.countDown();
 			}
-		}
+		});
 	}
 
 	@Test
+	@Timeout(90)
 	void copyingRequestDecoratorPreservesDispatchAndHandleIdentityThroughStreamLifecycle() throws Exception {
 		int port;
 		try (ServerSocket reserved = new ServerSocket(0)) { port = reserved.getLocalPort(); }
@@ -254,8 +252,7 @@ class HttpResponseStreamEnrollmentTests {
 		Resource resource = new Resource(stream -> {
 			order.add("producer"); stream.write("payload".getBytes(StandardCharsets.US_ASCII));
 		});
-		try (Soklet soklet = Soklet.fromConfig(config(decorator, collector, observer, resource))) {
-			soklet.start();
+		Soklet.run(config(decorator, collector, observer, resource), () -> {
 			String wire = exchange(port, "GET", "HTTP/1.1");
 			assertTrue(wire.startsWith("HTTP/1.1 200"), wire); assertTrue(wire.contains("payload"), wire);
 			assertTrue(handlingFinished.await(5, TimeUnit.SECONDS)); assertTrue(terminated.await(5, TimeUnit.SECONDS));
@@ -276,10 +273,11 @@ class HttpResponseStreamEnrollmentTests {
 			MetricsCollector.Snapshot snapshot = defaults.snapshot().orElseThrow();
 			assertEquals(0L, snapshot.getActiveRequests()); assertEquals(1L, requestCount(snapshot));
 			assertEquals(7D, responseBytes(snapshot)); assertEquals(1L, terminationCount(snapshot));
-		}
+		});
 	}
 
 	@Test
+	@Timeout(90)
 	void copyingRequestDecoratorRetainsDispatchIdentityWhenHttp10RejectsStreamWithoutPreparation() throws Exception {
 		int port;
 		try (ServerSocket reserved = new ServerSocket(0)) { port = reserved.getLocalPort(); }
@@ -322,9 +320,8 @@ class HttpResponseStreamEnrollmentTests {
 				terminalHandles.add(handle); reasons.add(termination.getReason()); terminated.countDown();
 			}
 		};
-		try (Soklet soklet = Soklet.fromConfig(config(decorator, collector, observer,
-				new Resource(stream -> producers.incrementAndGet())))) {
-			soklet.start();
+		Soklet.run(config(decorator, collector, observer,
+				new Resource(stream -> producers.incrementAndGet())), () -> {
 			String wire = exchange(port, "GET", "HTTP/1.0"); assertTrue(wire.startsWith("HTTP/1.0 505"), wire);
 			assertTrue(handlingFinished.await(5, TimeUnit.SECONDS)); assertTrue(terminated.await(5, TimeUnit.SECONDS));
 			assertNotSame(transportRequest.get(), dispatchRequest.get()); assertNotNull(dispatchRequest.get());
@@ -337,7 +334,7 @@ class HttpResponseStreamEnrollmentTests {
 			MetricsCollector.Snapshot snapshot = collector.snapshot().orElseThrow();
 			assertEquals(0L, snapshot.getActiveRequests()); assertEquals(1L, requestCount(snapshot));
 			assertTrue(snapshot.getHttpResponseStreamTerminations().isEmpty());
-		}
+		});
 	}
 
 	@Test
@@ -406,9 +403,8 @@ class HttpResponseStreamEnrollmentTests {
 			@Override public void didFinishRequestHandling(ServerType type, Request request, ResourceMethod method,
 					MarshaledResponse response, Duration duration, List<Throwable> throwables) { finished.countDown(); }
 		};
-		try (Soklet soklet = Soklet.fromConfig(config(HttpServer.withPort(port).host("127.0.0.1").build(), collector,
-				observer, new Resource(stream -> producers.incrementAndGet())))) {
-			soklet.start();
+		Soklet.run(config(HttpServer.withPort(port).host("127.0.0.1").build(), collector,
+				observer, new Resource(stream -> producers.incrementAndGet())), () -> {
 			assertTrue(exchange(port, "HEAD", "HTTP/1.1").startsWith("HTTP/1.1 200"));
 			assertTrue(exchange(port, "GET", "HTTP/1.0").startsWith("HTTP/1.0 505"));
 			assertTrue(finished.await(5, TimeUnit.SECONDS));
@@ -416,7 +412,7 @@ class HttpResponseStreamEnrollmentTests {
 			assertEquals(0L, collector.snapshot().orElseThrow().getActiveRequests());
 			assertEquals(2L, requestCount(collector.snapshot().orElseThrow()));
 			assertTrue(collector.snapshot().orElseThrow().getHttpResponseStreamTerminations().isEmpty());
-		}
+		});
 	}
 
 	private static long requestCount(MetricsCollector.Snapshot snapshot) {

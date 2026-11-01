@@ -108,73 +108,77 @@ public class HttpResponseStreamTerminalRuntimeTests {
         Observation o = new Observation(); o.blockHandling = new CountDownLatch(1);
         writer = stream -> stream.write(new byte[]{1,2,3});
         int port = findFreePort();
-        try (Soklet soklet = Soklet.fromConfig(config(HttpServer.withPort(port).host("127.0.0.1").build(), o))) {
-            soklet.start();
-            try (Socket socket = request(port, "GET", "HTTP/1.1")) {
-                assertTrue(new String(socket.getInputStream().readAllBytes(), StandardCharsets.US_ASCII).startsWith("HTTP/1.1 200"));
-                await(o.handling); assertEquals(0, o.calls.get()); assertEquals(1L, o.defaults.snapshot().orElseThrow().getActiveRequests());
-                // A real gate, not a timing assumption: the transport has finished, handling is still held.
-                o.blockHandling.countDown(); await(o.terminal);
-                assertEquals(3L, o.bytes); assertEquals(1, o.calls.get()); assertTrue(o.duration.toNanos() > 0);
-            }
+        try {
+            Soklet.run(config(HttpServer.withPort(port).host("127.0.0.1").build(), o), () -> {
+                try (Socket socket = request(port, "GET", "HTTP/1.1")) {
+                    assertTrue(new String(socket.getInputStream().readAllBytes(), StandardCharsets.US_ASCII).startsWith("HTTP/1.1 200"));
+                    await(o.handling); assertEquals(0, o.calls.get()); assertEquals(1L, o.defaults.snapshot().orElseThrow().getActiveRequests());
+                    // A real gate, not a timing assumption: the transport has finished, handling is still held.
+                    o.blockHandling.countDown(); await(o.terminal);
+                    assertEquals(3L, o.bytes); assertEquals(1, o.calls.get()); assertTrue(o.duration.toNanos() > 0);
+                }
+        });
         } finally { o.blockHandling.countDown(); }
     }
     @Test public void metricsCompleteBeforeBlockedLifecycleObserver() throws Exception {
         Observation o = new Observation(); o.blockLifecycle = new CountDownLatch(1);
         writer = stream -> stream.write(new byte[]{1,2,3}); int port = findFreePort();
-        try (Soklet soklet = Soklet.fromConfig(config(HttpServer.withPort(port).host("127.0.0.1").build(), o))) {
-            soklet.start();
-            try (Socket socket = request(port,"GET","HTTP/1.1")) {
-                socket.getInputStream().readAllBytes(); await(o.lifecycle); await(o.terminal);
-                assertEquals(0L, o.defaults.snapshot().orElseThrow().getActiveRequests()); assertEquals(3L, o.bytes);
-                o.blockLifecycle.countDown();
-            }
+        try {
+            Soklet.run(config(HttpServer.withPort(port).host("127.0.0.1").build(), o), () -> {
+                try (Socket socket = request(port,"GET","HTTP/1.1")) {
+                    socket.getInputStream().readAllBytes(); await(o.lifecycle); await(o.terminal);
+                    assertEquals(0L, o.defaults.snapshot().orElseThrow().getActiveRequests()); assertEquals(3L, o.bytes);
+                    o.blockLifecycle.countDown();
+                }
+        });
         } finally { o.blockLifecycle.countDown(); }
     }
     @Test public void producerFailureCountsOnlyPayloadAlreadyWrittenAndKeepsCommittedStatus() throws Exception {
         Observation o = new Observation(); CountDownLatch fail = new CountDownLatch(1);
         writer = stream -> { stream.write("first".getBytes(StandardCharsets.US_ASCII)); stream.flush(); await(fail); throw new IOException("producer-failure-canary"); };
         int port = findFreePort();
-        try (Soklet soklet = Soklet.fromConfig(config(HttpServer.withPort(port).host("127.0.0.1").build(), o))) {
-            soklet.start(); try (Socket socket = request(port,"GET","HTTP/1.1")) {
-                assertTrue(head(socket.getInputStream()).startsWith("HTTP/1.1 200"));
-                assertEquals("5\r\nfirst\r\n", new String(socket.getInputStream().readNBytes(10),StandardCharsets.US_ASCII));
-                fail.countDown(); socket.getInputStream().readAllBytes(); await(o.terminal);
-                assertEquals(5L, o.bytes); assertEquals(StreamTerminationReason.PRODUCER_FAILED,o.outcome.getReason());
-                assertEquals("2xx", o.defaults.snapshot().orElseThrow().getHttpResponseStreamTerminations().keySet().iterator().next().getHttpServerRouteStatusKey().getStatusClass());
-            }
+        try {
+            Soklet.run(config(HttpServer.withPort(port).host("127.0.0.1").build(), o), () -> {
+                try (Socket socket = request(port,"GET","HTTP/1.1")) {
+                    assertTrue(head(socket.getInputStream()).startsWith("HTTP/1.1 200"));
+                    assertEquals("5\r\nfirst\r\n", new String(socket.getInputStream().readNBytes(10),StandardCharsets.US_ASCII));
+                    fail.countDown(); socket.getInputStream().readAllBytes(); await(o.terminal);
+                    assertEquals(5L, o.bytes); assertEquals(StreamTerminationReason.PRODUCER_FAILED,o.outcome.getReason());
+                    assertEquals("2xx", o.defaults.snapshot().orElseThrow().getHttpResponseStreamTerminations().keySet().iterator().next().getHttpServerRouteStatusKey().getStatusClass());
+                }
+        });
         } finally { fail.countDown(); }
     }
     @Test public void timeoutTerminatesAnAdmittedStreamAndRecordsZeroUnwrittenBytes() throws Exception {
         Observation o = new Observation(); CountDownLatch entered = new CountDownLatch(1);
         writer = stream -> { entered.countDown(); new CountDownLatch(1).await(5,TimeUnit.SECONDS); };
         int port=findFreePort();
-        try (Soklet soklet = Soklet.fromConfig(config(HttpServer.withPort(port).host("127.0.0.1")
-            .streamingResponseTimeout(Duration.ofMillis(300)).build(),o))) {
-            soklet.start(); try (Socket socket=request(port,"GET","HTTP/1.1")) {
+        Soklet.run(config(HttpServer.withPort(port).host("127.0.0.1")
+            .streamingResponseTimeout(Duration.ofMillis(300)).build(),o), () -> {
+            try (Socket socket=request(port,"GET","HTTP/1.1")) {
                 await(entered); socket.getInputStream().readAllBytes(); await(o.terminal);
                 assertEquals(StreamTerminationReason.RESPONSE_TIMEOUT,o.outcome.getReason()); assertEquals(0L,o.bytes);
                 assertEquals(0L,o.defaults.snapshot().orElseThrow().getActiveRequests());
             }
-        }
+        });
     }
     @Test public void disconnectTerminatesTheAdmittedStream() throws Exception {
         Observation o=new Observation(); CountDownLatch entered=new CountDownLatch(1);
         writer=stream->{stream.write(new byte[]{1});stream.flush();entered.countDown();new CountDownLatch(1).await(5,TimeUnit.SECONDS);};
         int port=findFreePort();
-        try (Soklet soklet=Soklet.fromConfig(config(HttpServer.withPort(port).host("127.0.0.1").build(),o))) {
-            soklet.start(); try (Socket socket=request(port,"GET","HTTP/1.1")) {
+        Soklet.run(config(HttpServer.withPort(port).host("127.0.0.1").build(),o), () -> {
+            try (Socket socket=request(port,"GET","HTTP/1.1")) {
                 head(socket.getInputStream()); socket.getInputStream().readNBytes(6); await(entered); socket.setSoLinger(true,0);
             }
             await(o.terminal); assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED,o.outcome.getReason());
             assertEquals(1L,o.bytes); assertEquals(0L,o.defaults.snapshot().orElseThrow().getActiveRequests());
-        }
+        });
     }
     @Test public void http10AndHeadRemainFiniteAndDoNotCountOriginalStreams() throws Exception {
         for (String method : List.of("GET","HEAD")) {
             Observation o=new Observation(); AtomicInteger entered=new AtomicInteger(); writer=stream->entered.incrementAndGet(); int port=findFreePort();
-            try (Soklet soklet=Soklet.fromConfig(config(HttpServer.withPort(port).host("127.0.0.1").build(),o))) {
-                soklet.start(); try(Socket socket=request(port,method,method.equals("GET")?"HTTP/1.0":"HTTP/1.1")) {
+            Soklet.run(config(HttpServer.withPort(port).host("127.0.0.1").build(),o), () -> {
+                try(Socket socket=request(port,method,method.equals("GET")?"HTTP/1.0":"HTTP/1.1")) {
                     String wire=new String(socket.getInputStream().readAllBytes(),StandardCharsets.US_ASCII); await(o.handling);
                     assertTrue(wire.contains(" "+(method.equals("GET")?505:200)+" "), wire);
                     assertEquals(0,entered.get()); assertEquals(0,o.calls.get());
@@ -182,16 +186,16 @@ public class HttpResponseStreamTerminalRuntimeTests {
                     assertTrue(snap.getHttpResponseStreamTerminations().isEmpty());
                     assertEquals(1L,snap.getHttpRequestDurations().values().stream().mapToLong(h->h.getCount()).sum());
                 }
-            }
+            });
         }
     }
     @Test public void throwingMetricsCallbackIsLoggedAndLifecycleStillRunsOnce() throws Exception {
         Observation o=new Observation(); o.throwMetrics=true; writer=stream->{}; int port=findFreePort();
-        try(Soklet soklet=Soklet.fromConfig(config(HttpServer.withPort(port).host("127.0.0.1").build(),o))) {
-            soklet.start(); try(Socket socket=request(port,"GET","HTTP/1.1")) {
+        Soklet.run(config(HttpServer.withPort(port).host("127.0.0.1").build(),o), () -> {
+            try(Socket socket=request(port,"GET","HTTP/1.1")) {
                 socket.getInputStream().readAllBytes(); await(o.lifecycle); assertEquals(1,o.calls.get()); assertEquals(1,o.logs.get());
             }
-        }
+        });
     }
     @Test public void simulatorCountsSuccessAndAcceptedPrefixBeforeFailure() {
         for(boolean failed:List.of(false,true)) {
@@ -220,21 +224,23 @@ public class HttpResponseStreamTerminalRuntimeTests {
     @Test public void capacityRejectionRecordsFinite503WithoutAStreamTerminalMetric() throws Exception {
         Observation o=new Observation();CountDownLatch release=new CountDownLatch(1);
         writer=stream->{stream.write(new byte[]{1});stream.flush();await(release);};int port=findFreePort();
-        try(Soklet soklet=Soklet.fromConfig(config(HttpServer.withPort(port).host("127.0.0.1")
-                .streamingLifecycleCapacity(1).streamingCallbackConcurrency(1).build(),o))) {
-            soklet.start();try(Socket first=request(port,"GET","HTTP/1.1")) {
-                head(first.getInputStream());first.getInputStream().readNBytes(6);await(o.handling);
-                try(Socket second=request(port,"GET","HTTP/1.1")) {
-                    String wire=new String(second.getInputStream().readAllBytes(),StandardCharsets.US_ASCII);
-                    assertTrue(wire.contains(" 503 "),wire);await(o.secondHandled);
-                    assertEquals(0,o.calls.get());assertEquals(1L,o.defaults.snapshot().orElseThrow().getActiveRequests());
+        try {
+            Soklet.run(config(HttpServer.withPort(port).host("127.0.0.1")
+                .streamingLifecycleCapacity(1).streamingCallbackConcurrency(1).build(),o), () -> {
+                try(Socket first=request(port,"GET","HTTP/1.1")) {
+                    head(first.getInputStream());first.getInputStream().readNBytes(6);await(o.handling);
+                    try(Socket second=request(port,"GET","HTTP/1.1")) {
+                        String wire=new String(second.getInputStream().readAllBytes(),StandardCharsets.US_ASCII);
+                        assertTrue(wire.contains(" 503 "),wire);await(o.secondHandled);
+                        assertEquals(0,o.calls.get());assertEquals(1L,o.defaults.snapshot().orElseThrow().getActiveRequests());
+                    }
+                    release.countDown();first.getInputStream().readAllBytes();await(o.terminal);
+                    var snapshot=o.defaults.snapshot().orElseThrow();assertEquals(0L,snapshot.getActiveRequests());
+                    assertEquals(1L,snapshot.getHttpResponseStreamTerminations().values().stream().mapToLong(Long::longValue).sum());
+                    assertTrue(snapshot.getHttpRequestDurations().keySet().stream().anyMatch(k->"5xx".equals(k.getStatusClass())));
+                    assertEquals(2L,snapshot.getHttpRequestDurations().values().stream().mapToLong(h->h.getCount()).sum());
                 }
-                release.countDown();first.getInputStream().readAllBytes();await(o.terminal);
-                var snapshot=o.defaults.snapshot().orElseThrow();assertEquals(0L,snapshot.getActiveRequests());
-                assertEquals(1L,snapshot.getHttpResponseStreamTerminations().values().stream().mapToLong(Long::longValue).sum());
-                assertTrue(snapshot.getHttpRequestDurations().keySet().stream().anyMatch(k->"5xx".equals(k.getStatusClass())));
-                assertEquals(2L,snapshot.getHttpRequestDurations().values().stream().mapToLong(h->h.getCount()).sum());
-            }
+        });
         }finally{release.countDown();}
     }
     @Test public void forcedServerStopTerminatesAdmittedStreamMetrics() throws Exception {
@@ -244,7 +250,9 @@ public class HttpResponseStreamTerminalRuntimeTests {
             LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(10)).startupCancelationTimeout(Duration.ofSeconds(1))
                 .gracefulShutdownTimeout(Duration.ZERO)
                 .forcedShutdownTimeout(Duration.ofSeconds(2)).build());
-        try(Soklet soklet=Soklet.fromConfig(config)) {
+        // The stream must remain admitted when this owner is forcibly stopped.
+        try(SokletTestScope sokletScope = SokletTestScope.of(Soklet.fromConfig(config))) {
+            Soklet soklet = sokletScope.soklet();
             soklet.start();try(Socket socket=request(port,"GET","HTTP/1.1")) {
                 await(entered);await(o.handling);soklet.shutdown().toCompletableFuture().get(3,TimeUnit.SECONDS);await(o.terminal);
                 assertEquals(StreamTerminationReason.SERVER_STOPPING,o.outcome.getReason());assertEquals(0L,o.bytes);

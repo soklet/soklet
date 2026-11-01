@@ -39,15 +39,14 @@ class KeepAliveResponseLatencyRuntimeTests {
         SokletConfig config = SokletConfig.withHttpServer(server)
                 .resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SmallResource.class)))
                 .lifecyclePolicy(lifecyclePolicy()).build();
-        try (Soklet soklet = Soklet.fromConfig(config)) {
-            soklet.start();
+        Soklet.run(config, () -> {
             int port = ((DefaultHttpServer) server).getEventLoop().orElseThrow().getPort();
             try (PersistentClient client = new PersistentClient(port)) {
                 byte[] request = "GET /small HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"
                         .getBytes(StandardCharsets.US_ASCII);
                 assertLowMedianLatency(client, request, SmallResource.BODY, "HTTP");
             }
-        }
+        });
     }
 
     @Test
@@ -66,8 +65,7 @@ class KeepAliveResponseLatencyRuntimeTests {
         SokletConfig config = SokletConfig.withMcpServer(server)
                 .resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
                 .lifecyclePolicy(lifecyclePolicy()).build();
-        try (Soklet soklet = Soklet.fromConfig(config)) {
-            soklet.start();
+        Soklet.run(config, () -> {
             int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
             try (PersistentClient client = new PersistentClient(port)) {
                 String body = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\",\"params\":{\"_meta\":{"
@@ -80,7 +78,7 @@ class KeepAliveResponseLatencyRuntimeTests {
                         .getBytes(StandardCharsets.UTF_8);
                 assertLowMedianLatency(client, request, "\"name\":\"probe\"", "MCP tools/list");
             }
-        }
+        });
     }
 
     private static LifecyclePolicy lifecyclePolicy() {

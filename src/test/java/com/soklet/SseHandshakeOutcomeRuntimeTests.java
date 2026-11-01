@@ -51,20 +51,21 @@ class SseHandshakeOutcomeRuntimeTests {
 					writer.accept(response.copy().headers(headers).finish());
 				}
 			};
-			try (Fixture fixture = new Fixture(8, 0, ResponseMarshaler.defaultInstance(), Duration.ofSeconds(10), interceptor)) {
-				if (live) {
-					fixture.app.start();
+			Fixture fixture = new Fixture(8, 0, ResponseMarshaler.defaultInstance(), Duration.ofSeconds(10), interceptor);
+			if (live) {
+				ShutdownResult result = Soklet.run(fixture.config, () -> {
 					try (Socket socket = fixture.request(HttpMethod.GET, "ok")) { assertTrue(readHead(socket).startsWith("HTTP/1.1 500")); }
-				} else {
-					SokletSimulator.run(SimulatorConfig.fromSokletConfig(fixture.config), simulator -> {
-						SseRequestResult.RequestFailed result = assertInstanceOf(SseRequestResult.RequestFailed.class,
-								simulator.performSseRequest(Request.fromPath(HttpMethod.GET, "/events/ok")));
-						assertEquals(500, result.getHttpRequestResult().getMarshaledResponse().getStatusCode());
-					});
-				}
-				assertEquals(0, fixture.resource.initializers.get());
-				assertNull(fixture.establishedConnection.get());
+				});
+				fixture.verifyShutdown(result);
+			} else {
+				SokletSimulator.run(SimulatorConfig.fromSokletConfig(fixture.config), simulator -> {
+					SseRequestResult.RequestFailed result = assertInstanceOf(SseRequestResult.RequestFailed.class,
+							simulator.performSseRequest(Request.fromPath(HttpMethod.GET, "/events/ok")));
+					assertEquals(500, result.getHttpRequestResult().getMarshaledResponse().getStatusCode());
+				});
 			}
+			assertEquals(0, fixture.resource.initializers.get());
+			assertNull(fixture.establishedConnection.get());
 		}
 	}
 	@Test
@@ -82,7 +83,8 @@ class SseHandshakeOutcomeRuntimeTests {
 
 	@Test
 	void headAndOptionsAdvertiseOnlyGetAndOptionsWithoutStreamAdmission() throws Exception {
-		try (Fixture f = started(8, 0, ResponseMarshaler.defaultInstance())) {
+		Fixture f = new Fixture(8, 0, ResponseMarshaler.defaultInstance());
+		ShutdownResult result = Soklet.run(f.config, () -> {
 			for (HttpMethod method : List.of(HttpMethod.HEAD, HttpMethod.OPTIONS)) {
 				try (Socket socket = f.request(method, "ok")) {
 					String response = new String(socket.getInputStream().readAllBytes(), StandardCharsets.ISO_8859_1);
@@ -96,7 +98,8 @@ class SseHandshakeOutcomeRuntimeTests {
 			assertTrue(f.streamEvents.isEmpty());
 			assertTrue(f.logs.isEmpty(), f.logs.toString());
 			assertEquals(0, f.server.getStreamLifecycleCoordinatorForTests().orElseThrow().snapshot().reservations());
-		}
+		});
+		f.verifyShutdown(result);
 	}
 
 	@Test
@@ -107,36 +110,43 @@ class SseHandshakeOutcomeRuntimeTests {
 			assertEquals(Set.of(HttpMethod.GET, HttpMethod.OPTIONS), methods);
 			return MarshaledResponse.withStatusCode(499).body("representation".getBytes(StandardCharsets.UTF_8)).build();
 		}).build();
-		try (Fixture f = started(8, 0, marshaler); Socket socket = f.request(HttpMethod.HEAD, "ok")) {
-			String response = new String(socket.getInputStream().readAllBytes(), StandardCharsets.ISO_8859_1);
-			assertTrue(response.startsWith("HTTP/1.1 499"), response);
-			assertTrue(response.endsWith("\r\n\r\n"), response);
-			assertEquals(1, calls.get());
-			assertEquals(0, f.resource.calls.get());
-		}
+		Fixture f = new Fixture(8, 0, marshaler);
+		ShutdownResult result = Soklet.run(f.config, () -> {
+			try (Socket socket = f.request(HttpMethod.HEAD, "ok")) {
+				String response = new String(socket.getInputStream().readAllBytes(), StandardCharsets.ISO_8859_1);
+				assertTrue(response.startsWith("HTTP/1.1 499"), response);
+				assertTrue(response.endsWith("\r\n\r\n"), response);
+				assertEquals(1, calls.get());
+				assertEquals(0, f.resource.calls.get());
+			}
+		});
+		f.verifyShutdown(result);
 	}
 
 	@TestFactory
 	Stream<DynamicTest> headAndOptionsDoNotConsumeOrRequireStreamCapacity() {
 		return Stream.of(true, false).map(fast -> DynamicTest.dynamicTest(fast ? "connection cap" : "lifecycle cap", () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
-			try (Fixture f = started(fast ? 8 : 1, fast ? 1 : 0, ResponseMarshaler.defaultInstance());
-					 Socket held = f.request(HttpMethod.GET, "ok")) {
-				assertTrue(readHead(held).startsWith("HTTP/1.1 200"));
-				await(() -> f.server.getActiveConnectionCount() == 1 && !f.streamEvents.isEmpty());
-				for (HttpMethod method : List.of(HttpMethod.HEAD, HttpMethod.OPTIONS)) {
-					try (Socket socket = f.request(method, "ok")) {
-						String response = new String(socket.getInputStream().readAllBytes(), StandardCharsets.ISO_8859_1);
-						assertTrue(response.startsWith("HTTP/1.1 " + (method == HttpMethod.HEAD ? 405 : 204)), response);
-						assertEquals(Set.of("GET", "OPTIONS"), allow(response));
-						assertTrue(response.endsWith("\r\n\r\n"), response);
+			Fixture f = new Fixture(fast ? 8 : 1, fast ? 1 : 0, ResponseMarshaler.defaultInstance());
+			ShutdownResult result = Soklet.run(f.config, () -> {
+				try (Socket held = f.request(HttpMethod.GET, "ok")) {
+					assertTrue(readHead(held).startsWith("HTTP/1.1 200"));
+					await(() -> f.server.getActiveConnectionCount() == 1 && !f.streamEvents.isEmpty());
+					for (HttpMethod method : List.of(HttpMethod.HEAD, HttpMethod.OPTIONS)) {
+						try (Socket socket = f.request(method, "ok")) {
+							String response = new String(socket.getInputStream().readAllBytes(), StandardCharsets.ISO_8859_1);
+							assertTrue(response.startsWith("HTTP/1.1 " + (method == HttpMethod.HEAD ? 405 : 204)), response);
+							assertEquals(Set.of("GET", "OPTIONS"), allow(response));
+							assertTrue(response.endsWith("\r\n\r\n"), response);
+						}
 					}
+					assertEquals(1, f.resource.calls.get());
+					assertEquals(1, f.resource.initializers.get());
+					assertEquals(1, f.server.getActiveConnectionCount());
+					assertEquals(1, f.server.getStreamLifecycleCoordinatorForTests().orElseThrow().snapshot().reservations());
+					assertTrue(f.connectionRejections.isEmpty());
 				}
-				assertEquals(1, f.resource.calls.get());
-				assertEquals(1, f.resource.initializers.get());
-				assertEquals(1, f.server.getActiveConnectionCount());
-				assertEquals(1, f.server.getStreamLifecycleCoordinatorForTests().orElseThrow().snapshot().reservations());
-				assertTrue(f.connectionRejections.isEmpty());
-			}
+			});
+			f.verifyShutdown(result);
 		})));
 	}
 
@@ -145,12 +155,16 @@ class SseHandshakeOutcomeRuntimeTests {
 		ResponseMarshaler marshaler = ResponseMarshaler.builder()
 				.methodNotAllowedHandler((request, methods) -> { throw new IllegalStateException("failed policy"); })
 				.throwableHandler((request, failure, method) -> { throw new IllegalStateException("failed marshaler"); }).build();
-		try (Fixture f = started(8, 0, marshaler); Socket socket = f.request(HttpMethod.HEAD, "ok")) {
-			String response = new String(socket.getInputStream().readAllBytes(), StandardCharsets.ISO_8859_1);
-			assertTrue(response.startsWith("HTTP/1.1 500"), response);
-			assertTrue(response.endsWith("\r\n\r\n"), response);
-			assertEquals(0, f.resource.calls.get());
-		}
+		Fixture f = new Fixture(8, 0, marshaler);
+		ShutdownResult result = Soklet.run(f.config, () -> {
+			try (Socket socket = f.request(HttpMethod.HEAD, "ok")) {
+				String response = new String(socket.getInputStream().readAllBytes(), StandardCharsets.ISO_8859_1);
+				assertTrue(response.startsWith("HTTP/1.1 500"), response);
+				assertTrue(response.endsWith("\r\n\r\n"), response);
+				assertEquals(0, f.resource.calls.get());
+			}
+		});
+		f.verifyShutdown(result);
 	}
 
 	@TestFactory
@@ -165,8 +179,8 @@ class SseHandshakeOutcomeRuntimeTests {
 						if (failing) throw new IllegalStateException("failed timeout response");
 						return MarshaledResponse.withStatusCode(503).body("timeout".getBytes(StandardCharsets.UTF_8)).build();
 					}).build();
-			try (Fixture f = new Fixture(8, 0, marshaler, Duration.ofMillis(100))) {
-				f.app.start();
+			Fixture f = new Fixture(8, 0, marshaler, Duration.ofMillis(100));
+			ShutdownResult result = Soklet.run(f.config, () -> {
 				try (Socket socket = f.request(HttpMethod.HEAD, "ok")) {
 					String response = new String(socket.getInputStream().readAllBytes(), StandardCharsets.ISO_8859_1);
 					assertTrue(response.startsWith("HTTP/1.1 503"), response);
@@ -176,55 +190,64 @@ class SseHandshakeOutcomeRuntimeTests {
 				assertEquals("HANDSHAKE_TIMEOUT", f.handshakeFailures.get(0).reason());
 				assertEquals(0, f.resource.calls.get());
 				assertTrue(f.streamEvents.isEmpty());
-			}
+			});
+			f.verifyShutdown(result);
 		})));
 	}
 
 	@TestFactory
 	Stream<DynamicTest> initializerFailuresReportEstablishedThenElectedTerminationWithoutInternalRejection() {
 		return Stream.of("checked", "overflow", "caught").map(mode -> DynamicTest.dynamicTest(mode, () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
-			try (Fixture f = started(8, 0, ResponseMarshaler.defaultInstance()); Socket socket = f.request(HttpMethod.GET, mode)) {
-				assertTrue(readHead(socket).startsWith("HTTP/1.1 200"));
-				assertEquals(-1, socket.getInputStream().read());
-				await(() -> f.streamEvents.size() == 3 && f.metricEvents.size() == 3);
-				String reason = mode.equals("checked") ? "PRODUCER_FAILED" : "BACKPRESSURE";
-				assertEquals(List.of("established", "will:" + reason, "did:" + reason), f.streamEvents);
-				assertEquals(f.streamEvents, f.metricEvents);
-				assertTrue(f.handshakeFailures.isEmpty(), f.handshakeFailures.toString());
-				assertTrue(f.connectionRejections.isEmpty(), f.connectionRejections.toString());
-				assertTrue(f.logs.stream().noneMatch(e -> e.getLogEventType() == LogEventType.SERVER_TRANSPORT_FAILURE), f.logs.toString());
-				if (mode.equals("checked")) assertSame(f.resource.failure, f.terminations.get(0).getCause().orElseThrow());
-				assertEquals(reason, f.terminations.get(0).getReason().name());
-				await(() -> f.logs.stream().anyMatch(e -> e.getLogEventType() == LogEventType.SSE_SERVER_INTERNAL_ERROR));
-				List<LogEvent> diagnostics = f.logs.stream().filter(e -> e.getLogEventType() == LogEventType.SSE_SERVER_INTERNAL_ERROR).toList();
-				assertEquals(1, diagnostics.size());
-				LogEvent diagnostic = diagnostics.get(0);
-				assertEquals("Server-Sent Event initialization terminated: " + reason, diagnostic.getMessage());
-				assertSame(f.terminations.get(0).getCause().orElseThrow(), diagnostic.getThrowable().orElseThrow());
-				if (!mode.equals("checked"))
-					assertEquals("SseInitializerQueueCapacityExceededException", diagnostic.getThrowable().orElseThrow().getClass().getSimpleName());
-				SseConnection established = f.establishedConnection.get();
-				assertNotNull(established);
-				assertSame(established.getRequest(), diagnostic.getRequest().orElseThrow());
-				assertEquals("/events/" + mode, diagnostic.getRequest().orElseThrow().getPath());
-				assertSame(established.getResourceMethod(), diagnostic.getResourceMethod().orElseThrow());
-				await(() -> f.server.getStreamLifecycleCoordinatorForTests().orElseThrow().snapshot().reservations() == 0);
-				assertEquals(0, f.server.getActiveConnectionCount());
-			}
+			Fixture f = new Fixture(8, 0, ResponseMarshaler.defaultInstance());
+			ShutdownResult result = Soklet.run(f.config, () -> {
+				try (Socket socket = f.request(HttpMethod.GET, mode)) {
+					assertTrue(readHead(socket).startsWith("HTTP/1.1 200"));
+					assertEquals(-1, socket.getInputStream().read());
+					await(() -> f.streamEvents.size() == 3 && f.metricEvents.size() == 3);
+					String reason = mode.equals("checked") ? "PRODUCER_FAILED" : "BACKPRESSURE";
+					assertEquals(List.of("established", "will:" + reason, "did:" + reason), f.streamEvents);
+					assertEquals(f.streamEvents, f.metricEvents);
+					assertTrue(f.handshakeFailures.isEmpty(), f.handshakeFailures.toString());
+					assertTrue(f.connectionRejections.isEmpty(), f.connectionRejections.toString());
+					assertTrue(f.logs.stream().noneMatch(e -> e.getLogEventType() == LogEventType.SERVER_TRANSPORT_FAILURE), f.logs.toString());
+					if (mode.equals("checked")) assertSame(f.resource.failure, f.terminations.get(0).getCause().orElseThrow());
+					assertEquals(reason, f.terminations.get(0).getReason().name());
+					await(() -> f.logs.stream().anyMatch(e -> e.getLogEventType() == LogEventType.SSE_SERVER_INTERNAL_ERROR));
+					List<LogEvent> diagnostics = f.logs.stream().filter(e -> e.getLogEventType() == LogEventType.SSE_SERVER_INTERNAL_ERROR).toList();
+					assertEquals(1, diagnostics.size());
+					LogEvent diagnostic = diagnostics.get(0);
+					assertEquals("Server-Sent Event initialization terminated: " + reason, diagnostic.getMessage());
+					assertSame(f.terminations.get(0).getCause().orElseThrow(), diagnostic.getThrowable().orElseThrow());
+					if (!mode.equals("checked"))
+						assertEquals("SseInitializerQueueCapacityExceededException", diagnostic.getThrowable().orElseThrow().getClass().getSimpleName());
+					SseConnection established = f.establishedConnection.get();
+					assertNotNull(established);
+					assertSame(established.getRequest(), diagnostic.getRequest().orElseThrow());
+					assertEquals("/events/" + mode, diagnostic.getRequest().orElseThrow().getPath());
+					assertSame(established.getResourceMethod(), diagnostic.getResourceMethod().orElseThrow());
+					await(() -> f.server.getStreamLifecycleCoordinatorForTests().orElseThrow().snapshot().reservations() == 0);
+					assertEquals(0, f.server.getActiveConnectionCount());
+				}
+			});
+			f.verifyShutdown(result);
 		})));
 	}
 
 	@TestFactory
 	Stream<DynamicTest> bothCapacityBoundariesReportCapacityRatherThanApplicationRejection() {
 		return Stream.of(true, false).map(fast -> DynamicTest.dynamicTest(fast ? "connection cap" : "lifecycle cap", () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
-			try (Fixture f = started(fast ? 8 : 1, fast ? 1 : 0, ResponseMarshaler.defaultInstance()); Socket held = f.request(HttpMethod.GET, "ok")) {
-				assertTrue(readHead(held).startsWith("HTTP/1.1 200")); await(() -> f.server.getActiveConnectionCount() == 1 && !f.streamEvents.isEmpty());
-				try (Socket rejected = f.request(HttpMethod.GET, "ok")) { assertTrue(readHead(rejected).startsWith("HTTP/1.1 503")); }
-				await(() -> f.handshakeFailures.size() == 1);
-				assertEquals("CAPACITY_EXCEEDED", f.handshakeFailures.get(0).reason());
-				assertEquals(fast ? 1 : 2, f.resource.calls.get());
+			Fixture f = new Fixture(fast ? 8 : 1, fast ? 1 : 0, ResponseMarshaler.defaultInstance());
+			ShutdownResult result = Soklet.run(f.config, () -> {
+				try (Socket held = f.request(HttpMethod.GET, "ok")) {
+					assertTrue(readHead(held).startsWith("HTTP/1.1 200")); await(() -> f.server.getActiveConnectionCount() == 1 && !f.streamEvents.isEmpty());
+					try (Socket rejected = f.request(HttpMethod.GET, "ok")) { assertTrue(readHead(rejected).startsWith("HTTP/1.1 503")); }
+					await(() -> f.handshakeFailures.size() == 1);
+					assertEquals("CAPACITY_EXCEEDED", f.handshakeFailures.get(0).reason());
+					assertEquals(fast ? 1 : 2, f.resource.calls.get());
 			assertEquals(1, f.resource.initializers.get());
-			}
+				}
+			});
+			f.verifyShutdown(result);
 		})));
 	}
 
@@ -233,57 +256,73 @@ class SseHandshakeOutcomeRuntimeTests {
 		IllegalStateException failure = new IllegalStateException("capacity response failed");
 		ResponseMarshaler marshaler = ResponseMarshaler.builder()
 				.serviceUnavailableHandler((request, method) -> { throw failure; }).build();
-		try (Fixture f = started(1, 0, marshaler); Socket held = f.request(HttpMethod.GET, "ok")) {
-			assertTrue(readHead(held).startsWith("HTTP/1.1 200"));
-			await(() -> f.server.getActiveConnectionCount() == 1 && !f.streamEvents.isEmpty());
-			try (Socket rejected = f.request(HttpMethod.GET, "ok")) {
-				String response = readHead(rejected);
-				assertTrue(response.startsWith("HTTP/1.1 500"), response);
+		Fixture f = new Fixture(1, 0, marshaler);
+		ShutdownResult result = Soklet.run(f.config, () -> {
+			try (Socket held = f.request(HttpMethod.GET, "ok")) {
+				assertTrue(readHead(held).startsWith("HTTP/1.1 200"));
+				await(() -> f.server.getActiveConnectionCount() == 1 && !f.streamEvents.isEmpty());
+				try (Socket rejected = f.request(HttpMethod.GET, "ok")) {
+					String response = readHead(rejected);
+					assertTrue(response.startsWith("HTTP/1.1 500"), response);
+				}
+				await(() -> f.handshakeFailures.size() == 1);
+				assertEquals("INTERNAL_ERROR", f.handshakeFailures.get(0).reason());
+				assertSame(failure, f.handshakeFailures.get(0).cause());
+				assertEquals(2, f.resource.calls.get());
+				assertEquals(1, f.resource.initializers.get());
+				assertEquals(1, f.server.getActiveConnectionCount());
 			}
-			await(() -> f.handshakeFailures.size() == 1);
-			assertEquals("INTERNAL_ERROR", f.handshakeFailures.get(0).reason());
-			assertSame(failure, f.handshakeFailures.get(0).cause());
-			assertEquals(2, f.resource.calls.get());
-			assertEquals(1, f.resource.initializers.get());
-			assertEquals(1, f.server.getActiveConnectionCount());
-		}
+		});
+		f.verifyShutdown(result);
 	}
 
 	@Test
 	void handlerFailureKeepsItsActualCause() throws Exception {
-		try (Fixture f = started(8, 0, ResponseMarshaler.defaultInstance()); Socket socket = f.request(HttpMethod.GET, "handler")) {
-			assertTrue(readHead(socket).startsWith("HTTP/1.1 500")); await(() -> f.handshakeFailures.size() == 1);
-			assertEquals("INTERNAL_ERROR", f.handshakeFailures.get(0).reason());
-			assertSame(f.resource.failure, f.handshakeFailures.get(0).cause());
-			assertTrue(f.streamEvents.isEmpty());
-		}
+		Fixture f = new Fixture(8, 0, ResponseMarshaler.defaultInstance());
+		ShutdownResult result = Soklet.run(f.config, () -> {
+			try (Socket socket = f.request(HttpMethod.GET, "handler")) {
+				assertTrue(readHead(socket).startsWith("HTTP/1.1 500")); await(() -> f.handshakeFailures.size() == 1);
+				assertEquals("INTERNAL_ERROR", f.handshakeFailures.get(0).reason());
+				assertSame(f.resource.failure, f.handshakeFailures.get(0).cause());
+				assertTrue(f.streamEvents.isEmpty());
+			}
+		});
+		f.verifyShutdown(result);
 	}
 
 	@Test
 	void explicitApplicationRejectionRemainsARejection() throws Exception {
-		try (Fixture f = started(8, 0, ResponseMarshaler.defaultInstance()); Socket socket = f.request(HttpMethod.GET, "reject")) {
-			assertTrue(readHead(socket).startsWith("HTTP/1.1 403")); await(() -> f.handshakeFailures.size() == 1);
-			assertEquals("HANDSHAKE_REJECTED", f.handshakeFailures.get(0).reason());
-			assertNull(f.handshakeFailures.get(0).cause());
-			assertTrue(f.streamEvents.isEmpty());
-		}
+		Fixture f = new Fixture(8, 0, ResponseMarshaler.defaultInstance());
+		ShutdownResult result = Soklet.run(f.config, () -> {
+			try (Socket socket = f.request(HttpMethod.GET, "reject")) {
+				assertTrue(readHead(socket).startsWith("HTTP/1.1 403")); await(() -> f.handshakeFailures.size() == 1);
+				assertEquals("HANDSHAKE_REJECTED", f.handshakeFailures.get(0).reason());
+				assertNull(f.handshakeFailures.get(0).cause());
+				assertTrue(f.streamEvents.isEmpty());
+			}
+		});
+		f.verifyShutdown(result);
 	}
 
 	@Test
 	void headPreparationFailureKeepsItsCauseBeforeAnyStreamIsEstablished() throws Exception {
-		try (Fixture f = started(8, 0, ResponseMarshaler.defaultInstance()); Socket socket = f.request(HttpMethod.GET, "badheader")) {
-			assertTrue(readHead(socket).startsWith("HTTP/1.1 500")); await(() -> f.handshakeFailures.size() == 1);
-			assertEquals("INTERNAL_ERROR", f.handshakeFailures.get(0).reason());
-			assertNotNull(f.handshakeFailures.get(0).cause());
-			assertTrue(f.streamEvents.isEmpty());
-		}
+		Fixture f = new Fixture(8, 0, ResponseMarshaler.defaultInstance());
+		ShutdownResult result = Soklet.run(f.config, () -> {
+			try (Socket socket = f.request(HttpMethod.GET, "badheader")) {
+				assertTrue(readHead(socket).startsWith("HTTP/1.1 500")); await(() -> f.handshakeFailures.size() == 1);
+				assertEquals("INTERNAL_ERROR", f.handshakeFailures.get(0).reason());
+				assertNotNull(f.handshakeFailures.get(0).cause());
+				assertTrue(f.streamEvents.isEmpty());
+			}
+		});
+		f.verifyShutdown(result);
 	}
 
 	@Test
 	void failedAcceptedHeadWriteKeepsItsCauseAndDoesNotEstablishAStream() throws Exception {
-		try (Fixture f = new Fixture(8, 0, ResponseMarshaler.defaultInstance())) {
-			f.failHeadWrite = true;
-			f.app.start();
+		Fixture f = new Fixture(8, 0, ResponseMarshaler.defaultInstance());
+		f.failHeadWrite = true;
+		ShutdownResult result = Soklet.run(f.config, () -> {
 			try (Socket socket = f.request(HttpMethod.GET, "ok")) { assertEquals(-1, socket.getInputStream().read()); }
 			await(() -> f.handshakeFailures.size() == 1);
 			assertEquals("INTERNAL_ERROR", f.handshakeFailures.get(0).reason());
@@ -292,7 +331,8 @@ class SseHandshakeOutcomeRuntimeTests {
 			assertTrue(f.connectionRejections.isEmpty(), f.connectionRejections.toString());
 			assertTrue(f.logs.stream().noneMatch(event -> event.getLogEventType() == LogEventType.SSE_SERVER_WRITING_HANDSHAKE_RESPONSE_FAILED
 					|| event.getLogEventType() == LogEventType.SERVER_TRANSPORT_FAILURE), f.logs.toString());
-		}
+		});
+		f.verifyShutdown(result);
 	}
 
 	@Test
@@ -305,9 +345,9 @@ class SseHandshakeOutcomeRuntimeTests {
 				writer.accept(generator.apply(request).copy().body(responseBody).finish());
 			}
 		};
-		try (Fixture fixture = new Fixture(8, 0, ResponseMarshaler.defaultInstance(), Duration.ofSeconds(10),
-				interceptor, Duration.ofMillis(50))) {
-			fixture.app.start();
+		Fixture fixture = new Fixture(8, 0, ResponseMarshaler.defaultInstance(), Duration.ofSeconds(10),
+				interceptor, Duration.ofMillis(50));
+		ShutdownResult result = Soklet.run(fixture.config, () -> {
 			try (Socket socket = fixture.request(HttpMethod.GET, "reject")) {
 				socket.setReceiveBufferSize(1024);
 				// Keep the socket open without reading. The response exceeds the
@@ -326,16 +366,12 @@ class SseHandshakeOutcomeRuntimeTests {
 				assertEquals(1, writeErrors.size(), fixture.logs.toString());
 				assertSame(timeout, writeErrors.get(0).getThrowable().orElseThrow());
 			}
-		}
+		});
+		fixture.verifyShutdown(result);
 	}
 
 	private record Failure(String reason, Throwable cause) {}
 
-	private static Fixture started(int capacity, int connections, ResponseMarshaler marshaler) throws Exception {
-		Fixture fixture = new Fixture(capacity, connections, marshaler);
-		fixture.app.start();
-		return fixture;
-	}
 
 	private static Set<String> allow(String response) {
 		return response.lines().filter(line -> line.startsWith("Allow: "))
@@ -361,12 +397,11 @@ class SseHandshakeOutcomeRuntimeTests {
 		assertTrue(condition.getAsBoolean());
 	}
 
-	private static final class Fixture implements AutoCloseable {
+	private static final class Fixture {
 		final int port = findFreePort();
 		final DefaultSseServer server;
 		final Resource resource = new Resource();
 		final SokletConfig config;
-		final Soklet app;
 		final List<String> streamEvents = new CopyOnWriteArrayList<>();
 		final List<String> metricEvents = new CopyOnWriteArrayList<>();
 		final List<String> connectionRejections = new CopyOnWriteArrayList<>();
@@ -455,7 +490,6 @@ class SseHandshakeOutcomeRuntimeTests {
 							metricEvents.add("did:" + termination.getReason());
 						}
 					}).build();
-			app = Soklet.fromConfig(config);
 		}
 
 		Socket request(HttpMethod httpMethod, String mode) throws Exception {
@@ -466,9 +500,8 @@ class SseHandshakeOutcomeRuntimeTests {
 			return socket;
 		}
 
-		@Override public void close() {
-			app.close();
-			assertTrue(app.getShutdownResult().orElseThrow().isComplete());
+		void verifyShutdown(ShutdownResult result) {
+			assertTrue(result.isComplete());
 		}
 	}
 

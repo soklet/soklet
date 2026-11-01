@@ -210,10 +210,8 @@ public class McpResourcePublicRuntimeTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
-		Soklet soklet = managedSoklet(server);
+		Soklet.run(managedSokletConfig(server), () -> {
 
-		try {
-			soklet.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 
@@ -336,9 +334,7 @@ public class McpResourcePublicRuntimeTests {
 			Assertions.assertEquals(List.of("admission:test://unknown-resource"), stages);
 			Assertions.assertEquals(6, handlerInvocations.get());
 			Assertions.assertEquals(0, toolLimiterInvocations.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -415,10 +411,8 @@ public class McpResourcePublicRuntimeTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
-		Soklet soklet = managedSoklet(server);
+		Soklet.run(managedSokletConfig(server), () -> {
 
-		try {
-			soklet.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 
@@ -492,9 +486,7 @@ public class McpResourcePublicRuntimeTests {
 			Assertions.assertEquals(5, requestLimiterInvocations.get());
 			Assertions.assertEquals(5, listHandlerInvocations.get());
 			Assertions.assertEquals(0, toolLimiterInvocations.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -540,10 +532,8 @@ public class McpResourcePublicRuntimeTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
-		Soklet soklet = managedSoklet(server);
+		Soklet.run(managedSokletConfig(server), () -> {
 
-		try {
-			soklet.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			HttpResponse<String> alphaPage = sendWithAuthorization(port,
@@ -565,9 +555,7 @@ public class McpResourcePublicRuntimeTests {
 					betaPage.body());
 			assertContains(betaPage.body(), "\"ttlMs\":250");
 			assertContains(betaPage.body(), "\"cacheScope\":\"private\"");
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -644,10 +632,8 @@ public class McpResourcePublicRuntimeTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
-		Soklet soklet = managedSoklet(server, observer);
+		Soklet.run(managedSokletConfig(server, observer), () -> {
 
-		try {
-			soklet.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			HttpResponse<String> templatePage = send(port,
@@ -686,9 +672,7 @@ public class McpResourcePublicRuntimeTests {
 					"invalid-content-metadata");
 			Assertions.assertFalse(invalidContent.body().contains("secret"),
 					invalidContent.body());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -816,10 +800,8 @@ public class McpResourcePublicRuntimeTests {
 				.resourceListHandler(listHandler, java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
 				.build();
 		McpServer server = serverBuilder(endpoint).build();
-		Soklet soklet = managedSoklet(server);
+		Soklet.run(managedSokletConfig(server), () -> {
 
-		try {
-			soklet.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			HttpResponse<String> oversized = send(port,
@@ -845,9 +827,7 @@ public class McpResourcePublicRuntimeTests {
 			assertContains(recovered.body(), canary);
 			assertContains(recovered.body(), "test://aggregate-page/first");
 			Assertions.assertEquals(2, listHandlerInvocations.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -888,10 +868,8 @@ public class McpResourcePublicRuntimeTests {
 							.build()))
 					.build();
 		McpServer server = serverBuilder(endpoint).build();
-		Soklet soklet = managedSoklet(server);
+		Soklet.run(managedSokletConfig(server), () -> {
 
-		try {
-			soklet.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			HttpResponse<String> boundary = read(port, "blob-boundary",
@@ -913,9 +891,7 @@ public class McpResourcePublicRuntimeTests {
 						"blob-aggregate-oversized");
 				Assertions.assertTrue(aggregateOversized.body().length() < 1_000,
 						Integer.toString(aggregateOversized.body().length()));
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -1068,9 +1044,8 @@ public class McpResourcePublicRuntimeTests {
 					stages.add("interceptor-after");
 					return result;
 				}).build();
-		Soklet soklet = managedSoklet(server);
-		try {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server), () -> {
+
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			for (String revision : List.of("2025-06-18", "2025-11-25")) {
 				HttpResponse<String> initialize = sendLegacy(port, revision, "initialize",
@@ -1115,9 +1090,7 @@ public class McpResourcePublicRuntimeTests {
 			Assertions.assertEquals(0, modernOnlyReads.get());
 			assertContains(read(port, "modern", SPECIAL_URI.toString()).body(), "\"text\":\"modern\"");
 			Assertions.assertEquals(1, modernOnlyReads.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -1148,9 +1121,8 @@ public class McpResourcePublicRuntimeTests {
 				return McpAdmissionDecision.rejected(McpAdmissionRejection.withStatusCodeAndError(403, McpJsonRpcError.fromApplication(-31903, "Denied")).build());
 			return McpAdmissionDecision.accepted(McpAdmissionIdentity.withRateLimitPartitionKey("reader").authorizationPartitionKey("reader").principal("reader").build());
 		}).build();
-		Soklet soklet = managedSoklet(server);
-		try {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server), () -> {
+
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			for (String revision : List.of("2025-06-18", "2025-11-25")) {
 				HttpResponse<String> first = sendLegacy(port, revision, "resources/list", "", "Bearer reader");
@@ -1176,9 +1148,7 @@ public class McpResourcePublicRuntimeTests {
 			}
 			Assertions.assertEquals(12, pages.get());
 			Assertions.assertEquals(16, admissions.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -1193,9 +1163,8 @@ public class McpResourcePublicRuntimeTests {
 		McpEndpoint endpoint = McpEndpoint.withPath(MCP_PATH, McpImplementation.withNameAndVersion("bounds", "1").build(), versions)
 				.resourceRegistrations(List.of(apps, oversized)).build();
 		McpServer server = serverBuilder(endpoint).build();
-		Soklet soklet = managedSoklet(server);
-		try {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server), () -> {
+
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			for (String revision : List.of("2025-06-18", "2025-11-25"))
 				for (URI uri : List.of(TEXT_URI, BINARY_URI)) {
@@ -1204,9 +1173,7 @@ public class McpResourcePublicRuntimeTests {
 					Assertions.assertFalse(failure.body().contains("private Apps canary"), failure.body());
 					Assertions.assertTrue(failure.body().getBytes(StandardCharsets.UTF_8).length <= 4_194_304);
 				}
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -1223,8 +1190,7 @@ public class McpResourcePublicRuntimeTests {
 				McpImplementation.withNameAndVersion("modern-resources", "1").build(), versions)
 				.resourceRegistrations(List.of(resource)).build();
 		McpServer server = serverBuilder(endpoint).build();
-		try (Soklet owner = managedSoklet(server)) {
-			owner.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			for (String revision : List.of("2025-06-18", "2025-11-25")) {
 				HttpResponse<String> initialize = sendLegacy(port, revision, "initialize",
@@ -1239,7 +1205,7 @@ public class McpResourcePublicRuntimeTests {
 			Assertions.assertEquals(0, invocations.get());
 			assertContains(read(port, "modern", TEXT_URI.toString()).body(), "\"text\":\"modern\"");
 			Assertions.assertEquals(1, invocations.get());
-		}
+		});
 	}
 
 	@Test
@@ -1259,8 +1225,7 @@ public class McpResourcePublicRuntimeTests {
 					return McpResourcePage.builder().build();
 				}, versions).build();
 		McpServer server = serverBuilder(endpoint).build();
-		try (Soklet owner = managedSoklet(server)) {
-			owner.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			for (String revision : List.of("2025-06-18", "2025-11-25")) {
 				HttpResponse<String> list = sendLegacy(port, revision, "resources/list", "", null);
@@ -1274,7 +1239,7 @@ public class McpResourcePublicRuntimeTests {
 			HttpResponse<String> modern = read(port, "modern-skill", skillUri.toString());
 			assertSuccess(modern, "modern-skill");
 			assertContains(modern.body(), "private skill canary");
-		}
+		});
 	}
 
 	@Test
@@ -1306,8 +1271,7 @@ public class McpResourcePublicRuntimeTests {
 			}
 			return chain.proceed();
 		}).build();
-		try (Soklet owner = managedSoklet(server)) {
-			owner.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			for (McpProtocolVersion version : List.of(McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28)) {
 				boolean modern = version == McpProtocolVersion.V2026_07_28;
@@ -1331,7 +1295,7 @@ public class McpResourcePublicRuntimeTests {
 				}
 				interceptorMode.set(0);
 			}
-		}
+		});
 	}
 
 	@Test
@@ -1357,8 +1321,7 @@ public class McpResourcePublicRuntimeTests {
 									return completeText(resourceReadContext.getUri(), "exact", "text/plain");
 								}).build())).build();
 		McpServer server = serverBuilder(endpoint).requestRateLimiter(rateLimitContext -> McpRateLimitDecision.allowed()).build();
-		try (Soklet owner = managedSoklet(server)) {
-			owner.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			for (McpProtocolVersion version : List.of(McpProtocolVersion.V2025_06_18,
 					McpProtocolVersion.V2025_11_25, McpProtocolVersion.V2026_07_28)) {
@@ -1388,7 +1351,7 @@ public class McpResourcePublicRuntimeTests {
 			}
 			Assertions.assertEquals(15, templateReads.get());
 			Assertions.assertEquals(3, exactReads.get());
-		}
+		});
 		for (String unsupported : List.of("file:///{+path}", "file:///{path*}", "file:///{path:5}")) {
 			McpEndpoint unsupportedEndpoint = McpEndpoint.withPath(MCP_PATH,
 					McpImplementation.withNameAndVersion("unsupported-template", "1").build(), versions)
@@ -1435,21 +1398,22 @@ public class McpResourcePublicRuntimeTests {
 				.allowedHosts(Set.of(LOOPBACK));
 	}
 
-	private static Soklet managedSoklet(McpServer server) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
-				.resourceMethodResolver(
-						ResourceMethodResolver.fromMethods(Set.of()))
-				.build());
+
+	private static SokletConfig managedSokletConfig(McpServer server,
+			LifecycleObserver lifecycleObserver) {
+		return SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.lifecycleObservers(List.of(lifecycleObserver)).build();
 	}
 
-	private static Soklet managedSoklet(McpServer server,
-			LifecycleObserver lifecycleObserver) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+	private static SokletConfig managedSokletConfig(McpServer server) {
+		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
-				.lifecycleObservers(List.of(lifecycleObserver))
-				.build());
+				.build();
 	}
+
+
 
 	private static McpResourceRegistration templateRegistration(String uriTemplate) {
 		return McpResourceRegistration

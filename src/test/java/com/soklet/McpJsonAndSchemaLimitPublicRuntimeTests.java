@@ -88,9 +88,8 @@ class McpJsonAndSchemaLimitPublicRuntimeTests {
 		McpServer server = McpServer.withPort(0).host("127.0.0.1").allowedHosts(Set.of("127.0.0.1"))
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.toolRateLimiter(rateLimitContext -> McpRateLimitDecision.allowed()).build();
-		try (Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
-				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).build())) {
-			soklet.start();
+		Soklet.run(SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).build(), () -> {
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			Response parseFailure = call(port, protocolVersion, "escaped",
 					"{\"value\":\"" + "\\n".repeat(524_289) + CANARY + "\"}");
@@ -117,7 +116,7 @@ class McpJsonAndSchemaLimitPublicRuntimeTests {
 				assertFalse(recovered.body().contains("\"isError\":true"), recovered.body());
 			}
 			assertEquals(5, handlerCalls.get());
-		}
+		});
 	}
 
 	private static Response call(int port, McpProtocolVersion protocolVersion,

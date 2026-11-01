@@ -71,12 +71,10 @@ public class McpAppResourceRuntimeTests {
 			return output;
 		});
 		McpServer server = configure(McpServer.withPort(0), endpoint).build();
-		Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+		AtomicReference<String> wireResponse = new AtomicReference<>();
+		Soklet.run(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.lifecyclePolicy(POLICY).build());
-		String wire;
-		try {
-			soklet.start();
+				.lifecyclePolicy(POLICY).build(), () -> {
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			HttpRequest request = HttpRequest.newBuilder()
 					.uri(URI.create("http://" + HOST + ":" + port + "/mcp"))
@@ -89,10 +87,9 @@ public class McpAppResourceRuntimeTests {
 			HttpResponse<String> response = HttpClient.newHttpClient().send(request,
 					HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
 			assertEquals(200, response.statusCode(), response.body());
-			wire = response.body();
-		} finally {
-			soklet.close();
-		}
+			wireResponse.set(response.body());
+		});
+		String wire = wireResponse.get();
 		assertTrue(wire.contains("\"connectDomains\":[\"https://a.example\",\"https://z.example\"]"), wire);
 		assertTrue(wire.contains("\"permissions\":{\"camera\":{},\"clipboardWrite\":{}}"), wire);
 		assertTrue(wire.contains("\"domain\":\"sandbox.example\""), wire);

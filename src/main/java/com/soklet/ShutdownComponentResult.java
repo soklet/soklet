@@ -67,6 +67,8 @@ public final class ShutdownComponentResult {
 	/**
 	 * Returns throwables in deterministic observation order. Throwable instances
 	 * retain their exact identities and may contain application-sensitive data.
+	 * Competing failures retained by the lifecycle coordinator are separate entries
+	 * rather than suppressed exceptions added to the primary failure.
 	 *
 	 * @return immutable throwable list
 	 */

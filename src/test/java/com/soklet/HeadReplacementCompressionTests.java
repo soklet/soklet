@@ -42,12 +42,11 @@ class HeadReplacementCompressionTests {
 	void freshBodylessReplacementClearsHeadPlanningWithoutAPostprocessor() throws Exception {
 		AtomicInteger plans = new AtomicInteger();
 		int port = TestSupport.findFreePort();
-		try (Soklet app = Soklet.fromConfig(config(new Resource("original-content-".repeat(5)), port,
+		Soklet.run(config(new Resource("original-content-".repeat(5)), port,
 				(request, response) -> {
 					plans.incrementAndGet();
 					return ResponseCompressionPlan.compress(ResponseCompressionCodec.gzipInstance());
-				}).requestInterceptor(replacing(true, () -> MarshaledResponse.fromStatusCode(200))).build())) {
-			app.start();
+				}).requestInterceptor(replacing(true, () -> MarshaledResponse.fromStatusCode(200))).build(), () -> {
 			WireResponse get = exchange(port, HttpMethod.GET, "gzip");
 			WireResponse head = exchange(port, HttpMethod.HEAD, "gzip");
 			assertEquals(get.status(), head.status());
@@ -55,7 +54,7 @@ class HeadReplacementCompressionTests {
 			assertNull(head.header("Content-Encoding"));
 			assertEquals(0, head.body().length);
 			assertEquals(0, plans.get(), "The discarded generated body must not reach compression planning.");
-		}
+		});
 	}
 
 	@Test
@@ -81,9 +80,8 @@ class HeadReplacementCompressionTests {
 						.body(("post:" + new String(response.bodyBytesOrEmpty(), StandardCharsets.UTF_8)).getBytes(StandardCharsets.UTF_8))
 						.finish()).build();
 				int port = TestSupport.findFreePort();
-				try (Soklet app = Soklet.fromConfig(config(resource, port, compressor).responseMarshaler(marshaler)
-						.requestInterceptor(replacing(generate, () -> bytes(replacement))).build())) {
-					app.start();
+				Soklet.run(config(resource, port, compressor).responseMarshaler(marshaler)
+						.requestInterceptor(replacing(generate, () -> bytes(replacement))).build(), () -> {
 					WireResponse get = exchange(port, HttpMethod.GET, "gzip");
 					WireResponse head = exchange(port, HttpMethod.HEAD, "gzip");
 					String expected = "post:" + replacement;
@@ -104,7 +102,7 @@ class HeadReplacementCompressionTests {
 						assertEquals(expected, new String(get.body(), StandardCharsets.UTF_8));
 						assertEquals(0, codecCalls.get());
 					}
-				}
+				});
 			}
 		}
 	}
@@ -113,17 +111,16 @@ class HeadReplacementCompressionTests {
 	void freshHeadReplacementRetainsEncodingRejection() throws Exception {
 		for (boolean generate : List.of(false, true)) {
 			int port = TestSupport.findFreePort();
-			try (Soklet app = Soklet.fromConfig(config(new Resource("old"), port,
+			Soklet.run(config(new Resource("old"), port,
 					ResponseCompressor.fromDefaultsWithMinimumBodySizeInBytes(16))
 					.responseMarshaler(headerPostprocessor()).requestInterceptor(replacing(generate,
-							() -> bytes("replacement-content-".repeat(5)))).build())) {
-				app.start();
+							() -> bytes("replacement-content-".repeat(5)))).build(), () -> {
 				WireResponse get = exchange(port, HttpMethod.GET, "gzip;q=0, identity;q=0");
 				WireResponse head = exchange(port, HttpMethod.HEAD, "gzip;q=0, identity;q=0");
 				assertTrue(get.status().startsWith("HTTP/1.1 406 "), get.status());
 				assertEquals(get.status(), head.status());
 				assertEquals(0, head.body().length);
-			}
+			});
 		}
 	}
 
@@ -134,7 +131,7 @@ class HeadReplacementCompressionTests {
 		for (String kind : List.of("bodyless", "file", "stream")) {
 			AtomicInteger plans = new AtomicInteger();
 			int port = TestSupport.findFreePort();
-			try (Soklet app = Soklet.fromConfig(config(new Resource("original-content-".repeat(5)), port,
+			Soklet.run(config(new Resource("original-content-".repeat(5)), port,
 					(request, response) -> {
 						plans.incrementAndGet();
 						return ResponseCompressionPlan.compress(ResponseCompressionCodec.gzipInstance());
@@ -142,15 +139,14 @@ class HeadReplacementCompressionTests {
 						case "file" -> MarshaledResponse.withStatusCode(200).body(file).build();
 						case "stream" -> MarshaledResponse.withStatusCode(200).stream(stream -> producers.incrementAndGet()).build();
 						default -> MarshaledResponse.fromStatusCode(200);
-					})).build())) {
-				app.start();
+					})).build(), () -> {
 				WireResponse head = exchange(port, HttpMethod.HEAD, "gzip");
 				assertTrue(head.status().startsWith("HTTP/1.1 200 "), head.status());
 				assertNull(head.header("Content-Encoding"), kind);
 				assertEquals(0, plans.get(), kind);
 				assertEquals(0, producers.get(), "HEAD must not execute a suppressed producer.");
 				assertEquals(kind.equals("file") ? "9" : null, head.header("Content-Length"), kind);
-			}
+			});
 		}
 	}
 

@@ -72,7 +72,8 @@ class HttpChannelCleanupLifecycleTests {
 		try (ClosingChannel channel = new ClosingChannel(FileChannel.open(path), attemptClose, mode.startsWith("failed"))) {
 			Resource resource = new Resource(channel, owned);
 			int port = TestSupport.findFreePort();
-			try (Soklet owner = Soklet.fromConfig(SokletConfig
+			// Channel cleanup probes this owner's self-wait guard during explicit shutdown.
+			try (SokletTestScope ownerScope = SokletTestScope.of(Soklet.fromConfig(SokletConfig
 					.withHttpServer(HttpServer.withPort(port).host("127.0.0.1")
 							.responseCompressor((request, response) -> {
 								if (preparationFailure && response.getStatusCode() == 200)
@@ -90,7 +91,8 @@ class HttpChannelCleanupLifecycleTests {
 					})
 					.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(3))
 							.gracefulShutdownTimeout(Duration.ofSeconds(1)).forcedShutdownTimeout(Duration.ofSeconds(1)).build())
-					.build())) {
+					.build()))) {
+				Soklet owner = ownerScope.soklet();
 				ownerReference.set(owner);
 				owner.start();
 				try (Socket socket = new Socket()) {

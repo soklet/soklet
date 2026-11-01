@@ -54,23 +54,28 @@ public class HttpStreamingPassiveDisconnectTests {
             release.await();
             responseStream.write("last".getBytes(StandardCharsets.UTF_8));
         });
-        try (Fixture fixture = new Fixture(body); Socket socket = fixture.connect()) {
-            send(socket, STREAM_REQUEST);
-            Assertions.assertTrue(readHeaders(socket.getInputStream()).startsWith("HTTP/1.1 200 OK"));
-            Assertions.assertEquals("first", readChunk(socket.getInputStream()));
-            send(socket, NEXT_REQUEST);
-            Assertions.assertEquals(0, fixture.routes.nextCalls.get(),
-                    "The second request must not start before the stream completes");
+        Fixture fixture = new Fixture(body);
+        try {
+            Soklet.run(fixture.config, () -> {
+                try (Socket socket = fixture.connect()) {
+                    send(socket, STREAM_REQUEST);
+                    Assertions.assertTrue(readHeaders(socket.getInputStream()).startsWith("HTTP/1.1 200 OK"));
+                    Assertions.assertEquals("first", readChunk(socket.getInputStream()));
+                    send(socket, NEXT_REQUEST);
+                    Assertions.assertEquals(0, fixture.routes.nextCalls.get(),
+                            "The second request must not start before the stream completes");
 
-            release.countDown();
-            Assertions.assertEquals("last", readChunk(socket.getInputStream()));
-            Assertions.assertEquals("", readChunk(socket.getInputStream()));
-            Assertions.assertTrue(readHeaders(socket.getInputStream()).startsWith("HTTP/1.1 200 OK"));
-            Assertions.assertArrayEquals("next".getBytes(StandardCharsets.UTF_8),
-                    socket.getInputStream().readNBytes(4));
-            Assertions.assertEquals(1, fixture.routes.nextCalls.get());
-            Assertions.assertTrue(fixture.terminated.await(3, TimeUnit.SECONDS));
-            Assertions.assertEquals(StreamTerminationReason.COMPLETED, fixture.reason.get());
+                    release.countDown();
+                    Assertions.assertEquals("last", readChunk(socket.getInputStream()));
+                    Assertions.assertEquals("", readChunk(socket.getInputStream()));
+                    Assertions.assertTrue(readHeaders(socket.getInputStream()).startsWith("HTTP/1.1 200 OK"));
+                    Assertions.assertArrayEquals("next".getBytes(StandardCharsets.UTF_8),
+                            socket.getInputStream().readNBytes(4));
+                    Assertions.assertEquals(1, fixture.routes.nextCalls.get());
+                    Assertions.assertTrue(fixture.terminated.await(3, TimeUnit.SECONDS));
+                    Assertions.assertEquals(StreamTerminationReason.COMPLETED, fixture.reason.get());
+                }
+            });
         } finally {
             release.countDown();
         }
@@ -91,25 +96,27 @@ public class HttpStreamingPassiveDisconnectTests {
                 canceled.countDown();
             }
         });
-        try (Fixture fixture = new Fixture(StreamingResponseBody.fromPublisher(publisher));
-             Socket socket = fixture.connect()) {
-            send(socket, STREAM_REQUEST);
-            Assertions.assertTrue(readHeaders(socket.getInputStream()).startsWith("HTTP/1.1 200 OK"));
-            Assertions.assertTrue(subscribed.await(3, TimeUnit.SECONDS));
-            socket.setSoLinger(true, 0);
-            socket.close();
+        Fixture fixture = new Fixture(StreamingResponseBody.fromPublisher(publisher));
+        Soklet.run(fixture.config, () -> {
+            try (Socket socket = fixture.connect()) {
+                send(socket, STREAM_REQUEST);
+                Assertions.assertTrue(readHeaders(socket.getInputStream()).startsWith("HTTP/1.1 200 OK"));
+                Assertions.assertTrue(subscribed.await(3, TimeUnit.SECONDS));
+                socket.setSoLinger(true, 0);
+                socket.close();
 
-            Assertions.assertTrue(canceled.await(3, TimeUnit.SECONDS),
-                    "A reset during idle output must cancel the blocked upstream publisher");
-            Assertions.assertTrue(fixture.terminated.await(3, TimeUnit.SECONDS));
-            Assertions.assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED, fixture.reason.get());
-        }
+                Assertions.assertTrue(canceled.await(3, TimeUnit.SECONDS),
+                        "A reset during idle output must cancel the blocked upstream publisher");
+                Assertions.assertTrue(fixture.terminated.await(3, TimeUnit.SECONDS));
+                Assertions.assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED, fixture.reason.get());
+            }
+        });
     }
 
-    private static final class Fixture implements AutoCloseable {
+    private static final class Fixture {
         final int port;
         final Routes routes;
-        final Soklet soklet;
+        final SokletConfig config;
         final CountDownLatch terminated = new CountDownLatch(1);
         final AtomicReference<StreamTerminationReason> reason = new AtomicReference<>();
 
@@ -119,7 +126,7 @@ public class HttpStreamingPassiveDisconnectTests {
             HttpServer server = HttpServer.withPort(port).host("127.0.0.1")
                     .streamingResponseTimeout(Duration.ZERO)
                     .streamingResponseIdleTimeout(Duration.ZERO).build();
-            soklet = Soklet.fromConfig(SokletConfig.withHttpServer(server)
+            config = SokletConfig.withHttpServer(server)
                     .resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Routes.class)))
                     .instanceProvider(new InstanceProvider() {
                         @Override
@@ -137,8 +144,7 @@ public class HttpStreamingPassiveDisconnectTests {
                             terminated.countDown();
                         }
 
-                    }).build());
-            soklet.start();
+                    }).build();
         }
 
         Socket connect() throws IOException, InterruptedException {
@@ -147,10 +153,6 @@ public class HttpStreamingPassiveDisconnectTests {
             return socket;
         }
 
-        @Override
-        public void close() {
-            soklet.close();
-        }
     }
 
     public static final class Routes {

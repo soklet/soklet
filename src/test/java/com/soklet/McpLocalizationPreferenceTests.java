@@ -179,12 +179,9 @@ class McpLocalizationPreferenceTests {
 						McpSubscriptionAuthorizer.denyAllInstance())
 				.localizer(localizer)
 				.build();
-		Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+		Soklet.run(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.build());
-
-		try {
-			soklet.start();
+				.build(), () -> {
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			byte[] body = ("{\"jsonrpc\":\"2.0\",\"id\":\"physical\","
@@ -218,9 +215,7 @@ class McpLocalizationPreferenceTests {
 						StandardCharsets.ISO_8859_1);
 				assertTrue(responseText.startsWith("HTTP/1.1 200"), responseText);
 			}
-		} finally {
-			soklet.close();
-		}
+		});
 
 		List<Locale.LanguageRange> ranges = observedRanges.get();
 		assertEquals(List.of("en-us", "fr-ca"), ranges.stream()

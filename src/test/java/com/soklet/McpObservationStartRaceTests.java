@@ -73,41 +73,44 @@ class McpObservationStartRaceTests {
 		MetricsCollector collector = new MetricsCollector() {
 			@Override public void didRecordMcpMetricsEvent(McpMetricsEvent event) { events.add(event); }
 		};
-		try (Fixture fixture = new Fixture(true, builder -> {
-			builder.requestTimeout(Duration.ofSeconds(terminal.equals("deadline") ? 1 : 5));
-			if (terminal.equals("expiry")) builder.sessionConfig(McpSessionConfig.withOwnerKeyResolver(identity -> "alice")
-					.maximumSessionIdleDuration(Duration.ofSeconds(2)).maximumSessionDuration(Duration.ofSeconds(2))
-					.transportAdmissionController(Fixture::allow).build());
-		}, (request, arguments, features) -> { handlers.incrementAndGet(); return McpCompleteResult.fromToolText("unexpected"); }, collector, observer)) {
-			String session = fixture.initialize("/mcp", version);
-			List<HeaderValue> headers = List.of(new HeaderValue("MCP-Protocol-Version", version.getWireValue()),
-					new HeaderValue("Mcp-Session-Id", session), new HeaderValue("X-Subject", "alice"));
-			String request = "{\"jsonrpc\":\"2.0\",\"id\":\"blocked\",\"method\":\"tools/call\",\"params\":{\"name\":\"busy\",\"arguments\":{}}}";
-			try (RawClient client = new RawClient(fixture.port, "POST", "/mcp", request, headers)) {
-				assertTrue(started.await(5, TimeUnit.SECONDS));
-				if (terminal.equals("delete"))
-					assertEquals(204, fixture.control("DELETE", "/mcp", version, session, "alice", "", List.of()).status());
-				else if (terminal.equals("cancel")) {
-					String cancel = "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/cancelled\",\"params\":{\"requestId\":\"blocked\"}}";
-					assertEquals(202, fixture.exchange("POST", "/mcp", cancel, headers).status());
+		try {
+			Fixture fixture = new Fixture(true, builder -> {
+				builder.requestTimeout(Duration.ofSeconds(terminal.equals("deadline") ? 1 : 5));
+				if (terminal.equals("expiry")) builder.sessionConfig(McpSessionConfig.withOwnerKeyResolver(identity -> "alice")
+						.maximumSessionIdleDuration(Duration.ofSeconds(2)).maximumSessionDuration(Duration.ofSeconds(2))
+						.transportAdmissionController(Fixture::allow).build());
+		}, (request, arguments, features) -> { handlers.incrementAndGet(); return McpCompleteResult.fromToolText("unexpected"); }, collector, observer);
+			Soklet.run(fixture.config, () -> {
+				String session = fixture.initialize("/mcp", version);
+				List<HeaderValue> headers = List.of(new HeaderValue("MCP-Protocol-Version", version.getWireValue()),
+						new HeaderValue("Mcp-Session-Id", session), new HeaderValue("X-Subject", "alice"));
+				String request = "{\"jsonrpc\":\"2.0\",\"id\":\"blocked\",\"method\":\"tools/call\",\"params\":{\"name\":\"busy\",\"arguments\":{}}}";
+			try (RawClient client = new RawClient(fixture.port(), "POST", "/mcp", request, headers)) {
+					assertTrue(started.await(5, TimeUnit.SECONDS));
+					if (terminal.equals("delete"))
+						assertEquals(204, fixture.control("DELETE", "/mcp", version, session, "alice", "", List.of()).status());
+					else if (terminal.equals("cancel")) {
+						String cancel = "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/cancelled\",\"params\":{\"requestId\":\"blocked\"}}";
+						assertEquals(202, fixture.exchange("POST", "/mcp", cancel, headers).status());
+					}
+					Head head = client.readHead();
+					assertEquals(terminal.equals("deadline") ? 504 : 200, head.status());
+					client.readBody(head);
+					assertEquals(0, finishes.get(), "Finish must wait for the admitted start callback to return.");
+				} finally { release.countDown(); }
+				assertTrue(finished.await(5, TimeUnit.SECONDS), "The terminal request leaked its reserved semantic finish.");
+				assertEquals(1, starts.get()); assertEquals(1, finishes.get()); assertEquals(0, handlers.get());
+				if (terminal.equals("cancel")) {
+					long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+					while (events.stream().noneMatch(McpMetricsEvent.RequestStreamClosed.class::isInstance)
+							&& System.nanoTime() < until) Thread.sleep(5);
+					List<Class<?>> transitions = events.stream().filter(event -> event instanceof McpMetricsEvent.RequestStreamOpened
+							|| event instanceof McpMetricsEvent.RequestStreamClosed).map(Object::getClass).toList();
+					assertEquals(List.of(McpMetricsEvent.RequestStreamOpened.class, McpMetricsEvent.RequestStreamClosed.class), transitions,
+							"A stream opened during semantic start needs exactly one ordered open/close pair.");
 				}
-				Head head = client.readHead();
-				assertEquals(terminal.equals("deadline") ? 504 : 200, head.status());
-				client.readBody(head);
-				assertEquals(0, finishes.get(), "Finish must wait for the admitted start callback to return.");
-			} finally { release.countDown(); }
-			assertTrue(finished.await(5, TimeUnit.SECONDS), "The terminal request leaked its reserved semantic finish.");
-			assertEquals(1, starts.get()); assertEquals(1, finishes.get()); assertEquals(0, handlers.get());
-			if (terminal.equals("cancel")) {
-				long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
-				while (events.stream().noneMatch(McpMetricsEvent.RequestStreamClosed.class::isInstance)
-						&& System.nanoTime() < until) Thread.sleep(5);
-				List<Class<?>> transitions = events.stream().filter(event -> event instanceof McpMetricsEvent.RequestStreamOpened
-						|| event instanceof McpMetricsEvent.RequestStreamClosed).map(Object::getClass).toList();
-				assertEquals(List.of(McpMetricsEvent.RequestStreamOpened.class, McpMetricsEvent.RequestStreamClosed.class), transitions,
-						"A stream opened during semantic start needs exactly one ordered open/close pair.");
-			}
-			// close() must prove complete physical cleanup; a leaked reservation makes it throw.
+			// Scoped finalization must prove complete physical cleanup; a leaked reservation makes it throw.
+			});
 		} finally { release.countDown(); }
 	}
 }

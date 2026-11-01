@@ -134,16 +134,20 @@ public class McpCrossFeatureSoakTests {
 			// graphs are one-shot, so each measured generation below is fresh.
 			McpServer warmupServer = mcpServer(state, publisher);
 			currentServer.set(warmupServer);
-			try (Soklet warmupSoklet = crossFeatureSoklet(warmupServer,
-					metricsCollector, lifecycle)) {
-				warmupSoklet.start();
+			Soklet warmupSoklet = crossFeatureSoklet(warmupServer,
+					metricsCollector, lifecycle);
+			try (@SuppressWarnings("try") AutoCloseable warmupSokletShutdown = () -> {
+				warmupSoklet.requestShutdown();
+				warmupSoklet.awaitShutdownAsync().toCompletableFuture().join();
+			}) {
 				InetSocketAddress warmupAddress = boundAddress(warmupServer);
 				performFeatureCycle(warmupAddress.getPort(), "warmup", state,
 						publisher, true);
 				awaitRuntimeIdle("warmup", warmupServer, metricsCollector,
 						warmupTotals, state, PROFILE.settleTimeout(),
 						PROFILE.metricDeliveryTimeout());
-				shutdownResults.add(warmupSoklet.shutdown()
+				warmupSoklet.requestShutdown();
+				shutdownResults.add(warmupSoklet.awaitShutdownAsync()
 						.toCompletableFuture().join());
 				assertStoppedAfterBinding(warmupServer, warmupAddress);
 			}
@@ -156,9 +160,12 @@ public class McpCrossFeatureSoakTests {
 					shutdownCycle < PROFILE.shutdownCycles(); shutdownCycle++) {
 				McpServer cycleServer = mcpServer(state, publisher);
 				currentServer.set(cycleServer);
-				try (Soklet cycleSoklet = crossFeatureSoklet(cycleServer,
-						metricsCollector, lifecycle)) {
-					cycleSoklet.start();
+				Soklet cycleSoklet = crossFeatureSoklet(cycleServer,
+						metricsCollector, lifecycle);
+				try (@SuppressWarnings("try") AutoCloseable cycleSokletShutdown = () -> {
+					cycleSoklet.requestShutdown();
+					cycleSoklet.awaitShutdownAsync().toCompletableFuture().join();
+				}) {
 					InetSocketAddress cycleAddress = boundAddress(cycleServer);
 					int port = cycleAddress.getPort();
 
@@ -417,7 +424,7 @@ public class McpCrossFeatureSoakTests {
 	private static Soklet crossFeatureSoklet(@NonNull McpServer mcpServer,
 			@NonNull CountingMcpMetricsCollector metricsCollector,
 			@NonNull CountingLifecycle lifecycle) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(mcpServer)
+		return Soklet.run(SokletConfig.withMcpServer(mcpServer)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.metricsCollector(metricsCollector)
 				.lifecycleObserver(lifecycle)
@@ -1360,7 +1367,8 @@ public class McpCrossFeatureSoakTests {
 
 			stopThread = new Thread(() -> {
 				try {
-					stopResult.set(soklet.shutdown().toCompletableFuture().join());
+					soklet.requestShutdown();
+					stopResult.set(soklet.awaitShutdownAsync().toCompletableFuture().join());
 				} catch (Throwable throwable) {
 					stopFailure.set(throwable);
 				}

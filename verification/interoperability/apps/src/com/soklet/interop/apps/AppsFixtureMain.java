@@ -87,8 +87,7 @@ public final class AppsFixtureMain {
 					geolocation ? Set.of(McpAppResourceMetadata.Permission.GEOLOCATION) : Set.of());
 			SokletConfig config = fixture.serverConfig(0, QUIET_OBSERVER);
 			server = config.getMcpServer().orElseThrow();
-			soklet = Soklet.fromConfig(config);
-			soklet.start();
+			soklet = Soklet.run(config);
 			InetSocketAddress address = server.getDiagnostics().getBoundAddress().orElseThrow();
 			if (!"127.0.0.1".equals(address.getAddress().getHostAddress()) || address.getPort() < 1)
 				throw new IllegalStateException();
@@ -104,10 +103,11 @@ public final class AppsFixtureMain {
 			failed = true;
 		} finally {
 			if (soklet != null) {
-				// Also bounds failures in a shutdown() call before it returns its future.
+				// Also bounds failures while requesting shutdown and obtaining completion.
 				ScheduledFuture<?> shutdownDeadline = watchdog.schedule(() -> haltFailed(124), 5, TimeUnit.SECONDS);
 				try {
-					ShutdownResult result = soklet.shutdown().toCompletableFuture().get(5, TimeUnit.SECONDS);
+					soklet.requestShutdown();
+					ShutdownResult result = soklet.awaitShutdownAsync().toCompletableFuture().get(5, TimeUnit.SECONDS);
 					if (server == null || server.getDiagnostics().getStatus() != McpServerStatus.TERMINATED
 							|| result.getShutdownComponentResult(ShutdownComponentType.MCP).orElseThrow()
 									.getShutdownComponentDisposition() != ShutdownComponentDisposition.GRACEFUL_TERMINATION)

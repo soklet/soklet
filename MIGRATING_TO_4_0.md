@@ -46,8 +46,8 @@ and [Java 24 release notes](https://www.oracle.com/java/technologies/javase/24-r
    coordinate to `com.soklet:soklet:4.0.0`.
 2. Replace direct transport lifecycle calls and per-server shutdown settings
    with the Soklet-wide lifecycle.
-3. Choose either `SokletApplication` for a standalone process or direct
-   `Soklet` ownership for an embedder.
+3. Replace `SokletApplication` and direct lifecycle construction with
+   `Soklet.run(config)`, then request or await shutdown explicitly.
 4. Pass the completed application configuration to
    [`SokletSimulator`](https://javadoc.soklet.com/com/soklet/SokletSimulator.html);
    add a simulator-specific builder only where a test needs an override.
@@ -941,144 +941,171 @@ for current examples and the codec contract.
 
 ### One lifecycle owns all transports
 
-`Soklet` is now a one-shot aggregate lifecycle. `HttpServer`, `SseServer`, and
+`Soklet` is a one-shot aggregate lifecycle. `HttpServer`, `SseServer`, and
 `McpServer` are configured components; their public `start()`, `stop()`,
-`isStarted()`, `close()`, and `AutoCloseable` contracts are gone. Start and
-shut down the containing `Soklet` instead. A stopped instance cannot restart;
-construct a new configuration and a new `Soklet` for a new generation.
+`isStarted()`, `close()`, and `AutoCloseable` contracts are gone. Start the
+containing lifecycle with `Soklet.run(config)`. A stopped instance cannot restart;
+construct a fresh configuration and run it for a new generation.
 
-`Soklet.fromConfig(config)` claims configured transport identities immediately,
-before `start()`. Reusing an already claimed identity throws
-`TransportOwnershipException`. `SokletApplication.fromConfig(config)` only
-configures a runner; it claims the identities when its run begins.
+The explicit `Soklet.run(config)` overloads claim configured transport identities
+and return a handle only after all configured transports reach readiness. Reusing a claimed identity throws
+`TransportOwnershipException`. Configuration, process-hook registration, or
+startup failure throws synchronously after attempted teardown. Cancellation or
+interruption before readiness does not return an unready instance.
 
-Default HTTP and SSE listener threads keep the JVM alive if the caller returns
-from `start()`. Complete shutdown releases those threads. Custom transports
-own their thread-liveness policy.
+A non-daemon lifecycle owner retains JVM liveness after explicit `run(config)`
+returns and through
+full finalization, including cleanup after the last listener retires. Default HTTP
+and SSE listener threads are also non-daemon. Finalization progresses independently
+of callers awaiting it; the async accessor does not add another waiting thread.
+Each run reserves one daemon completion-handoff worker before claiming transports.
+Failure to start that worker fails startup before ownership is committed. Terminal
+publication signals the reserved worker, so thread-creation failure during shutdown
+cannot move completion callbacks onto the non-daemon lifecycle owner.
 
-
-The old synchronous, void `Soklet.stop()` stopped transports before returning
-but provided no aggregate terminal evidence. It is replaced by:
+The public lifecycle consists of startup, a nonblocking shutdown request, and
+blocking or asynchronous observation of the same full terminal outcome:
 
 ```java
-CompletionStage<ShutdownResult> completion = soklet.shutdown();
+Soklet soklet = Soklet.run(config);
+soklet.requestShutdown();
 ShutdownResult result = soklet.awaitShutdown();
 ```
 
-`shutdown()` promptly publishes intent and always returns the same read-only
-completion stage. `awaitShutdown()` takes no shutdown trigger and returns the
-immutable terminal result. It only waits: it installs no JVM hook or signal
-trigger. In 3.5.1, bare `awaitShutdown()` installed a JVM shutdown hook; in
-4.0.0 it does not. Migrate standalone applications to `SokletApplication`, or
-have the embedding process explicitly request and await shutdown on termination.
-`Soklet.close()` remains available for direct
-embedders; it requests shutdown, joins it uninterruptibly, restores interrupt
-status, and throws if the result is unsuccessful.
+```java
+Soklet soklet = Soklet.run(config);
+soklet.awaitShutdownAsync().whenComplete((result, failure) ->
+    notifyApplicationOwner(result, failure));
+```
 
-Calling blocking `close()` or awaiting shutdown from an application handler,
-interceptor, lifecycle callback or metric callback can deadlock against the
-caller's own work. Built-in callback scopes reject these waits with
-`IllegalStateException`, including MCP catalog, access-policy, localization,
-request-state protection and Skills policy callbacks, and MCP publisher release.
-SSE fallback response handlers/postprocessors, handshake materialization and
-owned-body cleanup also carry these checks. Replace an admin route's old
-`soklet.close()` idiom
-with `soklet.shutdown()` and return promptly; await the result from the owning
-process thread. Joining the returned shutdown stage inside the callback can
-still exhaust the shutdown budget and produce `INCOMPLETE`.
+`requestShutdown()` returns promptly and is idempotent. Both await methods are
+observation-only: they do not initiate shutdown. `awaitShutdown()` throws
+`InterruptedException` if its caller stops waiting; that interruption does not
+request shutdown. `awaitShutdownAsync()` returns a read-only completion stage
+without creating a waiting thread. Both include configured application cleanup
+and release of process registrations; unsuccessful outcomes throw the lifecycle
+exception or complete the stage exceptionally with the same failure.
 
-An already interrupted thread cancels `start()` rather than starting normally;
-the thrown `SokletStartupException` records `StartupDisposition.CANCELED`.
+`SokletApplication` is removed. Replace `Soklet.fromConfig(config)` followed by
+`start()` with `Soklet.run(config)`. Replace `shutdown()` with
+`requestShutdown()`. Public `getStatus()` and `getShutdownResult()` are removed;
+observe the terminal result through either await method. `Soklet` no longer
+implements `AutoCloseable`, and `close()` is removed. Use a scoped `run` callback
+for tests and embedded work that fits inside a block; an explicit host requests
+and awaits shutdown before releasing dependencies.
 
-### Standalone applications use the runner
+Calling a blocking await from a handler, interceptor, lifecycle/metric callback,
+or transport-owned work can wait for that same work to exit. Built-in callback
+scopes reject these waits with `IllegalStateException`. Request shutdown and
+return promptly; the owning process or an independent thread awaits completion.
+Joining the async stage inside work that shutdown must join remains unsafe.
 
-The old pattern put process concerns into `Soklet.awaitShutdown(trigger)`:
+### Standalone applications, tests, and embedders use the same API
+
+Every `run` installs a JVM shutdown hook automatically. `ShutdownTrigger` and
+its varargs arguments are removed. Soklet no longer reads or registers listeners
+on standard input. A standalone application can start and await like this:
 
 ```java
-try (Soklet soklet = Soklet.fromConfig(config)) {
-  soklet.start();
-  soklet.awaitShutdown(ShutdownTrigger.ENTER_KEY);
+Soklet.run(config).awaitShutdown();
+```
+
+For tests and embedded work with a lexical lifetime, use a no-argument callback:
+
+```java
+ShutdownResult result = Soklet.run(config, () -> {
+    // All configured listeners are ready; perform work or network assertions.
+});
+```
+
+The callback type is nested inside `Soklet` and preserves checked exceptions:
+
+```java
+@FunctionalInterface
+public interface RunAction<E extends Throwable> {
+    void run() throws E;
 }
 ```
 
-For a standalone process, replace it with:
+The four overloads are `run(config)`, `run(config, cleanup)`,
+`run(config, action)`, and `run(config, cleanup, action)`. Explicit forms return
+`Soklet`; scoped forms return `ShutdownResult` and declare `throws E`. All
+arguments are validated before transport claims. The scoped callback runs once
+on the calling thread only after readiness; startup failure never invokes it.
+
+Returning or throwing from the callback requests shutdown and waits for full
+finalization. A callback failure, including an `Error`, is rethrown by identity
+with any teardown failure suppressed on it. Otherwise existing
+`SokletLifecycleException` subtypes report incomplete shutdown, unexpected
+termination, or cleanup failure, with the immutable result available through
+`getShutdownResult()`. Complete forced shutdown can return successfully, even
+when retained diagnostic throwables are present. The result can be ignored in
+ordinary tests that only require success-or-exception behavior.
+
+Scoped finalization does not abandon shutdown when interrupted: it clears and
+records an existing interrupt flag while joining, continues through subsequent
+interruptions, and restores the flag before returning or throwing. The callback's
+own checked exception propagates unchanged. This does not change explicit
+`awaitShutdown()`, whose `InterruptedException` stops only that wait. The callback
+itself has no imposed timeout; external shutdown does not forcibly interrupt or
+terminate it, and a scoped call still needs the callback to return.
+
+Applications that want console-driven shutdown own the input operation:
 
 ```java
-ShutdownResult result =
-    SokletApplication.run(config, ShutdownTrigger.ENTER_KEY);
+java.io.Console console = System.console();
+if (console != null) {
+    Soklet.run(config, () -> console.readLine("Press Enter to shut down.%n"));
+} else {
+    Soklet.run(config).awaitShutdown();
+}
 ```
 
-`SokletApplication` owns the JVM shutdown hook and optional runner-scoped
-`ENTER_KEY` trigger. The core lifecycle itself does not read standard input or
-own process hooks. Active registrations share one daemon listener, which reads
-one byte at a time and stops at the first LF or CR without adding read-ahead
-buffers or closing stdin. EOF without a line terminator leaves the runner and
-its signal hook active. When the last registration is removed during a blocked
-read, at most that one pending byte may be consumed before the listener retires;
-Java cannot portably cancel the read without closing process-owned stdin. Reserve
-stdin until that read completes. A trailing LF after a CR remains available to
-later consumers. When a standalone process owns application resources too,
-configure one one-shot application and supply the bounded cleanup and any
-additional triggers to its run:
+Enter or end-of-input ends that callback. Without a native console, the example
+waits for JVM shutdown. Applications with an existing event loop can instead
+retain the handle and call `requestShutdown()` from their own input/host handler.
+
+Required application cleanup belongs in a bounded specification supplied at
+startup; it is available with both explicit and scoped overloads:
 
 ```java
-ShutdownResult result = SokletApplication.fromConfig(config).run(
+Soklet soklet = Soklet.run(config,
     ShutdownCleanup.fromTimeoutAndAction(
         Duration.ofSeconds(5),
-        shutdownResult -> applicationResources.close()),
-    ShutdownTrigger.ENTER_KEY);
+        shutdownResult -> applicationResources.close()));
+ShutdownResult result = soklet.awaitShutdown();
 ```
 
-After any run attempt begins, the application cannot be run a second time or
-concurrently. Use cleanup only for a resource that is application-owned,
-ingress-exclusive, safe to clean after a complete core shutdown, and bounded by
-an explicit timeout. Stateful observers are not automatically safe cleanup
-targets: they need an application-defined delivery barrier first. Cleanup is
-skipped when core shutdown is incomplete. If you tested an earlier 4.0.0
-snapshot, remove `SokletApplicationOptions`; create the one-shot application
-with `SokletApplication.fromConfig(config)` and pass triggers and cleanup to its
-`run(...)` invocation instead.
+Cleanup is eligible at most once and only after complete core shutdown, even
+when the scoped callback failed. Use it for application-owned, ingress-exclusive
+resources that are safe to close at that point. A timeout bounds Soklet's wait;
+it does not forcibly stop arbitrary cleanup code. Stateful observers require an
+application-owned delivery barrier before cleanup can safely depend on their state.
 
-Embedders that already own process signals should continue to use
-`Soklet.fromConfig(config)`, `start()`, `shutdown()`, and `awaitShutdown()` and
-should not add the standalone runner's process ownership.
-A manually registered JVM hook must wait for shutdown to finish. Migrating
-`stop()` to the asynchronous `shutdown()` method reference loses that wait;
-use blocking `close()` instead:
+Explicit shutdown requests, scoped teardown, and the JVM hook join the same
+lifecycle. An embedded host must await Soklet shutdown before closing shared
+databases, logging, and other dependencies. Independent JVM hooks run concurrently
+without guaranteed ordering; the automatic hook does not give the host exclusive
+control over when draining begins. Normal finalization releases the hook. The
+JVM hook joins bounded core shutdown, eligible cleanup, and terminal reporting,
+without an unbounded join on the process owner. Ordinary awaits and scoped return
+also include process-registration release. During JVM shutdown, post-await code
+or completion callbacks need not finish before exit.
 
-```java
-Soklet soklet = Soklet.fromConfig(config);
-Thread shutdownHook = new Thread(soklet::close, "application-shutdown");
-Runtime.getRuntime().addShutdownHook(shutdownHook);
-try (soklet) {
-  soklet.start();
-  ShutdownResult result = soklet.awaitShutdown();
-} finally {
-  try {
-    Runtime.getRuntime().removeShutdownHook(shutdownHook);
-  } catch (IllegalStateException shutdownInProgress) {
-    // The JVM is already executing its registered shutdown hooks.
-  }
-}
-```
-
-[JVM shutdown hooks](https://docs.oracle.com/en/java/javase/26/docs/api/java.base/java/lang/Runtime.html)
-run concurrently with no guaranteed order. Coordinate independent logging and
-resource hooks so their dependencies remain available during Soklet's drain.
-On signal-driven JVM shutdown, `run(...)`, post-run code and a caller's
-`finally` block may never finish. Required application cleanup belongs in the
-bounded `ShutdownCleanup` action. The runner does not select process exit
-status; successful drain does not promise exit code zero after a signal.
+On signal-driven JVM shutdown, caller `finally` blocks and post-await code may
+not finish before the JVM exits. Put required cleanup in `ShutdownCleanup` or
+in the host's coordinated hook. Soklet does not choose a process exit status.
 
 Do not call `System.exit()` from work that shutdown must join, such as handlers,
 streaming producers or cleanup actions. The JVM hook can then wait for the
 same work that is waiting for JVM exit, exhausting the shutdown budget.
 Let an external process owner or supervisor terminate the process.
 
+The non-daemon lifecycle owner ends only after full finalization.
 Soklet-created auxiliary HTTP/SSE/MCP workers (including streaming callbacks,
 diagnostics, supervision, MCP platform handlers, policy/cancelation workers and
 protocol deadline timers) are daemon threads. A blocked residual callback on those auxiliary workers alone
-cannot keep the JVM alive after `run()` returns or throws. Built-in HTTP/SSE
+cannot keep the JVM alive after full lifecycle finalization. Built-in HTTP/SSE
 listener threads remain non-daemon: an inline connection observer or metric
 callback that never returns can retain the listener and keep the JVM alive.
 Keep those callbacks prompt. It remains residual
@@ -1088,9 +1115,8 @@ complete shutdown releases them. Custom transports and supplied executors own
 their thread/liveness policies. The runner does not call `System.exit()` or
 `Runtime.halt()`.
 
-Shutdown requested during startup may return normally without reaching
-readiness; this alone does not imply `SokletStartupException`. Inspect the
-returned lifecycle result.
+Shutdown requested during startup before readiness makes `run` throw a startup
+cancellation failure after attempted teardown; it never returns an unready handle.
 
 
 ### Shared lifecycle policy and changed defaults
@@ -1168,7 +1194,7 @@ that intent.
 
 ### Standalone terminal report
 
-`SokletApplication` attempts a multiline `soklet-terminal-report` directly on
+`Soklet` attempts a multiline `soklet-terminal-report` directly on
 standard error, captured when the run's runtime is created, if the runner's
 primary outcome indicates failure, startup fails or times out, shutdown is `FORCED` or
 `INCOMPLETE`, a component terminates unexpectedly, or configured application
@@ -1223,6 +1249,13 @@ budget expires.
 
 ### Observer and result changes
 
+The five aggregate observer methods no longer receive a `Soklet` parameter:
+`willStartSoklet()`, `didStartSoklet()`, `didFailToStartSoklet(Throwable)`,
+`willStopSoklet()`, and `didStopSoklet(ShutdownResult)`. Capture application identity
+in a per-application observer instance. These callbacks remain asynchronous
+observations; use `run` returning as the readiness boundary and either await
+method for full finalization.
+
 `LifecycleObserver.didFailToStopSoklet(...)` and the three transport-specific
 `didFailToStop...` callbacks are removed. The corresponding `didStop...`
 callback now receives `ShutdownResult` or `ShutdownComponentResult`, which
@@ -1230,7 +1263,7 @@ is the terminal evidence for successful, forced, unexpected, residual, and
 unknown termination. Observer callbacks are observational: exceptions are
 contained and do not rewrite lifecycle results.
 Lifecycle-transition callbacks are serialized on a daemon observer worker;
-returning from shutdown or `SokletApplication.run(...)` does not join their
+returning from `run(...)` or either await method does not join their
 delivery. They may be lost at JVM exit. Required cleanup belongs in bounded
 `ShutdownCleanup`. Cleanup that depends on observer state needs an
 application-owned delivery barrier. Other callbacks retain the inline behavior
@@ -2319,8 +2352,8 @@ category, not the number of retained tasks or callbacks. One object used in both
 HTTP and SSE configuration slots must provide distinct transport identities.
 
 Lifecycle completion stages are handed off to isolated completion execution.
-`awaitShutdown` waits for lifecycle classification and does not wait for arbitrary
-dependents of the public stage. Join the stage explicitly when its completion
+`awaitShutdown` waits for full lifecycle finalization and does not wait for arbitrary
+dependents of the public async stage. Join the stage explicitly when its completion
 publication or your dependent action is required. Keep dependent actions bounded.
 
 ## Final request parsing and routing bounds

@@ -199,8 +199,7 @@ class HeaderLocaleTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(LocaleResource.class)))
 				.lifecyclePolicy(lifecyclePolicy())
 				.build();
-		try (Soklet app = Soklet.fromConfig(config)) {
-			app.start();
+		Soklet.run(config, () -> {
 			assertWireStatus(port, "if-none-match: \"v1\"", "304 Not Modified");
 			assertWireStatus(port, "if-match: \"old\"", "412 Precondition Failed");
 			assertWireStatus(port, "if-match: \"v1\"", "200 OK");
@@ -213,7 +212,7 @@ class HeaderLocaleTests {
 							"HTTP/1.1 200 OK", Map.of("ETag", FILE_ENTITY_TAG, "Content-Length", "6"), "abcdef"),
 					() -> assertResponse(exchange(port, "/cookie", "", ""),
 							"HTTP/1.1 200 OK", Map.of("Set-Cookie", COOKIE, "Content-Length", "6"), "cookie"));
-		}
+		});
 	}
 
 	private static void assertSseWire() throws Exception {
@@ -242,8 +241,7 @@ class HeaderLocaleTests {
 						established.countDown();
 					}
 				}).build();
-		try (Soklet app = Soklet.fromConfig(config)) {
-			app.start();
+		Soklet.run(config, () -> {
 			Assertions.assertAll(
 					() -> assertResponse(exchange(port, "/sse/reject", "", ""),
 							"HTTP/1.1 403 Forbidden", Map.of("Content-Length", "10", "Set-Cookie", COOKIE), REJECTION_BODY),
@@ -266,7 +264,7 @@ class HeaderLocaleTests {
 											"HTTP/1.1 503 Service Unavailable", Map.of("Content-Length", "10", "Set-Cookie", COOKIE), REJECTION_BODY));
 						}
 					});
-		}
+		});
 	}
 
 	private static @NonNull LifecyclePolicy lifecyclePolicy() {

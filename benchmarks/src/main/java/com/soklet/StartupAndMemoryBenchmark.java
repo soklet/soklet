@@ -43,7 +43,7 @@ import java.util.concurrent.TimeUnit;
  * Each iteration forks a <em>fresh</em> JVM (no warm JIT or class-cache carryover) that starts a
  * one-route Soklet server, serves a real loopback request, and reports:
  * <ul>
- * <li>{@code startedMillis} — JVM start to {@code Soklet#start()} returning</li>
+ * <li>{@code startedMillis} — JVM start to {@code Soklet#run(SokletConfig)} returning</li>
  * <li>{@code firstResponseMillis} — JVM start to the first HTTP response fully read off a real socket</li>
  * <li>{@code usedHeapBytes} — used heap after startup, post-GC (approximate by nature)</li>
  * <li>{@code rssBytes} — median resident set size sampled from the OS via {@code ps} over the settle window
@@ -283,8 +283,11 @@ public final class StartupAndMemoryBenchmark {
 				})
 				.build();
 
-		try (Soklet soklet = Soklet.fromConfig(sokletConfig)) {
-			soklet.start();
+		Soklet soklet = Soklet.run(sokletConfig);
+		try (@SuppressWarnings("try") AutoCloseable sokletShutdown = () -> {
+			soklet.requestShutdown();
+			soklet.awaitShutdownAsync().toCompletableFuture().join();
+		}) {
 			long startedMillis = ManagementFactory.getRuntimeMXBean().getUptime();
 
 			probeFirstResponse(port);

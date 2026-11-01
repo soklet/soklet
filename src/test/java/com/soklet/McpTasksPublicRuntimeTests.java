@@ -155,10 +155,7 @@ public class McpTasksPublicRuntimeTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
-		Soklet soklet = managedSoklet(server);
-
-		try {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = boundPort(server);
 			String missingBody = "{\"jsonrpc\":\"2.0\","
 					+ "\"id\":\"typed-required-missing\","
@@ -222,9 +219,7 @@ public class McpTasksPublicRuntimeTests {
 					persistedState.find("selectedLocale").orElseThrow(),
 					"The durable task origin must preserve the locale selected before "
 							+ "the task-capable handler runs.");
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -257,10 +252,7 @@ public class McpTasksPublicRuntimeTests {
 				.build();
 		McpServer server = server(endpoint, Optional.of(taskManager),
 				McpHandlerInterceptor.passThroughInstance(), new AtomicInteger());
-		Soklet soklet = managedSoklet(server);
-
-		try {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = boundPort(server);
 			String body = "{\"jsonrpc\":\"2.0\",\"id\":\"large-create\","
 					+ "\"method\":\"tools/call\",\"params\":{"
@@ -284,9 +276,7 @@ public class McpTasksPublicRuntimeTests {
 			assertNoStore(restored, 200);
 			Assertions.assertTrue(restored.body().contains(
 					"\"taskId\":\"" + taskId + "\""), restored.body());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -324,10 +314,7 @@ public class McpTasksPublicRuntimeTests {
 		AtomicInteger handlerInvocations = new AtomicInteger();
 		McpServer server = taskServer(taskManager, handlerInvocations,
 				McpHandlerInterceptor.passThroughInstance(), new AtomicInteger());
-		Soklet soklet = managedSoklet(server);
-
-		try {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = boundPort(server);
 
 			HttpResponse<String> creation = callTool(port, "create-working",
@@ -396,12 +383,11 @@ public class McpTasksPublicRuntimeTests {
 							+ "\"text\":\"completed-output\"}],"
 							+ "\"resultType\":\"complete\",\"_meta\":{"
 							+ "\"com.example/completed\":\"nested\"}}");
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
+	@org.junit.jupiter.api.Timeout(90)
 	public void admittedTaskRequestsPublishExactLifecycleAndMetrics()
 			throws Exception {
 		ScriptedTaskManager taskManager = new ScriptedTaskManager();
@@ -411,17 +397,15 @@ public class McpTasksPublicRuntimeTests {
 		McpEndpoint endpoint = endpoint(taskManager, new AtomicInteger());
 		McpServer server = server(endpoint, Optional.of(taskManager),
 				McpHandlerInterceptor.passThroughInstance(), admissions);
-		Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+		Soklet.run(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObservers(List.of(recorder.lifecycleObserver()))
 				.metricsCollector(recorder.metricsCollector())
-				.build());
-		String taskId = "observed-task";
-		String unknownTaskId = "observed-unknown-task";
+				.build(), () -> {
+			String taskId = "observed-task";
+			String unknownTaskId = "observed-unknown-task";
 
-		try {
-			soklet.start();
 			int port = boundPort(server);
 
 			HttpResponse<String> creation = callTool(port, "observed-create",
@@ -469,9 +453,7 @@ public class McpTasksPublicRuntimeTests {
 					McpTaskRequestObservabilityRecorder.protocolError(
 							"observed-cancel-missing", "tasks/cancel",
 							unknownTaskId, McpOperationType.TASKS_CANCEL)));
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -480,10 +462,7 @@ public class McpTasksPublicRuntimeTests {
 		ScriptedTaskManager taskManager = new ScriptedTaskManager();
 		McpServer server = taskServer(taskManager, new AtomicInteger(),
 				McpHandlerInterceptor.passThroughInstance(), new AtomicInteger());
-		Soklet soklet = managedSoklet(server);
-
-		try {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = boundPort(server);
 
 			HttpResponse<String> update = callTaskUpdate(port, "update-task",
@@ -523,9 +502,7 @@ public class McpTasksPublicRuntimeTests {
 					cancelContext.getRequestContext().getOperationName());
 			Assertions.assertEquals(McpOperationType.TASKS_CANCEL,
 					cancelContext.getRequestContext().getOperationType());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -534,10 +511,7 @@ public class McpTasksPublicRuntimeTests {
 		ScriptedTaskManager taskManager = new ScriptedTaskManager();
 		McpServer server = taskServer(taskManager, new AtomicInteger(),
 				McpHandlerInterceptor.passThroughInstance(), new AtomicInteger());
-		Soklet soklet = managedSoklet(server);
-
-		try {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = boundPort(server);
 			assertNoStore(callTool(port, "seed-origin", "seed-task", false,
 					true), 200);
@@ -582,9 +556,7 @@ public class McpTasksPublicRuntimeTests {
 			assertInternalErrorWithoutDisclosure(callTask(port,
 					"tasks/cancel", "cancel-hostile", privateTaskId, true),
 					privateTaskId, MUTATION_FAILURE_CANARY);
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -593,10 +565,7 @@ public class McpTasksPublicRuntimeTests {
 		ScriptedTaskManager taskManager = new ScriptedTaskManager();
 		McpServer server = taskServer(taskManager, new AtomicInteger(),
 				McpHandlerInterceptor.passThroughInstance(), new AtomicInteger());
-		Soklet soklet = managedSoklet(server);
-
-		try {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = boundPort(server);
 			for (FindMode findMode : List.of(FindMode.EMPTY,
 					FindMode.NULL_OPTIONAL, FindMode.WRONG_ID,
@@ -613,9 +582,7 @@ public class McpTasksPublicRuntimeTests {
 			taskManager.findMode = FindMode.NORMAL;
 			assertNoStore(callTool(port, "creation-recovered",
 					"creation-valid", false, true), 200);
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -626,10 +593,7 @@ public class McpTasksPublicRuntimeTests {
 		AtomicInteger admissions = new AtomicInteger();
 		McpServer configuredServer = taskServer(taskManager, new AtomicInteger(),
 				McpHandlerInterceptor.passThroughInstance(), admissions);
-		Soklet configuredSoklet = managedSoklet(configuredServer);
-
-		try {
-			configuredSoklet.start();
+		Soklet.run(managedSokletConfig(configuredServer), () -> {
 			int port = boundPort(configuredServer);
 			HttpResponse<String> missingCapability = callTask(port, "tasks/get",
 					"missing-capability", "capability-task", false);
@@ -652,9 +616,7 @@ public class McpTasksPublicRuntimeTests {
 			}
 			Assertions.assertEquals(0, admissions.get(),
 					"The reserved Tasks namespace must fail before admission.");
-		} finally {
-			configuredSoklet.close();
-		}
+		});
 
 		McpEndpoint endpoint = endpoint(new ScriptedTaskManager(),
 				new AtomicInteger());
@@ -687,10 +649,7 @@ public class McpTasksPublicRuntimeTests {
 				McpTaskCreatedResult.<String>fromTaskId("typed-task");
 		McpServer server = server(endpoint, Optional.of(taskManager), interceptor,
 				new AtomicInteger());
-		Soklet soklet = managedSoklet(server);
-
-		try {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			HttpResponse<String> response = post(boundPort(server), "tools/call",
 					"tasks.typed-interceptor",
 					"{\"jsonrpc\":\"2.0\",\"id\":\"typed-invalid\","
@@ -707,9 +666,7 @@ public class McpTasksPublicRuntimeTests {
 			Assertions.assertEquals(0, handlerInvocations.get());
 			Assertions.assertEquals(0, taskManager.findInvocations.get(),
 					"A task lookup must not precede typed argument validation.");
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -772,10 +729,7 @@ public class McpTasksPublicRuntimeTests {
 		McpServer server = server(endpoint, Optional.of(taskManager),
 				McpHandlerInterceptor.passThroughInstance(), new AtomicInteger(),
 				sanitizer);
-		Soklet soklet = managedSoklet(server);
-
-		try {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = boundPort(server);
 			HttpResponse<String> creation = post(port, "tools/call",
 					"tasks.sanitized",
@@ -807,9 +761,7 @@ public class McpTasksPublicRuntimeTests {
 					"\"resultType\":\"complete\",\"_meta\":{"
 							+ "\"com.example/completed\":\"nested\"}"),
 					completed.body());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	private static McpEndpoint endpoint(@NonNull ScriptedTaskManager taskManager,
@@ -884,11 +836,11 @@ public class McpTasksPublicRuntimeTests {
 		return builder.build();
 	}
 
-	private static Soklet managedSoklet(@NonNull McpServer server) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+	private static SokletConfig managedSokletConfig(@NonNull McpServer server) {
+		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
-				.build());
+				.build();
 	}
 
 	private static int boundPort(@NonNull McpServer server) {

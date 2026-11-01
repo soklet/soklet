@@ -238,9 +238,7 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 						instanceProvider);
 				Assertions.assertSame(instanceProvider,
 						sokletConfig.getInstanceProvider());
-				Soklet soklet = Soklet.fromConfig(sokletConfig);
-				try {
-					soklet.start();
+				Soklet.run(sokletConfig, () -> {
 					int port = server.getDiagnostics().getBoundAddress()
 							.orElseThrow().getPort();
 					HttpResponse<String> listResponse = send(port, "tools/list",
@@ -379,9 +377,7 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 					Assertions.assertEquals(4, providedInstances.get(),
 							"Invalid arguments must not resolve the annotated handler instance.");
 					Assertions.assertEquals(5, handlerInterceptorInvocations.get());
-				} finally {
-					soklet.close();
-				}
+				});
 
 				AtomicInteger failedProviderInvocations = new AtomicInteger();
 				IllegalStateException providerFailure = new IllegalStateException(
@@ -403,9 +399,7 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 						failingProvider);
 				Assertions.assertSame(failingProvider,
 						failingConfig.getInstanceProvider());
-				Soklet failingSoklet = Soklet.fromConfig(failingConfig);
-				try {
-					failingSoklet.start();
+				Soklet.run(failingConfig, () -> {
 					int failingPort = failingServer.getDiagnostics().getBoundAddress()
 							.orElseThrow().getPort();
 					HttpResponse<String> failureResponse = sendToolCall(failingPort,
@@ -442,9 +436,7 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 							providerFailure.getMessage()),
 							promptFailureResponse.body());
 					Assertions.assertEquals(2, failedProviderInvocations.get());
-				} finally {
-					failingSoklet.close();
-				}
+				});
 			}
 		} finally {
 			if (previousProperty == null)

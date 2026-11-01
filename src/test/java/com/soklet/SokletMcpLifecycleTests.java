@@ -114,8 +114,7 @@ public class SokletMcpLifecycleTests {
 			}
 
 			@Override
-			public void didStopSoklet(@NonNull Soklet soklet,
-					@NonNull ShutdownResult result) {
+			public void didStopSoklet(@NonNull ShutdownResult result) {
 				globalResult.set(result);
 				terminalObserved.countDown();
 			}
@@ -447,7 +446,7 @@ public class SokletMcpLifecycleTests {
 		CountDownLatch terminalObserved = new CountDownLatch(1);
 		LifecycleObserver observer = new LifecycleObserver() {
 			@Override
-			public void willStopSoklet(@NonNull Soklet soklet) {
+			public void willStopSoklet() {
 				events.add("will-stop-soklet");
 			}
 
@@ -486,8 +485,7 @@ public class SokletMcpLifecycleTests {
 			}
 
 			@Override
-			public void didStopSoklet(@NonNull Soklet soklet,
-					@NonNull ShutdownResult result) {
+			public void didStopSoklet(@NonNull ShutdownResult result) {
 				events.add("did-stop-soklet");
 				terminalObserved.countDown();
 			}
@@ -777,30 +775,28 @@ public class SokletMcpLifecycleTests {
 		}
 
 		@Override
-		public void willStartSoklet(@NonNull Soklet soklet) {
+		public void willStartSoklet() {
 			this.events.add("will-start-soklet");
 		}
 
 		@Override
-		public void didStartSoklet(@NonNull Soklet soklet) {
+		public void didStartSoklet() {
 			this.events.add("did-start-soklet");
 			this.readyObserved.countDown();
 		}
 
 		@Override
-		public void didFailToStartSoklet(@NonNull Soklet soklet,
-				@NonNull Throwable throwable) {
+		public void didFailToStartSoklet(@NonNull Throwable throwable) {
 			this.events.add("did-fail-start-soklet");
 		}
 
 		@Override
-		public void willStopSoklet(@NonNull Soklet soklet) {
+		public void willStopSoklet() {
 			this.events.add("will-stop-soklet");
 		}
 
 		@Override
-		public void didStopSoklet(@NonNull Soklet soklet,
-				@NonNull ShutdownResult result) {
+		public void didStopSoklet(@NonNull ShutdownResult result) {
 			this.events.add("did-stop-soklet");
 			this.terminalObserved.countDown();
 		}

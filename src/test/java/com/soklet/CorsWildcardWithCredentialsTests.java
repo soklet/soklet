@@ -69,9 +69,7 @@ public class CorsWildcardWithCredentialsTests {
 				.corsAuthorizer(authorizer)
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
-
+		Soklet.run(cfg, () -> {
 			HttpClient client = HttpClient.newHttpClient();
 			HttpRequest request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/api/hello"))
 					.method("OPTIONS", HttpRequest.BodyPublishers.noBody())
@@ -91,7 +89,7 @@ public class CorsWildcardWithCredentialsTests {
 			Assertions.assertEquals("true", acc);
 			Assertions.assertNotEquals("*", acao);
 			Assertions.assertEquals("https://example.com", acao);
-		}
+		});
 	}
 
 	public static class CorsResource {

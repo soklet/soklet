@@ -91,8 +91,7 @@ public class McpPromptPublicRuntimeTests {
 						simplePrompt("modern-only", Set.of(McpProtocolVersion.V2026_07_28))))
 				.build();
 		McpServer server = legacyServerBuilder(endpoint).build();
-		try (Soklet owner = managedSoklet(server)) {
-			owner.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			for (McpProtocolVersion version : List.of(McpProtocolVersion.V2025_06_18,
 					McpProtocolVersion.V2025_11_25)) {
@@ -151,7 +150,7 @@ public class McpPromptPublicRuntimeTests {
 			assertSuccess(modern, "modern");
 			assertContains(modern.body(), "\"resultType\":\"complete\"");
 			Assertions.assertEquals(McpProtocolVersion.V2026_07_28, observedRequest.get().getProtocolVersion());
-		}
+		});
 	}
 
 	@Test
@@ -197,8 +196,7 @@ public class McpPromptPublicRuntimeTests {
 					stages.add("interceptor-after");
 					return result;
 				}).build();
-		try (Soklet owner = managedSoklet(server)) {
-			owner.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			for (String revision : List.of("2025-06-18", "2025-11-25")) {
 				allowed.set(true);
@@ -232,7 +230,7 @@ public class McpPromptPublicRuntimeTests {
 				Assertions.assertFalse(denied.body().contains("private prompt"));
 			}
 			Assertions.assertEquals(2, handlerInvocations.get());
-		}
+		});
 	}
 
 	@Test
@@ -242,8 +240,7 @@ public class McpPromptPublicRuntimeTests {
 				.promptRegistrations(List.of(simplePrompt("modern-only", Set.of(McpProtocolVersion.V2026_07_28))))
 				.build();
 		McpServer server = legacyServerBuilder(endpoint).build();
-		try (Soklet owner = managedSoklet(server)) {
-			owner.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			for (String revision : List.of("2025-06-18", "2025-11-25")) {
 				HttpResponse<String> initialize = sendLegacy(port, revision, "initialize", "init",
@@ -254,7 +251,7 @@ public class McpPromptPublicRuntimeTests {
 				assertError(sendLegacy(port, revision, "prompts/list", "list", "", Map.of()),
 						200, -32601, "list");
 			}
-		}
+		});
 	}
 
 	private static McpPromptRegistration simplePrompt(String name, Set<McpProtocolVersion> protocolVersions) {
@@ -361,10 +358,8 @@ public class McpPromptPublicRuntimeTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
-		Soklet soklet = managedSoklet(server);
+		Soklet.run(managedSokletConfig(server), () -> {
 
-		try {
-			soklet.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 
@@ -450,16 +445,15 @@ public class McpPromptPublicRuntimeTests {
 						: List.of("admission:" + name), stages);
 			}
 			Assertions.assertEquals(1, handlerInvocations.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
-	private static Soklet managedSoklet(McpServer server) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+
+	private static SokletConfig managedSokletConfig(McpServer server) {
+		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
-				.build());
+				.build();
 	}
 
 	private static HttpResponse<String> send(int port, String body,

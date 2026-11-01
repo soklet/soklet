@@ -55,7 +55,8 @@ class McpHandlerExecutorPublicRuntimeTests {
 	}
 
 	void directHandoffExecutesAllAcceptedRequestsWithoutCapacityFailures(McpProtocolVersion version) throws Exception {
-		try (Fixture fixture = new Fixture(new Executor(false, false), true, false)) {
+		Fixture fixture = new Fixture(new Executor(false, false), true, false);
+		Soklet.run(fixture.config, () -> {
 			List<RawClient> queued = new ArrayList<>();
 			try (RawClient active = fixture.open(version, "active")) {
 				assertTrue(fixture.firstEntered.await(5, TimeUnit.SECONDS));
@@ -80,12 +81,13 @@ class McpHandlerExecutorPublicRuntimeTests {
 				fixture.releaseFirst.countDown();
 				for (RawClient client : queued) client.close();
 			}
-		}
+		});
 	}
 
 	void executorSubmissionRejectionUsesTheFixedCapacityResponseAndRecovers(McpProtocolVersion version) throws Exception {
 		Executor executor = new Executor(true, false);
-		try (Fixture fixture = new Fixture(executor, false, false)) {
+		Fixture fixture = new Fixture(executor, false, false);
+		Soklet.run(fixture.config, () -> {
 			try (RawClient client = fixture.open(version, "rejected")) { assertCapacity(client, "rejected"); }
 			awaitCondition(() -> fixture.outcomes.size() == 1 && fixture.metricCount(McpMetricsEvent.HandlerCapacityRejected.class) == 1);
 			assertEquals(0, fixture.handlerCalls.get());
@@ -96,7 +98,7 @@ class McpHandlerExecutorPublicRuntimeTests {
 			awaitCondition(() -> fixture.outcomes.size() == 2);
 			assertEquals(1, fixture.handlerCalls.get());
 			assertEquals(List.of(McpRequestOutcome.REJECTED, McpRequestOutcome.COMPLETE), fixture.outcomes);
-		}
+		});
 	}
 
 	void callerRunsCannotMoveAnApplicationHandlerOntoTheProtocolThread(McpProtocolVersion version) throws Exception {
@@ -108,15 +110,18 @@ class McpHandlerExecutorPublicRuntimeTests {
 			try { release.await(); } catch (InterruptedException exception) { Thread.currentThread().interrupt(); }
 		});
 		assertTrue(occupied.await(5, TimeUnit.SECONDS));
-		try (Fixture fixture = new Fixture(executor, false, false)) {
-			try (RawClient client = fixture.open(version, "inline")) { assertCapacity(client, "inline"); }
-			awaitCondition(() -> fixture.outcomes.size() == 1);
-			assertEquals(0, fixture.handlerCalls.get());
-			assertEquals(List.of(McpRequestOutcome.REJECTED), fixture.outcomes);
-			release.countDown();
-			awaitCondition(() -> executor.getActiveCount() == 0);
-			try (RawClient client = fixture.open(version, "recovered")) { assertSuccess(client); }
-			assertEquals(1, fixture.handlerCalls.get());
+		Fixture fixture = new Fixture(executor, false, false);
+		try {
+					Soklet.run(fixture.config, () -> {
+				try (RawClient client = fixture.open(version, "inline")) { assertCapacity(client, "inline"); }
+				awaitCondition(() -> fixture.outcomes.size() == 1);
+				assertEquals(0, fixture.handlerCalls.get());
+				assertEquals(List.of(McpRequestOutcome.REJECTED), fixture.outcomes);
+				release.countDown();
+				awaitCondition(() -> executor.getActiveCount() == 0);
+				try (RawClient client = fixture.open(version, "recovered")) { assertSuccess(client); }
+				assertEquals(1, fixture.handlerCalls.get());
+					});
 		} finally {
 			release.countDown();
 			executor.shutdownNow();
@@ -129,7 +134,8 @@ class McpHandlerExecutorPublicRuntimeTests {
 		McpCatalogAccessPolicy policy = McpCatalogAccessPolicy.fromEvaluators(
 				(requestContext, toolRegistration, invocationFeatures) -> { policyCalls.incrementAndGet(); return true; },
 				(requestContext, promptRegistration, invocationFeatures) -> true);
-		try (Fixture fixture = new Fixture(new Executor(true, false), false, false, policy)) {
+		Fixture fixture = new Fixture(new Executor(true, false), false, false, policy);
+		Soklet.run(fixture.config, () -> {
 			try (RawClient client = fixture.openCatalog(version, "policy-rejected")) { assertCapacity(client, "policy-rejected"); }
 			awaitCondition(() -> fixture.outcomes.size() == 1);
 			assertEquals(0, policyCalls.get());
@@ -143,11 +149,12 @@ class McpHandlerExecutorPublicRuntimeTests {
 				assertTrue(body.contains("\"name\":\"work\""), body);
 			}
 			assertEquals(1, policyCalls.get());
-		}
+		});
 	}
 
 	void aHandlerThrownRejectionRemainsAnApplicationFailure(McpProtocolVersion version) throws Exception {
-		try (Fixture fixture = new Fixture(new Executor(false, false), false, true)) {
+		Fixture fixture = new Fixture(new Executor(false, false), false, true);
+		Soklet.run(fixture.config, () -> {
 			try (RawClient client = fixture.open(version, "handler-failure")) {
 				Head head = client.readHead();
 				String body = client.readBody(head);
@@ -160,12 +167,13 @@ class McpHandlerExecutorPublicRuntimeTests {
 			assertEquals(List.of(McpRequestOutcome.INTERNAL_ERROR), fixture.outcomes);
 			assertEquals(List.of(List.of(fixture.handlerFailure)), fixture.failures);
 			assertEquals(0, fixture.metricCount(McpMetricsEvent.HandlerCapacityRejected.class));
-		}
+		});
 	}
 
 	void unexpectedExecutorFailureRetainsTransportStatusAndRecovers(McpProtocolVersion version) throws Exception {
 		Executor executor = new Executor(false, false, true);
-		try (Fixture fixture = new Fixture(executor, false, false)) {
+		Fixture fixture = new Fixture(executor, false, false);
+		Soklet.run(fixture.config, () -> {
 			try (RawClient client = fixture.open(version, "executor-failure")) {
 				Head head = client.readHead();
 				String body = client.readBody(head);
@@ -178,7 +186,7 @@ class McpHandlerExecutorPublicRuntimeTests {
 			assertEquals(0, fixture.handlerCalls.get());
 			assertEquals(List.of(McpRequestOutcome.INTERNAL_ERROR), fixture.outcomes);
 			try (RawClient client = fixture.open(version, "recovered")) { assertSuccess(client); }
-		}
+		});
 	}
 
 	private static void assertSuccess(RawClient client) throws Exception {
@@ -205,7 +213,7 @@ class McpHandlerExecutorPublicRuntimeTests {
 		assertTrue(condition.getAsBoolean());
 	}
 
-	private static final class Fixture implements AutoCloseable {
+	private static final class Fixture {
 		private final CountDownLatch firstEntered = new CountDownLatch(1);
 		private final CountDownLatch releaseFirst = new CountDownLatch(1);
 		private final AtomicInteger handlerCalls = new AtomicInteger();
@@ -214,7 +222,7 @@ class McpHandlerExecutorPublicRuntimeTests {
 		private final List<List<Throwable>> failures = new CopyOnWriteArrayList<>();
 		private final List<McpMetricsEvent> events = new CopyOnWriteArrayList<>();
 		private final McpServer server;
-		private final Soklet soklet;
+		private final SokletConfig config;
 
 		private Fixture(Executor executor, boolean blockFirst, boolean failHandler) {
 			this(executor, blockFirst, failHandler, null);
@@ -237,7 +245,7 @@ class McpHandlerExecutorPublicRuntimeTests {
 					.requestHandlerConcurrency(1).requestHandlerQueueCapacity(3)
 					.requestTimeout(Duration.ofSeconds(10))
 					.requestHandlerExecutorServiceSupplier(() -> executor).build();
-			soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+			config = SokletConfig.withMcpServer(server)
 					.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 					.metricsCollector(new MetricsCollector() {
 						@Override public void didRecordMcpMetricsEvent(McpMetricsEvent event) { events.add(event); }
@@ -250,8 +258,7 @@ class McpHandlerExecutorPublicRuntimeTests {
 							outcomes.add(requestOutcome);
 						}
 					}).lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(5))
-							.gracefulShutdownTimeout(Duration.ofSeconds(1)).forcedShutdownTimeout(Duration.ofSeconds(1)).build()).build());
-			soklet.start();
+							.gracefulShutdownTimeout(Duration.ofSeconds(1)).forcedShutdownTimeout(Duration.ofSeconds(1)).build()).build();
 		}
 
 		private int metricCount(Class<? extends McpMetricsEvent> type) {
@@ -281,8 +288,6 @@ class McpHandlerExecutorPublicRuntimeTests {
 			}
 			return new RawClient(server.getDiagnostics().getBoundAddress().orElseThrow().getPort(), "POST", "/mcp", body, headers);
 		}
-
-		@Override public void close() { releaseFirst.countDown(); soklet.close(); }
 	}
 
 	private static final class Executor extends ThreadPoolExecutor {

@@ -84,55 +84,54 @@ public class McpTaskCancelationLifecycleTests {
 			return McpTaskCreatedResult.<McpJsonObject>fromTaskId(task.getTaskId());
 		};
 		McpServer server = server(taskManager, handler, Duration.ofSeconds(15));
-		Soklet soklet = managedSoklet(server);
-		CompletableFuture<HttpResponse<String>> originatingRequest = null;
+		Soklet.run(config(server), () -> {
+			CompletableFuture<HttpResponse<String>> originatingRequest = null;
 
-		try {
-			soklet.start();
-			int port = boundPort(server);
-			originatingRequest = callToolAsync(port, "originating-request");
-			Assertions.assertTrue(taskCreated.await(5, TimeUnit.SECONDS),
-					"The task-capable handler did not create its task.");
-			McpTask task = createdTask.get();
-			Assertions.assertNotNull(task);
+			try {
+				int port = boundPort(server);
+				originatingRequest = callToolAsync(port, "originating-request");
+				Assertions.assertTrue(taskCreated.await(5, TimeUnit.SECONDS),
+						"The task-capable handler did not create its task.");
+				McpTask task = createdTask.get();
+				Assertions.assertNotNull(task);
 
-			HttpResponse<String> cancel = callTask(port, "tasks/cancel",
-					"cancel-task", task.getTaskId());
-			assertCompleteAcknowledgement(cancel, "cancel-task");
-			Assertions.assertTrue(taskManager.isTaskCancelationRequested(
-					task.getTaskId()));
-			Assertions.assertEquals(McpTaskStatus.WORKING,
-					taskManager.findTask(task.getTaskId()).orElseThrow()
-							.getTaskStatus());
-			Assertions.assertFalse(requestCancelation.get().isCanceled());
-			Assertions.assertEquals(0, requestCancelationCallbacks.get());
-			Assertions.assertFalse(originatingRequest.isDone(),
-					"Task cancelation must not terminate the originating request.");
+				HttpResponse<String> cancel = callTask(port, "tasks/cancel",
+						"cancel-task", task.getTaskId());
+				assertCompleteAcknowledgement(cancel, "cancel-task");
+				Assertions.assertTrue(taskManager.isTaskCancelationRequested(
+						task.getTaskId()));
+				Assertions.assertEquals(McpTaskStatus.WORKING,
+						taskManager.findTask(task.getTaskId()).orElseThrow()
+								.getTaskStatus());
+				Assertions.assertFalse(requestCancelation.get().isCanceled());
+				Assertions.assertEquals(0, requestCancelationCallbacks.get());
+				Assertions.assertFalse(originatingRequest.isDone(),
+						"Task cancelation must not terminate the originating request.");
 
-			taskManager.completeTask(task.getTaskId(),
-					McpCompleteResult.fromToolText("completion won"), null);
-			releaseHandler.countDown();
-			HttpResponse<String> creation = originatingRequest.get(5,
-					TimeUnit.SECONDS);
-			Assertions.assertEquals(200, creation.statusCode(), creation.body());
-			Assertions.assertTrue(creation.body().contains(
-					"\"status\":\"completed\""), creation.body());
-			Assertions.assertTrue(creation.body().contains(
-					"\"resultType\":\"task\""), creation.body());
-			Assertions.assertFalse(requestCancelation.get().isCanceled());
-			Assertions.assertEquals(0, requestCancelationCallbacks.get());
+				taskManager.completeTask(task.getTaskId(),
+						McpCompleteResult.fromToolText("completion won"), null);
+				releaseHandler.countDown();
+				HttpResponse<String> creation = originatingRequest.get(5,
+						TimeUnit.SECONDS);
+				Assertions.assertEquals(200, creation.statusCode(), creation.body());
+				Assertions.assertTrue(creation.body().contains(
+						"\"status\":\"completed\""), creation.body());
+				Assertions.assertTrue(creation.body().contains(
+						"\"resultType\":\"task\""), creation.body());
+				Assertions.assertFalse(requestCancelation.get().isCanceled());
+				Assertions.assertEquals(0, requestCancelationCallbacks.get());
 
-			HttpResponse<String> completed = callTask(port, "tasks/get",
-					"get-completed", task.getTaskId());
-			Assertions.assertEquals(200, completed.statusCode(), completed.body());
-			Assertions.assertTrue(completed.body().contains("completion won"),
-					completed.body());
-		} finally {
-			releaseHandler.countDown();
-			if (originatingRequest != null)
-				originatingRequest.cancel(true);
-			soklet.close();
-		}
+				HttpResponse<String> completed = callTask(port, "tasks/get",
+						"get-completed", task.getTaskId());
+				Assertions.assertEquals(200, completed.statusCode(), completed.body());
+				Assertions.assertTrue(completed.body().contains("completion won"),
+						completed.body());
+			} finally {
+				releaseHandler.countDown();
+				if (originatingRequest != null)
+					originatingRequest.cancel(true);
+			}
+		});
 	}
 
 	@Test
@@ -165,54 +164,53 @@ public class McpTaskCancelationLifecycleTests {
 			}
 		};
 		McpServer server = server(taskManager, handler, Duration.ofSeconds(15));
-		Soklet soklet = managedSoklet(server);
-		CompletableFuture<HttpResponse<String>> originatingRequest = null;
+		Soklet.run(config(server), () -> {
+			CompletableFuture<HttpResponse<String>> originatingRequest = null;
 
-		try {
-			soklet.start();
-			int port = boundPort(server);
-			String requestId = "ignored-request-cancelation";
-			originatingRequest = callToolAsync(port, requestId);
-			Assertions.assertTrue(taskCreated.await(5, TimeUnit.SECONDS),
-					"The task-aware request did not create its durable task.");
-			McpTask task = createdTask.get();
-			Assertions.assertNotNull(task);
+			try {
+				int port = boundPort(server);
+				String requestId = "ignored-request-cancelation";
+				originatingRequest = callToolAsync(port, requestId);
+				Assertions.assertTrue(taskCreated.await(5, TimeUnit.SECONDS),
+						"The task-aware request did not create its durable task.");
+				McpTask task = createdTask.get();
+				Assertions.assertNotNull(task);
 
-			HttpResponse<String> notification = notifyRequestCancelation(port,
-					requestId);
-			Assertions.assertEquals(202, notification.statusCode(),
-					notification.body());
-			Assertions.assertTrue(notification.body().isEmpty(),
-					notification.body());
-			Assertions.assertEquals(1L, requestCanceled.getCount(),
-					"The ignored notification must not invoke cancelation callbacks.");
-			Assertions.assertFalse(requestCancelation.get().isCanceled());
-			Assertions.assertFalse(originatingRequest.isDone(),
-					"The ignored notification must not finish the active request.");
-			Assertions.assertFalse(taskManager.isTaskCancelationRequested(
-					task.getTaskId()));
-			Assertions.assertEquals(McpTaskStatus.WORKING,
-					taskManager.findTask(task.getTaskId()).orElseThrow()
-							.getTaskStatus());
+				HttpResponse<String> notification = notifyRequestCancelation(port,
+						requestId);
+				Assertions.assertEquals(202, notification.statusCode(),
+						notification.body());
+				Assertions.assertTrue(notification.body().isEmpty(),
+						notification.body());
+				Assertions.assertEquals(1L, requestCanceled.getCount(),
+						"The ignored notification must not invoke cancelation callbacks.");
+				Assertions.assertFalse(requestCancelation.get().isCanceled());
+				Assertions.assertFalse(originatingRequest.isDone(),
+						"The ignored notification must not finish the active request.");
+				Assertions.assertFalse(taskManager.isTaskCancelationRequested(
+						task.getTaskId()));
+				Assertions.assertEquals(McpTaskStatus.WORKING,
+						taskManager.findTask(task.getTaskId()).orElseThrow()
+								.getTaskStatus());
 
-			releaseHandler.countDown();
-			Assertions.assertTrue(handlerExited.await(5, TimeUnit.SECONDS),
-					"The task-aware request handler did not exit.");
-			HttpResponse<String> creation = originatingRequest.get(5,
-					TimeUnit.SECONDS);
-			Assertions.assertEquals(200, creation.statusCode(), creation.body());
-			Assertions.assertTrue(creation.body().contains(
-					"\"resultType\":\"task\""), creation.body());
-			Assertions.assertTrue(creation.body().contains(
-					"\"status\":\"working\""), creation.body());
-			Assertions.assertFalse(requestCancelation.get().isCanceled());
-			Assertions.assertEquals(1L, requestCanceled.getCount());
-		} finally {
-			releaseHandler.countDown();
-			if (originatingRequest != null && !originatingRequest.isDone())
-				originatingRequest.cancel(true);
-			soklet.close();
-		}
+				releaseHandler.countDown();
+				Assertions.assertTrue(handlerExited.await(5, TimeUnit.SECONDS),
+						"The task-aware request handler did not exit.");
+				HttpResponse<String> creation = originatingRequest.get(5,
+						TimeUnit.SECONDS);
+				Assertions.assertEquals(200, creation.statusCode(), creation.body());
+				Assertions.assertTrue(creation.body().contains(
+						"\"resultType\":\"task\""), creation.body());
+				Assertions.assertTrue(creation.body().contains(
+						"\"status\":\"working\""), creation.body());
+				Assertions.assertFalse(requestCancelation.get().isCanceled());
+				Assertions.assertEquals(1L, requestCanceled.getCount());
+			} finally {
+				releaseHandler.countDown();
+				if (originatingRequest != null && !originatingRequest.isDone())
+					originatingRequest.cancel(true);
+			}
+		});
 	}
 
 	@Test
@@ -229,82 +227,78 @@ public class McpTaskCancelationLifecycleTests {
 			return McpTaskCreatedResult.<McpJsonObject>fromTaskId(task.getTaskId());
 		};
 		McpServer server = server(taskManager, handler, Duration.ofSeconds(5));
-		Soklet soklet = managedSoklet(server);
-		// Both racers must reach the barrier even when the common pool has only
-		// one worker (for example, on a two-CPU JDK 25 runner).
-		ExecutorService raceExecutor = Executors.newFixedThreadPool(2);
+		Soklet.run(config(server), () -> {
+			// Both racers must reach the barrier even when the common pool has only
+			// one worker (for example, on a two-CPU JDK 25 runner).
+			ExecutorService raceExecutor = Executors.newFixedThreadPool(2);
 
-		try {
-			soklet.start();
-			int port = boundPort(server);
-			HttpResponse<String> creation = callTool(port, "create-raced-task");
-			Assertions.assertEquals(200, creation.statusCode(), creation.body());
-			McpTask racedTask = createdTask.get();
-			Assertions.assertNotNull(racedTask);
-			CyclicBarrier raceStart = new CyclicBarrier(2);
-			CompletableFuture<HttpResponse<String>> cancelation =
-					CompletableFuture.supplyAsync(() -> {
-						awaitRaceStart(raceStart);
-						try {
-							return callTask(port, "tasks/cancel",
-									"race-cancel", racedTask.getTaskId());
-						} catch (Exception exception) {
-							throw new CompletionException(exception);
-						}
-					}, raceExecutor);
-			CompletableFuture<Void> completion = CompletableFuture.runAsync(() -> {
-				awaitRaceStart(raceStart);
-				try {
-					taskManager.completeTask(racedTask.getTaskId(),
-							McpCompleteResult.fromToolText("race completion"), null);
-				} catch (McpTaskNotFoundException exception) {
-					throw new CompletionException(exception);
-				}
-			}, raceExecutor);
-
-			assertCompleteAcknowledgement(cancelation.get(5, TimeUnit.SECONDS),
-					"race-cancel");
-			completion.get(5, TimeUnit.SECONDS);
-			McpTask terminal = taskManager.findTask(racedTask.getTaskId())
-					.orElseThrow();
-			Assertions.assertEquals(McpTaskStatus.COMPLETED,
-					terminal.getTaskStatus());
-			HttpResponse<String> racedCompletion = callTask(port, "tasks/get",
-					"get-raced-completion", racedTask.getTaskId());
-			Assertions.assertEquals(200, racedCompletion.statusCode(),
-					racedCompletion.body());
-			Assertions.assertTrue(racedCompletion.body().contains("race completion"),
-					racedCompletion.body());
-			assertTerminalCompletionIsImmutable(taskManager, terminal);
-
-			HttpResponse<String> secondCreation = callTool(port,
-					"create-completion-first-task");
-			Assertions.assertEquals(200, secondCreation.statusCode(),
-					secondCreation.body());
-			McpTask completionFirstTask = createdTask.get();
-			Assertions.assertNotNull(completionFirstTask);
-			taskManager.completeTask(completionFirstTask.getTaskId(),
-					McpCompleteResult.fromToolText("completion first"), null);
-			assertCompleteAcknowledgement(callTask(port, "tasks/cancel",
-					"completion-first-cancel", completionFirstTask.getTaskId()),
-					"completion-first-cancel");
-			Assertions.assertFalse(taskManager.isTaskCancelationRequested(
-					completionFirstTask.getTaskId()));
-			McpTask completionFirstTerminal = taskManager.findTask(
-					completionFirstTask.getTaskId()).orElseThrow();
-			Assertions.assertEquals(McpTaskStatus.COMPLETED,
-					completionFirstTerminal.getTaskStatus());
-			assertTerminalCompletionIsImmutable(taskManager,
-					completionFirstTerminal);
-		} finally {
-			raceExecutor.shutdownNow();
 			try {
+				int port = boundPort(server);
+				HttpResponse<String> creation = callTool(port, "create-raced-task");
+				Assertions.assertEquals(200, creation.statusCode(), creation.body());
+				McpTask racedTask = createdTask.get();
+				Assertions.assertNotNull(racedTask);
+				CyclicBarrier raceStart = new CyclicBarrier(2);
+				CompletableFuture<HttpResponse<String>> cancelation =
+						CompletableFuture.supplyAsync(() -> {
+							awaitRaceStart(raceStart);
+							try {
+								return callTask(port, "tasks/cancel",
+										"race-cancel", racedTask.getTaskId());
+							} catch (Exception exception) {
+								throw new CompletionException(exception);
+							}
+						}, raceExecutor);
+				CompletableFuture<Void> completion = CompletableFuture.runAsync(() -> {
+					awaitRaceStart(raceStart);
+					try {
+						taskManager.completeTask(racedTask.getTaskId(),
+								McpCompleteResult.fromToolText("race completion"), null);
+					} catch (McpTaskNotFoundException exception) {
+						throw new CompletionException(exception);
+					}
+				}, raceExecutor);
+
+				assertCompleteAcknowledgement(cancelation.get(5, TimeUnit.SECONDS),
+						"race-cancel");
+				completion.get(5, TimeUnit.SECONDS);
+				McpTask terminal = taskManager.findTask(racedTask.getTaskId())
+						.orElseThrow();
+				Assertions.assertEquals(McpTaskStatus.COMPLETED,
+						terminal.getTaskStatus());
+				HttpResponse<String> racedCompletion = callTask(port, "tasks/get",
+						"get-raced-completion", racedTask.getTaskId());
+				Assertions.assertEquals(200, racedCompletion.statusCode(),
+						racedCompletion.body());
+				Assertions.assertTrue(racedCompletion.body().contains("race completion"),
+						racedCompletion.body());
+				assertTerminalCompletionIsImmutable(taskManager, terminal);
+
+				HttpResponse<String> secondCreation = callTool(port,
+						"create-completion-first-task");
+				Assertions.assertEquals(200, secondCreation.statusCode(),
+						secondCreation.body());
+				McpTask completionFirstTask = createdTask.get();
+				Assertions.assertNotNull(completionFirstTask);
+				taskManager.completeTask(completionFirstTask.getTaskId(),
+						McpCompleteResult.fromToolText("completion first"), null);
+				assertCompleteAcknowledgement(callTask(port, "tasks/cancel",
+						"completion-first-cancel", completionFirstTask.getTaskId()),
+						"completion-first-cancel");
+				Assertions.assertFalse(taskManager.isTaskCancelationRequested(
+						completionFirstTask.getTaskId()));
+				McpTask completionFirstTerminal = taskManager.findTask(
+						completionFirstTask.getTaskId()).orElseThrow();
+				Assertions.assertEquals(McpTaskStatus.COMPLETED,
+						completionFirstTerminal.getTaskStatus());
+				assertTerminalCompletionIsImmutable(taskManager,
+						completionFirstTerminal);
+			} finally {
+				raceExecutor.shutdownNow();
 				Assertions.assertTrue(raceExecutor.awaitTermination(5,
 						TimeUnit.SECONDS), "The task race executor did not terminate.");
-			} finally {
-				soklet.close();
 			}
-		}
+		});
 	}
 
 	@Test
@@ -338,10 +332,7 @@ public class McpTaskCancelationLifecycleTests {
 			return McpTaskCreatedResult.<McpJsonObject>fromTaskId(task.getTaskId());
 		};
 		McpServer server = server(taskManager, handler, Duration.ofSeconds(1));
-		Soklet soklet = managedSoklet(server);
-
-		try {
-			soklet.start();
+		Soklet.run(config(server), () -> {
 			CompletableFuture<HttpResponse<String>> request = callToolAsync(
 					boundPort(server), "timed-out-request");
 			Assertions.assertTrue(taskCreated.await(5, TimeUnit.SECONDS),
@@ -371,9 +362,7 @@ public class McpTaskCancelationLifecycleTests {
 			Assertions.assertEquals(200, completed.statusCode(), completed.body());
 			Assertions.assertTrue(completed.body().contains(
 					"survived request timeout"), completed.body());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -391,7 +380,8 @@ public class McpTaskCancelationLifecycleTests {
 		};
 		McpServer firstServer = server(taskManager, handler,
 				Duration.ofSeconds(5));
-		Soklet firstSoklet = managedSoklet(firstServer);
+		// The test explicitly shuts down a node before checking durable work and starting its replacement.
+		Soklet firstSoklet = Soklet.fromConfig(config(firstServer));
 		McpServer secondServer = null;
 		Soklet secondSoklet = null;
 
@@ -413,7 +403,7 @@ public class McpTaskCancelationLifecycleTests {
 					McpCompleteResult.fromToolText("completed after shutdown"), null);
 
 			secondServer = server(taskManager, handler, Duration.ofSeconds(5));
-			secondSoklet = managedSoklet(secondServer);
+			secondSoklet = Soklet.fromConfig(config(secondServer));
 			secondSoklet.start();
 			HttpResponse<String> recovered = callTask(boundPort(secondServer),
 					"tasks/get", "get-after-restart", task.getTaskId());
@@ -461,11 +451,11 @@ public class McpTaskCancelationLifecycleTests {
 	}
 
 	@NonNull
-	private static Soklet managedSoklet(@NonNull McpServer server) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+	private static SokletConfig config(@NonNull McpServer server) {
+		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
-				.build());
+				.build();
 	}
 
 	private static int boundPort(@NonNull McpServer server) {

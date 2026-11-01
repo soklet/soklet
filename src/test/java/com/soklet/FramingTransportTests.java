@@ -24,8 +24,7 @@ class FramingTransportTests {
     void faultyHttpFramingClosesBeforeAnyHandlerOrFollowingPipelineRequestRuns() throws Exception {
         int port = TestSupport.findFreePort();
         INVOCATIONS.set(0);
-        try (Soklet soklet = Soklet.fromConfig(config(port, null))) {
-            soklet.start();
+        Soklet.run(config(port, null), () -> {
             List<String> malformed = List.of(
                     "POST /framing HTTP/1.0\r\nHost: a\r\nConnection: keep-alive\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n",
                     chunked("1;name=a\rb\r\nx\r\n0\r\n\r\n"),
@@ -41,22 +40,21 @@ class FramingTransportTests {
                 assertEquals(1, wire.split("HTTP/1.1", -1).length - 1, wire);
                 assertEquals(0, INVOCATIONS.get());
             }
-        }
+        });
     }
 
     @Test
     void validChunkExtensionsAndHttp10ContentLengthReachTheHandler() throws Exception {
         int port = TestSupport.findFreePort();
         INVOCATIONS.set(0);
-        try (Soklet soklet = Soklet.fromConfig(config(port, null))) {
-            soklet.start();
+        Soklet.run(config(port, null), () -> {
             for (String request : List.of(chunked("1;name=\"quoted; value\\\"\"\r\nx\r\n0;done\r\n\r\n"),
                     "POST /framing HTTP/1.0\r\nHost: a\r\nContent-Length: 1\r\nConnection: close\r\n\r\nx")) {
                 String wire = exchange(port, request);
                 assertTrue(wire.startsWith("HTTP/1.1 200") || wire.startsWith("HTTP/1.0 200"), wire);
                 assertEquals("x", wire.substring(wire.indexOf("\r\n\r\n") + 4));
             }
-        }
+        });
         assertEquals(2, INVOCATIONS.get());
     }
 
@@ -65,8 +63,7 @@ class FramingTransportTests {
         int httpPort = TestSupport.findFreePort();
         int ssePort = TestSupport.findFreePort();
         INVOCATIONS.set(0);
-        try (Soklet soklet = Soklet.fromConfig(config(httpPort, ssePort))) {
-            soklet.start();
+        Soklet.run(config(httpPort, ssePort), () -> {
             String malformed = exchange(ssePort, "GET /events HTTP/1.1\r\nHost: a\r\n"
                     + "X-Note: a\rX-Authenticated-User: admin\r\n\r\n");
             assertTrue(malformed.startsWith("HTTP/1.1 400"), malformed);
@@ -83,7 +80,7 @@ class FramingTransportTests {
             assertEquals(List.of("Bearer realm=\"first\"", "Bearer realm=\"second\""), headers.get("WWW-Authenticate"));
             assertEquals("denied", wire.substring(wire.indexOf("\r\n\r\n") + 4));
             assertEquals(1, INVOCATIONS.get());
-        }
+        });
     }
 
     private static SokletConfig config(int httpPort, Integer ssePort) {
@@ -104,8 +101,7 @@ class FramingTransportTests {
     @Test
     void absoluteAuthorityAndEmptyNamesReachLiveHttpHandlers() throws Exception {
         int httpPort = TestSupport.findFreePort();
-        try (Soklet soklet = Soklet.fromConfig(config(httpPort, null))) {
-            soklet.start();
+        Soklet.run(config(httpPort, null), () -> {
             String wire = exchange(httpPort, "GET https://target.example:8443/authority?=value HTTP/1.1\r\nHost: other.example\r\nConnection: close\r\n\r\n");
             assertTrue(wire.startsWith("HTTP/1.1 200"), wire);
             assertEquals("https://target.example:8443|value", wire.substring(wire.indexOf("\r\n\r\n") + 4));
@@ -113,7 +109,7 @@ class FramingTransportTests {
                 String rejected = exchange(httpPort, "GET https://target.example/authority HTTP/1.1\r\n" + host + "Connection: close\r\n\r\n");
                 assertTrue(rejected.startsWith("HTTP/1.1 400"), rejected);
             }
-        }
+        });
     }
 
     private static String chunked(String body) {

@@ -516,6 +516,7 @@ class SokletApplicationFinalizationTests {
 		CountDownLatch cleanupEntered = new CountDownLatch(1);
 		CountDownLatch releaseCleanup = new CountDownLatch(1);
 		CountDownLatch cleanupFinished = new CountDownLatch(1);
+		CountDownLatch interruptAttempted = new CountDownLatch(1);
 		AtomicInteger interruptAttempts = new AtomicInteger();
 		AtomicInteger reporterCalls = new AtomicInteger();
 		SecurityException interruptFailure = new SecurityException(
@@ -534,6 +535,7 @@ class SokletApplicationFinalizationTests {
 						@Override
 						public void interrupt() {
 							interruptAttempts.incrementAndGet();
+							interruptAttempted.countDown();
 							throw interruptFailure;
 						}
 					} : new Thread(guarded, name);
@@ -559,6 +561,7 @@ class SokletApplicationFinalizationTests {
 		Assertions.assertEquals(InternalShutdownCleanupDisposition.TIMED_OUT,
 				joined.cleanupOutcome().disposition());
 		Assertions.assertTrue(joined.cleanupOutcome().workerMayRemain());
+		awaitLatch(interruptAttempted);
 		Assertions.assertEquals(1, interruptAttempts.get());
 		Assertions.assertEquals(1, reporterCalls.get());
 		Assertions.assertTrue(fixture.finalization().isComplete());

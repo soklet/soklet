@@ -185,10 +185,7 @@ public class McpMetadataBuilderReservedNamespaceTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
-		Soklet soklet = managedSoklet(server);
-
-		try {
-			soklet.start();
+		Soklet.run(config(server), () -> {
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			assertGenericFailure(exchange(port, "tool-text", "tools/call",
@@ -203,16 +200,14 @@ public class McpMetadataBuilderReservedNamespaceTests {
 			assertGenericFailure(exchange(port, "resource", "resources/read",
 					RESOURCE_URI.toString(), ",\"uri\":\"" + RESOURCE_URI + "\""),
 					"resource");
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
-	private static Soklet managedSoklet(McpServer server) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+	private static SokletConfig config(McpServer server) {
+		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
-				.build());
+				.build();
 	}
 
 	private static McpToolRegistration<McpJsonObject> invalidNestedTextTool() {

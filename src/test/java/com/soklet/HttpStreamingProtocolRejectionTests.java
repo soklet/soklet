@@ -59,8 +59,7 @@ public class HttpStreamingProtocolRejectionTests {
 				default -> throw new AssertionError(kind);
 			};
 			Fixture fixture = new Fixture(body, false);
-			try (fixture) {
-				fixture.start();
+			Soklet.run(fixture.config, () -> {
 				String wire = fixture.request("GET", "/stream", "HTTP/1.0");
 				assertRejectionWire(wire);
 				Assertions.assertTrue(fixture.metricsFinished.await(3, TimeUnit.SECONDS), kind);
@@ -68,42 +67,47 @@ public class HttpStreamingProtocolRejectionTests {
 				assertRejectionObservation(fixture);
 				Assertions.assertEquals(1, fixture.resource.handlerCalls.get(), kind);
 				Assertions.assertEquals(0, producerCalls.get(), kind);
-			}
+			});
 			Assertions.assertEquals(1, fixture.terminationCalls.get(), kind);
 		}
 	}
 
 	@Test
 	void replacementIsReportedEvenWhenTheLogicalStreamAlreadyHasStatus505() throws Exception {
-		try (Fixture fixture = new Fixture(StreamingResponseBody.fromWriter(stream -> Assertions.fail("Rejected writer entered")), false, 505)) {
-			fixture.start();
+		Fixture fixture = new Fixture(StreamingResponseBody.fromWriter(stream -> Assertions.fail("Rejected writer entered")), false, 505);
+		Soklet.run(fixture.config, () -> {
 			assertRejectionWire(fixture.request("GET", "/stream", "HTTP/1.0"));
 			Assertions.assertTrue(fixture.metricsFinished.await(3, TimeUnit.SECONDS));
 			Assertions.assertTrue(fixture.terminationFinished.await(3, TimeUnit.SECONDS));
 			assertRejectionObservation(fixture);
-		}
+		});
 	}
 
 	@Test
 	void rejectedFiniteResponseAndRequestFinishDoNotWaitForTerminationObserver() throws Exception {
 		Fixture fixture = new Fixture(StreamingResponseBody.fromWriter(stream -> Assertions.fail("Rejected writer entered")), true);
-		try (fixture) {
-			fixture.start();
-			assertRejectionWire(fixture.request("GET", "/stream", "HTTP/1.0"));
-			Assertions.assertTrue(fixture.terminationEntered.await(3, TimeUnit.SECONDS));
-			Assertions.assertEquals(1, fixture.terminationFinished.getCount(), "The observer should still be blocked");
-			Assertions.assertTrue(fixture.metricsFinished.await(3, TimeUnit.SECONDS), "Finite request finish waited for the observer");
-			assertRejectionObservation(fixture);
-			Assertions.assertTrue(fixture.request("GET", "/buffered", "HTTP/1.1").endsWith("ok"),
-					"The event loop or request worker was blocked by termination observation");
+		try {
+			Soklet.run(fixture.config, () -> {
+				try {
+					assertRejectionWire(fixture.request("GET", "/stream", "HTTP/1.0"));
+					Assertions.assertTrue(fixture.terminationEntered.await(3, TimeUnit.SECONDS));
+					Assertions.assertEquals(1, fixture.terminationFinished.getCount(), "The observer should still be blocked");
+					Assertions.assertTrue(fixture.metricsFinished.await(3, TimeUnit.SECONDS), "Finite request finish waited for the observer");
+					assertRejectionObservation(fixture);
+					Assertions.assertTrue(fixture.request("GET", "/buffered", "HTTP/1.1").endsWith("ok"),
+							"The event loop or request worker was blocked by termination observation");
+				} finally {
+					fixture.releaseTermination.countDown();
+				}
+			});
 		} finally { fixture.releaseTermination.countDown(); }
 		Assertions.assertEquals(1, fixture.terminationCalls.get());
 	}
 
 	@Test
 	void bufferedHttpOneDotZeroResponseStillWorks() throws Exception {
-		try (Fixture fixture = new Fixture(StreamingResponseBody.fromWriter(stream -> {}), false)) {
-			fixture.start();
+		Fixture fixture = new Fixture(StreamingResponseBody.fromWriter(stream -> {}), false);
+		Soklet.run(fixture.config, () -> {
 			String wire = fixture.request("GET", "/buffered", "HTTP/1.0");
 			Assertions.assertTrue(wire.startsWith("HTTP/1.0 200 OK\r\n"), wire);
 			Assertions.assertTrue(wire.endsWith("ok"), wire);
@@ -111,14 +115,14 @@ public class HttpStreamingProtocolRejectionTests {
 			Assertions.assertTrue(fixture.metricsFinished.await(3, TimeUnit.SECONDS));
 			Assertions.assertEquals(200, fixture.metricsFinish.get().getStatusCode());
 			Assertions.assertEquals(0, fixture.terminationCalls.get());
-		}
+		});
 	}
 
 	@Test
 	void httpOneDotZeroHeadUsesNormalBodyOmissionWithoutStartingProducer() throws Exception {
 		AtomicInteger producerCalls = new AtomicInteger();
-		try (Fixture fixture = new Fixture(StreamingResponseBody.fromWriter(stream -> producerCalls.incrementAndGet()), false)) {
-			fixture.start();
+		Fixture fixture = new Fixture(StreamingResponseBody.fromWriter(stream -> producerCalls.incrementAndGet()), false);
+		Soklet.run(fixture.config, () -> {
 			String wire = fixture.request("HEAD", "/stream", "HTTP/1.0");
 			Assertions.assertTrue(wire.startsWith("HTTP/1.0 200 OK\r\n"), wire);
 			Assertions.assertTrue(wire.endsWith("\r\n\r\n"), wire);
@@ -129,16 +133,16 @@ public class HttpStreamingProtocolRejectionTests {
 			Assertions.assertEquals(1, fixture.resource.handlerCalls.get());
 			Assertions.assertEquals(0, producerCalls.get());
 			Assertions.assertEquals(0, fixture.terminationCalls.get());
-		}
+		});
 	}
 
 	@Test
 	void httpOneDotOneStillStartsAndCompletesTheStreamingProducer() throws Exception {
 		AtomicInteger producerCalls = new AtomicInteger();
-		try (Fixture fixture = new Fixture(StreamingResponseBody.fromWriter(stream -> {
+		Fixture fixture = new Fixture(StreamingResponseBody.fromWriter(stream -> {
 			producerCalls.incrementAndGet(); stream.write("ok".getBytes(StandardCharsets.UTF_8));
-		}), false)) {
-			fixture.start();
+		}), false);
+		Soklet.run(fixture.config, () -> {
 			String wire = fixture.request("GET", "/stream", "HTTP/1.1");
 			Assertions.assertTrue(wire.startsWith("HTTP/1.1 200 OK\r\n"), wire);
 			Assertions.assertTrue(wire.contains("Transfer-Encoding: chunked\r\n"), wire);
@@ -149,7 +153,7 @@ public class HttpStreamingProtocolRejectionTests {
 			Assertions.assertTrue(fixture.metricsFinish.get().isStreaming());
 			Assertions.assertEquals(StreamTerminationReason.COMPLETED, fixture.termination.get().getReason());
 			Assertions.assertEquals(1, producerCalls.get());
-		}
+		});
 	}
 
 	private static void assertRejectionWire(String wire) {
@@ -183,10 +187,10 @@ public class HttpStreamingProtocolRejectionTests {
 		Assertions.assertEquals(0, fixture.writeFailures.get());
 	}
 
-	private static final class Fixture implements AutoCloseable {
+	private static final class Fixture {
 		private final int port = findFreePort();
 		private final TestResource resource;
-		private final Soklet soklet;
+		private final SokletConfig config;
 		private final AtomicReference<MarshaledResponse> intended = new AtomicReference<>();
 		private final AtomicReference<MarshaledResponse> written = new AtomicReference<>();
 		private final AtomicReference<MarshaledResponse> finished = new AtomicReference<>();
@@ -211,7 +215,7 @@ public class HttpStreamingProtocolRejectionTests {
 		private Fixture(StreamingResponseBody body, boolean blockTermination, int statusCode) throws Exception {
 			this.resource = new TestResource(body, statusCode);
 			this.releaseTermination = new CountDownLatch(blockTermination ? 1 : 0);
-			this.soklet = Soklet.fromConfig(SokletConfig.withHttpServer(HttpServer.withPort(this.port).host("127.0.0.1")
+			this.config = SokletConfig.withHttpServer(HttpServer.withPort(this.port).host("127.0.0.1")
 					.concurrency(1).streamingResponseTimeout(Duration.ofSeconds(5)).build())
 					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(TestResource.class)))
 					.instanceProvider(new InstanceProvider() {
@@ -256,10 +260,9 @@ public class HttpStreamingProtocolRejectionTests {
 						}
 						@Override
 						public void didReceiveLogEvent(LogEvent logEvent) { }
-					}).build());
+					}).build();
 		}
 
-		private void start() { this.soklet.start(); }
 
 		private String request(String method, String path, String version) throws Exception {
 			try (Socket socket = connectWithRetry("127.0.0.1", this.port, 3_000)) {
@@ -270,11 +273,6 @@ public class HttpStreamingProtocolRejectionTests {
 			}
 		}
 
-		@Override
-		public void close() throws Exception {
-			this.releaseTermination.countDown();
-			this.soklet.shutdown().toCompletableFuture().get(5, TimeUnit.SECONDS);
-		}
 	}
 
 	public static final class TestResource {

@@ -181,103 +181,108 @@ public class McpErrorMappingGoldenProductionTests {
 	}
 
 	@Test
+	@Timeout(61)
 	public void ordinaryMappingFamiliesMatchProductionListenerGoldens()
 			throws Exception {
 		FixtureState state = new FixtureState();
 		McpServer server = server(state);
-		Soklet owner = managedSoklet(server);
 		try {
-			owner.start();
-			int port = boundPort(server);
-			List<LiveCase> cases = List.of(
-					new LiveCase("rate-limit-string-429.http.hex",
-							post("rate-limit", requestBody("\"rate-limit\"",
-									"tools/call", PROTOCOL_VERSION, "{}",
-									",\"name\":\"" + REGULAR_TOOL
-											+ "\",\"arguments\":{}"),
-									withHeader(toolHeaders(REGULAR_TOOL,
-											PROTOCOL_VERSION), "X-Request-Canary",
-											RATE_SECRET))),
-					new LiveCase("strict-unknown-integer-400.http.hex",
-							post("strict-unknown", requestBody("31998",
-									"tools/call", PROTOCOL_VERSION, "{}",
-									",\"name\":\"" + REGULAR_TOOL
-											+ "\",\"arguments\":{}"),
-									withHeader(toolHeaders(REGULAR_TOOL,
-											PROTOCOL_VERSION), STRICT_NAME_SECRET,
-											STRICT_VALUE_SECRET))),
-					new LiveCase("header-mismatch-integer-400.http.hex",
-							post("header-mismatch", requestBody("32020",
-									"tools/call", PROTOCOL_VERSION, "{}",
-									",\"name\":\"" + REGULAR_TOOL
-											+ "\",\"arguments\":{}"),
-									toolHeaders(HEADER_SECRET, PROTOCOL_VERSION))),
-					new LiveCase(
-							"unsupported-selector-name-mismatch-integer-400.http.hex",
-							post("unsupported-selector-name-mismatch",
-									requestBody("32020", "tools/call", "2099-01-01",
-											"{}", ",\"name\":\"" + REGULAR_TOOL
-													+ "\",\"arguments\":{}"),
-									toolHeaders(HEADER_SECRET, "2099-01-01"))),
-					new LiveCase(
-							"unsupported-selector-strict-unknown-integer-400.http.hex",
-							post("unsupported-selector-strict-unknown",
-									requestBody("31998", "tools/call", "2099-01-01",
-											"{}", ",\"name\":\"" + REGULAR_TOOL
-													+ "\",\"arguments\":{}"),
-									withHeader(toolHeaders(REGULAR_TOOL, "2099-01-01"),
-											STRICT_NAME_SECRET, STRICT_VALUE_SECRET))),
-					new LiveCase(
-							"unsupported-selector-body-version-mismatch-string-400.http.hex",
-							post("unsupported-selector-body-version-mismatch",
-									requestBody("\"unsupported-body-version\"",
+			Soklet.run(managedSokletConfig(server), () -> {
+				try {
+					int port = boundPort(server);
+					List<LiveCase> cases = List.of(
+							new LiveCase("rate-limit-string-429.http.hex",
+									post("rate-limit", requestBody("\"rate-limit\"",
 											"tools/call", PROTOCOL_VERSION, "{}",
 											",\"name\":\"" + REGULAR_TOOL
 													+ "\",\"arguments\":{}"),
-									toolHeaders(REGULAR_TOOL, "2099-01-01"))),
-					new LiveCase("missing-capability-required-string-400.http.hex",
-							post("missing-required", requestBody(
-									"\"missing-required\"", "tools/call",
-									PROTOCOL_VERSION, "{}", ",\"name\":\""
-											+ REQUIRED_TOOL + "\",\"arguments\":{}"),
-									toolHeaders(REQUIRED_TOOL, PROTOCOL_VERSION))),
-					new LiveCase("missing-capability-conditional-integer-400.http.hex",
-							post("missing-conditional", requestBody("32021",
-									"tools/call", PROTOCOL_VERSION, "{}",
-									",\"name\":\"" + CONDITIONAL_TOOL
-											+ "\",\"arguments\":{}"),
-									toolHeaders(CONDITIONAL_TOOL, PROTOCOL_VERSION))),
-					new LiveCase("unsupported-version-string-400.http.hex",
-							post("unsupported-version", requestBody(
-									"\"unsupported-version\"", "tools/call",
-									"2099-01-01", "{}", ",\"name\":\""
-											+ REGULAR_TOOL + "\",\"arguments\":{}"),
-									toolHeaders(REGULAR_TOOL, "2099-01-01"))),
-					new LiveCase("invalid-params-integer-400.http.hex",
-							post("invalid-params", requestBody("32602",
-									"tools/call", PROTOCOL_VERSION, "{}",
-									",\"name\":\"" + REGULAR_TOOL
-											+ "\",\"arguments\":\""
-											+ INVALID_PARAMS_SECRET + "\""),
-									toolHeaders(REGULAR_TOOL, PROTOCOL_VERSION))),
-					new LiveCase("method-not-found-string-404.http.hex",
-							post("method-not-found", requestBody(
-									"\"unknown-method\"", UNKNOWN_METHOD_SECRET,
-									PROTOCOL_VERSION, "{}", ""),
-									requestHeaders(UNKNOWN_METHOD_SECRET,
-											PROTOCOL_VERSION, null))));
+											withHeader(toolHeaders(REGULAR_TOOL,
+													PROTOCOL_VERSION), "X-Request-Canary",
+													RATE_SECRET))),
+							new LiveCase("strict-unknown-integer-400.http.hex",
+									post("strict-unknown", requestBody("31998",
+											"tools/call", PROTOCOL_VERSION, "{}",
+											",\"name\":\"" + REGULAR_TOOL
+													+ "\",\"arguments\":{}"),
+											withHeader(toolHeaders(REGULAR_TOOL,
+													PROTOCOL_VERSION), STRICT_NAME_SECRET,
+													STRICT_VALUE_SECRET))),
+							new LiveCase("header-mismatch-integer-400.http.hex",
+									post("header-mismatch", requestBody("32020",
+											"tools/call", PROTOCOL_VERSION, "{}",
+											",\"name\":\"" + REGULAR_TOOL
+													+ "\",\"arguments\":{}"),
+											toolHeaders(HEADER_SECRET, PROTOCOL_VERSION))),
+							new LiveCase(
+									"unsupported-selector-name-mismatch-integer-400.http.hex",
+									post("unsupported-selector-name-mismatch",
+											requestBody("32020", "tools/call", "2099-01-01",
+													"{}", ",\"name\":\"" + REGULAR_TOOL
+															+ "\",\"arguments\":{}"),
+											toolHeaders(HEADER_SECRET, "2099-01-01"))),
+							new LiveCase(
+									"unsupported-selector-strict-unknown-integer-400.http.hex",
+									post("unsupported-selector-strict-unknown",
+											requestBody("31998", "tools/call", "2099-01-01",
+													"{}", ",\"name\":\"" + REGULAR_TOOL
+															+ "\",\"arguments\":{}"),
+											withHeader(toolHeaders(REGULAR_TOOL, "2099-01-01"),
+													STRICT_NAME_SECRET, STRICT_VALUE_SECRET))),
+							new LiveCase(
+									"unsupported-selector-body-version-mismatch-string-400.http.hex",
+									post("unsupported-selector-body-version-mismatch",
+											requestBody("\"unsupported-body-version\"",
+													"tools/call", PROTOCOL_VERSION, "{}",
+													",\"name\":\"" + REGULAR_TOOL
+															+ "\",\"arguments\":{}"),
+											toolHeaders(REGULAR_TOOL, "2099-01-01"))),
+							new LiveCase("missing-capability-required-string-400.http.hex",
+									post("missing-required", requestBody(
+											"\"missing-required\"", "tools/call",
+											PROTOCOL_VERSION, "{}", ",\"name\":\""
+													+ REQUIRED_TOOL + "\",\"arguments\":{}"),
+											toolHeaders(REQUIRED_TOOL, PROTOCOL_VERSION))),
+							new LiveCase("missing-capability-conditional-integer-400.http.hex",
+									post("missing-conditional", requestBody("32021",
+											"tools/call", PROTOCOL_VERSION, "{}",
+											",\"name\":\"" + CONDITIONAL_TOOL
+													+ "\",\"arguments\":{}"),
+											toolHeaders(CONDITIONAL_TOOL, PROTOCOL_VERSION))),
+							new LiveCase("unsupported-version-string-400.http.hex",
+									post("unsupported-version", requestBody(
+											"\"unsupported-version\"", "tools/call",
+											"2099-01-01", "{}", ",\"name\":\""
+													+ REGULAR_TOOL + "\",\"arguments\":{}"),
+											toolHeaders(REGULAR_TOOL, "2099-01-01"))),
+							new LiveCase("invalid-params-integer-400.http.hex",
+									post("invalid-params", requestBody("32602",
+											"tools/call", PROTOCOL_VERSION, "{}",
+											",\"name\":\"" + REGULAR_TOOL
+													+ "\",\"arguments\":\""
+													+ INVALID_PARAMS_SECRET + "\""),
+											toolHeaders(REGULAR_TOOL, PROTOCOL_VERSION))),
+							new LiveCase("method-not-found-string-404.http.hex",
+									post("method-not-found", requestBody(
+											"\"unknown-method\"", UNKNOWN_METHOD_SECRET,
+											PROTOCOL_VERSION, "{}", ""),
+											requestHeaders(UNKNOWN_METHOD_SECRET,
+													PROTOCOL_VERSION, null))));
 
-			for (LiveCase testCase : cases) {
-				WireResponse response = exchange(port, testCase.request());
-				assertGolden(response, testCase.fixture());
-			}
-			Assertions.assertEquals(0, state.regularHandlerInvocations.get());
-			Assertions.assertEquals(0, state.requiredHandlerInvocations.get());
-			Assertions.assertEquals(1, state.conditionalHandlerInvocations.get());
-			awaitIdle(server);
+					for (LiveCase testCase : cases) {
+						WireResponse response = exchange(port, testCase.request());
+						assertGolden(response, testCase.fixture());
+					}
+					Assertions.assertEquals(0, state.regularHandlerInvocations.get());
+					Assertions.assertEquals(0, state.requiredHandlerInvocations.get());
+					Assertions.assertEquals(1, state.conditionalHandlerInvocations.get());
+					awaitIdle(server);
+
+				} finally {
+					state.releaseHandlers.countDown();
+				}
+			});
 		} finally {
-			state.releaseHandlers.countDown();
-			stopAndAssertClean(owner, server);
+			assertClean(server);
 		}
 	}
 
@@ -286,45 +291,49 @@ public class McpErrorMappingGoldenProductionTests {
 	public void overloadMappingMatchesProductionListenerGolden() throws Exception {
 		FixtureState state = new FixtureState();
 		McpServer server = server(state);
-		Soklet owner = managedSoklet(server);
 		ExecutorService clients = Executors.newFixedThreadPool(2);
 		try {
-			owner.start();
-			int port = boundPort(server);
-			Future<WireResponse> active = clients.submit(() -> exchange(port,
-					post("overload-active", requestBody("\"active\"",
-							"tools/call", PROTOCOL_VERSION, "{}",
-							",\"name\":\"" + HOLD_TOOL
-									+ "\",\"arguments\":{}"),
-							toolHeaders(HOLD_TOOL, PROTOCOL_VERSION))));
-			Assertions.assertTrue(state.handlerHeld.await(5, TimeUnit.SECONDS),
-					"The active overload fixture did not enter its handler.");
-			Future<WireResponse> queued = clients.submit(() -> exchange(port,
-					post("overload-queued", requestBody("\"queued\"",
-							"tools/call", PROTOCOL_VERSION, "{}",
-							",\"name\":\"" + HOLD_TOOL
-									+ "\",\"arguments\":{}"),
-							toolHeaders(HOLD_TOOL, PROTOCOL_VERSION))));
-			awaitCondition(() -> server.getDiagnostics().getRequestHandlerQueueDepth() == 1);
+			Soklet.run(managedSokletConfig(server), () -> {
+				try {
+					int port = boundPort(server);
+					Future<WireResponse> active = clients.submit(() -> exchange(port,
+							post("overload-active", requestBody("\"active\"",
+									"tools/call", PROTOCOL_VERSION, "{}",
+									",\"name\":\"" + HOLD_TOOL
+											+ "\",\"arguments\":{}"),
+									toolHeaders(HOLD_TOOL, PROTOCOL_VERSION))));
+					Assertions.assertTrue(state.handlerHeld.await(5, TimeUnit.SECONDS),
+							"The active overload fixture did not enter its handler.");
+					Future<WireResponse> queued = clients.submit(() -> exchange(port,
+							post("overload-queued", requestBody("\"queued\"",
+									"tools/call", PROTOCOL_VERSION, "{}",
+									",\"name\":\"" + HOLD_TOOL
+											+ "\",\"arguments\":{}"),
+									toolHeaders(HOLD_TOOL, PROTOCOL_VERSION))));
+					awaitCondition(() -> server.getDiagnostics().getRequestHandlerQueueDepth() == 1);
 
-			WireResponse overload = exchange(port,
-					post("overload", requestBody("\"overload\"",
-							"tools/call", PROTOCOL_VERSION, "{}",
-							",\"name\":\"" + HOLD_TOOL
-									+ "\",\"arguments\":{}"),
-							toolHeaders(HOLD_TOOL, PROTOCOL_VERSION)));
-			assertGolden(overload, "overload-string-503.http.hex");
-			Assertions.assertEquals(1, state.holdHandlerInvocations.get(),
-					"The overloaded request must not enter the handler.");
+					WireResponse overload = exchange(port,
+							post("overload", requestBody("\"overload\"",
+									"tools/call", PROTOCOL_VERSION, "{}",
+									",\"name\":\"" + HOLD_TOOL
+											+ "\",\"arguments\":{}"),
+									toolHeaders(HOLD_TOOL, PROTOCOL_VERSION)));
+					assertGolden(overload, "overload-string-503.http.hex");
+					Assertions.assertEquals(1, state.holdHandlerInvocations.get(),
+							"The overloaded request must not enter the handler.");
 
-			state.releaseHandlers.countDown();
-			Assertions.assertEquals(200, active.get(5, TimeUnit.SECONDS).status());
-			Assertions.assertEquals(200, queued.get(5, TimeUnit.SECONDS).status());
-			Assertions.assertEquals(2, state.holdHandlerInvocations.get());
-			awaitIdle(server);
+					state.releaseHandlers.countDown();
+					Assertions.assertEquals(200, active.get(5, TimeUnit.SECONDS).status());
+					Assertions.assertEquals(200, queued.get(5, TimeUnit.SECONDS).status());
+					Assertions.assertEquals(2, state.holdHandlerInvocations.get());
+					awaitIdle(server);
+
+				} finally {
+					state.releaseHandlers.countDown();
+				}
+			});
 		} finally {
-			state.releaseHandlers.countDown();
-			stopAndAssertClean(owner, server);
+			assertClean(server);
 			clients.shutdownNow();
 			Assertions.assertTrue(clients.awaitTermination(5, TimeUnit.SECONDS));
 		}
@@ -593,15 +602,14 @@ public class McpErrorMappingGoldenProductionTests {
 		awaitCondition(() -> zeroLoad(server.getDiagnostics()));
 	}
 
-	private static Soklet managedSoklet(McpServer server) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+	private static SokletConfig managedSokletConfig(McpServer server) {
+		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
-				.build());
+				.build();
 	}
 
-	private static void stopAndAssertClean(Soklet owner, McpServer server) {
-		owner.close();
+	private static void assertClean(McpServer server) {
 		McpServerDiagnostics diagnostics = server.getDiagnostics();
 		Assertions.assertEquals(McpServerStatus.TERMINATED, diagnostics.getStatus());
 		Assertions.assertTrue(diagnostics.getBoundAddress().isPresent());

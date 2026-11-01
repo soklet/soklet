@@ -134,10 +134,7 @@ public class McpInputResponsesPublicRuntimeTests {
 					return continuation.proceed();
 				})
 				.build();
-		Soklet soklet = managedSoklet(server, observer, collector);
-
-		try {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server, observer, collector), () -> {
 			int port = boundPort(server);
 			HttpResponse<String> toolResponse = send(port, "tool-retry",
 					"tools/call", TOOL_NAME,
@@ -188,9 +185,7 @@ public class McpInputResponsesPublicRuntimeTests {
 			Assertions.assertEquals(3, observer.finishes.get());
 			Assertions.assertEquals(3, collector.started.get());
 			Assertions.assertEquals(3, collector.finished.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -243,10 +238,7 @@ public class McpInputResponsesPublicRuntimeTests {
 				.resourceRegistrations(java.util.List.of(resource))
 				.build();
 		McpServer server = serverBuilder(endpoint).build();
-		Soklet soklet = managedSoklet(server);
-
-		try {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = boundPort(server);
 			HttpResponse<String> toolResponse = send(port, "none-tool",
 					"tools/call", "none.tool",
@@ -268,9 +260,7 @@ public class McpInputResponsesPublicRuntimeTests {
 					"\"cacheScope\":\"private\""), resourceResponse.body());
 			Assertions.assertEquals(1, toolInvocations.get());
 			Assertions.assertEquals(1, resourceInvocations.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -310,10 +300,7 @@ public class McpInputResponsesPublicRuntimeTests {
 				.build();
 		McpEndpoint endpoint = endpointBuilder().toolRegistrations(java.util.List.of(tool)).build();
 		McpServer server = serverBuilder(endpoint).build();
-		Soklet soklet = managedSoklet(server);
-
-		try {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = boundPort(server);
 			HttpResponse<String> missing = send(port, "missing", "tools/call",
 					"retry.missing", ",\"name\":\"retry.missing\","
@@ -337,9 +324,7 @@ public class McpInputResponsesPublicRuntimeTests {
 			Assertions.assertTrue(complete.body().contains(
 					"\"text\":\"accepted\""), complete.body());
 			Assertions.assertEquals(2, handlerInvocations.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -403,10 +388,7 @@ public class McpInputResponsesPublicRuntimeTests {
 					return output;
 				})
 				.build();
-		Soklet soklet = managedSoklet(server, observer, collector);
-
-		try {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server, observer, collector), () -> {
 			int port = boundPort(server);
 			List<HttpResponse<String>> responses = List.of(
 					send(port, "null-responses", "tools/call", TOOL_NAME,
@@ -440,9 +422,7 @@ public class McpInputResponsesPublicRuntimeTests {
 					toolLimiterInvocations, handlerInvocations,
 					sanitizerInvocations, observer.starts, observer.finishes,
 					collector.started, collector.finished);
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	private static void assertExactInputResponses(
@@ -510,23 +490,21 @@ public class McpInputResponsesPublicRuntimeTests {
 		return server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 	}
 
-	@NonNull
-	private static Soklet managedSoklet(@NonNull McpServer server) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+	private static SokletConfig managedSokletConfig(@NonNull McpServer server) {
+		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
-				.build());
+				.build();
 	}
 
-	@NonNull
-	private static Soklet managedSoklet(@NonNull McpServer server,
+	private static SokletConfig managedSokletConfig(@NonNull McpServer server,
 			@NonNull LifecycleObserver observer,
 			@NonNull MetricsCollector collector) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(observer)
 				.metricsCollector(collector)
-				.build());
+				.build();
 	}
 
 	@NonNull

@@ -100,11 +100,12 @@ class SimulatorConfigDerivationTests {
 
 		// Simulator derivation did not claim the production transports: the exact
 		// source configuration can still own and complete its normal lifecycle.
-		try (Soklet soklet = Soklet.fromConfig(sourceConfig)) {
-			soklet.start();
-			Assertions.assertEquals(SokletStatus.RUNNING,
-					soklet.getStatus());
-		}
+		Soklet.run(sourceConfig, () -> {
+			Assertions.assertTrue(((DefaultHttpServer) sourceHttpServer).isStarted());
+			Assertions.assertTrue(((DefaultSseServer) sourceSseServer).isStarted());
+			Assertions.assertEquals(McpServerStatus.RUNNING,
+					sourceMcpServer.getDiagnostics().getStatus());
+		});
 		Assertions.assertEquals(McpServerStatus.TERMINATED,
 				sourceMcpServer.getDiagnostics().getStatus());
 	}

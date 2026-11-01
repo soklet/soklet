@@ -79,38 +79,29 @@ import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Soklet's main class - manages one or more configured transport servers ({@link HttpServer}, {@link SseServer}, and/or
- * {@link McpServer})
- * using the provided system configuration.
+ * Owns one ready-to-terminal Soklet lifecycle and its configured HTTP, SSE,
+ * and MCP transports. {@link #run(SokletConfig)} returns
+ * after all configured transports reach readiness; each instance is one-shot.
+ * Every run owns a JVM shutdown hook. Bounded application cleanup, terminal
+ * reporting, and process-registration release remain owned
+ * by the instance until finalization finishes, even when nobody waits.
  * <p>
- * This is the direct, embedded lifecycle API. The caller owns process-signal,
- * shutdown-trigger, and standard-input integration and requests termination
- * through {@link #shutdown()}. Standalone processes that want Soklet to own a
- * JVM shutdown hook or {@link ShutdownTrigger} registration should use
- * {@link SokletApplication} instead. Do not mix both ownership models for one
- * lifecycle.
- * Built-in HTTP/SSE listener threads retain JVM liveness while running, even
- * when the caller returns from {@link #start()}; a complete shutdown releases
- * them. Custom transports own their thread-liveness policy.
+ * <pre>{@code
+ * SokletConfig config = SokletConfig.withHttpServer(HttpServer.fromPort(8080)).build();
+ * Soklet soklet = Soklet.run(config);
+ * ShutdownResult result = soklet.awaitShutdown();
+ * }</pre>
+ * To stop programmatically, call {@link #requestShutdown()} and then await
+ * completion from an independent owning thread. An embedding host must finish
+ * Soklet shutdown before closing shared databases, telemetry, or logging.
+ * JVM hooks execute concurrently and do not establish resource ordering.
  * <p>
- * <pre>{@code // Use out-of-the-box defaults
- * SokletConfig config = SokletConfig.withHttpServer(
- *   HttpServer.fromPort(8080)
- * ).build();
- *
- * Soklet soklet = Soklet.fromConfig(config);
- * Thread shutdownHook = new Thread(soklet::close, "application-shutdown");
- * Runtime.getRuntime().addShutdownHook(shutdownHook);
- * try (soklet) {
- *   soklet.start();
- *   ShutdownResult result = soklet.awaitShutdown();
- * } finally {
- *   try {
- *     Runtime.getRuntime().removeShutdownHook(shutdownHook);
- *   } catch (IllegalStateException shutdownInProgress) {
- *     // The JVM is already executing its registered shutdown hooks.
- *   }
- * }}</pre>
+ * Required application cleanup belongs in bounded {@link ShutdownCleanup},
+ * rather than post-wait code or observational lifecycle callbacks: during JVM
+ * shutdown the JVM need not let those callers finish. Cleanup is eligible only
+ * after complete core shutdown; a cleanup timeout does not forcibly stop its code.
+ * Running built-in listeners and the lifecycle owner retain JVM liveness until
+ * shutdown and finalization; custom transports own their listener-thread policy.
  * <p>
  * Soklet also offers an off-network {@link Simulator} through
  * {@link SokletSimulator}, useful for integration testing.
@@ -162,7 +153,27 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-public final class Soklet implements AutoCloseable {
+public final class Soklet {
+	/**
+	 * Application work whose return or failure ends one running Soklet scope.
+	 * The action runs once, on the calling thread after readiness, without a
+	 * lifecycle handle. Checked failures retain their application-selected type.
+	 * The action itself has no imposed timeout and is not interrupted by Soklet
+	 * when a transport stops or JVM shutdown begins.
+	 *
+	 * @param <E> throwable type selected by the action
+	 */
+	@NotThreadSafe
+	@FunctionalInterface
+	public interface RunAction<E extends Throwable> {
+		/**
+		 * Performs work while the enclosing caller owns the running application.
+		 *
+		 * @throws E if application work fails
+		 */
+		void run() throws E;
+	}
+
 	@NonNull
 	private static final Map<@NonNull String, @NonNull List<@NonNull String>> DEFAULT_ACCEPTED_HANDSHAKE_HEADERS;
 
@@ -179,8 +190,8 @@ public final class Soklet implements AutoCloseable {
 	}
 
 	/**
-	 * Acquires a Soklet instance with the given configuration and claims its
-	 * transport identities immediately, before {@link #start()} is invoked.
+	 * Constructs an internal lifecycle for transport-isolated simulation and
+	 * low-level lifecycle composition. Claims transport identities immediately.
 	 *
 	 * @param sokletConfig configuration that drives the Soklet system
 	 * @return a Soklet instance
@@ -188,7 +199,7 @@ public final class Soklet implements AutoCloseable {
 	 * has already been claimed by another lifecycle
 	 */
 	@NonNull
-	public static Soklet fromConfig(@NonNull SokletConfig sokletConfig) {
+	static Soklet fromConfig(@NonNull SokletConfig sokletConfig) {
 		requireNonNull(sokletConfig);
 		return new Soklet(sokletConfig, LifecycleRuntimeServices.system(),
 				ignored -> { });
@@ -215,6 +226,9 @@ public final class Soklet implements AutoCloseable {
 	private final SokletFrameworkSetup frameworkSetup;
 	@NonNull
 	private final SokletDirectLifecycle directLifecycle;
+	@NonNull
+	private final CompletionStage<@NonNull ShutdownResult> coreAwaitStage;
+	private volatile @Nullable SokletRunCompletion runCompletion;
 
 	/**
 	 * Creates a Soklet instance with the given configuration.
@@ -235,6 +249,178 @@ public final class Soklet implements AutoCloseable {
 		this.directLifecycle = new SokletDirectLifecycle(this, sokletConfig,
 				this.frameworkSetup, requireNonNull(services),
 				requireNonNull(coreSnapshotPublisher));
+		this.coreAwaitStage = this.directLifecycle.shutdownStage().thenApply(result -> {
+			this.directLifecycle.throwIfUnsuccessfulShutdown(result);
+			return result;
+		});
+	}
+
+	/**
+	 * Starts one lifecycle, returning only after every configured transport has
+	 * reached readiness. Owns a JVM shutdown hook until full finalization.
+	 * Startup failure or cancellation throws
+	 * synchronously after attempted teardown; interruption before readiness
+	 * requests cancellation and the caller's interrupt status is restored.
+	 *
+	 * @param sokletConfig configuration with unclaimed transport identities
+	 * @return the ready lifecycle handle
+	 * @throws TransportOwnershipException if a configured transport is already claimed
+	 * @throws SokletStartupException if readiness is not reached
+	 */
+	@NonNull
+	public static Soklet run(@NonNull SokletConfig sokletConfig) {
+		return SokletProcessLifecycle.launch(requireNonNull(sokletConfig), null);
+	}
+
+	/**
+	 * Starts a lifecycle with bounded application cleanup eligible after complete
+	 * core shutdown. All arguments are validated before transports are claimed.
+	 * The JVM hook joins bounded core shutdown, cleanup, and reporting. Both
+	 * await methods additionally observe process-registration release.
+	 *
+	 * @param sokletConfig configuration with unclaimed transport identities
+	 * @param cleanup bounded synchronous application cleanup
+	 * @return the ready lifecycle handle
+	 * @throws TransportOwnershipException if a configured transport is already claimed
+	 * @throws SokletStartupException if readiness is not reached
+	 */
+	@NonNull
+	public static Soklet run(@NonNull SokletConfig sokletConfig,
+			@NonNull ShutdownCleanup cleanup) {
+		return SokletProcessLifecycle.launch(requireNonNull(sokletConfig),
+				requireNonNull(cleanup));
+	}
+
+	/**
+	 * Starts Soklet, invokes the action after readiness, and requests shutdown
+	 * when the action returns or throws. Joins full finalization before returning
+	 * the immutable terminal result or propagating a failure. The action runs
+	 * once on the calling thread; startup failure prevents its invocation.
+	 * All arguments are validated before transports are claimed.
+	 * <p>
+	 * A callback failure remains the exact primary exception or Error. A
+	 * concurrent finalization failure is suppressed on it using ordinary Java
+	 * suppression semantics, after finalization has finished. Without a callback
+	 * failure, finalization uses the same failure classification as
+	 * {@link #awaitShutdown()}. A complete forced shutdown can return normally.
+	 * <p>
+	 * Finalization does not abandon shutdown when the caller is interrupted.
+	 * An interrupt flag left set by the action is temporarily cleared for the
+	 * join, and it and interruptions received while joining are restored before
+	 * returning or throwing. An InterruptedException thrown by the action is
+	 * propagated as that action's original failure.
+	 * <p>
+	 * The action has no imposed timeout. An external shutdown does not terminate
+	 * it; the scoped invocation still needs the action to return or throw.
+	 *
+	 * @param sokletConfig configuration with unclaimed transport identities
+	 * @param action work defining the scope's lifetime
+	 * @param <E> throwable type selected by the action
+	 * @return the immutable successful terminal result; it may be ignored
+	 * @throws E if the action fails, after attempted shutdown and full finalization
+	 * @throws SokletStartupException if startup does not reach readiness
+	 * @throws SokletLifecycleException if finalization fails without an action failure
+	 */
+	@NonNull
+	public static <E extends Throwable> ShutdownResult run(
+			@NonNull SokletConfig sokletConfig,
+			@NonNull RunAction<@NonNull E> action) throws E {
+		return runScoped(sokletConfig, null, action);
+	}
+
+	/**
+	 * Runs one action-defined scope with bounded application cleanup. Shares the
+	 * execution, error, and interruption semantics of
+	 * {@link #run(SokletConfig, RunAction)}. Cleanup is eligible only after
+	 * complete core shutdown, including when the action failed; incomplete core
+	 * shutdown skips cleanup. All arguments are validated before transport claims.
+	 *
+	 * @param sokletConfig configuration with unclaimed transport identities
+	 * @param cleanup bounded synchronous application cleanup
+	 * @param action work defining the scope's lifetime
+	 * @param <E> throwable type selected by the action
+	 * @return the immutable successful terminal result; it may be ignored
+	 * @throws E if the action fails, after attempted shutdown and full finalization
+	 * @throws SokletStartupException if startup does not reach readiness
+	 * @throws SokletLifecycleException if finalization fails without an action failure
+	 */
+	@NonNull
+	public static <E extends Throwable> ShutdownResult run(
+			@NonNull SokletConfig sokletConfig,
+			@NonNull ShutdownCleanup cleanup,
+			@NonNull RunAction<@NonNull E> action) throws E {
+		return runScoped(sokletConfig, requireNonNull(cleanup), action);
+	}
+
+	@NonNull
+	private static <E extends Throwable> ShutdownResult runScoped(
+			@NonNull SokletConfig sokletConfig, @Nullable ShutdownCleanup cleanup,
+			@NonNull RunAction<E> action) throws E {
+		SokletConfig exactConfig = requireNonNull(sokletConfig);
+		RunAction<E> exactAction = requireNonNull(action);
+		Soklet soklet = SokletProcessLifecycle.launch(exactConfig, cleanup);
+		Throwable actionFailure = null;
+		try {
+			exactAction.run();
+		} catch (Throwable failure) {
+			actionFailure = failure;
+		}
+
+		boolean interrupted = Thread.interrupted();
+		Throwable requestFailure = null;
+		Throwable finalizationFailure = null;
+		ShutdownResult result = null;
+		try {
+			try {
+				soklet.requestShutdown();
+			} catch (Throwable failure) {
+				requestFailure = failure;
+			}
+			for (;;) {
+				try {
+					result = soklet.awaitShutdown();
+					break;
+				} catch (InterruptedException interruption) {
+					interrupted = true;
+				} catch (Throwable failure) {
+					finalizationFailure = failure;
+					break;
+				}
+			}
+		} finally {
+			if (interrupted)
+				Thread.currentThread().interrupt();
+		}
+
+		// Never acquire an application exception's monitor until the lifecycle
+		// has finished, and never combine failures while holding lifecycle locks.
+		if (finalizationFailure == null)
+			finalizationFailure = requestFailure;
+		else if (requestFailure != null && !sameInstance(finalizationFailure, requestFailure))
+			finalizationFailure.addSuppressed(requestFailure);
+		if (actionFailure != null) {
+			if (finalizationFailure != null && !sameInstance(actionFailure, finalizationFailure))
+				actionFailure.addSuppressed(finalizationFailure);
+			Soklet.<E>throwRunFailure(actionFailure);
+		}
+		if (finalizationFailure != null)
+			Soklet.<E>throwRunFailure(finalizationFailure);
+		return requireNonNull(result);
+	}
+
+	@SuppressWarnings("unchecked")
+	private static <E extends Throwable> void throwRunFailure(
+			@NonNull Throwable failure) throws E {
+		throw (E) requireNonNull(failure);
+	}
+
+	/**
+	 * Requests shutdown promptly without waiting. Repeated requests are safe.
+	 * Handlers and callbacks may request shutdown but must return without waiting
+	 * for work whose termination depends on their own return.
+	 */
+	public void requestShutdown() {
+		this.directLifecycle.requestShutdownIntent();
 	}
 
 	/**
@@ -249,7 +435,7 @@ public final class Soklet implements AutoCloseable {
 	 * @throws IllegalStateException if another start call already claimed this
 	 * lifecycle attempt
 	 */
-	public void start() {
+	void start() {
 		this.directLifecycle.start();
 	}
 
@@ -270,27 +456,54 @@ public final class Soklet implements AutoCloseable {
 	 * @return cached shutdown-result stage
 	 */
 	@NonNull
-	public CompletionStage<@NonNull ShutdownResult> shutdown() {
+	CompletionStage<@NonNull ShutdownResult> shutdown() {
 		return this.directLifecycle.shutdown();
 	}
 
 	/**
-	 * Blocks until this lifecycle publishes its immutable shutdown result.
-	 * This method only waits: it neither requests shutdown nor installs a JVM
-	 * hook, signal handler or input trigger. Use {@link SokletApplication} for
-	 * standalone process ownership. An application-owned JVM hook must join
-	 * shutdown, for example by invoking {@link #close()}, before the hook returns.
+	 * Waits for full shutdown, bounded application cleanup, terminal reporting,
+	 * and process-registration release, without requesting shutdown. This wait
+	 * and {@link #awaitShutdownAsync()} expose the same immutable result or failure.
 	 *
-	 * @return exact published result
-	 * @throws InterruptedException if the current thread is interrupted while
-	 * waiting
-	 * @throws IllegalStateException as a best-effort diagnostic when the current
-	 * thread is contributing to the unpublished shutdown barrier
+	 * @return the exact immutable terminal result
+	 * @throws InterruptedException if this wait is interrupted; the lifecycle continues
+	 * @throws SokletLifecycleException if the lifecycle or eligible cleanup fails
+	 * @throws IllegalStateException if tracked lifecycle work attempts to join itself
 	 */
 	@NonNull
 	@CheckReturnValue
 	public ShutdownResult awaitShutdown() throws InterruptedException {
+		SokletRunCompletion completion = this.runCompletion;
+		if (completion != null)
+			return completion.await();
+		ShutdownResult result = awaitCoreShutdown();
+		this.directLifecycle.throwIfUnsuccessfulShutdown(result);
+		return result;
+	}
+
+	/**
+	 * Observes the same full terminal outcome as {@link #awaitShutdown()} without
+	 * blocking or requesting shutdown. Returns one cached read-only stage; no
+	 * waiting thread is created by this method. Lifecycle failures complete it
+	 * exceptionally. Mutating a future derived from it cannot alter the lifecycle.
+	 * Callbacks must not join this stage from work that shutdown must drain.
+	 *
+	 * @return cached full-finalization completion stage
+	 */
+	@NonNull
+	@CheckReturnValue
+	public CompletionStage<@NonNull ShutdownResult> awaitShutdownAsync() {
+		SokletRunCompletion completion = this.runCompletion;
+		return completion == null ? this.coreAwaitStage : completion.async();
+	}
+
+	@NonNull
+	ShutdownResult awaitCoreShutdown() throws InterruptedException {
 		return this.directLifecycle.awaitPublicCompletion();
+	}
+
+	void attachRunCompletion(@NonNull SokletRunCompletion completion) {
+		this.runCompletion = requireNonNull(completion);
 	}
 
 	/**
@@ -298,7 +511,7 @@ public final class Soklet implements AutoCloseable {
 	 * Reasoning: users of this library should never call {@code handleRequest} directly - it should only be invoked in response to events
 	 * provided by a {@link HttpServer} or {@link SseServer} implementation.
 	 */
-	protected void handleRequest(@NonNull Request request,
+	void handleRequest(@NonNull Request request,
 														 @NonNull ServerType serverType,
 														 @NonNull Consumer<HttpRequestResult> requestResultConsumer) {
 		try (LifecycleExecutionContext.Scope ignored =
@@ -915,7 +1128,7 @@ public final class Soklet implements AutoCloseable {
 	}
 
 	@NonNull
-	protected HttpRequestResult toHttpRequestResult(@NonNull Request request,
+	HttpRequestResult toHttpRequestResult(@NonNull Request request,
 																					@Nullable ResourceMethod resourceMethod,
 																					@NonNull ServerType serverType) throws Throwable {
 		requireNonNull(request);
@@ -1202,7 +1415,7 @@ public final class Soklet implements AutoCloseable {
 	}
 
 	@NonNull
-	protected MarshaledResponse applyHeadResponseIfApplicable(@NonNull Request request,
+	MarshaledResponse applyHeadResponseIfApplicable(@NonNull Request request,
 																														@NonNull MarshaledResponse marshaledResponse) {
 		if (request.getHttpMethod() != HttpMethod.HEAD)
 			return marshaledResponse;
@@ -1212,7 +1425,7 @@ public final class Soklet implements AutoCloseable {
 
 	// Hat tip to Aslan Parçası and GrayStar
 	@NonNull
-	protected MarshaledResponse applyCommonPropertiesToMarshaledResponse(@NonNull Request request,
+	MarshaledResponse applyCommonPropertiesToMarshaledResponse(@NonNull Request request,
 																																			 @NonNull MarshaledResponse marshaledResponse) {
 		requireNonNull(request);
 		requireNonNull(marshaledResponse);
@@ -1221,7 +1434,7 @@ public final class Soklet implements AutoCloseable {
 	}
 
 	@NonNull
-	protected MarshaledResponse applyCommonPropertiesToMarshaledResponse(@NonNull Request request,
+	MarshaledResponse applyCommonPropertiesToMarshaledResponse(@NonNull Request request,
 																																			 @NonNull MarshaledResponse marshaledResponse,
 																																			 @NonNull Boolean suppressContentLength) {
 		return applyCommonPropertiesToMarshaledResponse(request, marshaledResponse, suppressContentLength, ignored -> {}, newPostProcessingToken());
@@ -1297,7 +1510,7 @@ public final class Soklet implements AutoCloseable {
 	}
 
 	@NonNull
-	protected MarshaledResponse applyContentLengthIfApplicable(@NonNull Request request,
+	MarshaledResponse applyContentLengthIfApplicable(@NonNull Request request,
 																														 @NonNull MarshaledResponse marshaledResponse) {
 		requireNonNull(request);
 		requireNonNull(marshaledResponse);
@@ -1338,7 +1551,7 @@ public final class Soklet implements AutoCloseable {
 	}
 
 	@NonNull
-	protected MarshaledResponse applyCorsResponseIfApplicable(@NonNull Request request,
+	MarshaledResponse applyCorsResponseIfApplicable(@NonNull Request request,
 																														@NonNull MarshaledResponse marshaledResponse) {
 		requireNonNull(request);
 		requireNonNull(marshaledResponse);
@@ -1366,7 +1579,7 @@ public final class Soklet implements AutoCloseable {
 	}
 
 	@NonNull
-	protected Map<@NonNull HttpMethod, @NonNull ResourceMethod> resolveMatchingResourceMethodsByHttpMethod(@NonNull Request request,
+	Map<@NonNull HttpMethod, @NonNull ResourceMethod> resolveMatchingResourceMethodsByHttpMethod(@NonNull Request request,
 																																																				 @NonNull ResourceMethodResolver resourceMethodResolver,
 																																																				 @NonNull ServerType serverType) {
 		requireNonNull(request);
@@ -1444,7 +1657,7 @@ public final class Soklet implements AutoCloseable {
 	}
 
 	@NonNull
-	protected MarshaledResponse provideFailsafeMarshaledResponse(@NonNull Request request,
+	MarshaledResponse provideFailsafeMarshaledResponse(@NonNull Request request,
 																															 @NonNull Throwable throwable) {
 		requireNonNull(request);
 		requireNonNull(throwable);
@@ -1468,8 +1681,7 @@ public final class Soklet implements AutoCloseable {
 	 * @throws IllegalStateException as a best-effort diagnostic when the current
 	 * thread is contributing to the unpublished shutdown barrier
 	 */
-	@Override
-	public void close() {
+	void close() {
 		shutdown();
 		boolean interrupted = false;
 		ShutdownResult result;
@@ -1477,7 +1689,7 @@ public final class Soklet implements AutoCloseable {
 		try {
 			for (;;) {
 				try {
-					result = awaitShutdown();
+					result = awaitCoreShutdown();
 					break;
 				} catch (InterruptedException exception) {
 					interrupted = true;
@@ -1497,7 +1709,7 @@ public final class Soklet implements AutoCloseable {
 	 * @return current lifecycle status
 	 */
 	@NonNull
-	public SokletStatus getStatus() {
+	SokletStatus getStatus() {
 		return this.directLifecycle.publicStatus();
 	}
 
@@ -1507,7 +1719,7 @@ public final class Soklet implements AutoCloseable {
 	 * @return terminal result, otherwise empty
 	 */
 	@NonNull
-	public Optional<@NonNull ShutdownResult> getShutdownResult() {
+	Optional<@NonNull ShutdownResult> getShutdownResult() {
 		return this.directLifecycle.publicResult();
 	}
 
@@ -1522,7 +1734,7 @@ public final class Soklet implements AutoCloseable {
 	}
 
 	@NonNull
-	protected SokletConfig getSokletConfig() {
+	SokletConfig getSokletConfig() {
 		return this.sokletConfig;
 	}
 
@@ -1535,7 +1747,7 @@ public final class Soklet implements AutoCloseable {
 	 * @return passive compatibility lock
 	 */
 	@NonNull
-	protected ReentrantLock getLock() {
+	ReentrantLock getLock() {
 		return this.lock;
 	}
 
@@ -1548,7 +1760,7 @@ public final class Soklet implements AutoCloseable {
 	 * @return one-shot shutdown-latch reference
 	 */
 	@NonNull
-	protected AtomicReference<@NonNull CountDownLatch>
+	AtomicReference<@NonNull CountDownLatch>
 			getAwaitShutdownLatchReference() {
 		return this.awaitShutdownLatchReference;
 	}
@@ -3128,7 +3340,7 @@ public final class Soklet implements AutoCloseable {
 			};
 		}
 
-		public void start() {
+		void start() {
 			// No-op
 		}
 
@@ -3156,12 +3368,12 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		@NonNull
-		protected synchronized Optional<SokletConfig> getSokletConfig() {
+		synchronized Optional<SokletConfig> getSokletConfig() {
 			return Optional.ofNullable(this.sokletConfig);
 		}
 
 		@NonNull
-		protected synchronized Optional<RequestHandler> getRequestHandler() {
+		synchronized Optional<RequestHandler> getRequestHandler() {
 			return Optional.ofNullable(this.requestHandler);
 		}
 	}
@@ -3390,12 +3602,12 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		@NonNull
-		protected Map<@NonNull Consumer<SseEvent>, @NonNull Object> getEventConsumers() {
+		Map<@NonNull Consumer<SseEvent>, @NonNull Object> getEventConsumers() {
 			return this.eventConsumers;
 		}
 
 		@NonNull
-		protected Map<@NonNull Consumer<SseComment>, @NonNull Object> getCommentConsumers() {
+		Map<@NonNull Consumer<SseComment>, @NonNull Object> getCommentConsumers() {
 			return this.commentConsumers;
 		}
 
@@ -3419,7 +3631,7 @@ public final class Soklet implements AutoCloseable {
 			this.commentConsumers.clear();
 		}
 
-		protected void handleBroadcastError(@NonNull Throwable throwable) {
+		void handleBroadcastError(@NonNull Throwable throwable) {
 			handleBroadcastError(throwable, LogEventType.SSE_SERVER_INTERNAL_ERROR,
 					"SSE simulator broadcast consumer failed");
 		}
@@ -3439,7 +3651,7 @@ public final class Soklet implements AutoCloseable {
 			safelyLog(LogEvent.with(logEventType, message).throwable(throwable).build());
 		}
 
-		protected void safelyLog(@NonNull LogEvent logEvent) {
+		void safelyLog(@NonNull LogEvent logEvent) {
 			requireNonNull(logEvent);
 
 			try {
@@ -3535,7 +3747,7 @@ public final class Soklet implements AutoCloseable {
 			};
 		}
 
-		public void start() {
+		void start() {
 			this.started = true;
 		}
 
@@ -3714,27 +3926,27 @@ public final class Soklet implements AutoCloseable {
 		}
 
 		@NonNull
-		protected synchronized Optional<SokletConfig> getSokletConfig() {
+		synchronized Optional<SokletConfig> getSokletConfig() {
 			return Optional.ofNullable(this.sokletConfig);
 		}
 
 		@NonNull
-		protected synchronized Optional<SseServer.RequestHandler> getRequestHandler() {
+		synchronized Optional<SseServer.RequestHandler> getRequestHandler() {
 			return Optional.ofNullable(this.requestHandler);
 		}
 
 		@NonNull
-		protected ConcurrentHashMap<@NonNull ResourcePath, @NonNull MockSseBroadcaster> getBroadcastersByResourcePath() {
+		ConcurrentHashMap<@NonNull ResourcePath, @NonNull MockSseBroadcaster> getBroadcastersByResourcePath() {
 			return this.broadcastersByResourcePath;
 		}
 
 		@NonNull
-		protected AtomicReference<Consumer<Throwable>> getBroadcastErrorHandler() {
+		AtomicReference<Consumer<Throwable>> getBroadcastErrorHandler() {
 			return this.broadcastErrorHandler;
 		}
 
 		@NonNull
-		protected AtomicReference<Consumer<Throwable>> getUnicastErrorHandler() {
+		AtomicReference<Consumer<Throwable>> getUnicastErrorHandler() {
 			return this.unicastErrorHandler;
 		}
 	}

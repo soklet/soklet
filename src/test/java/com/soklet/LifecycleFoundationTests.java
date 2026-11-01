@@ -268,24 +268,46 @@ class LifecycleFoundationTests {
 
 		group.signalFailure(root, primary);
 		group.commit();
-		Assertions.assertTrue(group.trySuppressFailureBeforeFreeze(
+		Assertions.assertTrue(group.tryRetainFailureBeforeFreeze(
 				root, primary, secondary));
-		Assertions.assertFalse(group.trySuppressFailureBeforeFreeze(
+		Assertions.assertFalse(group.tryRetainFailureBeforeFreeze(
 				root, primary, capped));
-		Assertions.assertArrayEquals(new Throwable[] { secondary },
-				primary.getSuppressed());
+		Assertions.assertEquals(0, primary.getSuppressed().length);
 		Assertions.assertEquals(1, group.primaryEventsInSequence().size());
 		Assertions.assertSame(primary, group.primaryEventsInSequence().get(0)
 				.cause().orElseThrow());
 
-		group.freezeEvidence();
-		Throwable[] frozenSuppressed = primary.getSuppressed();
-		Assertions.assertFalse(group.trySuppressFailureBeforeFreeze(
+		InternalTerminationGroup.EvidenceSnapshot frozen = group.freezeEvidence();
+		Assertions.assertEquals(List.of(primary, secondary), frozen.failures());
+		Assertions.assertFalse(group.tryRetainFailureBeforeFreeze(
 				root, primary, late));
-		Assertions.assertArrayEquals(frozenSuppressed, primary.getSuppressed());
+		Assertions.assertSame(frozen, group.freezeEvidence());
+		Assertions.assertEquals(List.of(primary, secondary), frozen.failures());
+		Assertions.assertEquals(0, primary.getSuppressed().length);
 		Assertions.assertEquals(1, group.primaryEventsInSequence().size());
 		Assertions.assertSame(primary, group.primaryEventsInSequence().get(0)
 				.cause().orElseThrow());
+	}
+
+	@Test
+	void competingFailureEvidencePreservesObservationOrderAndPrimaryElection() {
+		InternalTerminationGroup group = new InternalTerminationGroup(
+				new AdmissionFence(), () -> {}, new LifecycleWorkers());
+		InternalTerminationGroup.Member root = group.root();
+		InternalTerminationGroup.Member child = group.registerChild(root);
+		Throwable primary = new AssertionError("primary");
+		Throwable secondary = new AssertionError("secondary");
+		Throwable childFailure = new AssertionError("child");
+		group.signalFailure(root, primary);
+		Assertions.assertTrue(group.tryRetainFailureBeforeFreeze(root, primary, secondary));
+		group.signalFailure(child, childFailure);
+		group.commit();
+
+		InternalTerminationGroup.EvidenceSnapshot frozen = group.freezeEvidence();
+		Assertions.assertEquals(List.of(primary, secondary, childFailure), frozen.failures());
+		Assertions.assertEquals(2, frozen.primaryEvents().size());
+		Assertions.assertSame(primary, frozen.controllingEvent().orElseThrow().cause().orElseThrow());
+		Assertions.assertEquals(0, primary.getSuppressed().length);
 	}
 
 	@Test

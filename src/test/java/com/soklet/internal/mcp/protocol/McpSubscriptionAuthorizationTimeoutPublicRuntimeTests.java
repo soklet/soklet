@@ -104,80 +104,80 @@ public class McpSubscriptionAuthorizationTimeoutPublicRuntimeTests {
 		RecordingMetrics metrics = new RecordingMetrics();
 		McpServer server = server(authorizer, authorizationTimeout,
 				Duration.ofSeconds(5), Duration.ofSeconds(10), 2, 1, 1);
-		Soklet owner = managedSoklet(server, metrics);
-		McpChunkedHttpClient activeClient = null;
-		McpChunkedHttpClient queuedClient = null;
-		McpChunkedHttpClient firstProbeClient = null;
-		McpChunkedHttpClient secondProbeClient = null;
+		Soklet.run(managedSokletConfig(server, metrics), () -> {
+			McpChunkedHttpClient activeClient = null;
+			McpChunkedHttpClient queuedClient = null;
+			McpChunkedHttpClient firstProbeClient = null;
+			McpChunkedHttpClient secondProbeClient = null;
 
-		try {
-			owner.start();
-			int port = boundPort(server);
-			activeClient = listen(port, "\"initial-active-timeout\"");
-			Assertions.assertTrue(activeEntered.await(5, TimeUnit.SECONDS),
-					"The active initial authorization did not enter.");
+			try {
+				int port = boundPort(server);
+				activeClient = listen(port, "\"initial-active-timeout\"");
+				Assertions.assertTrue(activeEntered.await(5, TimeUnit.SECONDS),
+						"The active initial authorization did not enter.");
 
-			queuedClient = listen(port, "\"initial-queued-timeout\"");
-			awaitCondition(() -> server.getDiagnostics()
-					.getRequestHandlerQueueDepth() == 1,
-					"The second initial authorization was not queued.");
+				queuedClient = listen(port, "\"initial-queued-timeout\"");
+				awaitCondition(() -> server.getDiagnostics()
+						.getRequestHandlerQueueDepth() == 1,
+						"The second initial authorization was not queued.");
 
-			assertFixedFailure(activeClient, 504);
-			assertFixedFailure(queuedClient, 503);
-			metrics.awaitMaintenance(
-					McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
-					McpMetricsEvent.SubscriptionMaintenance.Outcome.TIMED_OUT, 2);
-			Assertions.assertTrue(activeToken.get().isCanceled(),
-					"The active timed-out authorizer did not observe cancellation.");
-			Assertions.assertEquals(1, authorizations.get(),
-					"A queue-inclusive timeout invoked the queued authorizer.");
-			Assertions.assertEquals(1, maximumActiveAuthorizers.get(),
-					"Initial authorization callbacks overlapped.");
-			Assertions.assertEquals(0,
-					server.getDiagnostics().getRequestHandlerQueueDepth(),
-					"A timed-out initial authorization remained queued.");
-			Assertions.assertEquals(0,
-					server.getDiagnostics().getActiveSubscriptions());
-			Assertions.assertEquals(1,
-					server.getDiagnostics().getActiveHandlerExecutions(),
-					"The cancellation-resistant initial callback released its worker early.");
-			Assertions.assertEquals(0L, metrics.subscriptionClosedCount(),
-					"A pre-ack timeout opened a subscription lifecycle.");
-			Assertions.assertEquals(2L, metrics.maintenanceCount(
-					McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
-					McpMetricsEvent.SubscriptionMaintenance.Outcome.TIMED_OUT));
+				assertFixedFailure(activeClient, 504);
+				assertFixedFailure(queuedClient, 503);
+				metrics.awaitMaintenance(
+						McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
+						McpMetricsEvent.SubscriptionMaintenance.Outcome.TIMED_OUT, 2);
+				Assertions.assertTrue(activeToken.get().isCanceled(),
+						"The active timed-out authorizer did not observe cancellation.");
+				Assertions.assertEquals(1, authorizations.get(),
+						"A queue-inclusive timeout invoked the queued authorizer.");
+				Assertions.assertEquals(1, maximumActiveAuthorizers.get(),
+						"Initial authorization callbacks overlapped.");
+				Assertions.assertEquals(0,
+						server.getDiagnostics().getRequestHandlerQueueDepth(),
+						"A timed-out initial authorization remained queued.");
+				Assertions.assertEquals(0,
+						server.getDiagnostics().getActiveSubscriptions());
+				Assertions.assertEquals(1,
+						server.getDiagnostics().getActiveHandlerExecutions(),
+						"The cancellation-resistant initial callback released its worker early.");
+				Assertions.assertEquals(0L, metrics.subscriptionClosedCount(),
+						"A pre-ack timeout opened a subscription lifecycle.");
+				Assertions.assertEquals(2L, metrics.maintenanceCount(
+						McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
+						McpMetricsEvent.SubscriptionMaintenance.Outcome.TIMED_OUT));
 
-			releaseActive.countDown();
-			Assertions.assertTrue(activeExited.await(5, TimeUnit.SECONDS),
-					"The cancellation-resistant initial callback did not exit.");
-			Thread.sleep(100L);
-			Assertions.assertEquals(1, authorizations.get(),
-					"A timed-out initial authorization retried after its callback exited.");
+				releaseActive.countDown();
+				Assertions.assertTrue(activeExited.await(5, TimeUnit.SECONDS),
+						"The cancellation-resistant initial callback did not exit.");
+				Thread.sleep(100L);
+				Assertions.assertEquals(1, authorizations.get(),
+						"A timed-out initial authorization retried after its callback exited.");
 
-			firstProbeClient = listen(port, "\"initial-timeout-quota-probe-1\"");
-			assertSseHead(firstProbeClient.readHead());
-			Assertions.assertEquals(acknowledgment(
-					"\"initial-timeout-quota-probe-1\""),
-					firstProbeClient.readChunkText());
-			secondProbeClient = listen(port, "\"initial-timeout-quota-probe-2\"");
-			assertSseHead(secondProbeClient.readHead());
-			Assertions.assertEquals(acknowledgment(
-					"\"initial-timeout-quota-probe-2\""),
-					secondProbeClient.readChunkText());
-			Assertions.assertEquals(3, authorizations.get(),
-					"Both quota probes require independent authorization checks.");
-		} finally {
-			releaseActive.countDown();
-			if (secondProbeClient != null)
-				secondProbeClient.closeWithReset();
-			if (firstProbeClient != null)
-				firstProbeClient.closeWithReset();
-			if (queuedClient != null)
-				queuedClient.close();
-			if (activeClient != null)
-				activeClient.close();
-			owner.close();
-		}
+				firstProbeClient = listen(port, "\"initial-timeout-quota-probe-1\"");
+				assertSseHead(firstProbeClient.readHead());
+				Assertions.assertEquals(acknowledgment(
+						"\"initial-timeout-quota-probe-1\""),
+						firstProbeClient.readChunkText());
+				secondProbeClient = listen(port, "\"initial-timeout-quota-probe-2\"");
+				assertSseHead(secondProbeClient.readHead());
+				Assertions.assertEquals(acknowledgment(
+						"\"initial-timeout-quota-probe-2\""),
+						secondProbeClient.readChunkText());
+				Assertions.assertEquals(3, authorizations.get(),
+						"Both quota probes require independent authorization checks.");
+			} finally {
+				releaseActive.countDown();
+				if (secondProbeClient != null)
+					secondProbeClient.closeWithReset();
+				if (firstProbeClient != null)
+					firstProbeClient.closeWithReset();
+				if (queuedClient != null)
+					queuedClient.close();
+				if (activeClient != null)
+					activeClient.close();
+
+			}
+		});
 	}
 
 	@Test
@@ -214,73 +214,73 @@ public class McpSubscriptionAuthorizationTimeoutPublicRuntimeTests {
 		RecordingMetrics metrics = new RecordingMetrics();
 		McpServer server = server(authorizer, authorizationTimeout,
 				Duration.ofSeconds(5), Duration.ofSeconds(10), 1, 1, 1);
-		Soklet owner = managedSoklet(server, metrics);
-		McpChunkedHttpClient client = null;
-		McpChunkedHttpClient probeClient = null;
+		Soklet.run(managedSokletConfig(server, metrics), () -> {
+			McpChunkedHttpClient client = null;
+			McpChunkedHttpClient probeClient = null;
 
-		try {
-			owner.start();
-			int port = boundPort(server);
-			client = listen(port, "\"renewal-timeout\"");
-			assertSseHead(client.readHead());
-			Assertions.assertEquals(acknowledgment("\"renewal-timeout\""),
-					client.readChunkText());
-			Assertions.assertTrue(renewalEntered.await(5, TimeUnit.SECONDS),
-					"The renewal authorization did not enter.");
+			try {
+				int port = boundPort(server);
+				client = listen(port, "\"renewal-timeout\"");
+				assertSseHead(client.readHead());
+				Assertions.assertEquals(acknowledgment("\"renewal-timeout\""),
+						client.readChunkText());
+				Assertions.assertTrue(renewalEntered.await(5, TimeUnit.SECONDS),
+						"The renewal authorization did not enter.");
 
-			metrics.awaitMaintenance(
-					McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
-					McpMetricsEvent.SubscriptionMaintenance.Outcome.TIMED_OUT, 1);
-			metrics.awaitSubscriptionClosed(
-					McpStreamTerminationReason
-							.SUBSCRIPTION_AUTHORIZATION_CHECK_FAILED);
-			Assertions.assertTrue(renewalToken.get().isCanceled(),
-					"The timed-out renewal did not observe cancellation.");
-			Assertions.assertEquals(0,
-					server.getDiagnostics().getActiveSubscriptions(),
-					"The timed-out renewal retained subscription quota.");
-			Assertions.assertEquals(1,
-					server.getDiagnostics().getActiveHandlerExecutions(),
-					"The resistant renewal did not retain physical worker accounting.");
-			Assertions.assertEquals(2, authorizations.get());
-			Assertions.assertEquals(1, maximumActiveAuthorizers.get(),
-					"One subscription overlapped authorization callbacks.");
+				metrics.awaitMaintenance(
+						McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
+						McpMetricsEvent.SubscriptionMaintenance.Outcome.TIMED_OUT, 1);
+				metrics.awaitSubscriptionClosed(
+						McpStreamTerminationReason
+								.SUBSCRIPTION_AUTHORIZATION_CHECK_FAILED);
+				Assertions.assertTrue(renewalToken.get().isCanceled(),
+						"The timed-out renewal did not observe cancellation.");
+				Assertions.assertEquals(0,
+						server.getDiagnostics().getActiveSubscriptions(),
+						"The timed-out renewal retained subscription quota.");
+				Assertions.assertEquals(1,
+						server.getDiagnostics().getActiveHandlerExecutions(),
+						"The resistant renewal did not retain physical worker accounting.");
+				Assertions.assertEquals(2, authorizations.get());
+				Assertions.assertEquals(1, maximumActiveAuthorizers.get(),
+						"One subscription overlapped authorization callbacks.");
 
-			server.getSubscriptionReconciler().reconcileSubscriptions();
-			Thread.sleep(350L);
-			Assertions.assertEquals(0,
-					server.getDiagnostics().getRequestHandlerQueueDepth(),
-					"A replacement check queued behind the resistant callback.");
-			Assertions.assertEquals(2, authorizations.get(),
-					"A timed-out renewal scheduled an automatic retry.");
-			Assertions.assertEquals(1L, metrics.maintenanceCount(
-					McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
-					McpMetricsEvent.SubscriptionMaintenance.Outcome.TIMED_OUT));
-			Assertions.assertEquals(1L, metrics.subscriptionClosedCount(
-					McpStreamTerminationReason
-							.SUBSCRIPTION_AUTHORIZATION_CHECK_FAILED));
+				server.getSubscriptionReconciler().reconcileSubscriptions();
+				Thread.sleep(350L);
+				Assertions.assertEquals(0,
+						server.getDiagnostics().getRequestHandlerQueueDepth(),
+						"A replacement check queued behind the resistant callback.");
+				Assertions.assertEquals(2, authorizations.get(),
+						"A timed-out renewal scheduled an automatic retry.");
+				Assertions.assertEquals(1L, metrics.maintenanceCount(
+						McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
+						McpMetricsEvent.SubscriptionMaintenance.Outcome.TIMED_OUT));
+				Assertions.assertEquals(1L, metrics.subscriptionClosedCount(
+						McpStreamTerminationReason
+								.SUBSCRIPTION_AUTHORIZATION_CHECK_FAILED));
 
-			releaseRenewal.countDown();
-			Assertions.assertTrue(renewalExited.await(5, TimeUnit.SECONDS),
-					"The cancellation-resistant renewal did not exit.");
-			Thread.sleep(100L);
-			Assertions.assertEquals(2, authorizations.get(),
-					"A replacement ran after the timed-out callback exited.");
+				releaseRenewal.countDown();
+				Assertions.assertTrue(renewalExited.await(5, TimeUnit.SECONDS),
+						"The cancellation-resistant renewal did not exit.");
+				Thread.sleep(100L);
+				Assertions.assertEquals(2, authorizations.get(),
+						"A replacement ran after the timed-out callback exited.");
 
-			probeClient = listen(port, "\"renewal-timeout-quota-probe\"");
-			assertSseHead(probeClient.readHead());
-			Assertions.assertEquals(acknowledgment(
-					"\"renewal-timeout-quota-probe\""),
-					probeClient.readChunkText());
-			Assertions.assertEquals(3, authorizations.get());
-		} finally {
-			releaseRenewal.countDown();
-			if (probeClient != null)
-				probeClient.closeWithReset();
-			if (client != null)
-				client.close();
-			owner.close();
-		}
+				probeClient = listen(port, "\"renewal-timeout-quota-probe\"");
+				assertSseHead(probeClient.readHead());
+				Assertions.assertEquals(acknowledgment(
+						"\"renewal-timeout-quota-probe\""),
+						probeClient.readChunkText());
+				Assertions.assertEquals(3, authorizations.get());
+			} finally {
+				releaseRenewal.countDown();
+				if (probeClient != null)
+					probeClient.closeWithReset();
+				if (client != null)
+					client.close();
+
+			}
+		});
 	}
 
 	@Test
@@ -309,65 +309,65 @@ public class McpSubscriptionAuthorizationTimeoutPublicRuntimeTests {
 		RecordingMetrics metrics = new RecordingMetrics();
 		McpServer server = server(authorizer, Duration.ofSeconds(5),
 				Duration.ofSeconds(10), Duration.ofSeconds(30), 3, 1, 1);
-		Soklet owner = managedSoklet(server, metrics);
-		McpChunkedHttpClient firstClient = null;
-		McpChunkedHttpClient secondClient = null;
-		McpChunkedHttpClient probeClient = null;
+		Soklet.run(managedSokletConfig(server, metrics), () -> {
+			McpChunkedHttpClient firstClient = null;
+			McpChunkedHttpClient secondClient = null;
+			McpChunkedHttpClient probeClient = null;
 
-		try {
-			owner.start();
-			int port = boundPort(server);
-			firstClient = listen(port, "\"capacity-first\"");
-			Assertions.assertTrue(firstEntered.await(5, TimeUnit.SECONDS),
-					"The first capacity authorizer did not enter.");
-			secondClient = listen(port, "\"capacity-queued\"");
-			awaitCondition(() -> server.getDiagnostics()
-					.getRequestHandlerQueueDepth() == 1,
-					"The second capacity authorizer was not queued.");
+			try {
+				int port = boundPort(server);
+				firstClient = listen(port, "\"capacity-first\"");
+				Assertions.assertTrue(firstEntered.await(5, TimeUnit.SECONDS),
+						"The first capacity authorizer did not enter.");
+				secondClient = listen(port, "\"capacity-queued\"");
+				awaitCondition(() -> server.getDiagnostics()
+						.getRequestHandlerQueueDepth() == 1,
+						"The second capacity authorizer was not queued.");
 
-			try (McpChunkedHttpClient rejected = listen(port,
-					"\"capacity-rejected\"")) {
-				assertFixedFailure(rejected, 503);
+				try (McpChunkedHttpClient rejected = listen(port,
+						"\"capacity-rejected\"")) {
+					assertFixedFailure(rejected, 503);
+				}
+				metrics.awaitMaintenance(
+						McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
+						McpMetricsEvent.SubscriptionMaintenance.Outcome.CAPACITY_REJECTED,
+						1);
+				Assertions.assertEquals(1, authorizations.get(),
+						"A capacity-rejected authorization invoked application code.");
+
+				releaseFirst.countDown();
+				assertSseHead(firstClient.readHead());
+				Assertions.assertEquals(acknowledgment("\"capacity-first\""),
+						firstClient.readChunkText());
+				assertSseHead(secondClient.readHead());
+				Assertions.assertEquals(acknowledgment("\"capacity-queued\""),
+						secondClient.readChunkText());
+				Assertions.assertEquals(2, authorizations.get());
+
+				// The rejected request temporarily held the third partition slot. Keeping
+				// both successful streams open makes this probe a direct quota-cleanup
+				// assertion: a leaked reservation would reject it before authorization.
+				probeClient = listen(port, "\"capacity-quota-probe\"");
+				assertSseHead(probeClient.readHead());
+				Assertions.assertEquals(acknowledgment("\"capacity-quota-probe\""),
+						probeClient.readChunkText());
+				Assertions.assertEquals(3, authorizations.get());
+				Assertions.assertEquals(1, maximumActiveAuthorizers.get(),
+						"The bounded dispatcher overlapped authorization callbacks.");
+				Assertions.assertEquals(1L, metrics.maintenanceCount(
+						McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
+						McpMetricsEvent.SubscriptionMaintenance.Outcome.CAPACITY_REJECTED));
+			} finally {
+				releaseFirst.countDown();
+				if (probeClient != null)
+					probeClient.closeWithReset();
+				if (secondClient != null)
+					secondClient.closeWithReset();
+				if (firstClient != null)
+					firstClient.closeWithReset();
+
 			}
-			metrics.awaitMaintenance(
-					McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
-					McpMetricsEvent.SubscriptionMaintenance.Outcome.CAPACITY_REJECTED,
-					1);
-			Assertions.assertEquals(1, authorizations.get(),
-					"A capacity-rejected authorization invoked application code.");
-
-			releaseFirst.countDown();
-			assertSseHead(firstClient.readHead());
-			Assertions.assertEquals(acknowledgment("\"capacity-first\""),
-					firstClient.readChunkText());
-			assertSseHead(secondClient.readHead());
-			Assertions.assertEquals(acknowledgment("\"capacity-queued\""),
-					secondClient.readChunkText());
-			Assertions.assertEquals(2, authorizations.get());
-
-			// The rejected request temporarily held the third partition slot. Keeping
-			// both successful streams open makes this probe a direct quota-cleanup
-			// assertion: a leaked reservation would reject it before authorization.
-			probeClient = listen(port, "\"capacity-quota-probe\"");
-			assertSseHead(probeClient.readHead());
-			Assertions.assertEquals(acknowledgment("\"capacity-quota-probe\""),
-					probeClient.readChunkText());
-			Assertions.assertEquals(3, authorizations.get());
-			Assertions.assertEquals(1, maximumActiveAuthorizers.get(),
-					"The bounded dispatcher overlapped authorization callbacks.");
-			Assertions.assertEquals(1L, metrics.maintenanceCount(
-					McpMetricsEvent.SubscriptionMaintenance.Work.AUTHORIZATION,
-					McpMetricsEvent.SubscriptionMaintenance.Outcome.CAPACITY_REJECTED));
-		} finally {
-			releaseFirst.countDown();
-			if (probeClient != null)
-				probeClient.closeWithReset();
-			if (secondClient != null)
-				secondClient.closeWithReset();
-			if (firstClient != null)
-				firstClient.closeWithReset();
-			owner.close();
-		}
+		});
 	}
 
 	private static void awaitIgnoringInterrupts(@NonNull CountDownLatch release) {
@@ -466,9 +466,10 @@ public class McpSubscriptionAuthorizationTimeoutPublicRuntimeTests {
 	}
 
 	@NonNull
-	private static Soklet managedSoklet(@NonNull McpServer server,
+
+	private static SokletConfig managedSokletConfig(@NonNull McpServer server,
 			@NonNull MetricsCollector metricsCollector) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.metricsCollector(metricsCollector)
 				.lifecyclePolicy(LifecyclePolicy.builder()
@@ -477,7 +478,7 @@ public class McpSubscriptionAuthorizationTimeoutPublicRuntimeTests {
 						.gracefulShutdownTimeout(Duration.ofSeconds(2))
 						.forcedShutdownTimeout(Duration.ofSeconds(1))
 						.build())
-				.build());
+				.build();
 	}
 
 	@NonNull

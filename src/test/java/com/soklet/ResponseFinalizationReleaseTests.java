@@ -77,9 +77,8 @@ class ResponseFinalizationReleaseTests {
 		int port = TestSupport.findFreePort();
 		ResponseMarshaler marshaler = ResponseMarshaler.builder().postProcessor(response -> response.copy()
 				.headers(headers -> headers.put("X-Finalized", List.of("yes"))).finish()).build();
-		try (Soklet app = Soklet.fromConfig(sseConfig(new SseResource(), port)
-				.responseMarshaler(marshaler).requestInterceptor(freshSseResponse()).build())) {
-			app.start();
+		Soklet.run(sseConfig(new SseResource(), port)
+				.responseMarshaler(marshaler).requestInterceptor(freshSseResponse()).build(), () -> {
 			try (Socket socket = new Socket("127.0.0.1", port)) {
 				socket.setSoTimeout(5000);
 				socket.getOutputStream().write("GET /events HTTP/1.1\r\nHost: localhost\r\n\r\n".getBytes(StandardCharsets.US_ASCII));
@@ -94,7 +93,7 @@ class ResponseFinalizationReleaseTests {
 				assertTrue(headers.stream().anyMatch(header -> header.equalsIgnoreCase("X-Finalized: yes")));
 				assertFalse(headers.stream().anyMatch(header -> header.toLowerCase(java.util.Locale.ROOT).startsWith("content-length:")));
 			}
-		}
+		});
 	}
 
 	@Test
@@ -216,8 +215,7 @@ class ResponseFinalizationReleaseTests {
 		}).build();
 		ResponseMarshaler marshaler = ResponseMarshaler.builder().postProcessor(response -> response.copy().statusCode(201)
 				.body("prefix:body".getBytes(StandardCharsets.UTF_8)).finish()).build();
-		try (Soklet app = Soklet.fromConfig(config(resource, port).httpServer(server).responseMarshaler(marshaler).build())) {
-			app.start();
+		Soklet.run(config(resource, port).httpServer(server).responseMarshaler(marshaler).build(), () -> {
 			try (Socket socket = new Socket("127.0.0.1", port)) {
 				socket.setSoTimeout(5000);
 				socket.getOutputStream().write("HEAD /logical HTTP/1.1\r\nHost: localhost\r\nAccept-Encoding: gzip\r\nConnection: close\r\n\r\n".getBytes(StandardCharsets.US_ASCII));
@@ -228,7 +226,7 @@ class ResponseFinalizationReleaseTests {
 			}
 			assertEquals(1, plans.get());
 			assertEquals(11L, plannedLength.get());
-		}
+		});
 	}
 
 	@Test
@@ -402,9 +400,8 @@ class ResponseFinalizationReleaseTests {
 			try (FileChannel channel = FileChannel.open(path); DelegatingChannel wrapper = new DelegatingChannel(channel)) {
 				resource.response = response(channel);
 				int port = TestSupport.findFreePort();
-				try (Soklet app = Soklet.fromConfig(config(resource, port).requestInterceptor(streaming
-						? wrapStream(channel, false, null) : wrapFile(wrapper)).build())) {
-					app.start();
+				Soklet.run(config(resource, port).requestInterceptor(streaming
+						? wrapStream(channel, false, null) : wrapFile(wrapper)).build(), () -> {
 					String wire;
 					try (Socket socket = new Socket("127.0.0.1", port)) {
 						socket.setSoTimeout(5000);
@@ -414,7 +411,7 @@ class ResponseFinalizationReleaseTests {
 					assertTrue(wire.startsWith("HTTP/1.1 200"), wire);
 					assertTrue(wire.contains("body"), wire);
 					awaitClosed(channel);
-				}
+				});
 			}
 		}
 	}
@@ -427,8 +424,7 @@ class ResponseFinalizationReleaseTests {
 		try (FileChannel channel = FileChannel.open(path)) {
 			resource.response = response(channel);
 			int port = TestSupport.findFreePort();
-			try (Soklet app = Soklet.fromConfig(config(resource, port).requestInterceptor(wrapStream(channel, false, producing)).build())) {
-				app.start();
+			Soklet.run(config(resource, port).requestInterceptor(wrapStream(channel, false, producing)).build(), () -> {
 				try (Socket socket = new Socket("127.0.0.1", port)) {
 					socket.setSoTimeout(5000);
 					socket.getOutputStream().write("GET /body HTTP/1.1\r\nHost: localhost\r\n\r\n".getBytes(StandardCharsets.US_ASCII));
@@ -437,7 +433,7 @@ class ResponseFinalizationReleaseTests {
 					socket.setSoLinger(true, 0);
 				}
 				awaitClosed(channel);
-			}
+			});
 		}
 	}
 

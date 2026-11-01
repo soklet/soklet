@@ -272,7 +272,7 @@ final class SokletDirectLifecycleTests {
 
 		// Joining from outside admitted execution observes the shared terminal
 		// result rather than initiating a second shutdown transition.
-		ShutdownResult publicResult = soklet.awaitShutdown();
+		ShutdownResult publicResult = soklet.awaitCoreShutdown();
 		Assertions.assertSame(publicResult,
 				soklet.getShutdownResult().orElseThrow());
 		InternalShutdownResult result = soklet.getDirectLifecycle().result()
@@ -517,7 +517,7 @@ final class SokletDirectLifecycleTests {
 				new CopyOnWriteArrayList<>();
 		@NonNull private final CountDownLatch terminal = new CountDownLatch(1);
 
-		@Override public void willStopSoklet(@NonNull Soklet soklet) {
+		@Override public void willStopSoklet() {
 			this.transitions.add("will-stop-soklet");
 		}
 
@@ -530,8 +530,7 @@ final class SokletDirectLifecycleTests {
 			this.transitions.add("did-stop-http");
 		}
 
-		@Override public void didStopSoklet(@NonNull Soklet soklet,
-				@NonNull ShutdownResult result) {
+		@Override public void didStopSoklet(@NonNull ShutdownResult result) {
 			this.transitions.add("did-stop-soklet");
 			this.terminal.countDown();
 		}
@@ -542,17 +541,15 @@ final class SokletDirectLifecycleTests {
 		@NonNull private final List<String> events = new CopyOnWriteArrayList<>();
 		@NonNull private final CountDownLatch terminal = new CountDownLatch(1);
 
-		@Override public void didStartSoklet(@NonNull Soklet soklet) {
+		@Override public void didStartSoklet() {
 			this.events.add("did-start");
 		}
 
-		@Override public void didFailToStartSoklet(@NonNull Soklet soklet,
-				@NonNull Throwable throwable) {
+		@Override public void didFailToStartSoklet(@NonNull Throwable throwable) {
 			this.events.add("did-fail");
 		}
 
-		@Override public void didStopSoklet(@NonNull Soklet soklet,
-				@NonNull ShutdownResult result) {
+		@Override public void didStopSoklet(@NonNull ShutdownResult result) {
 			this.events.add("did-stop");
 			this.terminal.countDown();
 		}

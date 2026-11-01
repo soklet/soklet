@@ -67,10 +67,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 			admissions.add(context);
 			return McpAdmissionDecision.accepted();
 		});
-		Soklet soklet = managedSoklet(server);
-
-		try {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			HttpResponse<String> response = discover(port, "valid-extension", "{"
@@ -109,9 +106,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 								+ capability);
 			Assertions.assertTrue(capabilities.toJson().getMembers()
 					.containsKey("futureCapability"));
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -122,15 +117,13 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 			admissions.add(context);
 			return McpAdmissionDecision.accepted();
 		});
-		Soklet soklet = managedSoklet(server);
-		List<String> malformedCapabilities = List.of(
-				"{\"extensions\":[]}",
-				"{\"extensions\":{\"not-prefixed\":{}}}",
-				"{\"extensions\":{\"/missing-prefix\":{}}}",
-				"{\"extensions\":{\"com.example/client-extension\":true}}");
+		Soklet.run(managedSokletConfig(server), () -> {
+			List<String> malformedCapabilities = List.of(
+					"{\"extensions\":[]}",
+					"{\"extensions\":{\"not-prefixed\":{}}}",
+					"{\"extensions\":{\"/missing-prefix\":{}}}",
+					"{\"extensions\":{\"com.example/client-extension\":true}}");
 
-		try {
-			soklet.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			for (int index = 0; index < malformedCapabilities.size(); index++) {
@@ -151,9 +144,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 			}
 			Assertions.assertTrue(admissions.isEmpty(),
 					"Malformed extension metadata must fail before admission.");
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -209,10 +200,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 			admissions.add(context);
 			return McpAdmissionDecision.accepted();
 		}, interceptor);
-		Soklet soklet = managedSoklet(server);
-
-		try {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			HttpResponse<String> response = callNegotiatedTool(port);
@@ -258,9 +246,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 			Assertions.assertEquals(2, admissions.size());
 			Assertions.assertEquals(1, interceptorInvocations.get(),
 					"Framework-owned discovery must not traverse the application interceptor.");
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -287,10 +273,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 			admissions.add(context);
 			return McpAdmissionDecision.accepted();
 		}, McpHandlerInterceptor.passThroughInstance());
-		Soklet soklet = managedSoklet(server);
-
-		try {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			HttpResponse<String> obsoleteTask = callWithObsoleteTask(port);
@@ -326,9 +309,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 			Assertions.assertEquals(1, admissions.size(),
 					"A removed Tasks method must fail before admission.");
 			Assertions.assertEquals(1, handlerInvocations.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -349,12 +330,9 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
-		Soklet soklet = managedSoklet(server);
-
-		try {
-			Assertions.assertSame(taskManager,
-					server.getTaskManager().orElseThrow());
-			soklet.start();
+		Assertions.assertSame(taskManager,
+				server.getTaskManager().orElseThrow());
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			HttpResponse<String> response = discover(port, "tasks-capability", "{}");
@@ -363,9 +341,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 			Assertions.assertTrue(response.body().contains(
 					"\"extensions\":{\"" + TASKS_EXTENSION_ID + "\":{}}"),
 					response.body());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -408,10 +384,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 		McpTaskManager taskManager = McpTaskManager.fromInMemoryDefaults();
 		McpServer configuredServer = taskCreationContextServer(endpoint,
 				Optional.of(taskManager));
-		Soklet configuredSoklet = managedSoklet(configuredServer);
-
-		try {
-			configuredSoklet.start();
+		Soklet.run(managedSokletConfig(configuredServer), () -> {
 			int port = configuredServer.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			Assertions.assertEquals(200,
@@ -424,9 +397,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 					callTaskCreationContextTool(port, "incapable", false).statusCode());
 			Assertions.assertEquals(200,
 					callTaskCreationContextPrompt(port, "non-tool").statusCode());
-		} finally {
-			configuredSoklet.close();
-		}
+		});
 
 		McpEndpoint unconfiguredEndpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion(
@@ -436,16 +407,12 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 				.promptRegistrations(java.util.List.of(prompt))
 				.build();
 		McpServer unconfiguredServer = taskCreationContextServer(unconfiguredEndpoint, Optional.empty());
-		Soklet unconfiguredSoklet = managedSoklet(unconfiguredServer);
-		try {
-			unconfiguredSoklet.start();
+		Soklet.run(managedSokletConfig(unconfiguredServer), () -> {
 			int port = unconfiguredServer.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			Assertions.assertEquals(200,
 					callTaskCreationContextTool(port, "no-manager", true).statusCode());
-		} finally {
-			unconfiguredSoklet.close();
-		}
+		});
 
 		Assertions.assertEquals(4, observedTaskCreationContexts.size());
 		McpTaskCreationContext taskCreationContext = observedTaskCreationContexts.get(0).orElseThrow();
@@ -516,10 +483,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 		};
 		McpServer server = taskCreationContextServer(endpoint,
 				Optional.of(McpTaskManager.fromInMemoryDefaults()), interceptor);
-		Soklet soklet = managedSoklet(server);
-
-		try {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			TASK_CREATION_CONTEXT_ARGUMENT_CONSTRUCTIONS.set(0);
@@ -626,9 +590,7 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 					TASK_CREATION_CONTEXT_ARGUMENT_CONSTRUCTIONS.get());
 			Assertions.assertEquals(Optional.empty(),
 					observedTaskCreationContexts.get(4));
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	private static McpServer taskCreationContextServer(@NonNull McpEndpoint endpoint,
@@ -653,11 +615,11 @@ public class McpExtensionCompatibilityPublicRuntimeTests {
 		return builder.build();
 	}
 
-	private static Soklet managedSoklet(McpServer server) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+	private static SokletConfig managedSokletConfig(McpServer server) {
+		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
-				.build());
+				.build();
 	}
 
 	private static McpServer server(McpAdmissionController admissionController) {

@@ -98,10 +98,8 @@ public class ResourceMethodBindingValidationTests {
 		for (Class<?> resource : List.of(OptionalPrimitive.class, ConflictingBindings.class, OptionalPath.class, NonStringVarargs.class)) {
 			CONSTRUCTIONS.set(0);
 			SokletConfig config = config(resource);
-			try (Soklet soklet = Soklet.fromConfig(config)) {
-				SokletStartupException failure = assertThrows(SokletStartupException.class, soklet::start, resource.getName());
-				assertInstanceOf(IllegalArgumentException.class, failure.getCause());
-			}
+			SokletStartupException failure = assertThrows(SokletStartupException.class, () -> Soklet.run(config, () -> {}), resource.getName());
+			assertInstanceOf(IllegalArgumentException.class, failure.getCause());
 			assertEquals(0, CONSTRUCTIONS.get());
 		}
 	}
@@ -157,10 +155,8 @@ public class ResourceMethodBindingValidationTests {
 	void incompatibleDefaultConstructorsFailDuringSetupWithoutConstructingAnything() {
 		for (Class<?> resource : List.of(PrivateConstructor.class, NoDefaultConstructor.class, AbstractResource.class)) {
 			CONSTRUCTIONS.set(0);
-			try (Soklet soklet = Soklet.fromConfig(config(resource))) {
-				SokletStartupException failure = assertThrows(SokletStartupException.class, soklet::start, resource.getName());
-				assertTrue(failure.getCause().getMessage().contains("InstanceProvider"));
-			}
+			SokletStartupException failure = assertThrows(SokletStartupException.class, () -> Soklet.run(config(resource), () -> {}), resource.getName());
+			assertTrue(failure.getCause().getMessage().contains("InstanceProvider"));
 			assertEquals(0, CONSTRUCTIONS.get());
 		}
 	}

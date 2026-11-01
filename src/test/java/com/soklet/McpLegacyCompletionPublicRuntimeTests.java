@@ -102,8 +102,7 @@ public class McpLegacyCompletionPublicRuntimeTests {
 		prompts.add(juneReference);
 		McpEndpoint endpoint = endpoint(prompts, resources);
 		McpServer server = configure(McpServer.withPort(0), endpoint).build();
-		try (Soklet soklet = managed(server, new MetricsCollector() { })) {
-			soklet.start();
+		Soklet.run(managedConfig(server, new MetricsCollector() { }), () -> {
 			int port = port(server);
 			for (McpProtocolVersion requestedVersion : ALL) {
 				if (LEGACY.contains(requestedVersion)) {
@@ -136,7 +135,7 @@ public class McpLegacyCompletionPublicRuntimeTests {
 					assertError(reference, -32602);
 			}
 			assertEquals(7, entries.get(), "Wrong-revision completers must never execute.");
-		}
+		});
 	}
 
 	@Test
@@ -146,8 +145,7 @@ public class McpLegacyCompletionPublicRuntimeTests {
 						McpArgumentCompletionResult.fromValues(List.of("modern")),
 				Set.of(McpProtocolVersion.V2026_07_28))), List.of());
 		McpServer server = configure(McpServer.withPort(0), endpoint).build();
-		try (Soklet soklet = managed(server, new MetricsCollector() { })) {
-			soklet.start();
+		Soklet.run(managedConfig(server, new MetricsCollector() { }), () -> {
 			for (McpProtocolVersion version : LEGACY) {
 				Capture initialize = send(port(server), version, "initialize",
 						"\"protocolVersion\":" + quote(version.getWireValue())
@@ -164,7 +162,7 @@ public class McpLegacyCompletionPublicRuntimeTests {
 					"server/discover", "", "discover", null);
 			assertEquals(200, discover.status(), discover.body());
 			assertTrue(discover.body().contains("\"completions\":{}"), discover.body());
-		}
+		});
 	}
 
 	@Test
@@ -209,15 +207,14 @@ public class McpLegacyCompletionPublicRuntimeTests {
 					interceptorEntries.incrementAndGet();
 					return continuation.proceed();
 				}).build();
-		try (Soklet soklet = managed(server, new MetricsCollector() {
+		Soklet.run(managedConfig(server, new MetricsCollector() {
 			@Override
 			public void didRecordMcpMetricsEvent(McpMetricsEvent event) {
 				events.add(event);
 				if (event instanceof McpMetricsEvent.RequestFinished)
 					finished.countDown();
 			}
-		})) {
-			soklet.start();
+		}), () -> {
 			for (McpProtocolVersion version : LEGACY) {
 				assertValues(send(port(server), version, "completion/complete",
 						params(true, "private", "value", " α",
@@ -247,7 +244,7 @@ public class McpLegacyCompletionPublicRuntimeTests {
 			assertEquals(2, interceptorEntries.get());
 			assertEquals(2, handlerEntries.get());
 			assertEquals(16, events.stream().filter(McpMetricsEvent.RequestFinished.class::isInstance).count());
-		}
+		});
 	}
 
 	@Test
@@ -267,8 +264,7 @@ public class McpLegacyCompletionPublicRuntimeTests {
 				List.of(template("wire", ALL, handler, ALL)));
 		McpServer server = configure(McpServer.withPort(0), endpoint).build();
 		List<Capture> listener = new ArrayList<>();
-		try (Soklet soklet = managed(server, new MetricsCollector() { })) {
-			soklet.start();
+		Soklet.run(managedConfig(server, new MetricsCollector() { }), () -> {
 			for (McpProtocolVersion version : LEGACY)
 				for (boolean prompt : List.of(true, false)) {
 					Capture capture = send(port(server), version, "completion/complete",
@@ -281,7 +277,7 @@ public class McpLegacyCompletionPublicRuntimeTests {
 					assertFalse(capture.body().contains("resultType"), capture.body());
 					listener.add(capture);
 				}
-		}
+		});
 		SokletSimulator.run(SimulatorConfig.builder()
 				.configureMcpServer(builder -> configure(builder.port(0), endpoint))
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
@@ -331,8 +327,7 @@ public class McpLegacyCompletionPublicRuntimeTests {
 				List.of(template("deadline", ALL, handler, ALL)));
 		McpServer server = configure(McpServer.withPort(0), endpoint)
 				.requestTimeout(Duration.ofMillis(250)).build();
-		try (Soklet soklet = managed(server, new MetricsCollector() { })) {
-			soklet.start();
+		Soklet.run(managedConfig(server, new MetricsCollector() { }), () -> {
 			try {
 				for (McpProtocolVersion version : LEGACY)
 					for (boolean prompt : List.of(true, false)) {
@@ -348,7 +343,7 @@ public class McpLegacyCompletionPublicRuntimeTests {
 				release.countDown();
 			}
 			assertTrue(exited.await(5, TimeUnit.SECONDS));
-		}
+		});
 	}
 
 	private static McpPromptRegistration prompt(String name,
@@ -396,10 +391,10 @@ public class McpLegacyCompletionPublicRuntimeTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance()).allowedHosts(Set.of(HOST));
 	}
 
-	private static Soklet managed(McpServer server, MetricsCollector metricsCollector) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+	private static SokletConfig managedConfig(McpServer server, MetricsCollector metricsCollector) {
+		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.metricsCollector(metricsCollector).lifecyclePolicy(TEST_LIFECYCLE_POLICY).build());
+				.metricsCollector(metricsCollector).lifecyclePolicy(TEST_LIFECYCLE_POLICY).build();
 	}
 
 	private static int port(McpServer server) {

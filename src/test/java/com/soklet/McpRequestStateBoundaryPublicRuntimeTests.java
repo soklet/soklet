@@ -52,23 +52,28 @@ class McpRequestStateBoundaryPublicRuntimeTests {
 		assertTrue(arguments.length() < requestLimit);
 		if (chunkCount > 10)
 			assertTrue(arguments.length() > 10 * MIB);
-		try (Fixture first = new Fixture(requestLimit, 10); Fixture second = new Fixture(requestLimit, 10)) {
-			String state = protectedState(first.post("initial", arguments, null, 200));
-			assertTrue(state.length() < 65_536, "Only the small application state is retained in the envelope.");
-			String changed = arguments.replace("stable-tail", "changed-tail");
-			String invalid = second.post("changed", changed, state, 400);
-			assertTrue(invalid.contains("\"code\":-32602"), invalid);
-			assertEquals(0, second.calls.get(), "Changed stable input must fail before handler entry.");
-			String complete = second.post("retry", arguments, state, 200);
-			assertTrue(complete.contains("\"text\":\"verified\""), complete);
-			assertEquals(1, first.calls.get());
-			assertEquals(1, second.calls.get());
-		}
+		Fixture first = new Fixture(requestLimit, 10);
+		Fixture second = new Fixture(requestLimit, 10);
+		Soklet.run(first.config, () -> {
+			Soklet.run(second.config, () -> {
+				String state = protectedState(first.post("initial", arguments, null, 200));
+				assertTrue(state.length() < 65_536, "Only the small application state is retained in the envelope.");
+				String changed = arguments.replace("stable-tail", "changed-tail");
+				String invalid = second.post("changed", changed, state, 400);
+				assertTrue(invalid.contains("\"code\":-32602"), invalid);
+				assertEquals(0, second.calls.get(), "Changed stable input must fail before handler entry.");
+				String complete = second.post("retry", arguments, state, 200);
+				assertTrue(complete.contains("\"text\":\"verified\""), complete);
+				assertEquals(1, first.calls.get());
+				assertEquals(1, second.calls.get());
+			});
+		});
 	}
 
 	@Test
 	void finalAllowedRoundCanCompleteButCannotEmitMoreFrameworkState() throws Exception {
-		try (Fixture fixture = new Fixture(10 * MIB, 1)) {
+		Fixture fixture = new Fixture(10 * MIB, 1);
+		Soklet.run(fixture.config, () -> {
 			String state = protectedState(fixture.post("initial", "{}", null, 200));
 			fixture.reemit.set(true);
 			String failure = fixture.post("exhausted", "{}", state, 200);
@@ -81,7 +86,7 @@ class McpRequestStateBoundaryPublicRuntimeTests {
 			String complete = fixture.post("complete", "{}", state, 200);
 			assertTrue(complete.contains("\"text\":\"verified\""), complete);
 			assertEquals(3, fixture.calls.get());
-		}
+		});
 	}
 
 	private static String protectedState(String response) {
@@ -93,11 +98,11 @@ class McpRequestStateBoundaryPublicRuntimeTests {
 		return response.substring(start, response.indexOf('"', start));
 	}
 
-	private static final class Fixture implements AutoCloseable {
+	private static final class Fixture {
 		private final AtomicInteger calls = new AtomicInteger();
 		private final AtomicBoolean reemit = new AtomicBoolean();
 		private final McpServer server;
-		private final Soklet soklet;
+		private final SokletConfig config;
 
 		private Fixture(int requestLimit, int maximumRounds) {
 			McpInputRequestDeclaration declaration = McpInputRequestDeclaration.fromElicitationForm(McpInputRequirement.REQUIRED);
@@ -133,12 +138,11 @@ class McpRequestStateBoundaryPublicRuntimeTests {
 					.protectionConfig(McpProtectionConfig.withKeyring(keyring).maximumRequestStateRounds(maximumRounds).build())
 					.admissionController(admissionContext -> McpAdmissionDecision.accepted(identity))
 					.toolRateLimiter(rateLimitContext -> McpRateLimitDecision.allowed()).build();
-			soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+			config = SokletConfig.withMcpServer(server)
 					.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(java.time.Duration.ofSeconds(10))
 							.startupCancelationTimeout(java.time.Duration.ofSeconds(1)).gracefulShutdownTimeout(java.time.Duration.ofSeconds(1))
 							.forcedShutdownTimeout(java.time.Duration.ofSeconds(1)).build())
-					.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).build());
-			soklet.start();
+					.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).build();
 		}
 
 		private String post(String id, String arguments, String state, int expectedStatus) throws Exception {
@@ -157,7 +161,5 @@ class McpRequestStateBoundaryPublicRuntimeTests {
 				return response;
 			}
 		}
-
-		@Override public void close() { soklet.close(); }
 	}
 }

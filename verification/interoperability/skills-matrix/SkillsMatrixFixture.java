@@ -93,6 +93,7 @@ public final class SkillsMatrixFixture {
 
 	private SkillsMatrixFixture() { }
 
+	@SuppressWarnings("try") // The cleanup scope is intentionally not referenced by its body.
 	public static void main(String[] arguments) throws Exception {
 		if (arguments.length != 0) throw new IllegalArgumentException("No arguments expected.");
 		SkillsMatrixFixture fixture = new SkillsMatrixFixture();
@@ -100,8 +101,11 @@ public final class SkillsMatrixFixture {
 		SokletConfig config = SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(QUIET).build();
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
+		Soklet soklet = Soklet.run(config);
+		try (AutoCloseable sokletShutdown = () -> {
+			soklet.requestShutdown();
+			soklet.awaitShutdownAsync().toCompletableFuture().join();
+		}) {
 			InetSocketAddress address = server.getDiagnostics().getBoundAddress().orElseThrow();
 			if (server.getDiagnostics().getStatus() != McpServerStatus.RUNNING
 					|| !HOST.equals(address.getAddress().getHostAddress()) || address.getPort() < 1)
@@ -115,7 +119,8 @@ public final class SkillsMatrixFixture {
 					throw new IllegalArgumentException("Unexpected fixture control.");
 				control("{\"event\":\"revoked\"}");
 			}
-			ShutdownResult result = soklet.shutdown().toCompletableFuture().get(5, TimeUnit.SECONDS);
+			soklet.requestShutdown();
+			ShutdownResult result = soklet.awaitShutdownAsync().toCompletableFuture().get(5, TimeUnit.SECONDS);
 			if (server.getDiagnostics().getStatus() != McpServerStatus.TERMINATED
 					|| result.getShutdownComponentResult(ShutdownComponentType.MCP).orElseThrow()
 							.getShutdownComponentDisposition() != ShutdownComponentDisposition.GRACEFUL_TERMINATION)

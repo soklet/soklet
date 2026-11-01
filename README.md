@@ -169,8 +169,9 @@ public class App {
       HttpServer.withPort(8080).host("127.0.0.1").build()
     ).build();
 
-    System.out.println("Starting Soklet; press [enter] to stop once ready");
-    SokletApplication.run(config, ShutdownTrigger.ENTER_KEY);
+    System.out.println("Starting Soklet");
+    Soklet soklet = Soklet.run(config);
+    soklet.awaitShutdown();
   }
 }
 ```
@@ -182,25 +183,31 @@ Size request and concurrent-connection limits against the available heap and
 apply corresponding limits at the edge. Soklet does not supply these deployment
 policies automatically.
 
-The static [`run(SokletConfig)`](<https://javadoc.soklet.com/com/soklet/SokletApplication.html#run(com.soklet.SokletConfig)>) and
-[`run(SokletConfig, ShutdownTrigger...)`](<https://javadoc.soklet.com/com/soklet/SokletApplication.html#run(com.soklet.SokletConfig,com.soklet.ShutdownTrigger...)>) methods on
-[`SokletApplication`](https://javadoc.soklet.com/com/soklet/SokletApplication.html) cover the usual standalone-process lifecycle. If
-the runner also owns bounded application-resource cleanup, configure one
-one-shot application and supply that cleanup for its run:
+[`Soklet.run(config)`](<https://javadoc.soklet.com/com/soklet/Soklet.html#run(com.soklet.SokletConfig)>) starts every configured transport, installs a JVM shutdown hook, and returns the one-shot `Soklet` instance after readiness. `awaitShutdown()` waits for shutdown and full finalization; `awaitShutdownAsync()` exposes the same outcome as a read-only completion stage. Neither await method requests shutdown. To stop programmatically, call `requestShutdown()` and then await completion before releasing shared dependencies.
+
+For tests and embedded work whose lifetime fits inside a block, use the scoped overload:
 
 ```java
-ShutdownResult result = SokletApplication.fromConfig(config).run(
-    ShutdownCleanup.fromTimeoutAndAction(
-        Duration.ofSeconds(5),
-        shutdownResult -> applicationResources.close()),
-    ShutdownTrigger.ENTER_KEY);
+Soklet.run(config, () -> {
+    // Every configured transport is ready; perform application work or network assertions.
+});
 ```
 
-The configured [`SokletApplication`](https://javadoc.soklet.com/com/soklet/SokletApplication.html)
-is one-shot. After any run attempt begins,
-it cannot be run a second time or concurrently. The cleanup action is eligible
-only after Soklet has proven core shutdown complete; an incomplete core
-shutdown skips it.
+The no-argument `Soklet.RunAction<E>` runs once on the calling thread and may throw checked exceptions. When it returns or throws, Soklet requests shutdown and joins full finalization. A successful return supplies the immutable `ShutdownResult`; complete forced shutdown can still be successful. A callback failure is rethrown unchanged after teardown, with any lifecycle failure suppressed on it. If only finalization fails, the existing lifecycle exception is thrown. Interruption during finalization does not abandon cleanup; the interrupt flag is restored before returning or throwing. External shutdown does not interrupt or terminate the callback, and the callback itself has no imposed timeout.
+
+For bounded application-resource cleanup, supply a `ShutdownCleanup` to `run`:
+
+```java
+Soklet soklet = Soklet.run(config,
+    ShutdownCleanup.fromTimeoutAndAction(
+        Duration.ofSeconds(5),
+        shutdownResult -> applicationResources.close()));
+ShutdownResult result = soklet.awaitShutdown();
+```
+
+Cleanup is eligible only after Soklet has proven core shutdown complete; incomplete core shutdown skips it. The instance owns its JVM hook until finalization releases it. It does not implement `AutoCloseable`. `ShutdownTrigger` is removed: Soklet never installs a console-input listener. Application code can end a scoped callback after reading a command, or call `requestShutdown()` from an existing event handler.
+
+Each run reserves its daemon completion-handoff worker before claiming transports. If that worker cannot start, startup fails before a transport is claimed. Finalization only signals the reserved worker; application completion callbacks never run on the non-daemon lifecycle owner. The JVM hook joins bounded core shutdown, eligible cleanup, and terminal reporting. It does not wait for the owner to return from unrelated application callbacks; normal await methods additionally include process-registration release.
 
 #### Building and Running
 

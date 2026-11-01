@@ -168,8 +168,11 @@ public final class OperationalHistoryHarness {
     List<ScenarioResult> scenarios = new ArrayList<>();
     double drainSeconds = 0.0;
 
-    try (Soklet soklet = Soklet.fromConfig(config)) {
-      soklet.start();
+    Soklet soklet = Soklet.run(config);
+    try (@SuppressWarnings("try") AutoCloseable sokletShutdown = () -> {
+      soklet.requestShutdown();
+      soklet.awaitShutdownAsync().toCompletableFuture().join();
+    }) {
       warmUp(policy.clientsPerScenario(), index ->
           httpOperation(client, port, canaryFor("http", index, policy)));
       tracker.reset();
@@ -271,8 +274,11 @@ public final class OperationalHistoryHarness {
     List<ScenarioResult> scenarios = new ArrayList<>();
     double drainSeconds = 0.0;
 
-    try (Soklet soklet = Soklet.fromConfig(config)) {
-      soklet.start();
+    Soklet soklet = Soklet.run(config);
+    try (@SuppressWarnings("try") AutoCloseable sokletShutdown = () -> {
+      soklet.requestShutdown();
+      soklet.awaitShutdownAsync().toCompletableFuture().join();
+    }) {
       int mcpPort = mcpServer.getDiagnostics().getBoundAddress().orElseThrow().getPort();
       warmUp(policy.clientsPerScenario(), index ->
           mcpOperation(client, mcpPort, canaryFor("mcp", index, policy),
@@ -370,8 +376,11 @@ public final class OperationalHistoryHarness {
         .lifecyclePolicy(lifecyclePolicy())
         .build();
     httpMetrics.initialize(httpConfig);
-    try (Soklet soklet = Soklet.fromConfig(httpConfig)) {
-      soklet.start();
+    Soklet httpSoklet = Soklet.run(httpConfig);
+    try (@SuppressWarnings("try") AutoCloseable httpSokletShutdown = () -> {
+      httpSoklet.requestShutdown();
+      httpSoklet.awaitShutdownAsync().toCompletableFuture().join();
+    }) {
       httpTelemetry.beginOperationalWindow(5, httpOutcomes);
       httpMetrics.beginOperationalWindow();
       httpOperation(httpClient(), httpPort,
@@ -440,8 +449,11 @@ public final class OperationalHistoryHarness {
         .lifecyclePolicy(lifecyclePolicy())
         .build();
     metrics.initialize(config);
-    try (Soklet soklet = Soklet.fromConfig(config)) {
-      soklet.start();
+    Soklet soklet = Soklet.run(config);
+    try (@SuppressWarnings("try") AutoCloseable sokletShutdown = () -> {
+      soklet.requestShutdown();
+      soklet.awaitShutdownAsync().toCompletableFuture().join();
+    }) {
       int mcpPort = mcpServer.getDiagnostics().getBoundAddress().orElseThrow().getPort();
       telemetry.beginOperationalWindow(5, outcomes);
       metrics.beginOperationalWindow();

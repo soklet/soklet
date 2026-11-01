@@ -265,11 +265,11 @@ final class SokletApplicationFinalization {
 	@NonNull
 	private final AtomicBoolean cleanupLaunchClaimed;
 	@NonNull
-	private final AtomicReference<Thread> cleanupThread;
+	private final AtomicReference<LifecycleInterruptDelivery> cleanupInterruptDelivery;
 	@NonNull
 	private final AtomicBoolean cleanupInterruptRequested;
 	@NonNull
-	private final AtomicBoolean cleanupInterruptDelivered;
+	private final AtomicBoolean cleanupInterruptFinished;
 	@NonNull
 	private final AtomicBoolean cleanupWorkerFinished;
 	@NonNull
@@ -303,9 +303,9 @@ final class SokletApplicationFinalization {
 		this.corePlan = new AtomicReference<>();
 		this.cleanupOutcome = new AtomicReference<>();
 		this.cleanupLaunchClaimed = new AtomicBoolean();
-		this.cleanupThread = new AtomicReference<>();
+		this.cleanupInterruptDelivery = new AtomicReference<>();
 		this.cleanupInterruptRequested = new AtomicBoolean();
-		this.cleanupInterruptDelivered = new AtomicBoolean();
+		this.cleanupInterruptFinished = new AtomicBoolean();
 		this.cleanupWorkerFinished = new AtomicBoolean();
 		this.reporterPlan = new AtomicReference<>();
 		this.reporterLaunchClaimed = new AtomicBoolean();
@@ -423,10 +423,26 @@ final class SokletApplicationFinalization {
 		}
 		if (this.cleanupLaunchClaimed.compareAndSet(false, true)) {
 			if (this.cleanupOutcome.get() == null) {
+				LifecycleInterruptDelivery delivery = null;
 				try {
+					// Reserve interruption before application cleanup can enter I/O.
+					// A later timeout only signals this independent daemon.
+					delivery = new LifecycleInterruptDelivery(this.workers,
+							"soklet-cleanup-interrupt", () -> {
+								this.cleanupInterruptFinished.set(true);
+								this.waiter.signal();
+							});
+					this.cleanupInterruptDelivery.set(delivery);
+					deliverCleanupInterruptIfRequested();
+					if (this.cleanupOutcome.get() != null) {
+						delivery.retire();
+						return;
+					}
 					this.workers.start(LifecycleWorkers.Role.SHUTDOWN_CLEANUP,
 							"soklet-application-cleanup", exactPlan.task());
 				} catch (Throwable launchFailure) {
+					if (delivery != null)
+						delivery.retire();
 					freezeCleanupOutcome(new InternalShutdownCleanupOutcome(
 							InternalShutdownCleanupDisposition.FAILED,
 							Optional.of(exactPlan.timeout()),
@@ -447,16 +463,16 @@ final class SokletApplicationFinalization {
 	private void runCleanup(@NonNull InternalLifecycleCoreSnapshot snapshot,
 			ShutdownCleanup.@NonNull Action action, @NonNull Duration timeout,
 			long deadlineNanos) {
-		Thread worker = Thread.currentThread();
-		this.cleanupThread.set(worker);
-		deliverCleanupInterruptIfRequested();
+		LifecycleInterruptDelivery delivery = requireNonNull(this.cleanupInterruptDelivery.get());
 		Throwable actionFailure = null;
 		try {
+			delivery.bind(Thread.currentThread());
 			requireNonNull(action).performCleanup(
 					requireNonNull(snapshot).publicResult());
 		} catch (Throwable failure) {
 			actionFailure = failure;
 		} finally {
+			delivery.retire();
 			long completionNanos = this.clock.nanoTime();
 			if (completionNanos - deadlineNanos > 0L) {
 				this.cleanupWorkerFinished.set(true);
@@ -482,7 +498,7 @@ final class SokletApplicationFinalization {
 		TimeoutException timeoutFailure = new TimeoutException(
 				"Standalone Soklet cleanup timed out; its daemon action may remain live");
 		boolean workerMayRemain = this.cleanupLaunchClaimed.get()
-				&& !this.cleanupWorkerFinished.get();
+				&& (!this.cleanupWorkerFinished.get() || !this.cleanupInterruptFinished.get());
 		InternalShutdownCleanupOutcome timedOutOutcome =
 				new InternalShutdownCleanupOutcome(
 						InternalShutdownCleanupDisposition.TIMED_OUT,
@@ -504,16 +520,9 @@ final class SokletApplicationFinalization {
 	private void deliverCleanupInterruptIfRequested() {
 		if (!this.cleanupInterruptRequested.get())
 			return;
-		Thread worker = this.cleanupThread.get();
-		if (worker != null
-				&& this.cleanupInterruptDelivered.compareAndSet(false, true)) {
-			try {
-				worker.interrupt();
-			} catch (Throwable ignored) {
-				// Interrupt delivery cannot revoke an already-frozen timeout or
-				// prevent terminal reporting and process-resource release.
-			}
-		}
+		LifecycleInterruptDelivery delivery = this.cleanupInterruptDelivery.get();
+		if (delivery != null)
+			delivery.request();
 	}
 
 	private void freezeCleanupOutcome(

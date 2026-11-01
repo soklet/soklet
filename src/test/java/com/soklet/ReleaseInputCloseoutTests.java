@@ -111,8 +111,7 @@ public class ReleaseInputCloseoutTests {
 	public void unsupportedMcpEncodingsRejectBeforeAdmissionAndDispatch() throws Exception {
 		AtomicInteger admissions = new AtomicInteger(), handlers = new AtomicInteger();
 		McpServer server = server(admissions, handlers, false);
-		try (Soklet owner = owner(server)) {
-			owner.start();
+		Soklet.run(config(server), () -> {
 			for (String encodingHeaders : List.of("Content-Encoding: gzip\r\n", "Content-Encoding: br\r\n",
 					"Content-Encoding: gzip, identity\r\n", "Content-Encoding: identity, GZIP\r\n",
 					"Content-Encoding: identity\r\nContent-Encoding: deflate\r\n",
@@ -131,15 +130,14 @@ public class ReleaseInputCloseoutTests {
 					"Content-Encoding: gzip\r\n", compressed.toByteArray()).status());
 			assertEquals(0, admissions.get());
 			assertEquals(0, handlers.get());
-		}
+		});
 	}
 
 	@Test
 	public void identityMcpEncodingsStillReachTheHandler() throws Exception {
 		AtomicInteger admissions = new AtomicInteger(), handlers = new AtomicInteger();
 		McpServer server = server(admissions, handlers, false);
-		try (Soklet owner = owner(server)) {
-			owner.start();
+		Soklet.run(config(server), () -> {
 			for (String encodingHeaders : List.of("", "Content-Encoding: identity\r\n",
 					"Content-Encoding: \tIDENTITY \t\r\n",
 					"Content-Encoding: identity\r\nContent-Encoding: identity\r\n",
@@ -149,15 +147,14 @@ public class ReleaseInputCloseoutTests {
 			}
 			assertEquals(5, admissions.get());
 			assertEquals(5, handlers.get());
-		}
+		});
 	}
 
 	@Test
 	public void mcpHostOriginAndEndpointGuardsPrecedeContentEncoding() throws Exception {
 		AtomicInteger admissions = new AtomicInteger(), handlers = new AtomicInteger();
 		McpServer server = server(admissions, handlers, false);
-		try (Soklet owner = owner(server)) {
-			owner.start();
+		Soklet.run(config(server), () -> {
 			String encoding = "Content-Encoding: gzip\r\n";
 			assertEquals(404, send(server, "/unknown", "127.0.0.1", "2026-07-28", encoding, RPC).status());
 			assertEquals(421, send(server, "/mcp", "bad.example", "2026-07-28", encoding, RPC).status());
@@ -168,15 +165,14 @@ public class ReleaseInputCloseoutTests {
 			assertNull(denied.header("Access-Control-Expose-Headers"));
 			assertEquals(0, admissions.get());
 			assertEquals(0, handlers.get());
-		}
+		});
 	}
 
 	@Test
 	public void approvedOriginCanReadRateLimitRetryAfter() throws Exception {
 		AtomicInteger admissions = new AtomicInteger(), handlers = new AtomicInteger();
 		McpServer server = server(admissions, handlers, true);
-		try (Soklet owner = owner(server)) {
-			owner.start();
+		Soklet.run(config(server), () -> {
 			WireResponse response = send(server, "/mcp", "127.0.0.1", "2026-07-28", "Origin: " + ORIGIN + "\r\n", RPC);
 			assertEquals(429, response.status());
 			assertEquals("2", response.header("Retry-After"));
@@ -187,7 +183,7 @@ public class ReleaseInputCloseoutTests {
 			assertEquals(429, noOrigin.status());
 			assertNull(noOrigin.header("Access-Control-Expose-Headers"));
 			assertEquals(0, handlers.get());
-		}
+		});
 	}
 
 	private static Request multipart(String body) {
@@ -212,12 +208,12 @@ public class ReleaseInputCloseoutTests {
 				.toolRateLimiter(context -> McpRateLimitDecision.allowed()).build();
 	}
 
-	private static Soklet owner(McpServer server) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+	private static SokletConfig config(McpServer server) {
+		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(5))
 						.startupCancelationTimeout(Duration.ofSeconds(2)).gracefulShutdownTimeout(Duration.ofSeconds(2))
-						.forcedShutdownTimeout(Duration.ofSeconds(1)).build()).build());
+						.forcedShutdownTimeout(Duration.ofSeconds(1)).build()).build();
 	}
 
 	private static WireResponse send(McpServer server, String path, String host, String version, String headers, byte[] body) throws Exception {

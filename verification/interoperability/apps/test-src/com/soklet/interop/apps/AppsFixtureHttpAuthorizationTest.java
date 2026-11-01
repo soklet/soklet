@@ -69,8 +69,7 @@ public final class AppsFixtureHttpAuthorizationTest {
 				new AppsFixture.Caller("first", "alpha", "en-US", true)));
 		SokletConfig config = fixture.serverConfig(0, QUIET);
 		McpServer server = config.getMcpServer().orElseThrow();
-		Soklet soklet = Soklet.fromConfig(config);
-		soklet.start();
+		Soklet soklet = Soklet.run(config);
 		int completedRequests;
 		try {
 			InetSocketAddress address = server.getDiagnostics().getBoundAddress().orElseThrow();
@@ -81,7 +80,8 @@ public final class AppsFixtureHttpAuthorizationTest {
 			suite.run(fixture);
 			completedRequests = suite.requests;
 		} finally {
-			ShutdownResult shutdown = soklet.shutdown().toCompletableFuture().get(5, TimeUnit.SECONDS);
+			soklet.requestShutdown();
+			ShutdownResult shutdown = soklet.awaitShutdownAsync().toCompletableFuture().get(5, TimeUnit.SECONDS);
 			check(server.getDiagnostics().getStatus() == McpServerStatus.TERMINATED
 					&& shutdown.getShutdownComponentResult(ShutdownComponentType.MCP).orElseThrow()
 							.getShutdownComponentDisposition() == ShutdownComponentDisposition.GRACEFUL_TERMINATION,

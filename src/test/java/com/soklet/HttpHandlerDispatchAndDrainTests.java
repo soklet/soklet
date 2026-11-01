@@ -50,81 +50,114 @@ class HttpHandlerDispatchAndDrainTests {
 	@Test
 	void directExecutorIsRejectedBeforeApplicationEntryAndCanRecover() throws Exception {
 		SwitchableExecutor executor = new SwitchableExecutor();
-		try (Fixture fixture = new Fixture(executor, Duration.ofSeconds(2), false);
-				 Socket rejected = fixture.open("/health?secret=http-dispatch-canary")) {
-			assertUnavailable(readResponse(rejected));
-			assertEquals(0, fixture.resource.healthCalls.get());
-			assertEquals(List.of(RequestRejectionReason.REQUEST_HANDLER_QUEUE_FULL), fixture.rejections);
-			assertEquals(List.of("Request handler executor must dispatch asynchronously"), fixture.rejectionMessages,
-					"The rejection exception must not render request-controlled input");
-			executor.inline.set(false);
-			try (Socket healthy = fixture.open("/health")) {
-				assertTrue(readResponse(healthy).startsWith("HTTP/1.1 200 OK"));
-			}
-			assertEquals(1, fixture.resource.healthCalls.get());
-			assertEquals(1, fixture.accepted.get());
+		Fixture fixture = new Fixture(executor, Duration.ofSeconds(2), false);
+		try {
+			Soklet.run(fixture.config, () -> {
+				try (Socket rejected = fixture.open("/health?secret=http-dispatch-canary")) {
+					assertUnavailable(readResponse(rejected));
+					assertEquals(0, fixture.resource.healthCalls.get());
+					assertEquals(List.of(RequestRejectionReason.REQUEST_HANDLER_QUEUE_FULL), fixture.rejections);
+					assertEquals(List.of("Request handler executor must dispatch asynchronously"), fixture.rejectionMessages,
+							"The rejection exception must not render request-controlled input");
+					executor.inline.set(false);
+					try (Socket healthy = fixture.open("/health")) {
+						assertTrue(readResponse(healthy).startsWith("HTTP/1.1 200 OK"));
+					}
+					assertEquals(1, fixture.resource.healthCalls.get());
+					assertEquals(1, fixture.accepted.get());
+				} finally {
+					fixture.release();
+				}
+			});
+		} finally {
+			fixture.closeExecutor();
 		}
 	}
 
 	@Test
 	void saturatedCallerRunsDoesNotEnterAnotherHandlerOnTheSelector() throws Exception {
 		ThreadPoolExecutor executor = executor(new SynchronousQueue<>(), true);
-		try (Fixture fixture = new Fixture(executor, Duration.ofSeconds(5), false);
-				 Socket active = fixture.open("/block")) {
-			assertTrue(fixture.resource.entered.await(2, TimeUnit.SECONDS));
-			try (Socket rejected = fixture.open("/queued")) {
-				assertUnavailable(readResponse(rejected));
-			}
-			assertEquals(0, fixture.resource.queuedCalls.get());
-			assertEquals(List.of(RequestRejectionReason.REQUEST_HANDLER_QUEUE_FULL), fixture.rejections);
-			fixture.resource.release.countDown();
-			assertTrue(readResponse(active).startsWith("HTTP/1.1 200 OK"));
-			await(() -> executor.getActiveCount() == 0, "The first worker must be available again");
-			try (Socket healthy = fixture.open("/health")) {
-				assertTrue(readResponse(healthy).startsWith("HTTP/1.1 200 OK"));
-			}
-			assertFalse(fixture.resource.handlerWasSelector.get());
+		Fixture fixture = new Fixture(executor, Duration.ofSeconds(5), false);
+		try {
+			Soklet.run(fixture.config, () -> {
+				try (Socket active = fixture.open("/block")) {
+					assertTrue(fixture.resource.entered.await(2, TimeUnit.SECONDS));
+					try (Socket rejected = fixture.open("/queued")) {
+						assertUnavailable(readResponse(rejected));
+					}
+					assertEquals(0, fixture.resource.queuedCalls.get());
+					assertEquals(List.of(RequestRejectionReason.REQUEST_HANDLER_QUEUE_FULL), fixture.rejections);
+					fixture.resource.release.countDown();
+					assertTrue(readResponse(active).startsWith("HTTP/1.1 200 OK"));
+					await(() -> executor.getActiveCount() == 0, "The first worker must be available again");
+					try (Socket healthy = fixture.open("/health")) {
+						assertTrue(readResponse(healthy).startsWith("HTTP/1.1 200 OK"));
+					}
+					assertFalse(fixture.resource.handlerWasSelector.get());
+				} finally {
+					fixture.release();
+				}
+			});
+		} finally {
+			fixture.closeExecutor();
 		}
 	}
 
 	@Test
 	void ordinaryExecutorRejectionStillReturnsUnavailableAndRecovers() throws Exception {
 		ThreadPoolExecutor executor = executor(new SynchronousQueue<>(), false);
-		try (Fixture fixture = new Fixture(executor, Duration.ofSeconds(5), false);
-				 Socket active = fixture.open("/block")) {
-			assertTrue(fixture.resource.entered.await(2, TimeUnit.SECONDS));
-			try (Socket rejected = fixture.open("/queued")) {
-				assertUnavailable(readResponse(rejected));
-			}
-			assertEquals(0, fixture.resource.queuedCalls.get());
-			fixture.resource.release.countDown();
-			assertTrue(readResponse(active).startsWith("HTTP/1.1 200 OK"));
-			await(() -> executor.getActiveCount() == 0, "Rejected dispatch must not occupy a worker");
-			try (Socket healthy = fixture.open("/health")) {
-				assertTrue(readResponse(healthy).startsWith("HTTP/1.1 200 OK"));
-			}
+		Fixture fixture = new Fixture(executor, Duration.ofSeconds(5), false);
+		try {
+			Soklet.run(fixture.config, () -> {
+				try (Socket active = fixture.open("/block")) {
+					assertTrue(fixture.resource.entered.await(2, TimeUnit.SECONDS));
+					try (Socket rejected = fixture.open("/queued")) {
+						assertUnavailable(readResponse(rejected));
+					}
+					assertEquals(0, fixture.resource.queuedCalls.get());
+					fixture.resource.release.countDown();
+					assertTrue(readResponse(active).startsWith("HTTP/1.1 200 OK"));
+					await(() -> executor.getActiveCount() == 0, "Rejected dispatch must not occupy a worker");
+					try (Socket healthy = fixture.open("/health")) {
+						assertTrue(readResponse(healthy).startsWith("HTTP/1.1 200 OK"));
+					}
+				} finally {
+					fixture.release();
+				}
+			});
+		} finally {
+			fixture.closeExecutor();
 		}
 	}
 
 	@Test
 	void selectorInterruptDoesNotLeakIntoFollowingRequests() throws Exception {
-		try (Fixture fixture = new Fixture(executor(new ArrayBlockingQueue<>(2), false),
-				Duration.ofSeconds(2), false)) {
-			fixture.interruptFirstSelectorTurn.set(true);
-			try (Socket first = fixture.open("/health")) {
-				assertTrue(readResponse(first).startsWith("HTTP/1.1 200 OK"));
-			}
-			try (Socket second = fixture.open("/health")) {
-				assertTrue(readResponse(second).startsWith("HTTP/1.1 200 OK"));
-			}
-			assertEquals(List.of(false, false), fixture.selectorInterrupts,
-					"An interrupted selector must recover before the next connection dispatch");
+		Fixture fixture = new Fixture(executor(new ArrayBlockingQueue<>(2), false),
+				Duration.ofSeconds(2), false);
+		try {
+			Soklet.run(fixture.config, () -> {
+				try {
+					fixture.interruptFirstSelectorTurn.set(true);
+					try (Socket first = fixture.open("/health")) {
+						assertTrue(readResponse(first).startsWith("HTTP/1.1 200 OK"));
+					}
+					try (Socket second = fixture.open("/health")) {
+						assertTrue(readResponse(second).startsWith("HTTP/1.1 200 OK"));
+					}
+					assertEquals(List.of(false, false), fixture.selectorInterrupts,
+							"An interrupted selector must recover before the next connection dispatch");
+				} finally {
+					fixture.release();
+				}
+			});
+		} finally {
+			fixture.closeExecutor();
 		}
 	}
 
 	@Test
 	void activeHandlerDeadlineRemainsEffectiveDuringGracefulDrain() throws Exception {
-		try (Fixture fixture = new Fixture(executor(new ArrayBlockingQueue<>(2), false),
+		try (ManualFixture fixture = new ManualFixture(executor(new ArrayBlockingQueue<>(2), false),
 				Duration.ofMillis(700), false);
 				 Socket active = fixture.open("/block")) {
 			assertTrue(fixture.resource.entered.await(2, TimeUnit.SECONDS));
@@ -140,7 +173,7 @@ class HttpHandlerDispatchAndDrainTests {
 	@Test
 	void queuedDeadlineExpiresWithoutApplicationEntryWhileResidualHandlerDrains() throws Exception {
 		ThreadPoolExecutor executor = executor(new ArrayBlockingQueue<>(2), false);
-		try (Fixture fixture = new Fixture(executor, Duration.ofMillis(700), true);
+		try (ManualFixture fixture = new ManualFixture(executor, Duration.ofMillis(700), true);
 				 Socket active = fixture.open("/block")) {
 			assertTrue(fixture.resource.entered.await(2, TimeUnit.SECONDS));
 			try (Socket queued = fixture.open("/queued")) {
@@ -161,7 +194,7 @@ class HttpHandlerDispatchAndDrainTests {
 
 	@Test
 	void successfulDrainCancelsItsDeadlineAndRetiresTheScheduler() throws Exception {
-		try (Fixture fixture = new Fixture(executor(new ArrayBlockingQueue<>(2), false),
+		try (ManualFixture fixture = new ManualFixture(executor(new ArrayBlockingQueue<>(2), false),
 				Duration.ofSeconds(10), false);
 				 Socket active = fixture.open("/block")) {
 			assertTrue(fixture.resource.entered.await(2, TimeUnit.SECONDS));
@@ -177,7 +210,7 @@ class HttpHandlerDispatchAndDrainTests {
 
 	@Test
 	void forcedShutdownStopsTheSchedulerButRetainsRealHandlerResidualEvidence() throws Exception {
-		try (Fixture fixture = new Fixture(executor(new ArrayBlockingQueue<>(2), false),
+		try (ManualFixture fixture = new ManualFixture(executor(new ArrayBlockingQueue<>(2), false),
 				Duration.ofSeconds(10), true, Duration.ofMillis(100));
 				 Socket active = fixture.open("/block")) {
 			assertTrue(fixture.resource.entered.await(2, TimeUnit.SECONDS));
@@ -216,16 +249,14 @@ class HttpHandlerDispatchAndDrainTests {
 		}
 	}
 
-	private static final class Fixture implements AutoCloseable {
+	private static class Fixture {
 		final BlockingResource resource;
 		final DefaultHttpServer server;
-		final Soklet soklet;
-		final TimeoutScheduler scheduler;
+		final SokletConfig config;
 		final ThreadPoolExecutor executor;
 		final int port;
 		final List<RequestRejectionReason> rejections = new CopyOnWriteArrayList<>();
 		final List<String> rejectionMessages = new CopyOnWriteArrayList<>();
-		boolean residualExpected;
 		final AtomicInteger accepted = new AtomicInteger();
 		final AtomicBoolean interruptFirstSelectorTurn = new AtomicBoolean();
 		final List<Boolean> selectorInterrupts = new CopyOnWriteArrayList<>();
@@ -242,7 +273,7 @@ class HttpHandlerDispatchAndDrainTests {
 			this.server = (DefaultHttpServer) HttpServer.withPort(this.port).host("127.0.0.1")
 					.concurrency(1).requestHandlerTimeout(timeout)
 					.requestHandlerExecutorServiceSupplier(() -> executor).build();
-			this.soklet = Soklet.fromConfig(SokletConfig.withHttpServer(this.server)
+			this.config = SokletConfig.withHttpServer(this.server)
 					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(BlockingResource.class)))
 					.instanceProvider(new InstanceProvider() {
 						@Override public <T> T provide(@NonNull Class<T> instanceClass) {
@@ -270,9 +301,7 @@ class HttpHandlerDispatchAndDrainTests {
 							rejections.add(reason);
 							rejectionMessages.add(throwable.getMessage());
 						}
-					}).build());
-			this.soklet.start();
-			this.scheduler = this.server.getRequestHandlerTimeoutScheduler().orElseThrow();
+					}).build();
 		}
 
 		Socket open(String path) throws Exception {
@@ -282,6 +311,32 @@ class HttpHandlerDispatchAndDrainTests {
 					.getBytes(StandardCharsets.ISO_8859_1));
 			socket.getOutputStream().flush();
 			return socket;
+		}
+
+		void release() { this.resource.release.countDown(); }
+
+		void closeExecutor() throws InterruptedException {
+			this.executor.shutdownNow();
+			assertTrue(this.executor.awaitTermination(2, TimeUnit.SECONDS));
+		}
+	}
+
+	/** Drain tests need explicit shutdown while admitted request work is live. */
+	private static final class ManualFixture extends Fixture implements AutoCloseable {
+		final Soklet soklet;
+		final TimeoutScheduler scheduler;
+		boolean residualExpected;
+
+		ManualFixture(ThreadPoolExecutor executor, Duration timeout, boolean ignoreInterrupts) throws Exception {
+			this(executor, timeout, ignoreInterrupts, Duration.ofSeconds(4));
+		}
+
+		ManualFixture(ThreadPoolExecutor executor, Duration timeout, boolean ignoreInterrupts,
+				Duration gracefulTimeout) throws Exception {
+			super(executor, timeout, ignoreInterrupts, gracefulTimeout);
+			this.soklet = Soklet.fromConfig(this.config);
+			this.soklet.start();
+			this.scheduler = this.server.getRequestHandlerTimeoutScheduler().orElseThrow();
 		}
 
 		CompletableFuture<ShutdownResult> beginDrain() throws Exception {

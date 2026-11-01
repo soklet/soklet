@@ -40,7 +40,8 @@ final class SokletDirectTransportAliasTests {
 		ProbeHttpDecorator sibling = new ProbeHttpDecorator(base);
 		ProbeHttpDecorator nested = new ProbeHttpDecorator(configured);
 
-		try (Soklet owner = Soklet.fromConfig(httpConfig(configured))) {
+		try (SokletTestScope ownerScope = SokletTestScope.of(Soklet.fromConfig(httpConfig(configured)))) {
+			Soklet owner = ownerScope.soklet();
 			assertOwnershipConflict(base, ShutdownComponentType.HTTP,
 					ProbeHttpEngine.class);
 			assertOwnershipConflict(sibling, ShutdownComponentType.HTTP,
@@ -73,7 +74,8 @@ final class SokletDirectTransportAliasTests {
 				duplicate.getMessage());
 		assertUntouched(http, sse);
 
-		try (Soklet owner = Soklet.fromConfig(httpConfig(http))) {
+		try (SokletTestScope ownerScope = SokletTestScope.of(Soklet.fromConfig(httpConfig(http)))) {
+			Soklet owner = ownerScope.soklet();
 			TransportOwnershipException conflict = Assertions.assertThrows(
 					TransportOwnershipException.class,
 					() -> Soklet.fromConfig(sseConfig(sse)));
@@ -99,7 +101,8 @@ final class SokletDirectTransportAliasTests {
 		ProbeHttpEngine duplicateHttp = new ProbeHttpEngine(identity);
 		ProbeSseEngine duplicateSse = new ProbeSseEngine(identity);
 
-		try (Soklet owner = Soklet.fromConfig(httpConfig(claimed))) {
+		try (SokletTestScope ownerScope = SokletTestScope.of(Soklet.fromConfig(httpConfig(claimed)))) {
+			Soklet owner = ownerScope.soklet();
 			IllegalArgumentException duplicate = Assertions.assertThrows(
 					IllegalArgumentException.class,
 					() -> Soklet.fromConfig(httpAndSseConfig(duplicateHttp,
@@ -124,7 +127,8 @@ final class SokletDirectTransportAliasTests {
 		ProbeHttpEngine freeHttp = new ProbeHttpEngine(freeIdentity);
 		ProbeSseEngine conflictingSse = new ProbeSseEngine(claimedIdentity);
 
-		try (Soklet firstOwner = Soklet.fromConfig(httpConfig(claimed))) {
+		try (SokletTestScope firstOwnerScope = SokletTestScope.of(Soklet.fromConfig(httpConfig(claimed)))) {
+			Soklet firstOwner = firstOwnerScope.soklet();
 			TransportOwnershipException conflict = Assertions.assertThrows(
 					TransportOwnershipException.class,
 					() -> Soklet.fromConfig(httpAndSseConfig(freeHttp,
@@ -140,7 +144,8 @@ final class SokletDirectTransportAliasTests {
 					conflict.getMessage());
 			assertUntouched(claimed, freeHttp, conflictingSse);
 
-			try (Soklet secondOwner = Soklet.fromConfig(httpConfig(freeHttp))) {
+			try (SokletTestScope secondOwnerScope = SokletTestScope.of(Soklet.fromConfig(httpConfig(freeHttp)))) {
+				Soklet secondOwner = secondOwnerScope.soklet();
 				Assertions.assertNotSame(firstOwner, secondOwner);
 				assertUntouched(claimed, freeHttp, conflictingSse);
 			}

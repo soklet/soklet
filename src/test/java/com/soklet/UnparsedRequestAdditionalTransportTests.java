@@ -74,55 +74,63 @@ class UnparsedRequestAdditionalTransportTests {
 	}
 
 	private void assertCustomized(ServerType serverType, Case c) throws Exception {
-		try (Fixture fixture = new Fixture(serverType, c, request -> custom(request)); Socket socket = fixture.open()) {
-			fixture.send(socket, c.input());
-			String response = readResponse(socket);
-			assertTrue(response.startsWith("HTTP/1.1 498 "), response);
-			assertTrue(response.contains("X-Unparsed-Reason: " + c.reason() + "\r\n"), response);
-			assertTrue(response.contains("X-Postprocessed: true\r\n"), response);
-			assertTrue(response.contains("Connection: close\r\n"), response);
-			assertFalse(response.contains("X-Hop:"), response);
-			assertFalse(response.contains("Transfer-Encoding:"), response);
-			assertFalse(response.contains("Content-Length: 999\r\n"), response);
-			assertEquals(List.of("observer", "marshaler"), fixture.order);
-			assertEquals(1, fixture.requests.size());
-			UnparsedRequest request = fixture.requests.get(0);
-			assertEquals(serverType, request.getServerType());
-			assertEquals(c.reason(), request.getReason().name());
-			assertEquals(0, fixture.resource.calls.get());
-			assertTrue(fixture.threads.stream().noneMatch(t -> t.contains("event-loop") || t.contains("timeout")), fixture.threads.toString());
-			if (c.name().equals("invalid UTF-8 query") || c.name().equals("unsupported method") || c.name().contains("coding") || c.name().contains("gzip")) {
-				assertEquals(0, request.getCapturedBytes().remaining());
-				assertEquals((long)c.input().length(), request.getObservedByteCount());
-				assertTrue(request.isCaptureTruncated());
-			} else {
-				String capture = captured(request);
-				assertTrue(c.input().startsWith(capture), capture);
-				assertTrue(request.getObservedByteCount() > 0);
+		Fixture fixture = new Fixture(serverType, c, request -> custom(request));
+		ShutdownResult result = Soklet.run(fixture.config, () -> {
+			try (Socket socket = fixture.open()) {
+				fixture.send(socket, c.input());
+				String response = readResponse(socket);
+				assertTrue(response.startsWith("HTTP/1.1 498 "), response);
+				assertTrue(response.contains("X-Unparsed-Reason: " + c.reason() + "\r\n"), response);
+				assertTrue(response.contains("X-Postprocessed: true\r\n"), response);
+				assertTrue(response.contains("Connection: close\r\n"), response);
+				assertFalse(response.contains("X-Hop:"), response);
+				assertFalse(response.contains("Transfer-Encoding:"), response);
+				assertFalse(response.contains("Content-Length: 999\r\n"), response);
+				assertEquals(List.of("observer", "marshaler"), fixture.order);
+				assertEquals(1, fixture.requests.size());
+				UnparsedRequest request = fixture.requests.get(0);
+				assertEquals(serverType, request.getServerType());
+				assertEquals(c.reason(), request.getReason().name());
+				assertEquals(0, fixture.resource.calls.get());
+				assertTrue(fixture.threads.stream().noneMatch(t -> t.contains("event-loop") || t.contains("timeout")), fixture.threads.toString());
+				if (c.name().equals("invalid UTF-8 query") || c.name().equals("unsupported method") || c.name().contains("coding") || c.name().contains("gzip")) {
+					assertEquals(0, request.getCapturedBytes().remaining());
+					assertEquals((long)c.input().length(), request.getObservedByteCount());
+					assertTrue(request.isCaptureTruncated());
+				} else {
+					String capture = captured(request);
+					assertTrue(c.input().startsWith(capture), capture);
+					assertTrue(request.getObservedByteCount() > 0);
+				}
+				assertFalse(request.toString().contains("canary"));
 			}
-			assertFalse(request.toString().contains("canary"));
-		}
+		});
+		assertTrue(result.isComplete());
 	}
 
 	@Test
 	void sseLfHeaderBoundaryExcludesFollowingCrLfRequest() throws Exception {
 		String rejected = "GET /events HTTP/1.1\nHost: localhost\nBroken-Header\n\n";
 		Case c = new Case("malformed LF", "MALFORMED_REQUEST", rejected, 4096, 1024, 8192);
-		try (Fixture fixture = new Fixture(ServerType.SSE, c, UnparsedRequestAdditionalTransportTests::custom); Socket socket = fixture.open()) {
-			fixture.send(socket, rejected + "GET /following-secret HTTP/1.1\r\nHost: secret\r\n\r\n");
-			assertTrue(readResponse(socket).startsWith("HTTP/1.1 498 "));
-			UnparsedRequest request = fixture.requests.get(0);
-			assertEquals(rejected, captured(request));
-			assertEquals((long)rejected.length(), request.getObservedByteCount());
-			assertFalse(request.isCaptureTruncated());
-		}
+		Fixture fixture = new Fixture(ServerType.SSE, c, UnparsedRequestAdditionalTransportTests::custom);
+		ShutdownResult result = Soklet.run(fixture.config, () -> {
+			try (Socket socket = fixture.open()) {
+				fixture.send(socket, rejected + "GET /following-secret HTTP/1.1\r\nHost: secret\r\n\r\n");
+				assertTrue(readResponse(socket).startsWith("HTTP/1.1 498 "));
+				UnparsedRequest request = fixture.requests.get(0);
+				assertEquals(rejected, captured(request));
+				assertEquals((long)rejected.length(), request.getObservedByteCount());
+				assertFalse(request.isCaptureTruncated());
+			}
+		});
+		assertTrue(result.isComplete());
 	}
 
 	@Test
 	void uncooperativeSseUnparsedHandlerPreventsCompleteShutdownUntilItActuallyReturns() throws Exception {
 		CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
 		Case c = new Case("malformed", "MALFORMED_REQUEST", "GET /events HTTP/1.1\r\nHost: localhost\r\nBroken-Header\r\n\r\n", 4096, 1024, 8192);
-		try (Fixture fixture = new Fixture(ServerType.SSE, c, request -> {
+		try (ManualFixture fixture = new ManualFixture(ServerType.SSE, c, request -> {
 			entered.countDown();
 			while (release.getCount() > 0) {
 				try { release.await(); } catch (InterruptedException ignored) { /* Deliberately uncooperative. */ }
@@ -154,27 +162,35 @@ class UnparsedRequestAdditionalTransportTests {
 		}
 		String input = "POST /ok HTTP/1.1\r\nHost: localhost\r\nContent-Encoding: gzip\r\nContent-Length: " + gzip.length + "\r\n\r\n" + new String(gzip, StandardCharsets.ISO_8859_1);
 		Case c = new Case("decoded body too large", "", input, 4096, 1024, 8192);
-		try (Fixture fixture = new Fixture(ServerType.HTTP, c, UnparsedRequestAdditionalTransportTests::custom); Socket socket = fixture.open()) {
-			fixture.send(socket, input);
-			assertTrue(readResponse(socket).startsWith("HTTP/1.1 497 "));
-			assertEquals(1, fixture.parsedSizeRejections.get());
-			assertTrue(fixture.requests.isEmpty());
-		}
+		Fixture fixture = new Fixture(ServerType.HTTP, c, UnparsedRequestAdditionalTransportTests::custom);
+		ShutdownResult result = Soklet.run(fixture.config, () -> {
+			try (Socket socket = fixture.open()) {
+				fixture.send(socket, input);
+				assertTrue(readResponse(socket).startsWith("HTTP/1.1 497 "));
+				assertEquals(1, fixture.parsedSizeRejections.get());
+				assertTrue(fixture.requests.isEmpty());
+			}
+		});
+		assertTrue(result.isComplete());
 	}
 
 	@Test
 	void sseCaptureExcludesFollowingRequestAndCapsRetainedBytes() throws Exception {
 		String rejected = "GET /events HTTP/1.1\r\nHost: localhost\r\nX-A: " + "a".repeat(70_000) + "\r\nBroken-Header\r\n\r\n";
 		Case c = new Case("large malformed", "MALFORMED_REQUEST", rejected, 200_000, 100_000, 8192);
-		try (Fixture fixture = new Fixture(ServerType.SSE, c, UnparsedRequestAdditionalTransportTests::custom); Socket socket = fixture.open()) {
-			fixture.send(socket, rejected + "GET /following-secret HTTP/1.1\r\nHost: secret\r\n\r\n");
-			assertTrue(readResponse(socket).startsWith("HTTP/1.1 498 "));
-			UnparsedRequest request = fixture.requests.get(0);
-			assertEquals(64 * 1024, request.getCapturedBytes().remaining());
-			assertEquals((long)rejected.length(), request.getObservedByteCount());
-			assertTrue(request.isCaptureTruncated());
-			assertFalse(captured(request).contains("following-secret"));
-		}
+		Fixture fixture = new Fixture(ServerType.SSE, c, UnparsedRequestAdditionalTransportTests::custom);
+		ShutdownResult result = Soklet.run(fixture.config, () -> {
+			try (Socket socket = fixture.open()) {
+				fixture.send(socket, rejected + "GET /following-secret HTTP/1.1\r\nHost: secret\r\n\r\n");
+				assertTrue(readResponse(socket).startsWith("HTTP/1.1 498 "));
+				UnparsedRequest request = fixture.requests.get(0);
+				assertEquals(64 * 1024, request.getCapturedBytes().remaining());
+				assertEquals((long)rejected.length(), request.getObservedByteCount());
+				assertTrue(request.isCaptureTruncated());
+				assertFalse(captured(request).contains("following-secret"));
+			}
+		});
+		assertTrue(result.isComplete());
 	}
 
 	@TestFactory
@@ -185,12 +201,16 @@ class UnparsedRequestAdditionalTransportTests {
 				request -> MarshaledResponse.withStatusCode(498).body(new byte[70_000]).build());
 		return Stream.iterate(0, i -> i + 1).limit(handlers.size()).map(i -> DynamicTest.dynamicTest("fallback " + i, () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
 			Case c = new Case("malformed", "MALFORMED_REQUEST", "GET /events HTTP/1.1\r\nHost: localhost\r\nBroken-Header\r\n\r\n", 4096, 1024, 8192);
-			try (Fixture fixture = new Fixture(ServerType.SSE, c, handlers.get(i)); Socket socket = fixture.open()) {
-				fixture.send(socket, c.input());
-				assertTrue(readResponse(socket).startsWith("HTTP/1.1 400 "));
-				assertEquals(1, fixture.requests.size());
-				assertEquals(1, fixture.logs.stream().filter(e -> e.getLogEventType() == LogEventType.RESPONSE_MARSHALER_FOR_UNPARSED_REQUEST_FAILED).count());
-			}
+			Fixture fixture = new Fixture(ServerType.SSE, c, handlers.get(i));
+			ShutdownResult result = Soklet.run(fixture.config, () -> {
+				try (Socket socket = fixture.open()) {
+					fixture.send(socket, c.input());
+					assertTrue(readResponse(socket).startsWith("HTTP/1.1 400 "));
+					assertEquals(1, fixture.requests.size());
+					assertEquals(1, fixture.logs.stream().filter(e -> e.getLogEventType() == LogEventType.RESPONSE_MARSHALER_FOR_UNPARSED_REQUEST_FAILED).count());
+				}
+			});
+			assertTrue(result.isComplete());
 		})));
 	}
 
@@ -198,17 +218,23 @@ class UnparsedRequestAdditionalTransportTests {
 	void stalledSseMarshalerReceivesInterruptionAndCannotWriteALateResponse() throws Exception {
 		CountDownLatch entered = new CountDownLatch(1), interrupted = new CountDownLatch(1), release = new CountDownLatch(1);
 		Case c = new Case("timeout", "REQUEST_READ_TIMEOUT", "GET /events HTTP/1.1\r\nHost: localhost\r\n", 4096, 1024, 8192);
-		try (Fixture fixture = new Fixture(ServerType.SSE, c, request -> {
+		Fixture fixture = new Fixture(ServerType.SSE, c, request -> {
 			entered.countDown();
 			try { release.await(); } catch (InterruptedException ignored) { interrupted.countDown(); }
 			return custom(request);
-		}); Socket socket = fixture.open()) {
-			fixture.send(socket, c.input());
-			assertTrue(entered.await(2, TimeUnit.SECONDS));
-			String response = readResponse(socket);
-			assertTrue(response.startsWith("HTTP/1.1 408 "), response);
-			assertFalse(response.contains("498"), response);
-			assertTrue(interrupted.await(2, TimeUnit.SECONDS));
+		});
+		try {
+			ShutdownResult result = Soklet.run(fixture.config, () -> {
+				try (Socket socket = fixture.open()) {
+					fixture.send(socket, c.input());
+					assertTrue(entered.await(2, TimeUnit.SECONDS));
+					String response = readResponse(socket);
+					assertTrue(response.startsWith("HTTP/1.1 408 "), response);
+					assertFalse(response.contains("498"), response);
+					assertTrue(interrupted.await(2, TimeUnit.SECONDS));
+				}
+			});
+			assertTrue(result.isComplete());
 		} finally { release.countDown(); }
 	}
 
@@ -216,18 +242,24 @@ class UnparsedRequestAdditionalTransportTests {
 	void laterHttpConstructionFailureUsesItsOriginalRejectionWhenMarshalingTimesOut() throws Exception {
 		CountDownLatch entered = new CountDownLatch(1), interrupted = new CountDownLatch(1), release = new CountDownLatch(1);
 		Case c = new Case("invalid UTF-8 query", "MALFORMED_REQUEST", "GET /ok?token=%C0%AF HTTP/1.1\r\nHost: localhost\r\n\r\n", 4096, 1024, 8192);
-		try (Fixture fixture = new Fixture(ServerType.HTTP, c, request -> {
+		Fixture fixture = new Fixture(ServerType.HTTP, c, request -> {
 			entered.countDown();
 			try { release.await(); } catch (InterruptedException ignored) { interrupted.countDown(); }
 			return custom(request);
-		}); Socket socket = fixture.open()) {
-			fixture.send(socket, c.input());
-			assertTrue(entered.await(2, TimeUnit.SECONDS));
-			String response = readResponse(socket);
-			assertTrue(response.startsWith("HTTP/1.1 400 "), response);
-			assertFalse(response.contains("498"), response);
-			assertTrue(interrupted.await(2, TimeUnit.SECONDS));
-			assertEquals(List.of("observer", "marshaler"), fixture.order);
+		});
+		try {
+			ShutdownResult result = Soklet.run(fixture.config, () -> {
+				try (Socket socket = fixture.open()) {
+					fixture.send(socket, c.input());
+					assertTrue(entered.await(2, TimeUnit.SECONDS));
+					String response = readResponse(socket);
+					assertTrue(response.startsWith("HTTP/1.1 400 "), response);
+					assertFalse(response.contains("498"), response);
+					assertTrue(interrupted.await(2, TimeUnit.SECONDS));
+					assertEquals(List.of("observer", "marshaler"), fixture.order);
+				}
+			});
+			assertTrue(result.isComplete());
 		} finally { release.countDown(); }
 	}
 
@@ -257,16 +289,14 @@ class UnparsedRequestAdditionalTransportTests {
 		}
 		return bytes.toString(StandardCharsets.ISO_8859_1);
 	}
-	private static final class Fixture implements AutoCloseable {
+	private static class Fixture {
 		final int port = findFreePort();
 		final Resource resource;
 		final AtomicInteger parsedSizeRejections = new AtomicInteger();
 		final List<UnparsedRequest> requests = new CopyOnWriteArrayList<>();
 		final List<String> order = new CopyOnWriteArrayList<>(), threads = new CopyOnWriteArrayList<>();
 		final List<LogEvent> logs = new CopyOnWriteArrayList<>();
-		final Soklet app;
-		final ExecutorService handlerExecutor;
-		boolean expectComplete = true;
+		final SokletConfig config;
 		Fixture(ServerType type, Case c, Function<UnparsedRequest, MarshaledResponse> handler) throws Exception {
 			resource = type == ServerType.SSE ? new SseResource() : new HttpResource();
 			SokletConfig.Builder builder;
@@ -282,7 +312,7 @@ class UnparsedRequestAdditionalTransportTests {
 						.maximumHeadersSizeInBytes(c.headerLimit()).maximumRequestTargetLengthInBytes(c.targetLimit())
 						.requestDecompressionPolicy(RequestDecompressionPolicy.builder().maximumDecompressedBodySizeInBytes(10).build()).build());
 			}
-			app = Soklet.fromConfig(builder.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(resource.getClass())))
+			config = builder.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(resource.getClass())))
 					.instanceProvider(new InstanceProvider() {
 						@Override public <T> T provide(Class<T> type) { return type == resource.getClass() ? type.cast(resource) : InstanceProvider.defaultInstance().provide(type); }
 					}).lifecyclePolicy(LifecyclePolicy.builder().gracefulShutdownTimeout(Duration.ofMillis(300)).forcedShutdownTimeout(Duration.ofSeconds(1)).build())
@@ -293,20 +323,31 @@ class UnparsedRequestAdditionalTransportTests {
 						order.add("marshaler"); threads.add(Thread.currentThread().getName()); return handler.apply(request);
 					}).contentTooLargeHandler((request, resourceMethod) -> {
 						parsedSizeRejections.incrementAndGet(); return MarshaledResponse.fromStatusCode(497);
-					}).postProcessor(response -> response.copy().headers(headers -> headers.put("X-Postprocessed", List.of("true"))).finish()).build()).build());
-			app.start();
-			handlerExecutor = type == ServerType.SSE
-					? ((DefaultSseServer)app.getSokletConfig().getSseServer().orElseThrow()).getRequestHandlerExecutorService().orElseThrow()
-					: ((DefaultHttpServer)app.getSokletConfig().getHttpServer().orElseThrow()).getRequestHandlerExecutorService().orElseThrow();
+					}).postProcessor(response -> response.copy().headers(headers -> headers.put("X-Postprocessed", List.of("true"))).finish()).build()).build();
 		}
 		Socket open() throws Exception { Socket socket = connectWithRetry("127.0.0.1", port, 2000); socket.setSoTimeout(3000); return socket; }
 		void send(Socket socket, String input) throws Exception { socket.getOutputStream().write(input.getBytes(StandardCharsets.ISO_8859_1)); socket.getOutputStream().flush(); }
+	}
+	/** This case inspects shutdown while the unparsed handler remains physically blocked. */
+	private static final class ManualFixture extends Fixture implements AutoCloseable {
+		final Soklet app;
+		final ExecutorService handlerExecutor;
+		boolean expectComplete = true;
+		ManualFixture(ServerType type, Case c, Function<UnparsedRequest, MarshaledResponse> handler) throws Exception {
+			super(type, c, handler);
+			app = Soklet.fromConfig(config);
+			app.start();
+			handlerExecutor = type == ServerType.SSE
+					? ((DefaultSseServer)config.getSseServer().orElseThrow()).getRequestHandlerExecutorService().orElseThrow()
+					: ((DefaultHttpServer)config.getHttpServer().orElseThrow()).getRequestHandlerExecutorService().orElseThrow();
+		}
 		@Override public void close() {
 			try { app.close(); }
 			catch (SokletShutdownIncompleteException expected) { if (expectComplete) throw expected; }
 			assertEquals(expectComplete, app.getShutdownResult().orElseThrow().isComplete());
 		}
 	}
+
 	public static class Resource {
 		final AtomicInteger calls = new AtomicInteger();
 	}

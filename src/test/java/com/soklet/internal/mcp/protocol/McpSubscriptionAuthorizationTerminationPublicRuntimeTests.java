@@ -40,7 +40,6 @@ import com.soklet.MetricsCollector;
 import com.soklet.ResourceMethodResolver;
 import com.soklet.Soklet;
 import com.soklet.SokletConfig;
-import com.soklet.SokletStatus;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -79,39 +78,39 @@ public class McpSubscriptionAuthorizationTerminationPublicRuntimeTests {
 				new CancellationResistantRenewal();
 		RecordingMetrics metrics = new RecordingMetrics();
 		McpServer server = server(renewal.authorizer());
-		Soklet owner = managedSoklet(server, metrics);
-		McpChunkedHttpClient client = null;
+		Soklet.run(managedSokletConfig(server, metrics), () -> {
+			McpChunkedHttpClient client = null;
 
-		try {
-			owner.start();
-			client = listen(boundPort(server), "\"disconnect-renewal\"");
-			assertSseHead(client.readHead());
-			Assertions.assertEquals(acknowledgment("\"disconnect-renewal\""),
-					client.readChunkText());
-			renewal.awaitEntered();
-			assertRenewalIsPhysicallyActive(server, renewal);
+			try {
+				client = listen(boundPort(server), "\"disconnect-renewal\"");
+				assertSseHead(client.readHead());
+				Assertions.assertEquals(acknowledgment("\"disconnect-renewal\""),
+						client.readChunkText());
+				renewal.awaitEntered();
+				assertRenewalIsPhysicallyActive(server, renewal);
 
-			client.closeWithReset();
-			client = null;
-			renewal.awaitCanceled();
-			metrics.awaitSubscriptionClosed(
-					McpStreamTerminationReason.CLIENT_DISCONNECTED);
-			awaitCondition(() -> server.getDiagnostics().getActiveSubscriptions() == 0,
-					"The disconnected subscription remained active.");
-			Assertions.assertEquals(1,
-					server.getDiagnostics().getActiveHandlerExecutions(),
-					"Physical worker accounting ended before the callback exited.");
-
-			renewal.release();
-			renewal.awaitExited();
-			assertTerminalCleanup(server, renewal, metrics,
-					McpStreamTerminationReason.CLIENT_DISCONNECTED);
-		} finally {
-			renewal.release();
-			if (client != null)
 				client.closeWithReset();
-			owner.close();
-		}
+				client = null;
+				renewal.awaitCanceled();
+				metrics.awaitSubscriptionClosed(
+						McpStreamTerminationReason.CLIENT_DISCONNECTED);
+				awaitCondition(() -> server.getDiagnostics().getActiveSubscriptions() == 0,
+						"The disconnected subscription remained active.");
+				Assertions.assertEquals(1,
+						server.getDiagnostics().getActiveHandlerExecutions(),
+						"Physical worker accounting ended before the callback exited.");
+
+				renewal.release();
+				renewal.awaitExited();
+				assertTerminalCleanup(server, renewal, metrics,
+						McpStreamTerminationReason.CLIENT_DISCONNECTED);
+			} finally {
+				renewal.release();
+				if (client != null)
+					client.closeWithReset();
+
+			}
+		});
 	}
 
 	@Test
@@ -127,7 +126,6 @@ public class McpSubscriptionAuthorizationTerminationPublicRuntimeTests {
 		Thread stopper = null;
 
 		try {
-			owner.start();
 			client = listen(boundPort(server), "\"shutdown-renewal\"");
 			assertSseHead(client.readHead());
 			Assertions.assertEquals(acknowledgment("\"shutdown-renewal\""),
@@ -137,7 +135,9 @@ public class McpSubscriptionAuthorizationTerminationPublicRuntimeTests {
 
 			stopper = new Thread(() -> {
 				try {
-					owner.close();
+					// Shutdown is controlled while an authorization renewal resists cancellation.
+					// Shutdown is controlled while an authorization renewal resists cancellation.
+					com.soklet.SokletTestScope.close(owner);
 				} catch (Throwable throwable) {
 					stopFailure.set(throwable);
 				}
@@ -155,7 +155,7 @@ public class McpSubscriptionAuthorizationTerminationPublicRuntimeTests {
 					"Server shutdown did not finish after the callback exited.");
 			Assertions.assertNull(stopFailure.get(),
 					"Server shutdown failed unexpectedly.");
-			Assertions.assertEquals(SokletStatus.CLOSED, owner.getStatus());
+			Assertions.assertTrue(owner.awaitShutdown().isComplete());
 			metrics.awaitSubscriptionClosed(
 					McpStreamTerminationReason.SERVER_STOPPING);
 			assertTerminalCleanup(server, renewal, metrics,
@@ -164,7 +164,7 @@ public class McpSubscriptionAuthorizationTerminationPublicRuntimeTests {
 			renewal.release();
 			if (client != null)
 				client.closeWithReset();
-			owner.close();
+			com.soklet.SokletTestScope.close(owner);
 			if (stopper != null && stopper.isAlive())
 				stopper.join(TimeUnit.SECONDS.toMillis(10));
 		}
@@ -252,7 +252,7 @@ public class McpSubscriptionAuthorizationTerminationPublicRuntimeTests {
 	@NonNull
 	private static Soklet managedSoklet(@NonNull McpServer server,
 			@NonNull MetricsCollector metricsCollector) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+		return Soklet.run(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.metricsCollector(metricsCollector)
 				.lifecyclePolicy(LifecyclePolicy.builder()
@@ -262,6 +262,20 @@ public class McpSubscriptionAuthorizationTerminationPublicRuntimeTests {
 						.forcedShutdownTimeout(Duration.ofSeconds(2))
 						.build())
 				.build());
+	}
+
+	private static SokletConfig managedSokletConfig(@NonNull McpServer server,
+			@NonNull MetricsCollector metricsCollector) {
+		return SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
+				.metricsCollector(metricsCollector)
+				.lifecyclePolicy(LifecyclePolicy.builder()
+						.startupTimeout(Duration.ofSeconds(5))
+						.startupCancelationTimeout(Duration.ofSeconds(2))
+						.gracefulShutdownTimeout(Duration.ofSeconds(5))
+						.forcedShutdownTimeout(Duration.ofSeconds(2))
+						.build())
+				.build();
 	}
 
 	@NonNull

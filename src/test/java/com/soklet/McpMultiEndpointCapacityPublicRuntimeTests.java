@@ -79,72 +79,72 @@ public class McpMultiEndpointCapacityPublicRuntimeTests {
 				.requestHandlerConcurrency(1)
 				.requestHandlerQueueCapacity(1)
 				.build();
-		Soklet soklet = managedSoklet(server);
+		SokletConfig sokletConfig = config(server);
 
-		try {
-			soklet.start();
-			int port = server.getDiagnostics().getBoundAddress()
-					.orElseThrow().getPort();
-			CompletableFuture<HttpResponse<String>> first = sendAsync(port,
-					FIRST_PATH, "capacity-first", FIRST_TOOL);
-			Assertions.assertTrue(firstHandlerEntered.await(5, TimeUnit.SECONDS),
-					"The first endpoint handler did not start.");
+		Soklet.run(sokletConfig, () -> {
+			try {
+				int port = server.getDiagnostics().getBoundAddress()
+						.orElseThrow().getPort();
+				CompletableFuture<HttpResponse<String>> first = sendAsync(port,
+						FIRST_PATH, "capacity-first", FIRST_TOOL);
+				Assertions.assertTrue(firstHandlerEntered.await(5, TimeUnit.SECONDS),
+						"The first endpoint handler did not start.");
 
-			CompletableFuture<HttpResponse<String>> second = sendAsync(port,
-					FIRST_PATH, "capacity-second", FIRST_TOOL);
-			CompletableFuture<HttpResponse<String>> third = sendAsync(port,
-					SECOND_PATH, "capacity-third", SECOND_TOOL);
+				CompletableFuture<HttpResponse<String>> second = sendAsync(port,
+						FIRST_PATH, "capacity-second", FIRST_TOOL);
+				CompletableFuture<HttpResponse<String>> third = sendAsync(port,
+						SECOND_PATH, "capacity-third", SECOND_TOOL);
 
-			HttpResponse<String> rejected = second.applyToEither(third,
-					response -> response).get(5, TimeUnit.SECONDS);
-			Assertions.assertEquals(503, rejected.statusCode(), rejected.body());
-			assertContains(rejected.body(), "\"code\":-32603");
-			assertContains(rejected.body(), "\"message\":\"Internal error\"");
-			Assertions.assertFalse(rejected.body().contains("\"data\""),
-					rejected.body());
-			Assertions.assertTrue(rejected.headers()
-					.firstValue("Retry-After").isEmpty());
-			boolean rejectedFirstEndpoint = rejected.body().contains(
-					"\"id\":\"capacity-second\"");
-			boolean rejectedSecondEndpoint = rejected.body().contains(
-					"\"id\":\"capacity-third\"");
-			Assertions.assertTrue(rejectedFirstEndpoint
-					^ rejectedSecondEndpoint, rejected.body());
+				HttpResponse<String> rejected = second.applyToEither(third,
+						response -> response).get(5, TimeUnit.SECONDS);
+				Assertions.assertEquals(503, rejected.statusCode(), rejected.body());
+				assertContains(rejected.body(), "\"code\":-32603");
+				assertContains(rejected.body(), "\"message\":\"Internal error\"");
+				Assertions.assertFalse(rejected.body().contains("\"data\""),
+						rejected.body());
+				Assertions.assertTrue(rejected.headers()
+						.firstValue("Retry-After").isEmpty());
+				boolean rejectedFirstEndpoint = rejected.body().contains(
+						"\"id\":\"capacity-second\"");
+				boolean rejectedSecondEndpoint = rejected.body().contains(
+						"\"id\":\"capacity-third\"");
+				Assertions.assertTrue(rejectedFirstEndpoint
+						^ rejectedSecondEndpoint, rejected.body());
 
-			releaseHandlers.countDown();
-			HttpResponse<String> firstResponse = first.get(5, TimeUnit.SECONDS);
-			HttpResponse<String> secondResponse = second.get(5, TimeUnit.SECONDS);
-			HttpResponse<String> thirdResponse = third.get(5, TimeUnit.SECONDS);
-			List<HttpResponse<String>> responses = List.of(firstResponse,
-					secondResponse, thirdResponse);
-			Assertions.assertEquals(2, responses.stream()
-					.filter(response -> response.statusCode() == 200)
-					.count());
-			Assertions.assertEquals(1, responses.stream()
-					.filter(response -> response.statusCode() == 503)
-					.count());
-			Assertions.assertEquals(2,
-					firstInvocations.get() + secondInvocations.get());
-			if (rejectedFirstEndpoint) {
-				Assertions.assertEquals(1, firstInvocations.get());
-				Assertions.assertEquals(1, secondInvocations.get());
-			} else {
-				Assertions.assertEquals(2, firstInvocations.get());
-				Assertions.assertEquals(0, secondInvocations.get());
+				releaseHandlers.countDown();
+				HttpResponse<String> firstResponse = first.get(5, TimeUnit.SECONDS);
+				HttpResponse<String> secondResponse = second.get(5, TimeUnit.SECONDS);
+				HttpResponse<String> thirdResponse = third.get(5, TimeUnit.SECONDS);
+				List<HttpResponse<String>> responses = List.of(firstResponse,
+						secondResponse, thirdResponse);
+				Assertions.assertEquals(2, responses.stream()
+						.filter(response -> response.statusCode() == 200)
+						.count());
+				Assertions.assertEquals(1, responses.stream()
+						.filter(response -> response.statusCode() == 503)
+						.count());
+				Assertions.assertEquals(2,
+						firstInvocations.get() + secondInvocations.get());
+				if (rejectedFirstEndpoint) {
+					Assertions.assertEquals(1, firstInvocations.get());
+					Assertions.assertEquals(1, secondInvocations.get());
+				} else {
+					Assertions.assertEquals(2, firstInvocations.get());
+					Assertions.assertEquals(0, secondInvocations.get());
+				}
+				Assertions.assertEquals(1, maximumActiveHandlers.get(),
+						"All endpoint paths must share the server-wide handler slot.");
+			} finally {
+				releaseHandlers.countDown();
 			}
-			Assertions.assertEquals(1, maximumActiveHandlers.get(),
-					"All endpoint paths must share the server-wide handler slot.");
-		} finally {
-			releaseHandlers.countDown();
-			soklet.close();
-		}
+		});
 	}
 
-	private static Soklet managedSoklet(McpServer server) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+	private static SokletConfig config(McpServer server) {
+		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
-				.build());
+				.build();
 	}
 
 	@NonNull

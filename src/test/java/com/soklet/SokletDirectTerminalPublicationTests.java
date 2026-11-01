@@ -260,8 +260,9 @@ final class SokletDirectTerminalPublicationTests {
 		CountDownLatch callbackEntered = new CountDownLatch(1);
 		CountDownLatch releaseCallback = new CountDownLatch(1);
 		try (OwnerHarness harness = OwnerHarness.create();
-				Soklet peer = Soklet.fromConfig(
-						config(new TerminalHttpEndpoint()).build())) {
+				SokletTestScope peerScope = SokletTestScope.of(Soklet.fromConfig(
+						config(new TerminalHttpEndpoint()).build()))) {
+			Soklet peer = peerScope.soklet();
 			Thread handoff;
 			try {
 				harness.owner().start();

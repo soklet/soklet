@@ -636,7 +636,9 @@ Phase 5 remains byte-identical. The released-3.5.1 compatibility ledger remains
 618 records with SHA-256
 `3d9d68bbbdeabae63a78d40a50c9896d3f11f6d0d2305beff0c94bd86476928c`.
 
-The same-day final non-MCP application-runner shape uses
+> Historical checkpoint, superseded by the [2026-10-31 unified lifecycle amendment](README.md#2026-10-31-unified-soklet-lifecycle-api-amendment): the public runner is now `Soklet.run(...)`, and `SokletApplication` is removed. Counts and hashes below describe the earlier checkpoint.
+
+The same-day then-current non-MCP application-runner shape uses
 `SokletApplication.fromConfig(...)` to create the configured one-shot value
 and exposes direct `run(...)` overloads for shutdown triggers and optional
 bounded cleanup. `ShutdownCleanup` is an immutable value with
@@ -1423,3 +1425,15 @@ The Phase 4 reflection/nullability digest is
 `127d61399990bdc65c3a87fc37ad787006b1c5a338f9a2835c78a94fda0121db`.
 No API owner is added or removed. Other phase snapshots are unchanged. These
 records document the owner's local API change, not immutable candidate CI evidence.
+
+
+### 2026-10-31 aggregate lifecycle-observer parameter removal
+
+The five `LifecycleObserver` aggregate callbacks no longer expose a `Soklet`
+parameter. This approved amendment updates the current Phase 4 signature
+snapshot and the canonical reflection/nullability digest to
+`d9f6c8b0efbab759e7097ad94851d8bbcbe42145d6b503815d4568f5c97c631c`.
+Restoring only those five parameters and the shifted remaining parameter indices
+reproduces the earlier digest
+`127d61399990bdc65c3a87fc37ad787006b1c5a338f9a2835c78a94fda0121db`;
+other historical checkpoint digests remain historical.

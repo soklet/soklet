@@ -161,7 +161,8 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 		McpServer neverStartedServer = serverFor(List.of(
 				emptyEndpoint("/mcp/idle-never-started")),
 				2, 3, Duration.ofSeconds(5));
-		Soklet neverStartedOwner = newSoklet(neverStartedServer);
+		// Direct owners exercise never-started close and repeated terminal calls across fresh generations.
+		Soklet neverStartedOwner = Soklet.fromConfig(config(neverStartedServer));
 		McpServerDiagnostics neverStarted = neverStartedServer.getDiagnostics();
 		assertDiagnostics(neverStarted, McpServerStatus.NOT_STARTED, false,
 				2, 3, 0, 0);
@@ -173,7 +174,7 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 		McpServer firstServer = serverFor(List.of(
 				emptyEndpoint("/mcp/idle-first")),
 				2, 3, Duration.ofSeconds(5));
-		Soklet firstOwner = newSoklet(firstServer);
+		Soklet firstOwner = Soklet.fromConfig(config(firstServer));
 		McpServerDiagnostics beforeStart = firstServer.getDiagnostics();
 		assertDiagnostics(beforeStart, McpServerStatus.NOT_STARTED, false,
 				2, 3, 0, 0);
@@ -203,7 +204,7 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 		McpServer secondServer = serverFor(List.of(
 				emptyEndpoint("/mcp/idle-second")),
 				2, 3, Duration.ofSeconds(5));
-		Soklet secondOwner = newSoklet(secondServer);
+		Soklet secondOwner = Soklet.fromConfig(config(secondServer));
 		try {
 			secondOwner.start();
 			assertDiagnostics(secondServer.getDiagnostics(),
@@ -254,86 +255,82 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 				});
 		McpServer server = serverFor(List.of(firstEndpoint, secondEndpoint),
 				1, 1, Duration.ofSeconds(5));
-		Soklet owner = newSoklet(server);
-		ExecutorService readerExecutor = Executors.newSingleThreadExecutor();
-		AtomicBoolean readSnapshots = new AtomicBoolean();
-		AtomicInteger snapshotReads = new AtomicInteger();
-		CompletableFuture<HttpResponse<String>> first = null;
-		CompletableFuture<HttpResponse<String>> second = null;
-		Future<?> reader = null;
+		Soklet.run(config(server), () -> {
+			ExecutorService readerExecutor = Executors.newSingleThreadExecutor();
+			AtomicBoolean readSnapshots = new AtomicBoolean();
+			AtomicInteger snapshotReads = new AtomicInteger();
+			CompletableFuture<HttpResponse<String>> first = null;
+			CompletableFuture<HttpResponse<String>> second = null;
+			Future<?> reader = null;
 
-		try {
-			owner.start();
-			int port = port(server);
-			first = callTool(port, "/mcp/diagnostics-first", "first",
-					"diagnostics.first");
-			Assertions.assertTrue(firstEntered.await(5, TimeUnit.SECONDS));
-			second = callTool(port, "/mcp/diagnostics-second", "second",
-					"diagnostics.second");
-			McpServerDiagnostics saturated = awaitDiagnostics(server,
-					diagnostics -> diagnostics.getActiveHandlerExecutions() == 1
-							&& diagnostics.getRequestHandlerQueueDepth() == 1);
-			assertDiagnostics(saturated, McpServerStatus.RUNNING, true,
-					1, 1, 1, 1);
-			Assertions.assertEquals(1, firstInvocations.get());
-			Assertions.assertEquals(0, secondInvocations.get());
-			HttpResponse<String> rejected = callTool(port,
-					"/mcp/diagnostics-second", "rejected",
-					"diagnostics.second").get(5, TimeUnit.SECONDS);
-			Assertions.assertEquals(503, rejected.statusCode(), rejected.body());
-			assertDiagnostics(server.getDiagnostics(), McpServerStatus.RUNNING, true,
-					1, 1, 1, 1);
-			Assertions.assertEquals(1, firstInvocations.get());
-			Assertions.assertEquals(0, secondInvocations.get(),
-					"A capacity-rejected request must not enter a handler.");
-
-			readSnapshots.set(true);
-			reader = readerExecutor.submit(() -> {
-				while (readSnapshots.get()) {
-					McpServerDiagnostics diagnostics = server.getDiagnostics();
-					assertBoundedStartedTuple(diagnostics, 1, 1);
-					snapshotReads.incrementAndGet();
-				}
-			});
-			awaitCondition(() -> snapshotReads.get() > 0);
-
-			releaseFirst.countDown();
-			Assertions.assertTrue(secondEntered.await(5, TimeUnit.SECONDS));
-			assertDiagnostics(awaitDiagnostics(server,
-					diagnostics -> diagnostics.getActiveHandlerExecutions() == 1
-							&& diagnostics.getRequestHandlerQueueDepth() == 0),
-					McpServerStatus.RUNNING, true, 1, 1, 1, 0);
-			releaseSecond.countDown();
-			Assertions.assertEquals(200,
-					requireNonNull(first).get(5, TimeUnit.SECONDS).statusCode());
-			Assertions.assertEquals(200,
-					requireNonNull(second).get(5, TimeUnit.SECONDS).statusCode());
-			assertDiagnostics(awaitDiagnostics(server,
-					diagnostics -> diagnostics.getActiveHandlerExecutions() == 0
-							&& diagnostics.getRequestHandlerQueueDepth() == 0),
-					McpServerStatus.RUNNING, true, 1, 1, 0, 0);
-
-			readSnapshots.set(false);
-			requireNonNull(reader).get(5, TimeUnit.SECONDS);
-			Assertions.assertTrue(snapshotReads.get() > 0);
-			assertDiagnostics(saturated, McpServerStatus.RUNNING, true,
-					1, 1, 1, 1);
-		} finally {
-			readSnapshots.set(false);
-			releaseFirst.countDown();
-			releaseSecond.countDown();
-			if (first != null)
-				first.cancel(true);
-			if (second != null)
-				second.cancel(true);
 			try {
+				int port = port(server);
+				first = callTool(port, "/mcp/diagnostics-first", "first",
+						"diagnostics.first");
+				Assertions.assertTrue(firstEntered.await(5, TimeUnit.SECONDS));
+				second = callTool(port, "/mcp/diagnostics-second", "second",
+						"diagnostics.second");
+				McpServerDiagnostics saturated = awaitDiagnostics(server,
+						diagnostics -> diagnostics.getActiveHandlerExecutions() == 1
+								&& diagnostics.getRequestHandlerQueueDepth() == 1);
+				assertDiagnostics(saturated, McpServerStatus.RUNNING, true,
+						1, 1, 1, 1);
+				Assertions.assertEquals(1, firstInvocations.get());
+				Assertions.assertEquals(0, secondInvocations.get());
+				HttpResponse<String> rejected = callTool(port,
+						"/mcp/diagnostics-second", "rejected",
+						"diagnostics.second").get(5, TimeUnit.SECONDS);
+				Assertions.assertEquals(503, rejected.statusCode(), rejected.body());
+				assertDiagnostics(server.getDiagnostics(), McpServerStatus.RUNNING, true,
+						1, 1, 1, 1);
+				Assertions.assertEquals(1, firstInvocations.get());
+				Assertions.assertEquals(0, secondInvocations.get(),
+						"A capacity-rejected request must not enter a handler.");
+
+				readSnapshots.set(true);
+				reader = readerExecutor.submit(() -> {
+					while (readSnapshots.get()) {
+						McpServerDiagnostics diagnostics = server.getDiagnostics();
+						assertBoundedStartedTuple(diagnostics, 1, 1);
+						snapshotReads.incrementAndGet();
+					}
+				});
+				awaitCondition(() -> snapshotReads.get() > 0);
+
+				releaseFirst.countDown();
+				Assertions.assertTrue(secondEntered.await(5, TimeUnit.SECONDS));
+				assertDiagnostics(awaitDiagnostics(server,
+						diagnostics -> diagnostics.getActiveHandlerExecutions() == 1
+								&& diagnostics.getRequestHandlerQueueDepth() == 0),
+						McpServerStatus.RUNNING, true, 1, 1, 1, 0);
+				releaseSecond.countDown();
+				Assertions.assertEquals(200,
+						requireNonNull(first).get(5, TimeUnit.SECONDS).statusCode());
+				Assertions.assertEquals(200,
+						requireNonNull(second).get(5, TimeUnit.SECONDS).statusCode());
+				assertDiagnostics(awaitDiagnostics(server,
+						diagnostics -> diagnostics.getActiveHandlerExecutions() == 0
+								&& diagnostics.getRequestHandlerQueueDepth() == 0),
+						McpServerStatus.RUNNING, true, 1, 1, 0, 0);
+
+				readSnapshots.set(false);
+				requireNonNull(reader).get(5, TimeUnit.SECONDS);
+				Assertions.assertTrue(snapshotReads.get() > 0);
+				assertDiagnostics(saturated, McpServerStatus.RUNNING, true,
+						1, 1, 1, 1);
+			} finally {
+				readSnapshots.set(false);
+				releaseFirst.countDown();
+				releaseSecond.countDown();
+				if (first != null)
+					first.cancel(true);
+				if (second != null)
+					second.cancel(true);
 				readerExecutor.shutdownNow();
 				Assertions.assertTrue(readerExecutor.awaitTermination(
 						5, TimeUnit.SECONDS));
-			} finally {
-				owner.close();
 			}
-		}
+		});
 	}
 
 	@Test
@@ -357,7 +354,8 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 				});
 		McpServer server = serverFor(List.of(endpoint), 1, 1,
 				Duration.ofSeconds(10));
-		Soklet owner = newSoklet(server, shortShutdownPolicy());
+		// Direct control is needed to inspect and replay the incomplete-shutdown result before late exit.
+		Soklet owner = Soklet.fromConfig(config(server, shortShutdownPolicy()));
 		CompletableFuture<HttpResponse<String>> active = null;
 		CompletableFuture<HttpResponse<String>> queued = null;
 
@@ -572,18 +570,18 @@ public class McpHandlerQueueDiagnosticsPublicRuntimeTests {
 	}
 
 	@NonNull
-	private static Soklet newSoklet(@NonNull McpServer server) {
-		return newSoklet(server, LIFECYCLE_POLICY);
+	private static SokletConfig config(@NonNull McpServer server) {
+		return config(server, LIFECYCLE_POLICY);
 	}
 
 	@NonNull
-	private static Soklet newSoklet(@NonNull McpServer server,
+	private static SokletConfig config(@NonNull McpServer server,
 			@NonNull LifecyclePolicy lifecyclePolicy) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(requireNonNull(server))
+		return SokletConfig.withMcpServer(requireNonNull(server))
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecyclePolicy(requireNonNull(lifecyclePolicy))
-				.build());
+				.build();
 	}
 
 	@NonNull

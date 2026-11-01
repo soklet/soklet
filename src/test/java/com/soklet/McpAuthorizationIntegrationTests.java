@@ -73,61 +73,61 @@ public class McpAuthorizationIntegrationTests {
 	public void passesSafeBearerChallenge() throws Exception {
 		FixtureState state = new FixtureState();
 		McpServer server = server(state);
-		Soklet soklet = managedSoklet(server);
 
 		try {
-			soklet.start();
-			int port = boundPort(server);
-			WireResponse request = exchange(port, "POST", toolRequest("auth-request"),
-					toolHeaders());
-			WireResponse notification = exchange(port, "POST", cancellationNotification(),
-					notificationHeaders());
+			Soklet.run(config(server), () -> {
+				int port = boundPort(server);
+				WireResponse request = exchange(port, "POST", toolRequest("auth-request"),
+						toolHeaders());
+				WireResponse notification = exchange(port, "POST", cancellationNotification(),
+						notificationHeaders());
 
-			Assertions.assertTrue(URI.create(RESOURCE_METADATA).isAbsolute());
-			Assertions.assertEquals(401, request.status(), request.rawHead());
-			Assertions.assertEquals("application/json",
-					request.singleHeader("Content-Type"));
-			Assertions.assertEquals("97", request.singleHeader("Content-Length"));
-			Assertions.assertEquals("no-store",
-					request.singleHeader("Cache-Control"));
-			Assertions.assertEquals(TOOL_CHALLENGE,
-					request.singleHeader("WWW-Authenticate"));
-			Assertions.assertEquals("{\"jsonrpc\":\"2.0\",\"id\":\"auth-request\","
-					+ "\"error\":{\"code\":-31901,"
-					+ "\"message\":\"Authentication required\"}}",
-					request.bodyText());
-			assertNoSessionHeaders(request);
+				Assertions.assertTrue(URI.create(RESOURCE_METADATA).isAbsolute());
+				Assertions.assertEquals(401, request.status(), request.rawHead());
+				Assertions.assertEquals("application/json",
+						request.singleHeader("Content-Type"));
+				Assertions.assertEquals("97", request.singleHeader("Content-Length"));
+				Assertions.assertEquals("no-store",
+						request.singleHeader("Cache-Control"));
+				Assertions.assertEquals(TOOL_CHALLENGE,
+						request.singleHeader("WWW-Authenticate"));
+				Assertions.assertEquals("{\"jsonrpc\":\"2.0\",\"id\":\"auth-request\","
+						+ "\"error\":{\"code\":-31901,"
+						+ "\"message\":\"Authentication required\"}}",
+						request.bodyText());
+				assertNoSessionHeaders(request);
 
-			Assertions.assertEquals(401, notification.status(), notification.rawHead());
-			Assertions.assertEquals("no-store",
-					notification.singleHeader("Cache-Control"));
-			Assertions.assertEquals(NOTIFICATION_CHALLENGE,
-					notification.singleHeader("WWW-Authenticate"));
-			Assertions.assertEquals("0",
-					notification.singleHeader("Content-Length"));
-			Assertions.assertEquals(0, notification.body().length);
-			Assertions.assertFalse(notification.hasHeader("Content-Type"),
-					notification.rawHead());
-			assertNoSessionHeaders(notification);
+				Assertions.assertEquals(401, notification.status(), notification.rawHead());
+				Assertions.assertEquals("no-store",
+						notification.singleHeader("Cache-Control"));
+				Assertions.assertEquals(NOTIFICATION_CHALLENGE,
+						notification.singleHeader("WWW-Authenticate"));
+				Assertions.assertEquals("0",
+						notification.singleHeader("Content-Length"));
+				Assertions.assertEquals(0, notification.body().length);
+				Assertions.assertFalse(notification.hasHeader("Content-Type"),
+						notification.rawHead());
+				assertNoSessionHeaders(notification);
 
-			Assertions.assertEquals(2, state.admissions.size());
-			McpAdmissionContext requestAdmission = state.admissions.get(0);
-			Assertions.assertFalse(requestAdmission.isNotification());
-			Assertions.assertEquals("tools/call", requestAdmission.getJsonRpcMethod());
-			Assertions.assertEquals(TOOL_NAME,
-					requestAdmission.getOperationName().orElseThrow());
-			Assertions.assertEquals("auth-request", requestAdmission.getRequestId()
-					.orElseThrow().asString().orElseThrow());
-			McpAdmissionContext notificationAdmission = state.admissions.get(1);
-			Assertions.assertTrue(notificationAdmission.isNotification());
-			Assertions.assertEquals("notifications/cancelled",
-					notificationAdmission.getJsonRpcMethod());
-			Assertions.assertTrue(notificationAdmission.getOperationName().isEmpty());
-			Assertions.assertTrue(notificationAdmission.getRequestId().isEmpty());
-			state.assertNoDownstreamInvocations();
-			assertIdleStartedDiagnostics(server);
+				Assertions.assertEquals(2, state.admissions.size());
+				McpAdmissionContext requestAdmission = state.admissions.get(0);
+				Assertions.assertFalse(requestAdmission.isNotification());
+				Assertions.assertEquals("tools/call", requestAdmission.getJsonRpcMethod());
+				Assertions.assertEquals(TOOL_NAME,
+						requestAdmission.getOperationName().orElseThrow());
+				Assertions.assertEquals("auth-request", requestAdmission.getRequestId()
+						.orElseThrow().asString().orElseThrow());
+				McpAdmissionContext notificationAdmission = state.admissions.get(1);
+				Assertions.assertTrue(notificationAdmission.isNotification());
+				Assertions.assertEquals("notifications/cancelled",
+						notificationAdmission.getJsonRpcMethod());
+				Assertions.assertTrue(notificationAdmission.getOperationName().isEmpty());
+				Assertions.assertTrue(notificationAdmission.getRequestId().isEmpty());
+				state.assertNoDownstreamInvocations();
+				assertIdleStartedDiagnostics(server);
+			});
 		} finally {
-			stopAndAssertClean(soklet, server);
+			assertStoppedClean(server);
 		}
 	}
 
@@ -136,87 +136,87 @@ public class McpAuthorizationIntegrationTests {
 		assertGoldenManifest();
 		FixtureState state = new FixtureState();
 		McpServer server = server(state);
-		Soklet soklet = managedSoklet(server);
 
 		try {
-			soklet.start();
-			int port = boundPort(server);
-			WireResponse preflight = exchange(port, "OPTIONS", "", List.of(
-					new HeaderLine("Origin", ALLOWED_ORIGIN),
-					new HeaderLine("Access-Control-Request-Method", "POST"),
-					new HeaderLine("Access-Control-Request-Headers",
-							"Mcp-Param-Tenant, MCP-Protocol-Version, Authorization, "
-									+ "Mcp-Name, Content-Type, Accept, Mcp-Method")));
-			assertGoldenHead(preflight, "authorized-preflight.head");
-			Assertions.assertEquals(204, preflight.status(), preflight.rawHead());
-			Assertions.assertEquals(ALLOWED_ORIGIN,
-					preflight.singleHeader("Access-Control-Allow-Origin"));
-			Assertions.assertEquals("POST, OPTIONS",
-					preflight.singleHeader("Access-Control-Allow-Methods"));
-			Assertions.assertEquals("Accept, Authorization, Content-Type, Mcp-Method, "
-					+ "Mcp-Name, Mcp-Param-Tenant, MCP-Protocol-Version",
-					preflight.singleHeader("Access-Control-Allow-Headers"));
-			Assertions.assertEquals("Origin, Access-Control-Request-Method, "
-					+ "Access-Control-Request-Headers", preflight.singleHeader("Vary"));
-			Assertions.assertEquals(0, preflight.body().length);
-			Assertions.assertFalse(preflight.hasHeader("WWW-Authenticate"),
-					preflight.rawHead());
-			assertNoSessionHeaders(preflight);
-
-			for (String legacyHeader : List.of("MCP-Session-Id", "Last-Event-ID")) {
-				WireResponse legacyPreflight = exchange(port, "OPTIONS", "", List.of(
+			Soklet.run(config(server), () -> {
+				int port = boundPort(server);
+				WireResponse preflight = exchange(port, "OPTIONS", "", List.of(
 						new HeaderLine("Origin", ALLOWED_ORIGIN),
 						new HeaderLine("Access-Control-Request-Method", "POST"),
-						new HeaderLine("Access-Control-Request-Headers", legacyHeader)));
-				assertGoldenHead(legacyPreflight, "empty-cors-rejection.head");
-				Assertions.assertEquals(403, legacyPreflight.status(),
-						legacyPreflight.rawHead());
-				Assertions.assertEquals(0, legacyPreflight.body().length);
-				Assertions.assertFalse(legacyPreflight.hasHeader(
-						"Access-Control-Allow-Origin"), legacyPreflight.rawHead());
-				Assertions.assertFalse(legacyPreflight.hasHeader(
-						"Access-Control-Allow-Headers"), legacyPreflight.rawHead());
-				Assertions.assertFalse(legacyPreflight.hasHeader("Content-Type"),
-						legacyPreflight.rawHead());
-				assertNoSessionHeaders(legacyPreflight);
-			}
+						new HeaderLine("Access-Control-Request-Headers",
+								"Mcp-Param-Tenant, MCP-Protocol-Version, Authorization, "
+										+ "Mcp-Name, Content-Type, Accept, Mcp-Method")));
+				assertGoldenHead(preflight, "authorized-preflight.head");
+				Assertions.assertEquals(204, preflight.status(), preflight.rawHead());
+				Assertions.assertEquals(ALLOWED_ORIGIN,
+						preflight.singleHeader("Access-Control-Allow-Origin"));
+				Assertions.assertEquals("POST, OPTIONS",
+						preflight.singleHeader("Access-Control-Allow-Methods"));
+				Assertions.assertEquals("Accept, Authorization, Content-Type, Mcp-Method, "
+						+ "Mcp-Name, Mcp-Param-Tenant, MCP-Protocol-Version",
+						preflight.singleHeader("Access-Control-Allow-Headers"));
+				Assertions.assertEquals("Origin, Access-Control-Request-Method, "
+						+ "Access-Control-Request-Headers", preflight.singleHeader("Vary"));
+				Assertions.assertEquals(0, preflight.body().length);
+				Assertions.assertFalse(preflight.hasHeader("WWW-Authenticate"),
+						preflight.rawHead());
+				assertNoSessionHeaders(preflight);
 
-			List<HeaderLine> allowedHeaders = new ArrayList<>(toolHeaders());
-			allowedHeaders.add(new HeaderLine("Origin", ALLOWED_ORIGIN));
-			WireResponse challenged = exchange(port, "POST", toolRequest("auth-request"),
-					List.copyOf(allowedHeaders));
-			assertGoldenHead(challenged, "authorized-bearer-challenge.head");
-			Assertions.assertEquals(401, challenged.status(), challenged.rawHead());
-			Assertions.assertEquals(ALLOWED_ORIGIN,
-					challenged.singleHeader("Access-Control-Allow-Origin"));
-			Assertions.assertEquals("WWW-Authenticate",
-					challenged.singleHeader("Access-Control-Expose-Headers"));
-			Assertions.assertEquals("Origin", challenged.singleHeader("Vary"));
-			Assertions.assertEquals(TOOL_CHALLENGE,
-					challenged.singleHeader("WWW-Authenticate"));
-			assertNoSessionHeaders(challenged);
+				for (String legacyHeader : List.of("MCP-Session-Id", "Last-Event-ID")) {
+					WireResponse legacyPreflight = exchange(port, "OPTIONS", "", List.of(
+							new HeaderLine("Origin", ALLOWED_ORIGIN),
+							new HeaderLine("Access-Control-Request-Method", "POST"),
+							new HeaderLine("Access-Control-Request-Headers", legacyHeader)));
+					assertGoldenHead(legacyPreflight, "empty-cors-rejection.head");
+					Assertions.assertEquals(403, legacyPreflight.status(),
+							legacyPreflight.rawHead());
+					Assertions.assertEquals(0, legacyPreflight.body().length);
+					Assertions.assertFalse(legacyPreflight.hasHeader(
+							"Access-Control-Allow-Origin"), legacyPreflight.rawHead());
+					Assertions.assertFalse(legacyPreflight.hasHeader(
+							"Access-Control-Allow-Headers"), legacyPreflight.rawHead());
+					Assertions.assertFalse(legacyPreflight.hasHeader("Content-Type"),
+							legacyPreflight.rawHead());
+					assertNoSessionHeaders(legacyPreflight);
+				}
 
-			List<HeaderLine> rejectedHeaders = new ArrayList<>(toolHeaders());
-			rejectedHeaders.add(new HeaderLine("Origin", REJECTED_ORIGIN));
-			WireResponse rejected = exchange(port, "POST", toolRequest("rejected-origin"),
-					List.copyOf(rejectedHeaders));
-			assertGoldenHead(rejected, "empty-cors-rejection.head");
-			Assertions.assertEquals(403, rejected.status(), rejected.rawHead());
-			Assertions.assertEquals(0, rejected.body().length);
-			Assertions.assertFalse(rejected.hasHeader("Access-Control-Allow-Origin"),
-					rejected.rawHead());
-			Assertions.assertFalse(rejected.hasHeader("Access-Control-Expose-Headers"),
-					rejected.rawHead());
-			Assertions.assertFalse(rejected.hasHeader("WWW-Authenticate"),
-					rejected.rawHead());
-			assertNoSessionHeaders(rejected);
+				List<HeaderLine> allowedHeaders = new ArrayList<>(toolHeaders());
+				allowedHeaders.add(new HeaderLine("Origin", ALLOWED_ORIGIN));
+				WireResponse challenged = exchange(port, "POST", toolRequest("auth-request"),
+						List.copyOf(allowedHeaders));
+				assertGoldenHead(challenged, "authorized-bearer-challenge.head");
+				Assertions.assertEquals(401, challenged.status(), challenged.rawHead());
+				Assertions.assertEquals(ALLOWED_ORIGIN,
+						challenged.singleHeader("Access-Control-Allow-Origin"));
+				Assertions.assertEquals("WWW-Authenticate",
+						challenged.singleHeader("Access-Control-Expose-Headers"));
+				Assertions.assertEquals("Origin", challenged.singleHeader("Vary"));
+				Assertions.assertEquals(TOOL_CHALLENGE,
+						challenged.singleHeader("WWW-Authenticate"));
+				assertNoSessionHeaders(challenged);
 
-			Assertions.assertEquals(1, state.admissions.size(),
-					"Preflight and rejected Origin must not reach admission.");
-			state.assertNoDownstreamInvocations();
-			assertIdleStartedDiagnostics(server);
+				List<HeaderLine> rejectedHeaders = new ArrayList<>(toolHeaders());
+				rejectedHeaders.add(new HeaderLine("Origin", REJECTED_ORIGIN));
+				WireResponse rejected = exchange(port, "POST", toolRequest("rejected-origin"),
+						List.copyOf(rejectedHeaders));
+				assertGoldenHead(rejected, "empty-cors-rejection.head");
+				Assertions.assertEquals(403, rejected.status(), rejected.rawHead());
+				Assertions.assertEquals(0, rejected.body().length);
+				Assertions.assertFalse(rejected.hasHeader("Access-Control-Allow-Origin"),
+						rejected.rawHead());
+				Assertions.assertFalse(rejected.hasHeader("Access-Control-Expose-Headers"),
+						rejected.rawHead());
+				Assertions.assertFalse(rejected.hasHeader("WWW-Authenticate"),
+						rejected.rawHead());
+				assertNoSessionHeaders(rejected);
+
+				Assertions.assertEquals(1, state.admissions.size(),
+						"Preflight and rejected Origin must not reach admission.");
+				state.assertNoDownstreamInvocations();
+				assertIdleStartedDiagnostics(server);
+			});
 		} finally {
-			stopAndAssertClean(soklet, server);
+			assertStoppedClean(server);
 		}
 	}
 
@@ -407,15 +407,14 @@ public class McpAuthorizationIntegrationTests {
 		throw new AssertionError();
 	}
 
-	private static Soklet managedSoklet(McpServer server) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+	private static SokletConfig config(McpServer server) {
+		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
-				.build());
+				.build();
 	}
 
-	private static void stopAndAssertClean(Soklet soklet, McpServer server) {
-		soklet.close();
+	private static void assertStoppedClean(McpServer server) {
 		McpServerDiagnostics diagnostics = server.getDiagnostics();
 		Assertions.assertEquals(McpServerStatus.TERMINATED, diagnostics.getStatus());
 		Assertions.assertTrue(diagnostics.getBoundAddress().isPresent());

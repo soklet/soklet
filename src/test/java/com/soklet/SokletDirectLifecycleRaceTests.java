@@ -1076,8 +1076,7 @@ final class SokletDirectLifecycleRaceTests {
 		}
 
 		@Override
-		public void didFailToStartSoklet(@NonNull Soklet soklet,
-				@NonNull Throwable throwable) {
+		public void didFailToStartSoklet(@NonNull Throwable throwable) {
 			this.failure.compareAndSet(null, throwable);
 			this.observed.countDown();
 		}

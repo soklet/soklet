@@ -163,17 +163,18 @@ public class StreamingServerSettingsTests {
 
 	@Test
 	public void maximumResponseTimeoutsAllowARealStreamingResponse() throws Exception {
-		try (Fixture fixture = new Fixture(1, 1, Duration.ofSeconds(1), new QuietObserver() {},
-				Duration.ofNanos(Long.MAX_VALUE), Duration.ofNanos(Long.MAX_VALUE))) {
-			fixture.body("maximum", responseStream -> responseStream.write("ok".getBytes(StandardCharsets.UTF_8)));
-			fixture.start();
+		Fixture fixture = new Fixture(1, 1, Duration.ofSeconds(1), new QuietObserver() {},
+				Duration.ofNanos(Long.MAX_VALUE), Duration.ofNanos(Long.MAX_VALUE));
+		fixture.body("maximum", responseStream -> responseStream.write("ok".getBytes(StandardCharsets.UTF_8)));
+		ShutdownResult result = Soklet.run(fixture.config, () -> {
 			try (Socket socket = fixture.request("maximum")) {
 				assertStatus(socket, 200);
 				Assertions.assertEquals("2\r\nok\r\n0\r\n\r\n", readRemainder(socket));
 			}
 			assertEventually(() -> fixture.coordinator().snapshot().reservations() == 0,
 					"A maximum timer duration must not prevent physical retirement");
-		}
+		});
+		Assertions.assertTrue(result.isComplete());
 	}
 
 	@Test
@@ -199,43 +200,44 @@ public class StreamingServerSettingsTests {
 			producerCalls.incrementAndGet();
 			responseStream.write("ok".getBytes(StandardCharsets.UTF_8));
 		});
-		try {
-			fixture.start();
-			for (int index = 0; index < 3; ++index) {
-				try (Socket socket = fixture.request("ready")) {
-					assertStatus(socket, 200);
-					Assertions.assertEquals("2\r\nok\r\n0\r\n\r\n", readRemainder(socket));
+		ShutdownResult result = Soklet.run(fixture.config, () -> {
+			try {
+				for (int index = 0; index < 3; ++index) {
+					try (Socket socket = fixture.request("ready")) {
+						assertStatus(socket, 200);
+						Assertions.assertEquals("2\r\nok\r\n0\r\n\r\n", readRemainder(socket));
+					}
 				}
+				await(observersEntered, "All three capacity-reserved observers must enter independently");
+				Assertions.assertEquals(0, fixture.coordinator().snapshot().queuedCallbacks());
+				Assertions.assertEquals(3, observerCalls.get());
+				Assertions.assertEquals(3, maximumObservers.get());
+				Assertions.assertEquals(3, fixture.coordinator().snapshot().reservations());
+				assertEventually(() -> fixture.coordinator().snapshot().overdue() == 3,
+						"The configured cleanup timeout must supervise all admitted observers");
+				try (Socket rejected = fixture.request("ready")) {
+					String headers = assertStatus(rejected, 503);
+					Assertions.assertFalse(headers.toLowerCase(java.util.Locale.ROOT).contains("transfer-encoding:"), headers);
+					readRemainder(rejected);
+				}
+				Assertions.assertEquals(3, producerCalls.get(), "Rejection must happen before the writer is invoked");
+				releaseObservers.countDown();
+				assertEventually(() -> fixture.coordinator().snapshot().reservations() == 0,
+						"Physical observer completion must release admission");
+				assertEventually(() -> observerCalls.get() == 4 && activeObservers.get() == 0,
+						"The rejected stream must report termination through the separate bounded rejection pool");
+				try (Socket recovered = fixture.request("ready")) {
+					assertStatus(recovered, 200);
+					Assertions.assertEquals("2\r\nok\r\n0\r\n\r\n", readRemainder(recovered));
+				}
+				Assertions.assertEquals(4, producerCalls.get());
+				Assertions.assertTrue(maximumObservers.get() >= 3 && maximumObservers.get() <= 4,
+						"Three admitted observations and one unadmitted rejection have independent bounds");
+			} finally {
+				releaseObservers.countDown();
 			}
-			await(observersEntered, "All three capacity-reserved observers must enter independently");
-			Assertions.assertEquals(0, fixture.coordinator().snapshot().queuedCallbacks());
-			Assertions.assertEquals(3, observerCalls.get());
-			Assertions.assertEquals(3, maximumObservers.get());
-			Assertions.assertEquals(3, fixture.coordinator().snapshot().reservations());
-			assertEventually(() -> fixture.coordinator().snapshot().overdue() == 3,
-					"The configured cleanup timeout must supervise all admitted observers");
-			try (Socket rejected = fixture.request("ready")) {
-				String headers = assertStatus(rejected, 503);
-				Assertions.assertFalse(headers.toLowerCase(java.util.Locale.ROOT).contains("transfer-encoding:"), headers);
-				readRemainder(rejected);
-			}
-			Assertions.assertEquals(3, producerCalls.get(), "Rejection must happen before the writer is invoked");
-			releaseObservers.countDown();
-			assertEventually(() -> fixture.coordinator().snapshot().reservations() == 0,
-					"Physical observer completion must release admission");
-			assertEventually(() -> observerCalls.get() == 4 && activeObservers.get() == 0,
-					"The rejected stream must report termination through the separate bounded rejection pool");
-			try (Socket recovered = fixture.request("ready")) {
-				assertStatus(recovered, 200);
-				Assertions.assertEquals("2\r\nok\r\n0\r\n\r\n", readRemainder(recovered));
-			}
-			Assertions.assertEquals(4, producerCalls.get());
-			Assertions.assertTrue(maximumObservers.get() >= 3 && maximumObservers.get() <= 4,
-					"Three admitted observations and one unadmitted rejection have independent bounds");
-		} finally {
-			releaseObservers.countDown();
-			fixture.close();
-		}
+		});
+		Assertions.assertTrue(result.isComplete());
 	}
 
 	@Test
@@ -260,37 +262,38 @@ public class StreamingServerSettingsTests {
 			responseStream.flush();
 		});
 		fixture.body("ready", responseStream -> responseStream.write("ok".getBytes(StandardCharsets.UTF_8)));
-		try {
-			fixture.start();
-			try (Socket socket = fixture.request("blocked")) {
-				assertStatus(socket, 200);
-				await(closeEntered, "Owned finalization did not start");
-				String incompleteBody = readRemainder(socket);
-				Assertions.assertFalse(incompleteBody.endsWith("0\r\n\r\n"), incompleteBody);
+		ShutdownResult result = Soklet.run(fixture.config, () -> {
+			try {
+				try (Socket socket = fixture.request("blocked")) {
+					assertStatus(socket, 200);
+					await(closeEntered, "Owned finalization did not start");
+					String incompleteBody = readRemainder(socket);
+					Assertions.assertFalse(incompleteBody.endsWith("0\r\n\r\n"), incompleteBody);
+				}
+				assertEventually(() -> terminations.containsKey("/settings/blocked"), "Cleanup expiry did not terminate delivery");
+				Assertions.assertEquals(StreamTerminationReason.CLEANUP_TIMEOUT,
+						terminations.get("/settings/blocked").getReason());
+				Assertions.assertEquals(1, fixture.coordinator().snapshot().reservations());
+				Assertions.assertEquals(1, fixture.coordinator().snapshot().runningProducers());
+				Assertions.assertEquals(1, fixture.coordinator().snapshot().overdue());
+				Assertions.assertEquals(1, closeCalls.get());
+				try (Socket rejected = fixture.request("ready")) {
+					assertStatus(rejected, 503);
+					readRemainder(rejected);
+				}
+				releaseClose.countDown();
+				assertEventually(() -> fixture.coordinator().snapshot().reservations() == 0,
+						"The finalizer's physical return must release its reservation");
+				try (Socket recovered = fixture.request("ready")) {
+					assertStatus(recovered, 200);
+					Assertions.assertEquals("2\r\nok\r\n0\r\n\r\n", readRemainder(recovered));
+				}
+				Assertions.assertEquals(1, closeCalls.get());
+			} finally {
+				releaseClose.countDown();
 			}
-			assertEventually(() -> terminations.containsKey("/settings/blocked"), "Cleanup expiry did not terminate delivery");
-			Assertions.assertEquals(StreamTerminationReason.CLEANUP_TIMEOUT,
-					terminations.get("/settings/blocked").getReason());
-			Assertions.assertEquals(1, fixture.coordinator().snapshot().reservations());
-			Assertions.assertEquals(1, fixture.coordinator().snapshot().runningProducers());
-			Assertions.assertEquals(1, fixture.coordinator().snapshot().overdue());
-			Assertions.assertEquals(1, closeCalls.get());
-			try (Socket rejected = fixture.request("ready")) {
-				assertStatus(rejected, 503);
-				readRemainder(rejected);
-			}
-			releaseClose.countDown();
-			assertEventually(() -> fixture.coordinator().snapshot().reservations() == 0,
-					"The finalizer's physical return must release its reservation");
-			try (Socket recovered = fixture.request("ready")) {
-				assertStatus(recovered, 200);
-				Assertions.assertEquals("2\r\nok\r\n0\r\n\r\n", readRemainder(recovered));
-			}
-			Assertions.assertEquals(1, closeCalls.get());
-		} finally {
-			releaseClose.countDown();
-			fixture.close();
-		}
+		});
+		Assertions.assertTrue(result.isComplete());
 	}
 
 	private static HttpServer.Builder builder() { return HttpServer.withPort(8080); }
@@ -302,10 +305,10 @@ public class StreamingServerSettingsTests {
 		Assertions.assertEquals(timeout, server.getStreamingCleanupTimeout());
 	}
 
-	private static final class Fixture implements AutoCloseable {
+	private static final class Fixture {
 		private final int port;
 		private final DefaultHttpServer server;
-		private final Soklet soklet;
+		private final SokletConfig config;
 		private final Map<String, StreamingResponseWriter> writers = new ConcurrentHashMap<>();
 
 		private Fixture(int capacity, int concurrency, Duration timeout, LifecycleObserver observer) throws IOException {
@@ -320,7 +323,7 @@ public class StreamingServerSettingsTests {
 					.streamingCleanupTimeout(timeout).streamingResponseTimeout(responseTimeout)
 					.streamingResponseIdleTimeout(idleTimeout).build();
 			StreamingResource resource = new StreamingResource(this.writers);
-			this.soklet = Soklet.fromConfig(SokletConfig.withHttpServer(this.server)
+			this.config = SokletConfig.withHttpServer(this.server)
 					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))
 					.instanceProvider(new InstanceProvider() {
 						@Override public <T> T provide(Class<T> type) {
@@ -328,11 +331,10 @@ public class StreamingServerSettingsTests {
 						}
 					}).lifecycleObserver(observer)
 					.lifecyclePolicy(LifecyclePolicy.builder().gracefulShutdownTimeout(Duration.ofMillis(500))
-							.forcedShutdownTimeout(Duration.ofMillis(500)).build()).build());
+							.forcedShutdownTimeout(Duration.ofMillis(500)).build()).build();
 		}
 
 		private void body(String name, StreamingResponseWriter writer) { this.writers.put("/settings/" + name, writer); }
-		private void start() { this.soklet.start(); }
 		private StreamLifecycleCoordinator coordinator() { return this.server.getStreamLifecycleCoordinatorForTests().orElseThrow(); }
 		private Socket request(String name) throws IOException, InterruptedException {
 			Socket socket = connectWithRetry("127.0.0.1", this.port, 2_000);
@@ -341,9 +343,6 @@ public class StreamingServerSettingsTests {
 					.getBytes(StandardCharsets.ISO_8859_1));
 			socket.getOutputStream().flush();
 			return socket;
-		}
-		@Override public void close() throws Exception {
-			Assertions.assertTrue(this.soklet.shutdown().toCompletableFuture().get(WAIT.toMillis(), TimeUnit.MILLISECONDS).isComplete());
 		}
 	}
 

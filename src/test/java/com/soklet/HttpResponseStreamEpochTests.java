@@ -71,24 +71,25 @@ class HttpResponseStreamEpochTests {
 		Resource resource = new Resource(observation);
 		HttpServer server = HttpServer.withPort(port).host("127.0.0.1")
 				.streamingExecutorServiceSupplier(() -> producerExecutor).build();
-		try (Soklet soklet = Soklet.fromConfig(config(server, observation, resource))) {
-			soklet.start();
-			try (Socket socket = new Socket("127.0.0.1", port)) {
-				socket.setSoTimeout(5000);
-				socket.getOutputStream().write("GET /epoch HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
-						.getBytes(StandardCharsets.US_ASCII));
-				await(producerExecutor.entered);
-				assertFalse(observation.prepared.await(200, TimeUnit.MILLISECONDS), "Preparation must follow successful source submission");
-				assertNull(observation.producerEnteredAt.get());
-				Instant submissionReleasedAt = Instant.now();
-				producerExecutor.release.countDown();
-				String wire = new String(socket.getInputStream().readAllBytes(), StandardCharsets.US_ASCII);
-				assertTrue(wire.startsWith("HTTP/1.1 200"), wire); assertTrue(wire.contains("payload"), wire);
-				await(observation.terminated);
-				assertTrue(observation.preparedHandle.get().getEstablishedAt().isBefore(submissionReleasedAt),
-						"The admitted epoch precedes source submission, including a possible pre-preparation cancellation");
-				observation.assertTerminalEpoch();
-			}
+		try {
+			Soklet.run(config(server, observation, resource), () -> {
+				try (Socket socket = new Socket("127.0.0.1", port)) {
+					socket.setSoTimeout(5000);
+					socket.getOutputStream().write("GET /epoch HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+							.getBytes(StandardCharsets.US_ASCII));
+					await(producerExecutor.entered);
+					assertFalse(observation.prepared.await(200, TimeUnit.MILLISECONDS), "Preparation must follow successful source submission");
+					assertNull(observation.producerEnteredAt.get());
+					Instant submissionReleasedAt = Instant.now();
+					producerExecutor.release.countDown();
+					String wire = new String(socket.getInputStream().readAllBytes(), StandardCharsets.US_ASCII);
+					assertTrue(wire.startsWith("HTTP/1.1 200"), wire); assertTrue(wire.contains("payload"), wire);
+					await(observation.terminated);
+					assertTrue(observation.preparedHandle.get().getEstablishedAt().isBefore(submissionReleasedAt),
+							"The admitted epoch precedes source submission, including a possible pre-preparation cancellation");
+					observation.assertTerminalEpoch();
+				}
+		});
 		} finally {
 			producerExecutor.release.countDown(); producerExecutor.shutdownNow();
 			assertTrue(producerExecutor.awaitTermination(3, TimeUnit.SECONDS));

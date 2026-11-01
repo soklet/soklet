@@ -110,12 +110,15 @@ class McpLocalizationLifecycleExecutionTests {
 			}).build());
 		}
 		McpServer server = builder.build();
-		try (Soklet owner = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+		// The callbacks must inspect the exact owner token and verify owner-scoped self-wait guards.
+		// The callbacks must inspect the exact owner token and verify owner-scoped self-wait guards.
+		try (SokletTestScope ownerScope = SokletTestScope.of(Soklet.fromConfig(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObserver(new LifecycleObserver() { @Override public void didReceiveLogEvent(LogEvent event) {} })
 				.lifecyclePolicy(LifecyclePolicy.builder().gracefulShutdownTimeout(Duration.ofSeconds(1))
-						.forcedShutdownTimeout(Duration.ofSeconds(1)).build()).build());
+						.forcedShutdownTimeout(Duration.ofSeconds(1)).build()).build()));
 				HttpClient client = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build()) {
+			Soklet owner = ownerScope.soklet();
 			ownerReference.set(owner);
 			owner.start();
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();

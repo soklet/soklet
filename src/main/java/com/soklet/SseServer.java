@@ -59,8 +59,9 @@ import static java.util.Objects.requireNonNull;
  *
  * // Add .httpServer(HttpServer.fromPort(8080)) if you also serve ordinary HTTP resources
  *
- * // Run the app until the user presses enter
- * SokletApplication.run(config, ShutdownTrigger.ENTER_KEY);}</pre>
+ * // Run the app with automatic JVM shutdown handling
+ * Soklet soklet = Soklet.run(config);
+ * ShutdownResult result = soklet.awaitShutdown();}</pre>
  * <p>
  * See <a href="https://www.soklet.com/docs/server-sent-events">https://www.soklet.com/docs/server-sent-events</a> for detailed documentation.
  *

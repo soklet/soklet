@@ -88,7 +88,7 @@ public final class SseConnectionQualification {
 		check(server.getStreamingLifecycleCapacity() == CONNECTIONS && server.getConnectionQueueCapacity() == 128,
 				"Qualification must run against the selected defaults");
 		Resource resource = new Resource(this);
-		Soklet app = Soklet.fromConfig(SokletConfig.withSseServer(server)
+		Soklet app = Soklet.run(SokletConfig.withSseServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Resource.class)))
 				.instanceProvider(new InstanceProvider() {
 					@Override public <T> T provide(Class<T> type) {
@@ -100,7 +100,6 @@ public final class SseConnectionQualification {
 					}
 				}).build());
 		try {
-			app.start();
 			StreamLifecycleCoordinator coordinator = server.getStreamLifecycleCoordinatorForTests().orElseThrow();
 			long establishmentStart = System.nanoTime();
 			for (int index = 0; index < CONNECTIONS; index++) this.clients.add(connect(port, 1));
@@ -155,7 +154,8 @@ public final class SseConnectionQualification {
 			long churnNanos = System.nanoTime() - churnStart;
 			for (Client client : this.clients) client.expectedClose.set(true);
 			long shutdownStart = System.nanoTime();
-			ShutdownResult shutdown = app.shutdown().toCompletableFuture().get(20, TimeUnit.SECONDS);
+			app.requestShutdown();
+			ShutdownResult shutdown = app.awaitShutdownAsync().toCompletableFuture().get(20, TimeUnit.SECONDS);
 			long shutdownNanos = System.nanoTime() - shutdownStart;
 			check(shutdown.isComplete(), "Shutdown left residual work");
 			for (Client client : this.clients) client.reader.get(15, TimeUnit.SECONDS);
@@ -180,7 +180,8 @@ public final class SseConnectionQualification {
 		} finally {
 			for (Client client : this.clients) { client.expectedClose.set(true); try { client.socket.close(); } catch (IOException ignored) {} }
 			this.readers.shutdownNow();
-			app.close();
+			app.requestShutdown();
+			app.awaitShutdownAsync().toCompletableFuture().join();
 		}
 	}
 

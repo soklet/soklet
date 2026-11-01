@@ -46,7 +46,8 @@ class HttpTransportResponseOutcomeTests {
 	@Test
 	void notWrittenFailsDirectAndOpaqueConsumersWithoutClaimingSuccessOrReplacement() {
 		for (boolean opaque : List.of(false, true)) {
-			try (Fixture fixture = new Fixture(RequestInterceptor.defaultInstance())) {
+			Fixture fixture = new Fixture(RequestInterceptor.defaultInstance());
+			Soklet.run(fixture.config, () -> {
 				AtomicInteger afterWrite = new AtomicInteger();
 				fixture.dispatch("/outcome", feedback -> {
 					Consumer<HttpRequestResult> writer = HttpTransportResponseFeedback.fromWriter(feedback,
@@ -60,7 +61,7 @@ class HttpTransportResponseOutcomeTests {
 				assertEquals(200, fixture.observation.finished.get("/outcome").getStatusCode());
 				assertFalse(fixture.observation.written.containsKey("/outcome"));
 				assertEquals(0, afterWrite.get());
-			}
+			});
 		}
 	}
 
@@ -77,7 +78,8 @@ class HttpTransportResponseOutcomeTests {
 
 	@Test
 	void freshResultDecoratorRetainsReplacementAndNextDeliveryStartsClean() {
-		try (Fixture fixture = new Fixture(RequestInterceptor.defaultInstance())) {
+		Fixture fixture = new Fixture(RequestInterceptor.defaultInstance());
+		Soklet.run(fixture.config, () -> {
 			fixture.dispatch("/outcome", feedback -> result -> HttpTransportResponseFeedback.fromWriter(feedback, ignored ->
 					HttpTransportResponseOutcome.replaced(response(505), null, null))
 					.accept(HttpRequestResult.fromMarshaledResponse(result.getMarshaledResponse())));
@@ -86,12 +88,13 @@ class HttpTransportResponseOutcomeTests {
 			assertTrue(fixture.observation.failures.get("/outcome").isEmpty());
 			fixture.dispatch("/outcome", feedback -> HttpTransportResponseFeedback.fromWriter(feedback, result -> HttpTransportResponseOutcome.accepted()));
 			assertEquals(200, fixture.observation.finished.get("/outcome").getStatusCode());
-		}
+		});
 	}
 
 	@Test
 	void nestedDeliveryKeepsFeedbackBoundToEachRequest() {
-		try (Fixture fixture = new Fixture(RequestInterceptor.defaultInstance())) {
+		Fixture fixture = new Fixture(RequestInterceptor.defaultInstance());
+		Soklet.run(fixture.config, () -> {
 			fixture.dispatch("/outcome", feedback -> result -> {
 				fixture.dispatch("/nested", nestedFeedback -> HttpTransportResponseFeedback.fromWriter(nestedFeedback, nested ->
 						HttpTransportResponseOutcome.replaced(response(503), null, null)));
@@ -101,14 +104,15 @@ class HttpTransportResponseOutcomeTests {
 			assertEquals(503, fixture.observation.finished.get("/nested").getStatusCode());
 			assertEquals(505, fixture.observation.finished.get("/outcome").getStatusCode());
 			assertTrue(fixture.observation.failures.get("/outcome").isEmpty());
-		}
+		});
 	}
 
 	@Test
 	void opaqueDecoratorRetainsLegacyReplacementUnwindingAndPreparationFailure() {
 		RuntimeException preparationFailure = new IllegalArgumentException("preparation failed");
 		AtomicInteger callbacksAfterReplacement = new AtomicInteger();
-		try (Fixture fixture = new Fixture(RequestInterceptor.defaultInstance())) {
+		Fixture fixture = new Fixture(RequestInterceptor.defaultInstance());
+		Soklet.run(fixture.config, () -> {
 			fixture.dispatch("/outcome", feedback -> result -> {
 				HttpTransportResponseFeedback.fromWriter(feedback, ignored ->
 						HttpTransportResponseOutcome.replaced(response(503), preparationFailure, null)).accept(result);
@@ -119,14 +123,15 @@ class HttpTransportResponseOutcomeTests {
 			assertTrue(fixture.metricWriteFailures.isEmpty());
 			assertEquals(503, fixture.observation.finished.get("/outcome").getStatusCode());
 			assertEquals(List.of(preparationFailure), fixture.observation.failures.get("/outcome"));
-		}
+		});
 	}
 
 	@Test
 	void replacementWriteErrorIsObservedUnwrappedAfterThePreparationFailure() {
 		RuntimeException preparationFailure = new IllegalArgumentException("preparation failed");
 		AssertionError writeFailure = new AssertionError("write failed");
-		try (Fixture fixture = new Fixture(RequestInterceptor.defaultInstance())) {
+		Fixture fixture = new Fixture(RequestInterceptor.defaultInstance());
+		Soklet.run(fixture.config, () -> {
 			AtomicInteger callbacksAfterFailure = new AtomicInteger();
 			fixture.dispatch("/outcome", feedback -> result -> {
 				HttpTransportResponseFeedback.fromWriter(feedback, ignored ->
@@ -139,7 +144,7 @@ class HttpTransportResponseOutcomeTests {
 			assertEquals(500, fixture.observation.finished.get("/outcome").getStatusCode());
 			assertEquals(List.of(preparationFailure, writeFailure), fixture.observation.failures.get("/outcome"));
 			assertFalse(fixture.observation.written.containsKey("/outcome"));
-		}
+		});
 	}
 
 	@Test
@@ -151,7 +156,8 @@ class HttpTransportResponseOutcomeTests {
 				throw handlingFailure;
 			}
 		};
-		try (Fixture fixture = new Fixture(interceptor)) {
+		Fixture fixture = new Fixture(interceptor);
+		Soklet.run(fixture.config, () -> {
 			fixture.dispatch("/outcome", feedback -> HttpTransportResponseFeedback.fromWriter(feedback, result -> {
 				assertEquals(500, result.getMarshaledResponse().getStatusCode());
 				return HttpTransportResponseOutcome.replaced(response(503), null, writeFailure);
@@ -159,26 +165,28 @@ class HttpTransportResponseOutcomeTests {
 			assertSame(writeFailure, fixture.observation.writeFailures.get("/outcome"));
 			assertSame(writeFailure, fixture.metricWriteFailures.get("/outcome"));
 			assertEquals(503, fixture.observation.finished.get("/outcome").getStatusCode());
-		}
+		});
 	}
 
 	@Test
 	void feedbackChannelsAreIsolatedAcrossConcurrentRequests() throws Exception {
-		try (Fixture fixture = new Fixture(RequestInterceptor.defaultInstance());
-				var executor = java.util.concurrent.Executors.newFixedThreadPool(2)) {
-			CountDownLatch entered = new CountDownLatch(2);
-			var first = executor.submit(() -> fixture.dispatch("/outcome", feedback -> HttpTransportResponseFeedback.fromWriter(feedback, result -> {
-				entered.countDown(); await(entered);
-				return HttpTransportResponseOutcome.replaced(response(503), null, null);
-			})));
-			var second = executor.submit(() -> fixture.dispatch("/nested", feedback -> HttpTransportResponseFeedback.fromWriter(feedback, result -> {
-				entered.countDown(); await(entered);
-				return HttpTransportResponseOutcome.replaced(response(505), null, null);
-			})));
-			first.get(5, TimeUnit.SECONDS); second.get(5, TimeUnit.SECONDS);
-			assertEquals(503, fixture.observation.finished.get("/outcome").getStatusCode());
-			assertEquals(505, fixture.observation.finished.get("/nested").getStatusCode());
-		}
+		Fixture fixture = new Fixture(RequestInterceptor.defaultInstance());
+		Soklet.run(fixture.config, () -> {
+			try (var executor = java.util.concurrent.Executors.newFixedThreadPool(2)) {
+				CountDownLatch entered = new CountDownLatch(2);
+				var first = executor.submit(() -> fixture.dispatch("/outcome", feedback -> HttpTransportResponseFeedback.fromWriter(feedback, result -> {
+					entered.countDown(); await(entered);
+					return HttpTransportResponseOutcome.replaced(response(503), null, null);
+				})));
+				var second = executor.submit(() -> fixture.dispatch("/nested", feedback -> HttpTransportResponseFeedback.fromWriter(feedback, result -> {
+					entered.countDown(); await(entered);
+					return HttpTransportResponseOutcome.replaced(response(505), null, null);
+				})));
+				first.get(5, TimeUnit.SECONDS); second.get(5, TimeUnit.SECONDS);
+				assertEquals(503, fixture.observation.finished.get("/outcome").getStatusCode());
+				assertEquals(505, fixture.observation.finished.get("/nested").getStatusCode());
+			}
+		});
 	}
 
 	@Test
@@ -292,7 +300,8 @@ class HttpTransportResponseOutcomeTests {
 			AtomicInteger statusInMetrics = new AtomicInteger();
 			String path = timeout ? "/outcome" : "/stream";
 			int expected = timeout ? 503 : 505;
-			try (Soklet soklet = Soklet.fromConfig(config(decorator, observation, resource)
+			try {
+				Soklet.run(config(decorator, observation, resource)
 					.requestInterceptor(new RequestInterceptor() {
 						@Override public void interceptRequest(ServerType type, Request request, ResourceMethod method,
 								Function<Request, MarshaledResponse> generator, Consumer<MarshaledResponse> writer) {
@@ -302,26 +311,26 @@ class HttpTransportResponseOutcomeTests {
 					}).metricsCollector(new MetricsCollector() {
 				@Override public void didWriteResponse(ServerType type, Request request, ResourceMethod method,
 						MarshaledResponse response, Duration duration) { statusInMetrics.set(response.getStatusCode()); }
-			}).build())) {
-				soklet.start();
-				handler(delegate).handle(new MicrohttpRequest("GET", path, timeout ? "HTTP/1.1" : "HTTP/1.0",
-						List.of(new Header("Host", "localhost")), new byte[0], false, null), wire -> {
-					statusOnWire.set(wire.status());
-					wireWritten.countDown();
-				});
-				await(dispatchFinished);
-				await(resourceEntered);
-				if (timeout) await(wireWritten);
-				releaseResource.countDown();
-				await(wireWritten);
-				await(observation.finishedLatch);
-				assertEquals(expected, statusOnWire.get());
-				assertEquals(expected, observation.written.get(path).getStatusCode());
-				assertEquals(expected, observation.finished.get(path).getStatusCode());
-				assertFalse(observation.finished.get(path).isStreaming());
-				assertEquals(expected, statusInMetrics.get());
-				assertTrue(observation.failures.get(path).isEmpty());
-				assertEquals(0, resource.producerCalls.get());
+			}).build(), () -> {
+					handler(delegate).handle(new MicrohttpRequest("GET", path, timeout ? "HTTP/1.1" : "HTTP/1.0",
+							List.of(new Header("Host", "localhost")), new byte[0], false, null), wire -> {
+						statusOnWire.set(wire.status());
+						wireWritten.countDown();
+					});
+					await(dispatchFinished);
+					await(resourceEntered);
+					if (timeout) await(wireWritten);
+					releaseResource.countDown();
+					await(wireWritten);
+					await(observation.finishedLatch);
+					assertEquals(expected, statusOnWire.get());
+					assertEquals(expected, observation.written.get(path).getStatusCode());
+					assertEquals(expected, observation.finished.get(path).getStatusCode());
+					assertFalse(observation.finished.get(path).isStreaming());
+					assertEquals(expected, statusInMetrics.get());
+					assertTrue(observation.failures.get(path).isEmpty());
+					assertEquals(0, resource.producerCalls.get());
+			});
 			} finally {
 				releaseResource.countDown();
 			}
@@ -347,8 +356,7 @@ class HttpTransportResponseOutcomeTests {
 		Resource resource = new Resource();
 		AtomicInteger offers = new AtomicInteger();
 		AssertionError writeFailure = new AssertionError("HTTP/1.0 wire callback failed");
-		try (Soklet soklet = Soklet.fromConfig(config(decorator, observation, resource).build())) {
-			soklet.start();
+		Soklet.run(config(decorator, observation, resource).build(), () -> {
 			Handler handler = handler(delegate);
 			handler.handle(new MicrohttpRequest("GET", "/stream", "HTTP/1.0", List.of(new Header("Host", "localhost")), new byte[0], false, null), wire -> {
 				offers.incrementAndGet();
@@ -364,7 +372,7 @@ class HttpTransportResponseOutcomeTests {
 			assertEquals(0, resource.producerCalls.get());
 			assertEquals(1, observation.terminations.get());
 			assertEquals(StreamTerminationReason.PROTOCOL_UNSUPPORTED, observation.terminationReason);
-		}
+		});
 	}
 
 	@Test
@@ -498,15 +506,14 @@ class HttpTransportResponseOutcomeTests {
 		Resource resource = new Resource();
 		AtomicInteger offers = new AtomicInteger();
 		Map<String, Throwable> metricWriteFailures = new ConcurrentHashMap<>();
-		try (Soklet soklet = Soklet.fromConfig(config(decorator, observation, resource)
+		Soklet.run(config(decorator, observation, resource)
 				.metricsCollector(new MetricsCollector() {
 					@Override public void didFailToWriteResponse(ServerType type, Request request, ResourceMethod method,
 							MarshaledResponse response, Duration duration, Throwable failure) {
 						assertEquals(505, response.getStatusCode());
 						metricWriteFailures.put("/stream", failure);
 					}
-				}).build())) {
-			soklet.start();
+				}).build(), () -> {
 			handler(delegate).handle(new MicrohttpRequest("GET", "/stream", "HTTP/1.0",
 					List.of(new Header("Host", "localhost")), new byte[0], false, null), wire -> {
 				offers.incrementAndGet();
@@ -532,7 +539,7 @@ class HttpTransportResponseOutcomeTests {
 			assertEquals(0, resource.producerCalls.get());
 			assertEquals(1, observation.terminations.get());
 			assertEquals(StreamTerminationReason.PROTOCOL_UNSUPPORTED, observation.terminationReason);
-		}
+		});
 	}
 
 	private static void runOnJoinedThread(Runnable action) {
@@ -592,27 +599,25 @@ class HttpTransportResponseOutcomeTests {
 		}
 	}
 
-	private static final class Fixture implements AutoCloseable {
+	private static final class Fixture {
 		private final Observation observation = new Observation();
 		private final Map<String, Throwable> metricWriteFailures = new ConcurrentHashMap<>();
 		private final CustomTransport transport = new CustomTransport();
-		private final Soklet soklet;
+		private final SokletConfig config;
 		private Fixture(RequestInterceptor interceptor) {
-			this.soklet = Soklet.fromConfig(config(this.transport, this.observation, new Resource())
+			this.config = config(this.transport, this.observation, new Resource())
 					.requestInterceptor(interceptor).metricsCollector(new MetricsCollector() {
 						@Override public void didFailToWriteResponse(ServerType type, Request request, ResourceMethod method,
 								MarshaledResponse response, Duration duration, Throwable failure) {
 							metricWriteFailures.put(request.getResourcePath().getPath(), failure);
 						}
-					}).build());
-			this.soklet.start();
+					}).build();
 		}
 		private void dispatch(String path, Function<HttpTransportResponseFeedback, Consumer<HttpRequestResult>> consumerFactory) {
 			try (HttpTransportResponseFeedback feedback = HttpTransportResponseFeedback.create()) {
 				this.transport.handler.handleRequest(Request.fromPath(HttpMethod.GET, path), consumerFactory.apply(feedback));
 			}
 		}
-		@Override public void close() { this.soklet.close(); }
 	}
 
 	private static final class CustomTransport implements HttpServer {

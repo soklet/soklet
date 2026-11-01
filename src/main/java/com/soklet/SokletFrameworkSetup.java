@@ -37,7 +37,7 @@ import static java.util.Objects.requireNonNull;
 /**
  * The bounded, side-effecting framework-setup phase shared by the direct
  * one-shot owner and the isolated simulator.  Configuration construction and
- * {@link Soklet#fromConfig(SokletConfig)} deliberately do not invoke it.
+ * internal lifecycle construction deliberately do not invoke it.
  */
 @ThreadSafe
 final class SokletFrameworkSetup {

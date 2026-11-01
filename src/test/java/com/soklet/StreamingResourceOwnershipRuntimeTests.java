@@ -234,7 +234,7 @@ public class StreamingResourceOwnershipRuntimeTests {
 		};
 		ResourceMethodResolver resolver = ResourceMethodResolver.fromClasses(Set.of(WriterResource.class));
 		AtomicReference<String> body = new AtomicReference<>();
-		Throwable failure = null;
+		AtomicReference<Throwable> failure = new AtomicReference<>();
 		if (simulated) {
 			SimulatorConfig config = SimulatorConfig.builder().httpServer().resourceMethodResolver(resolver)
 					.instanceProvider(provider).lifecycleObserver(observation).build();
@@ -244,13 +244,12 @@ public class StreamingResourceOwnershipRuntimeTests {
 					Assertions.assertEquals(200, result.getMarshaledResponse().getStatusCode());
 					body.set(new String(result.getMarshaledResponse().bodyBytesOrEmpty(), StandardCharsets.UTF_8));
 				});
-			} catch (RuntimeException exception) { failure = exception; }
+			} catch (RuntimeException exception) { failure.set(exception); }
 		} else {
 			int port = findFreePort();
 			SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(port).build())
 					.resourceMethodResolver(resolver).instanceProvider(provider).lifecycleObserver(observation).build();
-			try (Soklet soklet = Soklet.fromConfig(config)) {
-				soklet.start();
+			Soklet.run(config, () -> {
 				HttpURLConnection connection = (HttpURLConnection) new URL("http://127.0.0.1:" + port + "/owned").openConnection();
 				connection.setRequestMethod(method.name());
 				connection.setConnectTimeout(2_000);
@@ -258,13 +257,13 @@ public class StreamingResourceOwnershipRuntimeTests {
 				try {
 					Assertions.assertEquals(200, connection.getResponseCode());
 					body.set(new String(connection.getInputStream().readAllBytes(), StandardCharsets.UTF_8));
-				} catch (IOException exception) { failure = exception; }
+				} catch (IOException exception) { failure.set(exception); }
 				finally { connection.disconnect(); }
 				if (method != HttpMethod.HEAD)
 					Assertions.assertTrue(observation.terminated.await(3, TimeUnit.SECONDS));
-			}
+			});
 		}
-		return new Outcome(body.get(), failure, observation.termination.get());
+		return new Outcome(body.get(), failure.get(), observation.termination.get());
 	}
 
 	public static final class WriterResource {

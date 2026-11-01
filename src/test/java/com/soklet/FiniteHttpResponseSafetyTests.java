@@ -33,20 +33,22 @@ class FiniteHttpResponseSafetyTests {
 	void customHeadRepresentationLengthSurvivesAndGetStillUsesActualLength() throws Exception {
 		ResponseMarshaler marshaler = ResponseMarshaler.builder().headHandler((request, response) ->
 				response.copy().body((MarshaledResponseBody) null).headers(Map.of("Content-Length", List.of("4242"))).finish()).build();
-		try (Fixture fixture = new Fixture(null, RequestInterceptor.defaultInstance(), marshaler)) {
+		Fixture fixture = new Fixture(null, RequestInterceptor.defaultInstance(), marshaler);
+		Soklet.run(fixture.config, () -> {
 			assertEquals(List.of("4242"), fixture.pipeline("HEAD", "/clean", "/clean").get(0).headers().get("content-length"));
 			assertEquals(List.of("3"), fixture.pipeline("GET", "/clean", "/clean").get(0).headers().get("content-length"));
 			WireResponse noContent = fixture.pipeline("HEAD", "/status/204", "/clean").get(0);
 			assertEquals(204, noContent.status());
 			assertFalse(noContent.headers().containsKey("content-length"));
-		}
+		});
 	}
 
 	@Test
 	void resetContentHasZeroLengthEvenWithCustomHeadRepresentationMetadata() throws Exception {
 		ResponseMarshaler marshaler = ResponseMarshaler.builder().headHandler((request, response) ->
 				response.copy().body((MarshaledResponseBody) null).headers(Map.of("Content-Length", List.of("4242"))).finish()).build();
-		try (Fixture fixture = new Fixture(null, RequestInterceptor.defaultInstance(), marshaler)) {
+		Fixture fixture = new Fixture(null, RequestInterceptor.defaultInstance(), marshaler);
+		Soklet.run(fixture.config, () -> {
 			for (String method : List.of("GET", "HEAD")) {
 				List<WireResponse> responses = fixture.boundedPipeline(method, "/status/205", "/clean");
 				assertEquals(205, responses.get(0).status());
@@ -54,7 +56,7 @@ class FiniteHttpResponseSafetyTests {
 				assertEquals("", responses.get(0).body());
 				assertEquals("def", responses.get(1).body());
 			}
-		}
+		});
 	}
 
 	@Test
@@ -63,7 +65,8 @@ class FiniteHttpResponseSafetyTests {
 		AtomicInteger status = new AtomicInteger();
 		ResponseMarshaler marshaler = ResponseMarshaler.builder().notFoundHandler(request ->
 				MarshaledResponse.withStatusCode(status.get()).body(new byte[]{1}).build()).build();
-		try (Fixture fixture = new Fixture(null, RequestInterceptor.defaultInstance(), marshaler)) {
+		Fixture fixture = new Fixture(null, RequestInterceptor.defaultInstance(), marshaler);
+		Soklet.run(fixture.config, () -> {
 			for (int bodylessStatus : List.of(204, 205, 304)) {
 				status.set(bodylessStatus);
 				List<WireResponse> responses = fixture.boundedPipeline("GET", "/missing", "/clean");
@@ -74,22 +77,24 @@ class FiniteHttpResponseSafetyTests {
 				assertEquals(200, responses.get(1).status());
 				assertEquals("def", responses.get(1).body());
 			}
-		}
+		});
 	}
 
 	@Test
 	void upgradeRequiredRetainsItsAdvertisementWithoutAcceptingUnsafeFraming() throws Exception {
-		try (Fixture fixture = new Fixture(null, RequestInterceptor.defaultInstance(), ResponseMarshaler.defaultInstance())) {
+		Fixture fixture = new Fixture(null, RequestInterceptor.defaultInstance(), ResponseMarshaler.defaultInstance());
+		Soklet.run(fixture.config, () -> {
 			WireResponse response = fixture.pipeline("GET", "/upgrade", "/clean").get(0);
 			assertEquals(426, response.status());
 			assertEquals(List.of("HTTP/2.0"), response.headers().get("upgrade"));
 			assertEquals(List.of("Upgrade"), response.headers().get("connection"));
 			assertFalse(response.headers().containsKey("transfer-encoding"));
-		}
+		});
 	}
 	@Test
 	void applicationFramingCannotDesynchronizePipelinedFiniteResponses() throws Exception {
-		try (Fixture fixture = new Fixture(null, RequestInterceptor.defaultInstance(), ResponseMarshaler.defaultInstance())) {
+		Fixture fixture = new Fixture(null, RequestInterceptor.defaultInstance(), ResponseMarshaler.defaultInstance());
+		Soklet.run(fixture.config, () -> {
 			for (String method : List.of("GET", "HEAD")) {
 				List<WireResponse> responses = fixture.pipeline(method, "/unsafe", "/clean");
 				WireResponse first = responses.get(0);
@@ -101,37 +106,41 @@ class FiniteHttpResponseSafetyTests {
 				assertEquals(List.of("z", "a"), first.headers().get("x-order"));
 				assertEquals(200, responses.get(1).status()); assertEquals("def", responses.get(1).body());
 			}
-		}
+		});
 	}
 
 	@Test
 	void finiteHeadFileLengthUsesOriginalRepresentationInsteadOfApplicationHeader(@TempDir Path directory) throws Exception {
 		Path file = directory.resolve("representation.txt"); Files.writeString(file, "abcde", StandardCharsets.US_ASCII);
-		try (Fixture fixture = new Fixture(file, RequestInterceptor.defaultInstance(), ResponseMarshaler.defaultInstance())) {
+		Fixture fixture = new Fixture(file, RequestInterceptor.defaultInstance(), ResponseMarshaler.defaultInstance());
+		Soklet.run(fixture.config, () -> {
 			List<WireResponse> responses = fixture.pipeline("HEAD", "/file", "/clean");
 			assertEquals(200, responses.get(0).status());
 			assertEquals(List.of("5"), responses.get(0).headers().get("content-length"));
 			assertEquals("", responses.get(0).body());
 			assertEquals(200, responses.get(1).status()); assertEquals("def", responses.get(1).body());
-		}
+		});
 	}
 
 	@Test
 	void explicitConnectionCloseSurvivesHopHeaderFiltering() throws Exception {
-		try (Fixture fixture = new Fixture(null, RequestInterceptor.defaultInstance(), ResponseMarshaler.defaultInstance());
-				Socket socket = fixture.socket()) {
-			socket.getOutputStream().write(request("GET", "/close", false).getBytes(StandardCharsets.US_ASCII));
-			WireResponse response = readResponse(socket.getInputStream(), false);
-			assertEquals(200, response.status()); assertEquals("abc", response.body());
-			assertEquals(List.of("close"), response.headers().get("connection"));
-			assertFalse(response.headers().containsKey("x-hop"));
-			assertEquals(-1, socket.getInputStream().read());
-		}
+		Fixture fixture = new Fixture(null, RequestInterceptor.defaultInstance(), ResponseMarshaler.defaultInstance());
+		Soklet.run(fixture.config, () -> {
+			try (Socket socket = fixture.socket()) {
+				socket.getOutputStream().write(request("GET", "/close", false).getBytes(StandardCharsets.US_ASCII));
+				WireResponse response = readResponse(socket.getInputStream(), false);
+				assertEquals(200, response.status()); assertEquals("abc", response.body());
+				assertEquals(List.of("close"), response.headers().get("connection"));
+				assertFalse(response.headers().containsKey("x-hop"));
+				assertEquals(-1, socket.getInputStream().read());
+			}
+		});
 	}
 
 	@Test
 	void invalidFinalStatusesBecomeFinite500AndLeaveNextPipelinedResponseReadable() throws Exception {
-		try (Fixture fixture = new Fixture(null, RequestInterceptor.defaultInstance(), ResponseMarshaler.defaultInstance())) {
+		Fixture fixture = new Fixture(null, RequestInterceptor.defaultInstance(), ResponseMarshaler.defaultInstance());
+		Soklet.run(fixture.config, () -> {
 			for (int status : List.of(42, 100, 101, 199, 600, 999, 1000)) {
 				List<WireResponse> responses = fixture.pipeline("GET", "/status/" + status, "/clean");
 				assertEquals(500, responses.get(0).status(), "Unsafe final status " + status);
@@ -140,7 +149,7 @@ class FiniteHttpResponseSafetyTests {
 			for (int status : List.of(200, 299, 599))
 				assertEquals(status, fixture.pipeline("GET", "/status/" + status, "/clean").get(0).status());
 			assertEquals(0L, fixture.metrics.snapshot().orElseThrow().getActiveRequests());
-		}
+		});
 	}
 
 	@Test
@@ -153,14 +162,16 @@ class FiniteHttpResponseSafetyTests {
 				else writer.accept(generator.apply(request));
 			}
 		};
-		try (Fixture fixture = new Fixture(null, interceptor, ResponseMarshaler.defaultInstance())) {
+		Fixture fixture = new Fixture(null, interceptor, ResponseMarshaler.defaultInstance());
+		Soklet.run(fixture.config, () -> {
 			assertEquals(500, fixture.pipeline("GET", "/override", "/clean").get(0).status());
-		}
+		});
 		ResponseMarshaler marshaler = ResponseMarshaler.builder().postProcessor(response ->
 				response.getStatusCode() == 500 ? response : response.copy().statusCode(101).finish()).build();
-		try (Fixture fixture = new Fixture(null, RequestInterceptor.defaultInstance(), marshaler)) {
-			assertEquals(500, fixture.pipeline("GET", "/not-found", "/clean").get(0).status());
-		}
+		Fixture customMarshalerFixture = new Fixture(null, RequestInterceptor.defaultInstance(), marshaler);
+		Soklet.run(customMarshalerFixture.config, () -> {
+			assertEquals(500, customMarshalerFixture.pipeline("GET", "/not-found", "/clean").get(0).status());
+		});
 	}
 
 	private static Map<String, List<String>> unsafeHeaders(String connection) {
@@ -223,16 +234,16 @@ class FiniteHttpResponseSafetyTests {
 		return new WireResponse(status, headers, new String(body, StandardCharsets.US_ASCII));
 	}
 
-	private static final class Fixture implements AutoCloseable {
+	private static final class Fixture {
 		private final int port;
-		private final Soklet soklet;
+		private final SokletConfig config;
 		private final DefaultMetricsCollector metrics = DefaultMetricsCollector.defaultInstance();
 		private final AtomicInteger finishes = new AtomicInteger();
 		private int expectedFinishes;
 		private Fixture(Path file, RequestInterceptor interceptor, ResponseMarshaler marshaler) throws Exception {
 			try (ServerSocket reserved = new ServerSocket(0)) { this.port = reserved.getLocalPort(); }
 			Resource resource = new Resource(file);
-			SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(this.port).host("127.0.0.1").build())
+			this.config = SokletConfig.withHttpServer(HttpServer.withPort(this.port).host("127.0.0.1").build())
 					.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(java.time.Duration.ofSeconds(10))
 							.startupCancelationTimeout(java.time.Duration.ofSeconds(1)).gracefulShutdownTimeout(java.time.Duration.ofSeconds(1))
 							.forcedShutdownTimeout(java.time.Duration.ofSeconds(1)).build())
@@ -246,7 +257,6 @@ class FiniteHttpResponseSafetyTests {
 						}
 					})
 					.instanceProvider(new InstanceProvider() { @Override public <T> T provide(Class<T> type) { return type.cast(resource); } }).build();
-			this.soklet = Soklet.fromConfig(config); this.soklet.start();
 		}
 		private Socket socket() throws Exception { Socket socket = new Socket("127.0.0.1", this.port); socket.setSoTimeout(5000); return socket; }
 		private List<WireResponse> boundedPipeline(String method, String firstPath, String secondPath) throws Exception {
@@ -300,6 +310,5 @@ class FiniteHttpResponseSafetyTests {
 				return List.of(first, second);
 			}
 		}
-		@Override public void close() { this.soklet.close(); }
 	}
 }

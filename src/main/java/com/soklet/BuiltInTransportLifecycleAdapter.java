@@ -846,7 +846,7 @@ final class BuiltInTransportLifecycleAdapter {
 			if (sameInstance(primary, exactCause))
 				generation.signal.signalTerminationFailure(primary);
 			else
-				generation.group.trySuppressFailureBeforeFreeze(
+				generation.group.tryRetainFailureBeforeFreeze(
 						generation.group.root(), primary, exactCause);
 		}
 	}

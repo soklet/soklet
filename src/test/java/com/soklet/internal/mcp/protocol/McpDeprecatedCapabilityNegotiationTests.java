@@ -80,14 +80,12 @@ public class McpDeprecatedCapabilityNegotiationTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
-		Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+		Soklet.run(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.lifecycleObservers(List.of(observer))
 				.metricsCollector(MetricsCollector.disabledInstance())
-				.build());
+				.build(), () -> {
 
-		try {
-			soklet.start();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			String body = """
@@ -122,8 +120,6 @@ public class McpDeprecatedCapabilityNegotiationTests {
 			Assertions.assertTrue(logEvents.isEmpty(),
 					() -> "Deprecated capability negotiation emitted LogEvent(s): "
 							+ logEvents);
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 }

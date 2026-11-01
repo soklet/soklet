@@ -78,8 +78,11 @@ public class RealtimeTransportSoakTests {
 				.build();
 		SoakResourceSnapshot baseline;
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
+		Soklet soklet = Soklet.run(config);
+		try (@SuppressWarnings("try") AutoCloseable sokletShutdown = () -> {
+			soklet.requestShutdown();
+			soklet.awaitShutdownAsync().toCompletableFuture().join();
+		}) {
 			openSseStreamTakeEventAndClose(port, "warmup");
 			assertGaugeReturnsToZero("active SSE streams", () -> activeSseStreams(metricsCollector), Duration.ofSeconds(3));
 			baseline = SoakResourceSnapshot.captureAfterGc();

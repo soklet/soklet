@@ -254,28 +254,10 @@
       "defaultSwitchGuidance": "Use a forward-compatible default."
     },
     {
-      "owner": "com.soklet.ShutdownTrigger",
-      "kind": "enum",
-      "status": "evolutionary",
-      "rationale": "The framework may add reviewed classification values.",
-      "changePolicy": "New alternatives require API, behavior and observability review.",
-      "javadocGuidance": "Document vocabulary growth in 4.x.",
-      "defaultSwitchGuidance": "Use a forward-compatible default."
-    },
-    {
       "owner": "com.soklet.SokletLifecycleException",
       "kind": "sealedRoot",
       "status": "evolutionary",
       "rationale": "The framework may add reviewed response or lifecycle alternatives.",
-      "changePolicy": "New alternatives require API, behavior and observability review.",
-      "javadocGuidance": "Document vocabulary growth in 4.x.",
-      "defaultSwitchGuidance": "Use a forward-compatible default."
-    },
-    {
-      "owner": "com.soklet.SokletStatus",
-      "kind": "enum",
-      "status": "evolutionary",
-      "rationale": "The framework may add reviewed classification values.",
       "changePolicy": "New alternatives require API, behavior and observability review.",
       "javadocGuidance": "Document vocabulary growth in 4.x.",
       "defaultSwitchGuidance": "Use a forward-compatible default."

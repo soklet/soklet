@@ -112,12 +112,11 @@ class McpCatalogAccessLocalizationReloadPublicRuntimeTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
-		Soklet owner = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+		SokletConfig ownerConfig = SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.build());
+				.build();
 
-		try {
-			owner.start();
+		Soklet.run(ownerConfig, () -> {
 			String missingTools = body(send(server, "missing-tools", "tools/list"));
 			String missingPrompts = body(send(server, "missing-prompts",
 					"prompts/list"));
@@ -177,9 +176,7 @@ class McpCatalogAccessLocalizationReloadPublicRuntimeTests {
 				Assertions.assertTrue(allowed.contains(lookup.owner()),
 						() -> "A filtered owner reached localization: " + lookup);
 			}
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	private static McpEndpoint endpoint() {

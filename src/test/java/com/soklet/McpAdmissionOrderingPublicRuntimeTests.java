@@ -32,7 +32,8 @@ class McpAdmissionOrderingPublicRuntimeTests {
 
 	@Test
 	void rejectedKnownUnknownAndDescriptorInvalidTargetsHaveTheSameChallenge() throws Exception {
-		try (Fixture fixture = new Fixture()) {
+		Fixture fixture = new Fixture();
+		Soklet.run(fixture.config, () -> {
 			for (McpProtocolVersion version : VERSIONS) {
 				String expected = null;
 				for (List<String> call : List.of(
@@ -56,12 +57,13 @@ class McpAdmissionOrderingPublicRuntimeTests {
 			assertEquals(0, fixture.handlers.get());
 			assertEquals(0, fixture.charges.get());
 			assertEquals(0, fixture.requestCharges.get());
-		}
+		});
 	}
 
 	@Test
 	void acceptedTargetsKeepTheirRevisionSpecificSuccessAndMissingErrors() throws Exception {
-		try (Fixture fixture = new Fixture()) {
+		Fixture fixture = new Fixture();
+		Soklet.run(fixture.config, () -> {
 			fixture.accepted.set(true);
 			for (McpProtocolVersion version : VERSIONS) {
 				for (List<String> call : List.of(
@@ -81,12 +83,13 @@ class McpAdmissionOrderingPublicRuntimeTests {
 			}
 			assertEquals(18, fixture.admissions.get());
 			assertEquals(12, fixture.handlers.get());
-		}
+		});
 	}
 
 	@Test
 	void rejectedCallersCannotProbeRequiredCapabilitiesOrCustomMirroredHeaders() throws Exception {
-		try (Fixture fixture = new Fixture()) {
+		Fixture fixture = new Fixture();
+		Soklet.run(fixture.config, () -> {
 			McpProtocolVersion version = McpProtocolVersion.V2026_07_28;
 			for (String name : List.of("mirrored-tool", "absent-tool")) {
 				HttpResponse<String> response = fixture.send(version, "tools/call", name,
@@ -108,13 +111,14 @@ class McpAdmissionOrderingPublicRuntimeTests {
 			assertTrue(missingCapability.body().contains("\"code\":-32021"), missingCapability.body());
 			assertEquals(5, fixture.admissions.get());
 			assertEquals(0, fixture.handlers.get());
-		}
+		});
 	}
 
 	@Test
 	void unsupportedVersionsCannotProbeRegisteredCustomHeaders() throws Exception {
-		for (McpUnknownMirroredHeaderPolicy policy : McpUnknownMirroredHeaderPolicy.values())
-			try (Fixture fixture = new Fixture(policy)) {
+		for (McpUnknownMirroredHeaderPolicy policy : McpUnknownMirroredHeaderPolicy.values()) {
+			Fixture fixture = new Fixture(policy);
+			Soklet.run(fixture.config, () -> {
 				String expected = null;
 				for (String name : List.of("mirrored-tool", "absent-tool")) {
 					HttpResponse<String> response = fixture.send("2099-01-01", "tools/call", name,
@@ -129,12 +133,14 @@ class McpAdmissionOrderingPublicRuntimeTests {
 				assertEquals(0, fixture.handlers.get());
 				assertEquals(0, fixture.charges.get());
 				assertEquals(0, fixture.requestCharges.get());
-			}
+			});
+		}
 	}
 
 	@Test
 	void wireShapeFailuresStillPrecedeAdmission() throws Exception {
-		try (Fixture fixture = new Fixture()) {
+		Fixture fixture = new Fixture();
+		Soklet.run(fixture.config, () -> {
 			for (McpProtocolVersion version : VERSIONS)
 				for (List<String> call : List.of(List.of("tools/call", "", "\"name\":42"),
 						List.of("prompts/get", "known-prompt", "\"name\":\"known-prompt\",\"arguments\":{\"subject\":42}"),
@@ -143,10 +149,10 @@ class McpAdmissionOrderingPublicRuntimeTests {
 					assertTrue(response.body().contains("\"code\":-32602") || response.body().contains("\"code\":-32020"), response.body());
 				}
 			assertEquals(0, fixture.admissions.get());
-		}
+		});
 	}
 
-	private static final class Fixture implements AutoCloseable {
+	private static final class Fixture {
 		private final AtomicBoolean accepted = new AtomicBoolean();
 		private final AtomicInteger admissions = new AtomicInteger();
 		private final AtomicInteger handlers = new AtomicInteger();
@@ -154,7 +160,7 @@ class McpAdmissionOrderingPublicRuntimeTests {
 		private final AtomicInteger requestCharges = new AtomicInteger();
 		private final HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
 		private final McpServer server;
-		private final Soklet owner;
+		private final SokletConfig config;
 
 		Fixture() {
 			this(McpUnknownMirroredHeaderPolicy.IGNORE);
@@ -185,14 +191,13 @@ class McpAdmissionOrderingPublicRuntimeTests {
 					.admissionController(context -> { admissions.incrementAndGet(); return accepted.get() ? McpAdmissionDecision.accepted() : McpAdmissionDecision.rejected(rejection); })
 					.requestRateLimiter(context -> { requestCharges.incrementAndGet(); return McpRateLimitDecision.allowed(); })
 					.toolRateLimiter(context -> { charges.incrementAndGet(); return McpRateLimitDecision.allowed(); }).build();
-			owner = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+			config = SokletConfig.withMcpServer(server)
 					.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(10))
 							.startupCancelationTimeout(Duration.ofSeconds(1))
 							.gracefulShutdownTimeout(Duration.ofSeconds(1))
 							.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
 					.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-					.lifecycleObserver(new LifecycleObserver() {}).build());
-			owner.start();
+					.lifecycleObserver(new LifecycleObserver() {}).build();
 		}
 
 		private McpCompleteResult resourceResult(McpResourceReadContext context) {
@@ -220,7 +225,6 @@ class McpAdmissionOrderingPublicRuntimeTests {
 			return client.send(request.POST(HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());
 		}
 
-		@Override public void close() { owner.close(); }
 	}
 
 	private record Tenant(@com.soklet.annotation.McpHeader(name = "Tenant") String tenant) {}

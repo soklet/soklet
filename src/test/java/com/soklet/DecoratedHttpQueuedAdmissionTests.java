@@ -31,16 +31,15 @@ class DecoratedHttpQueuedAdmissionTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Resource.class)))
 				.instanceProvider(new InstanceProvider() { @Override public <T> T provide(Class<T> type) { return type.cast(resource); } })
 				.lifecycleObserver(new LifecycleObserver() { @Override public void didReceiveLogEvent(LogEvent event) {} }).build();
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
+		ShutdownResult result = Soklet.run(config, () -> {
 			try (Socket socket = open(port, "/fallback")) {
 				String response = read(socket);
 				assertTrue(response.startsWith("HTTP/1.1 200"), response);
 				assertTrue(response.endsWith("queued"), response);
 				assertEquals(1, resource.queuedCalls.get());
 			}
-			assertEquals(ShutdownDisposition.GRACEFUL, soklet.shutdown().toCompletableFuture().get(3, TimeUnit.SECONDS).getShutdownDisposition());
-		}
+		});
+		assertEquals(ShutdownDisposition.GRACEFUL, result.getShutdownDisposition());
 	}
 	@Test
 	void transparentDecoratorPreservesQueuedAdmissionAcrossQuiesce() throws Exception { assertQueuedAdmission(false); }
@@ -75,7 +74,9 @@ class DecoratedHttpQueuedAdmissionTests {
 				.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(2))
 						.startupCancelationTimeout(Duration.ofSeconds(1)).gracefulShutdownTimeout(Duration.ofSeconds(5))
 						.forcedShutdownTimeout(Duration.ofMillis(200)).build()).build();
-		try (Soklet soklet = Soklet.fromConfig(config)) {
+		// Stop explicitly while the second admitted dispatch is still queued.
+		try (SokletTestScope sokletScope = SokletTestScope.of(Soklet.fromConfig(config))) {
+			Soklet soklet = sokletScope.soklet();
 			soklet.start();
 			try (Socket first = open(port, "/block")) {
 				assertTrue(resource.entered.await(2, TimeUnit.SECONDS));

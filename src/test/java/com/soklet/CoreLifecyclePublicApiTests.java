@@ -91,17 +91,76 @@ class CoreLifecyclePublicApiTests {
 	}
 
 	@Test
-	void applicationConfigurationParametersUseTypeAlignedName()
+	void lifecycleConfigurationParametersUseTypeAlignedName()
 			throws Exception {
-		Assertions.assertEquals("sokletConfig", SokletApplication.class
-				.getDeclaredMethod("fromConfig", SokletConfig.class)
-				.getParameters()[0].getName());
-		Assertions.assertEquals("sokletConfig", SokletApplication.class
-				.getDeclaredMethod("run", SokletConfig.class)
-				.getParameters()[0].getName());
-		Assertions.assertEquals("sokletConfig", SokletApplication.class
-				.getDeclaredMethod("run", SokletConfig.class,
-						ShutdownTrigger[].class).getParameters()[0].getName());
+		for (Method method : List.of(
+				Soklet.class.getMethod("run", SokletConfig.class),
+				Soklet.class.getMethod("run", SokletConfig.class, ShutdownCleanup.class),
+				Soklet.class.getMethod("run", SokletConfig.class, Soklet.RunAction.class),
+				Soklet.class.getMethod("run", SokletConfig.class,
+						ShutdownCleanup.class, Soklet.RunAction.class))) {
+			Assertions.assertEquals("sokletConfig",
+					method.getParameters()[0].getName());
+		}
+	}
+
+	@Test
+	void sokletExposesOnlyTheReviewedLifecycleOperations() throws Exception {
+		List<Method> methods = Arrays.stream(Soklet.class.getDeclaredMethods())
+				.filter(method -> java.lang.reflect.Modifier.isPublic(
+						method.getModifiers())).toList();
+		Assertions.assertEquals(7, methods.size());
+		Assertions.assertEquals(Set.of("run", "requestShutdown", "awaitShutdown",
+				"awaitShutdownAsync"), methods.stream().map(Method::getName)
+						.collect(Collectors.toUnmodifiableSet()));
+		Assertions.assertEquals(void.class,
+				Soklet.class.getMethod("requestShutdown").getReturnType());
+		Assertions.assertEquals(ShutdownResult.class,
+				Soklet.class.getMethod("awaitShutdown").getReturnType());
+		Assertions.assertEquals(java.util.concurrent.CompletionStage.class,
+				Soklet.class.getMethod("awaitShutdownAsync").getReturnType());
+		Assertions.assertFalse(AutoCloseable.class.isAssignableFrom(Soklet.class));
+		Assertions.assertTrue(Arrays.stream(Soklet.class.getConstructors())
+				.noneMatch(constructor -> java.lang.reflect.Modifier.isPublic(
+						constructor.getModifiers())));
+	}
+
+	@Test
+	void scopedRunUsesANoArgumentCheckedExceptionTransparentAction()
+			throws Exception {
+		Method action = Soklet.RunAction.class.getDeclaredMethod("run");
+		Assertions.assertEquals(void.class, action.getReturnType());
+		Assertions.assertEquals(0, action.getParameterCount());
+		Assertions.assertArrayEquals(new Class<?>[] { Throwable.class },
+				action.getExceptionTypes());
+		Assertions.assertEquals("E", action.getGenericExceptionTypes()[0].getTypeName());
+		Assertions.assertNotNull(Soklet.RunAction.class.getAnnotation(FunctionalInterface.class));
+		for (Method run : List.of(
+				Soklet.class.getMethod("run", SokletConfig.class, Soklet.RunAction.class),
+				Soklet.class.getMethod("run", SokletConfig.class,
+						ShutdownCleanup.class, Soklet.RunAction.class))) {
+			Assertions.assertEquals(ShutdownResult.class, run.getReturnType());
+			Assertions.assertFalse(run.isVarArgs());
+			Assertions.assertEquals("E", run.getGenericExceptionTypes()[0].getTypeName());
+		}
+		Assertions.assertEquals(Soklet.class,
+				Soklet.class.getMethod("run", SokletConfig.class).getReturnType());
+		Assertions.assertEquals(Soklet.class, Soklet.class.getMethod(
+				"run", SokletConfig.class, ShutdownCleanup.class).getReturnType());
+		Assertions.assertThrows(ClassNotFoundException.class,
+				() -> Class.forName("com.soklet.ShutdownTrigger"));
+	}
+
+	@Test
+	void aggregateObserversCarryOnlyOutcomePayloads() throws Exception {
+		LifecycleObserver.class.getMethod("willStartSoklet");
+		LifecycleObserver.class.getMethod("didStartSoklet");
+		LifecycleObserver.class.getMethod("didFailToStartSoklet", Throwable.class);
+		LifecycleObserver.class.getMethod("willStopSoklet");
+		LifecycleObserver.class.getMethod("didStopSoklet", ShutdownResult.class);
+		Assertions.assertTrue(Arrays.stream(LifecycleObserver.class.getMethods())
+				.flatMap(method -> Arrays.stream(method.getParameterTypes()))
+				.noneMatch(Soklet.class::equals));
 	}
 
 	@Test

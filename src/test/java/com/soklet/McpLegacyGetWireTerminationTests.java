@@ -29,35 +29,38 @@ class McpLegacyGetWireTerminationTests {
 
 	private void assertWireClosed(boolean graceExpired) throws Exception {
 		for (McpProtocolVersion version : List.of(McpProtocolVersion.V2025_06_18, McpProtocolVersion.V2025_11_25)) {
-			try (Fixture fixture = new Fixture(true, builder -> {})) {
-				String id = fixture.initialize("/mcp", version);
-				try (RawClient client = fixture.openControl("GET", "/mcp", version, id, "alice", "", List.of())) {
-					Head head = client.readHead();
-					assertEquals(200, head.status());
-					assertEquals("chunked", head.header("Transfer-Encoding"));
-					// Select the same established control used by notification-pressure
-					// eviction, without depending on kernel send-buffer sizing or load.
-					Object runtime = field(field(fixture.server, "runtimeBridge"), "runtime");
-					Map<?, ?> controls = (Map<?, ?>) field(runtime, "legacyGetControls");
-					assertEquals(1, controls.size());
-					Object get = controls.values().iterator().next();
-					if (graceExpired) {
-						Object control = field(get, "control");
-						synchronized (field(control, "lock")) {
-							set(get, "closing", true);
-							set(get, "closeReason", McpStreamTerminationReason.SERVER_STOPPING);
-							set(get, "closeDeadlineNanos", 0L);
-						}
-						invoke(get, "onTimer", new Class<?>[]{long.class}, System.nanoTime());
-					} else invoke(get, "shedNotificationPressure", new Class<?>[0]);
-					// An unfinished chunked stream cannot be reused as an HTTP keepalive
-					// connection. It must end in EOF, rather than hang until header timeout.
-					assertThrows(EOFException.class, () -> client.readBody(head));
-					long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
-					while (fixture.server.getDiagnostics().getActiveRequestStreams() != 0 && System.nanoTime() < deadline)
-						Thread.sleep(5);
-					assertEquals(0, fixture.server.getDiagnostics().getActiveRequestStreams());
-				}
+			{
+				Fixture fixture = new Fixture(true, builder -> {});
+				Soklet.run(fixture.config, () -> {
+					String id = fixture.initialize("/mcp", version);
+					try (RawClient client = fixture.openControl("GET", "/mcp", version, id, "alice", "", List.of())) {
+						Head head = client.readHead();
+						assertEquals(200, head.status());
+						assertEquals("chunked", head.header("Transfer-Encoding"));
+						// Select the same established control used by notification-pressure
+						// eviction, without depending on kernel send-buffer sizing or load.
+						Object runtime = field(field(fixture.server, "runtimeBridge"), "runtime");
+						Map<?, ?> controls = (Map<?, ?>) field(runtime, "legacyGetControls");
+						assertEquals(1, controls.size());
+						Object get = controls.values().iterator().next();
+						if (graceExpired) {
+							Object control = field(get, "control");
+							synchronized (field(control, "lock")) {
+								set(get, "closing", true);
+								set(get, "closeReason", McpStreamTerminationReason.SERVER_STOPPING);
+								set(get, "closeDeadlineNanos", 0L);
+							}
+							invoke(get, "onTimer", new Class<?>[]{long.class}, System.nanoTime());
+						} else invoke(get, "shedNotificationPressure", new Class<?>[0]);
+						// An unfinished chunked stream cannot be reused as an HTTP keepalive
+						// connection. It must end in EOF, rather than hang until header timeout.
+						assertThrows(EOFException.class, () -> client.readBody(head));
+						long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+						while (fixture.server.getDiagnostics().getActiveRequestStreams() != 0 && System.nanoTime() < deadline)
+							Thread.sleep(5);
+						assertEquals(0, fixture.server.getDiagnostics().getActiveRequestStreams());
+					}
+				});
 			}
 		}
 	}

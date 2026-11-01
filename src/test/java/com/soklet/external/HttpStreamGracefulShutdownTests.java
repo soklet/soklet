@@ -59,13 +59,12 @@ class HttpStreamGracefulShutdownTests {
 	@Test
 	void liveFeedFinishesItsOutputAndFinalizerWhileAFiniteDownloadKeepsDraining() throws Exception {
 		try (Fixture fixture = new Fixture()) {
-			fixture.soklet.start();
 			try (Socket feed = connect(fixture.port, "/feed"); Socket finite = connect(fixture.port, "/finite")) {
 				assertTrue(readHead(feed).toLowerCase(java.util.Locale.ROOT).contains("transfer-encoding: chunked"));
 				assertTrue(readHead(finite).toLowerCase(java.util.Locale.ROOT).contains("transfer-encoding: chunked"));
 				assertTrue(fixture.resource.feedEntered.await(3, TimeUnit.SECONDS));
 				assertTrue(fixture.resource.finiteEntered.await(3, TimeUnit.SECONDS));
-				var shutdown = fixture.soklet.shutdown().toCompletableFuture();
+				var shutdown = com.soklet.SokletTestScope.shutdown(fixture.soklet).toCompletableFuture();
 				assertEquals("begin\nend\ntail\n", readChunkedBody(feed));
 				assertTrue(fixture.resource.finiteStreams.get(0).isGracefulShutdownRequested());
 				assertFalse(shutdown.isDone(), "The finite writer is still retained and may ignore the advisory request");
@@ -181,6 +180,7 @@ class HttpStreamGracefulShutdownTests {
 		}
 	}
 
+	// This fixture exposes shutdown while a live stream is held; its stop timing is the assertion.
 	private static final class Fixture implements AutoCloseable {
 		final Resource resource = new Resource();
 		final Map<String, StreamTermination> terminations = new ConcurrentHashMap<>();
@@ -188,7 +188,7 @@ class HttpStreamGracefulShutdownTests {
 		final Soklet soklet;
 		Fixture() throws Exception {
 			try (ServerSocket socket = new ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))) { this.port = socket.getLocalPort(); }
-			this.soklet = Soklet.fromConfig(SokletConfig.withHttpServer(HttpServer.withPort(this.port).host("127.0.0.1")
+			this.soklet = Soklet.run(SokletConfig.withHttpServer(HttpServer.withPort(this.port).host("127.0.0.1")
 					.streamingResponseTimeout(Duration.ofSeconds(10)).build()).resourceMethodResolver(resolver()).instanceProvider(provider(this.resource))
 					.lifecyclePolicy(policy()).lifecycleObserver(new LifecycleObserver() {
 						@Override public void didTerminateResponseStream(StreamingResponseHandle handle, StreamTermination termination) {
@@ -196,7 +196,7 @@ class HttpStreamGracefulShutdownTests {
 						}
 					}).build());
 		}
-		@Override public void close() { this.resource.cleanupRequested.set(true); this.resource.releaseFinite.countDown(); this.soklet.close(); }
+		@Override public void close() { this.resource.cleanupRequested.set(true); this.resource.releaseFinite.countDown(); com.soklet.SokletTestScope.close(this.soklet); }
 	}
 
 	private static Socket connect(int port, String path) throws Exception {

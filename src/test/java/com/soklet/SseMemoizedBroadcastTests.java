@@ -82,44 +82,50 @@ class SseMemoizedBroadcastTests {
 	@TestFactory
 	Stream<DynamicTest> liveBroadcastCachesProviderAndSerializationFailuresAndRecoversOnTheNextCall() {
 		return cases().map(testCase -> DynamicTest.dynamicTest(testCase.toString(), () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
-			try (LiveFixture fixture = new LiveFixture()) {
-				SseBroadcaster broadcaster = fixture.server.acquireBroadcaster(PATH).orElseThrow();
-				broadcast(broadcaster, testCase.comments(), context -> { fail("No key selection without clients"); return null; },
-						groupKey -> { fail("No generation without clients"); return null; });
-				fixture.connect();
-				Map<GroupKey, Integer> calls = new HashMap<>();
-				RuntimeException failure = new IllegalStateException("controlled provider failure");
-				broadcast(broadcaster, testCase.comments(), SseMemoizedBroadcastTests::key, groupKey -> {
-					calls.merge(groupKey, 1, Integer::sum);
-					if (failedGroup(groupKey)) {
-						if (testCase.nullResult()) return null;
-						throw failure;
+			LiveFixture fixture = new LiveFixture();
+			ShutdownResult result = Soklet.run(fixture.config, () -> {
+				try {
+					SseBroadcaster broadcaster = fixture.server.acquireBroadcaster(PATH).orElseThrow();
+					broadcast(broadcaster, testCase.comments(), context -> { fail("No key selection without clients"); return null; },
+							groupKey -> { fail("No generation without clients"); return null; });
+					fixture.connect();
+					Map<GroupKey, Integer> calls = new HashMap<>();
+					RuntimeException failure = new IllegalStateException("controlled provider failure");
+					broadcast(broadcaster, testCase.comments(), SseMemoizedBroadcastTests::key, groupKey -> {
+						calls.merge(groupKey, 1, Integer::sum);
+						if (failedGroup(groupKey)) {
+							if (testCase.nullResult()) return null;
+							throw failure;
+						}
+						return "first";
+					});
+					assertOncePerKey(calls);
+					List<LogEvent> failures = fixture.generationFailures();
+					assertEquals(2, failures.size());
+					for (LogEvent log : failures) {
+						assertTrue(log.getMessage().contains("2 connections"), log.getMessage());
+						if (testCase.nullResult()) assertInstanceOf(NullPointerException.class, log.getThrowable().orElseThrow());
+						else assertSame(failure, log.getThrowable().orElseThrow());
 					}
-					return "first";
-				});
-				assertOncePerKey(calls);
-				List<LogEvent> failures = fixture.generationFailures();
-				assertEquals(2, failures.size());
-				for (LogEvent log : failures) {
-					assertTrue(log.getMessage().contains("2 connections"), log.getMessage());
-					if (testCase.nullResult()) assertInstanceOf(NullPointerException.class, log.getThrowable().orElseThrow());
-					else assertSame(failure, log.getThrowable().orElseThrow());
+					assertEquals(List.of(new Outcome(testCase.comments(), 2, 2, 0)), fixture.outcomes);
+					for (int i = 4; i < GROUPS.length; i++)
+						assertEquals(frame(testCase.comments(), "first"), readThrough(fixture.sockets.get(i), "\n\n"));
+					calls.clear();
+					broadcast(broadcaster, testCase.comments(), SseMemoizedBroadcastTests::key, groupKey -> {
+						calls.merge(groupKey, 1, Integer::sum);
+						return "recovered";
+					});
+					assertOncePerKey(calls);
+					for (Socket socket : fixture.sockets)
+						assertEquals(frame(testCase.comments(), "recovered"), readThrough(socket, "\n\n"));
+					assertEquals(2, fixture.generationFailures().size());
+					assertEquals(new Outcome(testCase.comments(), 6, 6, 0), fixture.outcomes.get(1));
+					assertEquals(6, broadcaster.getClientCount());
+				} finally {
+					fixture.closeSockets();
 				}
-				assertEquals(List.of(new Outcome(testCase.comments(), 2, 2, 0)), fixture.outcomes);
-				for (int i = 4; i < GROUPS.length; i++)
-					assertEquals(frame(testCase.comments(), "first"), readThrough(fixture.sockets.get(i), "\n\n"));
-				calls.clear();
-				broadcast(broadcaster, testCase.comments(), SseMemoizedBroadcastTests::key, groupKey -> {
-					calls.merge(groupKey, 1, Integer::sum);
-					return "recovered";
-				});
-				assertOncePerKey(calls);
-				for (Socket socket : fixture.sockets)
-					assertEquals(frame(testCase.comments(), "recovered"), readThrough(socket, "\n\n"));
-				assertEquals(2, fixture.generationFailures().size());
-				assertEquals(new Outcome(testCase.comments(), 6, 6, 0), fixture.outcomes.get(1));
-				assertEquals(6, broadcaster.getClientCount());
-			}
+			});
+			fixture.verifyShutdown(result);
 		})));
 	}
 
@@ -198,21 +204,27 @@ class SseMemoizedBroadcastTests {
 	@TestFactory
 	Stream<DynamicTest> liveKeySelectionFailureDoesNotAffectOtherClients() {
 		return Stream.of(false, true).map(comments -> DynamicTest.dynamicTest(comments ? "comments" : "events", () -> Assertions.assertTimeoutPreemptively(Duration.ofSeconds(60), () -> {
-			try (LiveFixture fixture = new LiveFixture()) {
-				fixture.connect();
-				RuntimeException failure = new IllegalStateException("controlled key selection failure");
-				Map<GroupKey, Integer> calls = new HashMap<>();
-				broadcast(fixture.server.acquireBroadcaster(PATH).orElseThrow(), comments,
-						context -> { if (!"ok".equals(context)) throw failure; return key(context); }, groupKey -> {
-							calls.merge(groupKey, 1, Integer::sum);
-							return "payload";
-						});
-				assertEquals(4, fixture.generationFailures().size());
-				fixture.generationFailures().forEach(log -> assertSame(failure, log.getThrowable().orElseThrow()));
-				assertEquals(Map.of(new GroupKey("ok"), 1), calls);
-				for (int i = 4; i < GROUPS.length; i++)
-					assertEquals(frame(comments, "payload"), readThrough(fixture.sockets.get(i), "\n\n"));
-			}
+			LiveFixture fixture = new LiveFixture();
+			ShutdownResult result = Soklet.run(fixture.config, () -> {
+				try {
+					fixture.connect();
+					RuntimeException failure = new IllegalStateException("controlled key selection failure");
+					Map<GroupKey, Integer> calls = new HashMap<>();
+					broadcast(fixture.server.acquireBroadcaster(PATH).orElseThrow(), comments,
+							context -> { if (!"ok".equals(context)) throw failure; return key(context); }, groupKey -> {
+								calls.merge(groupKey, 1, Integer::sum);
+								return "payload";
+							});
+					assertEquals(4, fixture.generationFailures().size());
+					fixture.generationFailures().forEach(log -> assertSame(failure, log.getThrowable().orElseThrow()));
+					assertEquals(Map.of(new GroupKey("ok"), 1), calls);
+					for (int i = 4; i < GROUPS.length; i++)
+						assertEquals(frame(comments, "payload"), readThrough(fixture.sockets.get(i), "\n\n"));
+				} finally {
+					fixture.closeSockets();
+				}
+			});
+			fixture.verifyShutdown(result);
 		})));
 	}
 
@@ -295,10 +307,10 @@ class SseMemoizedBroadcastTests {
 		while (!condition.getAsBoolean() && System.nanoTime() < deadline) Thread.sleep(5);
 		assertTrue(condition.getAsBoolean());
 	}
-	private static final class LiveFixture implements AutoCloseable {
+	private static final class LiveFixture {
 		final int port = findFreePort();
 		final DefaultSseServer server;
-		final Soklet app;
+		final SokletConfig config;
 		final List<Socket> sockets = new ArrayList<>();
 		final List<LogEvent> logs = new CopyOnWriteArrayList<>();
 		final List<Outcome> outcomes = new CopyOnWriteArrayList<>();
@@ -306,7 +318,7 @@ class SseMemoizedBroadcastTests {
 			server = (DefaultSseServer) SseServer.withPort(port).host("127.0.0.1")
 					.heartbeatInterval(Duration.ofMinutes(10)).verifyConnectionOnceEstablished(false)
 					.connectionQueueCapacity(8).build();
-			app = Soklet.fromConfig(SokletConfig.withSseServer(server)
+			config = SokletConfig.withSseServer(server)
 					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Resource.class)))
 					.lifecyclePolicy(LifecyclePolicy.builder().gracefulShutdownTimeout(Duration.ofMillis(300))
 							.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
@@ -319,8 +331,7 @@ class SseMemoizedBroadcastTests {
 								Integer attempted, Integer enqueued, Integer dropped) {
 							outcomes.add(new Outcome(true, attempted, enqueued, dropped));
 						}
-					}).build());
-			app.start();
+					}).build();
 		}
 		void connect() throws Exception {
 			for (String group : GROUPS) {
@@ -336,10 +347,11 @@ class SseMemoizedBroadcastTests {
 		List<LogEvent> generationFailures() {
 			return logs.stream().filter(log -> log.getLogEventType() == LogEventType.SSE_SERVER_BROADCAST_GENERATION_FAILED).toList();
 		}
-		@Override public void close() throws Exception {
-			try { for (Socket socket : sockets) socket.close(); }
-			finally { app.close(); }
-			assertTrue(app.getShutdownResult().orElseThrow().isComplete());
+		void closeSockets() throws Exception {
+			for (Socket socket : sockets) socket.close();
+		}
+		void verifyShutdown(ShutdownResult result) {
+			assertTrue(result.isComplete());
 		}
 	}
 	public static final class Resource {

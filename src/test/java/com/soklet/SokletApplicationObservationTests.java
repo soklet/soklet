@@ -23,7 +23,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
-import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -206,21 +205,21 @@ final class SokletApplicationObservationTests {
 		LifecycleRuntimeServices services =
 				transitionTrackingServices(transitionWorkerDone);
 		RecordingProcessAccess process = new RecordingProcessAccess();
-		RecordingTriggerRegistry triggers = new RecordingTriggerRegistry();
+		RecordingShutdownControl triggers = new RecordingShutdownControl();
 		AtomicReference<SokletApplicationRuntime> runtime = new AtomicReference<>();
 		SokletApplicationRuntimeFactory factory = (exactConfig, exactServices,
 				exactPublisher) -> {
 			SokletApplicationRuntime direct = DirectSokletApplicationRuntime.create(
 					exactConfig, exactServices, exactPublisher);
 			Assertions.assertTrue(runtime.compareAndSet(null, direct));
+			triggers.bind(direct::shutdown);
 			return new StartSignalingRuntime(direct, startReturned);
 		};
 		SokletApplicationEnvironment environment = new SokletApplicationEnvironment(
-				services, process, triggers, ignored -> { }, factory,
+				services, process, ignored -> { }, factory,
 				(name, task) -> new Thread(task, name));
-		SokletApplication application = SokletApplication.fromConfig(config);
-		RunnerCall runner = startRunner(application, environment,
-				ShutdownTrigger.ENTER_KEY);
+		SokletProcessLifecycle application = SokletProcessLifecycle.fromConfig(config);
+		RunnerCall runner = startRunner(application, environment);
 
 		Assertions.assertTrue(startReturned.await(5, TimeUnit.SECONDS));
 		triggers.trigger();
@@ -283,16 +282,15 @@ final class SokletApplicationObservationTests {
 				participantResults.add(result);
 			}
 
-			@Override public void willStartSoklet(@NonNull Soklet soklet) {
+			@Override public void willStartSoklet() {
 				transitions.add("will-start-soklet");
 			}
 
-			@Override public void didFailToStartSoklet(@NonNull Soklet soklet,
-					@NonNull Throwable throwable) {
+			@Override public void didFailToStartSoklet(@NonNull Throwable throwable) {
 				transitions.add("did-fail-start-soklet");
 			}
 
-			@Override public void willStopSoklet(@NonNull Soklet soklet) {
+			@Override public void willStopSoklet() {
 				transitions.add("will-stop-soklet");
 			}
 
@@ -323,8 +321,7 @@ final class SokletApplicationObservationTests {
 				participant("did-stop-mcp", result);
 			}
 
-			@Override public void didStopSoklet(@NonNull Soklet soklet,
-					@NonNull ShutdownResult result) {
+			@Override public void didStopSoklet(@NonNull ShutdownResult result) {
 				terminalSokletResult.set(result);
 				terminalResults.add(result);
 				transitions.add("did-stop-soklet");
@@ -360,20 +357,21 @@ final class SokletApplicationObservationTests {
 		});
 		LifecycleRuntimeServices services = new LifecycleRuntimeServices(
 				NanoClock.system(), workers);
-		RecordingTriggerRegistry triggers = new RecordingTriggerRegistry();
+		RecordingShutdownControl triggers = new RecordingShutdownControl();
 		AtomicReference<SokletApplicationRuntime> runtime = new AtomicReference<>();
 		SokletApplicationRuntimeFactory factory = (exactConfig, exactServices,
 				exactPublisher) -> {
 			SokletApplicationRuntime direct = DirectSokletApplicationRuntime.create(
 					exactConfig, exactServices, exactPublisher);
 			runtime.set(direct);
+			triggers.bind(direct::shutdown);
 			return direct;
 		};
 		SokletApplicationEnvironment environment = new SokletApplicationEnvironment(
-				services, new RecordingProcessAccess(), triggers, ignored -> { },
+				services, new RecordingProcessAccess(), ignored -> { },
 				factory, (name, task) -> new Thread(task, name));
-		RunnerCall runner = startRunner(SokletApplication.fromConfig(config),
-				environment, ShutdownTrigger.ENTER_KEY);
+		RunnerCall runner = startRunner(SokletProcessLifecycle.fromConfig(config),
+				environment);
 
 		try {
 			Assertions.assertTrue(attachEntered.await(5, TimeUnit.SECONDS));
@@ -556,7 +554,7 @@ final class SokletApplicationObservationTests {
 		AtomicReference<Boolean> logWasTracked = new AtomicReference<>();
 		List<LogEvent> logs = new CopyOnWriteArrayList<>();
 		LifecycleObserver observer = new LifecycleObserver() {
-			@Override public void willStartSoklet(@NonNull Soklet soklet) {
+			@Override public void willStartSoklet() {
 				transitionThread.set(Thread.currentThread());
 				transitionEntered.countDown();
 				awaitUninterruptibly(releaseTransition);
@@ -645,7 +643,7 @@ final class SokletApplicationObservationTests {
 		CountDownLatch transitionWorkerDone = new CountDownLatch(1);
 		LifecycleObserver observer = new LifecycleObserver() {
 			@Override
-			public void willStartSoklet(@NonNull Soklet soklet) {
+			public void willStartSoklet() {
 				throw observerFailure;
 			}
 
@@ -703,7 +701,7 @@ final class SokletApplicationObservationTests {
 		CountDownLatch startReturned = new CountDownLatch(1);
 		LifecycleRuntimeServices services =
 				transitionTrackingServices(transitionWorkerDone);
-		RecordingTriggerRegistry triggers = new RecordingTriggerRegistry();
+		RecordingShutdownControl triggers = new RecordingShutdownControl();
 		AtomicInteger cleanupCalls = new AtomicInteger();
 		SokletConfig config = SokletConfig
 				.withHttpServer(HttpServer.withPort(0).build())
@@ -711,7 +709,7 @@ final class SokletApplicationObservationTests {
 						Set.of(ObservationResource.class)))
 				.lifecycleObserver(observer)
 				.build();
-		SokletApplication application = SokletApplication.fromConfig(config);
+		SokletProcessLifecycle application = SokletProcessLifecycle.fromConfig(config);
 		ShutdownCleanup cleanup = ShutdownCleanup.fromTimeoutAndAction(
 				Duration.ofSeconds(2), result -> {
 					if (observer.closeCalls.get() != 0)
@@ -719,14 +717,16 @@ final class SokletApplicationObservationTests {
 					cleanupCalls.incrementAndGet();
 				});
 		SokletApplicationRuntimeFactory factory = (exactConfig, exactServices,
-				exactPublisher) -> new StartSignalingRuntime(
-					DirectSokletApplicationRuntime.create(exactConfig, exactServices,
-							exactPublisher), startReturned);
+				exactPublisher) -> {
+			SokletApplicationRuntime direct = DirectSokletApplicationRuntime.create(
+					exactConfig, exactServices, exactPublisher);
+			triggers.bind(direct::shutdown);
+			return new StartSignalingRuntime(direct, startReturned);
+		};
 		SokletApplicationEnvironment environment = new SokletApplicationEnvironment(
-				services, new RecordingProcessAccess(), triggers, ignored -> { },
+				services, new RecordingProcessAccess(), ignored -> { },
 				factory, (name, task) -> new Thread(task, name));
-		RunnerCall runner = startRunner(application, environment, cleanup,
-				ShutdownTrigger.ENTER_KEY);
+		RunnerCall runner = startRunner(application, environment, cleanup);
 
 		Assertions.assertTrue(startReturned.await(5, TimeUnit.SECONDS));
 		triggers.trigger();
@@ -763,7 +763,7 @@ final class SokletApplicationObservationTests {
 		HotPathObservationResource.handlerThread.set(null);
 		LifecycleObserver blockingObserver = new LifecycleObserver() {
 			@Override
-			public void willStartSoklet(@NonNull Soklet soklet) {
+			public void willStartSoklet() {
 				transitions.add("will-start-soklet");
 				observerEntered.countDown();
 				awaitUninterruptibly(releaseObserver);
@@ -780,7 +780,7 @@ final class SokletApplicationObservationTests {
 			}
 
 			@Override
-			public void didStartSoklet(@NonNull Soklet soklet) {
+			public void didStartSoklet() {
 				transitions.add("did-start-soklet");
 			}
 
@@ -804,7 +804,7 @@ final class SokletApplicationObservationTests {
 			}
 
 			@Override
-			public void willStopSoklet(@NonNull Soklet soklet) {
+			public void willStopSoklet() {
 				transitions.add("will-stop-soklet");
 			}
 
@@ -820,15 +820,14 @@ final class SokletApplicationObservationTests {
 			}
 
 			@Override
-			public void didStopSoklet(@NonNull Soklet soklet,
-					@NonNull ShutdownResult result) {
+			public void didStopSoklet(@NonNull ShutdownResult result) {
 				transitions.add("did-stop-soklet");
 				terminalCallbackResult.set(result);
 				terminalCallback.countDown();
 			}
 		};
 		LifecycleObserver peerObserver = new LifecycleObserver() {
-			@Override public void willStartSoklet(@NonNull Soklet soklet) {
+			@Override public void willStartSoklet() {
 				peerCallbacks.incrementAndGet();
 			}
 			@Override public void willStartHttpServer(@NonNull HttpServer server) {
@@ -837,10 +836,10 @@ final class SokletApplicationObservationTests {
 			@Override public void didStartHttpServer(@NonNull HttpServer server) {
 				peerCallbacks.incrementAndGet();
 			}
-			@Override public void didStartSoklet(@NonNull Soklet soklet) {
+			@Override public void didStartSoklet() {
 				peerCallbacks.incrementAndGet();
 			}
-			@Override public void willStopSoklet(@NonNull Soklet soklet) {
+			@Override public void willStopSoklet() {
 				peerCallbacks.incrementAndGet();
 			}
 			@Override public void willStopHttpServer(@NonNull HttpServer server) {
@@ -850,8 +849,7 @@ final class SokletApplicationObservationTests {
 					@NonNull ShutdownComponentResult result) {
 				peerCallbacks.incrementAndGet();
 			}
-			@Override public void didStopSoklet(@NonNull Soklet soklet,
-					@NonNull ShutdownResult result) {
+			@Override public void didStopSoklet(@NonNull ShutdownResult result) {
 				peerCallbacks.incrementAndGet();
 				peerTerminalCallback.countDown();
 			}
@@ -865,29 +863,31 @@ final class SokletApplicationObservationTests {
 				.build();
 		LifecycleRuntimeServices services = LifecycleRuntimeServices.system();
 		RecordingProcessAccess process = new RecordingProcessAccess();
-		RecordingTriggerRegistry triggers = new RecordingTriggerRegistry();
+		RecordingShutdownControl triggers = new RecordingShutdownControl();
 		AtomicInteger cleanupCalls = new AtomicInteger();
 		AtomicReference<ShutdownResult> cleanupResult =
 				new AtomicReference<>();
 		AtomicReference<SokletApplicationTerminalSnapshot> report =
 				new AtomicReference<>();
-		SokletApplication application = SokletApplication.fromConfig(config);
+		SokletProcessLifecycle application = SokletProcessLifecycle.fromConfig(config);
 		ShutdownCleanup cleanup = ShutdownCleanup.fromTimeoutAndAction(
 				Duration.ofSeconds(2), result -> {
 					cleanupResult.set(result);
 					cleanupCalls.incrementAndGet();
 				});
 		SokletApplicationRuntimeFactory factory = (exactConfig, exactServices,
-				exactPublisher) -> new StartSignalingRuntime(
-					DirectSokletApplicationRuntime.create(exactConfig, exactServices,
-							exactPublisher), startReturned);
+				exactPublisher) -> {
+			SokletApplicationRuntime direct = DirectSokletApplicationRuntime.create(
+					exactConfig, exactServices, exactPublisher);
+			triggers.bind(direct::shutdown);
+			return new StartSignalingRuntime(direct, startReturned);
+		};
 		SokletApplicationEnvironment environment = new SokletApplicationEnvironment(
-				services, process, triggers, snapshot -> {
+				services, process, snapshot -> {
 				report.set(snapshot);
 				reportReceived.countDown();
 			}, factory, (name, task) -> new Thread(task, name));
-		RunnerCall runner = startRunner(application, environment, cleanup,
-				ShutdownTrigger.ENTER_KEY);
+		RunnerCall runner = startRunner(application, environment, cleanup);
 
 		try {
 			Assertions.assertTrue(observerEntered.await(5, TimeUnit.SECONDS));
@@ -940,7 +940,6 @@ final class SokletApplicationObservationTests {
 					LifecycleWorkers.Role.TRANSITION_OBSERVER));
 			Assertions.assertEquals(1, process.addCalls.get());
 			Assertions.assertEquals(1, process.removeCalls.get());
-			Assertions.assertEquals(1, triggers.unregisterCalls.get());
 		} finally {
 			releaseObserver.countDown();
 		}
@@ -1032,20 +1031,16 @@ final class SokletApplicationObservationTests {
 	}
 
 	@NonNull
-	private static RunnerCall startRunner(@NonNull SokletApplication application,
-			@NonNull SokletApplicationEnvironment environment,
-			@NonNull ShutdownTrigger... additionalShutdownTriggers) {
-		return startRunner(() -> application.run(environment,
-				additionalShutdownTriggers));
+	private static RunnerCall startRunner(@NonNull SokletProcessLifecycle application,
+			@NonNull SokletApplicationEnvironment environment) {
+		return startRunner(() -> application.run(environment));
 	}
 
 	@NonNull
-	private static RunnerCall startRunner(@NonNull SokletApplication application,
+	private static RunnerCall startRunner(@NonNull SokletProcessLifecycle application,
 			@NonNull SokletApplicationEnvironment environment,
-			@NonNull ShutdownCleanup cleanup,
-			@NonNull ShutdownTrigger... additionalShutdownTriggers) {
-		return startRunner(() -> application.run(environment, cleanup,
-				additionalShutdownTriggers));
+			@NonNull ShutdownCleanup cleanup) {
+		return startRunner(() -> application.run(environment, cleanup));
 	}
 
 	@NonNull
@@ -1138,7 +1133,7 @@ final class SokletApplicationObservationTests {
 		}
 
 		@Override
-		public void willStartSoklet(@NonNull Soklet soklet) {
+		public void willStartSoklet() {
 			this.transitions.add("will-start-soklet");
 		}
 
@@ -1173,12 +1168,12 @@ final class SokletApplicationObservationTests {
 		}
 
 		@Override
-		public void didStartSoklet(@NonNull Soklet soklet) {
+		public void didStartSoklet() {
 			this.transitions.add("did-start-soklet");
 		}
 
 		@Override
-		public void willStopSoklet(@NonNull Soklet soklet) {
+		public void willStopSoklet() {
 			this.transitions.add("will-stop-soklet");
 		}
 
@@ -1216,8 +1211,7 @@ final class SokletApplicationObservationTests {
 		}
 
 		@Override
-		public void didStopSoklet(@NonNull Soklet soklet,
-				@NonNull ShutdownResult result) {
+		public void didStopSoklet(@NonNull ShutdownResult result) {
 			this.transitions.add("did-stop-soklet");
 		}
 
@@ -1234,13 +1228,12 @@ final class SokletApplicationObservationTests {
 		@NonNull private final AtomicInteger closeCalls = new AtomicInteger();
 
 		@Override
-		public void didStartSoklet(@NonNull Soklet soklet) {
+		public void didStartSoklet() {
 			this.state.add("started");
 		}
 
 		@Override
-		public void didStopSoklet(@NonNull Soklet soklet,
-				@NonNull ShutdownResult result) {
+		public void didStopSoklet(@NonNull ShutdownResult result) {
 			this.state.add("stopped");
 		}
 
@@ -1347,10 +1340,6 @@ final class SokletApplicationObservationTests {
 		@NonNull private final AtomicInteger addCalls = new AtomicInteger();
 		@NonNull private final AtomicInteger removeCalls = new AtomicInteger();
 
-		@Override @NonNull public Optional<InputStream> standardInput() {
-			return Optional.empty();
-		}
-
 		@Override public void addShutdownHook(@NonNull Thread hook) {
 			requireNonNull(hook);
 			this.addCalls.incrementAndGet();
@@ -1362,22 +1351,16 @@ final class SokletApplicationObservationTests {
 			return true;
 		}
 
-		@Override public void reportConfigurationWarning(@NonNull String message) {
-			throw new AssertionError("No process warning expected: " + message);
-		}
 	}
 
-	private static final class RecordingTriggerRegistry
-			implements SokletApplicationTriggerRegistry {
+	private static final class RecordingShutdownControl {
 		@NonNull private final AtomicReference<Runnable> shutdownIntent =
 				new AtomicReference<>();
-		@NonNull private final AtomicInteger unregisterCalls = new AtomicInteger();
 
-		@Override @NonNull public SokletApplicationTriggerRegistration register(
+		void bind(
 				@NonNull Runnable shutdownIntent) {
 			Assertions.assertTrue(this.shutdownIntent.compareAndSet(null,
 					requireNonNull(shutdownIntent)));
-			return this.unregisterCalls::incrementAndGet;
 		}
 
 		void trigger() {

@@ -82,8 +82,7 @@ public class StreamingResponseTests {
 				})
 				.build();
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
+		Soklet.run(config, () -> {
 
 			HttpURLConnection connection = (HttpURLConnection) new URL("http://127.0.0.1:" + port + "/writer").openConnection();
 			connection.setConnectTimeout(2_000);
@@ -96,7 +95,7 @@ public class StreamingResponseTests {
 			Assertions.assertTrue(terminatedLatch.await(2, TimeUnit.SECONDS), "Stream termination lifecycle hook was not invoked");
 			Assertions.assertEquals(StreamTerminationReason.COMPLETED, cancelationReasonRef.get());
 			Assertions.assertNull(throwableRef.get());
-		}
+		});
 	}
 
 	@Test
@@ -108,8 +107,7 @@ public class StreamingResponseTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))
 				.build();
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
+		Soklet.run(config, () -> {
 
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2_000)) {
 				socket.setSoTimeout(2_000);
@@ -127,7 +125,7 @@ public class StreamingResponseTests {
 				Assertions.assertFalse(responseHeaders.contains("Content-Length:"), responseHeaders);
 				Assertions.assertFalse(responseHeaders.contains("Transfer-Encoding:"), responseHeaders);
 			}
-		}
+		});
 	}
 
 	@Test
@@ -139,8 +137,7 @@ public class StreamingResponseTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(StreamingResource.class)))
 				.build();
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
+		Soklet.run(config, () -> {
 
 			HttpURLConnection connection = (HttpURLConnection) new URL("http://127.0.0.1:" + port + "/context-request").openConnection();
 			connection.setConnectTimeout(2_000);
@@ -148,7 +145,7 @@ public class StreamingResponseTests {
 
 			Assertions.assertEquals(200, connection.getResponseCode());
 			Assertions.assertEquals("same", new String(readAll(connection.getInputStream()), StandardCharsets.UTF_8));
-		}
+		});
 	}
 
 	@Test
@@ -175,8 +172,7 @@ public class StreamingResponseTests {
 				})
 				.build();
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
+		Soklet.run(config, () -> {
 
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2_000)) {
 				socket.setSoTimeout(2_000);
@@ -192,7 +188,7 @@ public class StreamingResponseTests {
 				Assertions.assertTrue(terminatedLatch.await(2, TimeUnit.SECONDS), "Stream termination lifecycle hook was not invoked");
 				Assertions.assertEquals(StreamTerminationReason.PROTOCOL_UNSUPPORTED, cancelationReasonRef.get());
 			}
-		}
+		});
 	}
 
 	@Test
@@ -236,8 +232,7 @@ public class StreamingResponseTests {
 				})
 				.build();
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
+		Soklet.run(config, () -> {
 
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2_000)) {
 				socket.setSoTimeout(2_000);
@@ -252,7 +247,7 @@ public class StreamingResponseTests {
 				Assertions.assertTrue(terminatedLatch.await(2, TimeUnit.SECONDS), "Stream termination lifecycle hook was not invoked");
 				Assertions.assertEquals(StreamTerminationReason.RESPONSE_TIMEOUT, cancelationReasonRef.get());
 			}
-		}
+		});
 	}
 
 	@Test
@@ -738,8 +733,7 @@ public class StreamingResponseTests {
 				})
 				.build();
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
+		Soklet.run(config, () -> {
 
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2_000)) {
 				socket.setSoTimeout(2_000);
@@ -753,7 +747,7 @@ public class StreamingResponseTests {
 				Assertions.assertTrue(terminatedLatch.await(2, TimeUnit.SECONDS), "Stream termination lifecycle hook was not invoked");
 				Assertions.assertEquals(StreamTerminationReason.RESPONSE_TIMEOUT, cancelationReasonRef.get());
 			}
-		}
+		});
 	}
 
 	private static void writeRawRequest(@NonNull Socket socket,

@@ -96,10 +96,7 @@ public class McpSelfReportedIdentityPublicRuntimeTests {
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(LOOPBACK))
 				.build();
-		Soklet owner = managedSoklet(server);
-
-		try {
-			owner.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
 			HttpResponse<String> alphaResponse = call(port, "alpha",
@@ -133,9 +130,7 @@ public class McpSelfReportedIdentityPublicRuntimeTests {
 					"Rejected admission must not reach the handler.");
 			assertHandler(handlers.get(0), "reported-beta", alpha);
 			assertHandler(handlers.get(1), "reported-alpha", beta);
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -204,11 +199,11 @@ public class McpSelfReportedIdentityPublicRuntimeTests {
 		return new IdentityFixture(name, identity, principal, applicationContext);
 	}
 
-	private static Soklet managedSoklet(McpServer server) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+	private static SokletConfig managedSokletConfig(McpServer server) {
+		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
-				.build());
+				.build();
 	}
 
 	private static HttpResponse<String> call(int port, String id,

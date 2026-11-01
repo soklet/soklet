@@ -104,12 +104,11 @@ public final class McpSubscriptionRenewalBenchmark {
 		ObservedRuntimeConfiguration runtimeConfiguration =
 				ObservedRuntimeConfiguration.from(server);
 		benchmark.bindRuntimeConfiguration(runtimeConfiguration);
+		long benchmarkStartedAtNanos = System.nanoTime();
 		Soklet owner = managedSoklet(server, metrics);
 		List<BenchmarkClient> clients = new ArrayList<>(config.subscriptions());
-		long benchmarkStartedAtNanos = System.nanoTime();
 
 		try {
-			owner.start();
 			McpServerDiagnostics startedDiagnostics = server.getDiagnostics();
 			int port = startedDiagnostics.getBoundAddress().orElseThrow().getPort();
 			printConfiguration(config, runtimeConfiguration, startedDiagnostics, port);
@@ -146,7 +145,8 @@ public final class McpSubscriptionRenewalBenchmark {
 								+ result.rejectionReasons());
 		} finally {
 			closeClients(clients);
-			owner.close();
+			owner.requestShutdown();
+			owner.awaitShutdownAsync().toCompletableFuture().join();
 		}
 	}
 
@@ -208,7 +208,7 @@ public final class McpSubscriptionRenewalBenchmark {
 	@NonNull
 	private static Soklet managedSoklet(@NonNull McpServer server,
 			@NonNull MetricsCollector metrics) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+		return Soklet.run(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.metricsCollector(metrics)
 				.lifecyclePolicy(LifecyclePolicy.builder()

@@ -228,24 +228,56 @@
   applications must declare their core dependency explicitly because the
   adapters retain provided scope. See
   [Servlet adapters](MIGRATING_TO_4_0.md#servlet-adapters).
-- **Aggregate lifecycle:** `Soklet` is now a one-shot owner of every configured
-  transport. `HttpServer`, `SseServer`, and `McpServer` no longer expose direct
-  start/stop/status/close ownership. `Soklet.shutdown()` returns the one cached
-  completion stage, `awaitShutdown()` returns immutable terminal evidence, and
-  lifecycle observers receive aggregate or participant shutdown results. The
-  old failure-only stop callbacks and config copier are removed. See
+- **Aggregate lifecycle:** `Soklet.run(...)` starts the one-shot owner of every
+  configured transport and returns after readiness. Every instance owns a JVM
+  shutdown hook. `requestShutdown()` requests termination promptly;
+  `awaitShutdown()` and `awaitShutdownAsync()` observe full finalization,
+  including configured cleanup, synchronously or through a read-only stage.
+  Removed `SokletApplication`, public `fromConfig`, `start`, `shutdown`, status
+  and terminal-result getters, and `AutoCloseable`/`close`. The five aggregate
+  `LifecycleObserver` callbacks no longer receive a `Soklet` parameter; startup
+  failures and terminal results remain their typed arguments. Transport objects
+  no longer expose direct start/stop/status/close ownership. See
   [Lifecycle and process ownership](MIGRATING_TO_4_0.md#lifecycle-and-process-ownership).
+  The JVM hook no longer waits indefinitely for a process owner blocked in
+  startup-warning logging. Completion handoff is reserved before transport claims,
+  keeping callback dispatch off that owner when shutdown-time thread creation fails.
+  Startup now recognizes a `READY` terminal result when readiness and immediate
+  shutdown complete between its observations, preserving the real lifecycle
+  outcome instead of constructing an invalid startup exception.
+  Startup cancellation now reaches the core lifecycle without interrupting its
+  process owner, and denied worker interruption cannot bypass bounded teardown.
+  Startup cancellation and cleanup timeouts reserve independent daemon interrupt
+  delivery before starting application work, so blocking NIO channel-close code
+  cannot trap lifecycle owners or JVM shutdown hooks. In-flight interrupt delivery
+  remains tracked as shutdown work.
+  Setup and attachment accounting now retain that work after the original action
+  returns, keeping shutdown incomplete and skipping cleanup while delivery is live.
+  Late-start catch-up failures are retained as separate shutdown-result errors
+  without locking or modifying application exceptions, preserving shutdown
+  deadlines when another thread holds an exception's monitor.
+- **Scoped execution and console ownership:** `Soklet.run(config, action)` and
+  `Soklet.run(config, cleanup, action)` accept a no-argument `Soklet.RunAction<E>`.
+  The callback runs once on the caller after readiness; returning or throwing
+  requests shutdown and joins full finalization. Callback failures retain their
+  exact identity with teardown failures suppressed; otherwise lifecycle failures
+  are thrown. Scoped teardown preserves interruption while completing its join.
+  Removed `ShutdownTrigger`, its varargs parameters, and framework console-input
+  listeners. Every run still owns its JVM shutdown hook. Applications handle
+  Enter-key input themselves; tests can use scoped execution without
+  `AutoCloseable` or manual `finally` cleanup.
 - **Shared deadlines:** transport-specific shutdown-deadline setters are
   replaced by one `LifecyclePolicy`. The defaults are 30 seconds for normal
   startup, 2 seconds for cancellation of live startup, 15 seconds graceful,
   and 3 seconds forced. This lengthens the old HTTP, SSE, and MCP defaults;
   deployments must recalculate their termination grace. See
   [changed defaults](MIGRATING_TO_4_0.md#shared-lifecycle-policy-and-changed-defaults).
-- **Standalone runner:** process shutdown hooks, the `ENTER_KEY` trigger, the
-  terminal report, and optional bounded application cleanup now belong to
-  `SokletApplication`. Embedders continue to own direct `Soklet` lifecycle and
-  must not mix the two ownership models. See
-  [standalone applications](MIGRATING_TO_4_0.md#standalone-applications-use-the-runner).
+- **Unified process ownership:** the terminal report and optional bounded
+  application cleanup are part of the `Soklet.run` lifecycle.
+  Tests and embedders use the same ready-returning API, then request and await
+  shutdown before releasing shared dependencies. JVM hooks remain automatic;
+  independent hook ordering must be coordinated by the host. See
+  [standalone and embedded applications](MIGRATING_TO_4_0.md#standalone-applications-tests-and-embedders-use-the-same-api).
 - **Transport SPI and injection:** custom HTTP/SSE implementations migrate
   to stable transport identity, attachment/runtime, lifecycle context, and
   termination-proof contracts. `HttpServer` is no longer injectable into

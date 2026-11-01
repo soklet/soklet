@@ -30,13 +30,14 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 
-/** Regression coverage for retained protected one-shot lifecycle projections. */
+/** Regression coverage for internal one-shot lifecycle projections. */
 @Timeout(value = 60, unit = TimeUnit.SECONDS)
 final class SokletProtectedLifecycleCompatibilityTests {
 	@Test
 	void protectedLifecycleProjectionDescriptorsRemainExact() throws Exception {
 		Method getLock = Soklet.class.getDeclaredMethod("getLock");
-		Assertions.assertTrue(Modifier.isProtected(getLock.getModifiers()));
+		Assertions.assertFalse(Modifier.isPublic(getLock.getModifiers()));
+		Assertions.assertFalse(Modifier.isProtected(getLock.getModifiers()));
 		Assertions.assertEquals(ReentrantLock.class, getLock.getReturnType());
 		Assertions.assertEquals(0, getLock.getExceptionTypes().length);
 		Assertions.assertTrue(getLock.getAnnotatedReturnType()
@@ -44,7 +45,9 @@ final class SokletProtectedLifecycleCompatibilityTests {
 
 		Method getLatchReference = Soklet.class.getDeclaredMethod(
 				"getAwaitShutdownLatchReference");
-		Assertions.assertTrue(Modifier.isProtected(
+		Assertions.assertFalse(Modifier.isPublic(
+				getLatchReference.getModifiers()));
+		Assertions.assertFalse(Modifier.isProtected(
 				getLatchReference.getModifiers()));
 		Assertions.assertEquals(AtomicReference.class,
 				getLatchReference.getReturnType());
@@ -140,7 +143,7 @@ final class SokletProtectedLifecycleCompatibilityTests {
 		Assertions.assertFalse(holder.isAlive());
 		Assertions.assertFalse(shutdownCaller.isAlive());
 		Assertions.assertSame(soklet.getShutdownResult().orElseThrow(),
-				soklet.awaitShutdown());
+				soklet.awaitCoreShutdown());
 	}
 
 	@Test

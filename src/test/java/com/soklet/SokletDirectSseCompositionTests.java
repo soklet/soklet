@@ -57,7 +57,8 @@ final class SokletDirectSseCompositionTests {
 		TransparentSseDecorator outer = new TransparentSseDecorator("transparent",
 				probe, engine);
 		SokletConfig config = configuration(outer);
-		try (Soklet soklet = Soklet.fromConfig(config)) {
+		try (SokletTestScope sokletScope = SokletTestScope.of(Soklet.fromConfig(config))) {
+			Soklet soklet = sokletScope.soklet();
 			exerciseReadyGraph(soklet, config, outer, engine,
 					List.of("transparent", "engine"), List.of("transparent"));
 			soklet.shutdown().toCompletableFuture().join();
@@ -88,7 +89,8 @@ final class SokletDirectSseCompositionTests {
 		ComposedSseEndpoint outer = new OwningSseDecorator("owner", probe,
 				engine);
 		SokletConfig config = configuration(outer);
-		try (Soklet soklet = Soklet.fromConfig(config)) {
+		try (SokletTestScope sokletScope = SokletTestScope.of(Soklet.fromConfig(config))) {
+			Soklet soklet = sokletScope.soklet();
 			exerciseReadyGraph(soklet, config, outer, engine,
 					List.of("owner", "engine"), List.of("owner"));
 			soklet.shutdown().toCompletableFuture().join();

@@ -51,8 +51,7 @@ public class StreamingResponseStreamRuntimeTests {
 				.streamingResponseIdleTimeout(idleTimeout)
 				.build();
 
-		try (Soklet soklet = Soklet.fromConfig(httpConfig(server, resource))) {
-			soklet.start();
+		Soklet.run(httpConfig(server, resource), () -> {
 			for (int index = 0; index < 2; ++index) {
 				Instant before = Instant.now();
 				Assertions.assertEquals("unified", performHttp(port, HttpMethod.GET));
@@ -67,7 +66,7 @@ public class StreamingResponseStreamRuntimeTests {
 				Assertions.assertFalse(deadline.isAfter(after.plus(responseTimeout)),
 						"The deadline must be established before the response completes");
 			}
-		}
+		});
 
 		assertFreshExecutionState(resource);
 	}
@@ -81,10 +80,9 @@ public class StreamingResponseStreamRuntimeTests {
 				.streamingResponseIdleTimeout(Duration.ZERO)
 				.build();
 
-		try (Soklet soklet = Soklet.fromConfig(httpConfig(server, resource))) {
-			soklet.start();
+		Soklet.run(httpConfig(server, resource), () -> {
 			Assertions.assertEquals("unified", performHttp(port, HttpMethod.GET));
-		}
+		});
 
 		Assertions.assertEquals(1, resource.executions.size());
 		assertRequestAndTokenIdentity(resource, 0);
@@ -116,6 +114,7 @@ public class StreamingResponseStreamRuntimeTests {
 	}
 
 	@Test
+	@Timeout(120)
 	public void headThroughStreamConvenienceDoesNotInvokeWriterInEitherRuntime() throws Exception {
 		WriterResource resource = new WriterResource();
 		Assertions.assertTrue(resource.executions.isEmpty(), "Building a response must not invoke its writer");
@@ -129,10 +128,9 @@ public class StreamingResponseStreamRuntimeTests {
 		Assertions.assertTrue(resource.executions.isEmpty());
 
 		int port = findFreePort();
-		try (Soklet soklet = Soklet.fromConfig(httpConfig(HttpServer.withPort(port).build(), resource))) {
-			soklet.start();
+		Soklet.run(httpConfig(HttpServer.withPort(port).build(), resource), () -> {
 			Assertions.assertEquals("", performHttp(port, HttpMethod.HEAD));
-		}
+		});
 
 		Assertions.assertEquals(2, resource.requests.size(), "Both HEAD requests must reach the GET resource");
 		Assertions.assertTrue(resource.executions.isEmpty(), "HEAD must suppress the reusable writer");

@@ -47,23 +47,27 @@ class McpNumericRequestStatePublicRuntimeTests {
 
 	@Test
 	void canonicalNumericStateHasStableEqualityAndHashLookupsAcrossTwoRetries() throws Exception {
-		try (Fixture first = new Fixture(); Fixture second = new Fixture()) {
-			String initial = first.post("initial", null, false, 200);
-			String firstState = protectedState(initial);
-			String sameId = second.post("initial", firstState, true, 400);
-			assertTrue(sameId.contains("\"code\":-32602"), sameId);
-			assertEquals(0, second.calls.get(), "An invalid prior request ID must fail before handler entry.");
-			String middle = second.post("middle", firstState, true, 200);
-			assertCanonicalState(second.observed.get());
-			String completed = first.post("final", protectedState(middle), false, 200);
-			assertTrue(completed.contains("\"text\":\"verified numeric state\""), completed);
-			assertCanonicalState(first.observed.get());
-			assertEquals(2, first.calls.get());
-			assertEquals(1, second.calls.get());
-			assertEquals(new BigDecimal("100"), number(ORIGINAL, "integer"));
-			assertEquals(new BigDecimal("1.50"), number(ORIGINAL, "decimal"));
-			assertEquals(new BigDecimal("-0.000"), number(ORIGINAL, "zero"));
-		}
+		Fixture first = new Fixture();
+		Fixture second = new Fixture();
+		Soklet.run(first.config, () -> {
+			Soklet.run(second.config, () -> {
+				String initial = first.post("initial", null, false, 200);
+				String firstState = protectedState(initial);
+				String sameId = second.post("initial", firstState, true, 400);
+				assertTrue(sameId.contains("\"code\":-32602"), sameId);
+				assertEquals(0, second.calls.get(), "An invalid prior request ID must fail before handler entry.");
+				String middle = second.post("middle", firstState, true, 200);
+				assertCanonicalState(second.observed.get());
+				String completed = first.post("final", protectedState(middle), false, 200);
+				assertTrue(completed.contains("\"text\":\"verified numeric state\""), completed);
+				assertCanonicalState(first.observed.get());
+				assertEquals(2, first.calls.get());
+				assertEquals(1, second.calls.get());
+				assertEquals(new BigDecimal("100"), number(ORIGINAL, "integer"));
+				assertEquals(new BigDecimal("1.50"), number(ORIGINAL, "decimal"));
+				assertEquals(new BigDecimal("-0.000"), number(ORIGINAL, "zero"));
+			});
+		});
 	}
 
 	private static void assertCanonicalState(McpJsonValue state) {
@@ -91,11 +95,11 @@ class McpNumericRequestStatePublicRuntimeTests {
 		return response.substring(start, response.indexOf('"', start));
 	}
 
-	private static final class Fixture implements AutoCloseable {
+	private static final class Fixture {
 		private final AtomicInteger calls = new AtomicInteger();
 		private final AtomicReference<McpJsonValue> observed = new AtomicReference<>();
 		private final McpServer server;
-		private final Soklet soklet;
+		private final SokletConfig config;
 
 		private Fixture() {
 			Map<McpJsonValue, String> lookup = new HashMap<>();
@@ -136,12 +140,11 @@ class McpNumericRequestStatePublicRuntimeTests {
 					.protectionConfig(McpProtectionConfig.withKeyring(keyring).build())
 					.admissionController(admissionContext -> McpAdmissionDecision.accepted(identity))
 					.toolRateLimiter(rateLimitContext -> McpRateLimitDecision.allowed()).build();
-			soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+			config = SokletConfig.withMcpServer(server)
 					.lifecyclePolicy(LifecyclePolicy.builder().startupTimeout(java.time.Duration.ofSeconds(10))
 							.startupCancelationTimeout(java.time.Duration.ofSeconds(1)).gracefulShutdownTimeout(java.time.Duration.ofSeconds(1))
 							.forcedShutdownTimeout(java.time.Duration.ofSeconds(1)).build())
-					.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).build());
-			soklet.start();
+					.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).build();
 		}
 
 		private String post(String id, String state, boolean again, int expectedStatus) throws Exception {
@@ -160,7 +163,5 @@ class McpNumericRequestStatePublicRuntimeTests {
 				return response;
 			}
 		}
-
-		@Override public void close() { soklet.close(); }
 	}
 }

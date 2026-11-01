@@ -1490,9 +1490,7 @@ public class McpShutdownObservabilityTests {
 		}
 
 		@Override
-		public void didStopSoklet(@NonNull Soklet soklet,
-				@NonNull ShutdownResult result) {
-			requireNonNull(soklet);
+		public void didStopSoklet(@NonNull ShutdownResult result) {
 			this.globalResult.set(requireNonNull(result));
 			this.terminal.countDown();
 		}

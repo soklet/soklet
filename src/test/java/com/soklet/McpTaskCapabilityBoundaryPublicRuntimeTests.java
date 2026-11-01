@@ -87,8 +87,7 @@ class McpTaskCapabilityBoundaryPublicRuntimeTests {
 					}
 					return continuation.proceed();
 				}).build();
-		try (Soklet soklet = managed(server)) {
-			soklet.start();
+		Soklet.run(managedConfig(server), () -> {
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			Response failure = post(port, "/mcp", testCase.version(), "tools/call", "optional",
 					"\"name\":\"optional\",\"arguments\":{}", testCase.clientCapable());
@@ -105,7 +104,7 @@ class McpTaskCapabilityBoundaryPublicRuntimeTests {
 			assertEquals(200, recovered.status(), recovered.body());
 			assertTrue(recovered.body().contains("\"text\":\"inline\""), recovered.body());
 			assertEquals(0, managerReads.get());
-		}
+		});
 	}
 
 	@Test
@@ -128,8 +127,7 @@ class McpTaskCapabilityBoundaryPublicRuntimeTests {
 				}).build();
 		McpServer server = server(List.of(endpoint("/enabled", true, tool),
 				endpoint("/disabled", false, tool)), manager).build();
-		try (Soklet soklet = managed(server)) {
-			soklet.start();
+		Soklet.run(managedConfig(server), () -> {
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			for (String path : List.of("/enabled", "/disabled")) {
 				Response discovery = post(port, path, McpProtocolVersion.V2026_07_28,
@@ -143,7 +141,7 @@ class McpTaskCapabilityBoundaryPublicRuntimeTests {
 			assertEquals(2, contexts.size());
 			assertTrue(contexts.get(0).isPresent());
 			assertTrue(contexts.get(1).isEmpty());
-		}
+		});
 	}
 
 	private static McpEndpoint endpoint(String path, boolean enabled, McpToolRegistration<?> tool) {
@@ -157,9 +155,9 @@ class McpTaskCapabilityBoundaryPublicRuntimeTests {
 				.toolRateLimiter(rateLimitContext -> McpRateLimitDecision.allowed());
 	}
 
-	private static Soklet managed(McpServer server) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
-				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).build());
+	private static SokletConfig managedConfig(McpServer server) {
+		return SokletConfig.withMcpServer(server)
+				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).build();
 	}
 
 	static Response post(int port, String path, McpProtocolVersion version, String method,

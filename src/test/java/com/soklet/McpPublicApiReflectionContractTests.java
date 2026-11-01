@@ -88,8 +88,9 @@ public class McpPublicApiReflectionContractTests {
 	private static final int PHASE_SIX_TYPE_COUNT = 68;
 	private static final int PROVISIONAL_TYPE_COUNT = 22;
 	private static final int CURRENT_MCP_TYPE_COUNT = 304;
+	// 2026-10-31 lifecycle amendment: aggregate observers no longer carry Soklet.
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
-			"127d61399990bdc65c3a87fc37ad787006b1c5a338f9a2835c78a94fda0121db";
+			"d9f6c8b0efbab759e7097ad94851d8bbcbe42145d6b503815d4568f5c97c631c";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
 			"d677a7f58b36d0293b7ff47dd1501fee626369b6cacee26317a350a5fd14b1e1";
 	private static final String PHASE_SIX_NULLABILITY_SHA_256 =

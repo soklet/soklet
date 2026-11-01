@@ -132,10 +132,9 @@ public class McpStreamDisconnectPublicRuntimeTests {
 				requestFinished.countDown();
 			}
 		};
-		try (Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+		Soklet.run(SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.metricsCollector(collector).lifecycleObserver(observer).lifecyclePolicy(LIFECYCLE).build())) {
-			soklet.start();
+				.metricsCollector(collector).lifecycleObserver(observer).lifecyclePolicy(LIFECYCLE).build(), () -> {
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			String modernMetadata = version == McpProtocolVersion.V2026_07_28
 					? "\"io.modelcontextprotocol/protocolVersion\":\"" + version.getWireValue() + "\","
@@ -170,6 +169,6 @@ public class McpStreamDisconnectPublicRuntimeTests {
 				stopProducing.set(true);
 				continueProducing.countDown();
 			}
-		}
+		});
 	}
 }

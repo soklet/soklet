@@ -511,10 +511,9 @@ public class SseTests {
 				.lifecyclePolicy(shutdownPolicy(Duration.ofSeconds(1)))
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
+		Soklet.run(cfg, () -> {
 			// if stop hangs due to accept(), this test times out
-		} // try-with-resources stops both HTTP and SSE servers
+		}); // try-with-resources stops both HTTP and SSE servers
 	}
 
 	@Test
@@ -540,14 +539,12 @@ public class SseTests {
 				.metricsCollector(metricsCollector)
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
-
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(2000);
 				Assertions.assertTrue(waitForEof(socket, 3000), "Expected zero-progress SSE request timeout to close the socket");
 			}
-		}
+		});
 
 		Assertions.assertEquals(0L, transportFailureCount(metricsCollector, ServerType.SSE,
 				MetricsCollector.TransportFailureReason.REQUEST_READ_TIMEOUT));
@@ -578,9 +575,7 @@ public class SseTests {
 				.metricsCollector(metricsCollector)
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
-
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(2000);
 				socket.getOutputStream().write("GET /sse/abc HTTP/1.1\r\nHo".getBytes(StandardCharsets.UTF_8));
@@ -588,7 +583,7 @@ public class SseTests {
 
 				Assertions.assertTrue(waitForEof(socket, 3000), "Expected partial SSE request timeout to close the socket");
 			}
-		}
+		});
 
 		Assertions.assertEquals(1L, transportFailureCount(metricsCollector, ServerType.SSE,
 				MetricsCollector.TransportFailureReason.REQUEST_READ_TIMEOUT));
@@ -621,7 +616,9 @@ public class SseTests {
 					.lifecycleObserver(lifecycleObserver)
 					.build();
 
-			try (Soklet app = Soklet.fromConfig(sokletConfig)) {
+			// Keep explicit startup control to inspect synchronous bind failure and rollback.
+			try (SokletTestScope appScope = SokletTestScope.of(Soklet.fromConfig(sokletConfig))) {
+				Soklet app = appScope.soklet();
 				SokletStartupException exception = Assertions.assertThrows(
 						SokletStartupException.class, app::start);
 				Assertions.assertEquals(InternalStartupDisposition.FAILED,
@@ -671,7 +668,9 @@ public class SseTests {
 				.lifecyclePolicy(shutdownPolicy(Duration.ofSeconds(2)))
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
+		// Keep shutdown asynchronous while querying the server during its stop wait.
+		try (SokletTestScope appScope = SokletTestScope.of(Soklet.fromConfig(cfg))) {
+			Soklet app = appScope.soklet();
 			app.start();
 
 			DefaultSseServer internal = (DefaultSseServer) sse;
@@ -779,9 +778,7 @@ public class SseTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
-
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(4000);
 
@@ -821,7 +818,7 @@ public class SseTests {
 				Assertions.assertTrue(lines.stream().anyMatch(s -> s.equals("data: hello")));
 				Assertions.assertTrue(lines.stream().anyMatch(s -> s.equals("data: world")));
 			}
-		}
+		});
 	}
 
 	@Test
@@ -887,8 +884,7 @@ public class SseTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(config)) {
-			app.start();
+		Soklet.run(config, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2_000)) {
 				socket.setSoTimeout(4_000);
 				writeHttpGet(socket, "/catchup", ssePort);
@@ -909,7 +905,7 @@ public class SseTests {
 						readUntil(socket, "\n\n", 4_096),
 						"Framework verification heartbeat must follow the full initializer");
 			}
-		}
+		});
 	}
 
 	@Test
@@ -962,8 +958,7 @@ public class SseTests {
 				.metricsCollector(metricsCollector)
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(config)) {
-			app.start();
+		Soklet.run(config, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2_000)) {
 				socket.setSoTimeout(4_000);
 				writeHttpGet(socket, "/catchup", ssePort);
@@ -976,7 +971,7 @@ public class SseTests {
 			}
 			Assertions.assertTrue(terminated.await(5, SECONDS),
 					"Accepted initializer overflow must publish stream termination");
-		}
+		});
 
 		Assertions.assertEquals(List.of("established", "will:BACKPRESSURE", "did:BACKPRESSURE"),
 				streamEvents);
@@ -1015,8 +1010,7 @@ public class SseTests {
 						Set.of(UnicodeDataSseResource.class)))
 				.lifecycleObserver(new QuietLifecycle()).build();
 
-		try (Soklet app = Soklet.fromConfig(config)) {
-			app.start();
+		Soklet.run(config, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2_000)) {
 				socket.setSoTimeout(4_000);
 				writeHttpGet(socket, "/unicode-data", ssePort);
@@ -1024,7 +1018,7 @@ public class SseTests {
 				Assertions.assertEquals("data: a\u2028b\u0085c\u000Bd\n\n",
 						readNextEventBlock(socket, 8_192));
 			}
-		}
+		});
 	}
 
 	@Test
@@ -1045,9 +1039,7 @@ public class SseTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
-
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(12000);
 
@@ -1079,7 +1071,7 @@ public class SseTests {
 				Assertions.assertEquals(bigData.length(), reconstructed.length(), "Large SSE payload corrupted or truncated");
 				Assertions.assertEquals(bigData, reconstructed, "Large SSE payload mismatch");
 			}
-		}
+		});
 	}
 
 	@Test
@@ -1129,9 +1121,7 @@ public class SseTests {
 				.lifecycleObserver(lifecycle)
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
-
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(12000);
 
@@ -1158,7 +1148,7 @@ public class SseTests {
 				}
 				Assertions.assertTrue(waitForEof(socket, 6000), "Connection did not close after backpressure");
 			}
-		}
+		});
 	}
 
 	@Test
@@ -1183,9 +1173,7 @@ public class SseTests {
 				.lifecycleObserver(lifecycle)
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
-
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(12000);
 
@@ -1209,7 +1197,7 @@ public class SseTests {
 				Assertions.assertEquals(StreamTerminationReason.BACKPRESSURE, lifecycle.getReason());
 				lifecycle.releaseWriter();
 			}
-		}
+		});
 	}
 
 	@Test
@@ -1229,7 +1217,9 @@ public class SseTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
+		// Stop the owner while the client is open to verify connection termination.
+		try (SokletTestScope appScope = SokletTestScope.of(Soklet.fromConfig(cfg))) {
+			Soklet app = appScope.soklet();
 			app.start();
 
 			Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000);
@@ -1275,7 +1265,9 @@ public class SseTests {
 				.lifecyclePolicy(shutdownPolicy(Duration.ofSeconds(5)))
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
+		// Race owner shutdown with queued event delivery rather than waiting for the body to finish.
+		try (SokletTestScope appScope = SokletTestScope.of(Soklet.fromConfig(cfg))) {
+			Soklet app = appScope.soklet();
 			app.start();
 
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
@@ -1692,7 +1684,9 @@ public class SseTests {
 				.lifecycleObserver(lifecycle)
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
+		// Inspect the shutdown result while asserting the server-stop termination reason.
+		try (SokletTestScope appScope = SokletTestScope.of(Soklet.fromConfig(cfg))) {
+			Soklet app = appScope.soklet();
 			app.start();
 
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
@@ -1738,9 +1732,7 @@ public class SseTests {
 				.metricsCollector(metricsCollector)
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
-
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(4000);
 
@@ -1757,7 +1749,7 @@ public class SseTests {
 				Assertions.assertTrue(metricsCollector.snapshot().orElseThrow().getTransportFailures().values().stream()
 						.allMatch(value -> value == 0L));
 			}
-		}
+		});
 	}
 
 	@Test
@@ -1816,40 +1808,40 @@ public class SseTests {
 						.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
+		try {
+			Soklet.run(cfg, () -> {
+				try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
+					socket.setSoTimeout(4000);
+					socket.setSoLinger(true, 0);
 
-			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
-				socket.setSoTimeout(4000);
-				socket.setSoLinger(true, 0);
+					writeHttpGet(socket, "/sse/limit", ssePort);
+					BlockingHandshakeResource.awaitReady(5, SECONDS);
 
-				writeHttpGet(socket, "/sse/limit", ssePort);
-				BlockingHandshakeResource.awaitReady(5, SECONDS);
+					socket.close();
+					BlockingHandshakeResource.release();
 
-				socket.close();
-				BlockingHandshakeResource.release();
-
-				Assertions.assertTrue(handshakeSettled.await(5, SECONDS), "The reset handshake did not finish");
-				// The handshake write and TCP reset race legitimately. Either the
-				// original write fails, or it establishes and the next write sees
-				// the disconnect. Both paths must finish without server errors.
-				if (handshakeFailureReason.get() != null) {
-					Assertions.assertEquals(0, establishedConnections.get());
-					Assertions.assertNull(terminationReason.get());
-					Assertions.assertEquals(SseConnection.HandshakeFailureReason.INTERNAL_ERROR, handshakeFailureReason.get());
-					Throwable cause = Assertions.assertInstanceOf(IOException.class, handshakeFailureCause.get());
-					Assertions.assertTrue(cause.getClass().getName().startsWith("java."),
-							"The handshake outcome must expose the original JDK socket exception, not a private wrapper");
-				} else {
-					Assertions.assertEquals(1, establishedConnections.get());
-					Assertions.assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED, terminationReason.get());
+					Assertions.assertTrue(handshakeSettled.await(5, SECONDS), "The reset handshake did not finish");
+					// The handshake write and TCP reset race legitimately. Either the
+					// original write fails, or it establishes and the next write sees
+					// the disconnect. Both paths must finish without server errors.
+					if (handshakeFailureReason.get() != null) {
+						Assertions.assertEquals(0, establishedConnections.get());
+						Assertions.assertNull(terminationReason.get());
+						Assertions.assertEquals(SseConnection.HandshakeFailureReason.INTERNAL_ERROR, handshakeFailureReason.get());
+						Throwable cause = Assertions.assertInstanceOf(IOException.class, handshakeFailureCause.get());
+						Assertions.assertTrue(cause.getClass().getName().startsWith("java."),
+								"The handshake outcome must expose the original JDK socket exception, not a private wrapper");
+					} else {
+						Assertions.assertEquals(1, establishedConnections.get());
+						Assertions.assertEquals(StreamTerminationReason.CLIENT_DISCONNECTED, terminationReason.get());
+					}
+					Assertions.assertEquals(0, acceptanceFailures.get(), "A peer closing an admitted handshake is not an acceptance failure");
+					Assertions.assertTrue(metricsCollector.snapshot().orElseThrow().getTransportFailures().values().stream()
+							.allMatch(value -> value == 0L));
+					Assertions.assertTrue(logEvents.stream().noneMatch(event -> event.getLogEventType() == LogEventType.SSE_SERVER_WRITING_HANDSHAKE_RESPONSE_FAILED
+							|| event.getLogEventType() == LogEventType.SERVER_TRANSPORT_FAILURE), logEvents.toString());
 				}
-				Assertions.assertEquals(0, acceptanceFailures.get(), "A peer closing an admitted handshake is not an acceptance failure");
-				Assertions.assertTrue(metricsCollector.snapshot().orElseThrow().getTransportFailures().values().stream()
-						.allMatch(value -> value == 0L));
-				Assertions.assertTrue(logEvents.stream().noneMatch(event -> event.getLogEventType() == LogEventType.SSE_SERVER_WRITING_HANDSHAKE_RESPONSE_FAILED
-						|| event.getLogEventType() == LogEventType.SERVER_TRANSPORT_FAILURE), logEvents.toString());
-			}
+			});
 		} finally {
 			BlockingHandshakeResource.release();
 		}
@@ -1876,9 +1868,7 @@ public class SseTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
-
+		Soklet.run(cfg, () -> {
 			try (Socket socket1 = connectWithRetry("127.0.0.1", ssePort, 2000);
 					 Socket socket2 = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket1.setSoTimeout(4000);
@@ -1906,7 +1896,7 @@ public class SseTests {
 				Assertions.assertTrue(h1Ok ^ h2Ok, "Expected exactly one 200 handshake");
 				Assertions.assertTrue(h1Busy ^ h2Busy, "Expected exactly one 503 handshake");
 			}
-		}
+		});
 	}
 
 	@Test
@@ -1930,9 +1920,7 @@ public class SseTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
-
+		Soklet.run(cfg, () -> {
 			try (Socket socket1 = connectWithRetry("127.0.0.1", ssePort, 2000);
 					 Socket socket2 = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket1.setSoTimeout(4000);
@@ -1954,7 +1942,7 @@ public class SseTests {
 				Assertions.assertTrue(h1.startsWith("HTTP/1.1 200"), "Expected socket1 to be accepted");
 				Assertions.assertTrue(h2.startsWith("HTTP/1.1 200"), "Expected socket2 to be accepted");
 			}
-		}
+		});
 	}
 
 	@Test
@@ -1981,9 +1969,7 @@ public class SseTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
-
+		Soklet.run(cfg, () -> {
 			ExecutorService requestExecutor = ((DefaultSseServer) sse).getRequestHandlerExecutorService().orElse(null);
 			ThreadPoolExecutor requestPool = requestExecutor instanceof ThreadPoolExecutor
 					? (ThreadPoolExecutor) requestExecutor
@@ -2049,7 +2035,7 @@ public class SseTests {
 				if (socket2 != null) socket2.close();
 				if (socket3 != null) socket3.close();
 			}
-		}
+		});
 	}
 
 	private static String readHandshake(@NonNull Socket socket) throws IOException {
@@ -2077,9 +2063,7 @@ public class SseTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
-
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(4000);
 				writeHttpGet(socket, "/sse/reject", ssePort);
@@ -2109,7 +2093,7 @@ public class SseTests {
 				byte[] body = readN(socket, contentLength, 4000);
 				Assertions.assertEquals("denied", new String(body, StandardCharsets.UTF_8));
 			}
-		}
+		});
 	}
 
 	@Test
@@ -2127,9 +2111,7 @@ public class SseTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
-
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(4000);
 
@@ -2144,7 +2126,7 @@ public class SseTests {
 				// Connection should close after rejected/normal response
 				Assertions.assertTrue(waitForEof(socket, 3000), "Connection did not close after 404 response");
 			}
-		}
+		});
 	}
 
 	@Test
@@ -2162,8 +2144,7 @@ public class SseTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(4000);
 				String req = "GET /sse/abc HTTP/1.1\r\n"
@@ -2180,7 +2161,7 @@ public class SseTests {
 				Assertions.assertTrue(rawHeaders.startsWith("HTTP/1.1 400"), "Expected 400 for Transfer-Encoding");
 				Assertions.assertTrue(waitForEof(socket, 3000), "Connection did not close after 400 response");
 			}
-		}
+		});
 	}
 
 	@Test
@@ -2198,8 +2179,7 @@ public class SseTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(4000);
 				String req = "GET /sse/abc HTTP/1.1\r\n"
@@ -2216,7 +2196,7 @@ public class SseTests {
 				Assertions.assertTrue(rawHeaders.startsWith("HTTP/1.1 400"), "Expected 400 for non-zero Content-Length");
 				Assertions.assertTrue(waitForEof(socket, 3000), "Connection did not close after 400 response");
 			}
-		}
+		});
 	}
 
 	@Test
@@ -2234,8 +2214,7 @@ public class SseTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(4000);
 				String req = "GET /sse/abc HTTP/1.1\r\n"
@@ -2251,7 +2230,7 @@ public class SseTests {
 				assertFreshResponseDate(rawHeaders);
 				Assertions.assertTrue(waitForEof(socket, 3000), "Connection did not close after 400 response");
 			}
-		}
+		});
 	}
 
 	@Test
@@ -2269,8 +2248,7 @@ public class SseTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(4000);
 				String req = "GET /sse/abc HTTP/1.1\r\n"
@@ -2286,7 +2264,7 @@ public class SseTests {
 				Assertions.assertTrue(rawHeaders.startsWith("HTTP/1.1 400"), "Expected 400 for invalid Host header");
 				Assertions.assertTrue(waitForEof(socket, 3000), "Connection did not close after 400 response");
 			}
-		}
+		});
 	}
 
 	@Test
@@ -2304,8 +2282,7 @@ public class SseTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(4000);
 				String req = "GET /sse/abc HTTP/1.1\r\n"
@@ -2322,7 +2299,7 @@ public class SseTests {
 				Assertions.assertTrue(rawHeaders.startsWith("HTTP/1.1 400"), "Expected 400 for Expect header");
 				Assertions.assertTrue(waitForEof(socket, 3000), "Connection did not close after 400 response");
 			}
-		}
+		});
 	}
 
 	@Test
@@ -2340,8 +2317,7 @@ public class SseTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(4000);
 				ByteArrayOutputStream req = new ByteArrayOutputStream();
@@ -2360,7 +2336,7 @@ public class SseTests {
 				Assertions.assertTrue(rawHeaders.startsWith("HTTP/1.1 400"), "Expected 400 for control character in header value");
 				Assertions.assertTrue(waitForEof(socket, 3000), "Connection did not close after 400 response");
 			}
-		}
+		});
 	}
 
 	@Test
@@ -2378,8 +2354,7 @@ public class SseTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(4000);
 				ByteArrayOutputStream req = new ByteArrayOutputStream();
@@ -2398,7 +2373,7 @@ public class SseTests {
 				Assertions.assertTrue(rawHeaders.startsWith("HTTP/1.1 200"),
 						"Expected 200 for obs-text in header value, got: " + rawHeaders);
 			}
-		}
+		});
 	}
 
 	@Test
@@ -2419,18 +2394,19 @@ public class SseTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
-			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
-				socket.setSoTimeout(4000);
-				writeHttpGet(socket, "/sse/limit", ssePort);
+		try {
+			Soklet.run(cfg, () -> {
+				try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
+					socket.setSoTimeout(4000);
+					writeHttpGet(socket, "/sse/limit", ssePort);
 
-				String rawHeaders = readUntil(socket, "\r\n\r\n", 4096);
-				if (rawHeaders == null) rawHeaders = readUntil(socket, "\n\n", 4096);
-				Assertions.assertNotNull(rawHeaders, "Did not receive HTTP response headers");
-				Assertions.assertTrue(rawHeaders.startsWith("HTTP/1.1 503"), "Expected 503 on handshake timeout");
-				Assertions.assertTrue(waitForEof(socket, 3000), "Connection did not close after timeout response");
-			}
+					String rawHeaders = readUntil(socket, "\r\n\r\n", 4096);
+					if (rawHeaders == null) rawHeaders = readUntil(socket, "\n\n", 4096);
+					Assertions.assertNotNull(rawHeaders, "Did not receive HTTP response headers");
+					Assertions.assertTrue(rawHeaders.startsWith("HTTP/1.1 503"), "Expected 503 on handshake timeout");
+					Assertions.assertTrue(waitForEof(socket, 3000), "Connection did not close after timeout response");
+				}
+			});
 		} finally {
 			BlockingHandshakeResource.release();
 		}
@@ -2455,28 +2431,29 @@ public class SseTests {
 						Set.of(BlockingHandshakeResource.class)))
 				.lifecycleObserver(lifecycle).build();
 
-		try (Soklet app = Soklet.fromConfig(config)) {
-			app.start();
-			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2_000)) {
-				socket.setSoTimeout(4_000);
-				writeHttpGet(socket, "/sse/limit", ssePort);
-				BlockingHandshakeResource.awaitReady(5, SECONDS);
-				Assertions.assertTrue(lifecycle.entered.await(5, SECONDS),
-						"Handshake timeout callback did not start");
+		try {
+			Soklet.run(config, () -> {
+				try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2_000)) {
+					socket.setSoTimeout(4_000);
+					writeHttpGet(socket, "/sse/limit", ssePort);
+					BlockingHandshakeResource.awaitReady(5, SECONDS);
+					Assertions.assertTrue(lifecycle.entered.await(5, SECONDS),
+							"Handshake timeout callback did not start");
 
-				CountDownLatch schedulerStillRuns = new CountDownLatch(1);
-				sse.getRequestHandlerTimeoutScheduler().orElseThrow()
-						.schedule(schedulerStillRuns::countDown,
-								Duration.ofMillis(10));
-				Assertions.assertTrue(schedulerStillRuns.await(1, SECONDS),
-						"Application callback blocked the shared timeout scheduler");
+					CountDownLatch schedulerStillRuns = new CountDownLatch(1);
+					sse.getRequestHandlerTimeoutScheduler().orElseThrow()
+							.schedule(schedulerStillRuns::countDown,
+									Duration.ofMillis(10));
+					Assertions.assertTrue(schedulerStillRuns.await(1, SECONDS),
+							"Application callback blocked the shared timeout scheduler");
 
-				lifecycle.release.countDown();
-				String rawHeaders = readUntil(socket, "\r\n\r\n", 4_096);
-				Assertions.assertNotNull(rawHeaders);
-				Assertions.assertTrue(rawHeaders.startsWith("HTTP/1.1 503"),
-						rawHeaders);
-			}
+					lifecycle.release.countDown();
+					String rawHeaders = readUntil(socket, "\r\n\r\n", 4_096);
+					Assertions.assertNotNull(rawHeaders);
+					Assertions.assertTrue(rawHeaders.startsWith("HTTP/1.1 503"),
+							rawHeaders);
+				}
+			});
 		} finally {
 			lifecycle.release.countDown();
 			BlockingHandshakeResource.release();
@@ -2570,8 +2547,7 @@ public class SseTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(4000);
 
@@ -2589,7 +2565,7 @@ public class SseTests {
 						"Expected 408 on handshake read timeout, got: " + rawHeaders);
 				Assertions.assertTrue(waitForEof(socket, 3000), "Connection did not close after timeout response");
 			}
-		}
+		});
 	}
 
 	@Test
@@ -2607,8 +2583,7 @@ public class SseTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(4000);
 				writeHttpGet(socket, "/sse/reject-explicit-cl", ssePort);
@@ -2624,7 +2599,7 @@ public class SseTests {
 				Assertions.assertEquals(1, cls.size(), "Expected exactly one Content-Length header");
 				Assertions.assertEquals("3", cls.stream().findFirst().get());
 			}
-		}
+		});
 	}
 
 	@Test
@@ -2641,8 +2616,7 @@ public class SseTests {
 						Set.of(AcceptedWithTransferEncoding.class)))
 				.lifecycleObserver(new QuietLifecycle()).build();
 
-		try (Soklet app = Soklet.fromConfig(config)) {
-			app.start();
+		Soklet.run(config, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2_000)) {
 				socket.setSoTimeout(4_000);
 				writeHttpGet(socket, "/sse/accepted-transfer-encoding", ssePort);
@@ -2653,7 +2627,7 @@ public class SseTests {
 				Assertions.assertFalse(rawHeaders.toLowerCase(Locale.ROOT)
 						.contains("transfer-encoding:"), rawHeaders);
 			}
-		}
+		});
 	}
 
 	@Test
@@ -2670,8 +2644,7 @@ public class SseTests {
 						Set.of(AcceptedWithKeepAliveHeaders.class)))
 				.lifecycleObserver(new QuietLifecycle()).build();
 
-		try (Soklet app = Soklet.fromConfig(config)) {
-			app.start();
+		Soklet.run(config, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2_000)) {
 				socket.setSoTimeout(4_000);
 				writeHttpGet(socket, "/sse/accepted-keep-alive", ssePort);
@@ -2690,7 +2663,7 @@ public class SseTests {
 						line.regionMatches(true, 0, "Keep-Alive:", 0,
 								"Keep-Alive:".length())), rawHeaders);
 			}
-		}
+		});
 	}
 
 	@Test
@@ -2712,9 +2685,7 @@ public class SseTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(AcceptingSseCorsResource.class)))
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
-
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2500)) {
 				socket.setSoTimeout(4000);
 				writeHttpGet(socket, "/sse/cors-ok", ssePort, origin);
@@ -2738,7 +2709,7 @@ public class SseTests {
 				// SSE accepted handshakes should keep the connection open; do not wait for EOF.
 				// We deliberately don't read further (heartbeats may arrive later).
 			}
-		}
+		});
 	}
 
 	@Test
@@ -2759,9 +2730,7 @@ public class SseTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(RejectingSseCorsResource.class)))
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
-
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2500)) {
 				socket.setSoTimeout(4000);
 				writeHttpGet(socket, "/sse/cors-reject", ssePort, origin);
@@ -2783,7 +2752,7 @@ public class SseTests {
 
 				// Body may be present; we don't need to read/validate it for CORS, so we stop here.
 			}
-		}
+		});
 	}
 
 	@Test
@@ -2805,9 +2774,7 @@ public class SseTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(AcceptingSseCorsResource.class)))
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
-
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2500)) {
 				socket.setSoTimeout(4000);
 				writeHttpGet(socket, "/sse/cors-ok", ssePort, origin);
@@ -2825,7 +2792,7 @@ public class SseTests {
 				// Allowed and denied origins both affect the cached representation.
 				Assertions.assertEquals("Origin", firstOrEmpty(headers, "vary"));
 			}
-		}
+		});
 	}
 
 	public static class AcceptingSseCorsResource {
@@ -2995,9 +2962,7 @@ public class SseTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseBasicHandshakeResource.class)))
 				.build();
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
-
+		Soklet.run(config, () -> {
 			// handshake
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(3000);
@@ -3019,7 +2984,7 @@ public class SseTests {
 						.retry(Duration.ofSeconds(5))
 						.build();
 
-				SseServer sseServer = soklet.getSokletConfig().getSseServer().get();
+				SseServer sseServer = config.getSseServer().orElseThrow();
 
 				// Wait until the broadcaster exists and has at least one connection
 				long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
@@ -3060,7 +3025,7 @@ public class SseTests {
 				Assertions.assertEquals("data: L3", dataLines.get(2));
 				Assertions.assertEquals("data: ", dataLines.get(3)); // trailing newline
 			}
-		}
+		});
 	}
 
 	@Test
@@ -3145,9 +3110,7 @@ public class SseTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
-
+		Soklet.run(config, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(3000);
 				socket.getOutputStream().write(("GET /sse HTTP/1.1\r\n"
@@ -3159,7 +3122,7 @@ public class SseTests {
 				Assertions.assertNotNull(response);
 				Assertions.assertTrue(response.startsWith("HTTP/1.1 431"));
 			}
-		}
+		});
 	}
 
 	@Test
@@ -3175,9 +3138,7 @@ public class SseTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
-
+		Soklet.run(config, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(3000);
 				socket.getOutputStream().write(("GET /sse HTTP/1.1\r\n"
@@ -3189,7 +3150,7 @@ public class SseTests {
 				Assertions.assertNotNull(response);
 				Assertions.assertTrue(response.startsWith("HTTP/1.1 431"));
 			}
-		}
+		});
 	}
 
 	@Test
@@ -3204,9 +3165,7 @@ public class SseTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
-
+		Soklet.run(config, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(3000);
 				socket.getOutputStream().write(("GET /too-long HTTP/1.1\r\n"
@@ -3218,7 +3177,7 @@ public class SseTests {
 				Assertions.assertNotNull(response);
 				Assertions.assertTrue(response.startsWith("HTTP/1.1 414"));
 			}
-		}
+		});
 	}
 
 	@Test
@@ -3259,9 +3218,7 @@ public class SseTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseBasicHandshakeResource.class)))
 				.build();
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
-
+		Soklet.run(config, () -> {
 			// handshake
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2000)) {
 				socket.setSoTimeout(3000);
@@ -3277,7 +3234,7 @@ public class SseTests {
 
 				Assertions.assertTrue(response.startsWith("HTTP/1.1 405"), "Not a 405 response");
 			}
-		}
+		});
 	}
 
 	@Test
@@ -3291,9 +3248,7 @@ public class SseTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseBasicHandshakeResource.class)))
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
-
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2500)) {
 				socket.setSoTimeout(4000);
 				// Note the extra spaces after GET and before HTTP/1.1
@@ -3305,7 +3260,7 @@ public class SseTests {
 				Assertions.assertNotNull(raw, "No HTTP response headers received");
 				Assertions.assertTrue(raw.startsWith("HTTP/1.1 200"), "Expected 200 OK SSE handshake");
 			}
-		}
+		});
 	}
 
 	@Test
@@ -3319,9 +3274,7 @@ public class SseTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SseBasicHandshakeResource.class)))
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
-
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", ssePort, 2500)) {
 				socket.setSoTimeout(4000);
 				String req = "GET http://127.0.0.1:" + ssePort + "/sse HTTP/1.1\r\nHost: 127.0.0.1\r\nAccept: text/event-stream\r\n\r\n";
@@ -3332,7 +3285,7 @@ public class SseTests {
 				Assertions.assertNotNull(raw, "No HTTP response headers received");
 				Assertions.assertTrue(raw.startsWith("HTTP/1.1 200"), "Expected 200 OK SSE handshake");
 			}
-		}
+		});
 	}
 
 	@Test
@@ -4739,13 +4692,12 @@ public class SseTests {
 				new CountDownLatch(1);
 
 		@Override
-		public void didStartSoklet(@NonNull Soklet soklet) {
+		public void didStartSoklet() {
 			this.didStartSoklet.incrementAndGet();
 		}
 
 		@Override
-		public void didFailToStartSoklet(@NonNull Soklet soklet,
-																		 @NonNull Throwable throwable) {
+		public void didFailToStartSoklet(@NonNull Throwable throwable) {
 			this.didFailToStartSoklet.incrementAndGet();
 		}
 
@@ -4772,8 +4724,7 @@ public class SseTests {
 		}
 
 		@Override
-		public void didStopSoklet(@NonNull Soklet soklet,
-				@NonNull ShutdownResult result) {
+		public void didStopSoklet(@NonNull ShutdownResult result) {
 			this.terminalTransitionsDelivered.countDown();
 		}
 	}

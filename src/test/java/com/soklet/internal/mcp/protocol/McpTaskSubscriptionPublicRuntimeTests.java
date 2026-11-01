@@ -136,8 +136,8 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 			McpServer server = serverBuilder(manager, new AtomicInteger())
 					.subscriptionAuthorizer((context, features) -> McpSubscriptionAuthorization.Allowed.fromValidUntil(Instant.now().plusSeconds(300)))
 					.build();
-			try (Soklet soklet = managedSoklet(server)) {
-				soklet.start(); int port = boundPort(server);
+			Soklet.run(managedSokletConfig(server), () -> {
+				int port = boundPort(server);
 				seedTask(port, "maintenance-transient", ALPHA); seedTask(port, "maintenance-peer", ALPHA);
 				try (McpChunkedHttpClient client = listen(port, "\"maintenance\"", ALPHA, true,
 						taskIdsFilter(List.of("maintenance-transient", "maintenance-peer")))) {
@@ -160,7 +160,7 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 					Assertions.assertEquals(completedNotification("\"maintenance\"", "maintenance-transient"), frame);
 					client.closeWithReset();
 				}
-			}
+			});
 		}
 	}
 
@@ -168,8 +168,8 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 	public void terminalTaskSnapshotSurvivesAnEarlierFleetClockThanTheLastWorkingSnapshot() throws Exception {
 		ScriptedTaskManager manager = new ScriptedTaskManager();
 		McpServer server = server(manager, new AtomicInteger());
-		try (Soklet soklet = managedSoklet(server)) {
-			soklet.start(); int port = boundPort(server);
+		Soklet.run(managedSokletConfig(server), () -> {
+			int port = boundPort(server);
 			seedTask(port, "clock-skew", ALPHA);
 			try (McpChunkedHttpClient client = listen(port, "\"clock-skew\"", ALPHA, true, taskIdsFilter(List.of("clock-skew")))) {
 				assertSseHead(client.readHead()); client.readChunkText();
@@ -183,7 +183,7 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 				Assertions.assertEquals(completedNotification("\"clock-skew\"", "clock-skew"), client.readChunkText());
 				client.closeWithReset();
 			}
-		}
+		});
 	}
 
 	@Test
@@ -202,32 +202,32 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 		});
 		McpServer server = serverBuilder(manager, new AtomicInteger())
 				.subscriptionAuthorizationTimeout(Duration.ofMillis(250)).build();
-		Soklet soklet = managedSoklet(server);
-		McpChunkedHttpClient client = null;
-		try {
-			soklet.start();
-			int port = boundPort(server);
-			seedTask(port, "late-terminal", ALPHA);
-			seedTask(port, "late-peer", ALPHA);
-			client = listen(port, "\"late-offer\"", ALPHA, true,
-					taskIdsFilter(List.of("late-terminal", "late-peer")));
-			assertSseHead(client.readHead());
-			Assertions.assertEquals(acknowledgment("\"late-offer\"", List.of("late-terminal", "late-peer")), client.readChunkText());
-			manager.replaceTask(completedTask(manager.requireTask("late-terminal")));
-			manager.publishTaskChanged("late-terminal");
-			Assertions.assertTrue(entered.await(5, TimeUnit.SECONDS));
-			// Cross the actual callback budget while paused after encoding, before channel admission.
-			Thread.sleep(350);
-			manager.publishTaskChanged("late-peer");
-			release.countDown();
-			Assertions.assertEquals(workingNotification("\"late-offer\"", "late-peer"), client.readChunkText());
-			manager.publishTaskChanged("late-terminal");
-			Assertions.assertEquals(completedNotification("\"late-offer\"", "late-terminal"), client.readChunkText());
-		} finally {
-			release.countDown(); McpRequestSseStream.setTestHooks(null);
-			if (client != null) client.closeWithReset();
-			soklet.close();
-		}
+		Soklet.run(managedSokletConfig(server), () -> {
+			McpChunkedHttpClient client = null;
+			try {
+				int port = boundPort(server);
+				seedTask(port, "late-terminal", ALPHA);
+				seedTask(port, "late-peer", ALPHA);
+				client = listen(port, "\"late-offer\"", ALPHA, true,
+						taskIdsFilter(List.of("late-terminal", "late-peer")));
+				assertSseHead(client.readHead());
+				Assertions.assertEquals(acknowledgment("\"late-offer\"", List.of("late-terminal", "late-peer")), client.readChunkText());
+				manager.replaceTask(completedTask(manager.requireTask("late-terminal")));
+				manager.publishTaskChanged("late-terminal");
+				Assertions.assertTrue(entered.await(5, TimeUnit.SECONDS));
+				// Cross the actual callback budget while paused after encoding, before channel admission.
+				Thread.sleep(350);
+				manager.publishTaskChanged("late-peer");
+				release.countDown();
+				Assertions.assertEquals(workingNotification("\"late-offer\"", "late-peer"), client.readChunkText());
+				manager.publishTaskChanged("late-terminal");
+				Assertions.assertEquals(completedNotification("\"late-offer\"", "late-terminal"), client.readChunkText());
+			} finally {
+				release.countDown(); McpRequestSseStream.setTestHooks(null);
+				if (client != null) client.closeWithReset();
+
+			}
+		});
 	}
 
 	@Test
@@ -249,41 +249,41 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 					}
 					return true;
 				}, (requestContext, prompt, features) -> true)).build();
-		Soklet soklet = managedSoklet(server);
-		McpChunkedHttpClient client = null;
-		McpChunkedHttpClient peer = null;
-		try {
-			soklet.start();
-			int port = boundPort(server);
-			seedTask(port, "slow-policy", ALPHA);
-			seedTask(port, "policy-peer", ALPHA);
-			client = listen(port, "\"slow-policy\"", ALPHA, true, taskIdsFilter(List.of("slow-policy")));
-			peer = listen(port, "\"policy-peer\"", ALPHA, true, taskIdsFilter(List.of("policy-peer")));
-			assertSseHead(client.readHead());
-			assertSseHead(peer.readHead());
-			Assertions.assertEquals(acknowledgment("\"slow-policy\"", List.of("slow-policy")), client.readChunkText());
-			Assertions.assertEquals(acknowledgment("\"policy-peer\"", List.of("policy-peer")), peer.readChunkText());
-			policyCalls.set(0);
-			manager.resetFindInvocations();
-			manager.replaceTask(completedTask(manager.requireTask("slow-policy")));
-			block.set(true);
-			manager.publishTaskChanged("slow-policy");
-			Assertions.assertTrue(entered.await(5, TimeUnit.SECONDS));
-			Assertions.assertTrue(canceled.await(5, TimeUnit.SECONDS), "The task policy must receive its bounded deadline cancellation.");
-			for (int i = 0; i < 50; i++) manager.publishTaskChanged("slow-policy");
-			manager.publishTaskChanged("policy-peer");
-			Assertions.assertEquals(workingNotification("\"policy-peer\"", "policy-peer"), peer.readChunkText());
-			Assertions.assertEquals(1, policyCalls.get(), "A canceled callback still running must retain the task owner.");
-			Assertions.assertEquals(1, manager.findInvocations("slow-policy"));
-			release.countDown();
-			Assertions.assertEquals(completedNotification("\"slow-policy\"", "slow-policy"), client.readChunkText());
-			Assertions.assertEquals(2, policyCalls.get(), "The retained burst should cause one fresh projection after physical exit.");
-		} finally {
-			release.countDown();
-			if (client != null) client.closeWithReset();
-			if (peer != null) peer.closeWithReset();
-			soklet.close();
-		}
+		Soklet.run(managedSokletConfig(server), () -> {
+			McpChunkedHttpClient client = null;
+			McpChunkedHttpClient peer = null;
+			try {
+				int port = boundPort(server);
+				seedTask(port, "slow-policy", ALPHA);
+				seedTask(port, "policy-peer", ALPHA);
+				client = listen(port, "\"slow-policy\"", ALPHA, true, taskIdsFilter(List.of("slow-policy")));
+				peer = listen(port, "\"policy-peer\"", ALPHA, true, taskIdsFilter(List.of("policy-peer")));
+				assertSseHead(client.readHead());
+				assertSseHead(peer.readHead());
+				Assertions.assertEquals(acknowledgment("\"slow-policy\"", List.of("slow-policy")), client.readChunkText());
+				Assertions.assertEquals(acknowledgment("\"policy-peer\"", List.of("policy-peer")), peer.readChunkText());
+				policyCalls.set(0);
+				manager.resetFindInvocations();
+				manager.replaceTask(completedTask(manager.requireTask("slow-policy")));
+				block.set(true);
+				manager.publishTaskChanged("slow-policy");
+				Assertions.assertTrue(entered.await(5, TimeUnit.SECONDS));
+				Assertions.assertTrue(canceled.await(5, TimeUnit.SECONDS), "The task policy must receive its bounded deadline cancellation.");
+				for (int i = 0; i < 50; i++) manager.publishTaskChanged("slow-policy");
+				manager.publishTaskChanged("policy-peer");
+				Assertions.assertEquals(workingNotification("\"policy-peer\"", "policy-peer"), peer.readChunkText());
+				Assertions.assertEquals(1, policyCalls.get(), "A canceled callback still running must retain the task owner.");
+				Assertions.assertEquals(1, manager.findInvocations("slow-policy"));
+				release.countDown();
+				Assertions.assertEquals(completedNotification("\"slow-policy\"", "slow-policy"), client.readChunkText());
+				Assertions.assertEquals(2, policyCalls.get(), "The retained burst should cause one fresh projection after physical exit.");
+			} finally {
+				release.countDown();
+				if (client != null) client.closeWithReset();
+				if (peer != null) peer.closeWithReset();
+
+			}
+		});
 	}
 
 	@Test
@@ -316,36 +316,36 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 					policyContexts.add(context);
 					return restored.get() || !context.equals("replacement-grant");
 				}, (requestContext, prompt, features) -> true)).build();
-		Soklet soklet = managedSoklet(server);
-		McpChunkedHttpClient client = null;
-		try {
-			soklet.start();
-			int port = boundPort(server);
-			seedTask(port, "fenced-result", ALPHA);
-			seedTask(port, "fenced-peer", ALPHA);
-			client = listen(port, "\"fenced-result\"", ALPHA, true, taskIdsFilter(List.of("fenced-result", "fenced-peer")));
-			assertSseHead(client.readHead());
-			Assertions.assertEquals(acknowledgment("\"fenced-result\"", List.of("fenced-result", "fenced-peer")), client.readChunkText());
-			policyContexts.clear();
-			manager.replaceTask(completedTask(manager.requireTask("fenced-result")));
-			manager.publishTaskChanged("fenced-result");
-			Assertions.assertTrue(entered.await(5, TimeUnit.SECONDS));
-			server.getSubscriptionReconciler().reconcileSubscriptions();
-			Assertions.assertTrue(replacement.await(5, TimeUnit.SECONDS));
-			release.countDown();
-			manager.publishTaskChanged("fenced-peer");
-			Assertions.assertEquals(workingNotification("\"fenced-result\"", "fenced-peer"),
-					client.readChunkText(), "A revoked result must not consume terminal delivery.");
-			Assertions.assertEquals(List.of("old-grant", "replacement-grant"), policyContexts);
-			restored.set(true);
-			server.getSubscriptionReconciler().reconcileSubscriptions();
-			Assertions.assertEquals(completedNotification("\"fenced-result\"", "fenced-result"),
-					client.readChunkText(), "Reconciliation must recover the undelivered result.");
-		} finally {
-			release.countDown(); McpRequestSseStream.setTestHooks(null);
-			if (client != null) client.closeWithReset();
-			soklet.close();
-		}
+		Soklet.run(managedSokletConfig(server), () -> {
+			McpChunkedHttpClient client = null;
+			try {
+				int port = boundPort(server);
+				seedTask(port, "fenced-result", ALPHA);
+				seedTask(port, "fenced-peer", ALPHA);
+				client = listen(port, "\"fenced-result\"", ALPHA, true, taskIdsFilter(List.of("fenced-result", "fenced-peer")));
+				assertSseHead(client.readHead());
+				Assertions.assertEquals(acknowledgment("\"fenced-result\"", List.of("fenced-result", "fenced-peer")), client.readChunkText());
+				policyContexts.clear();
+				manager.replaceTask(completedTask(manager.requireTask("fenced-result")));
+				manager.publishTaskChanged("fenced-result");
+				Assertions.assertTrue(entered.await(5, TimeUnit.SECONDS));
+				server.getSubscriptionReconciler().reconcileSubscriptions();
+				Assertions.assertTrue(replacement.await(5, TimeUnit.SECONDS));
+				release.countDown();
+				manager.publishTaskChanged("fenced-peer");
+				Assertions.assertEquals(workingNotification("\"fenced-result\"", "fenced-peer"),
+						client.readChunkText(), "A revoked result must not consume terminal delivery.");
+				Assertions.assertEquals(List.of("old-grant", "replacement-grant"), policyContexts);
+				restored.set(true);
+				server.getSubscriptionReconciler().reconcileSubscriptions();
+				Assertions.assertEquals(completedNotification("\"fenced-result\"", "fenced-result"),
+						client.readChunkText(), "Reconciliation must recover the undelivered result.");
+			} finally {
+				release.countDown(); McpRequestSseStream.setTestHooks(null);
+				if (client != null) client.closeWithReset();
+
+			}
+		});
 	}
 
 	@Test
@@ -387,38 +387,38 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 						&& grants.get() >= 2) renewed.countDown();
 			}
 		};
-		Soklet soklet = managedSoklet(server, metrics);
-		McpChunkedHttpClient client = null;
-		try {
-			soklet.start();
-			int port = boundPort(server);
-			seedTask(port, "renewal-hidden", ALPHA);
-			seedTask(port, "renewal-peer", ALPHA);
-			client = listen(port, "\"renewal-policy\"", ALPHA, true,
-					taskIdsFilter(List.of("renewal-hidden", "renewal-peer")));
-			assertSseHead(client.readHead());
-			Assertions.assertEquals(acknowledgment("\"renewal-policy\"",
-					List.of("renewal-hidden", "renewal-peer")), client.readChunkText());
-			manager.resetFindInvocations();
-			manager.replaceTask(completedTask(manager.requireTask("renewal-hidden")));
-			manager.publishTaskChanged("renewal-hidden");
-			Assertions.assertTrue(entered.await(5, TimeUnit.SECONDS));
-			visible.set(false);
-			Assertions.assertTrue(renewed.await(5, TimeUnit.SECONDS),
-					"The same-context renewal did not complete.");
-			release.countDown();
-			manager.awaitFindCompletions("renewal-hidden", 3);
-			visible.set(true);
-			manager.publishTaskChanged("renewal-peer");
-			Assertions.assertEquals(workingNotification("\"renewal-policy\"", "renewal-peer"),
-					client.readChunkText(),
-					"A queued task result must be checked under the renewed access decision.");
-		} finally {
-			release.countDown();
-			McpRequestSseStream.setTestHooks(null);
-			if (client != null) client.closeWithReset();
-			soklet.close();
-		}
+		Soklet.run(managedSokletConfig(server, metrics), () -> {
+			McpChunkedHttpClient client = null;
+			try {
+				int port = boundPort(server);
+				seedTask(port, "renewal-hidden", ALPHA);
+				seedTask(port, "renewal-peer", ALPHA);
+				client = listen(port, "\"renewal-policy\"", ALPHA, true,
+						taskIdsFilter(List.of("renewal-hidden", "renewal-peer")));
+				assertSseHead(client.readHead());
+				Assertions.assertEquals(acknowledgment("\"renewal-policy\"",
+						List.of("renewal-hidden", "renewal-peer")), client.readChunkText());
+				manager.resetFindInvocations();
+				manager.replaceTask(completedTask(manager.requireTask("renewal-hidden")));
+				manager.publishTaskChanged("renewal-hidden");
+				Assertions.assertTrue(entered.await(5, TimeUnit.SECONDS));
+				visible.set(false);
+				Assertions.assertTrue(renewed.await(5, TimeUnit.SECONDS),
+						"The same-context renewal did not complete.");
+				release.countDown();
+				manager.awaitFindCompletions("renewal-hidden", 3);
+				visible.set(true);
+				manager.publishTaskChanged("renewal-peer");
+				Assertions.assertEquals(workingNotification("\"renewal-policy\"", "renewal-peer"),
+						client.readChunkText(),
+						"A queued task result must be checked under the renewed access decision.");
+			} finally {
+				release.countDown();
+				McpRequestSseStream.setTestHooks(null);
+				if (client != null) client.closeWithReset();
+
+			}
+		});
 	}
 
 	@Test
@@ -463,64 +463,64 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 				}
 			}
 		};
-		Soklet soklet = managedSoklet(server, metrics);
-		McpChunkedHttpClient client = null;
-		try {
-			soklet.start();
-			int port = boundPort(server);
-			seedTask(port, "renewal-partial", ALPHA);
-			client = listen(port, "\"renewal-partial\"", ALPHA, true,
-					taskIdsFilter(List.of("renewal-partial")), 1024);
-			assertSseHead(client.readHead());
-			Assertions.assertEquals(acknowledgment("\"renewal-partial\"", List.of("renewal-partial")), client.readChunkText());
-			// Constrain the server's kernel send queue as well as the client window
-			// so the test observes a genuinely partial frame on every platform.
-			Object runtime = field(field(server, "runtimeBridge"), "runtime");
-			Object eventLoop = field(runtime, "eventLoop");
-			for (Object loop : (List<?>) field(eventLoop, "connectionEventLoops")) {
-				java.nio.channels.Selector selector = (java.nio.channels.Selector) field(loop, "selector");
-				for (java.nio.channels.SelectionKey key : selector.keys().toArray(java.nio.channels.SelectionKey[]::new))
-					if (key.channel() instanceof java.nio.channels.SocketChannel socket && socket.isOpen())
-						socket.setOption(java.net.StandardSocketOptions.SO_SNDBUF, 1024);
-			}
-			Object control = subscriptionControl(server);
-			Object channel = field(field(field(control, "responseStream"), "channel"), "delegate");
-			String output = "x".repeat(900_000);
-			manager.replaceTask(completedTask(manager.requireTask("renewal-partial"), output));
-			manager.publishTaskChanged("renewal-partial");
-			long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
-			boolean partial = false;
-			while (System.nanoTime() - deadline < 0L) {
-				synchronized (field(channel, "lock")) {
-					Object chunk = field(channel, "currentChunk");
-					if (chunk != null && (boolean) field(chunk, "hasWrittenBytes")) {
-						partial = true;
-						break;
-					}
+		Soklet.run(managedSokletConfig(server, metrics), () -> {
+			McpChunkedHttpClient client = null;
+			try {
+				int port = boundPort(server);
+				seedTask(port, "renewal-partial", ALPHA);
+				client = listen(port, "\"renewal-partial\"", ALPHA, true,
+						taskIdsFilter(List.of("renewal-partial")), 1024);
+				assertSseHead(client.readHead());
+				Assertions.assertEquals(acknowledgment("\"renewal-partial\"", List.of("renewal-partial")), client.readChunkText());
+				// Constrain the server's kernel send queue as well as the client window
+				// so the test observes a genuinely partial frame on every platform.
+				Object runtime = field(field(server, "runtimeBridge"), "runtime");
+				Object eventLoop = field(runtime, "eventLoop");
+				for (Object loop : (List<?>) field(eventLoop, "connectionEventLoops")) {
+					java.nio.channels.Selector selector = (java.nio.channels.Selector) field(loop, "selector");
+					for (java.nio.channels.SelectionKey key : selector.keys().toArray(java.nio.channels.SelectionKey[]::new))
+						if (key.channel() instanceof java.nio.channels.SocketChannel socket && socket.isOpen())
+							socket.setOption(java.net.StandardSocketOptions.SO_SNDBUF, 1024);
 				}
-				Thread.sleep(5);
+				Object control = subscriptionControl(server);
+				Object channel = field(field(field(control, "responseStream"), "channel"), "delegate");
+				String output = "x".repeat(900_000);
+				manager.replaceTask(completedTask(manager.requireTask("renewal-partial"), output));
+				manager.publishTaskChanged("renewal-partial");
+				long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+				boolean partial = false;
+				while (System.nanoTime() - deadline < 0L) {
+					synchronized (field(channel, "lock")) {
+						Object chunk = field(channel, "currentChunk");
+						if (chunk != null && (boolean) field(chunk, "hasWrittenBytes")) {
+							partial = true;
+							break;
+						}
+					}
+					Thread.sleep(5);
+				}
+				Assertions.assertTrue(partial, "The task frame must be partly written before renewal completes.");
+				Assertions.assertTrue(renewalEntered.await(5, TimeUnit.SECONDS));
+				releaseRenewal.countDown();
+				Assertions.assertTrue(renewed.await(5, TimeUnit.SECONDS));
+				McpChunkedHttpClient reader = client;
+				if (changeContext) {
+					Assertions.assertThrows(java.io.EOFException.class, reader::readChunkText,
+							"A changed grant must stop the remaining bytes of the old result.");
+					Assertions.assertTrue(closedObserved.await(5, TimeUnit.SECONDS));
+					Assertions.assertEquals(McpStreamTerminationReason.REQUEST_CANCELED, closed.get());
+				} else {
+					Assertions.assertEquals(completedNotification("\"renewal-partial\"", "renewal-partial")
+							.replace("completed-output", output), reader.readChunkText());
+					Assertions.assertNull(closed.get(), "An unchanged renewal must preserve the stream.");
+					Assertions.assertEquals(1, server.getDiagnostics().getActiveSubscriptions());
+				}
+			} finally {
+				releaseRenewal.countDown();
+				if (client != null) client.closeWithReset();
+
 			}
-			Assertions.assertTrue(partial, "The task frame must be partly written before renewal completes.");
-			Assertions.assertTrue(renewalEntered.await(5, TimeUnit.SECONDS));
-			releaseRenewal.countDown();
-			Assertions.assertTrue(renewed.await(5, TimeUnit.SECONDS));
-			McpChunkedHttpClient reader = client;
-			if (changeContext) {
-				Assertions.assertThrows(java.io.EOFException.class, reader::readChunkText,
-						"A changed grant must stop the remaining bytes of the old result.");
-				Assertions.assertTrue(closedObserved.await(5, TimeUnit.SECONDS));
-				Assertions.assertEquals(McpStreamTerminationReason.REQUEST_CANCELED, closed.get());
-			} else {
-				Assertions.assertEquals(completedNotification("\"renewal-partial\"", "renewal-partial")
-						.replace("completed-output", output), reader.readChunkText());
-				Assertions.assertNull(closed.get(), "An unchanged renewal must preserve the stream.");
-				Assertions.assertEquals(1, server.getDiagnostics().getActiveSubscriptions());
-			}
-		} finally {
-			releaseRenewal.countDown();
-			if (client != null) client.closeWithReset();
-			soklet.close();
-		}
+		});
 	}
 
 	private static void awaitIgnoringInterrupts(CountDownLatch latch) {
@@ -540,8 +540,7 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 	public void taskChangeDuringAuthorizationIsProjectedAfterActivation() throws Exception {
 		ScriptedTaskManager manager = new ScriptedTaskManager();
 		McpServer server = server(manager, new AtomicInteger());
-		try (Soklet soklet = managedSoklet(server)) {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = boundPort(server);
 			seedTask(port, "activation-race", ALPHA);
 			seedTask(port, "activation-control", ALPHA);
@@ -562,15 +561,14 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 				Assertions.assertEquals(workingNotification("\"activation\"", "activation-control"), client.readChunkText());
 				client.closeWithReset();
 			} finally { manager.releaseBlockedTaskFinds(); }
-		}
+		});
 	}
 
 	@Test
 	public void activationCatchUpChecksCurrentInputCapabilities() throws Exception {
 		ScriptedTaskManager manager = new ScriptedTaskManager();
 		McpServer server = server(manager, new AtomicInteger());
-		try (Soklet soklet = managedSoklet(server)) {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = boundPort(server);
 			seedTask(port, "activation-input", ALPHA);
 			seedTask(port, "activation-peer", ALPHA);
@@ -591,7 +589,7 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 				Assertions.assertEquals(completedNotification("\"activation-input\"", "activation-input"), client.readChunkText());
 				client.closeWithReset();
 			} finally { manager.releaseBlockedTaskFinds(); }
-		}
+		});
 	}
 
 	@Test
@@ -606,8 +604,7 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 				.toolResultSanitizer((requestContext, toolName, arguments, output) -> {
 					sanitizations.incrementAndGet(); return output;
 				}).build();
-		try (Soklet soklet = managedSoklet(server)) {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server), () -> {
 			int port = boundPort(server);
 			seedTask(port, "hidden-output", ALPHA);
 			seedTask(port, "hidden-peer", ALPHA);
@@ -638,7 +635,7 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 				Assertions.assertSame(persisted, manager.requireTask("hidden-output"));
 				client.closeWithReset();
 			}
-		}
+		});
 	}
 
 	@Test
@@ -646,11 +643,10 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 			throws Exception {
 		ScriptedTaskManager manager = new ScriptedTaskManager();
 		McpServer creator = server(manager, new AtomicInteger());
-		try (Soklet soklet = managedSoklet(creator)) {
-			soklet.start();
+		Soklet.run(managedSokletConfig(creator), () -> {
 			seedTask(boundPort(creator), "removed-output", ALPHA);
 			seedTask(boundPort(creator), "removed-peer", ALPHA);
-		}
+		});
 		McpEndpoint readerEndpoint = McpEndpoint.withPath(MCP_PATH,
 				McpImplementation.withNameAndVersion("task-subscription-reader", "4.0.0").build(),
 				Set.of(com.soklet.McpProtocolVersion.V2026_07_28))
@@ -661,8 +657,7 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 				.toolResultSanitizer((requestContext, toolName, arguments, output) -> {
 					sanitizations.incrementAndGet(); return output;
 				}).build();
-		try (Soklet soklet = managedSoklet(reader)) {
-			soklet.start();
+		Soklet.run(managedSokletConfig(reader), () -> {
 			int port = boundPort(reader);
 			try (McpChunkedHttpClient client = listen(port, "\"removed\"", ALPHA,
 					true, taskIdsFilter(List.of("removed-output", "removed-peer")))) {
@@ -686,7 +681,7 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 				Assertions.assertSame(persisted, manager.requireTask("removed-output"));
 				client.closeWithReset();
 			}
-		}
+		});
 	}
 
 	private static HttpResponse<String> pollTask(int port, @NonNull String taskId)
@@ -743,9 +738,8 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 								.build());
 				})
 				.build();
-		Soklet soklet = managedSoklet(server);
-		try {
-			soklet.start();
+		Soklet.run(managedSokletConfig(server), () -> {
+
 			try (McpChunkedHttpClient client = listen(boundPort(server),
 					"\"task-scope\"", ALPHA, true,
 					"{\"taskIds\":[\"task-first\",\"task-second\","
@@ -769,9 +763,7 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 			Assertions.assertThrows(UnsupportedOperationException.class,
 					() -> context.getRequestedTaskIds().add("mutated"));
 			Assertions.assertEquals(0, authorizerCalls.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -780,41 +772,41 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 		ScriptedTaskManager taskManager = new ScriptedTaskManager();
 		AtomicInteger admissions = new AtomicInteger();
 		McpServer server = server(taskManager, admissions);
-		Soklet soklet = managedSoklet(server);
-		McpChunkedHttpClient client = null;
+		Soklet.run(managedSokletConfig(server), () -> {
+			McpChunkedHttpClient client = null;
 
-		try {
-			soklet.start();
-			int port = boundPort(server);
-			seedTask(port, "task-first", ALPHA);
-			seedTask(port, "task-second", ALPHA);
-			seedTask(port, "task-private", BETA);
-			admissions.set(0);
-			taskManager.resetFindInvocations();
+			try {
+				int port = boundPort(server);
+				seedTask(port, "task-first", ALPHA);
+				seedTask(port, "task-second", ALPHA);
+				seedTask(port, "task-private", BETA);
+				admissions.set(0);
+				taskManager.resetFindInvocations();
 
-			client = listen(port, "\"task-filter\"", ALPHA, true,
-					"{\"taskIds\":[\"task-second\",\"task-missing\","
-							+ "\"task-private\",\"task-first\","
-							+ "\"task-second\"]}");
-			assertSseHead(client.readHead());
-			Assertions.assertEquals(acknowledgment("\"task-filter\"",
-					List.of("task-second", "task-first")),
-					client.readChunkText());
-			Assertions.assertEquals(1, admissions.get());
-			Assertions.assertEquals(4, taskManager.findInvocations(),
-					"Task IDs must be deduplicated before authorization lookup.");
+				client = listen(port, "\"task-filter\"", ALPHA, true,
+						"{\"taskIds\":[\"task-second\",\"task-missing\","
+								+ "\"task-private\",\"task-first\","
+								+ "\"task-second\"]}");
+				assertSseHead(client.readHead());
+				Assertions.assertEquals(acknowledgment("\"task-filter\"",
+						List.of("task-second", "task-first")),
+						client.readChunkText());
+				Assertions.assertEquals(1, admissions.get());
+				Assertions.assertEquals(4, taskManager.findInvocations(),
+						"Task IDs must be deduplicated before authorization lookup.");
 
-			taskManager.publishTaskChanged("task-missing");
-			taskManager.publishTaskChanged("task-private");
-			taskManager.publishTaskChanged("task-first");
-			Assertions.assertEquals(workingNotification("\"task-filter\"",
-					"task-first"), client.readChunkText(),
-					"Only an accepted task ID may produce a notification.");
-		} finally {
-			if (client != null)
-				client.closeWithReset();
-			soklet.close();
-		}
+				taskManager.publishTaskChanged("task-missing");
+				taskManager.publishTaskChanged("task-private");
+				taskManager.publishTaskChanged("task-first");
+				Assertions.assertEquals(workingNotification("\"task-filter\"",
+						"task-first"), client.readChunkText(),
+						"Only an accepted task ID may produce a notification.");
+			} finally {
+				if (client != null)
+					client.closeWithReset();
+
+			}
+		});
 	}
 
 	@Test
@@ -866,90 +858,90 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 								.build()))
 				.subscriptionAuthorizer(authorizer)
 				.build();
-		Soklet soklet = managedSoklet(server);
-		McpChunkedHttpClient client = null;
+		Soklet.run(managedSokletConfig(server), () -> {
+			McpChunkedHttpClient client = null;
 
-		try {
-			soklet.start();
-			int port = boundPort(server);
-			seedTask(port, acceptedTaskId, ALPHA);
-			seedTask(port, rejectedTaskId, ALPHA);
-			taskManager.putTask(taskManager.requireTask(rejectedTaskId),
-					"another-authorization-partition");
-			taskManager.resetFindInvocations();
+			try {
+				int port = boundPort(server);
+				seedTask(port, acceptedTaskId, ALPHA);
+				seedTask(port, rejectedTaskId, ALPHA);
+				taskManager.putTask(taskManager.requireTask(rejectedTaskId),
+						"another-authorization-partition");
+				taskManager.resetFindInvocations();
 
-			client = listenWithCredentialCanaries(port,
-					"\"derived-task-context\"", acceptedTaskId, rejectedTaskId);
-			assertSseHead(client.readHead());
-			Assertions.assertEquals(acknowledgment("\"derived-task-context\"",
-					List.of(acceptedTaskId)), client.readChunkText(),
-					"The ACK must contain only task IDs accepted with the replacement context.");
+				client = listenWithCredentialCanaries(port,
+						"\"derived-task-context\"", acceptedTaskId, rejectedTaskId);
+				assertSseHead(client.readHead());
+				Assertions.assertEquals(acknowledgment("\"derived-task-context\"",
+						List.of(acceptedTaskId)), client.readChunkText(),
+						"The ACK must contain only task IDs accepted with the replacement context.");
 
-			Assertions.assertEquals(1, authorizationInvocations.get());
-			Assertions.assertEquals(1, authorizationContexts.size());
-			McpRequestContext initial = authorizationContexts.get(0)
-					.getInitialRequestContext();
-			Assertions.assertEquals("Bearer original-credential",
-					initial.getRequest().getHeader("Authorization").orElseThrow());
-			Assertions.assertTrue(initial.getRequest().getBody().isPresent());
-			Assertions.assertTrue(initial.getRequestMetadata()
-					.find("authorizationTestMetadata").isPresent());
-			Assertions.assertTrue(initial.getTraceContext().isPresent());
-			Assertions.assertEquals(Map.of("credential", "metadata-secret"),
-					initial.getBaggage());
+				Assertions.assertEquals(1, authorizationInvocations.get());
+				Assertions.assertEquals(1, authorizationContexts.size());
+				McpRequestContext initial = authorizationContexts.get(0)
+						.getInitialRequestContext();
+				Assertions.assertEquals("Bearer original-credential",
+						initial.getRequest().getHeader("Authorization").orElseThrow());
+				Assertions.assertTrue(initial.getRequest().getBody().isPresent());
+				Assertions.assertTrue(initial.getRequestMetadata()
+						.find("authorizationTestMetadata").isPresent());
+				Assertions.assertTrue(initial.getTraceContext().isPresent());
+				Assertions.assertEquals(Map.of("credential", "metadata-secret"),
+						initial.getBaggage());
 
-			List<McpTaskRequestContext> initialTaskContexts =
-					taskManager.findContexts();
-			Assertions.assertEquals(2, initialTaskContexts.size());
-			Assertions.assertEquals(Set.of(acceptedTaskId, rejectedTaskId),
-					Set.of(initialTaskContexts.get(0).getTaskId(),
-							initialTaskContexts.get(1).getTaskId()));
-			McpRequestContext derived = initialTaskContexts.get(0)
-					.getRequestContext();
-			Assertions.assertSame(derived,
-					initialTaskContexts.get(1).getRequestContext());
-			Assertions.assertNotSame(initial, derived);
-			Assertions.assertTrue(derived.getRequest().getHeaders().isEmpty());
-			Assertions.assertTrue(derived.getRequest().getBody().isEmpty());
-			Assertions.assertEquals(McpJsonObject.emptyInstance(),
-					derived.getRequestMetadata());
-			Assertions.assertTrue(derived.getFrameworkRequestState().isEmpty());
-			Assertions.assertTrue(derived.getApplicationRequestState().isEmpty());
-			Assertions.assertTrue(derived.getTraceContext().isEmpty());
-			Assertions.assertTrue(derived.getRequest().getTraceContext().isEmpty());
-			Assertions.assertTrue(derived.getBaggage().isEmpty());
-			Assertions.assertTrue(derived.getRequestId().isEmpty());
-			McpAdmissionIdentity derivedIdentity = derived.getAdmissionIdentity();
-			Assertions.assertSame(principal,
-					derivedIdentity.getPrincipal().orElseThrow());
-			Assertions.assertSame(replacementApplicationContext,
-					derivedIdentity.getApplicationContext().orElseThrow());
-			Assertions.assertEquals(rateLimitPartition,
-					derivedIdentity.getRateLimitPartitionKey());
-			Assertions.assertEquals(Optional.of(authorizationPartition),
-					derivedIdentity.getAuthorizationPartitionKey());
-
-			taskManager.resetFindInvocations();
-			server.getSubscriptionReconciler().reconcileSubscriptions();
-			Assertions.assertTrue(reconciliationAuthorization.await(5,
-					TimeUnit.SECONDS),
-					"Reconciliation did not perform a fresh authorization check.");
-			taskManager.awaitFindCompletions(acceptedTaskId, 2);
-			Assertions.assertEquals(2,
-					taskManager.findInvocations(acceptedTaskId));
-			Assertions.assertEquals(0,
-					taskManager.findInvocations(rejectedTaskId),
-					"A task omitted from the ACK must not be added on renewal.");
-			Assertions.assertEquals(2, taskManager.findContexts().size());
-			for (McpTaskRequestContext context : taskManager.findContexts())
+				List<McpTaskRequestContext> initialTaskContexts =
+						taskManager.findContexts();
+				Assertions.assertEquals(2, initialTaskContexts.size());
+				Assertions.assertEquals(Set.of(acceptedTaskId, rejectedTaskId),
+						Set.of(initialTaskContexts.get(0).getTaskId(),
+								initialTaskContexts.get(1).getTaskId()));
+				McpRequestContext derived = initialTaskContexts.get(0)
+						.getRequestContext();
+				Assertions.assertSame(derived,
+						initialTaskContexts.get(1).getRequestContext());
+				Assertions.assertNotSame(initial, derived);
+				Assertions.assertTrue(derived.getRequest().getHeaders().isEmpty());
+				Assertions.assertTrue(derived.getRequest().getBody().isEmpty());
+				Assertions.assertEquals(McpJsonObject.emptyInstance(),
+						derived.getRequestMetadata());
+				Assertions.assertTrue(derived.getFrameworkRequestState().isEmpty());
+				Assertions.assertTrue(derived.getApplicationRequestState().isEmpty());
+				Assertions.assertTrue(derived.getTraceContext().isEmpty());
+				Assertions.assertTrue(derived.getRequest().getTraceContext().isEmpty());
+				Assertions.assertTrue(derived.getBaggage().isEmpty());
+				Assertions.assertTrue(derived.getRequestId().isEmpty());
+				McpAdmissionIdentity derivedIdentity = derived.getAdmissionIdentity();
+				Assertions.assertSame(principal,
+						derivedIdentity.getPrincipal().orElseThrow());
 				Assertions.assertSame(replacementApplicationContext,
-						context.getRequestContext().getAdmissionIdentity()
-								.getApplicationContext().orElseThrow());
-		} finally {
-			if (client != null)
-				client.closeWithReset();
-			soklet.close();
-		}
+						derivedIdentity.getApplicationContext().orElseThrow());
+				Assertions.assertEquals(rateLimitPartition,
+						derivedIdentity.getRateLimitPartitionKey());
+				Assertions.assertEquals(Optional.of(authorizationPartition),
+						derivedIdentity.getAuthorizationPartitionKey());
+
+				taskManager.resetFindInvocations();
+				server.getSubscriptionReconciler().reconcileSubscriptions();
+				Assertions.assertTrue(reconciliationAuthorization.await(5,
+						TimeUnit.SECONDS),
+						"Reconciliation did not perform a fresh authorization check.");
+				taskManager.awaitFindCompletions(acceptedTaskId, 2);
+				Assertions.assertEquals(2,
+						taskManager.findInvocations(acceptedTaskId));
+				Assertions.assertEquals(0,
+						taskManager.findInvocations(rejectedTaskId),
+						"A task omitted from the ACK must not be added on renewal.");
+				Assertions.assertEquals(2, taskManager.findContexts().size());
+				for (McpTaskRequestContext context : taskManager.findContexts())
+					Assertions.assertSame(replacementApplicationContext,
+							context.getRequestContext().getAdmissionIdentity()
+									.getApplicationContext().orElseThrow());
+			} finally {
+				if (client != null)
+					client.closeWithReset();
+
+			}
+		});
 	}
 
 	@Test
@@ -982,69 +974,69 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 		McpServer server = serverBuilder(taskManager, new AtomicInteger())
 				.subscriptionAuthorizer(authorizer)
 				.build();
-		Soklet soklet = managedSoklet(server);
-		McpChunkedHttpClient client = null;
+		Soklet.run(managedSokletConfig(server), () -> {
+			McpChunkedHttpClient client = null;
 
-		try {
-			soklet.start();
-			int port = boundPort(server);
-			seedTask(port, revokedTaskId, ALPHA);
-			seedTask(port, retainedTaskId, ALPHA);
-			client = listen(port, "\"task-revision-fence\"", ALPHA, true,
-					"{\"taskIds\":[\"" + revokedTaskId + "\",\""
-							+ retainedTaskId + "\"]}");
-			assertSseHead(client.readHead());
-			Assertions.assertEquals(acknowledgment("\"task-revision-fence\"",
-					List.of(revokedTaskId, retainedTaskId)), client.readChunkText());
+			try {
+				int port = boundPort(server);
+				seedTask(port, revokedTaskId, ALPHA);
+				seedTask(port, retainedTaskId, ALPHA);
+				client = listen(port, "\"task-revision-fence\"", ALPHA, true,
+						"{\"taskIds\":[\"" + revokedTaskId + "\",\""
+								+ retainedTaskId + "\"]}");
+				assertSseHead(client.readHead());
+				Assertions.assertEquals(acknowledgment("\"task-revision-fence\"",
+						List.of(revokedTaskId, retainedTaskId)), client.readChunkText());
 
-			taskManager.resetFindInvocations();
-			taskManager.blockTaskFindsAfterSnapshot(Set.of(revokedTaskId));
-			taskManager.publishTaskChanged(revokedTaskId);
-			taskManager.awaitBlockedTaskFinds();
-			taskManager.publishTaskChanged(retainedTaskId);
-			taskManager.revokeForApplicationContext(revokedTaskId,
-					replacementContext);
+				taskManager.resetFindInvocations();
+				taskManager.blockTaskFindsAfterSnapshot(Set.of(revokedTaskId));
+				taskManager.publishTaskChanged(revokedTaskId);
+				taskManager.awaitBlockedTaskFinds();
+				taskManager.publishTaskChanged(retainedTaskId);
+				taskManager.revokeForApplicationContext(revokedTaskId,
+						replacementContext);
 
-			server.getSubscriptionReconciler().reconcileSubscriptions();
-			Assertions.assertTrue(reconciliationAuthorization.await(5,
-					TimeUnit.SECONDS));
-			taskManager.awaitFindCompletions(retainedTaskId, 1);
-			taskManager.releaseBlockedTaskFinds();
+				server.getSubscriptionReconciler().reconcileSubscriptions();
+				Assertions.assertTrue(reconciliationAuthorization.await(5,
+						TimeUnit.SECONDS));
+				taskManager.awaitFindCompletions(retainedTaskId, 1);
+				taskManager.releaseBlockedTaskFinds();
 
-			Assertions.assertEquals(workingNotification("\"task-revision-fence\"",
-					retainedTaskId), client.readChunkText(),
-					"Only the retained task may be projected under fresh authorization.");
-			taskManager.awaitFindCompletions(revokedTaskId, 2);
-			taskManager.awaitFindCompletions(retainedTaskId, 2);
-			Assertions.assertEquals(2,
-					taskManager.findInvocations(revokedTaskId),
-					"The revoked queued task ran after fresh authorization.");
-			Assertions.assertEquals(2,
-					taskManager.findInvocations(retainedTaskId));
+				Assertions.assertEquals(workingNotification("\"task-revision-fence\"",
+						retainedTaskId), client.readChunkText(),
+						"Only the retained task may be projected under fresh authorization.");
+				taskManager.awaitFindCompletions(revokedTaskId, 2);
+				taskManager.awaitFindCompletions(retainedTaskId, 2);
+				Assertions.assertEquals(2,
+						taskManager.findInvocations(revokedTaskId),
+						"The revoked queued task ran after fresh authorization.");
+				Assertions.assertEquals(2,
+						taskManager.findInvocations(retainedTaskId));
 
-			List<McpTaskRequestContext> revokedContexts = taskManager.findContexts()
-					.stream().filter(context -> revokedTaskId.equals(context.getTaskId()))
-					.toList();
-			Assertions.assertEquals(2, revokedContexts.size());
-			Assertions.assertSame(firstContext, revokedContexts.get(0)
-					.getRequestContext().getAdmissionIdentity()
-					.getApplicationContext().orElseThrow());
-			Assertions.assertSame(replacementContext, revokedContexts.get(1)
-					.getRequestContext().getAdmissionIdentity()
-					.getApplicationContext().orElseThrow());
-			List<McpTaskRequestContext> retainedContexts = taskManager.findContexts()
-					.stream().filter(context -> retainedTaskId.equals(context.getTaskId()))
-					.toList();
-			Assertions.assertEquals(2, retainedContexts.size());
-			for (McpTaskRequestContext context : retainedContexts)
-				Assertions.assertSame(replacementContext, context.getRequestContext()
-						.getAdmissionIdentity().getApplicationContext().orElseThrow());
-		} finally {
-			taskManager.releaseBlockedTaskFinds();
-			if (client != null)
-				client.closeWithReset();
-			soklet.close();
-		}
+				List<McpTaskRequestContext> revokedContexts = taskManager.findContexts()
+						.stream().filter(context -> revokedTaskId.equals(context.getTaskId()))
+						.toList();
+				Assertions.assertEquals(2, revokedContexts.size());
+				Assertions.assertSame(firstContext, revokedContexts.get(0)
+						.getRequestContext().getAdmissionIdentity()
+						.getApplicationContext().orElseThrow());
+				Assertions.assertSame(replacementContext, revokedContexts.get(1)
+						.getRequestContext().getAdmissionIdentity()
+						.getApplicationContext().orElseThrow());
+				List<McpTaskRequestContext> retainedContexts = taskManager.findContexts()
+						.stream().filter(context -> retainedTaskId.equals(context.getTaskId()))
+						.toList();
+				Assertions.assertEquals(2, retainedContexts.size());
+				for (McpTaskRequestContext context : retainedContexts)
+					Assertions.assertSame(replacementContext, context.getRequestContext()
+							.getAdmissionIdentity().getApplicationContext().orElseThrow());
+			} finally {
+				taskManager.releaseBlockedTaskFinds();
+				if (client != null)
+					client.closeWithReset();
+
+			}
+		});
 	}
 
 	@Test
@@ -1052,28 +1044,28 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 			throws Exception {
 		ScriptedTaskManager taskManager = new ScriptedTaskManager();
 		McpServer server = server(taskManager, new AtomicInteger());
-		Soklet soklet = managedSoklet(server);
-		McpChunkedHttpClient client = null;
+		Soklet.run(managedSokletConfig(server), () -> {
+			McpChunkedHttpClient client = null;
 
-		try {
-			soklet.start();
-			int port = boundPort(server);
-			seedTask(port, "task-authorization-healthy", ALPHA);
-			taskManager.failNextFind("task-authorization-poisoned");
+			try {
+				int port = boundPort(server);
+				seedTask(port, "task-authorization-healthy", ALPHA);
+				taskManager.failNextFind("task-authorization-poisoned");
 
-			client = listen(port, "\"partial-task-authorization\"", ALPHA,
-					true, "{\"taskIds\":[\"task-authorization-poisoned\","
-							+ "\"task-authorization-healthy\"]}");
-			assertSseHead(client.readHead());
-			Assertions.assertEquals(acknowledgment(
-					"\"partial-task-authorization\"",
-					List.of("task-authorization-healthy")),
-					client.readChunkText());
-		} finally {
-			if (client != null)
-				client.closeWithReset();
-			soklet.close();
-		}
+				client = listen(port, "\"partial-task-authorization\"", ALPHA,
+						true, "{\"taskIds\":[\"task-authorization-poisoned\","
+								+ "\"task-authorization-healthy\"]}");
+				assertSseHead(client.readHead());
+				Assertions.assertEquals(acknowledgment(
+						"\"partial-task-authorization\"",
+						List.of("task-authorization-healthy")),
+						client.readChunkText());
+			} finally {
+				if (client != null)
+					client.closeWithReset();
+
+			}
+		});
 	}
 
 	@Test
@@ -1087,32 +1079,32 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 					return output;
 				})
 				.build();
-		Soklet soklet = managedSoklet(server);
-		McpChunkedHttpClient client = null;
+		Soklet.run(managedSokletConfig(server), () -> {
+			McpChunkedHttpClient client = null;
 
-		try {
-			soklet.start();
-			int port = boundPort(server);
-			seedTask(port, "task-completed-authorization", ALPHA);
-			taskManager.replaceTask(completedTask(
-					taskManager.requireTask("task-completed-authorization")));
-			sanitizerInvocations.set(0);
+			try {
+				int port = boundPort(server);
+				seedTask(port, "task-completed-authorization", ALPHA);
+				taskManager.replaceTask(completedTask(
+						taskManager.requireTask("task-completed-authorization")));
+				sanitizerInvocations.set(0);
 
-			client = listen(port, "\"lightweight-task-authorization\"", ALPHA,
-					true, "{\"taskIds\":[\"task-completed-authorization\"]}");
-			assertSseHead(client.readHead());
-			Assertions.assertEquals(acknowledgment(
-					"\"lightweight-task-authorization\"",
-					List.of("task-completed-authorization")),
-					client.readChunkText());
-			Assertions.assertEquals(0, sanitizerInvocations.get(),
-					"Subscription authorization must not sanitize a completed result "
-							+ "that it immediately discards.");
-		} finally {
-			if (client != null)
-				client.closeWithReset();
-			soklet.close();
-		}
+				client = listen(port, "\"lightweight-task-authorization\"", ALPHA,
+						true, "{\"taskIds\":[\"task-completed-authorization\"]}");
+				assertSseHead(client.readHead());
+				Assertions.assertEquals(acknowledgment(
+						"\"lightweight-task-authorization\"",
+						List.of("task-completed-authorization")),
+						client.readChunkText());
+				Assertions.assertEquals(0, sanitizerInvocations.get(),
+						"Subscription authorization must not sanitize a completed result "
+								+ "that it immediately discards.");
+			} finally {
+				if (client != null)
+					client.closeWithReset();
+
+			}
+		});
 	}
 
 	@Test
@@ -1120,36 +1112,36 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 			throws Exception {
 		ScriptedTaskManager taskManager = new ScriptedTaskManager();
 		McpServer server = server(taskManager, new AtomicInteger());
-		Soklet soklet = managedSoklet(server);
-		McpChunkedHttpClient client = null;
+		Soklet.run(managedSokletConfig(server), () -> {
+			McpChunkedHttpClient client = null;
 
-		try {
-			soklet.start();
-			int port = boundPort(server);
-			seedTask(port, "task-projection-transient", ALPHA);
-			seedTask(port, "task-projection-control", ALPHA);
-			client = listen(port, "\"projection-transient\"", ALPHA, true,
-					"{\"taskIds\":[\"task-projection-transient\","
-							+ "\"task-projection-control\"]}");
-			assertSseHead(client.readHead());
-			Assertions.assertEquals(acknowledgment("\"projection-transient\"",
-					List.of("task-projection-transient", "task-projection-control")),
-					client.readChunkText());
+			try {
+				int port = boundPort(server);
+				seedTask(port, "task-projection-transient", ALPHA);
+				seedTask(port, "task-projection-control", ALPHA);
+				client = listen(port, "\"projection-transient\"", ALPHA, true,
+						"{\"taskIds\":[\"task-projection-transient\","
+								+ "\"task-projection-control\"]}");
+				assertSseHead(client.readHead());
+				Assertions.assertEquals(acknowledgment("\"projection-transient\"",
+						List.of("task-projection-transient", "task-projection-control")),
+						client.readChunkText());
 
-			taskManager.resetFindInvocations();
-			taskManager.failNextFind("task-projection-transient");
-			taskManager.publishTaskChanged("task-projection-transient");
-			taskManager.awaitFindCompletions("task-projection-transient", 1);
-			taskManager.publishTaskChanged("task-projection-control");
-			Assertions.assertEquals(workingNotification("\"projection-transient\"",
-					"task-projection-control"), client.readChunkText(),
-					"An advisory lookup failure must skip one notification without "
-							+ "terminating the subscription.");
-		} finally {
-			if (client != null)
-				client.closeWithReset();
-			soklet.close();
-		}
+				taskManager.resetFindInvocations();
+				taskManager.failNextFind("task-projection-transient");
+				taskManager.publishTaskChanged("task-projection-transient");
+				taskManager.awaitFindCompletions("task-projection-transient", 1);
+				taskManager.publishTaskChanged("task-projection-control");
+				Assertions.assertEquals(workingNotification("\"projection-transient\"",
+						"task-projection-control"), client.readChunkText(),
+						"An advisory lookup failure must skip one notification without "
+								+ "terminating the subscription.");
+			} finally {
+				if (client != null)
+					client.closeWithReset();
+
+			}
+		});
 	}
 
 	@Test
@@ -1159,31 +1151,31 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 		McpServer server = serverBuilder(taskManager, new AtomicInteger())
 				.maximumSubscriptionsPerPartition(1)
 				.build();
-		Soklet soklet = managedSoklet(server);
-		McpChunkedHttpClient admitted = null;
+		Soklet.run(managedSokletConfig(server), () -> {
+			McpChunkedHttpClient admitted = null;
 
-		try {
-			soklet.start();
-			int port = boundPort(server);
-			seedTask(port, "task-cap-admitted", ALPHA);
-			seedTask(port, "task-cap-rejected", ALPHA);
-			admitted = listen(port, "\"task-cap-admitted\"", ALPHA, true,
-					"{\"taskIds\":[\"task-cap-admitted\"]}");
-			assertSseHead(admitted.readHead());
-			Assertions.assertEquals(acknowledgment("\"task-cap-admitted\"",
-					List.of("task-cap-admitted")), admitted.readChunkText());
-			taskManager.resetFindInvocations();
+			try {
+				int port = boundPort(server);
+				seedTask(port, "task-cap-admitted", ALPHA);
+				seedTask(port, "task-cap-rejected", ALPHA);
+				admitted = listen(port, "\"task-cap-admitted\"", ALPHA, true,
+						"{\"taskIds\":[\"task-cap-admitted\"]}");
+				assertSseHead(admitted.readHead());
+				Assertions.assertEquals(acknowledgment("\"task-cap-admitted\"",
+						List.of("task-cap-admitted")), admitted.readChunkText());
+				taskManager.resetFindInvocations();
 
-			assertTaskSubscriptionCapacityRejected(port, "task-cap-rejected",
-					"task-cap-rejected");
-			Assertions.assertEquals(0, taskManager.findInvocations(),
-					"A full authorization partition must reject before task IDs "
-							+ "amplify manager lookups.");
-		} finally {
-			if (admitted != null)
-				admitted.closeWithReset();
-			soklet.close();
-		}
+				assertTaskSubscriptionCapacityRejected(port, "task-cap-rejected",
+						"task-cap-rejected");
+				Assertions.assertEquals(0, taskManager.findInvocations(),
+						"A full authorization partition must reject before task IDs "
+								+ "amplify manager lookups.");
+			} finally {
+				if (admitted != null)
+					admitted.closeWithReset();
+
+			}
+		});
 	}
 
 	@Test
@@ -1193,37 +1185,37 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 		McpServer server = serverBuilder(taskManager, new AtomicInteger())
 				.maximumSubscriptionsPerPartition(1)
 				.build();
-		Soklet soklet = managedSoklet(server);
-		McpChunkedHttpClient blocked = null;
+		Soklet.run(managedSokletConfig(server), () -> {
+			McpChunkedHttpClient blocked = null;
 
-		try {
-			soklet.start();
-			int port = boundPort(server);
-			seedTask(port, "task-pending-disconnect", ALPHA);
-			seedTask(port, "task-after-pending-disconnect", ALPHA);
-			taskManager.resetFindInvocations();
-			taskManager.blockNextFindBeforeSnapshotIgnoringInterrupts(
-					"task-pending-disconnect");
+			try {
+				int port = boundPort(server);
+				seedTask(port, "task-pending-disconnect", ALPHA);
+				seedTask(port, "task-after-pending-disconnect", ALPHA);
+				taskManager.resetFindInvocations();
+				taskManager.blockNextFindBeforeSnapshotIgnoringInterrupts(
+						"task-pending-disconnect");
 
-			blocked = listen(port, "\"pending-disconnect\"", ALPHA, true,
-					"{\"taskIds\":[\"task-pending-disconnect\"]}");
-			taskManager.awaitBlockedFind();
-			awaitReservedSubscriptionCapacity(server, 1);
-			blocked.closeWithReset();
-			blocked = null;
-
-			awaitRecoveredTaskSubscription(port,
-					"task-after-pending-disconnect");
-			Assertions.assertEquals(0,
-					taskManager.findCompletions("task-pending-disconnect"),
-					"Disconnect must release capacity without waiting for the "
-							+ "application-owned lookup to return.");
-		} finally {
-			taskManager.releaseBlockedFind();
-			if (blocked != null)
+				blocked = listen(port, "\"pending-disconnect\"", ALPHA, true,
+						"{\"taskIds\":[\"task-pending-disconnect\"]}");
+				taskManager.awaitBlockedFind();
+				awaitReservedSubscriptionCapacity(server, 1);
 				blocked.closeWithReset();
-			soklet.close();
-		}
+				blocked = null;
+
+				awaitRecoveredTaskSubscription(port,
+						"task-after-pending-disconnect");
+				Assertions.assertEquals(0,
+						taskManager.findCompletions("task-pending-disconnect"),
+						"Disconnect must release capacity without waiting for the "
+								+ "application-owned lookup to return.");
+			} finally {
+				taskManager.releaseBlockedFind();
+				if (blocked != null)
+					blocked.closeWithReset();
+
+			}
+		});
 	}
 
 	@Test
@@ -1237,7 +1229,6 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 		McpChunkedHttpClient blocked = null;
 
 		try {
-			soklet.start();
 			int port = boundPort(server);
 			seedTask(port, "task-pending-shutdown", ALPHA);
 			taskManager.resetFindInvocations();
@@ -1249,7 +1240,9 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 			taskManager.awaitBlockedFind();
 			awaitReservedSubscriptionCapacity(server, 1);
 
-			soklet.shutdown();
+			// These cases inspect shutdown of a pending lookup or projection-retention state before and after stop.
+			// These cases inspect shutdown of a pending lookup or projection-retention state before and after stop.
+			com.soklet.SokletTestScope.shutdown(soklet);
 			awaitReservedSubscriptionCapacity(server, 0);
 			Assertions.assertEquals(0,
 					taskManager.findCompletions("task-pending-shutdown"),
@@ -1259,7 +1252,7 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 			taskManager.releaseBlockedFind();
 			if (blocked != null)
 				blocked.closeWithReset();
-			soklet.close();
+			com.soklet.SokletTestScope.close(soklet);
 		}
 	}
 
@@ -1271,42 +1264,42 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 				.maximumSubscriptionsPerPartition(1)
 				.requestTimeout(Duration.ofSeconds(1))
 				.build();
-		Soklet soklet = managedSoklet(server);
-		McpChunkedHttpClient blocked = null;
+		Soklet.run(managedSokletConfig(server), () -> {
+			McpChunkedHttpClient blocked = null;
 
-		try {
-			soklet.start();
-			int port = boundPort(server);
-			seedTask(port, "task-pending-deadline", ALPHA);
-			seedTask(port, "task-after-pending-deadline", ALPHA);
-			taskManager.resetFindInvocations();
-			taskManager.blockNextFindBeforeSnapshotIgnoringInterrupts(
-					"task-pending-deadline");
+			try {
+				int port = boundPort(server);
+				seedTask(port, "task-pending-deadline", ALPHA);
+				seedTask(port, "task-after-pending-deadline", ALPHA);
+				taskManager.resetFindInvocations();
+				taskManager.blockNextFindBeforeSnapshotIgnoringInterrupts(
+						"task-pending-deadline");
 
-			blocked = listen(port, "\"pending-deadline\"", ALPHA, true,
-					"{\"taskIds\":[\"task-pending-deadline\"]}");
-			taskManager.awaitBlockedFind();
-			awaitReservedSubscriptionCapacity(server, 1);
-			McpChunkedHttpClient.HttpResponseHead deadlineHead =
-					blocked.readHead();
-			Assertions.assertEquals(504, deadlineHead.status(),
-					deadlineHead.raw());
-			Assertions.assertEquals("no-store",
-					deadlineHead.singleHeader("Cache-Control"));
-			Assertions.assertFalse(deadlineHead.hasHeader("Content-Type"));
+				blocked = listen(port, "\"pending-deadline\"", ALPHA, true,
+						"{\"taskIds\":[\"task-pending-deadline\"]}");
+				taskManager.awaitBlockedFind();
+				awaitReservedSubscriptionCapacity(server, 1);
+				McpChunkedHttpClient.HttpResponseHead deadlineHead =
+						blocked.readHead();
+				Assertions.assertEquals(504, deadlineHead.status(),
+						deadlineHead.raw());
+				Assertions.assertEquals("no-store",
+						deadlineHead.singleHeader("Cache-Control"));
+				Assertions.assertFalse(deadlineHead.hasHeader("Content-Type"));
 
-			awaitRecoveredTaskSubscription(port,
-					"task-after-pending-deadline");
-			Assertions.assertEquals(0,
-					taskManager.findCompletions("task-pending-deadline"),
-					"Deadline expiry must release capacity without waiting for the "
-							+ "application-owned lookup to return.");
-		} finally {
-			taskManager.releaseBlockedFind();
-			if (blocked != null)
-				blocked.closeWithReset();
-			soklet.close();
-		}
+				awaitRecoveredTaskSubscription(port,
+						"task-after-pending-deadline");
+				Assertions.assertEquals(0,
+						taskManager.findCompletions("task-pending-deadline"),
+						"Deadline expiry must release capacity without waiting for the "
+								+ "application-owned lookup to return.");
+			} finally {
+				taskManager.releaseBlockedFind();
+				if (blocked != null)
+					blocked.closeWithReset();
+
+			}
+		});
 	}
 
 	@Test
@@ -1314,43 +1307,43 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 			throws Exception {
 		ScriptedTaskManager taskManager = new ScriptedTaskManager();
 		McpServer server = server(taskManager, new AtomicInteger());
-		Soklet soklet = managedSoklet(server);
-		McpChunkedHttpClient client = null;
+		Soklet.run(managedSokletConfig(server), () -> {
+			McpChunkedHttpClient client = null;
 
-		try {
-			soklet.start();
-			int port = boundPort(server);
-			seedTask(port, "task-stale", ALPHA);
-			seedTask(port, "task-revoked", ALPHA);
-			seedTask(port, "task-control", ALPHA);
+			try {
+				int port = boundPort(server);
+				seedTask(port, "task-stale", ALPHA);
+				seedTask(port, "task-revoked", ALPHA);
+				seedTask(port, "task-control", ALPHA);
 
-			client = listen(port, "\"fresh-snapshot\"", ALPHA, true,
-					"{\"taskIds\":[\"task-stale\",\"task-revoked\","
-							+ "\"task-control\"]}");
-			assertSseHead(client.readHead());
-			Assertions.assertEquals(acknowledgment("\"fresh-snapshot\"",
-					List.of("task-stale", "task-revoked", "task-control")),
-					client.readChunkText());
+				client = listen(port, "\"fresh-snapshot\"", ALPHA, true,
+						"{\"taskIds\":[\"task-stale\",\"task-revoked\","
+								+ "\"task-control\"]}");
+				assertSseHead(client.readHead());
+				Assertions.assertEquals(acknowledgment("\"fresh-snapshot\"",
+						List.of("task-stale", "task-revoked", "task-control")),
+						client.readChunkText());
 
-			taskManager.replaceTask(completedTask(
-					taskManager.requireTask("task-stale")));
-			taskManager.publishTaskChanged("task-stale");
-			Assertions.assertEquals(completedNotification("\"fresh-snapshot\"",
-					"task-stale"), client.readChunkText(),
-					"A coarse stale event must render a fresh authoritative snapshot.");
+				taskManager.replaceTask(completedTask(
+						taskManager.requireTask("task-stale")));
+				taskManager.publishTaskChanged("task-stale");
+				Assertions.assertEquals(completedNotification("\"fresh-snapshot\"",
+						"task-stale"), client.readChunkText(),
+						"A coarse stale event must render a fresh authoritative snapshot.");
 
-			taskManager.revoke("task-revoked");
-			taskManager.publishTaskChanged("task-revoked");
-			taskManager.awaitRevokedLookup();
-			taskManager.publishTaskChanged("task-control");
-			Assertions.assertEquals(workingNotification("\"fresh-snapshot\"",
-					"task-control"), client.readChunkText(),
-					"Revoked authorization must suppress the earlier task event.");
-		} finally {
-			if (client != null)
-				client.closeWithReset();
-			soklet.close();
-		}
+				taskManager.revoke("task-revoked");
+				taskManager.publishTaskChanged("task-revoked");
+				taskManager.awaitRevokedLookup();
+				taskManager.publishTaskChanged("task-control");
+				Assertions.assertEquals(workingNotification("\"fresh-snapshot\"",
+						"task-control"), client.readChunkText(),
+						"Revoked authorization must suppress the earlier task event.");
+			} finally {
+				if (client != null)
+					client.closeWithReset();
+
+			}
+		});
 	}
 
 	@Test
@@ -1358,56 +1351,56 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 			throws Exception {
 		ScriptedTaskManager taskManager = new ScriptedTaskManager();
 		McpServer server = server(taskManager, new AtomicInteger());
-		Soklet soklet = managedSoklet(server);
-		McpChunkedHttpClient withoutRoots = null;
-		McpChunkedHttpClient withRoots = null;
+		Soklet.run(managedSokletConfig(server), () -> {
+			McpChunkedHttpClient withoutRoots = null;
+			McpChunkedHttpClient withRoots = null;
 
-		try {
-			soklet.start();
-			int port = boundPort(server);
-			seedTask(port, "task-input-initial", ALPHA);
-			seedTask(port, "task-input-transition", ALPHA);
-			seedTask(port, "task-input-control", ALPHA);
-			taskManager.replaceTask(inputRequiredTask(
-					taskManager.requireTask("task-input-initial")));
+			try {
+				int port = boundPort(server);
+				seedTask(port, "task-input-initial", ALPHA);
+				seedTask(port, "task-input-transition", ALPHA);
+				seedTask(port, "task-input-control", ALPHA);
+				taskManager.replaceTask(inputRequiredTask(
+						taskManager.requireTask("task-input-initial")));
 
-			withoutRoots = listen(port, "\"without-roots\"", ALPHA, true,
-					false, "{\"taskIds\":[\"task-input-initial\","
-							+ "\"task-input-transition\",\"task-input-control\"]}");
-			assertSseHead(withoutRoots.readHead());
-			Assertions.assertEquals(acknowledgment("\"without-roots\"", List.of(
-					"task-input-transition", "task-input-control")),
-					withoutRoots.readChunkText(),
-					"Initial authorization must omit an input-required task when "
-							+ "the subscriber lacks Roots support.");
+				withoutRoots = listen(port, "\"without-roots\"", ALPHA, true,
+						false, "{\"taskIds\":[\"task-input-initial\","
+								+ "\"task-input-transition\",\"task-input-control\"]}");
+				assertSseHead(withoutRoots.readHead());
+				Assertions.assertEquals(acknowledgment("\"without-roots\"", List.of(
+						"task-input-transition", "task-input-control")),
+						withoutRoots.readChunkText(),
+						"Initial authorization must omit an input-required task when "
+								+ "the subscriber lacks Roots support.");
 
-			withRoots = listen(port, "\"with-roots\"", ALPHA, true, true,
-					"{\"taskIds\":[\"task-input-initial\","
-							+ "\"task-input-transition\"]}");
-			assertSseHead(withRoots.readHead());
-			Assertions.assertEquals(acknowledgment("\"with-roots\"", List.of(
-					"task-input-initial", "task-input-transition")),
-					withRoots.readChunkText(),
-					"A Roots-capable subscriber must retain the same task.");
+				withRoots = listen(port, "\"with-roots\"", ALPHA, true, true,
+						"{\"taskIds\":[\"task-input-initial\","
+								+ "\"task-input-transition\"]}");
+				assertSseHead(withRoots.readHead());
+				Assertions.assertEquals(acknowledgment("\"with-roots\"", List.of(
+						"task-input-initial", "task-input-transition")),
+						withRoots.readChunkText(),
+						"A Roots-capable subscriber must retain the same task.");
 
-			taskManager.replaceTask(inputRequiredTask(
-					taskManager.requireTask("task-input-transition")));
-			taskManager.publishTaskChanged("task-input-transition");
-			Assertions.assertEquals(inputRequiredNotification("\"with-roots\"",
-					"task-input-transition"), withRoots.readChunkText());
+				taskManager.replaceTask(inputRequiredTask(
+						taskManager.requireTask("task-input-transition")));
+				taskManager.publishTaskChanged("task-input-transition");
+				Assertions.assertEquals(inputRequiredNotification("\"with-roots\"",
+						"task-input-transition"), withRoots.readChunkText());
 
-			taskManager.publishTaskChanged("task-input-control");
-			Assertions.assertEquals(workingNotification("\"without-roots\"",
-					"task-input-control"), withoutRoots.readChunkText(),
-					"Event projection must suppress input-required state only for "
-							+ "the subscriber that lacks Roots support.");
-		} finally {
-			if (withoutRoots != null)
-				withoutRoots.closeWithReset();
-			if (withRoots != null)
-				withRoots.closeWithReset();
-			soklet.close();
-		}
+				taskManager.publishTaskChanged("task-input-control");
+				Assertions.assertEquals(workingNotification("\"without-roots\"",
+						"task-input-control"), withoutRoots.readChunkText(),
+						"Event projection must suppress input-required state only for "
+								+ "the subscriber that lacks Roots support.");
+			} finally {
+				if (withoutRoots != null)
+					withoutRoots.closeWithReset();
+				if (withRoots != null)
+					withRoots.closeWithReset();
+
+			}
+		});
 	}
 
 	@Test
@@ -1415,52 +1408,52 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 			throws Exception {
 		ScriptedTaskManager taskManager = new ScriptedTaskManager();
 		McpServer server = server(taskManager, new AtomicInteger());
-		Soklet soklet = managedSoklet(server);
-		McpChunkedHttpClient first = null;
-		McpChunkedHttpClient second = null;
+		Soklet.run(managedSokletConfig(server), () -> {
+			McpChunkedHttpClient first = null;
+			McpChunkedHttpClient second = null;
 
-		try {
-			soklet.start();
-			int port = boundPort(server);
-			seedTask(port, "task-missed", ALPHA);
-			seedTask(port, "task-after-reconnect", ALPHA);
+			try {
+				int port = boundPort(server);
+				seedTask(port, "task-missed", ALPHA);
+				seedTask(port, "task-after-reconnect", ALPHA);
 
-			first = listen(port, "\"before-disconnect\"", ALPHA, true,
-					"{\"taskIds\":[\"task-missed\"]}");
-			assertSseHead(first.readHead());
-			Assertions.assertEquals(acknowledgment("\"before-disconnect\"",
-					List.of("task-missed")), first.readChunkText());
-			first.closeWithReset();
-			first = null;
-			awaitActiveSubscriptions(server, 0);
-
-			taskManager.replaceTask(completedTask(
-					taskManager.requireTask("task-missed")));
-			taskManager.publishTaskChanged("task-missed");
-
-			second = listen(port, "\"after-disconnect\"", ALPHA, true,
-					"{\"taskIds\":[\"task-missed\","
-							+ "\"task-after-reconnect\"]}");
-			assertSseHead(second.readHead());
-			Assertions.assertEquals(acknowledgment("\"after-disconnect\"",
-					List.of("task-missed", "task-after-reconnect")),
-					second.readChunkText());
-
-			taskManager.publishTaskChanged("task-after-reconnect");
-			Assertions.assertEquals(workingNotification("\"after-disconnect\"",
-					"task-after-reconnect"), second.readChunkText(),
-					"A disconnected event must not replay onto a later subscription.");
-			taskManager.publishTaskChanged("task-missed");
-			Assertions.assertEquals(completedNotification("\"after-disconnect\"",
-					"task-missed"), second.readChunkText(),
-					"A new event must use the replacement subscription ID.");
-		} finally {
-			if (first != null)
+				first = listen(port, "\"before-disconnect\"", ALPHA, true,
+						"{\"taskIds\":[\"task-missed\"]}");
+				assertSseHead(first.readHead());
+				Assertions.assertEquals(acknowledgment("\"before-disconnect\"",
+						List.of("task-missed")), first.readChunkText());
 				first.closeWithReset();
-			if (second != null)
-				second.closeWithReset();
-			soklet.close();
-		}
+				first = null;
+				awaitActiveSubscriptions(server, 0);
+
+				taskManager.replaceTask(completedTask(
+						taskManager.requireTask("task-missed")));
+				taskManager.publishTaskChanged("task-missed");
+
+				second = listen(port, "\"after-disconnect\"", ALPHA, true,
+						"{\"taskIds\":[\"task-missed\","
+								+ "\"task-after-reconnect\"]}");
+				assertSseHead(second.readHead());
+				Assertions.assertEquals(acknowledgment("\"after-disconnect\"",
+						List.of("task-missed", "task-after-reconnect")),
+						second.readChunkText());
+
+				taskManager.publishTaskChanged("task-after-reconnect");
+				Assertions.assertEquals(workingNotification("\"after-disconnect\"",
+						"task-after-reconnect"), second.readChunkText(),
+						"A disconnected event must not replay onto a later subscription.");
+				taskManager.publishTaskChanged("task-missed");
+				Assertions.assertEquals(completedNotification("\"after-disconnect\"",
+						"task-missed"), second.readChunkText(),
+						"A new event must use the replacement subscription ID.");
+			} finally {
+				if (first != null)
+					first.closeWithReset();
+				if (second != null)
+					second.closeWithReset();
+
+			}
+		});
 	}
 
 	@Test
@@ -1469,10 +1462,8 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 		ScriptedTaskManager taskManager = new ScriptedTaskManager();
 		AtomicInteger admissions = new AtomicInteger();
 		McpServer server = server(taskManager, admissions);
-		Soklet soklet = managedSoklet(server);
+		Soklet.run(managedSokletConfig(server), () -> {
 
-		try {
-			soklet.start();
 			int port = boundPort(server);
 			List<InvalidTaskIds> invalidCases = List.of(
 					new InvalidTaskIds("null", "null"),
@@ -1501,9 +1492,7 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 			Assertions.assertEquals(0, admissions.get(),
 					"Missing Tasks support must fail before admission.");
 			Assertions.assertEquals(0, taskManager.findInvocations());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -1512,10 +1501,8 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 		ScriptedTaskManager taskManager = new ScriptedTaskManager(false);
 		AtomicInteger admissions = new AtomicInteger();
 		McpServer server = resourceSubscriptionServer(taskManager, admissions);
-		Soklet soklet = managedSoklet(server);
+		Soklet.run(managedSokletConfig(server), () -> {
 
-		try {
-			soklet.start();
 			try (McpChunkedHttpClient client = listen(boundPort(server),
 					"\"resource-only\"", ALPHA, false,
 					"{\"taskIds\":[\"task-unknown\"]}")) {
@@ -1529,9 +1516,7 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 							+ "resource notifications are configured.");
 			Assertions.assertEquals(0, taskManager.findInvocations(),
 					"A resource-only notification source must not trigger a task lookup.");
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -1540,13 +1525,11 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 		ScriptedTaskManager taskManager = new ScriptedTaskManager();
 		AtomicInteger admissions = new AtomicInteger();
 		McpServer server = server(taskManager, admissions);
-		Soklet soklet = managedSoklet(server);
-		List<String> excessiveTaskIds = new ArrayList<>();
-		for (int index = 0; index < 257; index++)
-			excessiveTaskIds.add("task-limit-" + index);
+		Soklet.run(managedSokletConfig(server), () -> {
+			List<String> excessiveTaskIds = new ArrayList<>();
+			for (int index = 0; index < 257; index++)
+				excessiveTaskIds.add("task-limit-" + index);
 
-		try {
-			soklet.start();
 			try (McpChunkedHttpClient client = listen(boundPort(server),
 					"\"too-many-task-ids\"", ALPHA, true,
 					taskIdsFilter(excessiveTaskIds))) {
@@ -1561,9 +1544,7 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 					"The finite task-ID bound must be enforced before admission.");
 			Assertions.assertEquals(0, taskManager.findInvocations(),
 					"An oversized task filter must not amplify manager lookups.");
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -1571,60 +1552,60 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 			throws Exception {
 		ScriptedTaskManager taskManager = new ScriptedTaskManager();
 		McpServer server = server(taskManager, new AtomicInteger());
-		Soklet soklet = managedSoklet(server);
-		McpChunkedHttpClient client = null;
+		Soklet.run(managedSokletConfig(server), () -> {
+			McpChunkedHttpClient client = null;
 
-		try {
-			soklet.start();
-			int port = boundPort(server);
-			seedTask(port, "task-race", ALPHA);
-			seedTask(port, "task-race-control", ALPHA);
+			try {
+				int port = boundPort(server);
+				seedTask(port, "task-race", ALPHA);
+				seedTask(port, "task-race-control", ALPHA);
 
-			client = listen(port, "\"terminal-race\"", ALPHA, true,
-					"{\"taskIds\":[\"task-race\",\"task-race-control\"]}");
-			assertSseHead(client.readHead());
-			Assertions.assertEquals(acknowledgment("\"terminal-race\"",
-					List.of("task-race", "task-race-control")),
-					client.readChunkText());
-			taskManager.resetFindInvocations();
+				client = listen(port, "\"terminal-race\"", ALPHA, true,
+						"{\"taskIds\":[\"task-race\",\"task-race-control\"]}");
+				assertSseHead(client.readHead());
+				Assertions.assertEquals(acknowledgment("\"terminal-race\"",
+						List.of("task-race", "task-race-control")),
+						client.readChunkText());
+				taskManager.resetFindInvocations();
 
-			taskManager.blockNextFindBeforeSnapshot("task-race");
-			taskManager.publishTaskChanged("task-race");
-			taskManager.awaitBlockedFind();
-			taskManager.replaceTask(completedTask(
-					taskManager.requireTask("task-race")));
-			for (int duplicate = 0; duplicate < 5; duplicate++)
-					taskManager.publishTaskChanged("task-race");
-			taskManager.releaseBlockedFind();
+				taskManager.blockNextFindBeforeSnapshot("task-race");
+				taskManager.publishTaskChanged("task-race");
+				taskManager.awaitBlockedFind();
+				taskManager.replaceTask(completedTask(
+						taskManager.requireTask("task-race")));
+				for (int duplicate = 0; duplicate < 5; duplicate++)
+						taskManager.publishTaskChanged("task-race");
+				taskManager.releaseBlockedFind();
 
-			Assertions.assertEquals(completedNotification("\"terminal-race\"",
-					"task-race"), client.readChunkText(),
-					"Projection must read the authoritative state after the event, "
-							+ "not a stale pre-update snapshot.");
-			taskManager.awaitFindCompletions("task-race", 2);
-			Assertions.assertEquals(2,
-					taskManager.findInvocations("task-race"),
-					"A duplicate burst must converge to one follow-up projection.");
+				Assertions.assertEquals(completedNotification("\"terminal-race\"",
+						"task-race"), client.readChunkText(),
+						"Projection must read the authoritative state after the event, "
+								+ "not a stale pre-update snapshot.");
+				taskManager.awaitFindCompletions("task-race", 2);
+				Assertions.assertEquals(2,
+						taskManager.findInvocations("task-race"),
+						"A duplicate burst must converge to one follow-up projection.");
 
-			taskManager.replaceTask(canceledTask(
-					taskManager.requireTask("task-race")));
-			taskManager.publishTaskChanged("task-race");
-			taskManager.awaitFindCompletions("task-race", 3);
-			taskManager.replaceTask(regressedWorkingTask(
-					taskManager.requireTask("task-race")));
-			taskManager.publishTaskChanged("task-race");
-			taskManager.awaitFindCompletions("task-race", 4);
-			taskManager.publishTaskChanged("task-race-control");
-			Assertions.assertEquals(workingNotification("\"terminal-race\"",
-					"task-race-control"), client.readChunkText(),
-					"Neither a different terminal status nor a nonterminal regression "
-							+ "may follow the first delivered terminal snapshot.");
-		} finally {
-			taskManager.releaseBlockedFind();
-			if (client != null)
-				client.closeWithReset();
-			soklet.close();
-		}
+				taskManager.replaceTask(canceledTask(
+						taskManager.requireTask("task-race")));
+				taskManager.publishTaskChanged("task-race");
+				taskManager.awaitFindCompletions("task-race", 3);
+				taskManager.replaceTask(regressedWorkingTask(
+						taskManager.requireTask("task-race")));
+				taskManager.publishTaskChanged("task-race");
+				taskManager.awaitFindCompletions("task-race", 4);
+				taskManager.publishTaskChanged("task-race-control");
+				Assertions.assertEquals(workingNotification("\"terminal-race\"",
+						"task-race-control"), client.readChunkText(),
+						"Neither a different terminal status nor a nonterminal regression "
+								+ "may follow the first delivered terminal snapshot.");
+			} finally {
+				taskManager.releaseBlockedFind();
+				if (client != null)
+					client.closeWithReset();
+
+			}
+		});
 	}
 
 	@Test
@@ -1635,40 +1616,40 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 				.streamQueueCapacity(1)
 				.maximumSubscriptionsPerPartition(1)
 				.build();
-		Soklet soklet = managedSoklet(server);
-		McpChunkedHttpClient backpressured = null;
+		Soklet.run(managedSokletConfig(server), () -> {
+			McpChunkedHttpClient backpressured = null;
 
-		try {
-			soklet.start();
-			int port = boundPort(server);
-			List<String> largeTaskIds = List.of("task-large-first",
-					"task-large-second", "task-large-third",
-					"task-large-fourth");
-			for (String taskId : largeTaskIds)
-				seedTask(port, taskId, ALPHA);
-			seedTask(port, "task-after-backpressure", ALPHA);
+			try {
+				int port = boundPort(server);
+				List<String> largeTaskIds = List.of("task-large-first",
+						"task-large-second", "task-large-third",
+						"task-large-fourth");
+				for (String taskId : largeTaskIds)
+					seedTask(port, taskId, ALPHA);
+				seedTask(port, "task-after-backpressure", ALPHA);
 
-			String notificationsJson = "{\"taskIds\":[\""
-					+ String.join("\",\"", largeTaskIds) + "\"]}";
-			backpressured = listen(port, "\"task-backpressured\"", ALPHA,
-					true, notificationsJson, 1_024);
-			assertSseHead(backpressured.readHead());
-			Assertions.assertEquals(acknowledgment("\"task-backpressured\"",
-					largeTaskIds), backpressured.readChunkText());
+				String notificationsJson = "{\"taskIds\":[\""
+						+ String.join("\",\"", largeTaskIds) + "\"]}";
+				backpressured = listen(port, "\"task-backpressured\"", ALPHA,
+						true, notificationsJson, 1_024);
+				assertSseHead(backpressured.readHead());
+				Assertions.assertEquals(acknowledgment("\"task-backpressured\"",
+						largeTaskIds), backpressured.readChunkText());
 
-			for (int index = 0; index < largeTaskIds.size(); index++) {
-				String taskId = largeTaskIds.get(index);
-				taskManager.replaceTask(workingTaskWithMessage(
-						taskManager.requireTask(taskId),
-						String.valueOf((char) ('a' + index)).repeat(900_000)));
-				taskManager.publishTaskChanged(taskId);
+				for (int index = 0; index < largeTaskIds.size(); index++) {
+					String taskId = largeTaskIds.get(index);
+					taskManager.replaceTask(workingTaskWithMessage(
+							taskManager.requireTask(taskId),
+							String.valueOf((char) ('a' + index)).repeat(900_000)));
+					taskManager.publishTaskChanged(taskId);
+				}
+				awaitRecoveredTaskSubscription(port, "task-after-backpressure");
+			} finally {
+				if (backpressured != null)
+					backpressured.closeWithReset();
+
 			}
-			awaitRecoveredTaskSubscription(port, "task-after-backpressure");
-		} finally {
-			if (backpressured != null)
-				backpressured.closeWithReset();
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -1679,32 +1660,32 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 		McpServer server = serverBuilder(taskManager, new AtomicInteger())
 				.maximumSubscriptionsPerPartition(1)
 				.build();
-		Soklet soklet = managedSoklet(server, metrics);
-		McpChunkedHttpClient oversized = null;
+		Soklet.run(managedSokletConfig(server, metrics), () -> {
+			McpChunkedHttpClient oversized = null;
 
-		try {
-			soklet.start();
-			int port = boundPort(server);
-			seedTask(port, "task-oversized", ALPHA);
-			seedTask(port, "task-after-oversized", ALPHA);
-			oversized = listen(port, "\"oversized-task-notification\"",
-					ALPHA, true, "{\"taskIds\":[\"task-oversized\"]}");
-			assertSseHead(oversized.readHead());
-			Assertions.assertEquals(acknowledgment(
-					"\"oversized-task-notification\"",
-					List.of("task-oversized")), oversized.readChunkText());
+			try {
+				int port = boundPort(server);
+				seedTask(port, "task-oversized", ALPHA);
+				seedTask(port, "task-after-oversized", ALPHA);
+				oversized = listen(port, "\"oversized-task-notification\"",
+						ALPHA, true, "{\"taskIds\":[\"task-oversized\"]}");
+				assertSseHead(oversized.readHead());
+				Assertions.assertEquals(acknowledgment(
+						"\"oversized-task-notification\"",
+						List.of("task-oversized")), oversized.readChunkText());
 
-			taskManager.replaceTask(workingTaskWithMessage(
-					taskManager.requireTask("task-oversized"),
-					"x".repeat(1_100_000)));
-			taskManager.publishTaskChanged("task-oversized");
-			metrics.awaitBackpressureClose();
-			awaitRecoveredTaskSubscription(port, "task-after-oversized");
-		} finally {
-			if (oversized != null)
-				oversized.closeWithReset();
-			soklet.close();
-		}
+				taskManager.replaceTask(workingTaskWithMessage(
+						taskManager.requireTask("task-oversized"),
+						"x".repeat(1_100_000)));
+				taskManager.publishTaskChanged("task-oversized");
+				metrics.awaitBackpressureClose();
+				awaitRecoveredTaskSubscription(port, "task-after-oversized");
+			} finally {
+				if (oversized != null)
+					oversized.closeWithReset();
+
+			}
+		});
 	}
 
 	@Test
@@ -1716,85 +1697,85 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 		McpServer server = serverBuilder(taskManager, new AtomicInteger())
 				.maximumSubscriptionsPerPartition(1)
 				.build();
-		Soklet soklet = managedSoklet(server, metrics);
-		McpChunkedHttpClient client = null;
+		Soklet.run(managedSokletConfig(server, metrics), () -> {
+			McpChunkedHttpClient client = null;
 
-		try {
-			soklet.start();
-			int port = boundPort(server);
-			seedTask(port, "task-storm-origin", ALPHA);
-			McpTaskOrigin origin = taskManager
-					.requireTask("task-storm-origin").getTaskOrigin();
-			List<String> taskIds = new ArrayList<>();
-			for (int index = 0; index < 256; index++) {
-				String taskId = "task-storm-" + index;
-				taskIds.add(taskId);
-				Map<String, McpJsonValue> persisted = new LinkedHashMap<>(
-						origin.getPersistedState().getMembers());
-				persisted.put("rawArguments", McpJsonObject.builder()
-						.put("private", "PRIVATE-ORIGIN-" + index
-								+ "x".repeat(128 * 1024)).build());
-				taskManager.putTask(workingTask(taskId,
-						McpTaskOrigin.fromPersistedState(
-								McpJsonObject.fromMembers(persisted))),
-						"authorization-" + ALPHA);
-			}
+			try {
+				int port = boundPort(server);
+				seedTask(port, "task-storm-origin", ALPHA);
+				McpTaskOrigin origin = taskManager
+						.requireTask("task-storm-origin").getTaskOrigin();
+				List<String> taskIds = new ArrayList<>();
+				for (int index = 0; index < 256; index++) {
+					String taskId = "task-storm-" + index;
+					taskIds.add(taskId);
+					Map<String, McpJsonValue> persisted = new LinkedHashMap<>(
+							origin.getPersistedState().getMembers());
+					persisted.put("rawArguments", McpJsonObject.builder()
+							.put("private", "PRIVATE-ORIGIN-" + index
+									+ "x".repeat(128 * 1024)).build());
+					taskManager.putTask(workingTask(taskId,
+							McpTaskOrigin.fromPersistedState(
+									McpJsonObject.fromMembers(persisted))),
+							"authorization-" + ALPHA);
+				}
 
-			client = listen(port, "\"bounded-storm\"", ALPHA, true,
-					taskIdsFilter(taskIds));
-			assertSseHead(client.readHead());
-			Assertions.assertEquals(acknowledgment("\"bounded-storm\"", taskIds),
-					client.readChunkText());
-			Object control = subscriptionControl(server);
-			taskManager.resetFindInvocations();
+				client = listen(port, "\"bounded-storm\"", ALPHA, true,
+						taskIdsFilter(taskIds));
+				assertSseHead(client.readHead());
+				Assertions.assertEquals(acknowledgment("\"bounded-storm\"", taskIds),
+						client.readChunkText());
+				Object control = subscriptionControl(server);
+				taskManager.resetFindInvocations();
 
-			taskManager.blockTaskFindsAfterSnapshot(Set.of(taskIds.get(0)));
-			taskManager.publishTaskChanged(taskIds.get(0));
-			taskManager.awaitBlockedTaskFinds();
-			for (String taskId : taskIds.subList(1, taskIds.size()))
-				taskManager.publishTaskChanged(taskId);
+				taskManager.blockTaskFindsAfterSnapshot(Set.of(taskIds.get(0)));
+				taskManager.publishTaskChanged(taskIds.get(0));
+				taskManager.awaitBlockedTaskFinds();
+				for (String taskId : taskIds.subList(1, taskIds.size()))
+					taskManager.publishTaskChanged(taskId);
 
-			assertDiscoverCompletes(port);
-			Assertions.assertEquals(1, taskManager.findInvocations(),
-					"One subscription must occupy only one projection worker and "
-							+ "one shared scheduler slot.");
-			Assertions.assertEquals(1,
-					server.getDiagnostics().getActiveSubscriptions());
-			metrics.assertOpen();
+				assertDiscoverCompletes(port);
+				Assertions.assertEquals(1, taskManager.findInvocations(),
+						"One subscription must occupy only one projection worker and "
+								+ "one shared scheduler slot.");
+				Assertions.assertEquals(1,
+						server.getDiagnostics().getActiveSubscriptions());
+				metrics.assertOpen();
 
-			taskManager.releaseBlockedTaskFinds();
-			for (String taskId : taskIds)
-				Assertions.assertEquals(workingNotification("\"bounded-storm\"",
-						taskId), client.readChunkText(),
-						"Unique task IDs must retain first-event order.");
-			Assertions.assertEquals(taskIds.size(), taskManager.findInvocations());
-			Assertions.assertEquals(1,
-					server.getDiagnostics().getActiveSubscriptions());
-			metrics.assertOpen();
-			awaitProjectionDrained(control);
-			assertNoPrivateProjectionRetention(control, taskIds.size());
+				taskManager.releaseBlockedTaskFinds();
+				for (String taskId : taskIds)
+					Assertions.assertEquals(workingNotification("\"bounded-storm\"",
+							taskId), client.readChunkText(),
+							"Unique task IDs must retain first-event order.");
+				Assertions.assertEquals(taskIds.size(), taskManager.findInvocations());
+				Assertions.assertEquals(1,
+						server.getDiagnostics().getActiveSubscriptions());
+				metrics.assertOpen();
+				awaitProjectionDrained(control);
+				assertNoPrivateProjectionRetention(control, taskIds.size());
 
-			for (String taskId : taskIds) {
-				String output = "PRIVATE-RESULT-" + taskId + "y".repeat(64 * 1024);
-				taskManager.replaceTask(completedTask(
-						taskManager.requireTask(taskId), output));
-				taskManager.publishTaskChanged(taskId);
-				Assertions.assertTrue(client.readChunkText().contains(output),
-						"The completed output must be delivered before it is released.");
-			}
-			awaitProjectionDrained(control);
-			assertNoPrivateProjectionRetention(control, taskIds.size());
+				for (String taskId : taskIds) {
+					String output = "PRIVATE-RESULT-" + taskId + "y".repeat(64 * 1024);
+					taskManager.replaceTask(completedTask(
+							taskManager.requireTask(taskId), output));
+					taskManager.publishTaskChanged(taskId);
+					Assertions.assertTrue(client.readChunkText().contains(output),
+							"The completed output must be delivered before it is released.");
+				}
+				awaitProjectionDrained(control);
+				assertNoPrivateProjectionRetention(control, taskIds.size());
 
-			client.closeWithReset();
-			client = null;
-			awaitActiveSubscriptions(server, 0);
-			assertNoPrivateProjectionRetention(control, 0);
-		} finally {
-			taskManager.releaseBlockedTaskFinds();
-			if (client != null)
 				client.closeWithReset();
-			soklet.close();
-		}
+				client = null;
+				awaitActiveSubscriptions(server, 0);
+				assertNoPrivateProjectionRetention(control, 0);
+			} finally {
+				taskManager.releaseBlockedTaskFinds();
+				if (client != null)
+					client.closeWithReset();
+
+			}
+		});
 	}
 
 	@Test
@@ -1806,7 +1787,6 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 		Soklet soklet = managedSoklet(server);
 		McpChunkedHttpClient client = null;
 		try {
-			soklet.start();
 			int port = boundPort(server);
 			String taskId = "task-comparison";
 			String controlTaskId = "task-comparison-control";
@@ -1867,12 +1847,12 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 					"Changed content must not override the stale-timestamp fence.");
 			awaitProjectionDrained(control);
 			assertNoPrivateProjectionRetention(control, 2);
-			soklet.close();
+			com.soklet.SokletTestScope.close(soklet);
 			assertNoPrivateProjectionRetention(control, 0);
 		} finally {
 			if (client != null)
 				client.closeWithReset();
-			soklet.close();
+			com.soklet.SokletTestScope.close(soklet);
 		}
 	}
 
@@ -1884,46 +1864,46 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 		McpServer server = serverBuilder(taskManager, new AtomicInteger())
 				.maximumSubscriptionsPerPartition(1)
 				.build();
-		Soklet soklet = managedSoklet(server);
-		McpChunkedHttpClient client = null;
+		Soklet.run(managedSokletConfig(server), () -> {
+			McpChunkedHttpClient client = null;
 
-		try {
-			soklet.start();
-			int port = boundPort(server);
-			seedTask(port, "task-disconnect-active", ALPHA);
-			seedTask(port, "task-disconnect-recovered", ALPHA);
-			client = listen(port, "\"disconnect-active\"", ALPHA, true,
-					"{\"taskIds\":[\"task-disconnect-active\"]}");
-			assertSseHead(client.readHead());
-			Assertions.assertEquals(acknowledgment("\"disconnect-active\"",
-					List.of("task-disconnect-active")), client.readChunkText());
-			Object control = subscriptionControl(server);
-			taskManager.publishTaskChanged("task-disconnect-active");
-			Assertions.assertEquals(workingNotification("\"disconnect-active\"",
-					"task-disconnect-active"), client.readChunkText());
-			awaitProjectionDrained(control);
-			taskManager.resetFindInvocations();
+			try {
+				int port = boundPort(server);
+				seedTask(port, "task-disconnect-active", ALPHA);
+				seedTask(port, "task-disconnect-recovered", ALPHA);
+				client = listen(port, "\"disconnect-active\"", ALPHA, true,
+						"{\"taskIds\":[\"task-disconnect-active\"]}");
+				assertSseHead(client.readHead());
+				Assertions.assertEquals(acknowledgment("\"disconnect-active\"",
+						List.of("task-disconnect-active")), client.readChunkText());
+				Object control = subscriptionControl(server);
+				taskManager.publishTaskChanged("task-disconnect-active");
+				Assertions.assertEquals(workingNotification("\"disconnect-active\"",
+						"task-disconnect-active"), client.readChunkText());
+				awaitProjectionDrained(control);
+				taskManager.resetFindInvocations();
 
-			taskManager.blockTaskFindsAfterSnapshot(
-					Set.of("task-disconnect-active"));
-			taskManager.publishTaskChanged("task-disconnect-active");
-			taskManager.awaitBlockedTaskFinds();
-			client.closeWithReset();
-			client = null;
-			awaitActiveSubscriptions(server, 0);
-			assertNoPrivateProjectionRetention(control, 0);
-
-			taskManager.releaseBlockedTaskFinds();
-			taskManager.awaitFindCompletions("task-disconnect-active", 1);
-			assertDiscoverCompletes(port);
-			assertNoPrivateProjectionRetention(control, 0);
-			awaitRecoveredTaskSubscription(port, "task-disconnect-recovered");
-		} finally {
-			taskManager.releaseBlockedTaskFinds();
-			if (client != null)
+				taskManager.blockTaskFindsAfterSnapshot(
+						Set.of("task-disconnect-active"));
+				taskManager.publishTaskChanged("task-disconnect-active");
+				taskManager.awaitBlockedTaskFinds();
 				client.closeWithReset();
-			soklet.close();
-		}
+				client = null;
+				awaitActiveSubscriptions(server, 0);
+				assertNoPrivateProjectionRetention(control, 0);
+
+				taskManager.releaseBlockedTaskFinds();
+				taskManager.awaitFindCompletions("task-disconnect-active", 1);
+				assertDiscoverCompletes(port);
+				assertNoPrivateProjectionRetention(control, 0);
+				awaitRecoveredTaskSubscription(port, "task-disconnect-recovered");
+			} finally {
+				taskManager.releaseBlockedTaskFinds();
+				if (client != null)
+					client.closeWithReset();
+
+			}
+		});
 	}
 
 	@Test
@@ -1933,41 +1913,30 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 		RecordingTaskEventPublisher publisher =
 				new RecordingTaskEventPublisher();
 		ScriptedTaskManager taskManager = new ScriptedTaskManager(publisher);
-		Soklet firstOwner = null;
-		Soklet secondOwner = null;
 
-		try {
-			McpServer firstServer = server(List.of(
-					taskEndpoint("/mcp-first", taskManager),
-					taskEndpoint("/mcp-second", taskManager)),
-					taskManager, new AtomicInteger());
-			firstOwner = managedSoklet(firstServer);
-			firstOwner.start();
+		McpServer firstServer = server(List.of(
+				taskEndpoint("/mcp-first", taskManager),
+				taskEndpoint("/mcp-second", taskManager)),
+				taskManager, new AtomicInteger());
+		Soklet.run(managedSokletConfig(firstServer), () -> {
 			Assertions.assertEquals(1, publisher.subscriptionCount(),
 					"Endpoints sharing one task publisher must share one registration.");
 			Assertions.assertEquals(1, publisher.activeRegistrationCount());
+		});
+		Assertions.assertEquals(1, publisher.closedRegistrationCount(),
+				"Stopping a generation must close its shared registration once.");
+		Assertions.assertEquals(0, publisher.activeRegistrationCount());
 
-			firstOwner.close();
-			firstOwner = null;
-			Assertions.assertEquals(1, publisher.closedRegistrationCount(),
-					"Stopping a generation must close its shared registration once.");
-			Assertions.assertEquals(0, publisher.activeRegistrationCount());
-
-			McpServer secondServer = server(List.of(
-					taskEndpoint("/mcp-first", taskManager),
-					taskEndpoint("/mcp-second", taskManager)),
-					taskManager, new AtomicInteger());
-			secondOwner = managedSoklet(secondServer);
-			secondOwner.start();
+		McpServer secondServer = server(List.of(
+				taskEndpoint("/mcp-first", taskManager),
+				taskEndpoint("/mcp-second", taskManager)),
+				taskManager, new AtomicInteger());
+		Soklet.run(managedSokletConfig(secondServer), () -> {
 			Assertions.assertEquals(2, publisher.subscriptionCount(),
 					"A fresh server generation must establish one fresh registration.");
 			Assertions.assertEquals(1, publisher.activeRegistrationCount());
-		} finally {
-			if (firstOwner != null)
-				firstOwner.close();
-			if (secondOwner != null)
-				secondOwner.close();
-		}
+		});
+
 		Assertions.assertEquals(2, publisher.closedRegistrationCount());
 		Assertions.assertEquals(0, publisher.activeRegistrationCount());
 		Assertions.assertEquals(0, publisher.publisherCloseCount(),
@@ -2077,9 +2046,13 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 		return managedSoklet(server, MetricsCollector.disabledInstance());
 	}
 
+	private static SokletConfig managedSokletConfig(@NonNull McpServer server) {
+		return managedSokletConfig(server, MetricsCollector.disabledInstance());
+	}
+
 	private static Soklet managedSoklet(@NonNull McpServer server,
 			@NonNull MetricsCollector metricsCollector) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+		return Soklet.run(SokletConfig.withMcpServer(server)
 				.lifecyclePolicy(com.soklet.LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(10))
 						.startupCancelationTimeout(Duration.ofSeconds(1)).gracefulShutdownTimeout(Duration.ofSeconds(1))
 						.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
@@ -2087,6 +2060,18 @@ public class McpTaskSubscriptionPublicRuntimeTests {
 						ResourceMethodResolver.fromMethods(Set.of()))
 				.metricsCollector(metricsCollector)
 				.build());
+	}
+
+	private static SokletConfig managedSokletConfig(@NonNull McpServer server,
+			@NonNull MetricsCollector metricsCollector) {
+		return SokletConfig.withMcpServer(server)
+				.lifecyclePolicy(com.soklet.LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(10))
+						.startupCancelationTimeout(Duration.ofSeconds(1)).gracefulShutdownTimeout(Duration.ofSeconds(1))
+						.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
+				.resourceMethodResolver(
+						ResourceMethodResolver.fromMethods(Set.of()))
+				.metricsCollector(metricsCollector)
+				.build();
 	}
 
 	private static int boundPort(@NonNull McpServer server) {

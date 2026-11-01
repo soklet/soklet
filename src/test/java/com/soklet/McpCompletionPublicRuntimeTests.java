@@ -114,11 +114,10 @@ public class McpCompletionPublicRuntimeTests {
 				})
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(HOST)).build();
-		Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.build());
-		try {
-			soklet.start();
+				.build();
+		Soklet.run(sokletConfig, () -> {
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			String discover = send(port, "server/discover", "", "discover").body();
 			assertTrue(discover.contains("\"completions\":{}"), discover);
@@ -213,9 +212,7 @@ public class McpCompletionPublicRuntimeTests {
 					"Each admitted Completion request must charge exactly once.");
 			assertEquals(1, promptEntries.get());
 			assertEquals(1, resourceEntries.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -235,6 +232,7 @@ public class McpCompletionPublicRuntimeTests {
 	}
 
 	@Test
+	@org.junit.jupiter.api.Timeout(90)
 	public void noCompleterDoesNotAdvertiseOrRouteCompletion() throws Exception {
 		McpEndpoint endpoint = McpEndpoint.withPath("/mcp",
 				McpImplementation.withNameAndVersion("completion-test", "4.0.0")
@@ -244,11 +242,10 @@ public class McpCompletionPublicRuntimeTests {
 				.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(HOST)).build();
-		Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.build());
-		try {
-			soklet.start();
+				.build();
+		Soklet.run(sokletConfig, () -> {
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			String discover = send(port, "server/discover", "", "discover").body();
 			assertFalse(discover.contains("\"completions\""), discover);
@@ -257,9 +254,7 @@ public class McpCompletionPublicRuntimeTests {
 			assertEquals(404, completion.statusCode(), completion.body());
 			assertTrue(completion.body().contains("\"code\":-32601"),
 					completion.body());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -293,11 +288,10 @@ public class McpCompletionPublicRuntimeTests {
 									McpTextContent.fromText("wrong")))).build()))
 				.corsAuthorizer(CorsAuthorizer.rejectAllInstance())
 				.allowedHosts(Set.of(HOST)).build();
-		Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+		SokletConfig sokletConfig = SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.build());
-		try {
-			soklet.start();
+				.build();
+		Soklet.run(sokletConfig, () -> {
 			int port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort();
 			HttpResponse<String> response = send(port, "completion/complete",
 					params(true, "visible", "subject", "s", null), "wrong");
@@ -305,9 +299,7 @@ public class McpCompletionPublicRuntimeTests {
 			assertFalse(response.body().contains(
 					"An MCP Completion interceptor"), response.body());
 			assertEquals(0, handlerEntries.get());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -340,16 +332,15 @@ public class McpCompletionPublicRuntimeTests {
 								throw new McpJsonRpcException(McpJsonRpcError.fromApplication(3102, "Private interceptor error"));
 							return result;
 						}).corsAuthorizer(CorsAuthorizer.rejectAllInstance()).allowedHosts(Set.of(HOST)).build();
-				Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+				SokletConfig sokletConfig = SokletConfig.withMcpServer(server)
 						.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 						.lifecyclePolicy(LifecyclePolicy.builder()
 								.startupTimeout(Duration.ofSeconds(10))
 								.startupCancelationTimeout(Duration.ofSeconds(1))
 								.gracefulShutdownTimeout(Duration.ofSeconds(1))
 								.forcedShutdownTimeout(Duration.ofSeconds(1))
-								.build()).build());
-				try {
-					soklet.start();
+								.build()).build();
+				Soklet.run(sokletConfig, () -> {
 					HttpResponse<String> response = send(server.getDiagnostics().getBoundAddress().orElseThrow().getPort(),
 							"completion/complete", params(promptReference, promptReference ? "visible" : "catalog://items/{subject}",
 									"subject", "s", null), "error");
@@ -364,9 +355,7 @@ public class McpCompletionPublicRuntimeTests {
 						assertFalse(response.body().contains("3102"), response.body());
 					}
 					assertEquals(errorSource.equals("interceptor-before") ? 0 : 1, handlerEntries.get());
-				} finally {
-					soklet.close();
-				}
+				});
 			}
 		}
 	}

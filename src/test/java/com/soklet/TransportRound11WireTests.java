@@ -25,10 +25,9 @@ class TransportRound11WireTests {
 		int port = TestSupport.findFreePort();
 		HttpServer server = HttpServer.withPort(port).host("127.0.0.1")
 				.maximumRequestSizeInBytes(1024).maximumRequestBodySizeInBytes(1024).build();
-		try (Soklet app = Soklet.fromConfig(SokletConfig.withHttpServer(server)
+		Soklet.run(SokletConfig.withHttpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Upload.class)))
-				.lifecyclePolicy(policy()).lifecycleObserver(quiet()).build())) {
-			app.start();
+				.lifecyclePolicy(policy()).lifecycleObserver(quiet()).build(), () -> {
 			try (Socket client = new Socket("127.0.0.1", port)) {
 				client.setSoTimeout(2000);
 				client.getOutputStream().write(("POST /upload HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1024\r\n"
@@ -36,7 +35,7 @@ class TransportRound11WireTests {
 				String status = new BufferedReader(new InputStreamReader(client.getInputStream(), StandardCharsets.US_ASCII)).readLine();
 				assertTrue(status.startsWith("HTTP/1.1 413"), status);
 			}
-		}
+		});
 	}
 
 	@Test void rejectedRewrittenHandshakeReportsEffectiveRequestAndRoute() throws Exception {
@@ -57,10 +56,9 @@ class TransportRound11WireTests {
 				observedRequest.set(request); observedMethod.set(method); observed.countDown();
 			}
 		};
-		try (Soklet app = Soklet.fromConfig(SokletConfig.withSseServer(server)
+		Soklet.run(SokletConfig.withSseServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Rejection.class)))
-				.requestInterceptor(rewrite).lifecycleObserver(observer).lifecyclePolicy(policy()).build())) {
-			app.start();
+				.requestInterceptor(rewrite).lifecycleObserver(observer).lifecyclePolicy(policy()).build(), () -> {
 			try (Socket client = new Socket("127.0.0.1", port)) {
 				client.setSoTimeout(2000);
 				client.getOutputStream().write("GET /v1/reject HTTP/1.1\r\nHost: localhost\r\n\r\n".getBytes(StandardCharsets.US_ASCII));
@@ -70,20 +68,20 @@ class TransportRound11WireTests {
 				assertNotNull(observedMethod.get());
 				assertEquals("/reject", observedMethod.get().getResourcePathDeclaration().getPath());
 			}
-		}
+		});
 	}
 
 	@Test void sseBindFailureRetainsItsDiagnosableCauseInTheParticipantResult() throws Exception {
 		try (ServerSocket occupied = new ServerSocket()) {
 			occupied.bind(new java.net.InetSocketAddress("127.0.0.1", 0));
 			SseServer server = SseServer.withPort(occupied.getLocalPort()).host("127.0.0.1").build();
-			try (Soklet app = Soklet.fromConfig(SokletConfig.withSseServer(server)
+			SokletConfig config = SokletConfig.withSseServer(server)
 					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Rejection.class)))
-					.lifecyclePolicy(policy()).lifecycleObserver(quiet()).build())) {
-				SokletStartupException failure = assertThrows(SokletStartupException.class, app::start);
-				assertTrue(failure.getShutdownResult().getShutdownComponentResult(ShutdownComponentType.SSE)
-						.orElseThrow().getThrowables().stream().anyMatch(java.net.BindException.class::isInstance));
-			}
+					.lifecyclePolicy(policy()).lifecycleObserver(quiet()).build();
+			SokletStartupException failure = assertThrows(SokletStartupException.class,
+				() -> Soklet.run(config, () -> fail("Failed startup must not invoke the scope callback")));
+			assertTrue(failure.getShutdownResult().getShutdownComponentResult(ShutdownComponentType.SSE)
+					.orElseThrow().getThrowables().stream().anyMatch(java.net.BindException.class::isInstance));
 		}
 	}
 

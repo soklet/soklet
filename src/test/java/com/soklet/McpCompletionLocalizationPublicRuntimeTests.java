@@ -56,9 +56,9 @@ class McpCompletionLocalizationPublicRuntimeTests {
 			throws Exception {
 		Observations observations = new Observations();
 		McpServer server = server(observations);
-		Soklet owner = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+		SokletConfig ownerConfig = SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.lifecyclePolicy(TEST_LIFECYCLE_POLICY).build());
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY).build();
 		List<LanguageCase> cases = List.of(
 				new LanguageCase("fr-CA, en;q=0.5", Locale.FRENCH),
 				new LanguageCase("ar", Locale.forLanguageTag("ar")),
@@ -66,8 +66,7 @@ class McpCompletionLocalizationPublicRuntimeTests {
 				new LanguageCase(null, Locale.ENGLISH),
 				new LanguageCase("invalid_locale", Locale.ENGLISH),
 				new LanguageCase("fr;q=0, en;q=1", Locale.ENGLISH));
-		try {
-			owner.start();
+		Soklet.run(ownerConfig, () -> {
 			HttpClient client = HttpClient.newBuilder().connectTimeout(WAIT).build();
 			int index = 0;
 			for (boolean prompt : List.of(true, false)) {
@@ -85,9 +84,7 @@ class McpCompletionLocalizationPublicRuntimeTests {
 			assertEquals(0, observations.lookups.get(),
 					"Completion strings, including canonical IDs, are application output.");
 			assertEquals(0, observations.ordinaryHandlerCalls.get());
-		} finally {
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -95,48 +92,48 @@ class McpCompletionLocalizationPublicRuntimeTests {
 			throws Exception {
 		Observations observations = new Observations();
 		McpServer server = server(observations);
-		Soklet owner = Soklet.fromConfig(SokletConfig.withMcpServer(server)
+		SokletConfig ownerConfig = SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
-				.lifecyclePolicy(TEST_LIFECYCLE_POLICY).build());
+				.lifecyclePolicy(TEST_LIFECYCLE_POLICY).build();
 		List<CompletableFuture<HttpResponse<String>>> responses = new ArrayList<>();
-		try {
-			owner.start();
-			HttpClient client = HttpClient.newBuilder().connectTimeout(WAIT).build();
-			for (boolean prompt : List.of(true, false)) {
-				for (String tenant : List.of("alpha", "beta")) {
-					String id = (prompt ? "prompt-" : "resource-") + tenant;
-					responses.add(client.sendAsync(request(server, id, prompt,
-							tenant, "fr-CA"), HttpResponse.BodyHandlers.ofString(
-							StandardCharsets.UTF_8)));
+		Soklet.run(ownerConfig, () -> {
+			try {
+				HttpClient client = HttpClient.newBuilder().connectTimeout(WAIT).build();
+				for (boolean prompt : List.of(true, false)) {
+					for (String tenant : List.of("alpha", "beta")) {
+						String id = (prompt ? "prompt-" : "resource-") + tenant;
+						responses.add(client.sendAsync(request(server, id, prompt,
+								tenant, "fr-CA"), HttpResponse.BodyHandlers.ofString(
+								StandardCharsets.UTF_8)));
+					}
 				}
-			}
-			CompletableFuture.allOf(responses.toArray(CompletableFuture[]::new))
-					.get(5, TimeUnit.SECONDS);
-			int index = 0;
-			for (boolean prompt : List.of(true, false)) {
-				for (String tenant : List.of("alpha", "beta")) {
-					String id = (prompt ? "prompt-" : "resource-") + tenant;
-					assertSuggestions(responses.get(index++).getNow(null),
-							tenant, Locale.FRENCH);
-					observations.assertInvocation(id, prompt, tenant, Locale.FRENCH);
-					HttpResponse<String> repeated = client.send(request(server,
-							id + "-repeat", prompt, tenant, "fr-CA"),
-							HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-					assertSuggestions(repeated, tenant, Locale.FRENCH);
-					observations.assertInvocation(id + "-repeat", prompt, tenant,
-							Locale.FRENCH);
+				CompletableFuture.allOf(responses.toArray(CompletableFuture[]::new))
+						.get(5, TimeUnit.SECONDS);
+				int index = 0;
+				for (boolean prompt : List.of(true, false)) {
+					for (String tenant : List.of("alpha", "beta")) {
+						String id = (prompt ? "prompt-" : "resource-") + tenant;
+						assertSuggestions(responses.get(index++).getNow(null),
+								tenant, Locale.FRENCH);
+						observations.assertInvocation(id, prompt, tenant, Locale.FRENCH);
+						HttpResponse<String> repeated = client.send(request(server,
+								id + "-repeat", prompt, tenant, "fr-CA"),
+								HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+						assertSuggestions(repeated, tenant, Locale.FRENCH);
+						observations.assertInvocation(id + "-repeat", prompt, tenant,
+								Locale.FRENCH);
+					}
 				}
+				assertEquals(8, observations.providerCalls.get());
+				assertEquals(8, observations.contexts.values().stream().distinct().count(),
+						"Every request owns a fresh localization snapshot, even on reuse.");
+				assertEquals(0, observations.lookups.get());
+				assertEquals(0, observations.ordinaryHandlerCalls.get());
+			} finally {
+				for (CompletableFuture<?> response : responses)
+					response.cancel(true);
 			}
-			assertEquals(8, observations.providerCalls.get());
-			assertEquals(8, observations.contexts.values().stream().distinct().count(),
-					"Every request owns a fresh localization snapshot, even on reuse.");
-			assertEquals(0, observations.lookups.get());
-			assertEquals(0, observations.ordinaryHandlerCalls.get());
-		} finally {
-			for (CompletableFuture<?> response : responses)
-				response.cancel(true);
-			owner.close();
-		}
+		});
 	}
 
 	private static McpServer server(Observations observations) {

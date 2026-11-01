@@ -65,7 +65,7 @@ class TransportCallbackSelfWaitTests {
 					@Override public void didReceiveLogEvent(LogEvent event) { }
 					@Override public void willAcceptConnection(ServerType type, InetSocketAddress address) {
 						try {
-							assertThrows(IllegalStateException.class, () -> owner.get().awaitShutdown());
+							assertThrows(IllegalStateException.class, () -> owner.get().awaitCoreShutdown());
 							assertDoesNotThrow(other::close, "A callback for owner A must be able to close independent owner B");
 							observed.set(expected);
 							throw expected;
@@ -108,7 +108,7 @@ class TransportCallbackSelfWaitTests {
 			if (!attempted.compareAndSet(false, true)) return;
 			callbackThread.set(Thread.currentThread());
 			try {
-				if (close) owner.get().close(); else owner.get().awaitShutdown();
+				if (close) owner.get().close(); else owner.get().awaitCoreShutdown();
 				outcome.complete(null);
 			} catch (Throwable failure) { outcome.complete(failure); }
 		};
@@ -228,7 +228,7 @@ class TransportCallbackSelfWaitTests {
 			callbackThread.set(Thread.currentThread());
 			try {
 				if (close) owner.get().close();
-				else owner.get().awaitShutdown();
+				else owner.get().awaitCoreShutdown();
 				outcome.complete(null);
 			} catch (Throwable failure) {
 				outcome.complete(failure);

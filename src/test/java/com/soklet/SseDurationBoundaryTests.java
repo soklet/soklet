@@ -93,53 +93,69 @@ class SseDurationBoundaryTests {
 
 	@Test
 	void maximumHeartbeatStillAcceptsApplicationWritesAndStopsCompletely() throws Exception {
-		try (LiveFixture fixture = new LiveFixture(Duration.ofMillis(Long.MAX_VALUE))) {
-			fixture.broadcaster().broadcastEvent(SseEvent.withData("first").build());
-			assertEquals("data: first\n\n", readThrough(fixture.socket, "\n\n"));
-			fixture.broadcaster().broadcastComment(SseComment.fromComment("still open"));
-			assertEquals(": still open\n\n", readThrough(fixture.socket, "\n\n"));
-			assertEquals(1, fixture.server.getActiveConnectionCount());
-		}
+		LiveFixture fixture = new LiveFixture(Duration.ofMillis(Long.MAX_VALUE));
+		ShutdownResult result = Soklet.run(fixture.config, () -> {
+			try (Socket socket = fixture.connect()) {
+				fixture.broadcaster().broadcastEvent(SseEvent.withData("first").build());
+				assertEquals("data: first\n\n", readThrough(socket, "\n\n"));
+				fixture.broadcaster().broadcastComment(SseComment.fromComment("still open"));
+				assertEquals(": still open\n\n", readThrough(socket, "\n\n"));
+				assertEquals(1, fixture.server.getActiveConnectionCount());
+			}
+		});
+		fixture.verifyShutdown(result);
 	}
 
 	@Test
 	void idleHeartbeatRemainsACommentAndDoesNotPreventLaterEvents() throws Exception {
-		try (LiveFixture fixture = new LiveFixture(Duration.ofMillis(25))) {
-			assertEquals(":\n\n", readThrough(fixture.socket, "\n\n"));
-			fixture.broadcaster().broadcastEvent(SseEvent.withData("after heartbeat").build());
-			String frame = "";
-			for (int i = 0; i < 120; i++) {
-				frame = readThrough(fixture.socket, "\n\n");
-				if (!frame.equals(":\n\n")) break;
+		LiveFixture fixture = new LiveFixture(Duration.ofMillis(25));
+		ShutdownResult result = Soklet.run(fixture.config, () -> {
+			try (Socket socket = fixture.connect()) {
+				assertEquals(":\n\n", readThrough(socket, "\n\n"));
+				fixture.broadcaster().broadcastEvent(SseEvent.withData("after heartbeat").build());
+				String frame = "";
+				for (int i = 0; i < 120; i++) {
+					frame = readThrough(socket, "\n\n");
+					if (!frame.equals(":\n\n")) break;
+				}
+				assertEquals("data: after heartbeat\n\n", frame);
 			}
-			assertEquals("data: after heartbeat\n\n", frame);
-		}
+		});
+		fixture.verifyShutdown(result);
 	}
 
 	@Test
 	void retryWireValuesUseNonnegativeWholeMillisecondsAtBothBounds() throws Exception {
-		try (LiveFixture fixture = new LiveFixture(Duration.ofMinutes(10))) {
-			for (RetryCase testCase : List.of(new RetryCase(Duration.ZERO, "0"),
-					new RetryCase(Duration.ofNanos(999_999), "0"),
-					new RetryCase(Duration.ofNanos(1_999_999), "1"),
-					new RetryCase(Duration.ofMillis(Long.MAX_VALUE), "9223372036854775807"),
-					new RetryCase(Duration.ofMillis(Long.MAX_VALUE).plusNanos(999_999), "9223372036854775807"))) {
-				fixture.broadcaster().broadcastEvent(SseEvent.builder().retry(testCase.duration()).build());
-				assertEquals("retry: " + testCase.milliseconds() + "\n\n", readThrough(fixture.socket, "\n\n"));
+		LiveFixture fixture = new LiveFixture(Duration.ofMinutes(10));
+		ShutdownResult result = Soklet.run(fixture.config, () -> {
+			try (Socket socket = fixture.connect()) {
+				for (RetryCase testCase : List.of(new RetryCase(Duration.ZERO, "0"),
+						new RetryCase(Duration.ofNanos(999_999), "0"),
+						new RetryCase(Duration.ofNanos(1_999_999), "1"),
+						new RetryCase(Duration.ofMillis(Long.MAX_VALUE), "9223372036854775807"),
+						new RetryCase(Duration.ofMillis(Long.MAX_VALUE).plusNanos(999_999), "9223372036854775807"))) {
+					fixture.broadcaster().broadcastEvent(SseEvent.builder().retry(testCase.duration()).build());
+					assertEquals("retry: " + testCase.milliseconds() + "\n\n", readThrough(socket, "\n\n"));
+				}
 			}
-		}
+		});
+		fixture.verifyShutdown(result);
 	}
 
 	@Test
 	void absentDataAndEmptyDataRemainDistinctOnTheWire() throws Exception {
-		try (LiveFixture fixture = new LiveFixture(Duration.ofMinutes(10))) {
-			fixture.broadcaster().broadcastEvent(SseEvent.withEvent("ready").build());
-			assertEquals("event: ready\n\n", readThrough(fixture.socket, "\n\n"));
-			fixture.broadcaster().broadcastEvent(SseEvent.withEvent("ready").data("").build());
-			assertEquals("event: ready\ndata: \n\n", readThrough(fixture.socket, "\n\n"));
-			fixture.broadcaster().broadcastEvent(SseEvent.builder().id("resume").build());
-			assertEquals("id: resume\n\n", readThrough(fixture.socket, "\n\n"));
-		}
+		LiveFixture fixture = new LiveFixture(Duration.ofMinutes(10));
+		ShutdownResult result = Soklet.run(fixture.config, () -> {
+			try (Socket socket = fixture.connect()) {
+				fixture.broadcaster().broadcastEvent(SseEvent.withEvent("ready").build());
+				assertEquals("event: ready\n\n", readThrough(socket, "\n\n"));
+				fixture.broadcaster().broadcastEvent(SseEvent.withEvent("ready").data("").build());
+				assertEquals("event: ready\ndata: \n\n", readThrough(socket, "\n\n"));
+				fixture.broadcaster().broadcastEvent(SseEvent.builder().id("resume").build());
+				assertEquals("id: resume\n\n", readThrough(socket, "\n\n"));
+			}
+		});
+		fixture.verifyShutdown(result);
 	}
 
 	private record RetryCase(Duration duration, String milliseconds) {}
@@ -160,36 +176,37 @@ class SseDurationBoundaryTests {
 		assertTrue(condition.getAsBoolean());
 	}
 
-	private static final class LiveFixture implements AutoCloseable {
+	private static final class LiveFixture {
 		final DefaultSseServer server;
-		final Soklet app;
-		final Socket socket;
+		final SokletConfig config;
+		final int port;
 		final List<LogEvent> logs = new CopyOnWriteArrayList<>();
 
 		LiveFixture(Duration heartbeatInterval) throws Exception {
-			int port = findFreePort();
+			port = findFreePort();
 			server = (DefaultSseServer) SseServer.withPort(port).host("127.0.0.1")
 					.heartbeatInterval(heartbeatInterval).verifyConnectionOnceEstablished(false).build();
-			app = Soklet.fromConfig(SokletConfig.withSseServer(server)
+			config = SokletConfig.withSseServer(server)
 					.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Resource.class)))
 					.lifecyclePolicy(LifecyclePolicy.builder().gracefulShutdownTimeout(Duration.ofMillis(300))
 							.forcedShutdownTimeout(Duration.ofSeconds(1)).build())
 					.lifecycleObserver(new LifecycleObserver() {
 						@Override public void didReceiveLogEvent(LogEvent event) { logs.add(event); }
-					}).build());
+					}).build();
+		}
+
+		Socket connect() throws Exception {
 			Socket connected = null;
 			try {
-				app.start();
 				connected = connectWithRetry("127.0.0.1", port, 2000);
 				connected.setSoTimeout(2000);
 				connected.getOutputStream().write("GET /duration-events HTTP/1.1\r\nHost: localhost\r\n\r\n"
 						.getBytes(StandardCharsets.ISO_8859_1));
 				assertTrue(readThrough(connected, "\r\n\r\n").startsWith("HTTP/1.1 200"));
 				await(() -> broadcaster().getClientCount() == 1);
-				socket = connected;
+				return connected;
 			} catch (Exception | AssertionError failure) {
 				if (connected != null) connected.close();
-				app.close();
 				throw failure;
 			}
 		}
@@ -198,9 +215,8 @@ class SseDurationBoundaryTests {
 			return server.acquireBroadcaster(ResourcePath.fromPath("/duration-events")).orElseThrow();
 		}
 
-		@Override public void close() throws Exception {
-			try { socket.close(); } finally { app.close(); }
-			assertTrue(app.getShutdownResult().orElseThrow().isComplete());
+		void verifyShutdown(ShutdownResult result) {
+			assertTrue(result.isComplete());
 			assertTrue(logs.stream().noneMatch(event -> event.getLogEventType() == LogEventType.SSE_SERVER_INTERNAL_ERROR
 					|| event.getLogEventType() == LogEventType.SSE_SERVER_BROADCAST_GENERATION_FAILED), logs.toString());
 		}

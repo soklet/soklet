@@ -24,6 +24,7 @@ public final class McpLegacyRuntimeFixture {
     final AtomicInteger activeGets = new AtomicInteger();
     final McpSubscriptionEventPublisher publisher = McpSubscriptionEventPublisher.fromInMemoryDefaults();
   }
+  @SuppressWarnings("try") // The cleanup scope is intentionally not referenced by its body.
   public static void main(String[] arguments) throws Exception {
     if (arguments.length != 1) throw new IllegalArgumentException("One existing empty output directory required");
     output = Path.of(arguments[0]).toRealPath();
@@ -97,10 +98,12 @@ public final class McpLegacyRuntimeFixture {
     LifecyclePolicy lifecycle = LifecyclePolicy.builder().startupTimeout(Duration.ofSeconds(5))
         .startupCancelationTimeout(Duration.ofSeconds(2)).gracefulShutdownTimeout(Duration.ofSeconds(2))
         .forcedShutdownTimeout(Duration.ofSeconds(1)).build();
-    try (Soklet soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server)
-        .resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).metricsCollector(metrics).lifecyclePolicy(lifecycle).build())) {
-      Runtime.getRuntime().addShutdownHook(new Thread(soklet::close, "notification-host-fixture-shutdown"));
-      soklet.start();
+    Soklet soklet = Soklet.run(SokletConfig.withMcpServer(server)
+        .resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).metricsCollector(metrics).lifecyclePolicy(lifecycle).build());
+    try (AutoCloseable sokletShutdown = () -> {
+      soklet.requestShutdown();
+      soklet.awaitShutdownAsync().toCompletableFuture().join();
+    }) {
       System.out.println("{\"ready\":true,\"port\":" + server.getDiagnostics().getBoundAddress().orElseThrow().getPort() + "}");
       System.out.flush();
       long deadline = System.nanoTime() + Duration.ofSeconds(70).toNanos();

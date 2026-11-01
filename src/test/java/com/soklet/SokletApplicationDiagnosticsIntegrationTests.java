@@ -23,7 +23,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
-import java.io.InputStream;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
@@ -54,7 +53,7 @@ final class SokletApplicationDiagnosticsIntegrationTests {
 								Set.of(DiagnosticsResource.class)));
 		ObservedLauncher launcher = new ObservedLauncher();
 		LifecycleWorkers workers = new LifecycleWorkers(launcher);
-		RecordingTriggerRegistry triggers = new RecordingTriggerRegistry();
+		RecordingShutdownControl triggers = new RecordingShutdownControl();
 		RecordingReporter reporter = new RecordingReporter();
 		AtomicInteger cleanupCalls = new AtomicInteger();
 		SokletConfig config = SokletConfig.withHttpServer(
@@ -63,8 +62,7 @@ final class SokletApplicationDiagnosticsIntegrationTests {
 				.internalLifecyclePolicy(immediateShutdownPolicy())
 				.build();
 		RunnerCall call = startRunner(application(config),
-				environment(workers, triggers, reporter), cleanup(cleanupCalls),
-				ShutdownTrigger.ENTER_KEY);
+				environment(workers, triggers, reporter), cleanup(cleanupCalls));
 
 		try {
 			Assertions.assertTrue(resolver.awaitEntered(),
@@ -128,7 +126,7 @@ final class SokletApplicationDiagnosticsIntegrationTests {
 
 		ObservedLauncher launcher = new ObservedLauncher();
 		LifecycleWorkers workers = new LifecycleWorkers(launcher);
-		RecordingTriggerRegistry triggers = new RecordingTriggerRegistry();
+		RecordingShutdownControl triggers = new RecordingShutdownControl();
 		RecordingReporter reporter = new RecordingReporter();
 		AtomicInteger cleanupCalls = new AtomicInteger();
 		SokletConfig config = SokletConfig.withHttpServer(endpoint)
@@ -137,8 +135,7 @@ final class SokletApplicationDiagnosticsIntegrationTests {
 				.internalLifecyclePolicy(immediateShutdownPolicy())
 				.build();
 		RunnerCall call = startRunner(application(config),
-				environment(workers, triggers, reporter), cleanup(cleanupCalls),
-				ShutdownTrigger.ENTER_KEY);
+				environment(workers, triggers, reporter), cleanup(cleanupCalls));
 
 		try {
 			Assertions.assertTrue(leafAttachEntered.await(5, TimeUnit.SECONDS),
@@ -208,8 +205,8 @@ final class SokletApplicationDiagnosticsIntegrationTests {
 	}
 
 	@NonNull
-	private static SokletApplication application(@NonNull SokletConfig config) {
-		return SokletApplication.fromConfig(config);
+	private static SokletProcessLifecycle application(@NonNull SokletConfig config) {
+		return SokletProcessLifecycle.fromConfig(config);
 	}
 
 	@NonNull
@@ -228,26 +225,28 @@ final class SokletApplicationDiagnosticsIntegrationTests {
 	@NonNull
 	private static SokletApplicationEnvironment environment(
 			@NonNull LifecycleWorkers workers,
-			@NonNull RecordingTriggerRegistry triggers,
+			@NonNull RecordingShutdownControl triggers,
 			@NonNull RecordingReporter reporter) {
 		LifecycleRuntimeServices services = new LifecycleRuntimeServices(
 				NanoClock.system(), requireNonNull(workers));
 		return new SokletApplicationEnvironment(services,
-				new RecordingProcessAccess(), requireNonNull(triggers),
-				requireNonNull(reporter), DirectSokletApplicationRuntime::create,
+				new RecordingProcessAccess(), requireNonNull(reporter),
+				(config, exactServices, publisher) -> {
+					SokletApplicationRuntime runtime = DirectSokletApplicationRuntime.create(config, exactServices, publisher);
+					triggers.bind(runtime::shutdown);
+					return runtime;
+				},
 				(name, task) -> new Thread(task, name));
 	}
 
 	@NonNull
-	private static RunnerCall startRunner(@NonNull SokletApplication application,
+	private static RunnerCall startRunner(@NonNull SokletProcessLifecycle application,
 			@NonNull SokletApplicationEnvironment environment,
-			@NonNull ShutdownCleanup cleanup,
-			@NonNull ShutdownTrigger... additionalShutdownTriggers) {
+			@NonNull ShutdownCleanup cleanup) {
 		RunnerCall call = new RunnerCall();
 		Thread thread = new Thread(() -> {
 			try {
-				call.result.set(application.run(environment, cleanup,
-						additionalShutdownTriggers));
+				call.result.set(application.run(environment, cleanup));
 			} catch (Throwable failure) {
 				call.failure.set(failure);
 			} finally {
@@ -428,12 +427,6 @@ final class SokletApplicationDiagnosticsIntegrationTests {
 		private final AtomicReference<Thread> hook = new AtomicReference<>();
 
 		@Override
-		@NonNull
-		public Optional<InputStream> standardInput() {
-			return Optional.empty();
-		}
-
-		@Override
 		public void addShutdownHook(@NonNull Thread hook) {
 			if (!this.hook.compareAndSet(null, requireNonNull(hook)))
 				throw new AssertionError("Shutdown hook was registered twice");
@@ -445,29 +438,21 @@ final class SokletApplicationDiagnosticsIntegrationTests {
 			return this.hook.compareAndSet(hook, null);
 		}
 
-		@Override
-		public void reportConfigurationWarning(@NonNull String message) {
-			throw new AssertionError("Unexpected configuration warning: " + message);
-		}
 	}
 
-	private static final class RecordingTriggerRegistry
-			implements SokletApplicationTriggerRegistry {
+	private static final class RecordingShutdownControl {
 		@NonNull
 		private final CountDownLatch registered = new CountDownLatch(1);
 		@NonNull
 		private final AtomicReference<Runnable> shutdownIntent =
 				new AtomicReference<>();
 
-		@Override
-		@NonNull
-		public SokletApplicationTriggerRegistration register(
+		void bind(
 				@NonNull Runnable shutdownIntent) {
 			if (!this.shutdownIntent.compareAndSet(null,
 					requireNonNull(shutdownIntent)))
 				throw new AssertionError("Shutdown trigger was registered twice");
 			this.registered.countDown();
-			return () -> this.shutdownIntent.compareAndSet(shutdownIntent, null);
 		}
 
 		void trigger() throws InterruptedException {

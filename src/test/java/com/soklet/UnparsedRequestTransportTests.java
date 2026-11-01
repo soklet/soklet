@@ -19,6 +19,7 @@ package com.soklet;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import java.util.ArrayList;
 import java.io.ByteArrayOutputStream;
@@ -119,8 +120,7 @@ class UnparsedRequestTransportTests {
 				.lifecyclePolicy(TEST_LIFECYCLE_POLICY)
 				.lifecycleObserver(observer)
 				.build();
-		try (Soklet app = Soklet.fromConfig(config)) {
-			app.start();
+		Soklet.run(config, () -> {
 			for (String value : List.of("+1", "-0", "9223372036854775808")) {
 				String safePrefix = "POST /bad-request HTTP/1.1\r\nHost: a\r\nContent-Length: "
 						+ value + "\r\n";
@@ -134,7 +134,7 @@ class UnparsedRequestTransportTests {
 						remainingBytes(rejected.getCapturedBytes()));
 				Assertions.assertEquals(safePrefix.length(), rejected.getObservedByteCount());
 			}
-		}
+		});
 		Assertions.assertEquals(3, rejectedRequests.size());
 	}
 
@@ -167,8 +167,7 @@ class UnparsedRequestTransportTests {
 						})
 						.build())
 				.build();
-		try (Soklet app = Soklet.fromConfig(config)) {
-			app.start();
+		Soklet.run(config, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2_000)) {
 				socket.setSoTimeout(4_000);
 				OutputStream output = socket.getOutputStream();
@@ -192,7 +191,7 @@ class UnparsedRequestTransportTests {
 					// after the complete rejection response has been delivered.
 				}
 			}
-		}
+		});
 		Assertions.assertEquals(1, rejectedRequests.size());
 		Assertions.assertEquals(1, marshaledRejections.get());
 		UnparsedRequest rejected = rejectedRequests.get(0);
@@ -304,8 +303,7 @@ class UnparsedRequestTransportTests {
 						"GET /x HTTP/1.1\r\nHost: 127.0.0.1\r\nX-One: 1\r\n"
 								+ "X-Offending: 2\r\n"));
 
-		try (Soklet app = Soklet.fromConfig(config)) {
-			app.start();
+		Soklet.run(config, () -> {
 			for (Scenario scenario : scenarios) {
 				RawResponse response = exchange(port, scenario.wireBytes());
 				byte[] expectedBody = ("custom-" + scenario.reason())
@@ -323,7 +321,7 @@ class UnparsedRequestTransportTests {
 				Assertions.assertFalse(response.headers().containsKey("x-hop"));
 				Assertions.assertArrayEquals(expectedBody, response.body());
 			}
-		}
+		});
 
 		Assertions.assertEquals(scenarios.size(), requests.size());
 		for (int index = 0; index < scenarios.size(); index++) {
@@ -378,13 +376,12 @@ class UnparsedRequestTransportTests {
 		String target = "/" + "a".repeat(70_000);
 		String requestLinePrefix = "GET " + target + " ";
 
-		try (Soklet app = Soklet.fromConfig(config)) {
-			app.start();
+		Soklet.run(config, () -> {
 			RawResponse response = exchange(port,
 					requestLinePrefix + "HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n");
 			Assertions.assertEquals("HTTP/1.1 414 URI Too Long",
 					response.statusLine());
-		}
+		});
 
 		UnparsedRequest request = capturedRequest.get();
 		Assertions.assertNotNull(request);
@@ -429,13 +426,12 @@ class UnparsedRequestTransportTests {
 		String request = "POST /body HTTP/1.1\r\nHost: 127.0.0.1\r\n"
 				+ "Content-Length: 5\r\n\r\n";
 
-		try (Soklet app = Soklet.fromConfig(config)) {
-			app.start();
+		Soklet.run(config, () -> {
 			RawResponse response = exchange(port, request);
 			Assertions.assertEquals("HTTP/1.1 419 Unknown", response.statusLine());
 			Assertions.assertEquals("request-aware",
 					new String(response.body(), StandardCharsets.US_ASCII));
-		}
+		});
 		Assertions.assertEquals(1, contentTooLargeInvocations.get());
 		Assertions.assertEquals(0, unparsedInvocations.get());
 	}
@@ -489,13 +485,12 @@ class UnparsedRequestTransportTests {
 				.responseMarshaler(responseMarshaler)
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(config)) {
-			app.start();
+		Soklet.run(config, () -> {
 			for (int index = 0; index < 9; index++) {
 				RawResponse response = exchange(port, "GET /x HTTP/9.9\r\n");
 				assertBodylessFallback(response, 400, "Bad Request");
 			}
-		}
+		});
 
 		Assertions.assertEquals(9, invocation.get());
 		Assertions.assertFalse(responseChannel.isOpen());
@@ -554,8 +549,7 @@ class UnparsedRequestTransportTests {
 				.responseMarshaler(responseMarshaler)
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(config)) {
-			app.start();
+		Soklet.run(config, () -> {
 			try {
 				RawResponse failedResponse = exchange(port,
 						"GET /x HTTP/9.9\r\n");
@@ -571,11 +565,12 @@ class UnparsedRequestTransportTests {
 			} finally {
 				releaseFailureLog.countDown();
 			}
-		}
+		});
 		Assertions.assertEquals(2, invocations.get());
 	}
 
 	@Test
+	@Timeout(90)
 	void timeoutsAndUnsafeExecutorDispatchUseTheBuiltInFallback()
 			throws Exception {
 		int timeoutPort = findFreePort();
@@ -622,8 +617,7 @@ class UnparsedRequestTransportTests {
 				.responseMarshaler(timeoutMarshaler)
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(timeoutConfig)) {
-			app.start();
+		Soklet.run(timeoutConfig, () -> {
 			try {
 				RawResponse firstResponse = exchange(timeoutPort,
 						"GET /x HTTP/9.9\r\n");
@@ -635,7 +629,7 @@ class UnparsedRequestTransportTests {
 			} finally {
 				releaseTimeoutLog.countDown();
 			}
-		}
+		});
 		Assertions.assertNotNull(handlerThread.get());
 		Assertions.assertNotEquals("connection-event-loop", handlerThread.get());
 		Assertions.assertEquals(1, timeoutLogEntered.getCount());
@@ -677,13 +671,12 @@ class UnparsedRequestTransportTests {
 						})
 						.build())
 				.build();
-		try (Soklet app = Soklet.fromConfig(observerTimeoutConfig)) {
-			app.start();
+		Soklet.run(observerTimeoutConfig, () -> {
 			RawResponse response = exchange(observerTimeoutPort,
 					"GET /x HTTP/9.9\r\n");
 			assertBodylessFallback(response, 400, "Bad Request");
 			Assertions.assertTrue(observerEntered.await(1, TimeUnit.SECONDS));
-		}
+		});
 		Assertions.assertEquals(0, observerTimeoutMarshalerInvocations.get());
 		Assertions.assertEquals(0, observerTimeoutLogEvents.stream()
 				.filter(event -> event.getThrowable()
@@ -717,11 +710,10 @@ class UnparsedRequestTransportTests {
 						})
 						.build())
 				.build();
-		try (Soklet app = Soklet.fromConfig(rejectionConfig)) {
-			app.start();
+		Soklet.run(rejectionConfig, () -> {
 			RawResponse response = exchange(rejectionPort, "GET /x HTTP/9.9\r\n");
 			assertBodylessFallback(response, 400, "Bad Request");
-		}
+		});
 		Assertions.assertEquals(0, observerInvocations.get());
 		Assertions.assertEquals(0, marshalerInvocations.get());
 
@@ -752,12 +744,11 @@ class UnparsedRequestTransportTests {
 						})
 						.build())
 				.build();
-		try (Soklet app = Soklet.fromConfig(throwingConfig)) {
-			app.start();
+		Soklet.run(throwingConfig, () -> {
 			RawResponse response = exchange(throwingPort,
 					"GET /x HTTP/9.9\r\n");
 			assertBodylessFallback(response, 400, "Bad Request");
-		}
+		});
 		Assertions.assertEquals(0, throwingObserverInvocations.get());
 		Assertions.assertEquals(0, throwingMarshalerInvocations.get());
 
@@ -787,11 +778,10 @@ class UnparsedRequestTransportTests {
 						})
 						.build())
 				.build();
-		try (Soklet app = Soklet.fromConfig(directConfig)) {
-			app.start();
+		Soklet.run(directConfig, () -> {
 			RawResponse response = exchange(directPort, "GET /x HTTP/9.9\r\n");
 			assertBodylessFallback(response, 400, "Bad Request");
-		}
+		});
 		Assertions.assertEquals(0, directObserverInvocations.get());
 		Assertions.assertEquals(0, directMarshalerInvocations.get());
 	}
@@ -826,8 +816,7 @@ class UnparsedRequestTransportTests {
 				.responseMarshaler(responseMarshaler)
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(config)) {
-			app.start();
+		Soklet.run(config, () -> {
 			try {
 				RawResponse firstResponse = exchange(port,
 						"GET /x HTTP/9.9\r\n");
@@ -840,7 +829,7 @@ class UnparsedRequestTransportTests {
 			} finally {
 				executor.releaseBlockingCancel();
 			}
-		}
+		});
 
 		Assertions.assertEquals(1, executor.cancelEntered().getCount());
 	}
@@ -881,11 +870,10 @@ class UnparsedRequestTransportTests {
 						.build())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(config)) {
-			app.start();
+		Soklet.run(config, () -> {
 			RawResponse response = exchange(port, "GET /x HTTP/9.9\r\n");
 			assertBodylessFallback(response, 400, "Bad Request");
-		}
+		});
 
 		Assertions.assertEquals(0, observerInvocations.get());
 		Assertions.assertEquals(0, marshalerInvocations.get());

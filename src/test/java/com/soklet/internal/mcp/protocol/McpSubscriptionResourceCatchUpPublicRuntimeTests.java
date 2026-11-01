@@ -87,37 +87,37 @@ public class McpSubscriptionResourceCatchUpPublicRuntimeTests {
 			return McpSubscriptionAuthorization.Allowed.withValidUntil(Instant.now().plusSeconds(300))
 					.applicationContext(new Object()).build();
 		}, Duration.ofMinutes(5));
-		Soklet owner = managed(server, new MetricsCollector() {});
-		try {
-			owner.start();
-			try (McpChunkedHttpClient client = listen(server)) {
-				assertAcknowledged(client);
-				server.getSubscriptionReconciler().reconcileSubscriptions();
-				await(reauthorizationEntered);
-				for (int index = 0; index < 20; index++) {
-					publisher.publishResourcesListChanged();
-					publisher.publishResourceUpdated(RESOURCE);
-					publisher.publishResourceUpdated(URI.create("test://catch-up/unselected"));
+		Soklet.run(managedConfig(server, new MetricsCollector() {}), () -> {
+			try {
+				try (McpChunkedHttpClient client = listen(server)) {
+					assertAcknowledged(client);
+					server.getSubscriptionReconciler().reconcileSubscriptions();
+					await(reauthorizationEntered);
+					for (int index = 0; index < 20; index++) {
+						publisher.publishResourcesListChanged();
+						publisher.publishResourceUpdated(RESOURCE);
+						publisher.publishResourceUpdated(URI.create("test://catch-up/unselected"));
+					}
+					releaseReauthorization.countDown();
+					if (allow) {
+						Assertions.assertEquals(listChanged(), client.readChunkText());
+						Assertions.assertEquals(resourceUpdated(), client.readChunkText());
+						publisher.publishResourcesListChanged();
+						Assertions.assertEquals(listChanged(), client.readChunkText(),
+								"Repeated fenced invalidations must coalesce; an unselected URI must never be sent.");
+					} else {
+						String terminal = client.readChunkText();
+						Assertions.assertTrue(terminal.contains("\"resultType\":\"complete\""), terminal);
+						Assertions.assertFalse(terminal.contains("notifications/resources"), terminal);
+						Assertions.assertNull(client.readChunk(),
+								"Denied reconciliation must discard fenced hints and end cleanly.");
+					}
 				}
+			} finally {
 				releaseReauthorization.countDown();
-				if (allow) {
-					Assertions.assertEquals(listChanged(), client.readChunkText());
-					Assertions.assertEquals(resourceUpdated(), client.readChunkText());
-					publisher.publishResourcesListChanged();
-					Assertions.assertEquals(listChanged(), client.readChunkText(),
-							"Repeated fenced invalidations must coalesce; an unselected URI must never be sent.");
-				} else {
-					String terminal = client.readChunkText();
-					Assertions.assertTrue(terminal.contains("\"resultType\":\"complete\""), terminal);
-					Assertions.assertFalse(terminal.contains("notifications/resources"), terminal);
-					Assertions.assertNull(client.readChunk(),
-							"Denied reconciliation must discard fenced hints and end cleanly.");
-				}
+
 			}
-		} finally {
-			releaseReauthorization.countDown();
-			owner.close();
-		}
+		});
 	}
 
 	@Test
@@ -146,19 +146,19 @@ public class McpSubscriptionResourceCatchUpPublicRuntimeTests {
 						&& authorizations.get() >= 2) renewed.countDown();
 			}
 		};
-		Soklet owner = managed(server, metrics);
-		try {
-			owner.start();
-			try (McpChunkedHttpClient client = listen(server)) {
-				assertAcknowledged(client);
-				publisher.publishResourceUpdated(RESOURCE);
-				await(offerEntered);
-				await(renewed);
-				releaseOffer.countDown();
-				Assertions.assertEquals(resourceUpdated(), client.readChunkText());
-				Assertions.assertEquals(1, offers.get(), "A renewed grant must preserve the still-authorized resource invalidation.");
-			}
-		} finally { releaseOffer.countDown(); owner.close(); }
+		Soklet.run(managedConfig(server, metrics), () -> {
+			try {
+				try (McpChunkedHttpClient client = listen(server)) {
+					assertAcknowledged(client);
+					publisher.publishResourceUpdated(RESOURCE);
+					await(offerEntered);
+					await(renewed);
+					releaseOffer.countDown();
+					Assertions.assertEquals(resourceUpdated(), client.readChunkText());
+					Assertions.assertEquals(1, offers.get(), "A renewed grant must preserve the still-authorized resource invalidation.");
+				}
+		} finally { releaseOffer.countDown();  }
+		});
 	}
 
 	@Test
@@ -195,20 +195,20 @@ public class McpSubscriptionResourceCatchUpPublicRuntimeTests {
 						&& authorizations.get() >= 2) renewed.countDown();
 			}
 		};
-		Soklet owner = managed(server, metrics);
-		try {
-			owner.start();
-			try (McpChunkedHttpClient client = listen(server)) {
-				assertAcknowledged(client);
-				publisher.publishResourceUpdated(RESOURCE);
-				await(offerEntered);
-				await(renewed);
-				releaseOffer.countDown();
-				Assertions.assertEquals(resourceUpdated(), client.readChunkText());
-				Assertions.assertEquals(2, offers.get(),
-						"A frame prepared under the old application context must be suppressed and reprojected.");
-			}
-		} finally { releaseOffer.countDown(); owner.close(); }
+		Soklet.run(managedConfig(server, metrics), () -> {
+			try {
+				try (McpChunkedHttpClient client = listen(server)) {
+					assertAcknowledged(client);
+					publisher.publishResourceUpdated(RESOURCE);
+					await(offerEntered);
+					await(renewed);
+					releaseOffer.countDown();
+					Assertions.assertEquals(resourceUpdated(), client.readChunkText());
+					Assertions.assertEquals(2, offers.get(),
+							"A frame prepared under the old application context must be suppressed and reprojected.");
+				}
+		} finally { releaseOffer.countDown();  }
+		});
 	}
 
 	private static McpServer server(McpSubscriptionEventPublisher publisher,
@@ -234,11 +234,11 @@ public class McpSubscriptionResourceCatchUpPublicRuntimeTests {
 				.corsAuthorizer(CorsAuthorizer.acceptAllInstance()).allowedHosts(Set.of("127.0.0.1")).build();
 	}
 
-	private static Soklet managed(McpServer server, MetricsCollector metrics) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+	private static SokletConfig managedConfig(McpServer server, MetricsCollector metrics) {
+		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).metricsCollector(metrics)
 				.lifecyclePolicy(LifecyclePolicy.builder().gracefulShutdownTimeout(Duration.ofSeconds(2))
-						.forcedShutdownTimeout(Duration.ofSeconds(1)).build()).build());
+						.forcedShutdownTimeout(Duration.ofSeconds(1)).build()).build();
 	}
 
 	private static McpChunkedHttpClient listen(McpServer server) throws Exception {

@@ -208,11 +208,9 @@ final class SokletFrameworkSetupValidationTests {
 				.resourceMethodResolver(fixedResolver(changing))
 				.build();
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			Assertions.assertDoesNotThrow(soklet::start,
-					"Every validation must inspect the one frozen resolver snapshot");
-			Assertions.assertEquals(SokletStatus.RUNNING, soklet.getStatus());
-		}
+		Assertions.assertDoesNotThrow(() -> {
+			Soklet.run(config, () -> Assertions.assertEquals(1, http.startCalls()));
+		}, "Every validation must inspect the one frozen resolver snapshot");
 
 		Assertions.assertEquals(1, http.initializeCalls());
 		Assertions.assertEquals(1, http.startCalls());
@@ -284,8 +282,7 @@ final class SokletFrameworkSetupValidationTests {
 				})
 				.build();
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
+		Soklet.run(config, () -> {
 			HttpRequestResult result = http.invoke("/dynamic-invalid")
 					.orElseThrow();
 
@@ -297,7 +294,7 @@ final class SokletFrameworkSetupValidationTests {
 					"HttpServer resource-method injection was removed in Soklet 4.0"));
 			Assertions.assertEquals(0, instanceProvider.provisionCalls());
 			Assertions.assertEquals(0, parameterProvider.provisionCalls());
-		}
+		});
 	}
 
 	@Test
@@ -471,8 +468,7 @@ final class SokletFrameworkSetupValidationTests {
 				})
 				.build();
 
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
+		Soklet.run(config, () -> {
 			HttpRequestResult result = http.invoke(request).orElseThrow();
 
 			Assertions.assertEquals(500,
@@ -483,7 +479,7 @@ final class SokletFrameworkSetupValidationTests {
 					"HttpServer resource-method injection was removed in Soklet 4.0"));
 			Assertions.assertEquals(0, instanceProvider.provisionCalls());
 			Assertions.assertEquals(0, parameterProvider.provisionCalls());
-		}
+		});
 	}
 
 	@NonNull

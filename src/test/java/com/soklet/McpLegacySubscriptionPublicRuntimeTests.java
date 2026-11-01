@@ -146,36 +146,39 @@ class McpLegacySubscriptionPublicRuntimeTests {
 	@Test
 	void liveNotificationsUseOneStreamAndDoNotReplayOnNewGetOrReconnect() throws Exception {
 		for (McpProtocolVersion version : LEGACY) {
-			try (SocketFixture fixture = new SocketFixture(new Harness())) {
-				String id = fixture.initialize(version).headers().get("mcp-session-id").get(0);
-				assertEmptyWireResult(fixture.rpc(version, id, "resources/subscribe", "{\"uri\":\"test:///exact\"}"));
-				try (RawClient first = fixture.openGet(version, id)) {
-					assertEquals(200, first.readHead().status());
-					fixture.harness.publisher.publishResourceUpdated(EXACT);
-					assertTrue(nextWireNotification(first).contains("notifications/resources/updated"));
-					fixture.harness.publisher.publishToolsListChanged();
-					assertTrue(nextWireNotification(first).contains("notifications/tools/list_changed"));
-					try (RawClient second = fixture.openGet(version, id)) {
-						assertEquals(200, second.readHead().status());
-						assertNoWireMessages(second, Duration.ofMillis(150));
+			{
+				SocketFixture fixture = new SocketFixture(new Harness());
+				Soklet.run(fixture.config, () -> {
+					String id = fixture.initialize(version).headers().get("mcp-session-id").get(0);
+					assertEmptyWireResult(fixture.rpc(version, id, "resources/subscribe", "{\"uri\":\"test:///exact\"}"));
+					try (RawClient first = fixture.openGet(version, id)) {
+						assertEquals(200, first.readHead().status());
 						fixture.harness.publisher.publishResourceUpdated(EXACT);
-						assertTrue(nextWireNotification(second).contains("notifications/resources/updated"));
-						fixture.rpc(version, id, "tools/list", "{}");
+						assertTrue(nextWireNotification(first).contains("notifications/resources/updated"));
 						fixture.harness.publisher.publishToolsListChanged();
-						assertTrue(nextWireNotification(second).contains("notifications/tools/list_changed"));
-						assertNoWireMessages(first, Duration.ofMillis(150));
+						assertTrue(nextWireNotification(first).contains("notifications/tools/list_changed"));
+						try (RawClient second = fixture.openGet(version, id)) {
+							assertEquals(200, second.readHead().status());
+							assertNoWireMessages(second, Duration.ofMillis(150));
+							fixture.harness.publisher.publishResourceUpdated(EXACT);
+							assertTrue(nextWireNotification(second).contains("notifications/resources/updated"));
+							fixture.rpc(version, id, "tools/list", "{}");
+							fixture.harness.publisher.publishToolsListChanged();
+							assertTrue(nextWireNotification(second).contains("notifications/tools/list_changed"));
+							assertNoWireMessages(first, Duration.ofMillis(150));
+						}
 					}
-				}
-				long deadline = System.nanoTime() + RawClient.remainingRequestWait().toNanos();
-				while (fixture.server.getDiagnostics().getActiveSubscriptions() != 0 && System.nanoTime() < deadline) Thread.sleep(5);
-				assertEquals(0, fixture.server.getDiagnostics().getActiveSubscriptions());
-				try (RawClient reconnect = fixture.openGet(version, id)) {
-					assertEquals(200, reconnect.readHead().status());
-					assertNoWireMessages(reconnect, Duration.ofMillis(150));
-					fixture.harness.publisher.publishResourceUpdated(EXACT);
-					assertTrue(nextWireNotification(reconnect).contains("notifications/resources/updated"));
-					assertNoWireMessages(reconnect, Duration.ofMillis(150));
-				}
+					long deadline = System.nanoTime() + RawClient.remainingRequestWait().toNanos();
+					while (fixture.server.getDiagnostics().getActiveSubscriptions() != 0 && System.nanoTime() < deadline) Thread.sleep(5);
+					assertEquals(0, fixture.server.getDiagnostics().getActiveSubscriptions());
+					try (RawClient reconnect = fixture.openGet(version, id)) {
+						assertEquals(200, reconnect.readHead().status());
+						assertNoWireMessages(reconnect, Duration.ofMillis(150));
+						fixture.harness.publisher.publishResourceUpdated(EXACT);
+						assertTrue(nextWireNotification(reconnect).contains("notifications/resources/updated"));
+						assertNoWireMessages(reconnect, Duration.ofMillis(150));
+					}
+				});
 			}
 		}
 	}
@@ -246,7 +249,8 @@ class McpLegacySubscriptionPublicRuntimeTests {
 
 	@Test
 	void liveAdmissionCanChallengeBeforeResourceAuthorizationAndInitializationAdvertisesExactFamilies() throws Exception {
-		try (SocketFixture fixture = new SocketFixture(new Harness())) {
+		SocketFixture fixture = new SocketFixture(new Harness());
+		Soklet.run(fixture.config, () -> {
 			for (McpProtocolVersion version : LEGACY) {
 				RawResponse initialization = fixture.initialize(version);
 				assertEquals(200, initialization.status());
@@ -261,12 +265,13 @@ class McpLegacySubscriptionPublicRuntimeTests {
 				assertTrue(fixture.harness.authorizations.isEmpty());
 				fixture.harness.challenge.set(false);
 			}
-		}
+		});
 	}
 
 	@Test
 	void liveDuplicateTemplateUnsubscribeAndDisconnectedGapPreserveOnlyCurrentUriGrant() throws Exception {
-		try (SocketFixture fixture = new SocketFixture(new Harness())) {
+		SocketFixture fixture = new SocketFixture(new Harness());
+		Soklet.run(fixture.config, () -> {
 			for (McpProtocolVersion version : LEGACY) {
 				String id = fixture.initialize(version).header("Mcp-Session-Id");
 				URI templateUri = URI.create("test:///template/one");
@@ -297,7 +302,7 @@ class McpLegacySubscriptionPublicRuntimeTests {
 					assertTrue(nextWireNotification(reconnected).contains("notifications/tools/list_changed"), "Unrelated catalog delivery remains active.");
 				}
 			}
-		}
+		});
 	}
 
 	@Test
@@ -312,60 +317,63 @@ class McpLegacySubscriptionPublicRuntimeTests {
 
 	private void assertDuplicateFlushPreservesWriter(boolean resourceUpdate) throws Exception {
 		for (McpProtocolVersion version : LEGACY) {
-			try (SocketFixture fixture = new SocketFixture(new Harness())) {
-				String id = fixture.initialize(version).header("Mcp-Session-Id");
-				if (resourceUpdate) assertEmptyWireResult(fixture.rpc(version, id, "resources/subscribe", "{\"uri\":\"test:///exact\"}"));
-				try (RawClient get = fixture.openGet(version, id)) {
-					assertEquals(200, get.readHead().status());
-					Object runtime = reflectedField(reflectedField(fixture.server, "runtimeBridge"), "runtime");
-					Object store = reflectedField(runtime, "legacySessionStore");
-					Object control = ((Map<?, ?>) reflectedField(runtime, "legacyGetControls")).values().iterator().next();
-					Object stream = reflectedField(control, "stream");
-					Object channel = reflectedField(reflectedField(stream, "channel"), "delegate");
-					var pending = store.getClass().getDeclaredMethod("pendingDeliveries", String.class, String.class);
-					pending.setAccessible(true);
-					var offer = java.util.Arrays.stream(runtime.getClass().getDeclaredMethods())
-							.filter(method -> method.getName().equals("offerLegacyDelivery")).findFirst().orElseThrow();
-					offer.setAccessible(true);
-					var hook = runtime.getClass().getDeclaredMethod("setLegacyNotificationReservationTestHook", Runnable.class);
-					hook.setAccessible(true);
-					AtomicInteger selections = new AtomicInteger();
-					// Keep the winning frame wholly unwritten, and exclude timer flushes while
-					// recursively interleaving a second flush after the first has selected its attempt.
-					synchronized (reflectedField(channel, "lock")) {
-						synchronized (reflectedField(store, "lock")) {
-							if (resourceUpdate) {
-								var mark = store.getClass().getDeclaredMethod("markResourceDirty", String.class, String.class, String.class);
-								mark.setAccessible(true); mark.invoke(store, "/mcp", version.getWireValue(), EXACT.toString());
-							} else {
-								Class<?> type = Class.forName("com.soklet.internal.mcp.protocol.McpResourceNotificationType");
-								Object family = java.util.Arrays.stream(type.getEnumConstants())
-										.filter(value -> value.toString().equals("TOOLS_LIST_CHANGED")).findFirst().orElseThrow();
-								var mark = store.getClass().getDeclaredMethod("markCatalogDirty", String.class, String.class, type);
-								mark.setAccessible(true); mark.invoke(store, "/mcp", version.getWireValue(), family);
-							}
-							Object delivery = ((List<?>) pending.invoke(store, "/mcp", version.getWireValue())).get(0);
-							hook.invoke(runtime, (Runnable) () -> {
-								if (selections.incrementAndGet() == 1) {
-									try { offer.invoke(runtime, store, delivery, version.getWireValue()); }
-									catch (ReflectiveOperationException failure) { throw new AssertionError(failure); }
+			{
+				SocketFixture fixture = new SocketFixture(new Harness());
+				Soklet.run(fixture.config, () -> {
+					String id = fixture.initialize(version).header("Mcp-Session-Id");
+					if (resourceUpdate) assertEmptyWireResult(fixture.rpc(version, id, "resources/subscribe", "{\"uri\":\"test:///exact\"}"));
+					try (RawClient get = fixture.openGet(version, id)) {
+						assertEquals(200, get.readHead().status());
+						Object runtime = reflectedField(reflectedField(fixture.server, "runtimeBridge"), "runtime");
+						Object store = reflectedField(runtime, "legacySessionStore");
+						Object control = ((Map<?, ?>) reflectedField(runtime, "legacyGetControls")).values().iterator().next();
+						Object stream = reflectedField(control, "stream");
+						Object channel = reflectedField(reflectedField(stream, "channel"), "delegate");
+						var pending = store.getClass().getDeclaredMethod("pendingDeliveries", String.class, String.class);
+						pending.setAccessible(true);
+						var offer = java.util.Arrays.stream(runtime.getClass().getDeclaredMethods())
+								.filter(method -> method.getName().equals("offerLegacyDelivery")).findFirst().orElseThrow();
+						offer.setAccessible(true);
+						var hook = runtime.getClass().getDeclaredMethod("setLegacyNotificationReservationTestHook", Runnable.class);
+						hook.setAccessible(true);
+						AtomicInteger selections = new AtomicInteger();
+						// Keep the winning frame wholly unwritten, and exclude timer flushes while
+						// recursively interleaving a second flush after the first has selected its attempt.
+						synchronized (reflectedField(channel, "lock")) {
+							synchronized (reflectedField(store, "lock")) {
+								if (resourceUpdate) {
+									var mark = store.getClass().getDeclaredMethod("markResourceDirty", String.class, String.class, String.class);
+									mark.setAccessible(true); mark.invoke(store, "/mcp", version.getWireValue(), EXACT.toString());
+								} else {
+									Class<?> type = Class.forName("com.soklet.internal.mcp.protocol.McpResourceNotificationType");
+									Object family = java.util.Arrays.stream(type.getEnumConstants())
+											.filter(value -> value.toString().equals("TOOLS_LIST_CHANGED")).findFirst().orElseThrow();
+									var mark = store.getClass().getDeclaredMethod("markCatalogDirty", String.class, String.class, type);
+									mark.setAccessible(true); mark.invoke(store, "/mcp", version.getWireValue(), family);
 								}
-							});
-							try {
-								offer.invoke(runtime, store, delivery, version.getWireValue());
-								assertEquals(2, selections.get(), "Both flushes must select before the winning reservation.");
-								assertEquals(1, fixture.server.getDiagnostics().getActiveSubscriptions(),
-										"A duplicate claim is not buffer pressure and must not close the winning GET.");
-							} finally { hook.invoke(runtime, (Runnable) null); }
+								Object delivery = ((List<?>) pending.invoke(store, "/mcp", version.getWireValue())).get(0);
+								hook.invoke(runtime, (Runnable) () -> {
+									if (selections.incrementAndGet() == 1) {
+										try { offer.invoke(runtime, store, delivery, version.getWireValue()); }
+										catch (ReflectiveOperationException failure) { throw new AssertionError(failure); }
+									}
+								});
+								try {
+									offer.invoke(runtime, store, delivery, version.getWireValue());
+									assertEquals(2, selections.get(), "Both flushes must select before the winning reservation.");
+									assertEquals(1, fixture.server.getDiagnostics().getActiveSubscriptions(),
+											"A duplicate claim is not buffer pressure and must not close the winning GET.");
+								} finally { hook.invoke(runtime, (Runnable) null); }
+							}
 						}
+						assertTrue(nextWireNotification(get).contains(resourceUpdate
+								? "notifications/resources/updated" : "notifications/tools/list_changed"));
+						assertNoWireMessages(get, Duration.ofMillis(100));
+						fixture.harness.publisher.publishPromptsListChanged();
+						assertTrue(nextWireNotification(get).contains("notifications/prompts/list_changed"),
+								"The same writer must remain usable after the losing flush.");
 					}
-					assertTrue(nextWireNotification(get).contains(resourceUpdate
-							? "notifications/resources/updated" : "notifications/tools/list_changed"));
-					assertNoWireMessages(get, Duration.ofMillis(100));
-					fixture.harness.publisher.publishPromptsListChanged();
-					assertTrue(nextWireNotification(get).contains("notifications/prompts/list_changed"),
-							"The same writer must remain usable after the losing flush.");
-				}
+				});
 			}
 		}
 	}
@@ -474,13 +482,14 @@ class McpLegacySubscriptionPublicRuntimeTests {
 						.handler((requestContext, arguments, invocationFeatures) -> McpCompleteResult.fromToolText("ok")).title("Modern title").build()));
 		isolated.additional = builder -> builder.catalogAccessPolicy(null).localizer(McpLocalizer.withFallbackLocale(Locale.ENGLISH,
 				request -> McpLocalizationContext.withLocale(Locale.ENGLISH, text -> McpLocalizationResult.useDefaultText()).build()).build());
-		try (SocketFixture fixture = new SocketFixture(isolated)) {
+		SocketFixture fixture = new SocketFixture(isolated);
+		Soklet.run(fixture.config, () -> {
 			for (McpProtocolVersion version : LEGACY) {
 				RawResponse initialization = fixture.initialize(version); assertEquals(200, initialization.status());
 				assertTrue(initialization.body().contains("\"tools\":{}"), initialization.body());
 				assertFalse(initialization.body().contains("\"tools\":{\"listChanged\""), "Modern-only localization must not advertise a legacy tool family.");
 			}
-		}
+		});
 	}
 
 	@Test
@@ -664,7 +673,7 @@ class McpLegacySubscriptionPublicRuntimeTests {
 							} else if (method.getName().equals("retire")) { retirement.set(arguments[0]); retirementObserved.countDown(); }
 							try { method.setAccessible(true); return method.invoke(original, arguments); }
 							catch (InvocationTargetException failure) { throw failure.getCause(); }
-						});
+				});
 				// Defer only the target callback; the store fence, timer and policy execution remain real.
 				synchronized (storeLock) { targetField.set(registration, deferred); }
 				Thread reconcile = new Thread(() -> simulator.getMcpServer().orElseThrow().getSubscriptionReconciler().reconcileSubscriptions(), "legacy-delayed-fence");
@@ -725,7 +734,7 @@ class McpLegacySubscriptionPublicRuntimeTests {
 							return McpSubscriptionAuthorization.deniedInstance();
 						}
 						return McpSubscriptionAuthorization.Allowed.withValidUntil(Instant.now().plusSeconds(30)).applicationContext(token).build();
-					});
+			});
 			SokletSimulator.run(harness.simulatorConfig(), simulator -> {
 				String id;
 				try (McpSimulation call = simulator.startMcpRequest(withBearer(request(HttpMethod.POST, version, null, initializeBody(version), null), tokenA))) {
@@ -799,7 +808,7 @@ class McpLegacySubscriptionPublicRuntimeTests {
 					.subscriptionAuthorizer((context, features) -> {
 						if (blockUriRenewals.get()) releaseUriRenewals.await(WAIT.toMillis(), TimeUnit.MILLISECONDS);
 						return McpSubscriptionAuthorization.Allowed.withValidUntil(Instant.now().plusSeconds(30)).build();
-					});
+			});
 			SokletSimulator.run(harness.simulatorConfig(), simulator -> {
 				String id = initialize(simulator, version);
 				for (int index = 0; index < 4; index++)
@@ -1162,7 +1171,7 @@ class McpLegacySubscriptionPublicRuntimeTests {
 						authorizations.add(context); assertTrue(features.getProgressReporter().isEmpty()); assertNotNull(features.getCancelationToken());
 						return denied.get() ? McpSubscriptionAuthorization.deniedInstance()
 								: McpSubscriptionAuthorization.Allowed.withValidUntil(Instant.now().plusSeconds(30)).applicationContext("grant-context").build();
-					});
+			});
 			additional.accept(builder);
 		}
 		SimulatorConfig simulatorConfig() {
@@ -1171,27 +1180,26 @@ class McpLegacySubscriptionPublicRuntimeTests {
 		}
 	}
 
-	static final class SocketFixture implements AutoCloseable {
-		final Harness harness; final McpServer server; final Soklet soklet; final int port;
+	static final class SocketFixture {
+		final Harness harness; final McpServer server; final SokletConfig config;
 		SocketFixture(Harness harness) throws Exception {
 			this.harness = harness; McpServer.Builder builder = McpServer.withPort(0); harness.configure(builder); this.server = builder.build();
-			this.soklet = Soklet.fromConfig(SokletConfig.withMcpServer(server).resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).lifecyclePolicy(LIFECYCLE).build());
-			try { soklet.start(); this.port = server.getDiagnostics().getBoundAddress().orElseThrow().getPort(); }
-			catch (Throwable failure) { soklet.close(); throw failure; }
+			this.config = SokletConfig.withMcpServer(server).resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of())).lifecyclePolicy(LIFECYCLE).build();
 		}
+		int port() { return server.getDiagnostics().getBoundAddress().orElseThrow().getPort(); }
+
 		RawResponse initialize(McpProtocolVersion version) throws Exception { return exchange(initializeBody(version), List.of()); }
 		RawResponse rpc(McpProtocolVersion version, String id, String method, String params) throws Exception {
 			return exchange("{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"" + method + "\",\"params\":" + params + "}",
 					List.of(new HeaderValue("MCP-Protocol-Version", version.getWireValue()), new HeaderValue("Mcp-Session-Id", id)));
 		}
 		RawResponse exchange(String body, List<HeaderValue> headers) throws Exception {
-			try (RawClient client = new RawClient(port, "POST", "/mcp", body, headers)) {
+			try (RawClient client = new RawClient(port(), "POST", "/mcp", body, headers)) {
 				Head head = client.readHead(); return new RawResponse(head.status(), head.headers(), client.readBody(head));
 			}
 		}
 		RawClient openGet(McpProtocolVersion version, String id) throws Exception {
-			return new RawClient(port, "GET", "/mcp", "", List.of(new HeaderValue("MCP-Protocol-Version", version.getWireValue()), new HeaderValue("Mcp-Session-Id", id)));
+			return new RawClient(port(), "GET", "/mcp", "", List.of(new HeaderValue("MCP-Protocol-Version", version.getWireValue()), new HeaderValue("Mcp-Session-Id", id)));
 		}
-		@Override public void close() { soklet.close(); }
 	}
 }

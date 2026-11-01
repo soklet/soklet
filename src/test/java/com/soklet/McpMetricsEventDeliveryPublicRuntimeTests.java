@@ -117,7 +117,8 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 				}
 			}
 		};
-		Soklet owner = soklet(server, collector, LifecycleObserver.defaultInstance());
+		// The test shuts down this owner before releasing its blocked metrics collector.
+		Soklet owner = Soklet.fromConfig(config(server, collector, LifecycleObserver.defaultInstance()));
 		ExecutorService executor = Executors.newSingleThreadExecutor();
 		List<InputStream> bodies = new ArrayList<>();
 		try {
@@ -229,8 +230,9 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 			throws InterruptedException {
 		RecordingMetricsCollector collector = new RecordingMetricsCollector();
 		McpServer neverStartedServer = server(0, "/mcp/never-started");
-		Soklet neverStartedOwner = soklet(neverStartedServer, collector,
-				LifecycleObserver.defaultInstance());
+		// Direct owners exercise never-started close and repeated shutdown as metric-delivery no-ops.
+		Soklet neverStartedOwner = Soklet.fromConfig(config(neverStartedServer, collector,
+				LifecycleObserver.defaultInstance()));
 		neverStartedOwner.close();
 		neverStartedOwner.close();
 		collector.awaitServerLifecycleEventCount(1);
@@ -240,8 +242,8 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 				"A configured MCP result emits one terminal metric even without a generation.");
 
 		McpServer firstServer = server(0, "/mcp/first-generation");
-		Soklet firstOwner = soklet(firstServer, collector,
-				LifecycleObserver.defaultInstance());
+		Soklet firstOwner = Soklet.fromConfig(config(firstServer, collector,
+				LifecycleObserver.defaultInstance()));
 		try {
 			firstOwner.start();
 			collector.awaitServerLifecycleEventCount(2);
@@ -263,8 +265,8 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 				collector.serverLifecycleEvents());
 
 		McpServer secondServer = server(0, "/mcp/second-generation");
-		Soklet secondOwner = soklet(secondServer, collector,
-				LifecycleObserver.defaultInstance());
+		Soklet secondOwner = Soklet.fromConfig(config(secondServer, collector,
+				LifecycleObserver.defaultInstance()));
 		try {
 			secondOwner.start();
 			collector.awaitServerLifecycleEventCount(4);
@@ -295,8 +297,9 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 			throws Exception {
 		RecordingMetricsCollector collector = new RecordingMetricsCollector();
 		McpServer firstServer = server(0, "/mcp/consume-stop-generation");
-		Soklet firstOwner = soklet(firstServer, collector,
-				LifecycleObserver.defaultInstance());
+		// Direct control verifies adapter stop and owner shutdown order across listener generations.
+		Soklet firstOwner = Soklet.fromConfig(config(firstServer, collector,
+				LifecycleObserver.defaultInstance()));
 		McpTransportLifecycleAdapter firstAdapter =
 				lifecycleAdapter(firstServer);
 
@@ -323,8 +326,8 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 		}
 
 		McpServer secondServer = server(0, "/mcp/after-consumed-generation");
-		Soklet secondOwner = soklet(secondServer, collector,
-				LifecycleObserver.defaultInstance());
+		Soklet secondOwner = Soklet.fromConfig(config(secondServer, collector,
+				LifecycleObserver.defaultInstance()));
 		try {
 			secondOwner.start();
 			collector.awaitEventCount(3);
@@ -354,8 +357,9 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 		RecordingMetricsCollector occupyingCollector =
 				new RecordingMetricsCollector();
 		McpServer occupyingServer = server(0, "/mcp/occupying-listener");
-		Soklet occupyingOwner = soklet(occupyingServer, occupyingCollector,
-				LifecycleObserver.defaultInstance());
+		// Direct owners expose failed-start state and repeated cleanup for metric-generation assertions.
+		Soklet occupyingOwner = Soklet.fromConfig(config(occupyingServer, occupyingCollector,
+				LifecycleObserver.defaultInstance()));
 
 		try {
 			occupyingOwner.start();
@@ -364,8 +368,8 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 			RecordingMetricsCollector failedCollector =
 					new RecordingMetricsCollector();
 			McpServer failedServer = server(occupiedPort, "/mcp/failed-listener");
-			Soklet failedOwner = soklet(failedServer, failedCollector,
-					LifecycleObserver.defaultInstance());
+			Soklet failedOwner = Soklet.fromConfig(config(failedServer, failedCollector,
+					LifecycleObserver.defaultInstance()));
 			ShutdownComponentDisposition failedDisposition = null;
 
 			try {
@@ -405,8 +409,8 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 					requireNonNull(failedDisposition);
 
 			McpServer proofServer = server(0, "/mcp/after-failed-listener");
-			Soklet proofOwner = soklet(proofServer, failedCollector,
-					LifecycleObserver.defaultInstance());
+			Soklet proofOwner = Soklet.fromConfig(config(proofServer, failedCollector,
+					LifecycleObserver.defaultInstance()));
 			try {
 				proofOwner.start();
 				failedCollector.awaitServerLifecycleEventCount(2);
@@ -447,7 +451,8 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 			}
 		};
 		McpServer server = server(0, "/mcp/observer-failure");
-		Soklet soklet = soklet(server, collector, observer);
+		// Callbacks probe this owner to verify delivery occurs outside lifecycle locks.
+		Soklet soklet = Soklet.fromConfig(config(server, collector, observer));
 		serverReference.set(server);
 		sokletReference.set(soklet);
 
@@ -491,7 +496,8 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 		RecordingMetricsCollector collector = new RecordingMetricsCollector();
 		RecordingLifecycleObserver observer = new RecordingLifecycleObserver();
 		McpServer firstServer = server(0, "/mcp/unexpected-first");
-		Soklet firstOwner = soklet(firstServer, collector, observer);
+		// The test observes terminal failure and repeated shutdown across listener generations.
+		Soklet firstOwner = Soklet.fromConfig(config(firstServer, collector, observer));
 		McpServerRuntimeBridge firstBridge = runtimeBridge(firstServer);
 		McpTransportLifecycleAdapter firstLifecycleAdapter =
 				lifecycleAdapter(firstServer);
@@ -539,8 +545,8 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 					transportFailure.toString());
 
 			McpServer secondServer = server(0, "/mcp/unexpected-second");
-			Soklet secondOwner = soklet(secondServer, collector,
-					LifecycleObserver.defaultInstance());
+			Soklet secondOwner = Soklet.fromConfig(config(secondServer, collector,
+					LifecycleObserver.defaultInstance()));
 			try {
 				secondOwner.start();
 				collector.awaitEventCount(4);
@@ -585,12 +591,10 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 				new ReentrantConnectionCollector(serverReference,
 						"/mcp/reentrant-connection");
 		McpServer server = server(0, "/mcp/reentrant-connection");
-		Soklet soklet = soklet(server, collector,
-				LifecycleObserver.defaultInstance());
 		serverReference.set(server);
 
-		try {
-			soklet.start();
+		Soklet.run(config(server, collector,
+				LifecycleObserver.defaultInstance()), () -> {
 			collector.awaitServerStartedDrain();
 			int port = server.getDiagnostics().getBoundAddress()
 					.orElseThrow().getPort();
@@ -616,9 +620,7 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 					McpMetricsEvent.RequestStarted.class,
 					McpMetricsEvent.RequestFinished.class),
 					collector.events().stream().map(Object::getClass).toList());
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@Test
@@ -631,8 +633,9 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 				probeExecutor, serverReference, sokletReference,
 				"/mcp/reentrant-start");
 		McpServer server = server(0, "/mcp/reentrant-start");
-		Soklet soklet = soklet(server, collector,
-				LifecycleObserver.defaultInstance());
+		// The reentrant collector probes this owner while startup metrics are delivered.
+		Soklet soklet = Soklet.fromConfig(config(server, collector,
+				LifecycleObserver.defaultInstance()));
 		serverReference.set(server);
 		sokletReference.set(soklet);
 
@@ -675,10 +678,7 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 				serverFailure, connectionFailure, requestFailure);
 		RecordingLifecycleObserver observer = new RecordingLifecycleObserver();
 		McpServer server = server(0, "/mcp/failure-context");
-		Soklet soklet = soklet(server, collector, observer);
-
-		try {
-			soklet.start();
+		Soklet.run(config(server, collector, observer), () -> {
 			Assertions.assertEquals(McpServerStatus.RUNNING,
 					server.getDiagnostics().getStatus(),
 					"A ServerStarted collector failure must not roll back the listener.");
@@ -722,9 +722,7 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 					connectionFailure.getMessage(), requestFailure.getMessage(),
 					requestBodyCanary))
 				Assertions.assertFalse(ownedLogs.contains(canary), ownedLogs);
-		} finally {
-			soklet.close();
-		}
+		});
 	}
 
 	@NonNull
@@ -743,10 +741,10 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 	}
 
 	@NonNull
-	private static Soklet soklet(@NonNull McpServer server,
+	private static SokletConfig config(@NonNull McpServer server,
 			@NonNull MetricsCollector collector,
 			@NonNull LifecycleObserver observer) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(ResourceMethodResolver.fromMethods(Set.of()))
 				.metricsCollector(collector)
 				.lifecycleObserver(observer)
@@ -756,7 +754,7 @@ public class McpMetricsEventDeliveryPublicRuntimeTests {
 						.gracefulShutdownTimeout(Duration.ofSeconds(2))
 						.forcedShutdownTimeout(Duration.ofSeconds(1))
 						.build())
-				.build());
+				.build();
 	}
 
 	@NonNull

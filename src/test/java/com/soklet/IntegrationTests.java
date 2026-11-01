@@ -180,42 +180,38 @@ public class IntegrationTests {
 		return c;
 	}
 
-	private static Soklet startApp(int port, Set<Class<?>> resourceClasses) {
+	private static SokletConfig appConfig(int port, Set<Class<?>> resourceClasses) {
 		SokletConfig cfg = SokletConfig.withHttpServer(HttpServer.withPort(port).requestHeaderTimeout(Duration.ofSeconds(5)).build())
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(resourceClasses))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
-		Soklet app = Soklet.fromConfig(cfg);
-		app.start();
-		return app;
+		return cfg;
 	}
 
-	private static Soklet startApp(HttpServer httpServer, Set<Class<?>> resourceClasses) {
+	private static SokletConfig appConfig(HttpServer httpServer, Set<Class<?>> resourceClasses) {
 		SokletConfig cfg = SokletConfig.withHttpServer(httpServer)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(resourceClasses))
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
-		Soklet app = Soklet.fromConfig(cfg);
-		app.start();
-		return app;
+		return cfg;
 	}
 
 	@Test
 	public void traceContextIsParsedOverNetwork() throws Exception {
 		int port = findFreePort();
-		try (Soklet app = startApp(port, Set.of(EchoResource.class))) {
+		Soklet.run(appConfig(port, Set.of(EchoResource.class)), () -> {
 			URL url = new URL("http://127.0.0.1:" + port + "/trace-id");
 			HttpURLConnection c = open("GET", url, Map.of("traceparent", "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"));
 			Assertions.assertEquals(200, c.getResponseCode());
 			String body = new String(readAll(c.getInputStream()), StandardCharsets.UTF_8);
 			Assertions.assertEquals("0af7651916cd43dd8448eb211c80319c", body);
-		}
+		});
 	}
 
 	@Test
 	public void effectiveClientIpResolutionUsesTrustedLoopbackProxy() throws Exception {
 		int port = findFreePort();
-		try (Soklet app = startApp(port, Set.of(EchoResource.class))) {
+		Soklet.run(appConfig(port, Set.of(EchoResource.class)), () -> {
 			URL url = new URL("http://127.0.0.1:" + port + "/effective-client-ip");
 			HttpURLConnection c = open("GET", url, Map.of(
 					"Accept", "text/plain",
@@ -224,26 +220,26 @@ public class IntegrationTests {
 			Assertions.assertEquals(200, c.getResponseCode());
 			String body = new String(readAll(c.getInputStream()), StandardCharsets.UTF_8);
 			Assertions.assertEquals("198.51.100.77", body);
-		}
+		});
 	}
 
 	@Test
 	public void varargs_pathRoundTrip_overNetwork() throws Exception {
 		int port = findFreePort();
-		try (Soklet app = startApp(port, Set.of(EchoResource.class))) {
+		Soklet.run(appConfig(port, Set.of(EchoResource.class)), () -> {
 			// Basic varargs round-trip (no decoding assertions here)
 			URL url = new URL("http://127.0.0.1:" + port + "/files/js/some/file/example.js");
 			HttpURLConnection c = open("GET", url, Map.of("Accept", "text/plain"));
 			Assertions.assertEquals(200, c.getResponseCode());
 			String body = new String(readAll(c.getInputStream()), StandardCharsets.UTF_8);
 			Assertions.assertEquals("js/some/file/example.js", body);
-		}
+		});
 	}
 
 	@Test
 	public void multivalueHeadersAreSplitCorrectly() throws Exception {
 		int port = findFreePort();
-		try (Soklet app = startApp(port, Set.of(EchoResource.class))) {
+		Soklet.run(appConfig(port, Set.of(EchoResource.class)), () -> {
 			String host = "127.0.0.1";
 			String path = "/multivalued-headers";
 
@@ -282,53 +278,55 @@ public class IntegrationTests {
 					// Since we don't need the body, just stop here.  If we do need the body later, read content-length bytes
 				}
 			}
-		}
+		});
 	}
 
 	@Test
 	public void noContentResponseDoesNotAdvertiseSyntheticContentLength() throws Exception {
 		int port = findFreePort();
-		try (Soklet app = startApp(port, Set.of(EchoResource.class));
-				 Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+		Soklet.run(appConfig(port, Set.of(EchoResource.class)), () -> {
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 				 OutputStream out = socket.getOutputStream();
 				 InputStream in = socket.getInputStream()) {
-			socket.setSoTimeout(2000);
-			out.write(("""
-					GET /no-content HTTP/1.1\r
-					Host: 127.0.0.1\r
-					Connection: close\r
-					\r
-					""").getBytes(StandardCharsets.ISO_8859_1));
-			out.flush();
+				socket.setSoTimeout(2000);
+				out.write(("""
+						GET /no-content HTTP/1.1\r
+						Host: 127.0.0.1\r
+						Connection: close\r
+						\r
+						""").getBytes(StandardCharsets.ISO_8859_1));
+				out.flush();
 
-			RawResponse response = readResponse(in);
-			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 204"), response.statusLine());
-			Assertions.assertFalse(response.headers().containsKey("content-length"), response.headers().toString());
-			Assertions.assertEquals(0, response.body().length);
-		}
+				RawResponse response = readResponse(in);
+				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 204"), response.statusLine());
+				Assertions.assertFalse(response.headers().containsKey("content-length"), response.headers().toString());
+				Assertions.assertEquals(0, response.body().length);
+			}
+		});
 	}
 
 	@Test
 	public void notModifiedResponseDoesNotAdvertiseSyntheticContentLength() throws Exception {
 		int port = findFreePort();
-		try (Soklet app = startApp(port, Set.of(EchoResource.class));
-				 Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+		Soklet.run(appConfig(port, Set.of(EchoResource.class)), () -> {
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 				 OutputStream out = socket.getOutputStream();
 				 InputStream in = socket.getInputStream()) {
-			socket.setSoTimeout(2000);
-			out.write(("""
-					GET /not-modified HTTP/1.1\r
-					Host: 127.0.0.1\r
-					Connection: close\r
-					\r
-					""").getBytes(StandardCharsets.ISO_8859_1));
-			out.flush();
+				socket.setSoTimeout(2000);
+				out.write(("""
+						GET /not-modified HTTP/1.1\r
+						Host: 127.0.0.1\r
+						Connection: close\r
+						\r
+						""").getBytes(StandardCharsets.ISO_8859_1));
+				out.flush();
 
-			RawResponse response = readResponse(in);
-			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 304"), response.statusLine());
-			Assertions.assertFalse(response.headers().containsKey("content-length"), response.headers().toString());
-			Assertions.assertEquals(0, response.body().length);
-		}
+				RawResponse response = readResponse(in);
+				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 304"), response.statusLine());
+				Assertions.assertFalse(response.headers().containsKey("content-length"), response.headers().toString());
+				Assertions.assertEquals(0, response.body().length);
+			}
+		});
 	}
 
 	@Test
@@ -341,8 +339,7 @@ public class IntegrationTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 					 OutputStream out = socket.getOutputStream()) {
 				socket.setSoTimeout(3000);
@@ -357,7 +354,7 @@ public class IntegrationTests {
 				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 400"), "Expected 400 for malformed header name");
 				Assertions.assertEquals("close", response.headers().get("connection"));
 			}
-		}
+		});
 	}
 
 	@Test
@@ -370,8 +367,7 @@ public class IntegrationTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 					 OutputStream out = socket.getOutputStream()) {
 				socket.setSoTimeout(3000);
@@ -388,7 +384,7 @@ public class IntegrationTests {
 				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 400"), "Expected 400 for malformed header value");
 				Assertions.assertEquals("close", response.headers().get("connection"));
 			}
-		}
+		});
 	}
 
 	@Test
@@ -401,8 +397,7 @@ public class IntegrationTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 					 OutputStream out = socket.getOutputStream()) {
 				socket.setSoTimeout(3000);
@@ -416,7 +411,7 @@ public class IntegrationTests {
 				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 400"), "Expected 400 for missing Host header");
 				Assertions.assertEquals("close", response.headers().get("connection"));
 			}
-		}
+		});
 	}
 
 	@Test
@@ -429,8 +424,7 @@ public class IntegrationTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 					 OutputStream out = socket.getOutputStream()) {
 				socket.setSoTimeout(3000);
@@ -445,7 +439,7 @@ public class IntegrationTests {
 				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 400"), "Expected 400 for invalid Host header");
 				Assertions.assertEquals("close", response.headers().get("connection"));
 			}
-		}
+		});
 	}
 
 	@Test
@@ -458,8 +452,7 @@ public class IntegrationTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 					 OutputStream out = socket.getOutputStream()) {
 				socket.setSoTimeout(3000);
@@ -474,7 +467,7 @@ public class IntegrationTests {
 				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 400"), "Expected 400 for unsupported HTTP version");
 				Assertions.assertEquals("close", response.headers().get("connection"));
 			}
-		}
+		});
 	}
 
 	@Test
@@ -487,8 +480,7 @@ public class IntegrationTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 					 OutputStream out = socket.getOutputStream()) {
 				socket.setSoTimeout(3000);
@@ -512,7 +504,7 @@ public class IntegrationTests {
 				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"), "Expected 200 after request body");
 				Assertions.assertEquals("hello", new String(response.body(), StandardCharsets.UTF_8));
 			}
-		}
+		});
 	}
 
 	@Test
@@ -525,8 +517,7 @@ public class IntegrationTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 					 OutputStream out = socket.getOutputStream()) {
 				socket.setSoTimeout(3000);
@@ -550,7 +541,7 @@ public class IntegrationTests {
 				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"), "Expected 200 after chunked request body");
 				Assertions.assertEquals("hello", new String(response.body(), StandardCharsets.UTF_8));
 			}
-		}
+		});
 	}
 
 	@Test
@@ -563,8 +554,7 @@ public class IntegrationTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 					 OutputStream out = socket.getOutputStream()) {
 				socket.setSoTimeout(3000);
@@ -580,7 +570,7 @@ public class IntegrationTests {
 				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 417"), "Expected 417 for unsupported Expect header");
 				Assertions.assertEquals("close", response.headers().get("connection"));
 			}
-		}
+		});
 	}
 
 	@Test
@@ -594,9 +584,7 @@ public class IntegrationTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
-
+		Soklet.run(cfg, () -> {
 			try (Socket socket1 = connectWithRetry("127.0.0.1", port, 2000)) {
 				socket1.setSoTimeout(3000);
 				OutputStream out1 = socket1.getOutputStream();
@@ -614,7 +602,7 @@ public class IntegrationTests {
 					Assertions.assertEquals(-1, b, "Expected second connection to be closed when max connections reached");
 				}
 			}
-		}
+		});
 	}
 
 	private static String readLineCRLF(InputStream in) throws IOException {
@@ -675,7 +663,7 @@ public class IntegrationTests {
 	@Test
 	public void queryDecoding_plusAndPercent() throws Exception {
 		int port = findFreePort();
-		try (Soklet app = startApp(port, Set.of(EchoResource.class))) {
+		Soklet.run(appConfig(port, Set.of(EchoResource.class)), () -> {
 			// q=hello+world -> "hello+world"
 			URL u1 = new URL("http://127.0.0.1:" + port + "/q?q=hello+world");
 			HttpURLConnection c1 = open("GET", u1, Map.of("Accept", "text/plain"));
@@ -687,13 +675,13 @@ public class IntegrationTests {
 			HttpURLConnection c2 = open("GET", u2, Map.of("Accept", "text/plain"));
 			Assertions.assertEquals(200, c2.getResponseCode());
 			Assertions.assertEquals("a+b", new String(readAll(c2.getInputStream()), StandardCharsets.UTF_8));
-		}
+		});
 	}
 
 	@Test
 	public void pathDecoding_plusIsLiteral_andPercentPlusDecodes() throws Exception {
 		int port = findFreePort();
-		try (Soklet app = startApp(port, Set.of(EchoResource.class))) {
+		Soklet.run(appConfig(port, Set.of(EchoResource.class)), () -> {
 			// Literal '+' must be preserved in PATH
 			URL u1 = new URL("http://127.0.0.1:" + port + "/files/foo+bar");
 			HttpURLConnection c1 = open("GET", u1, Map.of("Accept", "text/plain"));
@@ -705,13 +693,13 @@ public class IntegrationTests {
 			HttpURLConnection c2 = open("GET", u2, Map.of("Accept", "text/plain"));
 			Assertions.assertEquals(200, c2.getResponseCode());
 			Assertions.assertEquals("a+b", new String(readAll(c2.getInputStream()), StandardCharsets.UTF_8));
-		}
+		});
 	}
 
 	@Test
 	public void pathDecoding_encodedSlashIsRejected() throws Exception {
 		int port = findFreePort();
-		try (Soklet app = startApp(port, Set.of(EchoResource.class))) {
+		Soklet.run(appConfig(port, Set.of(EchoResource.class)), () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000)) {
 				socket.setSoTimeout(3000);
 				OutputStream out = socket.getOutputStream();
@@ -724,13 +712,13 @@ public class IntegrationTests {
 				RawResponse response = readResponse(socket.getInputStream());
 				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 400"), "Expected 400 for encoded slash in path");
 			}
-		}
+		});
 	}
 
 	@Test
 	public void pathNormalization_dotSegments() throws Exception {
 		int port = findFreePort();
-		try (Soklet app = startApp(port, Set.of(EchoResource.class))) {
+		Soklet.run(appConfig(port, Set.of(EchoResource.class)), () -> {
 			// We expect /files/a/b/../c -> "a/c" after normalization
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000)) {
 				socket.setSoTimeout(3000);
@@ -745,13 +733,13 @@ public class IntegrationTests {
 				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"), "Expected 200 OK");
 				Assertions.assertEquals("a/c", new String(response.body(), StandardCharsets.UTF_8));
 			}
-		}
+		});
 	}
 
 	@Test
 	public void cookies_caseSensitiveNames() throws Exception {
 		int port = findFreePort();
-		try (Soklet app = startApp(port, Set.of(EchoResource.class))) {
+		Soklet.run(appConfig(port, Set.of(EchoResource.class)), () -> {
 			URL u = new URL("http://127.0.0.1:" + port + "/cookie-echo");
 			HttpURLConnection c = open("GET", u, Map.of(
 					"Accept", "text/plain",
@@ -763,7 +751,7 @@ public class IntegrationTests {
 			Set<String> set = Arrays.stream(names.split(",")).map(String::trim).collect(Collectors.toSet());
 			Assertions.assertTrue(set.contains("SID"));
 			Assertions.assertTrue(set.contains("sid"));
-		}
+		});
 	}
 
 	@ThreadSafe
@@ -913,7 +901,7 @@ public class IntegrationTests {
 	@Test
 	public void routing_literalBeatsParam() throws Exception {
 		int port = findFreePort();
-		try (Soklet app = startApp(port, Set.of(UsersResource.class))) {
+		Soklet.run(appConfig(port, Set.of(UsersResource.class)), () -> {
 			var u1 = new URL("http://127.0.0.1:" + port + "/users/me");
 			var c1 = open("GET", u1, Map.of("Accept", "text/plain"));
 			Assertions.assertEquals(200, c1.getResponseCode());
@@ -923,13 +911,13 @@ public class IntegrationTests {
 			var c2 = open("GET", u2, Map.of("Accept", "text/plain"));
 			Assertions.assertEquals(200, c2.getResponseCode());
 			Assertions.assertEquals("param:123", new String(readAll(c2.getInputStream()), StandardCharsets.UTF_8));
-		}
+		});
 	}
 
 	@Test
 	public void headSemantics_noBody_contentLengthPresent() throws Exception {
 		int port = findFreePort();
-		try (Soklet app = startApp(port, Set.of(Echo2Resource.class))) {
+		Soklet.run(appConfig(port, Set.of(Echo2Resource.class)), () -> {
 			URL u = new URL("http://127.0.0.1:" + port + "/hello");
 			HttpURLConnection c = open("HEAD", u, Map.of("Accept", "text/plain"));
 			Assertions.assertEquals(200, c.getResponseCode());
@@ -937,13 +925,13 @@ public class IntegrationTests {
 			Assertions.assertEquals("5", cl); // "hello"
 			byte[] b = readAll(c.getInputStream());
 			Assertions.assertEquals(0, b.length);
-		}
+		});
 	}
 
 	@Test
 	public void chunkedExtensionsAndTrailers_areConsumed() throws Exception {
 		int port = findFreePort();
-		try (Soklet app = startApp(port, Set.of(Echo2Resource.class))) {
+		Soklet.run(appConfig(port, Set.of(Echo2Resource.class)), () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 					 OutputStream out = socket.getOutputStream();
 					 InputStream in = socket.getInputStream()) {
@@ -974,13 +962,13 @@ public class IntegrationTests {
 				Assertions.assertTrue(second.statusLine().startsWith("HTTP/1.1 200"));
 				Assertions.assertEquals("hello", new String(second.body(), StandardCharsets.UTF_8));
 			}
-		}
+		});
 	}
 
 	@Test
 	public void largeResponse_keepsPersistentConnectionUsableForPipelinedRequest() throws Exception {
 		int port = findFreePort();
-		try (Soklet app = startApp(port, Set.of(Echo2Resource.class))) {
+		Soklet.run(appConfig(port, Set.of(Echo2Resource.class)), () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 					 OutputStream out = socket.getOutputStream();
 					 InputStream in = socket.getInputStream()) {
@@ -1007,7 +995,7 @@ public class IntegrationTests {
 				Assertions.assertTrue(second.statusLine().startsWith("HTTP/1.1 200"));
 				Assertions.assertEquals("hello", new String(second.body(), StandardCharsets.UTF_8));
 			}
-		}
+		});
 	}
 
 	@Test
@@ -1018,28 +1006,29 @@ public class IntegrationTests {
 				.responseCompressor(ResponseCompressor.fromDefaultsWithMinimumBodySizeInBytes(1_024))
 				.build();
 
-		try (Soklet app = startApp(httpServer, Set.of(Echo2Resource.class));
-				 Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+		Soklet.run(appConfig(httpServer, Set.of(Echo2Resource.class)), () -> {
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 				 OutputStream out = socket.getOutputStream();
 				 InputStream in = socket.getInputStream()) {
-			socket.setSoTimeout(5000);
-			out.write((
-					"GET /vary-large HTTP/1.1\r\n" +
-							"Host: 127.0.0.1\r\n" +
-							"Accept-Encoding: br;q=1, gzip;q=0.8\r\n" +
-							"Connection: close\r\n" +
-							"\r\n"
-			).getBytes(StandardCharsets.UTF_8));
-			out.flush();
+				socket.setSoTimeout(5000);
+				out.write((
+						"GET /vary-large HTTP/1.1\r\n" +
+								"Host: 127.0.0.1\r\n" +
+								"Accept-Encoding: br;q=1, gzip;q=0.8\r\n" +
+								"Connection: close\r\n" +
+								"\r\n"
+				).getBytes(StandardCharsets.UTF_8));
+				out.flush();
 
-			RawResponse response = readResponse(in);
-			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"));
-			Assertions.assertEquals("gzip", response.headers().get("content-encoding"));
-			Assertions.assertEquals("Origin, Accept-Encoding", response.headers().get("vary"));
-			Assertions.assertEquals(Integer.toString(response.body().length), response.headers().get("content-length"));
-			Assertions.assertTrue(response.body().length < LARGE_RESPONSE_BODY.length);
-			Assertions.assertArrayEquals(LARGE_RESPONSE_BODY, gunzip(response.body()));
-		}
+				RawResponse response = readResponse(in);
+				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"));
+				Assertions.assertEquals("gzip", response.headers().get("content-encoding"));
+				Assertions.assertEquals("Origin, Accept-Encoding", response.headers().get("vary"));
+				Assertions.assertEquals(Integer.toString(response.body().length), response.headers().get("content-length"));
+				Assertions.assertTrue(response.body().length < LARGE_RESPONSE_BODY.length);
+				Assertions.assertArrayEquals(LARGE_RESPONSE_BODY, gunzip(response.body()));
+			}
+		});
 	}
 
 	@Test
@@ -1050,27 +1039,28 @@ public class IntegrationTests {
 				.responseCompressor(ResponseCompressor.fromDefaultsWithMinimumBodySizeInBytes(1_024))
 				.build();
 
-		try (Soklet app = startApp(httpServer, Set.of(Echo2Resource.class));
-				 Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+		Soklet.run(appConfig(httpServer, Set.of(Echo2Resource.class)), () -> {
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 				 OutputStream out = socket.getOutputStream();
 				 InputStream in = socket.getInputStream()) {
-			socket.setSoTimeout(5000);
-			out.write((
-					"HEAD /vary-large HTTP/1.1\r\n" +
-							"Host: 127.0.0.1\r\n" +
-							"Accept-Encoding: gzip\r\n" +
-							"Connection: close\r\n" +
-							"\r\n"
-			).getBytes(StandardCharsets.UTF_8));
-			out.flush();
+				socket.setSoTimeout(5000);
+				out.write((
+						"HEAD /vary-large HTTP/1.1\r\n" +
+								"Host: 127.0.0.1\r\n" +
+								"Accept-Encoding: gzip\r\n" +
+								"Connection: close\r\n" +
+								"\r\n"
+				).getBytes(StandardCharsets.UTF_8));
+				out.flush();
 
-			RawResponse response = readResponse(in);
-			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"));
-			Assertions.assertEquals("gzip", response.headers().get("content-encoding"));
-			Assertions.assertEquals("Origin, Accept-Encoding", response.headers().get("vary"));
-			Assertions.assertFalse(response.headers().containsKey("content-length"));
-			Assertions.assertEquals(0, response.body().length);
-		}
+				RawResponse response = readResponse(in);
+				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"));
+				Assertions.assertEquals("gzip", response.headers().get("content-encoding"));
+				Assertions.assertEquals("Origin, Accept-Encoding", response.headers().get("vary"));
+				Assertions.assertFalse(response.headers().containsKey("content-length"));
+				Assertions.assertEquals(0, response.body().length);
+			}
+		});
 	}
 
 	@Test
@@ -1147,8 +1137,7 @@ public class IntegrationTests {
 				.responseMarshaler(responseMarshaler)
 				.requestInterceptor(requestInterceptor)
 				.lifecycleObserver(new QuietLifecycle()).build();
-		try (Soklet app = Soklet.fromConfig(config)) {
-			app.start();
+		Soklet.run(config, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000)) {
 				socket.setSoTimeout(5000);
 				socket.getOutputStream().write(("HEAD /vary-large HTTP/1.1\r\n"
@@ -1164,7 +1153,7 @@ public class IntegrationTests {
 				Assertions.assertEquals(0, planCalls.get(),
 						"The planner must not see the discarded successful response's body");
 			}
-		}
+		});
 	}
 
 	private static void assertHeadCompressionPlansOriginalBody(ResponseMarshaler responseMarshaler) throws Exception {
@@ -1200,8 +1189,7 @@ public class IntegrationTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Echo2Resource.class)))
 				.responseMarshaler(responseMarshaler)
 				.lifecycleObserver(new QuietLifecycle()).build();
-		try (Soklet app = Soklet.fromConfig(config)) {
-			app.start();
+		Soklet.run(config, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000)) {
 				socket.setSoTimeout(5000);
 				socket.getOutputStream().write(("HEAD /vary-large HTTP/1.1\r\n"
@@ -1219,7 +1207,7 @@ public class IntegrationTests {
 				Assertions.assertEquals(0, providerCalls.get());
 				Assertions.assertEquals(0, codecCalls.get());
 			}
-		}
+		});
 	}
 
 	@Test
@@ -1254,8 +1242,7 @@ public class IntegrationTests {
 		SokletConfig config = SokletConfig.withHttpServer(httpServer)
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(Echo2Resource.class)))
 				.requestInterceptor(interceptor).lifecycleObserver(new QuietLifecycle()).build();
-		try (Soklet app = Soklet.fromConfig(config)) {
-			app.start();
+		Soklet.run(config, () -> {
 			HttpURLConnection connection = open("GET", new URL("http://127.0.0.1:" + port + "/vary-large"),
 					Map.of("Accept-Encoding", "gzip"));
 			Assertions.assertEquals(200, connection.getResponseCode());
@@ -1264,7 +1251,7 @@ public class IntegrationTests {
 			Assertions.assertArrayEquals(replacementBody, gunzip(readAll(connection.getInputStream())));
 			Assertions.assertEquals(1, planCalls.get());
 			Assertions.assertEquals(1, providerCalls.get());
-		}
+		});
 	}
 
 	@Test
@@ -1300,6 +1287,10 @@ public class IntegrationTests {
 						Assertions.assertEquals("13", response.headers().get("content-length"));
 						Assertions.assertFalse(response.headers().containsKey("content-encoding"));
 						Assertions.assertEquals(-1, socket.getInputStream().read());
+						// Socket EOF can precede the response's asynchronous channel cleanup.
+						long closeDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+						while (closeOnComplete && channel.isOpen() && System.nanoTime() < closeDeadline)
+							Thread.sleep(1);
 						Assertions.assertEquals(!closeOnComplete, channel.isOpen());
 					}
 				} finally {
@@ -1319,39 +1310,40 @@ public class IntegrationTests {
 					throw new AssertionError("Streaming responses must not invoke the compressor");
 				})
 				.build();
-		try (Soklet app = startApp(httpServer, Set.of(Echo2Resource.class))) {
+		Soklet.run(appConfig(httpServer, Set.of(Echo2Resource.class)), () -> {
 			HttpURLConnection connection = open("GET", new URL("http://127.0.0.1:" + port + "/streamed"),
 					Map.of("Accept-Encoding", "gzip"));
 			Assertions.assertEquals(200, connection.getResponseCode());
 			Assertions.assertNull(connection.getHeaderField("Content-Encoding"));
 			Assertions.assertArrayEquals(LARGE_RESPONSE_BODY, readAll(connection.getInputStream()));
 			Assertions.assertEquals(0, planCalls.get());
-		}
+		});
 	}
 
 	@Test
 	public void responseGzip_isDisabledByDefault() throws Exception {
 		int port = findFreePort();
-		try (Soklet app = startApp(port, Set.of(Echo2Resource.class));
-				 Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+		Soklet.run(appConfig(port, Set.of(Echo2Resource.class)), () -> {
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 				 OutputStream out = socket.getOutputStream();
 				 InputStream in = socket.getInputStream()) {
-			socket.setSoTimeout(5000);
-			out.write((
-					"GET /vary-large HTTP/1.1\r\n" +
-							"Host: 127.0.0.1\r\n" +
-							"Accept-Encoding: gzip\r\n" +
-							"Connection: close\r\n" +
-							"\r\n"
-			).getBytes(StandardCharsets.UTF_8));
-			out.flush();
+				socket.setSoTimeout(5000);
+				out.write((
+						"GET /vary-large HTTP/1.1\r\n" +
+								"Host: 127.0.0.1\r\n" +
+								"Accept-Encoding: gzip\r\n" +
+								"Connection: close\r\n" +
+								"\r\n"
+				).getBytes(StandardCharsets.UTF_8));
+				out.flush();
 
-			RawResponse response = readResponse(in);
-			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"));
-			Assertions.assertFalse(response.headers().containsKey("content-encoding"));
-			Assertions.assertEquals(Integer.toString(LARGE_RESPONSE_BODY.length), response.headers().get("content-length"));
-			Assertions.assertArrayEquals(LARGE_RESPONSE_BODY, response.body());
-		}
+				RawResponse response = readResponse(in);
+				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"));
+				Assertions.assertFalse(response.headers().containsKey("content-encoding"));
+				Assertions.assertEquals(Integer.toString(LARGE_RESPONSE_BODY.length), response.headers().get("content-length"));
+				Assertions.assertArrayEquals(LARGE_RESPONSE_BODY, response.body());
+			}
+		});
 	}
 
 	@Test
@@ -1362,25 +1354,26 @@ public class IntegrationTests {
 				.responseCompressor(ResponseCompressor.fromDefaultsWithMinimumBodySizeInBytes(LARGE_RESPONSE_BODY.length + 1))
 				.build();
 
-		try (Soklet app = startApp(httpServer, Set.of(Echo2Resource.class));
-				 Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+		Soklet.run(appConfig(httpServer, Set.of(Echo2Resource.class)), () -> {
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 				 OutputStream out = socket.getOutputStream();
 				 InputStream in = socket.getInputStream()) {
-			socket.setSoTimeout(5000);
-			out.write((
-					"GET /vary-large HTTP/1.1\r\n" +
-							"Host: 127.0.0.1\r\n" +
-							"Accept-Encoding: gzip\r\n" +
-							"Connection: close\r\n" +
-							"\r\n"
-			).getBytes(StandardCharsets.UTF_8));
-			out.flush();
+				socket.setSoTimeout(5000);
+				out.write((
+						"GET /vary-large HTTP/1.1\r\n" +
+								"Host: 127.0.0.1\r\n" +
+								"Accept-Encoding: gzip\r\n" +
+								"Connection: close\r\n" +
+								"\r\n"
+				).getBytes(StandardCharsets.UTF_8));
+				out.flush();
 
-			RawResponse response = readResponse(in);
-			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"));
-			Assertions.assertFalse(response.headers().containsKey("content-encoding"));
-			Assertions.assertArrayEquals(LARGE_RESPONSE_BODY, response.body());
-		}
+				RawResponse response = readResponse(in);
+				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"));
+				Assertions.assertFalse(response.headers().containsKey("content-encoding"));
+				Assertions.assertArrayEquals(LARGE_RESPONSE_BODY, response.body());
+			}
+		});
 	}
 
 	@Test
@@ -1391,26 +1384,27 @@ public class IntegrationTests {
 				.responseCompressor(ResponseCompressor.fromDefaultsWithMinimumBodySizeInBytes(1_024))
 				.build();
 
-		try (Soklet app = startApp(httpServer, Set.of(Echo2Resource.class));
-				 Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+		Soklet.run(appConfig(httpServer, Set.of(Echo2Resource.class)), () -> {
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 				 OutputStream out = socket.getOutputStream();
 				 InputStream in = socket.getInputStream()) {
-			socket.setSoTimeout(5000);
-			out.write((
-					"GET /large HTTP/1.1\r\n" +
-							"Host: 127.0.0.1\r\n" +
-							"Accept-Encoding: gzip\r\n" +
-							"Connection: close\r\n" +
-							"\r\n"
-			).getBytes(StandardCharsets.UTF_8));
-			out.flush();
+				socket.setSoTimeout(5000);
+				out.write((
+						"GET /large HTTP/1.1\r\n" +
+								"Host: 127.0.0.1\r\n" +
+								"Accept-Encoding: gzip\r\n" +
+								"Connection: close\r\n" +
+								"\r\n"
+				).getBytes(StandardCharsets.UTF_8));
+				out.flush();
 
-			RawResponse response = readResponse(in);
-			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"));
-			Assertions.assertFalse(response.headers().containsKey("content-encoding"));
-			Assertions.assertEquals(Integer.toString(LARGE_RESPONSE_BODY.length), response.headers().get("content-length"));
-			Assertions.assertArrayEquals(LARGE_RESPONSE_BODY, response.body());
-		}
+				RawResponse response = readResponse(in);
+				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"));
+				Assertions.assertFalse(response.headers().containsKey("content-encoding"));
+				Assertions.assertEquals(Integer.toString(LARGE_RESPONSE_BODY.length), response.headers().get("content-length"));
+				Assertions.assertArrayEquals(LARGE_RESPONSE_BODY, response.body());
+			}
+		});
 	}
 
 	@Test
@@ -1421,25 +1415,26 @@ public class IntegrationTests {
 				.responseCompressor(ResponseCompressor.fromDefaultsWithMinimumBodySizeInBytes(1_024))
 				.build();
 
-		try (Soklet app = startApp(httpServer, Set.of(Echo2Resource.class));
-				 Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+		Soklet.run(appConfig(httpServer, Set.of(Echo2Resource.class)), () -> {
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 				 OutputStream out = socket.getOutputStream();
 				 InputStream in = socket.getInputStream()) {
-			socket.setSoTimeout(5000);
-			out.write((
-					"GET /vary-large HTTP/1.1\r\n" +
-							"Host: 127.0.0.1\r\n" +
-							"Accept-Encoding: *;q=1, gzip;q=0\r\n" +
-							"Connection: close\r\n" +
-							"\r\n"
-			).getBytes(StandardCharsets.UTF_8));
-			out.flush();
+				socket.setSoTimeout(5000);
+				out.write((
+						"GET /vary-large HTTP/1.1\r\n" +
+								"Host: 127.0.0.1\r\n" +
+								"Accept-Encoding: *;q=1, gzip;q=0\r\n" +
+								"Connection: close\r\n" +
+								"\r\n"
+				).getBytes(StandardCharsets.UTF_8));
+				out.flush();
 
-			RawResponse response = readResponse(in);
-			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"));
-			Assertions.assertFalse(response.headers().containsKey("content-encoding"));
-			Assertions.assertArrayEquals(LARGE_RESPONSE_BODY, response.body());
-		}
+				RawResponse response = readResponse(in);
+				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"));
+				Assertions.assertFalse(response.headers().containsKey("content-encoding"));
+				Assertions.assertArrayEquals(LARGE_RESPONSE_BODY, response.body());
+			}
+		});
 	}
 
 	@Test
@@ -1451,25 +1446,26 @@ public class IntegrationTests {
 						ResponseCompressionPlan.compress(ResponseCompressionCodec.gzipInstance()))
 				.build();
 
-		try (Soklet app = startApp(httpServer, Set.of(Echo2Resource.class));
-				 Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+		Soklet.run(appConfig(httpServer, Set.of(Echo2Resource.class)), () -> {
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 				 OutputStream out = socket.getOutputStream();
 				 InputStream in = socket.getInputStream()) {
-			socket.setSoTimeout(5000);
-			out.write((
-					"GET /encoded HTTP/1.1\r\n" +
-							"Host: 127.0.0.1\r\n" +
-							"Accept-Encoding: gzip\r\n" +
-							"Connection: close\r\n" +
-							"\r\n"
-			).getBytes(StandardCharsets.UTF_8));
-			out.flush();
+				socket.setSoTimeout(5000);
+				out.write((
+						"GET /encoded HTTP/1.1\r\n" +
+								"Host: 127.0.0.1\r\n" +
+								"Accept-Encoding: gzip\r\n" +
+								"Connection: close\r\n" +
+								"\r\n"
+				).getBytes(StandardCharsets.UTF_8));
+				out.flush();
 
-			RawResponse response = readResponse(in);
-			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"));
-			Assertions.assertEquals("br", response.headers().get("content-encoding"));
-			Assertions.assertArrayEquals(LARGE_RESPONSE_BODY, response.body());
-		}
+				RawResponse response = readResponse(in);
+				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"));
+				Assertions.assertEquals("br", response.headers().get("content-encoding"));
+				Assertions.assertArrayEquals(LARGE_RESPONSE_BODY, response.body());
+			}
+		});
 	}
 
 	@Test
@@ -1480,25 +1476,26 @@ public class IntegrationTests {
 				.responseCompressor(ResponseCompressor.fromDefaultsWithMinimumBodySizeInBytes(1_024))
 				.build();
 
-		try (Soklet app = startApp(httpServer, Set.of(ByteBufferResource.class));
-				 Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+		Soklet.run(appConfig(httpServer, Set.of(ByteBufferResource.class)), () -> {
+			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 				 OutputStream out = socket.getOutputStream();
 				 InputStream in = socket.getInputStream()) {
-			socket.setSoTimeout(5000);
-			out.write((
-					"GET /byte-buffer HTTP/1.1\r\n" +
-							"Host: 127.0.0.1\r\n" +
-							"Accept-Encoding: gzip\r\n" +
-							"Connection: close\r\n" +
-							"\r\n"
-			).getBytes(StandardCharsets.UTF_8));
-			out.flush();
+				socket.setSoTimeout(5000);
+				out.write((
+						"GET /byte-buffer HTTP/1.1\r\n" +
+								"Host: 127.0.0.1\r\n" +
+								"Accept-Encoding: gzip\r\n" +
+								"Connection: close\r\n" +
+								"\r\n"
+				).getBytes(StandardCharsets.UTF_8));
+				out.flush();
 
-			RawResponse response = readResponse(in);
-			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"));
-			Assertions.assertEquals("gzip", response.headers().get("content-encoding"));
-			Assertions.assertArrayEquals(LARGE_RESPONSE_BODY, gunzip(response.body()));
-		}
+				RawResponse response = readResponse(in);
+				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"));
+				Assertions.assertEquals("gzip", response.headers().get("content-encoding"));
+				Assertions.assertArrayEquals(LARGE_RESPONSE_BODY, gunzip(response.body()));
+			}
+		});
 	}
 
 	@Test
@@ -1514,25 +1511,28 @@ public class IntegrationTests {
 						ResponseCompressionPlan.compress(ResponseCompressionCodec.gzipInstance()))
 				.build();
 
-		try (Soklet app = startApp(httpServer, Set.of(FileResource.class));
-				 Socket socket = connectWithRetry("127.0.0.1", port, 2000);
-				 OutputStream out = socket.getOutputStream();
-				 InputStream in = socket.getInputStream()) {
-			socket.setSoTimeout(5000);
-			out.write((
-					"GET /file HTTP/1.1\r\n" +
-							"Host: 127.0.0.1\r\n" +
-							"Accept-Encoding: gzip\r\n" +
-							"Connection: close\r\n" +
-							"\r\n"
-			).getBytes(StandardCharsets.UTF_8));
-			out.flush();
+		try {
+			Soklet.run(appConfig(httpServer, Set.of(FileResource.class)), () -> {
+				try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+					 OutputStream out = socket.getOutputStream();
+					 InputStream in = socket.getInputStream()) {
+					socket.setSoTimeout(5000);
+					out.write((
+							"GET /file HTTP/1.1\r\n" +
+									"Host: 127.0.0.1\r\n" +
+									"Accept-Encoding: gzip\r\n" +
+									"Connection: close\r\n" +
+									"\r\n"
+					).getBytes(StandardCharsets.UTF_8));
+					out.flush();
 
-			RawResponse response = readResponse(in);
-			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"));
-			Assertions.assertFalse(response.headers().containsKey("content-encoding"));
-			Assertions.assertEquals(Integer.toString(fileBytes.length), response.headers().get("content-length"));
-			Assertions.assertArrayEquals(fileBytes, response.body());
+					RawResponse response = readResponse(in);
+					Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"));
+					Assertions.assertFalse(response.headers().containsKey("content-encoding"));
+					Assertions.assertEquals(Integer.toString(fileBytes.length), response.headers().get("content-length"));
+					Assertions.assertArrayEquals(fileBytes, response.body());
+				}
+			});
 		} finally {
 			fileResponsePath = null;
 		}
@@ -1551,14 +1551,16 @@ public class IntegrationTests {
 						ResponseCompressionPlan.compress(ResponseCompressionCodec.gzipInstance()))
 				.build();
 
-		try (Soklet app = startApp(httpServer, Set.of(FileResource.class))) {
-			URL url = new URL("http://127.0.0.1:" + port + "/file");
-			HttpURLConnection connection = open("HEAD", url, Map.of("Accept-Encoding", "gzip"));
+		try {
+			Soklet.run(appConfig(httpServer, Set.of(FileResource.class)), () -> {
+				URL url = new URL("http://127.0.0.1:" + port + "/file");
+				HttpURLConnection connection = open("HEAD", url, Map.of("Accept-Encoding", "gzip"));
 
-			Assertions.assertEquals(200, connection.getResponseCode());
-			Assertions.assertNull(connection.getHeaderField("Content-Encoding"));
-			Assertions.assertEquals(Integer.toString(fileBytes.length), connection.getHeaderField("Content-Length"));
-			Assertions.assertEquals(0, readAll(connection.getInputStream()).length);
+				Assertions.assertEquals(200, connection.getResponseCode());
+				Assertions.assertNull(connection.getHeaderField("Content-Encoding"));
+				Assertions.assertEquals(Integer.toString(fileBytes.length), connection.getHeaderField("Content-Length"));
+				Assertions.assertEquals(0, readAll(connection.getInputStream()).length);
+			});
 		} finally {
 			fileResponsePath = null;
 		}
@@ -1571,39 +1573,41 @@ public class IntegrationTests {
 		Files.write(fileResponsePath, fileBytes);
 
 		int port = findFreePort();
-		try (Soklet app = startApp(port, Set.of(FileResource.class, Echo2Resource.class))) {
-			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
-					 OutputStream out = socket.getOutputStream();
-					 InputStream in = socket.getInputStream()) {
-				socket.setSoTimeout(5000);
+		try {
+			Soklet.run(appConfig(port, Set.of(FileResource.class, Echo2Resource.class)), () -> {
+				try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
+						 OutputStream out = socket.getOutputStream();
+						 InputStream in = socket.getInputStream()) {
+					socket.setSoTimeout(5000);
 
-				out.write((
-						"GET /file HTTP/1.1\r\n" +
-								"Host: 127.0.0.1\r\n" +
-								"Connection: keep-alive\r\n" +
-								"\r\n" +
-								"GET /hello HTTP/1.1\r\n" +
-								"Host: 127.0.0.1\r\n" +
-								"Connection: close\r\n" +
-								"\r\n"
-				).getBytes(StandardCharsets.UTF_8));
-				out.flush();
+					out.write((
+							"GET /file HTTP/1.1\r\n" +
+									"Host: 127.0.0.1\r\n" +
+									"Connection: keep-alive\r\n" +
+									"\r\n" +
+									"GET /hello HTTP/1.1\r\n" +
+									"Host: 127.0.0.1\r\n" +
+									"Connection: close\r\n" +
+									"\r\n"
+					).getBytes(StandardCharsets.UTF_8));
+					out.flush();
 
-				RawResponse first = readResponse(in);
-				Assertions.assertTrue(first.statusLine().startsWith("HTTP/1.1 200"));
-				Assertions.assertEquals(Integer.toString(fileBytes.length), first.headers().get("content-length"));
-				Assertions.assertArrayEquals(fileBytes, first.body());
+					RawResponse first = readResponse(in);
+					Assertions.assertTrue(first.statusLine().startsWith("HTTP/1.1 200"));
+					Assertions.assertEquals(Integer.toString(fileBytes.length), first.headers().get("content-length"));
+					Assertions.assertArrayEquals(fileBytes, first.body());
 
-				RawResponse second = readResponse(in);
-				Assertions.assertTrue(second.statusLine().startsWith("HTTP/1.1 200"));
-				Assertions.assertEquals("hello", new String(second.body(), StandardCharsets.UTF_8));
-			}
+					RawResponse second = readResponse(in);
+					Assertions.assertTrue(second.statusLine().startsWith("HTTP/1.1 200"));
+					Assertions.assertEquals("hello", new String(second.body(), StandardCharsets.UTF_8));
+				}
 
-			URL url = new URL("http://127.0.0.1:" + port + "/file");
-			HttpURLConnection connection = open("HEAD", url, Map.of("Accept", "application/octet-stream"));
-			Assertions.assertEquals(200, connection.getResponseCode());
-			Assertions.assertEquals(Integer.toString(fileBytes.length), connection.getHeaderField("Content-Length"));
-			Assertions.assertEquals(0, readAll(connection.getInputStream()).length);
+				URL url = new URL("http://127.0.0.1:" + port + "/file");
+				HttpURLConnection connection = open("HEAD", url, Map.of("Accept", "application/octet-stream"));
+				Assertions.assertEquals(200, connection.getResponseCode());
+				Assertions.assertEquals(Integer.toString(fileBytes.length), connection.getHeaderField("Content-Length"));
+				Assertions.assertEquals(0, readAll(connection.getInputStream()).length);
+			});
 		} finally {
 			fileResponsePath = null;
 		}
@@ -1612,7 +1616,7 @@ public class IntegrationTests {
 	@Test
 	public void byteBufferResponse_keepsPersistentConnectionUsableForPipelinedRequest() throws Exception {
 		int port = findFreePort();
-		try (Soklet app = startApp(port, Set.of(ByteBufferResource.class, Echo2Resource.class))) {
+		Soklet.run(appConfig(port, Set.of(ByteBufferResource.class, Echo2Resource.class)), () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 					 OutputStream out = socket.getOutputStream();
 					 InputStream in = socket.getInputStream()) {
@@ -1639,7 +1643,7 @@ public class IntegrationTests {
 				Assertions.assertTrue(second.statusLine().startsWith("HTTP/1.1 200"));
 				Assertions.assertEquals("hello", new String(second.body(), StandardCharsets.UTF_8));
 			}
-		}
+		});
 	}
 
 	@Test
@@ -1653,9 +1657,7 @@ public class IntegrationTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
-
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 					 OutputStream out = socket.getOutputStream();
 					 InputStream in = socket.getInputStream()) {
@@ -1671,7 +1673,7 @@ public class IntegrationTests {
 				RawResponse response = readResponse(in);
 				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 413"));
 			}
-		}
+		});
 	}
 
 	@Test
@@ -1687,9 +1689,7 @@ public class IntegrationTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
-
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 					 OutputStream out = socket.getOutputStream();
 					 InputStream in = socket.getInputStream()) {
@@ -1705,7 +1705,7 @@ public class IntegrationTests {
 				RawResponse response = readResponse(in);
 				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 413"));
 			}
-		}
+		});
 	}
 
 	@Test
@@ -1720,9 +1720,7 @@ public class IntegrationTests {
 				.build();
 		String firstChunkBody = "x".repeat(256);
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
-
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 					 OutputStream out = socket.getOutputStream();
 					 InputStream in = socket.getInputStream()) {
@@ -1745,7 +1743,7 @@ public class IntegrationTests {
 				RawResponse response = readResponse(in);
 				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 413"));
 			}
-		}
+		});
 	}
 
 	@Test
@@ -1759,9 +1757,7 @@ public class IntegrationTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
-
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 					 OutputStream out = socket.getOutputStream();
 					 InputStream in = socket.getInputStream()) {
@@ -1777,7 +1773,7 @@ public class IntegrationTests {
 				RawResponse response = readResponse(in);
 				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 431"));
 			}
-		}
+		});
 	}
 
 	@Test
@@ -1791,9 +1787,7 @@ public class IntegrationTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
-
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 					 OutputStream out = socket.getOutputStream();
 					 InputStream in = socket.getInputStream()) {
@@ -1809,7 +1803,7 @@ public class IntegrationTests {
 				RawResponse response = readResponse(in);
 				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 431"));
 			}
-		}
+		});
 	}
 
 	@Test
@@ -1823,9 +1817,7 @@ public class IntegrationTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
-
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 					 OutputStream out = socket.getOutputStream();
 					 InputStream in = socket.getInputStream()) {
@@ -1840,7 +1832,7 @@ public class IntegrationTests {
 				RawResponse response = readResponse(in);
 				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 414"), response.statusLine());
 			}
-		}
+		});
 	}
 
 	@Test
@@ -1848,14 +1840,13 @@ public class IntegrationTests {
 		int port = findFreePort();
 		SokletConfig cfg = decompressionConfig(port, RequestDecompressionPolicy.fromDefaults());
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
+		Soklet.run(cfg, () -> {
 			byte[] compressed = gzipBytes("hello gzip".getBytes(StandardCharsets.UTF_8));
 			RawResponse response = postRawBody(port, "/body", compressed, "Content-Encoding: gzip\r\n");
 
 			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"), response.statusLine());
 			Assertions.assertEquals("hello gzip", new String(response.body(), StandardCharsets.UTF_8));
-		}
+		});
 	}
 
 	@Test
@@ -1863,8 +1854,7 @@ public class IntegrationTests {
 		int port = findFreePort();
 		SokletConfig cfg = decompressionConfig(port, RequestDecompressionPolicy.fromDefaults());
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
+		Soklet.run(cfg, () -> {
 			byte[] uncompressed = "hello gzip".getBytes(StandardCharsets.UTF_8);
 			byte[] compressed = gzipBytes(uncompressed);
 			RawResponse response = postRawBody(port, "/body-meta", compressed, "Content-Encoding: gzip\r\n");
@@ -1873,7 +1863,7 @@ public class IntegrationTests {
 			// Content-Encoding stripped; Content-Length and body length reflect the decompressed size
 			Assertions.assertEquals("none|" + uncompressed.length + "|" + uncompressed.length + "|" + compressed.length,
 					new String(response.body(), StandardCharsets.UTF_8));
-		}
+		});
 	}
 
 	@Test
@@ -1881,8 +1871,7 @@ public class IntegrationTests {
 		int port = findFreePort();
 		SokletConfig cfg = decompressionConfig(port, null); // default: disabled
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
+		Soklet.run(cfg, () -> {
 			byte[] compressed = gzipBytes("hello gzip".getBytes(StandardCharsets.UTF_8));
 			RawResponse response = postRawBody(port, "/body-meta", compressed, "Content-Encoding: gzip\r\n");
 
@@ -1890,7 +1879,7 @@ public class IntegrationTests {
 			// Untouched: handler sees the original Content-Encoding and the compressed byte count
 			Assertions.assertEquals("gzip|" + compressed.length + "|" + compressed.length + "|" + compressed.length,
 					new String(response.body(), StandardCharsets.UTF_8));
-		}
+		});
 	}
 
 	@Test
@@ -1898,14 +1887,13 @@ public class IntegrationTests {
 		int port = findFreePort();
 		SokletConfig cfg = decompressionConfig(port, RequestDecompressionPolicy.fromDefaults());
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
+		Soklet.run(cfg, () -> {
 			RawResponse response = postRawBody(port, "/body", "plain".getBytes(StandardCharsets.UTF_8),
 					"Content-Encoding: identity\r\n");
 
 			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"), response.statusLine());
 			Assertions.assertEquals("plain", new String(response.body(), StandardCharsets.UTF_8));
-		}
+		});
 	}
 
 	@Test
@@ -1913,13 +1901,12 @@ public class IntegrationTests {
 		int port = findFreePort();
 		SokletConfig cfg = decompressionConfig(port, RequestDecompressionPolicy.fromDefaults());
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
+		Soklet.run(cfg, () -> {
 			RawResponse response = postRawBody(port, "/body", "whatever".getBytes(StandardCharsets.UTF_8),
 					"Content-Encoding: br\r\n");
 
 			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 415"), response.statusLine());
-		}
+		});
 	}
 
 	@Test
@@ -1927,13 +1914,12 @@ public class IntegrationTests {
 		int port = findFreePort();
 		SokletConfig cfg = decompressionConfig(port, RequestDecompressionPolicy.fromDefaults());
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
+		Soklet.run(cfg, () -> {
 			RawResponse response = postRawBody(port, "/body", "this is not gzip".getBytes(StandardCharsets.UTF_8),
 					"Content-Encoding: gzip\r\n");
 
 			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 400"), response.statusLine());
-		}
+		});
 	}
 
 	@Test
@@ -1943,13 +1929,12 @@ public class IntegrationTests {
 				.maximumDecompressedBodySizeInBytes(16)
 				.build());
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
+		Soklet.run(cfg, () -> {
 			byte[] compressed = gzipBytes(new byte[1_000]);
 			RawResponse response = postRawBody(port, "/body", compressed, "Content-Encoding: gzip\r\n");
 
 			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 413"), response.statusLine());
-		}
+		});
 	}
 
 	@Test
@@ -1967,15 +1952,14 @@ public class IntegrationTests {
 				.maximumDecompressedBodySizeInBytes(16)
 				.build(), responseMarshaler);
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
+		Soklet.run(cfg, () -> {
 			byte[] compressed = gzipBytes(new byte[1_000]);
 			RawResponse response = postRawBody(port, "/body", compressed, "Content-Encoding: gzip\r\n");
 
 			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 413"), response.statusLine());
 			Assertions.assertEquals("custom|true|true|" + compressed.length,
 					new String(response.body(), StandardCharsets.UTF_8));
-		}
+		});
 	}
 
 	@Test
@@ -1983,8 +1967,7 @@ public class IntegrationTests {
 		int port = findFreePort();
 		SokletConfig cfg = decompressionConfig(port, RequestDecompressionPolicy.fromDefaults());
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
+		Soklet.run(cfg, () -> {
 			byte[] uncompressed = "hello chunked gzip".getBytes(StandardCharsets.UTF_8);
 			byte[] compressed = gzipBytes(uncompressed);
 
@@ -2013,7 +1996,7 @@ public class IntegrationTests {
 				Assertions.assertEquals("none|" + uncompressed.length + "|" + uncompressed.length + "|" + compressed.length,
 						new String(response.body(), StandardCharsets.UTF_8));
 			}
-		}
+		});
 	}
 
 	@Test
@@ -2021,9 +2004,7 @@ public class IntegrationTests {
 		int port = findFreePort();
 		SokletConfig cfg = decompressionConfig(port, RequestDecompressionPolicy.fromDefaults());
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
-
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 					 OutputStream out = socket.getOutputStream();
 					 InputStream in = socket.getInputStream()) {
@@ -2058,7 +2039,7 @@ public class IntegrationTests {
 				Assertions.assertEquals("close", failsafeHead.headers().get("connection"));
 				Assertions.assertEquals(-1, in.read(), "Unparsed HEAD must close without leaking content");
 			}
-		}
+		});
 	}
 
 	private record HeadersOnlyResponse(String statusLine, Map<String, String> headers) {}
@@ -2088,9 +2069,7 @@ public class IntegrationTests {
 		int port = findFreePort();
 		SokletConfig cfg = decompressionConfig(port, RequestDecompressionPolicy.fromDefaults());
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
-
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 					 OutputStream out = socket.getOutputStream();
 					 InputStream in = socket.getInputStream()) {
@@ -2117,7 +2096,7 @@ public class IntegrationTests {
 				RawResponse response = readResponse(in);
 				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 400"), response.statusLine());
 			}
-		}
+		});
 	}
 
 	@Test
@@ -2125,9 +2104,7 @@ public class IntegrationTests {
 		int port = findFreePort();
 		SokletConfig cfg = decompressionConfig(port, RequestDecompressionPolicy.fromDefaults());
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
-
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 					 OutputStream out = socket.getOutputStream();
 					 InputStream in = socket.getInputStream()) {
@@ -2140,7 +2117,7 @@ public class IntegrationTests {
 				RawResponse response = readResponse(in);
 				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 415"), response.statusLine());
 			}
-		}
+		});
 	}
 
 	@Test
@@ -2148,9 +2125,7 @@ public class IntegrationTests {
 		int port = findFreePort();
 		SokletConfig cfg = decompressionConfig(port, RequestDecompressionPolicy.fromDefaults());
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
-
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 					 OutputStream out = socket.getOutputStream();
 					 InputStream in = socket.getInputStream()) {
@@ -2164,7 +2139,7 @@ public class IntegrationTests {
 				Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"), response.statusLine());
 				Assertions.assertEquals("hello world", new String(response.body(), StandardCharsets.UTF_8));
 			}
-		}
+		});
 	}
 
 	@Test
@@ -2172,9 +2147,7 @@ public class IntegrationTests {
 		int port = findFreePort();
 		SokletConfig cfg = decompressionConfig(port, RequestDecompressionPolicy.fromDefaults());
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
-
+		Soklet.run(cfg, () -> {
 			String boundary = "sokletBoundary";
 			String multipartBody = "--" + boundary + "\r\n"
 					+ "Content-Disposition: form-data; name=\"test\"\r\n"
@@ -2191,7 +2164,7 @@ public class IntegrationTests {
 			// while Content-Encoding/Content-Length are replaced to describe the decompressed bytes
 			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 200"), response.statusLine());
 			Assertions.assertEquals("test|data", new String(response.body(), StandardCharsets.UTF_8));
-		}
+		});
 	}
 
 	@Test
@@ -2199,14 +2172,13 @@ public class IntegrationTests {
 		int port = findFreePort();
 		SokletConfig cfg = decompressionConfig(port, RequestDecompressionPolicy.fromDefaults());
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
+		Soklet.run(cfg, () -> {
 			byte[] compressed = gzipBytes("hello".getBytes(StandardCharsets.UTF_8));
 			// RFC 9110 permits coding chains, but the opt-in policy supports single gzip/x-gzip only
 			RawResponse response = postRawBody(port, "/body", compressed, "Content-Encoding: identity, gzip\r\n");
 
 			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 415"), response.statusLine());
-		}
+		});
 	}
 
 	@Test
@@ -2214,15 +2186,14 @@ public class IntegrationTests {
 		int port = findFreePort();
 		SokletConfig cfg = decompressionConfig(port, RequestDecompressionPolicy.fromDefaults());
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
+		Soklet.run(cfg, () -> {
 			byte[] compressed = gzipBytes("hello".getBytes(StandardCharsets.UTF_8));
 			// Two Content-Encoding header lines are semantically a coding chain -> 415 under the single-coding policy
 			RawResponse response = postRawBody(port, "/body", compressed,
 					"Content-Encoding: gzip\r\nContent-Encoding: gzip\r\n");
 
 			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 415"), response.statusLine());
-		}
+		});
 	}
 
 	@Test
@@ -2232,14 +2203,13 @@ public class IntegrationTests {
 				.maximumCompressionRatio(1)
 				.build());
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
+		Soklet.run(cfg, () -> {
 			// ~100KB of zeros compresses to a few hundred bytes: expansion far beyond ratio 1 + 8KB allowance
 			byte[] compressed = gzipBytes(new byte[100_000]);
 			RawResponse response = postRawBody(port, "/body", compressed, "Content-Encoding: gzip\r\n");
 
 			Assertions.assertTrue(response.statusLine().startsWith("HTTP/1.1 413"), response.statusLine());
-		}
+		});
 	}
 
 	@NonNull
@@ -2310,9 +2280,7 @@ public class IntegrationTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
-
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 					 OutputStream out = socket.getOutputStream();
 					 InputStream in = socket.getInputStream()) {
@@ -2332,7 +2300,7 @@ public class IntegrationTests {
 						"The default unparsed-request timeout representation is empty");
 				Assertions.assertEquals(-1, in.read(), "Connection should close after the timeout response");
 			}
-		}
+		});
 	}
 
 	@Test
@@ -2347,9 +2315,7 @@ public class IntegrationTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
-
+		Soklet.run(cfg, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000);
 					 OutputStream out = socket.getOutputStream();
 					 InputStream in = socket.getInputStream()) {
@@ -2375,7 +2341,7 @@ public class IntegrationTests {
 					Assertions.fail("Connection did not close after timeout response");
 				}
 			}
-		}
+		});
 	}
 
 	@Test
@@ -2396,9 +2362,7 @@ public class IntegrationTests {
 				.lifecycleObserver(new QuietLifecycle())
 				.build();
 
-		try (Soklet app = Soklet.fromConfig(cfg)) {
-			app.start();
-
+		Soklet.run(cfg, () -> {
 			ExecutorService requestExecutor = ((DefaultHttpServer) httpServer).getRequestHandlerExecutorService().orElse(null);
 			if (requestExecutor instanceof ThreadPoolExecutor threadPoolExecutor) {
 				threadPoolExecutor.prestartAllCoreThreads();
@@ -2458,13 +2422,13 @@ public class IntegrationTests {
 
 			socket1.close();
 			socket2.close();
-		}
+		});
 	}
 
 	@Test
 	public void methodNotAllowed_405_includesAllow() throws Exception {
 		int port = findFreePort();
-		try (Soklet app = startApp(port, Set.of(UsersResource.class))) {
+		Soklet.run(appConfig(port, Set.of(UsersResource.class)), () -> {
 			URL u = new URL("http://127.0.0.1:" + port + "/users/123");
 			HttpURLConnection c = open("POST", u, Map.of("Accept", "text/plain"));
 			c.getOutputStream().write("x".getBytes(StandardCharsets.UTF_8));
@@ -2473,13 +2437,13 @@ public class IntegrationTests {
 			List<String> allow = c.getHeaderFields().get("Allow");
 			Assertions.assertNotNull(allow);
 			Assertions.assertTrue(allow.contains("GET"));
-		}
+		});
 	}
 
 	@Test
 	public void methodNotAllowed_405_excludesHeadWithoutGet() throws Exception {
 		int port = findFreePort();
-		try (Soklet app = startApp(port, Set.of(Echo2Resource.class))) {
+		Soklet.run(appConfig(port, Set.of(Echo2Resource.class)), () -> {
 			URL u = new URL("http://127.0.0.1:" + port + "/len");
 			HttpURLConnection c = open("GET", u, Map.of("Accept", "text/plain"));
 			int code = c.getResponseCode();
@@ -2489,13 +2453,13 @@ public class IntegrationTests {
 			Assertions.assertTrue(allow.contains("POST"));
 			Assertions.assertTrue(allow.contains("OPTIONS"));
 			Assertions.assertFalse(allow.contains("HEAD"));
-		}
+		});
 	}
 
 	@Test
 	public void cookies_quotedValueAndMultipleHeaders() throws Exception {
 		int port = findFreePort();
-		try (Soklet app = startApp(port, Set.of(Echo2Resource.class))) {
+		Soklet.run(appConfig(port, Set.of(Echo2Resource.class)), () -> {
 			URL u = new URL("http://127.0.0.1:" + port + "/cookie-value?name=flavor");
 			Map<String, String> headers = new LinkedHashMap<>();
 			headers.put("Accept", "text/plain");
@@ -2510,13 +2474,13 @@ public class IntegrationTests {
 			Set<String> vals = Arrays.stream(body.split("\\|")).collect(Collectors.toSet());
 			Assertions.assertTrue(vals.contains("choc chip"));
 			Assertions.assertTrue(vals.contains("vanilla"));
-		}
+		});
 	}
 
 	@Test
 	public void pathDecoding_plusLiteral_queryPlusIsNotSpace() throws Exception {
 		int port = findFreePort();
-		try (Soklet app = startApp(port, Set.of(Echo2Resource.class))) {
+		Soklet.run(appConfig(port, Set.of(Echo2Resource.class)), () -> {
 			URL upath = new URL("http://127.0.0.1:" + port + "/files/a+b");
 			HttpURLConnection cp = open("GET", upath, Map.of("Accept", "text/plain"));
 			Assertions.assertEquals(200, cp.getResponseCode());
@@ -2526,7 +2490,7 @@ public class IntegrationTests {
 			HttpURLConnection cq = open("GET", uquery, Map.of("Accept", "text/plain"));
 			Assertions.assertEquals(200, cq.getResponseCode());
 			Assertions.assertEquals("a+b", new String(readAll(cq.getInputStream()), StandardCharsets.UTF_8));
-		}
+		});
 	}
 
 	private static byte[] largeResponseBody() {

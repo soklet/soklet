@@ -81,229 +81,236 @@ public class McpHttpContractGoldenProductionTests {
 			Path.of("release", "README.md"));
 
 	@Test
+	@org.junit.jupiter.api.Timeout(90)
 	public void requestPipelineFirstFailureWinnersMatchCompleteWireGoldens()
 			throws Exception {
 		FixtureState state = new FixtureState();
 		McpServer server = server(state);
-		Soklet owner = managedSoklet(server);
+		SokletConfig ownerConfig = config(server);
 
 		try {
-			owner.start();
-			int port = boundPort(server);
-			List<RequestCase> cases = List.of(
-					new RequestCase("early-parser",
-							RequestSpec.raw("POST /mcp HTTP/1.1\r\n"
-									+ "Content-Length: 0\r\n"
-									+ "Connection: close\r\n\r\n"),
-							"early-parser-400.http.hex", List.of()),
-					new RequestCase("routing",
-							post("routing", "/missing", "{", List.of(
-									new HeaderLine("Host", "invalid.example"),
-									new HeaderLine("Origin", REJECTED_ORIGIN),
-									new HeaderLine("Content-Type", "text/plain"),
-									acceptHeader())),
-							"routing-404.http.hex", List.of()),
-					new RequestCase("host",
-							post("host", MCP_PATH, "{", List.of(
-									new HeaderLine("Host", "invalid.example"),
-									new HeaderLine("Origin", REJECTED_ORIGIN),
-									new HeaderLine("Content-Type", "text/plain"),
-									acceptHeader())),
-							"host-421.http.hex", List.of()),
-					new RequestCase("origin",
-							post("origin", MCP_PATH, "{", List.of(
-									new HeaderLine("Origin", REJECTED_ORIGIN),
-									new HeaderLine("Content-Type", "text/plain"),
-									acceptHeader())),
-							"origin-403.http.hex", List.of()),
-					new RequestCase("media",
-							post("media", MCP_PATH, "{", List.of(
-									new HeaderLine("Content-Type", "text/plain"),
-									acceptHeader())),
-							"media-415.http.hex", List.of()),
-					new RequestCase("strict-json",
-							post("strict-json", MCP_PATH, "{", baseMediaHeaders()),
-							"json-parse-400.http.hex", List.of()),
-					new RequestCase("envelope",
-							post("envelope", MCP_PATH,
-									"{\"jsonrpc\":\"2.0\",\"id\":\"contract\","
-											+ "\"result\":{}}", baseMediaHeaders()),
-							"invalid-envelope-400.http.hex", List.of()),
-					new RequestCase("unsupported-selector-row1-non-initialize",
-							post("unsupported-selector-row1-non-initialize", MCP_PATH,
-									"{\"jsonrpc\":\"2.0\",\"id\":\"contract\","
-											+ "\"method\":\"tools/call\",\"result\":{}}",
-									toolHeaders(TOOL_NAME, "2099-01-01")),
-							"unsupported-selector-invalid-envelope-non-initialize-400.http.hex",
-							List.of()),
-					new RequestCase("mirrored-header",
-							post("mirrored-header", MCP_PATH,
-									toolRequestWithoutMetadata(TOOL_NAME, "success"),
-									baseMediaHeaders()),
-							"header-mismatch-400.http.hex", List.of()),
-					new RequestCase("metadata",
-							post("metadata", MCP_PATH,
-									toolRequestWithoutMetadata(TOOL_NAME, "success"),
-									toolHeaders(TOOL_NAME, PROTOCOL_VERSION)),
-							"invalid-params-400.http.hex", List.of()),
-					new RequestCase("unsupported-missing-metadata",
-							post("unsupported-missing-metadata", MCP_PATH,
-									toolRequestWithoutMetadata(TOOL_NAME, "success"),
-									toolHeaders(TOOL_NAME, "2099-01-01")),
-							"unsupported-version-400.http.hex", List.of()),
-					new RequestCase("version",
-							post("version", MCP_PATH,
-									toolRequest(TOOL_NAME, "schema-failure",
-											"2099-01-01", false),
-									toolHeaders(TOOL_NAME, "2099-01-01")),
-							"unsupported-version-400.http.hex", List.of()),
-					new RequestCase("structural",
-							post("structural", MCP_PATH,
-									discoveryRequest("{\"unexpected\":true}"),
-									requestHeaders("server/discover", PROTOCOL_VERSION)),
-							"invalid-params-400.http.hex", List.of()),
-					new RequestCase("admission-denied",
-							validToolPost("admission-denied", TOOL_NAME, "success", false),
-							"admission-401.http.hex", List.of("admission")),
-					new RequestCase("rate-denied",
-							validToolPost("rate-denied", TOOL_NAME, "success", false),
-							"rate-429.http.hex",
-							List.of("admission", "request-limiter")),
-					new RequestCase("policy-cache-control",
-							validToolPost("policy-cache-control", TOOL_NAME, "success", false),
-							"internal-500.http.hex", List.of("admission")),
-					new RequestCase("interceptor-failure",
-							validToolPost("interceptor-failure", TOOL_NAME,
-									"schema-failure", false),
-							"internal-200.http.hex", List.of("admission",
-									"request-limiter", "tool-limiter", "interceptor")),
-					new RequestCase("schema-failure",
-							validToolPost("schema-failure", TOOL_NAME,
-									"schema-failure", false),
-							"tool-argument-error-200.http.hex", List.of("admission",
-									"request-limiter", "tool-limiter", "interceptor", "sanitizer")),
-					new RequestCase("handler-failure",
-							validToolPost("handler-failure", TOOL_NAME,
-									"handler-failure", false),
-							"internal-200.http.hex", List.of("admission",
-									"request-limiter", "tool-limiter", "interceptor",
-									"handler")),
-					new RequestCase("invalid-output",
-							validToolPost("invalid-output", TYPED_TOOL_NAME,
-									"invalid-output", false),
-							"internal-200.http.hex", List.of("admission",
-									"request-limiter", "tool-limiter", "interceptor",
-									"handler", "sanitizer")),
-					new RequestCase("typed-success",
-							validToolPost("typed-success", TYPED_TOOL_NAME,
-									"typed-success", false),
-							"typed-success-200.http.hex", List.of("admission",
-									"request-limiter", "tool-limiter", "interceptor",
-									"handler", "sanitizer")),
-					new RequestCase("success",
-							validToolPost("success", TOOL_NAME, "success", false),
-							"success-200.http.hex", List.of("admission",
-									"request-limiter", "tool-limiter", "interceptor",
-									"handler", "sanitizer")));
-
-			for (RequestCase testCase : cases) {
+			Soklet.run(ownerConfig, () -> {
 				try {
-					WireResponse response = exchange(port, testCase.request());
-					assertGolden(response, testCase.fixture());
-					Assertions.assertEquals(testCase.expectedStages(),
-							state.stages(testCase.name()), testCase.name());
-				} catch (Exception | AssertionError failure) {
-					throw new AssertionError("HTTP contract request case failed: "
-							+ testCase.name(), failure);
+					int port = boundPort(server);
+					List<RequestCase> cases = List.of(
+							new RequestCase("early-parser",
+									RequestSpec.raw("POST /mcp HTTP/1.1\r\n"
+											+ "Content-Length: 0\r\n"
+											+ "Connection: close\r\n\r\n"),
+									"early-parser-400.http.hex", List.of()),
+							new RequestCase("routing",
+									post("routing", "/missing", "{", List.of(
+											new HeaderLine("Host", "invalid.example"),
+											new HeaderLine("Origin", REJECTED_ORIGIN),
+											new HeaderLine("Content-Type", "text/plain"),
+											acceptHeader())),
+									"routing-404.http.hex", List.of()),
+							new RequestCase("host",
+									post("host", MCP_PATH, "{", List.of(
+											new HeaderLine("Host", "invalid.example"),
+											new HeaderLine("Origin", REJECTED_ORIGIN),
+											new HeaderLine("Content-Type", "text/plain"),
+											acceptHeader())),
+									"host-421.http.hex", List.of()),
+							new RequestCase("origin",
+									post("origin", MCP_PATH, "{", List.of(
+											new HeaderLine("Origin", REJECTED_ORIGIN),
+											new HeaderLine("Content-Type", "text/plain"),
+											acceptHeader())),
+									"origin-403.http.hex", List.of()),
+							new RequestCase("media",
+									post("media", MCP_PATH, "{", List.of(
+											new HeaderLine("Content-Type", "text/plain"),
+											acceptHeader())),
+									"media-415.http.hex", List.of()),
+							new RequestCase("strict-json",
+									post("strict-json", MCP_PATH, "{", baseMediaHeaders()),
+									"json-parse-400.http.hex", List.of()),
+							new RequestCase("envelope",
+									post("envelope", MCP_PATH,
+											"{\"jsonrpc\":\"2.0\",\"id\":\"contract\","
+													+ "\"result\":{}}", baseMediaHeaders()),
+									"invalid-envelope-400.http.hex", List.of()),
+							new RequestCase("unsupported-selector-row1-non-initialize",
+									post("unsupported-selector-row1-non-initialize", MCP_PATH,
+											"{\"jsonrpc\":\"2.0\",\"id\":\"contract\","
+													+ "\"method\":\"tools/call\",\"result\":{}}",
+											toolHeaders(TOOL_NAME, "2099-01-01")),
+									"unsupported-selector-invalid-envelope-non-initialize-400.http.hex",
+									List.of()),
+							new RequestCase("mirrored-header",
+									post("mirrored-header", MCP_PATH,
+											toolRequestWithoutMetadata(TOOL_NAME, "success"),
+											baseMediaHeaders()),
+									"header-mismatch-400.http.hex", List.of()),
+							new RequestCase("metadata",
+									post("metadata", MCP_PATH,
+											toolRequestWithoutMetadata(TOOL_NAME, "success"),
+											toolHeaders(TOOL_NAME, PROTOCOL_VERSION)),
+									"invalid-params-400.http.hex", List.of()),
+							new RequestCase("unsupported-missing-metadata",
+									post("unsupported-missing-metadata", MCP_PATH,
+											toolRequestWithoutMetadata(TOOL_NAME, "success"),
+											toolHeaders(TOOL_NAME, "2099-01-01")),
+									"unsupported-version-400.http.hex", List.of()),
+							new RequestCase("version",
+									post("version", MCP_PATH,
+											toolRequest(TOOL_NAME, "schema-failure",
+													"2099-01-01", false),
+											toolHeaders(TOOL_NAME, "2099-01-01")),
+									"unsupported-version-400.http.hex", List.of()),
+							new RequestCase("structural",
+									post("structural", MCP_PATH,
+											discoveryRequest("{\"unexpected\":true}"),
+											requestHeaders("server/discover", PROTOCOL_VERSION)),
+									"invalid-params-400.http.hex", List.of()),
+							new RequestCase("admission-denied",
+									validToolPost("admission-denied", TOOL_NAME, "success", false),
+									"admission-401.http.hex", List.of("admission")),
+							new RequestCase("rate-denied",
+									validToolPost("rate-denied", TOOL_NAME, "success", false),
+									"rate-429.http.hex",
+									List.of("admission", "request-limiter")),
+							new RequestCase("policy-cache-control",
+									validToolPost("policy-cache-control", TOOL_NAME, "success", false),
+									"internal-500.http.hex", List.of("admission")),
+							new RequestCase("interceptor-failure",
+									validToolPost("interceptor-failure", TOOL_NAME,
+											"schema-failure", false),
+									"internal-200.http.hex", List.of("admission",
+											"request-limiter", "tool-limiter", "interceptor")),
+							new RequestCase("schema-failure",
+									validToolPost("schema-failure", TOOL_NAME,
+											"schema-failure", false),
+									"tool-argument-error-200.http.hex", List.of("admission",
+											"request-limiter", "tool-limiter", "interceptor", "sanitizer")),
+							new RequestCase("handler-failure",
+									validToolPost("handler-failure", TOOL_NAME,
+											"handler-failure", false),
+									"internal-200.http.hex", List.of("admission",
+											"request-limiter", "tool-limiter", "interceptor",
+											"handler")),
+							new RequestCase("invalid-output",
+									validToolPost("invalid-output", TYPED_TOOL_NAME,
+											"invalid-output", false),
+									"internal-200.http.hex", List.of("admission",
+											"request-limiter", "tool-limiter", "interceptor",
+											"handler", "sanitizer")),
+							new RequestCase("typed-success",
+									validToolPost("typed-success", TYPED_TOOL_NAME,
+											"typed-success", false),
+									"typed-success-200.http.hex", List.of("admission",
+											"request-limiter", "tool-limiter", "interceptor",
+											"handler", "sanitizer")),
+							new RequestCase("success",
+									validToolPost("success", TOOL_NAME, "success", false),
+									"success-200.http.hex", List.of("admission",
+											"request-limiter", "tool-limiter", "interceptor",
+											"handler", "sanitizer")));
+
+					for (RequestCase testCase : cases) {
+						try {
+							WireResponse response = exchange(port, testCase.request());
+							assertGolden(response, testCase.fixture());
+							Assertions.assertEquals(testCase.expectedStages(),
+									state.stages(testCase.name()), testCase.name());
+						} catch (Exception | AssertionError failure) {
+							throw new AssertionError("HTTP contract request case failed: "
+									+ testCase.name(), failure);
+						}
+					}
+					assertIdleStartedDiagnostics(server);
+				} finally {
+					state.releaseHeldHandlers();
 				}
-			}
-			assertIdleStartedDiagnostics(server);
+			});
 		} finally {
-			state.releaseHeldHandlers();
-			stopAndAssertClean(owner, server);
+			verifyClean(server);
 		}
 	}
 
 	@Test
+	@org.junit.jupiter.api.Timeout(90)
 	public void notificationPipelineAndPreflightMatchCompleteWireGoldens()
 			throws Exception {
 		FixtureState state = new FixtureState();
 		McpServer server = server(state);
-		Soklet owner = managedSoklet(server);
+		SokletConfig ownerConfig = config(server);
 
 		try {
-			owner.start();
-			int port = boundPort(server);
-			List<RequestCase> cases = List.of(
-					new RequestCase("notification-origin",
-							post("notification-origin", MCP_PATH, "{", List.of(
-									new HeaderLine("Origin", REJECTED_ORIGIN),
-									new HeaderLine("Content-Type", "application/json"),
-									acceptHeader())),
-							"origin-403.http.hex", List.of()),
-					new RequestCase("notification-json",
-							post("notification-json", MCP_PATH, "{", baseMediaHeaders()),
-							"json-parse-400.http.hex", List.of()),
-					new RequestCase("notification-metadata",
-							post("notification-metadata", MCP_PATH,
-									notification("future/event", "{\"_meta\":\"invalid\"}"),
-									baseMediaHeaders()),
-							"early-parser-400.http.hex", List.of()),
-					new RequestCase("notification-version",
-							post("notification-version", MCP_PATH,
-									notification("future/event", "{}"),
-									baseMediaHeaders()),
-							"early-parser-400.http.hex", List.of()),
-					new RequestCase("notification-admission",
-							post("notification-admission", MCP_PATH,
-									notification("future/event", "{}"),
-									notificationHeaders()),
-							"notification-admission-401.http.hex", List.of("admission")),
-					new RequestCase("notification-rate",
-							post("notification-rate", MCP_PATH,
-									notification("future/event", "{}"),
-									notificationHeaders()),
-							"notification-rate-429.http.hex",
-							List.of("admission", "request-limiter")),
-					new RequestCase("notification-unsupported",
-							post("notification-unsupported", MCP_PATH,
-									notification("future/event", "{}"),
-									notificationHeaders()),
-							"early-parser-400.http.hex",
-							List.of("admission", "request-limiter")),
-					new RequestCase("notification-cancelled",
-							post("notification-cancelled", MCP_PATH,
-									notification("notifications/cancelled",
-											"{\"requestId\":{},\"_meta\":\"ignored\"}"),
-									notificationHeaders()),
-							"notification-accepted-202.http.hex",
-							List.of("admission", "request-limiter")));
+			Soklet.run(ownerConfig, () -> {
+				int port = boundPort(server);
+				List<RequestCase> cases = List.of(
+						new RequestCase("notification-origin",
+								post("notification-origin", MCP_PATH, "{", List.of(
+										new HeaderLine("Origin", REJECTED_ORIGIN),
+										new HeaderLine("Content-Type", "application/json"),
+										acceptHeader())),
+								"origin-403.http.hex", List.of()),
+						new RequestCase("notification-json",
+								post("notification-json", MCP_PATH, "{", baseMediaHeaders()),
+								"json-parse-400.http.hex", List.of()),
+						new RequestCase("notification-metadata",
+								post("notification-metadata", MCP_PATH,
+										notification("future/event", "{\"_meta\":\"invalid\"}"),
+										baseMediaHeaders()),
+								"early-parser-400.http.hex", List.of()),
+						new RequestCase("notification-version",
+								post("notification-version", MCP_PATH,
+										notification("future/event", "{}"),
+										baseMediaHeaders()),
+								"early-parser-400.http.hex", List.of()),
+						new RequestCase("notification-admission",
+								post("notification-admission", MCP_PATH,
+										notification("future/event", "{}"),
+										notificationHeaders()),
+								"notification-admission-401.http.hex", List.of("admission")),
+						new RequestCase("notification-rate",
+								post("notification-rate", MCP_PATH,
+										notification("future/event", "{}"),
+										notificationHeaders()),
+								"notification-rate-429.http.hex",
+								List.of("admission", "request-limiter")),
+						new RequestCase("notification-unsupported",
+								post("notification-unsupported", MCP_PATH,
+										notification("future/event", "{}"),
+										notificationHeaders()),
+								"early-parser-400.http.hex",
+								List.of("admission", "request-limiter")),
+						new RequestCase("notification-cancelled",
+								post("notification-cancelled", MCP_PATH,
+										notification("notifications/cancelled",
+												"{\"requestId\":{},\"_meta\":\"ignored\"}"),
+										notificationHeaders()),
+								"notification-accepted-202.http.hex",
+								List.of("admission", "request-limiter")));
 
-			for (RequestCase testCase : cases) {
-				try {
-					WireResponse response = exchange(port, testCase.request());
-					assertGolden(response, testCase.fixture());
-					Assertions.assertEquals(testCase.expectedStages(),
-							state.stages(testCase.name()), testCase.name());
-				} catch (Exception | AssertionError failure) {
-					throw new AssertionError("HTTP contract notification case failed: "
-							+ testCase.name(), failure);
+				for (RequestCase testCase : cases) {
+					try {
+						WireResponse response = exchange(port, testCase.request());
+						assertGolden(response, testCase.fixture());
+						Assertions.assertEquals(testCase.expectedStages(),
+								state.stages(testCase.name()), testCase.name());
+					} catch (Exception | AssertionError failure) {
+						throw new AssertionError("HTTP contract notification case failed: "
+								+ testCase.name(), failure);
+					}
 				}
-			}
 
-			WireResponse preflight = exchange(port, new RequestSpec("OPTIONS", MCP_PATH,
-					List.of(
-							new HeaderLine(CASE_HEADER, "preflight"),
-							new HeaderLine("Origin", ALLOWED_ORIGIN),
-							new HeaderLine("Access-Control-Request-Method", "POST"),
-							new HeaderLine("Access-Control-Request-Headers",
-									"Content-Type, MCP-Protocol-Version, Mcp-Method, Mcp-Name")),
-					new byte[0], null));
-			assertGolden(preflight, "preflight-204.http.hex");
-			Assertions.assertTrue(state.stages("preflight").isEmpty());
-			assertIdleStartedDiagnostics(server);
+				WireResponse preflight = exchange(port, new RequestSpec("OPTIONS", MCP_PATH,
+						List.of(
+								new HeaderLine(CASE_HEADER, "preflight"),
+								new HeaderLine("Origin", ALLOWED_ORIGIN),
+								new HeaderLine("Access-Control-Request-Method", "POST"),
+								new HeaderLine("Access-Control-Request-Headers",
+										"Content-Type, MCP-Protocol-Version, Mcp-Method, Mcp-Name")),
+						new byte[0], null));
+				assertGolden(preflight, "preflight-204.http.hex");
+				Assertions.assertTrue(state.stages("preflight").isEmpty());
+				assertIdleStartedDiagnostics(server);
+			});
 		} finally {
-			stopAndAssertClean(owner, server);
+			verifyClean(server);
 		}
 	}
 
@@ -313,44 +320,48 @@ public class McpHttpContractGoldenProductionTests {
 			throws Exception {
 		FixtureState state = new FixtureState();
 		McpServer server = server(state);
-		Soklet owner = managedSoklet(server);
+		SokletConfig ownerConfig = config(server);
 		ExecutorService clients = Executors.newFixedThreadPool(2);
 
 		try {
-			owner.start();
-			int port = boundPort(server);
-			Future<WireResponse> held = clients.submit(() -> exchange(port,
-					validToolPost("held", TOOL_NAME, "hold", false)));
-			Assertions.assertTrue(state.handlerHeld.await(5, TimeUnit.SECONDS),
-					"The active contract handler did not enter.");
-			Future<WireResponse> queued = clients.submit(() -> exchange(port,
-					validToolPost("queued", TOOL_NAME, "queued", false)));
-			awaitCondition(() -> server.getDiagnostics().getRequestHandlerQueueDepth() == 1);
+			Soklet.run(ownerConfig, () -> {
+				try {
+					int port = boundPort(server);
+					Future<WireResponse> held = clients.submit(() -> exchange(port,
+							validToolPost("held", TOOL_NAME, "hold", false)));
+					Assertions.assertTrue(state.handlerHeld.await(5, TimeUnit.SECONDS),
+							"The active contract handler did not enter.");
+					Future<WireResponse> queued = clients.submit(() -> exchange(port,
+							validToolPost("queued", TOOL_NAME, "queued", false)));
+					awaitCondition(() -> server.getDiagnostics().getRequestHandlerQueueDepth() == 1);
 
-			WireResponse overload = exchange(port,
-					validToolPost("overload", TOOL_NAME, "overload", false));
-			assertGolden(overload, "overload-503.http.hex");
-			Assertions.assertEquals(List.of("admission", "request-limiter",
-					"tool-limiter"), state.stages("overload"));
+					WireResponse overload = exchange(port,
+							validToolPost("overload", TOOL_NAME, "overload", false));
+					assertGolden(overload, "overload-503.http.hex");
+					Assertions.assertEquals(List.of("admission", "request-limiter",
+							"tool-limiter"), state.stages("overload"));
 
-			state.releaseHeldHandlers();
-			assertGolden(held.get(5, TimeUnit.SECONDS), "success-200.http.hex");
-			assertGolden(queued.get(5, TimeUnit.SECONDS), "success-200.http.hex");
-			List<String> successfulStages = List.of("admission", "request-limiter",
-					"tool-limiter", "interceptor", "handler", "sanitizer");
-			Assertions.assertEquals(successfulStages, state.stages("held"));
-			Assertions.assertEquals(successfulStages, state.stages("queued"));
+					state.releaseHeldHandlers();
+					assertGolden(held.get(5, TimeUnit.SECONDS), "success-200.http.hex");
+					assertGolden(queued.get(5, TimeUnit.SECONDS), "success-200.http.hex");
+					List<String> successfulStages = List.of("admission", "request-limiter",
+							"tool-limiter", "interceptor", "handler", "sanitizer");
+					Assertions.assertEquals(successfulStages, state.stages("held"));
+					Assertions.assertEquals(successfulStages, state.stages("queued"));
 
-			WireResponse sse = exchange(port,
-					validToolPost("sse", TOOL_NAME, "sse", true));
-			assertGolden(sse, "sse-200.http.hex");
-			Assertions.assertEquals(List.of("admission", "request-limiter",
-					"tool-limiter", "interceptor", "handler", "sanitizer"),
-					state.stages("sse"));
-			assertIdleStartedDiagnostics(server);
+					WireResponse sse = exchange(port,
+							validToolPost("sse", TOOL_NAME, "sse", true));
+					assertGolden(sse, "sse-200.http.hex");
+					Assertions.assertEquals(List.of("admission", "request-limiter",
+							"tool-limiter", "interceptor", "handler", "sanitizer"),
+							state.stages("sse"));
+					assertIdleStartedDiagnostics(server);
+				} finally {
+					state.releaseHeldHandlers();
+				}
+			});
 		} finally {
-			state.releaseHeldHandlers();
-			stopAndAssertClean(owner, server);
+			verifyClean(server);
 			clients.shutdownNow();
 			Assertions.assertTrue(clients.awaitTermination(5, TimeUnit.SECONDS));
 		}
@@ -746,15 +757,14 @@ public class McpHttpContractGoldenProductionTests {
 		assertZeroLoad(diagnostics);
 	}
 
-	private static Soklet managedSoklet(McpServer server) {
-		return Soklet.fromConfig(SokletConfig.withMcpServer(server)
+	private static SokletConfig config(McpServer server) {
+		return SokletConfig.withMcpServer(server)
 				.resourceMethodResolver(
 						ResourceMethodResolver.fromMethods(Set.of()))
-				.build());
+				.build();
 	}
 
-	private static void stopAndAssertClean(Soklet owner, McpServer server) {
-		owner.close();
+	private static void verifyClean(McpServer server) {
 		McpServerDiagnostics diagnostics = server.getDiagnostics();
 		Assertions.assertEquals(McpServerStatus.TERMINATED, diagnostics.getStatus());
 		Assertions.assertTrue(diagnostics.getBoundAddress().isPresent());

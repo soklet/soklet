@@ -202,8 +202,8 @@ public class StreamingSourceFactoryRuntimeTests {
 				.resourceMethodResolver(ResourceMethodResolver.fromClasses(Set.of(SourceResource.class)))
 				.instanceProvider(provider(resource))
 				.lifecycleObserver(observation == null ? new Observation() : observation).build();
-		try (Soklet soklet = Soklet.fromConfig(config)) {
-			soklet.start();
+		AtomicReference<String> response = new AtomicReference<>();
+		Soklet.run(config, () -> {
 			try (Socket socket = connectWithRetry("127.0.0.1", port, 2000)) {
 				socket.setSoTimeout(3000);
 				socket.getOutputStream().write((method.name() + " /source HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
@@ -211,9 +211,10 @@ public class StreamingSourceFactoryRuntimeTests {
 				String wire = new String(socket.getInputStream().readAllBytes(), StandardCharsets.ISO_8859_1);
 				if (observation != null)
 					Assertions.assertTrue(observation.terminated.await(3, TimeUnit.SECONDS));
-				return wire;
+				response.set(wire);
 			}
-		}
+		});
+		return response.get();
 	}
 
 	private static InstanceProvider provider(SourceResource resource) {
