@@ -32,7 +32,7 @@ import java.io.Reader;
 import java.io.StringReader;
 import java.net.HttpURLConnection;
 import java.net.Socket;
-import java.net.URL;
+import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
@@ -84,7 +84,7 @@ public class StreamingResponseTests {
 
 		Soklet.run(config, () -> {
 
-			HttpURLConnection connection = (HttpURLConnection) new URL("http://127.0.0.1:" + port + "/writer").openConnection();
+			HttpURLConnection connection = (HttpURLConnection) URI.create("http://127.0.0.1:" + port + "/writer").toURL().openConnection();
 			connection.setConnectTimeout(2_000);
 			connection.setReadTimeout(2_000);
 
@@ -139,7 +139,7 @@ public class StreamingResponseTests {
 
 		Soklet.run(config, () -> {
 
-			HttpURLConnection connection = (HttpURLConnection) new URL("http://127.0.0.1:" + port + "/context-request").openConnection();
+			HttpURLConnection connection = (HttpURLConnection) URI.create("http://127.0.0.1:" + port + "/context-request").toURL().openConnection();
 			connection.setConnectTimeout(2_000);
 			connection.setReadTimeout(2_000);
 

@@ -62,21 +62,18 @@ Similarly-flavored commercially-friendly OSS libraries are available.
 
 ### Public API evolution
 
-Public enums and sealed roots are classified in their Javadocs. Evolutionary
-types can gain reviewed constants or permitted subtypes in 4.x; application
-switches should include a safe default. Types explicitly documented as closed
-support exhaustive switches. The reviewed [core inventory](api/core-public-evolution-inventory.json)
-and [MCP inventory](api/mcp/mcp-public-evolution-inventory.json) record each
-classification, and the evolution verifier checks that the guidance is present
-on every listed owner. New telemetry values still require explicit cardinality
-and privacy review; do not derive metric labels from enum names automatically.
+Public enums and sealed roots describe their evolution policy in Javadoc.
+Evolutionary types can gain constants or permitted subtypes in Soklet 4.x;
+application switches should include a safe default. Types explicitly documented
+as closed support exhaustive switches. When mapping telemetry to your own
+metrics, keep labels bounded rather than deriving them automatically from enum
+names.
 
 ### License
 
 [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0)
 
-Redistributed-source attributions are retained in [`NOTICE`](NOTICE); the
-4.0.0 review is recorded in the [third-party audit](release/THIRD_PARTY_AUDIT.md).
+Redistributed-source attributions are retained in [`NOTICE`](NOTICE).
 
 ### Installation
 
@@ -207,7 +204,12 @@ ShutdownResult result = soklet.awaitShutdown();
 
 Cleanup is eligible only after Soklet has proven core shutdown complete; incomplete core shutdown skips it. The instance owns its JVM hook until finalization releases it. It does not implement `AutoCloseable`. `ShutdownTrigger` is removed: Soklet never installs a console-input listener. Application code can end a scoped callback after reading a command, or call `requestShutdown()` from an existing event handler.
 
-Each run reserves its daemon completion-handoff worker before claiming transports. If that worker cannot start, startup fails before a transport is claimed. Finalization only signals the reserved worker; application completion callbacks never run on the non-daemon lifecycle owner. The JVM hook joins bounded core shutdown, eligible cleanup, and terminal reporting. It does not wait for the owner to return from unrelated application callbacks; normal await methods additionally include process-registration release.
+Finalization progresses even when nobody is waiting for it. Both await methods
+include core shutdown, configured application cleanup, terminal reporting, and
+process-registration release. During JVM shutdown, required cleanup belongs in
+`ShutdownCleanup`; post-await code and dependent callbacks may not finish before
+exit. See [Application Lifecycle](https://www.soklet.com/docs/application-lifecycle)
+for standalone, scoped, and embedded-host examples.
 
 #### Building and Running
 
@@ -353,7 +355,7 @@ The class files retain compile-time annotation references. Static tools such as
 `jdeps --ignore-missing-deps` after verifying that only those annotation types
 are missing. That option is not a `jlink` option; the automatic module name
 does not make the Soklet JAR directly linkable. See the
-[dependency audit](release/THIRD_PARTY_AUDIT.md) for the scope of this distinction.
+[packaging guidance](https://www.soklet.com/docs/production-readiness#packaging-and-static-analysis) for application setup.
 
 ### Building Real-World Apps
 
@@ -923,8 +925,7 @@ argument completion, request-scoped POST progress, and framework static catalog
 pagination, plus explicitly enabled 2025 sessions with remembered public client
 metadata and active-request cancellation, leased GET opening, and verified DELETE
 retirement, session-owned URI grants, and resource/catalog invalidations over GET.
-Client support depends on the selected revision and features; see the dated
-[client compatibility matrix](release/MCP_CLIENT_COMPATIBILITY.md) for tested
+Client support depends on the selected revision and features; see [MCP Compatibility](https://www.soklet.com/docs/mcp-compatibility) for tested
 host versions and limitations. Endpoints and
 operations name their exact `McpProtocolVersion` values, with no implicit
 "latest" default. See [the MCP guide](MCP.md#exact-protocol-revisions).

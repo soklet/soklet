@@ -215,7 +215,7 @@ public final class MicrohttpReadPathBenchmark {
 	private static long threadAllocatedBytes() {
 		if (!allocationTrackingAvailable())
 			return -1L;
-		return THREAD_MX_BEAN.getThreadAllocatedBytes(Thread.currentThread().getId());
+		return THREAD_MX_BEAN.getThreadAllocatedBytes(Thread.currentThread().threadId());
 	}
 
 	@FunctionalInterface

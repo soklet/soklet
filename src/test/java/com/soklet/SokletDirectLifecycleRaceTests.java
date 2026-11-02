@@ -871,13 +871,12 @@ final class SokletDirectLifecycleRaceTests {
 	private static void awaitCollected(@NonNull WeakReference<?> reference)
 			throws InterruptedException {
 		for (int attempt = 0; attempt < 100; attempt++) {
-			// Modest pressure makes this deterministic on collectors which otherwise
-			// decline an explicit collection because the heap is almost empty.
+			// Modest pressure encourages collection when the heap is almost empty;
+			// collection and weak-reference clearing remain best effort.
 			byte[][] pressure = new byte[8][];
 			for (int index = 0; index < pressure.length; index++)
 				pressure[index] = new byte[256 * 1_024];
 			System.gc();
-			System.runFinalization();
 			if (reference.get() == null)
 				return;
 			Thread.sleep(10);

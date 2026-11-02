@@ -150,7 +150,7 @@ class Round16RequestResolverRegressionTests {
 				  }
 				  public static void main(String[] args) throws Exception {
 				    ClassLoader parent=Thread.currentThread().getContextClassLoader();
-				    try(URLClassLoader loader=new URLClassLoader(new URL[]{new URL(args[0])},parent) {
+				    try(URLClassLoader loader=new URLClassLoader(new URL[]{URI.create(args[0]).toURL()},parent) {
 				      @Override public Enumeration<URL> getResources(String name) throws java.io.IOException {
 				        return name.equals("META-INF/soklet/resource-method-lookup-table") ? findResources(name) : super.getResources(name);
 				      }

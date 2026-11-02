@@ -35,6 +35,7 @@ import java.lang.reflect.Field;
 import java.net.HttpURLConnection;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.URI;
 import java.net.URL;
 import java.nio.channels.Selector;
 import java.nio.charset.StandardCharsets;
@@ -83,7 +84,7 @@ public class HttpServerLifecycleTests {
 		Assertions.assertEquals(SokletStatus.RUNNING, soklet.getStatus());
 		Assertions.assertSame(identity, server.getTransportIdentity());
 		HttpURLConnection connection = open("GET",
-				new URL("http://127.0.0.1:" + port + "/health"),
+				URI.create("http://127.0.0.1:" + port + "/health").toURL(),
 				Map.of("Accept", "text/plain"));
 		Assertions.assertEquals(200, connection.getResponseCode());
 		Assertions.assertEquals("ok", new String(
@@ -287,7 +288,7 @@ public class HttpServerLifecycleTests {
 		Soklet.run(configuration(server,
 				HealthResource.class), () -> {
 			HttpURLConnection connection = open("GET",
-					new URL("http://127.0.0.1:" + port + "/health"), Map.of());
+					URI.create("http://127.0.0.1:" + port + "/health").toURL(), Map.of());
 			Assertions.assertEquals(503, connection.getResponseCode());
 			InputStream input = connection.getErrorStream();
 			if (input == null)
@@ -309,7 +310,7 @@ public class HttpServerLifecycleTests {
 			Soklet.run(configuration(server,
 				ThreadRecordingResource.class), () -> {
 				HttpURLConnection connection = open("GET",
-						new URL("http://127.0.0.1:" + port + "/thread"), Map.of());
+						URI.create("http://127.0.0.1:" + port + "/thread").toURL(), Map.of());
 				Assertions.assertEquals(200, connection.getResponseCode());
 				Assertions.assertEquals(Boolean.TRUE, handlerThreadVirtual.get());
 		});

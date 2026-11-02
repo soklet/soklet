@@ -27,7 +27,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.net.HttpURLConnection;
-import java.net.URL;
+import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -322,7 +322,7 @@ public class StreamingOutputViewRuntimeTests {
 					.resourceMethodResolver(resolver).instanceProvider(provider).lifecycleObserver(observation).build();
 			try {
 				Soklet.run(config, () -> {
-					HttpURLConnection connection = (HttpURLConnection) new URL("http://127.0.0.1:" + port + "/output-view").openConnection();
+					HttpURLConnection connection = (HttpURLConnection) URI.create("http://127.0.0.1:" + port + "/output-view").toURL().openConnection();
 					connection.setConnectTimeout(2_000);
 					connection.setReadTimeout(3_000);
 					try {

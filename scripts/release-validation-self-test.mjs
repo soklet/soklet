@@ -193,19 +193,27 @@ function canBindLoopback(port) {
   });
 }
 
-async function verifyLoopbackPortReservation(outputPath) {
-  const reservation = await createLoopbackPortReservation(outputPath);
+async function verifyLoopbackPortReservation(outputPath, requestedPort = 0) {
+  const reservation = await createLoopbackPortReservation(outputPath, requestedPort);
   try {
+    if (requestedPort !== 0)
+      assert.equal(reservation.port, requestedPort);
     assert.equal(readFileSync(outputPath, 'utf8'), `${reservation.port}\n`);
     const stats = lstatSync(outputPath);
     assert.equal(stats.isFile(), true);
     assert.equal(stats.isSymbolicLink(), false);
     assert.equal(stats.mode & 0o077, 0);
     assert.equal(await canBindLoopback(reservation.port), false);
+    await assert.rejects(
+      createLoopbackPortReservation(`${outputPath}.occupied`, reservation.port),
+      { code: 'EADDRINUSE' },
+    );
+    assert.equal(existsSync(`${outputPath}.occupied`), false);
   } finally {
     await reservation.close();
   }
   assert.equal(await canBindLoopback(reservation.port), true);
+  return reservation.port;
 }
 
 function fixturePath(...parts) {
@@ -467,7 +475,15 @@ try {
       ?? releaseWorkflowArtifactVerifierSelfTest.stdout}`,
   );
 
-  await verifyLoopbackPortReservation(fixturePath('reserved-loopback-port.txt'));
+  const reservedPort = await verifyLoopbackPortReservation(fixturePath('reserved-loopback-port.txt'));
+  await verifyLoopbackPortReservation(fixturePath('fixed-loopback-port.txt'), reservedPort);
+  for (const invalidPort of [-1, 65536, 1.5, NaN, '8080']) {
+    await assert.rejects(
+      createLoopbackPortReservation(fixturePath('invalid-loopback-port.txt'), invalidPort),
+      /port must be an integer/,
+    );
+  }
+  assert.equal(existsSync(fixturePath('invalid-loopback-port.txt')), false);
 
   const tracked = validateReleaseConfiguration(trackedManifestPath);
   const releaseHarnessConfiguration = verifyReleaseHarnessConfiguration();
@@ -1443,12 +1459,13 @@ try {
     /\nrun_barebones\(\) \{\n([\s\S]*?)\n\}\n\nrun_interoperability\(\)/,
   );
   assert.notEqual(barebonesFunction, null);
-  assert.doesNotMatch(barebonesFunction[1], /8080/);
-  assert.match(barebonesFunction[1], /reserve_loopback_port "\$port_file" "\$reservation_log"/);
+  assert.match(barebonesFunction[1], /local barebones_port=8080/);
+  assert.match(barebonesFunction[1], /reserve_loopback_port "\$port_file" "\$reservation_log" "\$barebones_port"/);
   assert.match(
     barebonesFunction[1],
-    /env RUNNING_IN_DOCKER=true SOKLET_BAREBONES_LOOPBACK_PORT="\$barebones_port"/,
+    /"\$reserved_loopback_port" -eq "\$barebones_port"/,
   );
+  assert.doesNotMatch(barebonesFunction[1], /RUNNING_IN_DOCKER|SOKLET_BAREBONES_LOOPBACK_PORT/);
   assert.equal(barebonesFunction[1].match(/127\.0\.0\.1:\$barebones_port/g)?.length, 3);
   assert.match(barebonesFunction[1], /grep --fixed-strings --line-regexp --quiet/);
   assert.match(barebonesFunction[1], /! kill -0 "\$reservation_pid"/);
@@ -1460,7 +1477,7 @@ try {
   );
   assert.ok(
     barebonesFunction[1].indexOf('stop_active_process')
-      < barebonesFunction[1].indexOf('SOKLET_BAREBONES_LOOPBACK_PORT="$barebones_port"'),
+      < barebonesFunction[1].indexOf('java -classpath'),
   );
   assert.match(barebonesFunction[1], /ls-files --error-unmatch "soklet-\$candidate_version.jar"/);
   assert.match(barebonesFunction[1], /verify_reviewed_soklet_jar "\$vendored_jar" "\$candidate_jar_sha256"/);
@@ -1528,7 +1545,7 @@ run_barebones
       `Barebones ${mode} JAR must be rejected before compilation`);
   }
   assert.match(releaseValidator, /scripts\/reserve-loopback-port\.mjs/);
-  assert.match(loopbackPortReserver, /host: '127\.0\.0\.1', port: 0/);
+  assert.match(loopbackPortReserver, /host: '127\.0\.0\.1', port: requestedPort/);
   assert.match(loopbackPortReserver, /flag: 'wx'/);
   assert.doesNotMatch(releaseValidator, /assert_loopback_port_available 8080/);
   assert.doesNotMatch(releaseValidator, /trap cleanup EXIT HUP INT TERM/);

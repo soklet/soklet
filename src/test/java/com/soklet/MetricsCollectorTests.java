@@ -40,6 +40,7 @@ import java.io.OutputStream;
 import java.lang.reflect.Method;
 import java.net.HttpURLConnection;
 import java.net.Socket;
+import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -407,7 +408,7 @@ public class MetricsCollectorTests {
 		HttpServerRouteKey routeKey = new HttpServerRouteKey(HttpMethod.POST, RouteType.MATCHED, httpMetricsRoute);
 
 		Soklet.run(config, () -> {
-			URL url = new URL("http://127.0.0.1:" + port + "/metrics/http/123");
+			URL url = URI.create("http://127.0.0.1:" + port + "/metrics/http/123").toURL();
 			HttpURLConnection connection = (HttpURLConnection) url.openConnection();
 			connection.setRequestMethod("POST");
 			connection.setDoOutput(true);

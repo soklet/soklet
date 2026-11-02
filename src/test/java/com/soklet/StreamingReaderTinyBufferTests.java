@@ -23,7 +23,7 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.io.Reader;
 import java.net.HttpURLConnection;
-import java.net.URL;
+import java.net.URI;
 import java.nio.CharBuffer;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
@@ -47,7 +47,7 @@ public class StreamingReaderTinyBufferTests {
 
 		Soklet.run(config, () -> {
 			HttpURLConnection connection = (HttpURLConnection)
-					new URL("http://127.0.0.1:" + port + "/tiny-reader").openConnection();
+					URI.create("http://127.0.0.1:" + port + "/tiny-reader").toURL().openConnection();
 			connection.setConnectTimeout(2_000);
 			connection.setReadTimeout(2_000);
 			try {

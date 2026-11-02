@@ -24,7 +24,7 @@ import org.junit.jupiter.api.Timeout;
 
 import java.io.InputStream;
 import java.net.HttpURLConnection;
-import java.net.URL;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -184,7 +184,7 @@ public class StreamingResponseStreamRuntimeTests {
 	}
 
 	private static String performHttp(int port, HttpMethod method) throws Exception {
-		HttpURLConnection connection = (HttpURLConnection) new URL("http://127.0.0.1:" + port + "/unified-stream")
+		HttpURLConnection connection = (HttpURLConnection) URI.create("http://127.0.0.1:" + port + "/unified-stream").toURL()
 				.openConnection();
 		connection.setRequestMethod(method.name());
 		connection.setConnectTimeout(2_000);

@@ -394,9 +394,10 @@ reserved_loopback_port=
 reserve_loopback_port() {
 	local output_file=$1
 	local log_file=$2
+	local requested_port=${3:-0}
 	[[ ! -e "$output_file" ]] \
 		|| fail "loopback port reservation output already exists: $output_file"
-	node "$loopback_port_reserver" "$output_file" >"$log_file" 2>&1 &
+	node "$loopback_port_reserver" "$output_file" "$requested_port" >"$log_file" 2>&1 &
 	active_pid=$!
 	local reservation_pid=$active_pid
 	local attempt
@@ -1162,15 +1163,16 @@ run_barebones() {
 	local log="$evidence_root/barebones-app.log"
 	local port_file="$work_root/barebones-loopback-port.txt"
 	local reservation_log="$evidence_root/barebones-port-reservation.log"
-	reserve_loopback_port "$port_file" "$reservation_log"
-	local barebones_port=$reserved_loopback_port
+	local barebones_port=8080
+	reserve_loopback_port "$port_file" "$reservation_log" "$barebones_port"
+	[[ "$reserved_loopback_port" -eq "$barebones_port" ]] \
+		|| fail "barebones-app must reserve its fixed loopback port $barebones_port."
 	local reservation_pid=$active_pid
 	stop_active_process \
 		|| fail "barebones-app loopback port reservation required SIGKILL."
 	! kill -0 "$reservation_pid" 2>/dev/null \
 		|| fail "barebones-app loopback port reservation remains alive after handoff."
-	env RUNNING_IN_DOCKER=true SOKLET_BAREBONES_LOOPBACK_PORT="$barebones_port" \
-		java -classpath "$vendored_jar:$classes" com.soklet.barebones.App \
+	java -classpath "$vendored_jar:$classes" com.soklet.barebones.App \
 		>"$log" 2>&1 &
 	active_pid=$!
 	local app_pid=$active_pid

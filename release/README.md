@@ -813,13 +813,13 @@ The Barebones hook first requires the pinned repository's tracked
 that vendored file without replacing it, rechecks its bytes and tracked
 checkout afterward, and retains the original JAR as `vendored-jar` evidence.
 A stale, missing, untracked, or symlinked vendored JAR fails before compilation.
-It then asks the operating system for an exclusive ephemeral IPv4
-loopback port and holds that reservation until immediately before process
-startup. It passes the selected port through the sample's scoped
-`SOKLET_BAREBONES_LOOPBACK_PORT` override, requires the matching startup marker,
+It then exclusively reserves the sample's fixed IPv4 loopback port 8080 and
+holds that reservation until immediately before process startup. If the port
+is occupied, validation fails without probing or signaling its existing owner.
+The hook requires the matching startup marker after Soklet has started,
 probes only that exact address, terminates only the recorded child PID, and
-proves that the same port can be rebound after shutdown. It does not inspect,
-signal, or depend on a process using the sample's normal port 8080.
+proves that the same port can be rebound after shutdown. The sample needs no
+environment-variable override or Docker-specific behavior.
 
 The workflow has no publish or signing authority. Promotion remains a separate
 maintainer-authorized operation and must consume the completed evidence

@@ -9,9 +9,11 @@ function fail(message) {
   throw new Error(message);
 }
 
-export async function createLoopbackPortReservation(outputPath) {
+export async function createLoopbackPortReservation(outputPath, requestedPort = 0) {
   if (typeof outputPath !== 'string' || outputPath === '')
     fail('Loopback port reservation output path must not be empty');
+  if (!Number.isInteger(requestedPort) || requestedPort < 0 || requestedPort > 65535)
+    fail('Loopback port reservation port must be an integer from 0 through 65535');
 
   const absoluteOutputPath = resolve(outputPath);
   const server = net.createServer({ pauseOnConnect: true }, (socket) => socket.destroy());
@@ -19,7 +21,7 @@ export async function createLoopbackPortReservation(outputPath) {
   await new Promise((resolveListening, rejectListening) => {
     const onError = (error) => rejectListening(error);
     server.once('error', onError);
-    server.listen({ exclusive: true, host: '127.0.0.1', port: 0 }, () => {
+    server.listen({ exclusive: true, host: '127.0.0.1', port: requestedPort }, () => {
       server.off('error', onError);
       resolveListening();
     });
@@ -30,7 +32,7 @@ export async function createLoopbackPortReservation(outputPath) {
       || address.address !== '127.0.0.1'
       || !Number.isInteger(address.port) || address.port < 1 || address.port > 65535) {
     await new Promise((resolveClose) => server.close(resolveClose));
-    fail('Unable to reserve an ephemeral IPv4 loopback port');
+    fail('Unable to reserve an IPv4 loopback port');
   }
 
   let closePromise;
@@ -63,13 +65,13 @@ export async function createLoopbackPortReservation(outputPath) {
 }
 
 async function main(args) {
-  if (args.length !== 1) {
-    console.error('Usage: node scripts/reserve-loopback-port.mjs <exclusive-port-output-file>');
+  if (args.length < 1 || args.length > 2) {
+    console.error('Usage: node scripts/reserve-loopback-port.mjs <exclusive-port-output-file> [port]');
     process.exitCode = 64;
     return;
   }
 
-  const reservation = await createLoopbackPortReservation(args[0]);
+  const reservation = await createLoopbackPortReservation(args[0], Number(args[1] ?? 0));
   await new Promise((resolveShutdown, rejectShutdown) => {
     let stopping = false;
     const stop = () => {

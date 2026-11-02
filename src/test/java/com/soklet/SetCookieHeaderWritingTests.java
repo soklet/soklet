@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import javax.annotation.concurrent.ThreadSafe;
 import java.net.HttpCookie;
 import java.net.HttpURLConnection;
+import java.net.URI;
 import java.net.URL;
 import java.time.Duration;
 import java.time.Instant;
@@ -47,7 +48,7 @@ public class SetCookieHeaderWritingTests {
 	public void multipleCookiesAreSeparateHeaders() throws Exception {
 		int port = findFreePort();
 		Soklet.run(config(port, Set.of(CookieResource.class)), () -> {
-			URL url = new URL("http://127.0.0.1:" + port + "/set-cookies");
+			URL url = URI.create("http://127.0.0.1:" + port + "/set-cookies").toURL();
 			HttpURLConnection c = (HttpURLConnection) url.openConnection();
 			c.setRequestMethod("GET");
 			c.setRequestProperty("Accept", "text/plain");

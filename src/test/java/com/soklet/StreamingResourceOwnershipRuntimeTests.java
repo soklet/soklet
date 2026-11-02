@@ -20,7 +20,7 @@ import org.junit.jupiter.api.Timeout;
 
 import java.io.IOException;
 import java.net.HttpURLConnection;
-import java.net.URL;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Set;
@@ -250,7 +250,7 @@ public class StreamingResourceOwnershipRuntimeTests {
 			SokletConfig config = SokletConfig.withHttpServer(HttpServer.withPort(port).build())
 					.resourceMethodResolver(resolver).instanceProvider(provider).lifecycleObserver(observation).build();
 			Soklet.run(config, () -> {
-				HttpURLConnection connection = (HttpURLConnection) new URL("http://127.0.0.1:" + port + "/owned").openConnection();
+				HttpURLConnection connection = (HttpURLConnection) URI.create("http://127.0.0.1:" + port + "/owned").toURL().openConnection();
 				connection.setRequestMethod(method.name());
 				connection.setConnectTimeout(2_000);
 				connection.setReadTimeout(3_000);
