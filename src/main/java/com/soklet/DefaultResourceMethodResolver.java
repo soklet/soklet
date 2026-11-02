@@ -1207,24 +1207,27 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 
 	private static boolean isTypeAdaptationBridge(Method method) {
 		if (!method.isBridge()) return false;
-		for (Method candidate : method.getDeclaringClass().getDeclaredMethods()) {
-			if (candidate.isBridge() || !candidate.getName().equals(method.getName())
-					|| candidate.getParameterCount() != method.getParameterCount()
-					|| !method.getReturnType().isAssignableFrom(candidate.getReturnType())
-					|| !Set.of(method.getAnnotations()).equals(Set.of(candidate.getAnnotations())))
-				continue;
-			Class<?>[] bridgeParameters = method.getParameterTypes();
-			Class<?>[] candidateParameters = candidate.getParameterTypes();
-			boolean compatible = true;
-			for (int index = 0; index < bridgeParameters.length; index++)
-				if (!bridgeParameters[index].isAssignableFrom(candidateParameters[index])) {
-					compatible = false;
-					break;
-				}
-			if (compatible && (method.getReturnType() != candidate.getReturnType()
-					|| !Arrays.equals(bridgeParameters, candidateParameters)))
-				return true;
-		}
+		// javac places an interface bridge in the class that adds the interface, even when
+		// the implementing declaration is inherited from a superclass.
+		for (Class<?> type = method.getDeclaringClass(); type != null; type = type.getSuperclass())
+			for (Method candidate : type.getDeclaredMethods()) {
+				if (candidate.isBridge() || !candidate.getName().equals(method.getName())
+						|| candidate.getParameterCount() != method.getParameterCount()
+						|| !method.getReturnType().isAssignableFrom(candidate.getReturnType())
+						|| !Set.of(method.getAnnotations()).equals(Set.of(candidate.getAnnotations())))
+					continue;
+				Class<?>[] bridgeParameters = method.getParameterTypes();
+				Class<?>[] candidateParameters = candidate.getParameterTypes();
+				boolean compatible = true;
+				for (int index = 0; index < bridgeParameters.length; index++)
+					if (!bridgeParameters[index].isAssignableFrom(candidateParameters[index])) {
+						compatible = false;
+						break;
+					}
+				if (compatible && (method.getReturnType() != candidate.getReturnType()
+						|| !Arrays.equals(bridgeParameters, candidateParameters)))
+					return true;
+			}
 		return false;
 	}
 

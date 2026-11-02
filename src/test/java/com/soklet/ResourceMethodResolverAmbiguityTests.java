@@ -18,11 +18,13 @@ package com.soklet;
 
 import com.soklet.annotation.GET;
 import com.soklet.annotation.PathParameter;
+import com.soklet.annotation.QueryParameter;
 import org.junit.jupiter.api.Test;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -40,6 +42,19 @@ public class ResourceMethodResolverAmbiguityTests {
 		assertTrue(exception.getMessage().toLowerCase().contains("ambiguous"),
 				"Expected ambiguous route error message");
 	}
+
+	@Test
+	public void inheritedImplementationsOfGenericInterfacesAreNotAmbiguous() throws Exception {
+		ResourceMethodResolver resolver = ResourceMethodResolver.fromClasses(Set.of(InheritedImplementationResource.class));
+
+		assertEquals(2, resolver.getResourceMethods().size());
+		assertEquals(InheritedImplementationBase.class.getDeclaredMethod("get"),
+				resolver.resourceMethodForRequest(Request.fromPath(HttpMethod.GET, "/inherited-factory"), ServerType.HTTP)
+						.orElseThrow().getMethod());
+		assertEquals(InheritedImplementationBase.class.getDeclaredMethod("handle", String.class),
+				resolver.resourceMethodForRequest(Request.fromPath(HttpMethod.GET, "/inherited-generic"), ServerType.HTTP)
+						.orElseThrow().getMethod());
+	}
 }
 
 class AmbiguousRouteResource {
@@ -52,4 +67,29 @@ class AmbiguousRouteResource {
 	public String getByName(@PathParameter String name) {
 		return name;
 	}
+}
+
+interface InheritedImplementationFactory<T> {
+	T get();
+}
+
+interface InheritedImplementationHandler<T> {
+	T handle(T value);
+}
+
+class InheritedImplementationBase {
+	@GET("/inherited-factory")
+	public String get() {
+		return "factory";
+	}
+
+	@GET("/inherited-generic")
+	public String handle(@QueryParameter String value) {
+		return value;
+	}
+}
+
+// javac declares annotated Object bridges here because the implementations are inherited.
+class InheritedImplementationResource extends InheritedImplementationBase
+		implements InheritedImplementationFactory<String>, InheritedImplementationHandler<String> {
 }

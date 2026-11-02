@@ -59,6 +59,8 @@ const CLASSIFICATIONS = Object.freeze({
 const EXPECTED_BASELINE_BY_ROOT = new Map();
 
 function git(root, args) {
+  assert.ok(['init', 'add', 'write-tree', 'update-index', 'cat-file'].includes(args[0]),
+    `Unsupported fixture Git command: ${args[0]}; fixtures must not create commits`);
   const result = spawnSync('git', args, {
     cwd: root,
     encoding: 'utf8',
@@ -176,11 +178,10 @@ function createFixture() {
     write(root, path, content);
   }
   git(root, ['init', '-q']);
-  git(root, ['config', 'user.email', 'self-test@soklet.invalid']);
-  git(root, ['config', 'user.name', 'Soklet Self-Test']);
   git(root, ['add', '--', ...Object.keys(BASELINE_FILES)]);
-  git(root, ['commit', '-q', '-m', 'synthetic baseline']);
-  const inventory = buildInventory(git(root, ['rev-parse', 'HEAD']));
+  // The verifier reads baseline trees; fixtures need no commit or Git identity.
+  // Keep a real index to exercise tracked/untracked-file checks independently.
+  const inventory = buildInventory(git(root, ['write-tree']));
   write(root, 'current-only.txt', 'runtime=4.0.0-SNAPSHOT\n');
   write(root, 'current-only-negative.txt', 'unsupported=4.0.0-SNAPSHOT\n');
   write(root, SELF_TEST_PENDING_PATH, 'release=4.0.0\n');
@@ -240,6 +241,15 @@ function reviewDeletedBaselinePath(root, path = 'remove.java') {
   return inventory.currentStage.censusSha256;
 }
 
+runCase('fixtures use baseline trees without creating commits', ({ root }) => {
+  const inventory = readInventory(root);
+  assert.equal(git(root, ['cat-file', '-t', inventory.baselineCommit]), 'tree');
+  const objectTypes = git(root, ['cat-file', '--batch-all-objects', '--batch-check=%(objecttype)'])
+    .split('\n');
+  assert.ok(objectTypes.every((type) => type === 'blob' || type === 'tree'));
+  assert.throws(() => git(root, ['commit', '-m', 'forbidden']), /fixtures must not create commits/);
+});
+
 runCase('reviewed complete file deletion preserves historical governance and D2 anchor', ({ root }) => {
   applyStage(root, { removeD2: true, removeU7: true });
   const before = readInventory(root);
@@ -268,7 +278,7 @@ runCase('reviewed deleted path cannot be reintroduced even without a version tok
 runCase('reviewed deleted path cannot be reintroduced as an untracked file', ({ root }) => {
   applyStage(root, { removeD2: true, removeU7: true });
   const pin = reviewDeletedBaselinePath(root);
-  git(root, ['rm', '--cached', '--', 'remove.java']);
+  git(root, ['update-index', '--force-remove', '--', 'remove.java']);
   expectFailure(root, 'post-u7', pin, /reviewed deleted baseline path must be absent/u);
 });
 
@@ -819,4 +829,4 @@ assert.equal(isReviewedCurrentFixture(numericFixturePath,
 assert.equal(isReviewedCurrentFixture(numericFixturePath,
   `${numericFixture}\n// version 3.6`, numericToken), false);
 
-console.log('version-transition inventory self-test PASS (46 fixture cases, external boundaries, and exact documentation/numeric controls)');
+console.log('version-transition inventory self-test PASS (47 fixture cases, external boundaries, and exact documentation/numeric controls)');
