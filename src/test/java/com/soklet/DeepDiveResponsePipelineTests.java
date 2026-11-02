@@ -90,7 +90,8 @@ class DeepDiveResponsePipelineTests {
 						.getBytes(StandardCharsets.UTF_8)).finish();
 			}).headHandler((request, response) -> {
 				assertEquals("post:body", new String(response.bodyBytesOrEmpty(), StandardCharsets.UTF_8));
-				return ResponseMarshaler.defaultInstance().forHead(request, response);
+				return ResponseMarshaler.defaultInstance().forHead(request, response).copy()
+						.headers(headers -> headers.put("X-Head", List.of("projected"))).finish();
 			}).build();
 			int port = TestSupport.findFreePort();
 			HttpServer server = HttpServer.withPort(port).host("127.0.0.1").responseCompressor((request, response) -> {
@@ -103,10 +104,62 @@ class DeepDiveResponsePipelineTests {
 				String head = exchange(port, "HEAD /body HTTP/1.1\r\nHost: localhost\r\nAccept-Encoding: gzip\r\nConnection: close\r\n\r\n");
 				assertTrue(get.contains("Content-Encoding: gzip\r\n"), get);
 				assertTrue(head.contains("Content-Encoding: gzip\r\n"), head);
+				assertTrue(head.contains("X-Head: projected\r\n"), head);
 				assertEquals(List.of("post:body", "post:body"), planned);
 				assertEquals(2, calls.get());
 			});
 		}
+	}
+
+	@Test
+	@Timeout(180)
+	void replacementHeadResponsesDoNotBorrowTheGetBodyMetadata() throws Exception {
+		record HeadCase(ResponseMarshaler.Builder.HeadHandler handler, int status, String length, String encoding) {}
+		List<HeadCase> cases = List.of(
+				new HeadCase((request, response) -> MarshaledResponse.fromStatusCode(200), 200, null, null),
+				new HeadCase((request, response) -> MarshaledResponse.fromStatusCode(404), 404, null, null),
+				new HeadCase((request, response) -> response.copy().withoutBody().statusCode(404).finish(), 404, null, null),
+				new HeadCase((request, response) -> MarshaledResponse.withStatusCode(200)
+						.headers(Map.of("Content-Length", List.of("7"))).build(), 200, "7", null),
+				new HeadCase((request, response) -> response.copy().withoutBody()
+						.headers(headers -> headers.put("Content-Length", List.of("7"))).finish(), 200, "7", null),
+				new HeadCase((request, response) -> response.copy().withoutBody()
+						.headers(headers -> headers.put("Content-Encoding", List.of("br"))).finish(), 200, null, "br"));
+		for (HeadCase headCase : cases) {
+			Resource resource = new Resource();
+			resource.response = MarshaledResponse.withStatusCode(200).headers(Map.of("Content-Type", List.of("text/plain")))
+					.body("x".repeat(4000).getBytes(StandardCharsets.UTF_8)).build();
+			ResponseMarshaler marshaler = ResponseMarshaler.builder().headHandler(headCase.handler()).build();
+			SokletSimulator.run(config(resource, 0).responseMarshaler(marshaler).build(), simulator -> {
+				MarshaledResponse response = simulator.performHttpRequest(request(HttpMethod.HEAD)).getMarshaledResponse();
+				assertEquals(headCase.status(), response.getStatusCode());
+				assertEquals(headCase.length() == null ? null : List.of(headCase.length()), response.getHeaders().get("Content-Length"));
+				assertEquals(headCase.encoding() == null ? null : List.of(headCase.encoding()), response.getHeaders().get("Content-Encoding"));
+				assertTrue(response.getBody().isEmpty());
+			});
+			AtomicInteger compressionPlans = new AtomicInteger();
+			int port = TestSupport.findFreePort();
+			HttpServer server = HttpServer.withPort(port).host("127.0.0.1").responseCompressor((request, response) -> {
+				compressionPlans.incrementAndGet();
+				return ResponseCompressionPlan.compress(ResponseCompressionCodec.gzipInstance());
+			}).build();
+			Soklet.run(config(resource, server).responseMarshaler(marshaler).build(), () -> {
+				for (String encoding : List.of("identity", "gzip")) {
+					String wire = exchange(port, "HEAD /body HTTP/1.1\r\nHost: localhost\r\nAccept-Encoding: "
+							+ encoding + "\r\nConnection: close\r\n\r\n");
+					assertTrue(wire.startsWith("HTTP/1.1 " + headCase.status() + " "), wire);
+					assertEquals(headCase.length(), header(wire, "Content-Length"), wire);
+					assertEquals(headCase.encoding(), header(wire, "Content-Encoding"), wire);
+					assertTrue(wire.endsWith("\r\n\r\n"), wire);
+				}
+				assertEquals(0, compressionPlans.get(), "A replacement HEAD must not compress the discarded GET body.");
+			});
+		}
+	}
+
+	private static String header(String response, String name) {
+		return response.lines().filter(line -> line.regionMatches(true, 0, name + ":", 0, name.length() + 1))
+				.map(line -> line.substring(name.length() + 1).trim()).findFirst().orElse(null);
 	}
 
 	@Test

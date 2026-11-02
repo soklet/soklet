@@ -208,8 +208,9 @@ do not treat the allowlist as a replacement for network controls that prevent
 proxy bypass, and never derive a partition from the request-controlled MCP
 `clientInfo` returned by `McpAdmissionContext.getClientInfo()`.
 
-Request-wide rate limiting is optional. A tool-bearing server must configure a
-fallback tool limiter; named endpoint and tool overrides replace that fallback.
+Request-wide and tool rate limiting are optional. A tool has no tool rate quota
+unless a tool, endpoint, or server limiter is configured. Named endpoint and tool
+overrides replace the server fallback when one is configured.
 The built-in token bucket is bounded but local to one JVM. Multi-instance
 deployments that require fleet-wide enforcement should supply their own
 thread-safe `McpRateLimiter`, backed by a distributed service, and should fail

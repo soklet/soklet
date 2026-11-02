@@ -62,6 +62,12 @@ Similarly-flavored commercially-friendly OSS libraries are available.
 
 ### Public API evolution
 
+Soklet-authored public and protected scalar fields and signatures use reference
+types such as `Integer`, `Long`, `Boolean`, and `Double`, including public
+constants. Values are non-null unless an explicit nullable contract says
+otherwise. Primitive exceptions are limited to `void`, language-required
+annotation elements, and overrides of external Java or Servlet contracts.
+
 Public enums and sealed roots describe their evolution policy in Javadoc.
 Evolutionary types can gain constants or permitted subtypes in Soklet 4.x;
 application switches should include a safe default. Types explicitly documented
@@ -180,7 +186,7 @@ Size request and concurrent-connection limits against the available heap and
 apply corresponding limits at the edge. Soklet does not supply these deployment
 policies automatically.
 
-[`Soklet.run(config)`](<https://javadoc.soklet.com/com/soklet/Soklet.html#run(com.soklet.SokletConfig)>) starts every configured transport, installs a JVM shutdown hook, and returns the one-shot `Soklet` instance after readiness. `awaitShutdown()` waits for shutdown and full finalization; `awaitShutdownAsync()` exposes the same outcome as a read-only completion stage. Neither await method requests shutdown. To stop programmatically, call `requestShutdown()` and then await completion before releasing shared dependencies.
+[`Soklet.run(config)`](<https://javadoc.soklet.com/com/soklet/Soklet.html#run(com.soklet.SokletConfig)>) starts every configured transport, installs a JVM shutdown hook by default, and returns the one-shot `Soklet` instance after readiness. `awaitShutdown()` waits for shutdown and full finalization; `awaitShutdownAsync()` exposes the same outcome as a read-only completion stage. Async failure callbacks receive a `CompletionException` whose cause is the lifecycle failure thrown by the blocking await. Neither await method requests shutdown. To stop programmatically, call `requestShutdown()` and then await completion before releasing shared dependencies.
 
 For tests and embedded work whose lifetime fits inside a block, use the scoped overload:
 
@@ -202,14 +208,29 @@ Soklet soklet = Soklet.run(config,
 ShutdownResult result = soklet.awaitShutdown();
 ```
 
-Cleanup is eligible only after Soklet has proven core shutdown complete; incomplete core shutdown skips it. The instance owns its JVM hook until finalization releases it. It does not implement `AutoCloseable`. `ShutdownTrigger` is removed: Soklet never installs a console-input listener. Application code can end a scoped callback after reading a command, or call `requestShutdown()` from an existing event handler.
+Cleanup is eligible only after Soklet has proven core shutdown complete; incomplete core shutdown skips it. At the cleanup deadline, Soklet requests interruption of a running action and stops waiting for it. Interruption is cooperative and may fail interruption-sensitive I/O; it does not forcibly terminate arbitrary cleanup code. When enabled, the instance owns its JVM hook until finalization releases it. It does not implement `AutoCloseable`. `ShutdownTrigger` is removed: Soklet never installs a console-input listener. Application code can end a scoped callback after reading a command, or call `requestShutdown()` from an existing event handler.
 
 Finalization progresses even when nobody is waiting for it. Both await methods
 include core shutdown, configured application cleanup, terminal reporting, and
-process-registration release. During JVM shutdown, required cleanup belongs in
-`ShutdownCleanup`; post-await code and dependent callbacks may not finish before
-exit. See [Application Lifecycle](https://www.soklet.com/docs/application-lifecycle)
+process-registration release. Completion callbacks run on a daemon handoff and do
+not keep the JVM alive. This also applies to normal programmatic shutdown after
+`main` returns: an asynchronous host must retain JVM liveness until its composed
+stage completes. Required standalone cleanup belongs in `ShutdownCleanup`;
+post-await code and dependent callbacks may not finish before JVM exit. See
+[Application Lifecycle](https://www.soklet.com/docs/application-lifecycle)
 for standalone, scoped, and embedded-host examples.
+
+A host that must control when draining begins can set
+`SokletConfig.Builder.jvmShutdownHookEnabled(Boolean.FALSE)`. The `Boolean`
+option defaults to `Boolean.TRUE`; null restores that default, and
+`SokletConfig.isJvmShutdownHookEnabled()` returns the effective value. All four
+`run` overloads honor it. Disabling it skips only Soklet's automatic JVM hook;
+programmatic shutdown, cleanup, scoped teardown, and lifecycle-owner liveness
+remain. The host must reject new runs once termination begins, perform any
+bounded deregistration/delay, then request shutdown and synchronously await its
+completion before its own shutdown hook returns. Release shared dependencies
+only after successful shutdown. See
+[host-owned JVM shutdown](https://www.soklet.com/docs/application-lifecycle#host-owned-jvm-shutdown).
 
 #### Building and Running
 
@@ -1268,6 +1289,14 @@ authoring, configuration, protocol behavior, security, observability, testing,
 and a map of the public API.
 
 #### Form Handling
+
+URL-encoded forms decode component bytes using the selected body charset.
+ASCII-compatible charsets such as UTF-8 support mixed literal and percent-encoded
+bytes. Non-ASCII-compatible charsets such as UTF-16 require every component byte
+to be percent-encoded; ISO-2022 charsets require escape/shift bytes (`ESC`, `SO`,
+and `SI`) and non-ASCII bytes to be percent-encoded. Keep `&` and `=` delimiters as
+ASCII. Ambiguous raw encodings are
+rejected with HTTP 400 when form parameters are accessed.
 
 Frontend:
 

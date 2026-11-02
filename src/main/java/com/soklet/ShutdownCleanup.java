@@ -28,6 +28,12 @@ import static java.util.Objects.requireNonNull;
  * Immutable specification for one bounded, synchronous cleanup action for an
  * ingress-exclusive application resource. Returning after merely delegating
  * asynchronous work is not proof that the resource was released.
+ * <p>
+ * At the cleanup deadline, Soklet requests interruption of a running action and
+ * stops waiting for it. Interruption is cooperative and may cause
+ * interruption-sensitive I/O to fail; it does not forcibly terminate arbitrary
+ * cleanup code. Actions should respond promptly to interruption and apply their
+ * own bounds to blocking work.
  */
 @ThreadSafe
 public final class ShutdownCleanup {

@@ -13,6 +13,15 @@
   instead of restoring hidden defaults, and incomplete configurations fail at
   `build()`. Configured limiter precedence and fail-closed behavior are unchanged.
 
+- **Reference scalar APIs:** exported scalar fields and signatures use reference
+  types, including the three MCP numeric constants (`@NonNull Integer`) and
+  `MetricsCollector.Histogram.record(@NonNull Long)`. Servlet context builder
+  session timeouts and print-writer event components use non-null reference
+  values; Jakarta's deprecated `isRequestedSessionIdFromUrl()` alias returns
+  `Boolean`. Numeric values and runtime behavior are unchanged; recompile callers and
+  overrides. Primitive exceptions are limited to `void`, language-required
+  annotation elements, and external Java/Servlet overrides.
+
 - **Final response phase and cleanup:** `ResponseMarshaler.postProcess(...)` is
   an abstract phase, applied once after the interceptor selects the final response
   and after CORS. Decorators must forward this method. HEAD hooks receive the
@@ -20,13 +29,13 @@
   failed head handlers. Public response copies never close original channels.
   `MarshaledResponse.close()` remains explicit terminal cleanup; the descriptor
   does not implement `AutoCloseable`. Finite simulator results capture bytes and
-  release owned channels before returning. Emergency HTTP503s bypass application
+  release owned channels before returning. Emergency HTTP 503s bypass application
   hooks. See [response processing and ownership](MIGRATING_TO_4_0.md#final-response-processing-and-channel-ownership).
 - **MCP observation isolation:** terminal outcomes during start observation now
   release their reservations and preserve callback ordering. Observation
   saturation omits a complete pair with a rate-limited diagnostic instead of
   rejecting requests or cancellation. Finish callbacks use bounded daemon
-  platform workers on Java21, avoiding carrier pinning from those callbacks.
+  platform workers on Java 21, avoiding carrier pinning from those callbacks.
   Guarded catalog hints discarded before writing restore their baseline so an
   allowed reconcile catches clients up.
 - **Request metadata and interoperability:** core cookies recover valid
@@ -34,7 +43,7 @@
   header names have finite counts. Unsupported charset lookup and malformed
   encoded words avoid repeated provider scans and stack allocation. HTTP-date
   parsing accepts only serializable years; static-file traversal past a file
-  remains404 after long symlink expansion on Java21. OTel switches handle future
+  remains 404 after long symlink expansion on Java 21. OTel switches handle future
   enum values conservatively.
 - **Modern MCP application errors:** admitted application-execution/output
   failures and active-handler deadlines return correlated JSON-RPC `-32603`
@@ -229,10 +238,16 @@
   adapters retain provided scope. See
   [Servlet adapters](MIGRATING_TO_4_0.md#servlet-adapters).
 - **Aggregate lifecycle:** `Soklet.run(...)` starts the one-shot owner of every
-  configured transport and returns after readiness. Every instance owns a JVM
-  shutdown hook. `requestShutdown()` requests termination promptly;
+  configured transport and returns after readiness. By default each instance owns
+  a JVM shutdown hook. `SokletConfig.Builder.jvmShutdownHookEnabled(Boolean)`
+  defaults to true (null restores true); false lets an embedding host own JVM
+  shutdown timing. Every run overload honors it without changing programmatic
+  shutdown, cleanup, scoped teardown, or lifecycle-owner liveness. The host must
+  fence new runs, then request and synchronously await shutdown before its own
+  hook returns. `requestShutdown()` requests termination promptly;
   `awaitShutdown()` and `awaitShutdownAsync()` observe full finalization,
   including configured cleanup, synchronously or through a read-only stage.
+  The blocking `awaitShutdown()` result may be ignored under Error Prone.
   Removed `SokletApplication`, public `fromConfig`, `start`, `shutdown`, status
   and terminal-result getters, and `AutoCloseable`/`close`. The five aggregate
   `LifecycleObserver` callbacks no longer receive a `Soklet` parameter; startup
@@ -263,8 +278,8 @@
   exact identity with teardown failures suppressed; otherwise lifecycle failures
   are thrown. Scoped teardown preserves interruption while completing its join.
   Removed `ShutdownTrigger`, its varargs parameters, and framework console-input
-  listeners. Every run still owns its JVM shutdown hook. Applications handle
-  Enter-key input themselves; tests can use scoped execution without
+  listeners. Every run honors the default-enabled JVM shutdown hook option.
+  Applications handle Enter-key input themselves; tests can use scoped execution without
   `AutoCloseable` or manual `finally` cleanup.
 - **Shared deadlines:** transport-specific shutdown-deadline setters are
   replaced by one `LifecyclePolicy`. The defaults are 30 seconds for normal
@@ -275,8 +290,8 @@
 - **Unified process ownership:** the terminal report and optional bounded
   application cleanup are part of the `Soklet.run` lifecycle.
   Tests and embedders use the same ready-returning API, then request and await
-  shutdown before releasing shared dependencies. JVM hooks remain automatic;
-  independent hook ordering must be coordinated by the host. See
+  shutdown before releasing shared dependencies. JVM hooks remain automatic by
+  default; independent hook ordering must be coordinated by the host. See
   [standalone and embedded applications](MIGRATING_TO_4_0.md#standalone-applications-tests-and-embedders-use-the-same-api).
 - **Transport SPI and injection:** custom HTTP/SSE implementations migrate
   to stable transport identity, attachment/runtime, lifecycle context, and
@@ -477,20 +492,26 @@ maintenance or security fixes afterward. See the explicit
 
 ### Correctness Fixes
 
+- Preserve custom HEAD replacement status, length and encoding without borrowing
+  metadata from the discarded GET body. Default and copied projections retain
+  GET/HEAD compression parity. The inherited unparsed-request marshaler now
+  invokes the implementation's postprocessor once, including forwarding decorators.
 - Coordinate HTTP and SSE timeout interrupts with handler retirement so a
   delayed interrupt cannot reach the next request on a pooled worker.
 - Release owned response channels after late SSE capacity rejection and accepted
   simulated handshakes, including preparation and initializer failures. Finite
   HTTP channel cleanup carries the lifecycle owner guard; borrowed channels
   remain caller-owned.
-- Decode URL-encoded forms from component bytes, supporting declared UTF-16
-  charsets and mixed literal/escaped multibyte text consistently. Apply the
+- Decode URL-encoded forms from component bytes, supporting fully percent-encoded
+  UTF-16 components and mixed literal/escaped text in ASCII-compatible stateless
+  charsets. Reject raw ISO-2022 escape/shift and non-ASCII bytes before delimiter
+  parsing. Apply the
   128-name CORS preflight bound to normal request parsing before deduplication.
 - Reject literal `#` in raw HTTP request targets before routing; percent-encoded
   `%23` and decoded path/query builders continue to support hash characters.
-- Ignore compiler bridge methods during automatic reflective route discovery,
-  matching generated-index discovery for generic and covariant handlers.
-  Explicit `fromMethods(...)` selection remains unchanged.
+- Ignore generic/covariant type-adaptation bridges during automatic reflective
+  route discovery while retaining visibility bridges for public routes inherited
+  from non-public bases. Explicit `fromMethods(...)` selection remains unchanged.
 - Extend lifecycle self-wait guards to MCP request-state protection, Skills
   policy callbacks and publisher release, plus SSE fallback response callbacks,
   materialization and owned-body cleanup.
@@ -502,7 +523,9 @@ maintenance or security fixes afterward. See the explicit
   access and binding reject duplicates consistently.
 - Reject unpaired UTF-16 surrogates in decoded query names/values, request
   copier updates and RFC 8187 header parameters. Preserve valid supplementary
-  Unicode and explicit replacement characters. Report duplicate charset
+  Unicode and explicit replacement characters. The outbound query encoder throws
+  `IllegalArgumentException`; request parsers retain `IllegalRequestException`.
+  Report duplicate charset
   parameters in multipart part metadata as redacted request-body errors.
 - Guard lifecycle self-waits inside MCP catalog, access-policy and localization
   callbacks. `McpRequestContext.getStartedAt()` exposes the semantic request's

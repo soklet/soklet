@@ -4093,7 +4093,7 @@
   "formatVersion": 1,
   "matcherRules": [
     {
-      "description": "Byte, short, int, long, BigInteger, or Duration fields explicitly declared with static and final in either modifier order whose identifier contains MAXIMUM or MINIMUM, plus derived declarations classified by FINITE-MATCH-004.",
+      "description": "Integral byte, short, int, long fields and their Byte, Short, Integer, Long wrappers (unqualified or java.lang-qualified), plus BigInteger or Duration fields, explicitly declared with static and final in either modifier order whose identifier contains MAXIMUM or MINIMUM, plus derived declarations classified by FINITE-MATCH-004.",
       "family": "NAMED_LIMIT_CONSTANT",
       "id": "FINITE-MATCH-001"
     },

@@ -203,7 +203,7 @@ export const FINITE_BOUND_SCAN_ROOTS = Object.freeze([
 ]);
 export const FINITE_BOUND_MATCHER_RULES = Object.freeze([
   Object.freeze({
-    description: 'Byte, short, int, long, BigInteger, or Duration fields explicitly declared with static and final in either modifier order whose identifier contains MAXIMUM or MINIMUM, plus derived declarations classified by FINITE-MATCH-004.',
+    description: 'Integral byte, short, int, long fields and their Byte, Short, Integer, Long wrappers (unqualified or java.lang-qualified), plus BigInteger or Duration fields, explicitly declared with static and final in either modifier order whose identifier contains MAXIMUM or MINIMUM, plus derived declarations classified by FINITE-MATCH-004.',
     family: 'NAMED_LIMIT_CONSTANT',
     id: 'FINITE-MATCH-001',
   }),
@@ -231,12 +231,17 @@ const FINITE_BOUND_EXCLUSION_ID_PATTERN = /^FINITE-EX-\d{3}$/u;
 const JAVA_OWNER_PATTERN = /^[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+$/u;
 const JAVA_MEMBER_PATTERN = /^[A-Za-z_$][\w$]*(?:\([^\r\n#]*\))?$/u;
 const BOUND_NAME_PATTERN = /^(?:maximum|minimum)[A-Z].*|^.*(?:Capacity|Concurrency|Timeout|Deadline|Duration|Interval|Resolution|Backlog|BufferSize)$/u;
+// Preserve finite-bound ownership when a public integral scalar is boxed.
+// Keep this restricted to the integral primitive/wrapper pairs, not arbitrary Number types.
+const FINITE_BOUND_TYPE_SOURCE = String.raw`(?:(?:[A-Za-z_$][\w$]*\.)*(?:BigInteger|Duration)|(?:java\.lang\.)?(?:Byte|Short|Integer|Long)|byte|short|int|long)`;
 const PRIVACY_BOUNDARY_INVENTORY_PATH =
   'conformance/mcp-privacy-boundary-inventory.json';
 // 2026-11-01 scoped run: retain exact callback Throwable declarations and
 // retire the removed console-input/warning sinks; matcher policy is unchanged.
+// 2026-11-02: retain fixed form/encoder diagnostics and the Histogram boxed wrapper
+// under their existing boundaries; source matchers and disclosure policy are unchanged.
 const EXPECTED_PRIVACY_SEMANTICS_SHA256 =
-  'f53baf3ddac31becd10b8771a2d7eb7d8665058fcf8be12c1cf47a6e910b8642';
+  '90a3ddba956f5f9220693e3d6d21daaa6f095be68669ee36c85e6b73e158d686';
 const PRIVACY_TOP_LEVEL_KEYS = Object.freeze([
   'artifactRoots',
   'boundaries',
@@ -1206,7 +1211,10 @@ export function deriveFiniteBoundCandidates(root, scanRoots) {
       ]));
     const lineAt = (index) => source.slice(0, index).split(/\r?\n/u).length;
 
-    const finiteFieldPattern = /\b((?:(?:public|protected|private|static|final|transient|volatile)\s+|(?:@[A-Za-z_$][\w$]*(?:\([^)]*\))?)\s+)*)(?:(?:[A-Za-z_$][\w$]*\.)*(?:BigInteger|Duration)|byte|short|int|long)\s+([A-Za-z_$][\w$]*)\s*(?==|,|;)/gu;
+    const finiteFieldPattern = new RegExp(
+      String.raw`\b((?:(?:public|protected|private|static|final|transient|volatile)\s+|(?:@[A-Za-z_$][\w$]*(?:\([^)]*\))?)\s+)*)(?:${FINITE_BOUND_TYPE_SOURCE})\s+([A-Za-z_$][\w$]*)\s*(?==|,|;)`,
+      'gu',
+    );
     for (const match of structure.matchAll(finiteFieldPattern)) {
       const modifiers = match[1];
       if (!/\bstatic\b/u.test(modifiers) || !/\bfinal\b/u.test(modifiers)) continue;
@@ -1302,7 +1310,7 @@ export function deriveFiniteBoundCandidates(root, scanRoots) {
       const finalLimitsClass = finalLimitsClasses.get(scope.owner);
       const sameNamedFiniteField = finalLimitsClass === undefined ? false
         : new RegExp(
-          `\\bfinal\\s+(?:(?:@[A-Za-z_$][\\w$]*(?:\\([^)]*\\))?)\\s+)*(?:(?:[A-Za-z_$][\\w$]*\\.)*(?:BigInteger|Duration)|byte|short|int|long)\\s+${scope.method}\\s*;`,
+          `\\bfinal\\s+(?:(?:@[A-Za-z_$][\\w$]*(?:\\([^)]*\\))?)\\s+)*${FINITE_BOUND_TYPE_SOURCE}\\s+${scope.method}\\s*;`,
           'u',
         ).test(structure.slice(
           finalLimitsClass.opening + 1,

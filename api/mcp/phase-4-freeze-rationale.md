@@ -1437,3 +1437,43 @@ Restoring only those five parameters and the shifted remaining parameter indices
 reproduces the earlier digest
 `127d61399990bdc65c3a87fc37ad787006b1c5a338f9a2835c78a94fda0121db`;
 other historical checkpoint digests remain historical.
+
+
+## 2026-11-02 host-owned JVM shutdown and reference scalar amendment
+
+The owner requested `SokletConfig.Builder.jvmShutdownHookEnabled(Boolean)`
+with a default of `Boolean.TRUE` and a nonnull boxed
+`SokletConfig.isJvmShutdownHookEnabled()` getter. A null builder input restores
+that default. Disabling integration skips hook construction, registration and
+removal; the host owns termination fencing, signal handling, request/await
+ordering and shared-resource release. Existing programmatic/scoped teardown,
+cleanup, reporting and process-liveness behavior remain intact. Ordinary
+examples retain the default automatic hook.
+
+The same audit corrected avoidable primitive public scalars. The three public
+constants on `McpAdmissionIdentity` and `McpJsonRpcError` now have nonnull
+`Integer` types with unchanged values. `MetricsCollector.Histogram.record(Long)`
+replaces its public primitive input; a package-private primitive overload keeps
+internal recording unchanged. Servlet adapter session/event APIs follow the
+same reference-type rule. Required external Java/Servlet overrides, annotation
+elements and void remain explicit language/platform exceptions; reference
+arrays remain supported.
+
+The reviewed Phase 4 delta is exactly two method additions and three field-type
+changes, with no owner changes. It now contains 1,384 records with SHA-256
+`45b3e700d62020e401cf2d27623c42ba54d6d964c2a7202c04c59ec214dfdfec`.
+The canonical Phase 4 reflection/nullability digest is
+`2d3f05c0ffd1af5fc233863148fe769a90c191563e617b9334d9a2559fb3c444`;
+its exact delta is the two new method contracts and three nonnull Integer
+field types. Other phase and provisional snapshots remain unchanged.
+
+The 3.5.1 incompatibility ledger adds only the removed public
+`MetricsCollector.Histogram.record(long)` descriptor: 790 records, SHA-256
+`ac37c66d89d105f403021bee08563401a7c6b0f2abb73c8f0552b806931eb566`.
+Historical checkpoint hashes remain historical. These are local API decisions
+and preparation evidence, not immutable-candidate CI or publication receipts.
+
+The existing `MetricsCollector.Histogram` type is now assigned to the non-MCP
+public-delta allowlist because its primitive overload changed accessibility and
+its boxed public overload was added. This adds one delta-owner classification,
+not a new published type; MCP owner counts remain unchanged.

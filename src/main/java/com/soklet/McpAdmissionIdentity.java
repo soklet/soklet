@@ -46,7 +46,8 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 public final class McpAdmissionIdentity {
 	/** Maximum UTF-8 encoding length of either partition key. */
-	public static final int MAXIMUM_PARTITION_KEY_SIZE_IN_UTF_8_BYTES = 256;
+	@NonNull
+	public static final Integer MAXIMUM_PARTITION_KEY_SIZE_IN_UTF_8_BYTES = 256;
 	@NonNull
 	private static final McpAdmissionIdentity ANONYMOUS =
 			new Builder("anonymous").build();

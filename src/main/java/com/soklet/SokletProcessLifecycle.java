@@ -35,8 +35,11 @@ import static java.util.Objects.requireNonNull;
  * Each {@code run(...)} method blocks through finalization. If its calling
  * thread is interrupted, the runner requests shutdown, joins the lifecycle
  * uninterruptibly, and restores the calling thread's interrupt status before
- * returning or throwing. The runner owns its JVM shutdown hook for the duration
- * of the run and releases it before returning, unless JVM shutdown is underway.
+ * returning or throwing. By default the runner owns its JVM shutdown hook for
+ * the duration of the run and releases it before returning, unless JVM shutdown
+ * is underway. {@link SokletConfig.Builder#jvmShutdownHookEnabled(Boolean)} may
+ * disable that integration when a host owns shutdown ordering. Disabling the
+ * hook does not change finalization or lifecycle-owner process liveness.
  * Console input and other application events remain application-owned.
  * Application cleanup begins only after a complete core shutdown. A cleanup
  * timeout bounds the runner's wait and reporting; it does not imply that
@@ -233,34 +236,36 @@ final class SokletProcessLifecycle {
 		boolean skipStart = false;
 		boolean interrupted = false;
 
-		try {
-			hook = exactEnvironment.hookFactory().create(
-					"soklet-application-shutdown-hook", attempt::runHook);
-		} catch (Throwable failure) {
-			processOwnershipFailure = failure;
-			finalization.notePrimary(
-					SokletApplicationPrimaryOutcome.PROCESS_OWNERSHIP_FAILURE,
-					failure);
-			attempt.requestShutdown(TriggerSource.PROCESS_OWNERSHIP_FAILURE);
-			skipStart = true;
-		}
-		if (!skipStart) {
+		if (this.config.isJvmShutdownHookEnabled()) {
 			try {
-				exactEnvironment.processAccess().addShutdownHook(
-						requireNonNull(hook));
-				hookRegistered = true;
-			} catch (IllegalStateException shutdownInProgress) {
-				attempt.requestShutdown(
-						TriggerSource.HOOK_REGISTRATION_SHUTDOWN);
-				skipStart = true;
+				hook = exactEnvironment.hookFactory().create(
+						"soklet-application-shutdown-hook", attempt::runHook);
 			} catch (Throwable failure) {
 				processOwnershipFailure = failure;
 				finalization.notePrimary(
 						SokletApplicationPrimaryOutcome.PROCESS_OWNERSHIP_FAILURE,
 						failure);
-				attempt.requestShutdown(
-						TriggerSource.PROCESS_OWNERSHIP_FAILURE);
+				attempt.requestShutdown(TriggerSource.PROCESS_OWNERSHIP_FAILURE);
 				skipStart = true;
+			}
+			if (!skipStart) {
+				try {
+					exactEnvironment.processAccess().addShutdownHook(
+							requireNonNull(hook));
+					hookRegistered = true;
+				} catch (IllegalStateException shutdownInProgress) {
+					attempt.requestShutdown(
+							TriggerSource.HOOK_REGISTRATION_SHUTDOWN);
+					skipStart = true;
+				} catch (Throwable failure) {
+					processOwnershipFailure = failure;
+					finalization.notePrimary(
+							SokletApplicationPrimaryOutcome.PROCESS_OWNERSHIP_FAILURE,
+							failure);
+					attempt.requestShutdown(
+							TriggerSource.PROCESS_OWNERSHIP_FAILURE);
+					skipStart = true;
+				}
 			}
 		}
 

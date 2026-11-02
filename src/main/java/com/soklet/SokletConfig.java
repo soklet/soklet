@@ -72,6 +72,7 @@ public final class SokletConfig {
 	private final McpServer mcpServer;
 	@NonNull
 	private final LifecyclePolicy lifecyclePolicy;
+	private final boolean jvmShutdownHookEnabled;
 	@NonNull
 	private final ApplicationSettings applicationSettings;
 
@@ -128,6 +129,7 @@ public final class SokletConfig {
 		this.mcpServer = builder.mcpServer;
 		this.lifecyclePolicy = builder.lifecyclePolicy != null
 				? builder.lifecyclePolicy : LifecyclePolicy.defaultInstance();
+		this.jvmShutdownHookEnabled = builder.jvmShutdownHookEnabled == null || builder.jvmShutdownHookEnabled;
 		this.instanceProvider = builder.instanceProvider != null ? builder.instanceProvider : InstanceProvider.defaultInstance();
 		this.valueConverterRegistry = builder.valueConverterRegistry != null ? builder.valueConverterRegistry : ValueConverterRegistry.fromDefaults();
 		this.requestBodyMarshaler = builder.requestBodyMarshaler != null ? builder.requestBodyMarshaler : RequestBodyMarshaler.fromValueConverterRegistry(getValueConverterRegistry());
@@ -287,6 +289,24 @@ public final class SokletConfig {
 		return this.lifecyclePolicy;
 	}
 
+	/**
+	 * Whether {@link Soklet#run(SokletConfig)} and its overloads register a JVM
+	 * shutdown hook for this lifecycle. The default is {@code true}.
+	 * <p>
+	 * When {@code false}, Soklet does not create, register, or remove a JVM hook.
+	 * The host owns signal handling and shutdown ordering: it must request shutdown
+	 * through {@link Soklet#requestShutdown()} and await completion before the JVM
+	 * exits or shared dependencies are released. Programmatic shutdown, scoped-run
+	 * teardown, bounded cleanup, terminal reporting, and the lifecycle owner's
+	 * process-liveness policy are unchanged. Simulation does not use process hooks.
+	 *
+	 * @return whether JVM shutdown-hook integration is enabled
+	 */
+	@NonNull
+	public Boolean isJvmShutdownHookEnabled() {
+		return this.jvmShutdownHookEnabled;
+	}
+
 	@NonNull
 	InternalLifecyclePolicy getInternalLifecyclePolicy() {
 		return this.lifecyclePolicy.toInternal();
@@ -307,6 +327,8 @@ public final class SokletConfig {
 	private static final class ApplicationSettings {
 		@Nullable
 		private final LifecyclePolicy lifecyclePolicy;
+		@Nullable
+		private final Boolean jvmShutdownHookEnabled;
 		@Nullable
 		private final InstanceProvider instanceProvider;
 		@Nullable
@@ -332,6 +354,7 @@ public final class SokletConfig {
 		private ApplicationSettings(@NonNull Builder builder) {
 			Builder exactBuilder = requireNonNull(builder);
 			this.lifecyclePolicy = exactBuilder.lifecyclePolicy;
+			this.jvmShutdownHookEnabled = exactBuilder.jvmShutdownHookEnabled;
 			this.instanceProvider = exactBuilder.instanceProvider;
 			this.valueConverterRegistry = exactBuilder.valueConverterRegistry;
 			this.requestBodyMarshaler = exactBuilder.requestBodyMarshaler;
@@ -349,6 +372,7 @@ public final class SokletConfig {
 		private void applyTo(@NonNull Builder builder) {
 			Builder exactBuilder = requireNonNull(builder);
 			exactBuilder.lifecyclePolicy = this.lifecyclePolicy;
+			exactBuilder.jvmShutdownHookEnabled = this.jvmShutdownHookEnabled;
 			exactBuilder.instanceProvider = this.instanceProvider;
 			exactBuilder.valueConverterRegistry = this.valueConverterRegistry;
 			exactBuilder.requestBodyMarshaler = this.requestBodyMarshaler;
@@ -382,6 +406,8 @@ public final class SokletConfig {
 		private McpServer mcpServer;
 		@Nullable
 		private LifecyclePolicy lifecyclePolicy;
+		@Nullable
+		private Boolean jvmShutdownHookEnabled;
 		@Nullable
 		private InstanceProvider instanceProvider;
 		@Nullable
@@ -455,6 +481,26 @@ public final class SokletConfig {
 		public Builder lifecyclePolicy(
 				@Nullable LifecyclePolicy lifecyclePolicy) {
 			this.lifecyclePolicy = lifecyclePolicy;
+			return this;
+		}
+
+		/**
+		 * Sets whether {@link Soklet#run(SokletConfig)} and its overloads integrate
+		 * with JVM shutdown through a framework-owned hook.
+		 * <p>
+		 * Disable this only when a host coordinates shutdown itself, including
+		 * requesting shutdown and awaiting complete finalization before JVM exit.
+		 * This setting does not disable programmatic shutdown, scoped-run teardown,
+		 * bounded cleanup, terminal reporting, or lifecycle-owner process liveness.
+		 * Simulation does not create process hooks regardless of this setting.
+		 *
+		 * @param enabled {@code false} for host-owned shutdown integration,
+		 * {@code true} or {@code null} to enable the default JVM hook
+		 * @return this builder
+		 */
+		@NonNull
+		public Builder jvmShutdownHookEnabled(@Nullable Boolean enabled) {
+			this.jvmShutdownHookEnabled = enabled;
 			return this;
 		}
 

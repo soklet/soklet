@@ -43,6 +43,7 @@ import java.lang.reflect.Method;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.Comparator;
@@ -1177,9 +1178,9 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 
 		for (Class<?> resourceClass : resourceClasses)
 			for (Method method : resourceClass.getMethods()) {
-				// javac copies route annotations onto generic/covariant bridges.
-				// They delegate to the real declaration rather than adding a route.
-				if (method.isBridge())
+				// Generic/covariant bridges repeat an annotated real declaration. Visibility
+				// bridges expose an inherited method from a non-public base and must remain.
+				if (isTypeAdaptationBridge(method))
 					continue;
 				for (Annotation annotation : method.getAnnotations())
 					if (annotation instanceof GET
@@ -1202,6 +1203,29 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 			}
 
 		return methods;
+	}
+
+	private static boolean isTypeAdaptationBridge(Method method) {
+		if (!method.isBridge()) return false;
+		for (Method candidate : method.getDeclaringClass().getDeclaredMethods()) {
+			if (candidate.isBridge() || !candidate.getName().equals(method.getName())
+					|| candidate.getParameterCount() != method.getParameterCount()
+					|| !method.getReturnType().isAssignableFrom(candidate.getReturnType())
+					|| !Set.of(method.getAnnotations()).equals(Set.of(candidate.getAnnotations())))
+				continue;
+			Class<?>[] bridgeParameters = method.getParameterTypes();
+			Class<?>[] candidateParameters = candidate.getParameterTypes();
+			boolean compatible = true;
+			for (int index = 0; index < bridgeParameters.length; index++)
+				if (!bridgeParameters[index].isAssignableFrom(candidateParameters[index])) {
+					compatible = false;
+					break;
+				}
+			if (compatible && (method.getReturnType() != candidate.getReturnType()
+					|| !Arrays.equals(bridgeParameters, candidateParameters)))
+				return true;
+		}
+		return false;
 	}
 
 	@NonNull

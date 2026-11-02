@@ -88,14 +88,14 @@ public class McpPublicApiReflectionContractTests {
 	private static final int PHASE_SIX_TYPE_COUNT = 68;
 	private static final int PROVISIONAL_TYPE_COUNT = 22;
 	private static final int CURRENT_MCP_TYPE_COUNT = 304;
-	// 2026-10-31 lifecycle amendment: aggregate observers no longer carry Soklet.
+	// 2026-11-02 amendment: optional JVM hook and boxed public scalar constants.
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
-			"d9f6c8b0efbab759e7097ad94851d8bbcbe42145d6b503815d4568f5c97c631c";
+			"2d3f05c0ffd1af5fc233863148fe769a90c191563e617b9334d9a2559fb3c444";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
 			"d677a7f58b36d0293b7ff47dd1501fee626369b6cacee26317a350a5fd14b1e1";
 	private static final String PHASE_SIX_NULLABILITY_SHA_256 =
 			"76b6316df434fffe47a0e8276ba8e6f289ba020795fab2251073f3a054e2cb3f";
-	private static final Map<String, Object> PHASE_FOUR_PRIMITIVE_CONSTANTS =
+	private static final Map<String, Object> PHASE_FOUR_SCALAR_CONSTANTS =
 			Map.of(
 					"com.soklet.McpAdmissionIdentity#MAXIMUM_PARTITION_KEY_SIZE_IN_UTF_8_BYTES",
 					256,
@@ -1182,7 +1182,7 @@ public class McpPublicApiReflectionContractTests {
 	}
 
 	@Test
-	public void phaseFourPublicPrimitiveConstantsRetainExactValues()
+	public void phaseFourPublicReferenceConstantsRetainExactValues()
 			throws Exception {
 		Map<String, Object> actualConstants = new TreeMap<>();
 
@@ -1191,14 +1191,16 @@ public class McpPublicApiReflectionContractTests {
 				int modifiers = field.getModifiers();
 				if (Modifier.isPublic(modifiers) && Modifier.isStatic(modifiers)
 						&& Modifier.isFinal(modifiers)
-						&& field.getType().isPrimitive())
+						&& field.getType() == Integer.class) {
+					Assertions.assertTrue(hasExactNullness(field.getAnnotatedType(), NonNull.class));
 					actualConstants.put(type.getName() + "#" + field.getName(),
 							field.get(null));
+				}
 			}
 		}
 
-		Assertions.assertEquals(PHASE_FOUR_PRIMITIVE_CONSTANTS, actualConstants,
-				"Phase 4 public static-final primitive constants changed");
+		Assertions.assertEquals(PHASE_FOUR_SCALAR_CONSTANTS, actualConstants,
+				"Phase 4 public static-final nonnull Integer constants changed");
 	}
 
 	@Test
@@ -1232,11 +1234,9 @@ public class McpPublicApiReflectionContractTests {
 				continue;
 
 			for (Field field : type.getDeclaredFields()) {
-				String fieldId = type.getName() + "#" + field.getName();
 				if (isPublicOrProtected(field.getModifiers())
-						&& field.getType().isPrimitive()
-						&& !PHASE_FOUR_PRIMITIVE_CONSTANTS.containsKey(fieldId))
-					primitiveSignatures.add("FIELD|" + fieldId + "|"
+						&& field.getType().isPrimitive())
+					primitiveSignatures.add("FIELD|" + type.getName() + "#" + field.getName() + "|"
 							+ field.getType().getName());
 			}
 

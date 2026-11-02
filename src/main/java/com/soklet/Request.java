@@ -647,6 +647,10 @@ public final class Request {
 	 * At most 1,000 nonempty form pairs are accepted, including repeated names.
 	 * Delimiters and percent escapes are parsed from the original bytes, then each
 	 * component is decoded using the selected charset.
+	 * Non-ASCII-compatible charsets such as UTF-16 require percent-encoding every
+	 * component byte. Stateful ISO-2022 charsets require percent-encoding non-ASCII
+	 * bytes and escape/shift bytes; raw stateful text is rejected before delimiters
+	 * are parsed. ASCII-compatible stateless charsets may mix raw and escaped bytes.
 	 * <p>
 	 * <em>Note that form parameters have case-sensitive names per the HTTP spec.</em>
 	 * <p>
@@ -654,7 +658,7 @@ public final class Request {
 	 *
 	 * @return the request's form parameters
 	 * @throws IllegalRequestBodyException if an unescaped form component is invalid for its selected charset
-	 * @throws IllegalRequestException if there are more than 1,000 pairs, or a form component contains malformed percent-encoding or text invalid for its selected charset
+	 * @throws IllegalRequestException if there are more than 1,000 pairs, the raw carrier violates the charset restrictions above, or a form component contains malformed percent-encoding or text invalid for its selected charset
 	 */
 	@NonNull
 	public Map<@NonNull String, @NonNull List<@NonNull String>> getFormParameters() {
@@ -2155,6 +2159,13 @@ public final class Request {
 				if (queryParameters == null || queryParameters.isEmpty()) {
 					this.builder.rawQuery(null);
 				} else {
+					// Request construction retains request-validation exceptions even though
+					// the public outbound encoder reports invalid arguments to its callers.
+					for (Map.Entry<String, List<String>> entry : queryParameters.entrySet()) {
+						Utilities.validateDecodedQueryComponent(entry.getKey());
+						for (String value : entry.getValue())
+							Utilities.validateDecodedQueryComponent(value);
+					}
 					this.builder.rawQuery(Utilities.encodeQueryParameters(queryParameters, QueryFormat.RFC_3986_STRICT));
 				}
 			}

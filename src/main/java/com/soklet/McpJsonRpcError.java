@@ -40,12 +40,14 @@ public final class McpJsonRpcError {
 	/**
 	 * Soklet-owned error code used for rate-limit rejection results.
 	 */
-	public static final int SOKLET_RATE_LIMIT_ERROR_CODE = -31999;
+	@NonNull
+	public static final Integer SOKLET_RATE_LIMIT_ERROR_CODE = -31999;
 	/**
 	 * Soklet-owned error code used when strict unknown mirrored-header handling
 	 * rejects a request.
 	 */
-	public static final int SOKLET_STRICT_UNKNOWN_MIRRORED_HEADER_ERROR_CODE = -31998;
+	@NonNull
+	public static final Integer SOKLET_STRICT_UNKNOWN_MIRRORED_HEADER_ERROR_CODE = -31998;
 	private static final int INVALID_PARAMS = -32602;
 	private final int code;
 	@NonNull

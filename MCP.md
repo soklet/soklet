@@ -689,10 +689,11 @@ configuration diagnostic; it must not be used as a production authentication
 policy. Supplying `McpAdmissionController.acceptAllInstance()` explicitly
 records a deliberate anonymous-access decision and suppresses that diagnostic.
 
-`McpTokenBucketConfig.withCapacity(capacity)` is a complete builder entrypoint.
-Without overrides it replenishes 60 tokens every one minute; passing null to
-`refillTokens(...)` or `refillInterval(...)` restores those values. Capacity
-remains required and has no null reset.
+`McpTokenBucketConfig.withCapacity(capacity)` starts a builder. Capacity,
+`refillTokens(...)`, and `refillInterval(...)` must all be supplied explicitly;
+there are no implicit quota values. Omitting either refill setting causes
+`build()` to throw `IllegalStateException`. Refill setters reject null with
+`NullPointerException`; null does not restore a default.
 
 ## Endpoint authoring
 

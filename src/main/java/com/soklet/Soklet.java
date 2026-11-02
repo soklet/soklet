@@ -16,6 +16,7 @@
 
 package com.soklet;
 
+import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import com.google.errorprone.annotations.CheckReturnValue;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.SimulationSession;
 import com.soklet.internal.microhttp.StreamLifecycleCoordinator;
@@ -82,8 +83,10 @@ import static java.util.Objects.requireNonNull;
  * Owns one ready-to-terminal Soklet lifecycle and its configured HTTP, SSE,
  * and MCP transports. {@link #run(SokletConfig)} returns
  * after all configured transports reach readiness; each instance is one-shot.
- * Every run owns a JVM shutdown hook. Bounded application cleanup, terminal
- * reporting, and process-registration release remain owned
+ * Every run registers a JVM shutdown hook by default. An embedding host can
+ * disable only that registration through
+ * {@link SokletConfig.Builder#jvmShutdownHookEnabled(Boolean)}. Bounded application
+ * cleanup, terminal reporting, and process-registration release remain owned
  * by the instance until finalization finishes, even when nobody waits.
  * <p>
  * <pre>{@code
@@ -95,6 +98,10 @@ import static java.util.Objects.requireNonNull;
  * completion from an independent owning thread. An embedding host must finish
  * Soklet shutdown before closing shared databases, telemetry, or logging.
  * JVM hooks execute concurrently and do not establish resource ordering.
+ * With the automatic hook disabled, the host must prevent new runs once
+ * termination begins and request and synchronously await shutdown before its
+ * own shutdown hook returns. Any deregistration or delay belongs before that
+ * shutdown request; shared dependencies remain available until shutdown succeeds.
  * <p>
  * Required application cleanup belongs in bounded {@link ShutdownCleanup},
  * rather than post-wait code or observational lifecycle callbacks: during JVM
@@ -257,7 +264,11 @@ public final class Soklet {
 
 	/**
 	 * Starts one lifecycle, returning only after every configured transport has
-	 * reached readiness. Owns a JVM shutdown hook until full finalization.
+	 * reached readiness. By default owns a JVM shutdown hook until full finalization;
+	 * {@link SokletConfig.Builder#jvmShutdownHookEnabled(Boolean)} may disable only
+	 * that automatic registration. Programmatic shutdown, cleanup, and lifecycle
+	 * owner liveness remain unchanged. The host then owns signal-driven shutdown
+	 * and must request and synchronously await it before its own hook returns.
 	 * Startup failure or cancellation throws
 	 * synchronously after attempted teardown; interruption before readiness
 	 * requests cancellation and the caller's interrupt status is restored.
@@ -275,8 +286,8 @@ public final class Soklet {
 	/**
 	 * Starts a lifecycle with bounded application cleanup eligible after complete
 	 * core shutdown. All arguments are validated before transports are claimed.
-	 * The JVM hook joins bounded core shutdown, cleanup, and reporting. Both
-	 * await methods additionally observe process-registration release.
+	 * When enabled, the JVM hook joins bounded core shutdown, cleanup, and reporting.
+	 * Both await methods additionally observe process-registration release.
 	 *
 	 * @param sokletConfig configuration with unclaimed transport identities
 	 * @param cleanup bounded synchronous application cleanup
@@ -297,6 +308,9 @@ public final class Soklet {
 	 * the immutable terminal result or propagating a failure. The action runs
 	 * once on the calling thread; startup failure prevents its invocation.
 	 * All arguments are validated before transports are claimed.
+	 * The configuration's {@link SokletConfig#isJvmShutdownHookEnabled()} option
+	 * applies to scoped execution as well; disabling the automatic hook does not
+	 * disable teardown when the action returns or throws.
 	 * <p>
 	 * A callback failure remains the exact primary exception or Error. A
 	 * concurrent finalization failure is suppressed on it using ordinary Java
@@ -463,7 +477,9 @@ public final class Soklet {
 	/**
 	 * Waits for full shutdown, bounded application cleanup, terminal reporting,
 	 * and process-registration release, without requesting shutdown. This wait
-	 * and {@link #awaitShutdownAsync()} expose the same immutable result or failure.
+	 * and {@link #awaitShutdownAsync()} expose the same immutable result or underlying
+	 * lifecycle failure; the asynchronous stage wraps failures in
+	 * {@link java.util.concurrent.CompletionException}.
 	 *
 	 * @return the exact immutable terminal result
 	 * @throws InterruptedException if this wait is interrupted; the lifecycle continues
@@ -471,7 +487,7 @@ public final class Soklet {
 	 * @throws IllegalStateException if tracked lifecycle work attempts to join itself
 	 */
 	@NonNull
-	@CheckReturnValue
+	@CanIgnoreReturnValue
 	public ShutdownResult awaitShutdown() throws InterruptedException {
 		SokletRunCompletion completion = this.runCompletion;
 		if (completion != null)
@@ -485,8 +501,14 @@ public final class Soklet {
 	 * Observes the same full terminal outcome as {@link #awaitShutdown()} without
 	 * blocking or requesting shutdown. Returns one cached read-only stage; no
 	 * waiting thread is created by this method. Lifecycle failures complete it
-	 * exceptionally. Mutating a future derived from it cannot alter the lifecycle.
+	 * exceptionally, with the underlying lifecycle failure wrapped in
+	 * {@link java.util.concurrent.CompletionException}. Mutating a future derived
+	 * from it cannot alter the lifecycle.
 	 * Callbacks must not join this stage from work that shutdown must drain.
+	 * The daemon completion handoff does not keep the JVM alive, including during
+	 * normal programmatic shutdown after {@code main} returns. A host composing
+	 * asynchronous cleanup must retain process liveness until its dependent stages
+	 * finish. Put required standalone application cleanup in {@link ShutdownCleanup}.
 	 *
 	 * @return cached full-finalization completion stage
 	 */
@@ -1457,15 +1479,15 @@ public final class Soklet {
 	@NonNull
 	private MarshaledResponse applyCommonPropertiesToMarshaledResponse(@NonNull Request request,
 			@NonNull MarshaledResponse response, boolean suppressContentLength,
-			@NonNull Consumer<MarshaledResponse> beforeHead, @Nullable ResponseFinalizationToken postProcessingToken) {
+			@NonNull Consumer<MarshaledResponse> headRepresentationConsumer, @Nullable ResponseFinalizationToken postProcessingToken) {
 		return applyCommonPropertiesToMarshaledResponse(request, response, suppressContentLength,
-				beforeHead, postProcessingToken, true);
+				headRepresentationConsumer, postProcessingToken, true);
 	}
 
 	@NonNull
 	private MarshaledResponse applyCommonPropertiesToMarshaledResponse(@NonNull Request request,
 			@NonNull MarshaledResponse response, boolean suppressContentLength,
-			@NonNull Consumer<MarshaledResponse> beforeHead, @Nullable ResponseFinalizationToken postProcessingToken, boolean applyHead) {
+			@NonNull Consumer<MarshaledResponse> headRepresentationConsumer, @Nullable ResponseFinalizationToken postProcessingToken, boolean applyHead) {
 		requireNonNull(request);
 		requireNonNull(response);
 		boolean head = applyHead && request.getHttpMethod() == HttpMethod.HEAD;
@@ -1480,10 +1502,22 @@ public final class Soklet {
 			}
 			response = response.markPostProcessed(token);
 		}
-		beforeHead.accept(response);
 		boolean postProcessed = postProcessingToken != null && response.isPostProcessedFor(postProcessingToken);
-		if (head)
+		MarshaledResponse headRepresentation = response;
+		if (head) {
 			response = ResponseBodyCleanup.transform(response, current -> applyHeadResponseIfApplicable(request, current));
+			// Only a projection of this representation may borrow its discarded body.
+			// A fresh descriptor or changed representation metadata belongs to the HEAD handler.
+			List<String> projectedLength = response.getHeaders().get("Content-Length");
+			boolean preservesRepresentation = postProcessed && response.isPostProcessedFor(postProcessingToken)
+					&& response.getStatusCode().equals(headRepresentation.getStatusCode())
+					&& Objects.equals(response.getHeaders().get("Content-Encoding"), headRepresentation.getHeaders().get("Content-Encoding"))
+					&& (projectedLength == null || headRepresentation.getBody().isEmpty()
+							|| projectedLength.equals(List.of(Long.toString(headRepresentation.getBodyLength()))));
+			if (!preservesRepresentation || response.getBody().isPresent() || response.isStreaming())
+				headRepresentation = response;
+		}
+		headRepresentationConsumer.accept(headRepresentation);
 		if (postProcessed) response = response.markPostProcessed(postProcessingToken);
 		response = normalizeBodylessMarshaledResponse(request, response);
 		if (!suppressContentLength) response = applyContentLengthIfApplicable(request, response);

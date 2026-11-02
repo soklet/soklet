@@ -144,8 +144,8 @@ class Round15RequestValueRegressionTests {
 	void queryEncodingRejectsMalformedTextBeforeReplacementEncoding() {
 		for (QueryFormat format : QueryFormat.values()) {
 			for (String invalid : MALFORMED_TEXT) {
-				assertInvalidQuery(() -> Utilities.encodeQueryParameters(Map.of(invalid, List.of()), format));
-				assertInvalidQuery(() -> Utilities.encodeQueryParameters(Map.of("name", List.of(invalid)), format));
+				assertInvalidOutboundQuery(() -> Utilities.encodeQueryParameters(Map.of(invalid, List.of()), format));
+				assertInvalidOutboundQuery(() -> Utilities.encodeQueryParameters(Map.of("name", List.of(invalid)), format));
 			}
 			Map<String, List<String>> valid = Map.of("name-𝄞", List.of("value-🍪", "�"));
 			assertEquals(valid, Utilities.extractQueryParametersFromQuery(Utilities.encodeQueryParameters(valid, format), format));
@@ -154,6 +154,12 @@ class Round15RequestValueRegressionTests {
 
 	private static void assertInvalidQuery(Runnable operation) {
 		IllegalRequestException failure = assertThrows(IllegalRequestException.class, operation::run);
+		assertEquals("Invalid Unicode in query parameter.", failure.getMessage());
+		assertNull(failure.getCause());
+	}
+
+	private static void assertInvalidOutboundQuery(Runnable operation) {
+		IllegalArgumentException failure = assertThrows(IllegalArgumentException.class, operation::run);
 		assertEquals("Invalid Unicode in query parameter.", failure.getMessage());
 		assertNull(failure.getCause());
 	}

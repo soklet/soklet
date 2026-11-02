@@ -186,13 +186,17 @@ public interface ResponseMarshaler {
 	 * <p>
 	 * The default implementation returns the conventional bodyless response for
 	 * the rejection reason ({@code 400}, {@code 408}, {@code 413}, {@code 414}, {@code 415},
-	 * {@code 417}, or {@code 431}).
+	 * {@code 417}, or {@code 431}), finalized through this implementation's
+	 * {@link #postProcess(MarshaledResponse)} method.
 	 * Custom implementations may return any final response status from {@code 200}
 	 * through {@code 599}, consistent with this interface's other methods. This
 	 * default method preserves
 	 * compatibility for direct implementations of this interface; applications that use
 	 * {@link #builder()} may customize the behavior with
 	 * {@link Builder#unparsedRequestHandler(Builder.UnparsedRequestHandler)}.
+	 * A forwarding decorator must delegate this method explicitly to preserve its
+	 * delegate's unparsed-request handler and finalization. That delegated response
+	 * is already finalized and must not be postprocessed a second time.
 	 * <p>
 	 * Detailed documentation is available at
 	 * <a href="https://www.soklet.com/docs/response-writing#advanced-response-marshaling">https://www.soklet.com/docs/response-writing#advanced-response-marshaling</a>.
@@ -204,8 +208,8 @@ public interface ResponseMarshaler {
 	default MarshaledResponse forUnparsedRequest(
 			@NonNull UnparsedRequest request) {
 		requireNonNull(request);
-		return DefaultResponseMarshaler.defaultInstance()
-				.forUnparsedRequest(request);
+		return ResponseBodyCleanup.transform(DefaultResponseMarshaler.defaultInstance()
+				.forUnparsedRequest(request), this::postProcess);
 	}
 
 	/**

@@ -956,9 +956,15 @@ class LifecycleFoundationTests {
 		AtomicReference<Thread> quiesceWorker = new AtomicReference<>();
 		List<String> events = new CopyOnWriteArrayList<>();
 		DeadlineWaiter waiter = new DeadlineWaiter(now::get, (monitor, remaining) -> {
-			waitCount.incrementAndGet();
-			quiesceEntered.await();
-			now.set(10L);
+			if (now.get() < 10L) {
+				waitCount.incrementAndGet();
+				quiesceEntered.await();
+				now.set(10L);
+			} else {
+				// Interrupt delivery may still be completing after the quiesce wrapper
+				// exits. Wait for its progress signal without counting another grace wait.
+				monitor.wait();
+			}
 		});
 		LifecycleWorkers workers = new LifecycleWorkers((name, runnable) -> {
 			if (name.equals("lifecycle-quiesce-http")) {

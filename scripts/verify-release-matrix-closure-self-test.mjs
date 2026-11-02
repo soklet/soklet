@@ -491,6 +491,59 @@ final class McpFiniteBoundSyntax {
       { matcherRuleId: 'FINITE-MATCH-004', member: 'DERIVED_MARGIN' },
     ],
   );
+  const boxedFiniteRoot = join(temporaryRoot, 'finite-bound-boxed-project');
+  const boxedFiniteSource = join(
+    boxedFiniteRoot, 'src/main/java/com/soklet/McpBoxedLimits.java',
+  );
+  mkdirSync(dirname(boxedFiniteSource), { recursive: true });
+  const boxedFiniteText = `package com.soklet;
+final class McpBoxedLimits {
+  static final @NonNull Integer MAXIMUM_BOXED = 256;
+  final static java.lang.Integer MINIMUM_QUALIFIED = 1;
+  static final Byte MAXIMUM_BYTE = (byte) 7;
+  static final Short MAXIMUM_SHORT = (short) 9;
+  static final java.lang.Long MAXIMUM_LONG = 10L;
+  static final Integer MAXIMUM_FIRST = 8, MINIMUM_SECOND = 1;
+  static final Integer DERIVED_MARGIN = MAXIMUM_BOXED + 1;
+  private final @NonNull java.lang.Integer maximumBytes;
+  public java.lang.Integer maximumBytes() { return this.maximumBytes; }
+  final Integer MAXIMUM_INSTANCE = 8;
+  static Integer MAXIMUM_MUTABLE = 8;
+  static final Integer ORDINARY_VALUE = 8;
+  static final java.util.concurrent.atomic.AtomicInteger MAXIMUM_ATOMIC = null;
+  static final custom.Integer MAXIMUM_UNRELATED_TYPE = null;
+  static final Double MAXIMUM_FLOATING = 8.0;
+  static final Integer[] MAXIMUM_ARRAY = null;
+  static final String MASKED = "static final Integer MAXIMUM_STRING_CONTENT = 99;";
+  // static final Integer MAXIMUM_COMMENT = 99;
+}
+`;
+  writeFileSync(boxedFiniteSource, boxedFiniteText);
+  assert.deepEqual(
+    deriveFiniteBoundCandidates(boxedFiniteRoot, [
+      'src/main/java/com/soklet/Mcp*.java',
+    ]).map(({ matcherRuleId, member }) => ({ matcherRuleId, member })),
+    [
+      { matcherRuleId: 'FINITE-MATCH-001', member: 'MAXIMUM_BOXED' },
+      { matcherRuleId: 'FINITE-MATCH-001', member: 'MAXIMUM_BYTE' },
+      { matcherRuleId: 'FINITE-MATCH-001', member: 'MAXIMUM_FIRST' },
+      { matcherRuleId: 'FINITE-MATCH-001', member: 'MAXIMUM_LONG' },
+      { matcherRuleId: 'FINITE-MATCH-001', member: 'MAXIMUM_SHORT' },
+      { matcherRuleId: 'FINITE-MATCH-001', member: 'MINIMUM_QUALIFIED' },
+      { matcherRuleId: 'FINITE-MATCH-001', member: 'MINIMUM_SECOND' },
+      { matcherRuleId: 'FINITE-MATCH-002', member: 'maximumBytes' },
+      { matcherRuleId: 'FINITE-MATCH-004', member: 'DERIVED_MARGIN' },
+    ],
+    'Boxed integral limits retain classification without admitting unrelated or mutable fields',
+  );
+  writeFileSync(boxedFiniteSource, boxedFiniteText.replace(
+    'static final @NonNull Integer MAXIMUM_BOXED = 256;',
+    'static final Integer MAXIMUM_BOXED;',
+  ));
+  assert.throws(() => deriveFiniteBoundCandidates(boxedFiniteRoot, [
+    'src/main/java/com/soklet/Mcp*.java',
+  ]), /Finite-bound field MAXIMUM_BOXED .* must have an initializer/);
+  writeFileSync(boxedFiniteSource, boxedFiniteText);
   const finiteBoundCandidates = deriveFiniteBoundCandidates(
     finiteBoundProjectRoot,
     finiteBoundScanRoots,
@@ -553,6 +606,31 @@ final class McpFiniteBoundSyntax {
   const finiteBaseline = verifyFiniteBoundFixture(finiteBoundInventoryPath);
   assert.deepEqual(finiteBaseline.candidates, finiteBoundCandidates);
   assert.deepEqual(finiteBaseline.exclusions, []);
+
+  // Boxing an existing limit must retain its reviewed owner and failure semantics.
+  // A newly added boxed limit must still fail closed without an inventory owner.
+  const finiteFixtureSourcePath = join(
+    finiteBoundSourceDirectory, 'McpFiniteBoundFixture.java',
+  );
+  const finiteFixtureOriginal = readFileSync(finiteFixtureSourcePath, 'utf8');
+  const finiteFixtureBoxed = finiteFixtureOriginal.replace(
+    'static final int MAXIMUM_ITEMS = 8;',
+    'static final @NonNull java.lang.Integer MAXIMUM_ITEMS = 8;',
+  );
+  assert.notEqual(finiteFixtureBoxed, finiteFixtureOriginal);
+  writeFileSync(finiteFixtureSourcePath, finiteFixtureBoxed);
+  assert.deepEqual(
+    verifyFiniteBoundFixture(finiteBoundInventoryPath).candidates,
+    finiteBaseline.candidates,
+  );
+  writeFileSync(finiteFixtureSourcePath, finiteFixtureBoxed.replace(
+    'static final @NonNull java.lang.Integer MAXIMUM_ITEMS = 8;',
+    'static final @NonNull java.lang.Integer MAXIMUM_ITEMS = 8;\n'
+      + '  static final Long MINIMUM_UNREVIEWED_BOXED = 1L;',
+  ));
+  assert.throws(() => verifyFiniteBoundFixture(finiteBoundInventoryPath),
+    /omitted=\[[^\]]*MINIMUM_UNREVIEWED_BOXED/);
+  writeFileSync(finiteFixtureSourcePath, finiteFixtureOriginal);
 
   const finiteTwoBoundInventory = clone(finiteInventory);
   const secondFiniteBound = clone(finiteTwoBoundInventory.bounds[0]);

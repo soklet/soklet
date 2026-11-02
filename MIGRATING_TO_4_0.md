@@ -176,6 +176,31 @@ headers. It names the origin—the value from which the preflight representation
 is constructed—without misidentifying the preflight's actual HTTP method,
 which is always `OPTIONS`.
 
+### Reference scalar APIs
+
+Soklet-authored public and protected scalar fields and signatures use reference
+types. Values are non-null unless the API explicitly documents a nullable
+contract. The only primitive exceptions are `void`, language-required annotation
+elements, and overrides of external Java or Servlet contracts.
+
+`McpAdmissionIdentity.MAXIMUM_PARTITION_KEY_SIZE_IN_UTF_8_BYTES`,
+`McpJsonRpcError.SOKLET_RATE_LIMIT_ERROR_CODE`, and
+`McpJsonRpcError.SOKLET_STRICT_UNKNOWN_MIRRORED_HEADER_ERROR_CODE` are now
+`@NonNull Integer` fields with unchanged values. They are no longer Java
+compile-time constant expressions. `MetricsCollector.Histogram.record(...)`
+accepts `@NonNull Long`; null is rejected. Matching primitive arguments work
+through autoboxing, but callers and overrides must be recompiled. For histogram
+recording, use a `long` value such as `1L`; an `int` literal no longer widens to
+the boxed `Long` parameter.
+
+Both Servlet adapters use `@NonNull Integer` for
+`SokletServletContext.Builder.sessionTimeout(...)`. The numeric components of
+`SokletServletPrintWriterEvent` records use `Integer`, and `CharAppended.ch` uses
+`Character`; constructors reject null. Jakarta's deprecated
+`SokletHttpServletRequest.isRequestedSessionIdFromUrl()` alias returns non-null
+`Boolean`. Methods that actually override Java or Servlet signatures retain the
+primitive types required by those interfaces.
+
 ### Metric snapshot keys
 
 The thirteen HTTP/SSE/transport `MetricsCollector` key types are final classes
@@ -260,8 +285,14 @@ including an explicitly encoded U+FFFD replacement character, remains accepted.
 
 URL-encoded forms parse delimiters and percent escapes from the original bytes
 before decoding each component with the selected charset. This supports encoded
-UTF-16 components and mixed literal/escaped multibyte characters. Body text
-access remains independent of form-component decoding.
+UTF-16 components and mixed literal/escaped multibyte characters in
+ASCII-compatible charsets such as UTF-8. Non-ASCII-compatible charsets, including
+UTF-16, require every name/value byte to be percent-encoded, leaving the `&` and
+`=` delimiters as ASCII. Stateful ISO-2022 charsets require escape/shift bytes
+(`ESC`, `SO`, and `SI`) and non-ASCII bytes to be percent-encoded. Ambiguous raw
+forms are rejected with
+`IllegalRequestException` instead of silently splitting a character into fields.
+Body text access remains independent of form-component decoding.
 
 Extended multipart parameters such as `name*` and `filename*` require complete
 ASCII hexadecimal percent-escapes. Malformed or truncated escapes and raw
@@ -289,8 +320,9 @@ decoding remains lazy. Existing `IllegalRequestException` and
 marshaler returns HTTP 400 with a redacted diagnostic.
 
 Decoded query names and values supplied to `Request.withPath(...)` or a request
-copier also reject unpaired UTF-16 surrogates, as does
-`Utilities.encodeQueryParameters(...)`. The RFC 8187 header builder
+copier also reject unpaired UTF-16 surrogates with `IllegalRequestException`.
+The outbound `Utilities.encodeQueryParameters(...)` encoder rejects them with
+`IllegalArgumentException`. The RFC 8187 header builder
 `ParameterizedHeaderValue.Builder.rfc8187Parameter(...)` rejects malformed
 UTF-16 before changing the builder, instead of encoding a substituted `?`.
 Valid supplementary characters and explicit U+FFFD remain supported.
@@ -983,8 +1015,17 @@ observation-only: they do not initiate shutdown. `awaitShutdown()` throws
 `InterruptedException` if its caller stops waiting; that interruption does not
 request shutdown. `awaitShutdownAsync()` returns a read-only completion stage
 without creating a waiting thread. Both include configured application cleanup
-and release of process registrations; unsuccessful outcomes throw the lifecycle
-exception or complete the stage exceptionally with the same failure.
+and release of process registrations. The blocking await throws the lifecycle
+failure directly. Async failure callbacks receive a `CompletionException` whose
+cause is that same failure; unwrap it before inspecting lifecycle-specific fields.
+The read-only stage and futures derived from it follow this completion-stage
+exception wrapping behavior.
+
+The daemon completion handoff does not keep the JVM alive after lifecycle
+finalization. Even normal programmatic shutdown can end the process before
+dependent callbacks run when `main` has returned. An asynchronous host must retain
+JVM liveness until its composed stage completes. Required standalone resource
+release belongs in `ShutdownCleanup`, not in a completion callback.
 
 `SokletApplication` is removed. Replace `Soklet.fromConfig(config)` followed by
 `start()` with `Soklet.run(config)`. Replace `shutdown()` with
@@ -1002,8 +1043,8 @@ Joining the async stage inside work that shutdown must join remains unsafe.
 
 ### Standalone applications, tests, and embedders use the same API
 
-Every `run` installs a JVM shutdown hook automatically. `ShutdownTrigger` and
-its varargs arguments are removed. Soklet no longer reads or registers listeners
+By default, every `run` installs a JVM shutdown hook automatically.
+`ShutdownTrigger` and its varargs arguments are removed. Soklet no longer reads or registers listeners
 on standard input. A standalone application can start and await like this:
 
 ```java
@@ -1078,11 +1119,13 @@ ShutdownResult result = soklet.awaitShutdown();
 
 Cleanup is eligible at most once and only after complete core shutdown, even
 when the scoped callback failed. Use it for application-owned, ingress-exclusive
-resources that are safe to close at that point. A timeout bounds Soklet's wait;
-it does not forcibly stop arbitrary cleanup code. Stateful observers require an
+resources that are safe to close at that point. At timeout Soklet requests
+interruption of a running cleanup action and stops waiting for it. Interruption
+is cooperative and may fail interruption-sensitive I/O; the timeout does not
+forcibly stop arbitrary cleanup code. Stateful observers require an
 application-owned delivery barrier before cleanup can safely depend on their state.
 
-Explicit shutdown requests, scoped teardown, and the JVM hook join the same
+Explicit shutdown requests, scoped teardown, and an enabled JVM hook join the same
 lifecycle. An embedded host must await Soklet shutdown before closing shared
 databases, logging, and other dependencies. Independent JVM hooks run concurrently
 without guaranteed ordering; the automatic hook does not give the host exclusive
@@ -1091,6 +1134,25 @@ JVM hook joins bounded core shutdown, eligible cleanup, and terminal reporting,
 without an unbounded join on the process owner. Ordinary awaits and scoped return
 also include process-registration release. During JVM shutdown, post-await code
 or completion callbacks need not finish before exit.
+
+Hosts that must delay draining until load-balancer deregistration or other
+services are ready can configure
+`SokletConfig.Builder.jvmShutdownHookEnabled(Boolean.FALSE)`. This `Boolean`
+option defaults to `Boolean.TRUE`; null restores the default. The non-null
+`SokletConfig.isJvmShutdownHookEnabled()` getter reports the effective value.
+Every `run` overload honors it. Disabling it skips automatic JVM hook
+registration only: programmatic shutdown, await methods, configured cleanup,
+scoped callback teardown, and lifecycle-owner liveness are unchanged.
+
+With the hook disabled, the host owns the termination sequence. It must prevent
+new Soklet runs once termination begins, perform any bounded deregistration or
+delay, then call `requestShutdown()` and synchronously `awaitShutdown()` before
+its own shutdown hook returns. Release shared dependencies only after successful
+shutdown. Include the host's delay in the platform termination budget. Soklet's
+lifecycle owner does not keep the JVM alive after all JVM
+shutdown hooks return. Skipping hook registration also removes its startup-time
+check for JVM shutdown already being in progress, so the host must coordinate
+starts and termination itself.
 
 On signal-driven JVM shutdown, caller `finally` blocks and post-await code may
 not finish before the JVM exits. Put required cleanup in `ShutdownCleanup` or

@@ -118,6 +118,21 @@ class Round16RequestResolverRegressionTests {
 	}
 
 	@Test
+	void automaticDiscoveryRetainsVisibilityBridgesFromPackagePrivateBases() {
+		assertTrue(Arrays.stream(VisibilityResource.class.getDeclaredMethods()).anyMatch(Method::isBridge));
+		ResourceMethodResolver resolver = ResourceMethodResolver.fromClasses(Set.of(VisibilityResource.class, TargetResource.class));
+		assertEquals(3, resolver.getResourceMethods().size());
+		assertTrue(resolver.resourceMethodForRequest(Request.fromPath(HttpMethod.GET, "/inherited"), ServerType.HTTP)
+				.orElseThrow().getMethod().isBridge());
+		SokletSimulator.run(SimulatorConfig.builder().httpServer().resourceMethodResolver(resolver).build(), simulator -> {
+			assertEquals("inherited", responseBody(simulator.performHttpRequest(Request.fromPath(HttpMethod.GET, "/inherited"))));
+			assertEquals("admin", responseBody(simulator.performHttpRequest(Request.fromPath(HttpMethod.GET, "/admin"))));
+		});
+		ResourceMethodResolver onlyInherited = ResourceMethodResolver.fromClasses(Set.of(VisibilityResource.class));
+		assertEquals(1, onlyInherited.getResourceMethods().size(), "A sole inherited route must remain usable.");
+	}
+
+	@Test
 	void explicitMethodSelectionRetainsTheSelectedBridge() throws Exception {
 		Method bridge = Arrays.stream(CovariantResource.class.getDeclaredMethods()).filter(Method::isBridge).findFirst().orElseThrow();
 		Method real = CovariantResource.class.getDeclaredMethod("get");
@@ -232,6 +247,10 @@ class Round16RequestResolverRegressionTests {
 
 	interface GenericApi<T> { T handle(T value); }
 	interface ResultFactory<T> { T get(); }
+	abstract static class VisibilityBase {
+		@GET("/inherited") public String inherited() { return "inherited"; }
+	}
+	public static class VisibilityResource extends VisibilityBase {}
 	public static class GenericResource implements GenericApi<String> {
 		@GET("/generic") public String handle(@QueryParameter(name = "value") String value) { return value; }
 	}

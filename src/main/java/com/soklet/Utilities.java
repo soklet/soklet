@@ -217,6 +217,17 @@ public final class Utilities {
 			byte @NonNull [] body, @NonNull Charset charset, int maximumPairs) {
 		requireNonNull(body);
 		requireNonNull(charset);
+		String charsetName = charset.name().toUpperCase(Locale.ROOT);
+		boolean stateful = charsetName.contains("2022") || charsetName.startsWith("X-WINDOWS-5022");
+		if (stateful)
+			for (byte value : body)
+				if ((value & 0xff) >= 0x80 || value == 0x1b || value == 0x0e || value == 0x0f)
+					throw new IllegalRequestException("Stateful form charset requires percent-encoded non-ASCII and shift bytes.");
+		// The wire carrier uses ASCII delimiters independently of the component charset.
+		// A non-ASCII-compatible charset must escape every component byte, so raw
+		// encoded characters cannot masquerade as '&', '=' or other carrier syntax.
+		boolean fullyEncodedComponents = !stateful && (!charset.canEncode()
+				|| !Arrays.equals("&=+%AZaz09".getBytes(StandardCharsets.US_ASCII), "&=+%AZaz09".getBytes(charset)));
 		Map<String, List<String>> parameters = new LinkedHashMap<>();
 		int pairCount = 0;
 		for (int start = 0; start < body.length;) {
@@ -232,8 +243,8 @@ public final class Utilities {
 			int separator = start;
 			while (separator < end && body[separator] != '=')
 				separator++;
-			String name = decodeFormComponent(body, start, separator, charset);
-			String value = decodeFormComponent(body, separator < end ? separator + 1 : end, end, charset);
+			String name = decodeFormComponent(body, start, separator, charset, fullyEncodedComponents);
+			String value = decodeFormComponent(body, separator < end ? separator + 1 : end, end, charset, fullyEncodedComponents);
 			addStringValue(parameters, name, value);
 			start = end + 1;
 		}
@@ -242,7 +253,8 @@ public final class Utilities {
 	}
 
 	@NonNull
-	private static String decodeFormComponent(byte @NonNull [] body, int start, int end, @NonNull Charset charset) {
+	private static String decodeFormComponent(byte @NonNull [] body, int start, int end, @NonNull Charset charset,
+			boolean fullyEncoded) {
 		byte[] bytes = Arrays.copyOfRange(body, start, end);
 		int length = 0;
 		boolean escaped = false;
@@ -258,8 +270,11 @@ public final class Utilities {
 				value = high * 16 + low;
 				index += 2;
 				escaped = true;
-			} else if (value == '+') {
-				value = ' ';
+			} else {
+				if (fullyEncoded)
+					throw new IllegalRequestException("Non-ASCII-compatible form charset requires percent-encoded component bytes.");
+				if (value == '+')
+					value = ' ';
 			}
 			bytes[length++] = (byte) value;
 		}
@@ -920,6 +935,7 @@ public final class Utilities {
 	 * @param queryParameters the decoded query parameters
 	 * @param queryFormat     the encoding strategy
 	 * @return the encoded query string, or the empty string if no parameters
+	 * @throws IllegalArgumentException if a parameter name or value contains an unpaired surrogate
 	 */
 	@NonNull
 	public static String encodeQueryParameters(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> queryParameters,
@@ -956,7 +972,8 @@ public final class Utilities {
 																		 @NonNull QueryFormat queryFormat) {
 		requireNonNull(queryComponent);
 		requireNonNull(queryFormat);
-		validateDecodedQueryComponent(queryComponent);
+		if (containsUnpairedSurrogate(queryComponent))
+			throw new IllegalArgumentException("Invalid Unicode in query parameter.");
 
 		String encoded = URLEncoder.encode(queryComponent, StandardCharsets.UTF_8);
 

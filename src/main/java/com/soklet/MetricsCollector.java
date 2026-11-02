@@ -2032,7 +2032,12 @@ public interface MetricsCollector {
 		 *
 		 * @param value the value to record
 		 */
-		public void record(long value) {
+		public void record(@NonNull Long value) {
+			record(requireNonNull(value).longValue());
+		}
+
+		// Internal collectors retain the allocation-free primitive path.
+		void record(long value) {
 			if (value < 0)
 				return;
 
@@ -2121,7 +2126,7 @@ public interface MetricsCollector {
 	 * <p>
 	 * Bucket counts are cumulative. Boundaries are inclusive upper bounds, and the final
 	 * boundary is {@link Long#MAX_VALUE} to represent the overflow bucket. Units are the same
-	 * as values passed to {@link Histogram#record(long)}.
+	 * as values passed to {@link Histogram#record(Long)}.
 	 * The sum is an approximate floating-point total; counts, boundaries and
 	 * min/max remain integer values. All public scalar values and inputs are
 	 * nonnull references. Constructor bucket lists are defensively copied.
