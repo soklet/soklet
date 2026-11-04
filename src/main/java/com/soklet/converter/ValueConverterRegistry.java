@@ -32,12 +32,16 @@ import com.soklet.internal.util.ConcurrentLruMap;
 
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
+import static com.soklet.Utilities.trimAggressivelyToNull;
 
 /**
  * A collection of {@link ValueConverter} instances, supplemented with quality-of-life features that most applications need.
  * <p>
  * For example, the registry will automatically generate and cache off {@link ValueConverter} instances when a requested 'from' type is {@link String}
  * and the 'to' type is an {@link Enum} if no converter was previously specified (this is almost always the behavior you want).
+ * Generated enum converters trim surrounding space-separator characters like the other default text converters;
+ * blank input converts to {@link Optional#empty()}, and constant names remain case-sensitive.
+ * Explicitly registered enum converters retain their own input handling.
  * <p>
  * The registry will also perform primitive mapping when locating {@link ValueConverter} instances.
  * For example, if a requested 'from' {@link String} and 'to' {@code int} are specified and that converter does not exist, but a 'from' {@link String} and 'to' {@link Integer} does exist, it will be returned.
@@ -253,9 +257,12 @@ public final class ValueConverterRegistry {
 					public Optional<T> convert(@Nullable Object from) throws ValueConversionException {
 						if (from == null)
 							return Optional.empty();
+						String value = trimAggressivelyToNull(from.toString());
+						if (value == null)
+							return Optional.empty();
 
 						try {
-							return Optional.ofNullable((T) Enum.valueOf(toClass, from.toString()));
+							return Optional.ofNullable((T) Enum.valueOf(toClass, value));
 						} catch (Exception e) {
 							throw new ValueConversionException(format("Unable to convert value '%s' of type %s to an instance of %s",
 									from, getFromType(), getToType()), e, getFromType(), from, getToType());

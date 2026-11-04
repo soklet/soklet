@@ -57,9 +57,21 @@ import static java.util.Objects.requireNonNull;
  * resource method. A bodyless explicit HEAD method can use a custom
  * {@link ResponseMarshaler.Builder.HeadHandler} or final {@link ResponseMarshaler.Builder.PostProcessor}
  * to advertise a nonzero representation length.
- * A validated {@code 426} response may advertise {@code Upgrade}. The default response marshaler
- * rejects {@link StreamingResponseBody} as this response's body; return a {@link MarshaledResponse}
- * with its streaming body configured instead.
+ * A validated {@code 426} response may advertise {@code Upgrade}.
+ * <p>
+ * The default response marshaler passes {@code byte[]} bodies as binary data and renders other ordinary logical values
+ * using {@link Object#toString()}. It rejects {@link java.nio.file.Path}, {@link java.io.File}, {@link java.nio.ByteBuffer},
+ * {@link java.io.InputStream}, {@link java.nio.channels.FileChannel}, and {@link StreamingResponseBody} bodies instead of
+ * rendering resource handles as text. Return a {@link MarshaledResponse} with its finite body or streaming body configured
+ * instead. Use {@link MarshaledResponse.Builder#body(java.nio.file.Path)} for files (converting a {@code File} with
+ * {@link java.io.File#toPath()}),
+ * {@link MarshaledResponse.Builder#body(java.nio.ByteBuffer)} for buffers, and
+ * {@link MarshaledResponse.Builder#body(java.nio.channels.FileChannel, Long, Long, Boolean)} for file channels.
+ * For an input stream, use {@link StreamingResponseBody#fromInputStream(StreamResourceFactory)}
+ * with a factory that opens a new stream when production starts.
+ * Supplying a logical body does not transfer ownership of its resource or cause it to be closed, including when default
+ * marshaling rejects it. A custom {@link ResponseMarshaler.Builder.ResourceMethodHandler} or {@link ResponseMarshaler}
+ * can explicitly implement other serialization behavior.
  * <p>
  * Full documentation is available at <a href="https://www.soklet.com/docs/response-writing">https://www.soklet.com/docs/response-writing</a>.
  *
@@ -326,6 +338,9 @@ public final class Response {
 
 		/**
 		 * Replaces the configured response body.
+		 * <p>
+		 * This is a logical value for the configured {@link ResponseMarshaler}; setting it does not read or take ownership
+		 * of a file, buffer, stream, or channel. The default marshaler rejects those handle types as described by {@link Response}.
 		 *
 		 * @param body response body, or {@code null} to configure no body
 		 * @return this builder
@@ -436,6 +451,8 @@ public final class Response {
 
 		/**
 		 * Replaces the copied response body.
+		 * <p>
+		 * This has the same logical-value and ownership contract as {@link Builder#body(Object)}.
 		 *
 		 * @param body response body, or {@code null} to configure no body
 		 * @return this copier

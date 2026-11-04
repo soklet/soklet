@@ -282,5 +282,14 @@ public enum LogEventType {
 	 * ID, trace flags, {@code tracestate}, or {@code baggage}, and its throwable,
 	 * request, resource method, and marshaled response are absent.</p>
 	 */
-	MCP_TRACE_CORRELATION
+	MCP_TRACE_CORRELATION,
+	/**
+	 * A startup-discovered Resource Method has an unannotated scalar or JDK
+	 * collection/map parameter that will fall back to the default
+	 * {@link InstanceProvider}. This warning is emitted only when the default
+	 * parameter and instance providers handle the parameter. It does not reject
+	 * the configuration or change injection behavior. Dynamically selected
+	 * methods absent from the startup snapshot are not scanned.
+	 */
+	RESOURCE_METHOD_UNANNOTATED_VALUE_PARAMETER
 }

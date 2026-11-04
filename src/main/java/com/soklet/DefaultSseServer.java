@@ -4269,6 +4269,10 @@ final class DefaultSseServer implements SseServer {
 	}
 
 	protected void validateNoRequestBodyHeaders(@NonNull Request request) {
+		validateSseRequestBody(request);
+	}
+
+	static void validateSseRequestBody(@NonNull Request request) {
 		requireNonNull(request);
 
 		Map<String, List<String>> headers = request.getHeaders();
@@ -4314,6 +4318,8 @@ final class DefaultSseServer implements SseServer {
 			if (contentLength != 0)
 				throw new IllegalRequestException("Non-zero Content-Length is not allowed for Server-Sent Event requests");
 		}
+		if (request.getBody().filter(body -> body.length != 0).isPresent())
+			throw new IllegalRequestException("Request bodies are not allowed for Server-Sent Event requests");
 	}
 
 	@NonNull

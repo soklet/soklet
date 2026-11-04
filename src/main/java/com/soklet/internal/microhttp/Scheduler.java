@@ -36,6 +36,19 @@ class Scheduler {
         return tasks.size();
     }
 
+    long selectTimeoutMillis(long maximumMillis) {
+        if (tasks.isEmpty())
+            return maximumMillis;
+
+        long remainingNanos = tasks.first().time - elapsedNanos();
+        // select(0) blocks indefinitely. Round up both positive submillisecond
+        // delays and already-due tasks so the selector cannot hide a deadline.
+        long nextTaskMillis = remainingNanos <= 0 ? 1
+                : (remainingNanos - 1) / 1_000_000 + 1;
+        return maximumMillis == 0 ? nextTaskMillis
+                : Math.min(maximumMillis, nextTaskMillis);
+    }
+
     Cancelable schedule(Runnable task, Duration duration) {
         if (duration.isNegative())
             throw new IllegalArgumentException("Scheduled duration must not be negative");

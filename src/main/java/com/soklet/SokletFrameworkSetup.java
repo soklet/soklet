@@ -20,6 +20,7 @@ import com.soklet.annotation.SseEventSource;
 import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
@@ -27,6 +28,7 @@ import java.lang.reflect.TypeVariable;
 import java.lang.reflect.WildcardType;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
@@ -85,6 +87,7 @@ final class SokletFrameworkSetup {
 			validateNoRemovedHttpServerInjection(snapshot);
 			for (ResourceMethod resourceMethod : snapshot)
 				validateConfiguredResourceMethod(this.config, resourceMethod);
+			warnAboutUnannotatedValueParameters(snapshot);
 			initializeMetrics();
 			this.resourceMethods.set(snapshot);
 			this.state.set(State.SUCCEEDED);
@@ -100,6 +103,16 @@ final class SokletFrameworkSetup {
 			this.state.set(State.FAILED);
 			throw propagate(throwable);
 		}
+	}
+
+	private void warnAboutUnannotatedValueParameters(@NonNull Set<ResourceMethod> snapshot) {
+		if (!(this.config.getResourceMethodParameterProvider() instanceof DefaultResourceMethodParameterProvider defaultProvider)
+				|| !(this.config.getInstanceProvider() instanceof DefaultInstanceProvider))
+			return;
+		Set<Method> warnedMethods = new HashSet<>();
+		for (ResourceMethod resourceMethod : snapshot)
+			if (warnedMethods.add(resourceMethod.getMethod()))
+				defaultProvider.warnAboutUnannotatedValueParameters(resourceMethod);
 	}
 
 	@NonNull

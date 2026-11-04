@@ -241,7 +241,7 @@ const PRIVACY_BOUNDARY_INVENTORY_PATH =
 // 2026-11-02: retain fixed form/encoder diagnostics and the Histogram boxed wrapper
 // under their existing boundaries; source matchers and disclosure policy are unchanged.
 const EXPECTED_PRIVACY_SEMANTICS_SHA256 =
-  '90a3ddba956f5f9220693e3d6d21daaa6f095be68669ee36c85e6b73e158d686';
+  '1cb5abca74a4a18c7435c02d54ae8c7890b3284cbcc18da2410f1abd4aa31b23';
 const PRIVACY_TOP_LEVEL_KEYS = Object.freeze([
   'artifactRoots',
   'boundaries',

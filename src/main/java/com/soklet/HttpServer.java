@@ -407,11 +407,12 @@ public interface HttpServer {
 		}
 
 		/**
-		 * Sets the maximum duration of one socket-selection wait. Passing
+		 * Sets the maximum idle duration of one socket-selection wait. Passing
 		 * {@code null} restores the built-in default of 100 milliseconds.
-		 * Timeout enforcement is checked by the selection loop, so this interval also
-		 * bounds the polling precision of request, idle, response and drain deadlines;
-		 * a deadline may be observed up to one selection interval later.
+		 * The duration must be positive. The selection loop shortens this maximum
+		 * wait to the earliest pending transport timer. Timer enforcement still
+		 * depends on the worker returning to the loop; this setting does not guarantee
+		 * exact deadline execution when the worker is busy.
 		 *
 		 * @param socketSelectTimeout socket-selection timeout, or {@code null} for
 		 * the default
@@ -614,6 +615,9 @@ public interface HttpServer {
 		 * activation. Admission or executor rejection yields a failsafe {@code 503} response.
 		 * A custom executor must have capacity to start accepted producer work promptly;
 		 * queueing behind long-lived producers delays an already accepted response.
+		 * Before returning a producer task to this executor, Soklet retires its
+		 * interrupt-delivery fence and clears the worker's interrupt status so it
+		 * cannot carry over to the next task.
 		 *
 		 * @param streamingExecutorServiceSupplier the executor service supplier, or {@code null} for the default
 		 * @return this builder

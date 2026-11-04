@@ -36,8 +36,13 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.io.File;
+import java.io.InputStream;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -180,6 +185,9 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 			Object bodyAsObject = response.getBody().orElse(null);
 			if (bodyAsObject instanceof StreamingResponseBody)
 				throw new IllegalArgumentException("StreamingResponseBody requires MarshaledResponse.stream or streamingResponseBody; Response.body does not open a stream.");
+			if (bodyAsObject instanceof Path || bodyAsObject instanceof File || bodyAsObject instanceof ByteBuffer
+					|| bodyAsObject instanceof InputStream || bodyAsObject instanceof FileChannel)
+				throw new IllegalArgumentException("Path, File, ByteBuffer, InputStream and FileChannel cannot be marshaled by the default Response.body handler; return MarshaledResponse with its body or streamingResponseBody configured instead.");
 			boolean binaryResponse = false;
 
 			// If response body is a byte array, pass through as-is.

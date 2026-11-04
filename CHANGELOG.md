@@ -492,6 +492,56 @@ maintenance or security fixes afterward. See the explicit
 
 ### Correctness Fixes
 
+- Publish default classpath resolver context-loader capture failures to waiting
+  callers instead of leaving the shared resolver stuck loading. Preserve failure
+  memoization and recursive-access detection.
+- Serialize pending `100 Continue` responses with final request-timeout responses
+  under socket backpressure, retaining write readiness until the final bytes are
+  flushed.
+- Isolate stream-producer interruption from lifecycle locks so blocking
+  interruptible-resource cleanup cannot stall shutdown beyond its budgets.
+  In-flight interrupt delivery remains tracked until it returns.
+- Clear a finished streaming producer's interrupt status before returning its
+  pooled worker, preventing cancelation from interrupting a later stream on
+  executors that retain task interrupt status. Inline callers retain their status.
+- Preserve completed closing HTTP responses while unread upload bytes remain by
+  half-closing output and draining terminal input within time and byte bounds.
+  The one-second lingering-input window consumes the graceful shutdown budget
+  and can trigger forced shutdown with short budgets.
+  Pending transport deadlines now shorten otherwise longer selector waits.
+- Emit startup-only warnings for suspicious unannotated value parameters handled
+  by the default parameter and instance providers. Warnings identify likely
+  missing request-binding annotations and do not reject configurations.
+- Reject Path, File, ByteBuffer, InputStream, and FileChannel objects mistakenly
+  supplied to logical Response.body in the default response marshaler, with
+  guidance to the finite and streaming response APIs.
+- Apply default text-converter space-separator trimming to generated enum
+  converters, including empty results for all-space input, while retaining
+  case-sensitive names and explicitly registered converter behavior.
+- Reject an accepted SSE handshake's invalid Content-Type and align simulated
+  SSE request-body admission with the standard server before application handling.
+- Stop legacy forwarded-origin fallback after a malformed nearest Forwarded entry
+  under the trusted-proxy allowlist. Validate legacy forwarded protocol values as
+  URI schemes so they cannot inject a host, path, or query into the effective origin.
+- Unwind MCP publisher startup after every JVM callback failure, including checked
+  exceptions, fencing failed listeners and releasing partial generations.
+- Accept valid HTTP quoted-pairs and empty list/parameter elements during MCP
+  media negotiation while preserving malformed-header and unacceptable-media checks.
+- Serialize assignable reference arrays in typed MCP output, including arrays of
+  List/Map implementations, while retaining recursive element validation.
+- Preserve literal multipart boundaries that resemble MIME encoded words, and
+  decode HTTP quoted-pairs in Content-Type parameters without changing legacy
+  Content-Disposition filename decoding. Reject malformed boundary quoting.
+- Decode RFC Forwarded quoted-pairs once and validate the complete selected entry
+  before using its origin or client-IP fields. Malformed quoting cannot promote
+  retained client fields into trusted proxy metadata; unknown IP hops remain
+  trust boundaries, and legacy X-Forwarded quoted-pair interpretation is retained.
+- Apply core's form-carrier charset validation in both Servlet adapters. Reject
+  ambiguous raw stateful/non-ASCII-compatible form bytes with HTTP 400 while
+  preserving fully percent-encoded components and query-first parameter merging.
+- Preserve an untouched raw query when changing a copied request's path, including
+  escaping, bare flags and interleaved duplicate parameters. Explicit query edits
+  still regenerate the raw query from the new decoded values.
 - Preserve custom HEAD replacement status, length and encoding without borrowing
   metadata from the discarded GET body. Default and copied projections retain
   GET/HEAD compression parity. The inherited unparsed-request marshaler now

@@ -1262,7 +1262,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				application.start();
 				subscribeToSubscriptionEventSources(registrations);
 				startAcceptingSubscriptions();
-			} catch (RuntimeException | Error failure) {
+			} catch (Throwable failure) {
+				// JVM callbacks can emit checked failures even without a Java throws
+				// declaration.  Every startup failure must retain or release its owner.
 				generation.beginClosing();
 				Throwable cleanupFailure = null;
 				cleanupFailure = runLifecycleStep(cleanupFailure,
@@ -2033,7 +2035,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						"MCP shutdown began before listener readiness.");
 			}
 			return requireNonNull(effectiveAddress);
-		} catch (IOException | RuntimeException | Error throwable) {
+		} catch (Throwable throwable) {
+			// Application callbacks are JVM boundaries: checked failures need the
+			// same startup election and resource unwind as Java-declared failures.
 			Throwable primary;
 			synchronized (lifecycleLock) {
 				// Startup and EventLoop termination elect one exact primary while
@@ -2540,7 +2544,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					registration, listenerFence);
 			registrations.add(control);
 			requireNonNull(registrationConsumer).accept(control);
-		} catch (RuntimeException | Error failure) {
+		} catch (Throwable failure) {
+			// Fence a retained listener even when subscribe emits a checked JVM
+			// failure rather than returning its registration.
 			listenerFence.deactivate();
 			// Once subscribe() returns, the framework owns the registration even if
 			// later bookkeeping fails.  Start a retained close attempt before
@@ -6906,6 +6912,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		if (values.isEmpty()) return false;
 		List<MediaRange> ranges = new ArrayList<>();
 		for (String value : splitCommaAware(String.join(",", values))) {
+			// HTTP list recipients ignore empty members; they advertise no support.
+			if (value.isEmpty()) continue;
 			if (!validAcceptFragment(value)) return false;
 			Optional<MediaRange> range = MediaRange.fromHeaderRepresentation(value);
 			if (range.isEmpty()) return false;
@@ -8810,6 +8818,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		Set<String> names = new LinkedHashSet<>();
 		for (int index = 1; index < segments.size(); index++) {
 			String segment = segments.get(index).trim();
+			// RFC 9110 parameters permit an empty element after a semicolon.
+			if (segment.isEmpty())
+				continue;
 			int equals = segment.indexOf('=');
 			if (equals <= 0 || equals == segment.length() - 1)
 				return false;
@@ -8838,6 +8849,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		List<String> fragments = splitCommaAware(String.join(",", acceptHeaders));
 		List<MediaRange> ranges = new ArrayList<>(fragments.size());
 		for (String fragment : fragments) {
+			// Empty comma-list members do not contribute a media range.
+			if (fragment.isEmpty())
+				continue;
 			if (!validAcceptFragment(fragment))
 				return false;
 
@@ -8875,6 +8889,9 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		Set<String> parameterNames = new LinkedHashSet<>();
 		for (int index = 1; index < segments.size(); index++) {
 			String segment = segments.get(index).trim();
+			// RFC 9110 parameters permit an empty element after a semicolon.
+			if (segment.isEmpty())
+				continue;
 			int equals = segment.indexOf('=');
 			if (equals <= 0 || equals == segment.length() - 1)
 				return false;
@@ -10275,9 +10292,18 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 	@NonNull
 	private String unquote(@NonNull String value) {
-		if (value.length() >= 2 && value.startsWith("\"") && value.endsWith("\""))
-			return value.substring(1, value.length() - 1);
-		return value;
+		if (value.length() < 2 || !value.startsWith("\"") || !value.endsWith("\""))
+			return value;
+		// Syntax was checked by validParameterValue. Interpret quoted-pairs before
+		// comparing the charset, so quoted and token spellings remain equivalent.
+		StringBuilder decoded = new StringBuilder(value.length() - 2);
+		for (int index = 1; index < value.length() - 1; index++) {
+			char character = value.charAt(index);
+			if (character == '\\')
+				character = value.charAt(++index);
+			decoded.append(character);
+		}
+		return decoded.toString();
 	}
 
 	private boolean validParameterValue(@NonNull String value) {
@@ -10285,11 +10311,15 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			boolean escaped = false;
 			for (int index = 1; index < value.length() - 1; index++) {
 				char character = value.charAt(index);
+				// Both qdtext and quoted-pairs permit HTAB and obs-text, but never
+				// other controls. Validate escaped characters as well as literal ones.
+				if ((character < 0x20 && character != '\t') || character == 0x7F || character > 0xFF)
+					return false;
 				if (escaped) {
 					escaped = false;
 				} else if (character == '\\') {
 					escaped = true;
-				} else if (character < 0x20 || character == 0x7F || character == '"') {
+				} else if (character == '"') {
 					return false;
 				}
 			}

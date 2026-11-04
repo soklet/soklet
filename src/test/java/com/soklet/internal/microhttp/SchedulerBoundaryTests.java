@@ -69,6 +69,30 @@ class SchedulerBoundaryTests {
         assertEquals(List.of(second), scheduler.expired());
     }
 
+    @Test
+    void selectorWaitNeverHidesTheNextDeadlineOrTurnsZeroIntoAnInfiniteWait() {
+        TestClock clock = new TestClock(Long.MAX_VALUE - 10);
+        Scheduler scheduler = new Scheduler(clock);
+        assertEquals(0, scheduler.selectTimeoutMillis(0));
+        assertEquals(30_000, scheduler.selectTimeoutMillis(30_000));
+
+        Cancelable later = scheduler.schedule(() -> {}, Duration.ofSeconds(1));
+        assertEquals(1_000, scheduler.selectTimeoutMillis(30_000));
+        assertEquals(1_000, scheduler.selectTimeoutMillis(0));
+        assertEquals(10, scheduler.selectTimeoutMillis(10));
+
+        Cancelable sooner = scheduler.schedule(() -> {}, Duration.ofNanos(500_001));
+        assertEquals(1, scheduler.selectTimeoutMillis(0));
+        clock.time += 500_001;
+        assertEquals(1, scheduler.selectTimeoutMillis(30_000));
+        sooner.cancel();
+        assertEquals(1_000, scheduler.selectTimeoutMillis(30_000));
+        clock.time += 1_000_000_000;
+        assertEquals(1, scheduler.selectTimeoutMillis(0));
+        later.cancel();
+        assertEquals(0, scheduler.selectTimeoutMillis(0));
+    }
+
     private static final class TestClock implements Clock {
         long time;
         TestClock(long time) { this.time = time; }

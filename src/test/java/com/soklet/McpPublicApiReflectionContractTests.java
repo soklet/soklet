@@ -91,6 +91,11 @@ public class McpPublicApiReflectionContractTests {
 	// 2026-11-02 amendment: optional JVM hook and boxed public scalar constants.
 	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
 			"2d3f05c0ffd1af5fc233863148fe769a90c191563e617b9334d9a2559fb3c444";
+	// Preserve the historical layout above. This is the one reviewed current
+	// extension; its complete type-use layout is checked before projection.
+	private static final String PHASE_FOUR_CURRENT_NULLABILITY_EXTENSION =
+			"FIELD|com.soklet.LogEventType#RESOURCE_METHOD_UNANNOTATED_VALUE_PARAMETER"
+					+ "|TYPE|class(com.soklet.LogEventType)|nullness=[]";
 	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
 			"d677a7f58b36d0293b7ff47dd1501fee626369b6cacee26317a350a5fd14b1e1";
 	private static final String PHASE_SIX_NULLABILITY_SHA_256 =
@@ -1299,9 +1304,8 @@ public class McpPublicApiReflectionContractTests {
 	@Test
 	public void phaseFourJSpecifyNullabilityLayoutRemainsExact()
 			throws Exception {
-		assertNullabilityLayout(phaseFourTypes(),
-				PHASE_FOUR_NULLABILITY_SHA_256,
-				"PHASE_FOUR_NULLABILITY_SHA_256", "Phase 4");
+		assertPhaseFourNullabilityLayout(
+				canonicalNullabilityContract(phaseFourTypes()));
 	}
 
 	@Test
@@ -2437,6 +2441,24 @@ public class McpPublicApiReflectionContractTests {
 	private static boolean directlyPermits(Class<?> parent, Class<?> child) {
 		return parent.isSealed() && Arrays.asList(parent.getPermittedSubclasses())
 				.contains(child);
+	}
+
+	private static void assertPhaseFourNullabilityLayout(String currentContract)
+			throws Exception {
+		List<String> historicalLines = new ArrayList<>(currentContract.lines().toList());
+		Assertions.assertEquals(1L, historicalLines.stream()
+				.filter(PHASE_FOUR_CURRENT_NULLABILITY_EXTENSION::equals).count(),
+				"The reviewed current LogEventType field must retain its exact type-use layout");
+		historicalLines.remove(PHASE_FOUR_CURRENT_NULLABILITY_EXTENSION);
+		String historicalContract = String.join("\n", historicalLines) + "\n";
+		String historicalDigest = sha256(historicalContract);
+		Assertions.assertEquals(PHASE_FOUR_NULLABILITY_SHA_256, historicalDigest,
+				() -> "The historical Phase 4 @NonNull/@Nullable layout changed. "
+						+ "Only the exact reviewed current field is projected out; "
+						+ "do not repin the historical digest for a current API extension."
+						+ "\nExpected SHA-256: " + PHASE_FOUR_NULLABILITY_SHA_256
+						+ "\nActual SHA-256:   " + historicalDigest
+						+ "\nHistorical canonical contract:\n" + historicalContract);
 	}
 
 	private static void assertNullabilityLayout(List<Class<?>> types,

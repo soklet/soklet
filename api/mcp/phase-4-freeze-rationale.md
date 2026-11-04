@@ -1477,3 +1477,35 @@ The existing `MetricsCollector.Histogram` type is now assigned to the non-MCP
 public-delta allowlist because its primitive overload changed accessibility and
 its boxed public overload was added. This adds one delta-owner classification,
 not a new published type; MCP owner counts remain unchanged.
+
+
+## 2026-11-04 startup parameter-warning API amendment
+
+The owner approved the startup parameter warning on November 3. This amendment
+records its appended shared enum constant,
+`LogEventType.RESOURCE_METHOD_UNANNOTATED_VALUE_PARAMETER`, while retaining
+that advisory behavior. The warning reviews startup-discovered resource methods
+when both default parameter and instance providers are active. Suspicious
+unannotated value parameters produce a diagnostic; aliased routes share one
+method review. Custom providers remain authoritative, and no request-time scan
+is added.
+
+The exact current Phase 4 delta is one reference-typed enum field:
+`F:com/soklet/LogEventType#RESOURCE_METHOD_UNANNOTATED_VALUE_PARAMETER:Lcom/soklet/LogEventType;`.
+It follows all previous enum constants, preserving their ordinals. No API owner,
+method, inheritance contract, or public primitive signature changes. The Phase 4
+snapshot now contains 1,385 records with SHA-256
+`493b117b759083f240759cd88e2c25484f1934f4f26192094e8c4c049720eb46`.
+Removing only this added record reproduces all 1,384 preceding records and their
+`45b3e700d62020e401cf2d27623c42ba54d6d964c2a7202c04c59ec214dfdfec`
+hash exactly. Phase owners, other phase/provisional signature snapshots, and
+the 790-record released-baseline incompatibility ledger remain unchanged.
+
+The historical Phase 4 nullability digest remains
+`2d3f05c0ffd1af5fc233863148fe769a90c191563e617b9334d9a2559fb3c444`.
+The existing exact one-field current extension yields
+`3177f0efd1dbb99688d416b547bb7f2a4013103dd80296af6e125e8c14d4b961`;
+this amendment broadens no reflection or nullability exception. Historical
+checkpoint sections and `release/d1p-tracked-blobs.sha256` retain their original
+records. This is an approved local API amendment, not an immutable candidate
+validation or publication receipt.

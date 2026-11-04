@@ -309,7 +309,9 @@ final class DefaultMultipartParser implements MultipartParser {
 		if (parameters == null)
 			return fieldsBuilder;
 
-		ParameterParser parser = new ParameterParser();
+		// Content-Type parameters define framing. A boundary that happens to look
+		// like a MIME encoded word must still match the literal bytes in the body.
+		ParameterParser parser = new ParameterParser(false);
 		parser.setLowerCaseNames(true);
 
 		Map<String, String> parsedParameters = parser.parse(parameters, ';');
@@ -1747,6 +1749,7 @@ final class DefaultMultipartParser implements MultipartParser {
 	 * </p>
 	 */
 	protected class ParameterParser {
+		private final boolean decodeParameterValues;
 
 		/**
 		 * String to be parsed.
@@ -1782,6 +1785,11 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * Default ParameterParser constructor.
 		 */
 		public ParameterParser() {
+			this(true);
+		}
+
+		private ParameterParser(boolean decodeParameterValues) {
+			this.decodeParameterValues = decodeParameterValues;
 		}
 
 		/**
@@ -1888,7 +1896,7 @@ final class DefaultMultipartParser implements MultipartParser {
 					pos++; // skip '='
 					paramValue = parseQuotedToken(new char[]{separator});
 
-					if (paramValue != null) {
+					if (paramValue != null && this.decodeParameterValues) {
 						try {
 							paramValue = RFC2231Utils.hasEncodedValue(paramName) ? RFC2231Utils.decodeText(paramValue) : MimeUtils.decodeText(paramValue);
 						} catch (final UnsupportedEncodingException ignored) {
@@ -1957,6 +1965,9 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * @return the token
 		 */
 		private String parseQuotedToken(final char[] terminators) {
+			if (!this.decodeParameterValues)
+				return parseContentTypeValue(terminators);
+
 			char ch;
 			i1 = pos;
 			i2 = pos;
@@ -1981,6 +1992,36 @@ final class DefaultMultipartParser implements MultipartParser {
 
 			}
 			return getToken(true);
+		}
+
+		/** Content-Type uses HTTP quoted-pairs rather than browser filename escaping. */
+		private String parseContentTypeValue(final char[] terminators) {
+			while (hasChar() && Character.isWhitespace(chars[pos]))
+				pos++;
+			if (!hasChar() || chars[pos] != '"')
+				return parseToken(terminators);
+
+			pos++;
+			StringBuilder value = new StringBuilder();
+			while (hasChar()) {
+				char ch = chars[pos++];
+				if (ch == '"') {
+					while (hasChar() && Character.isWhitespace(chars[pos]))
+						pos++;
+					if (hasChar() && !isOneOf(chars[pos], terminators))
+						throw new IllegalRequestBodyException("Multipart Content-Type parameter is malformed.");
+					return value.length() == 0 ? null : value.toString();
+				}
+				if (ch == '\\') {
+					if (!hasChar())
+						throw new IllegalRequestBodyException("Multipart Content-Type parameter is malformed.");
+					ch = chars[pos++];
+				}
+				if (ch != '\t' && (ch < 0x20 || ch > 0xff || ch == 0x7f))
+					throw new IllegalRequestBodyException("Multipart Content-Type parameter is malformed.");
+				value.append(ch);
+			}
+			throw new IllegalRequestBodyException("Multipart Content-Type parameter is malformed.");
 		}
 
 		/**

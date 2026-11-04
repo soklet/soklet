@@ -37,7 +37,7 @@ const temporaryRoot = mkdtempSync(join(tmpdir(),
   'soklet-mcp-transport-dependencies-self-test-'));
 const goldenRoot = resolve(temporaryRoot, 'golden');
 const OUTBOUND_CHANNEL = 'src/main/java/com/soklet/internal/mcp/transport/McpOutboundChannel.java';
-const EXPECTED_CASE_COUNT = 151;
+const EXPECTED_CASE_COUNT = 167;
 let passedCases = 0;
 
 const FIXTURE_SOURCES = Object.freeze([
@@ -1170,9 +1170,35 @@ try {
   expectRejected('response completion must consume closeAfterResponse by closing',
     (root) => {
       mutateSource(root, EVENT_LOOP, (source) => replaceAfter(source,
-        'if (closeAfterResponse) { // non-persistent connection, close now',
-        'failSafeClose();', 'disableReadInterest();'));
+        'if (closeAfterResponse) { // non-persistent connection',
+        'beginLingeringClose();', 'disableReadInterest();'));
     }, /response-completion path must close/u);
+
+  // The current terminal handoff preserves the original discard-and-close
+  // characterization; each mutation removes one concrete finite-close proof.
+  for (const [label, anchor, before, after, diagnostic] of [
+    ["terminal close handoff cannot be conditional","if (closeAfterResponse) { // non-persistent connection","beginLingeringClose();","if (false) { beginLingeringClose(); }","response-completion path must close"],
+    ["terminal close duration stays finite and reviewed","class ConnectionEventLoop {","Duration.ofSeconds(1)","Duration.ofSeconds(Long.MAX_VALUE)","one-second and 16-MiB"],
+    ["terminal close byte cap stays finite and reviewed","class ConnectionEventLoop {","MAX_LINGERING_CLOSE_BYTES = 16L * 1024L * 1024L","MAX_LINGERING_CLOSE_BYTES = Long.MAX_VALUE","one-second and 16-MiB"],
+    ["terminal helper cannot return instead of half-closing","private void beginLingeringClose()","socketChannel.shutdownOutput();","return; // socketChannel.shutdownOutput();","must half-close output"],
+    ["terminal physical-close deadline cannot be conditional","private void beginLingeringClose()","lingeringCloseTimeoutTask = timeoutQueue.schedule(this::failSafeClose,\n                    MAX_LINGERING_CLOSE_DURATION);","if (false) { lingeringCloseTimeoutTask = timeoutQueue.schedule(this::failSafeClose,\n                    MAX_LINGERING_CLOSE_DURATION); }","unconditionally arm its physical-close deadline"],
+    ["terminal deadline must call physical close","private void beginLingeringClose()","this::failSafeClose,","() -> {},","finite deadline which physically closes"],
+    ["terminal deadline cannot be canceled after arming","private void beginLingeringClose()","MAX_LINGERING_CLOSE_DURATION);","MAX_LINGERING_CLOSE_DURATION); lingeringCloseTimeoutTask.cancel();","final absolute deadline"],
+    ["terminal discard read cannot exceed remaining bytes","private void readDuringLingeringClose()","Math.min(buffer.capacity(), remaining)","buffer.capacity()","read once per turn within remaining bytes"],
+    ["terminal discard cannot monopolize one selector turn","private void readDuringLingeringClose()","int count = SocketChannelIo.read(socketChannel, buffer);","int count = SocketChannelIo.read(socketChannel, buffer); while (count > 0) { count = SocketChannelIo.read(socketChannel, buffer); }","read once per turn within remaining bytes"],
+    ["terminal EOF must physically close","if (count < 0) {","failSafeClose();","disableReadInterest();","read once per turn within remaining bytes"],
+    ["terminal discard must count actual read bytes","private void readDuringLingeringClose()","lingeringCloseBytesDiscarded += count;","lingeringCloseBytesDiscarded += 0;","read once per turn within remaining bytes"],
+    ["terminal byte exhaustion must close","private void readDuringLingeringClose()","if (lingeringCloseBytesDiscarded >= MAX_LINGERING_CLOSE_BYTES)","if (false)","read once per turn within remaining bytes"],
+    ["physical terminal close stays idempotent","private void failSafeClose(@Nullable StreamTerminationReason cancelationReason","if (!closed.compareAndSet(false, true))","if (false)","physical terminal close must remain idempotent"],
+    ["physical terminal close retires its deadline","private void failSafeClose(@Nullable StreamTerminationReason cancelationReason","lingeringCloseTimeoutTask.cancel();","// lingeringCloseTimeoutTask.cancel();","cancel and clear the lingering deadline"],
+    ["physical terminal close releases connection admission","private void failSafeClose(@Nullable StreamTerminationReason cancelationReason","admission.release();","// admission.release();","release the key, socket, connection count and admission"],
+    ["terminal closing response cannot parse buffered requests","if (closeAfterResponse) { // non-persistent connection","beginLingeringClose();","parseBufferedRequestAfterResponse(); beginLingeringClose();","may parse buffered input only in its persistent branch"],
+  ]) {
+    expectRejected(label, (root) => {
+      mutateSource(root, EVENT_LOOP, (source) =>
+        replaceAfter(source, anchor, before, after));
+    }, new RegExp(diagnostic, 'u'));
+  }
 
   expectRejected('streaming input cannot reenter ByteTokenizer', (root) => {
     mutateSource(root, EVENT_LOOP, (source) => replaceAfter(source,

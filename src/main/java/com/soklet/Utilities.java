@@ -1281,41 +1281,28 @@ public final class Utilities {
 						String entryPortAsString = null;
 						Boolean entryPortExplicit = false;
 
-						// Each field component might look like "by=<identifier>"
-						List<String> forwardedHeaderFieldComponents = splitSemicolonAware(entry);
-						for (String forwardedHeaderFieldComponent : forwardedHeaderFieldComponents) {
-							forwardedHeaderFieldComponent = trimAggressivelyToNull(forwardedHeaderFieldComponent);
-							if (forwardedHeaderFieldComponent == null)
-								continue;
-
-							// Break "by=<identifier>" into "by" and "<identifier>" pieces
-							String[] forwardedHeaderFieldNameAndValue = forwardedHeaderFieldComponent.split(Pattern.quote("=" /* escape special Regex char */), 2);
-							if (forwardedHeaderFieldNameAndValue.length != 2)
-								continue;
-
-							String name = trimAggressivelyToNull(forwardedHeaderFieldNameAndValue[0]);
-							String value = trimAggressivelyToNull(forwardedHeaderFieldNameAndValue[1]);
-							if (name == null || value == null)
-								continue;
-
-							if ("host".equalsIgnoreCase(name)) {
-								if (entryHost == null) {
-									HostPort hostPort = parseForwardedHostPort(value).orElse(null);
-
-									if (hostPort != null) {
-										entryHost = hostPort.getHost();
-
-										if (hostPort.getPort().isPresent()) {
-											entryPortAsString = String.valueOf(hostPort.getPort().get());
-											entryPortExplicit = true;
-										}
-									}
+						Map<String, String> parameters = decodedForwardedParameters(entry);
+						if (parameters == null) {
+							// A malformed nearest entry cannot authorize legacy forwarded fields.
+							if (effectiveOriginResolver.getTrustPolicy() == EffectiveOriginResolver.TrustPolicy.TRUST_PROXY_ALLOWLIST)
+								trustForwardedHeaders = false;
+							continue;
+						}
+						String forwardedHost = parameters.get("host");
+						if (forwardedHost != null && forwardedHost.equals(trimHeaderWhitespace(forwardedHost))
+								&& HostHeaderValidator.isValidHostHeaderValue(forwardedHost)) {
+							HostPort hostPort = parseHostPort(forwardedHost, false).orElse(null);
+							if (hostPort != null) {
+								entryHost = hostPort.getHost();
+								if (hostPort.getPort().isPresent()) {
+									entryPortAsString = String.valueOf(hostPort.getPort().get());
+									entryPortExplicit = true;
 								}
-							} else if ("proto".equalsIgnoreCase(name)) {
-								if (entryProtocol == null)
-									entryProtocol = stripOptionalQuotes(value);
 							}
 						}
+						String forwardedProtocol = parameters.get("proto");
+						if (forwardedProtocol != null && validForwardedScheme(forwardedProtocol))
+							entryProtocol = forwardedProtocol;
 
 						if (entryHost != null || entryProtocol != null) {
 							host = entryHost;
@@ -1334,22 +1321,31 @@ public final class Utilities {
 		// X-Forwarded-Proto: https
 		if (trustForwardedHeaders && protocol == null) {
 			String xForwardedProtoHeader = forwardedOriginValue(headers.get("X-Forwarded-Proto"), effectiveOriginResolver.getTrustPolicy());
-			if (xForwardedProtoHeader != null)
-				protocol = stripOptionalQuotes(xForwardedProtoHeader);
+			if (xForwardedProtoHeader != null) {
+				String candidate = stripOptionalQuotes(xForwardedProtoHeader);
+				if (validForwardedScheme(candidate))
+					protocol = candidate;
+			}
 		}
 
 		// X-Forwarded-Protocol: https (Microsoft's alternate name)
 		if (trustForwardedHeaders && protocol == null) {
 			String xForwardedProtocolHeader = forwardedOriginValue(headers.get("X-Forwarded-Protocol"), effectiveOriginResolver.getTrustPolicy());
-			if (xForwardedProtocolHeader != null)
-				protocol = stripOptionalQuotes(xForwardedProtocolHeader);
+			if (xForwardedProtocolHeader != null) {
+				String candidate = stripOptionalQuotes(xForwardedProtocolHeader);
+				if (validForwardedScheme(candidate))
+					protocol = candidate;
+			}
 		}
 
 		// X-Url-Scheme: https (Microsoft's alternate name)
 		if (trustForwardedHeaders && protocol == null) {
 			String xUrlSchemeHeader = forwardedOriginValue(headers.get("X-Url-Scheme"), effectiveOriginResolver.getTrustPolicy());
-			if (xUrlSchemeHeader != null)
-				protocol = stripOptionalQuotes(xUrlSchemeHeader);
+			if (xUrlSchemeHeader != null) {
+				String candidate = stripOptionalQuotes(xUrlSchemeHeader);
+				if (validForwardedScheme(candidate))
+					protocol = candidate;
+			}
 		}
 
 		// Front-End-Https: on (Microsoft's alternate name)
@@ -1503,6 +1499,83 @@ public final class Utilities {
 		return entries.isEmpty() ? null : trimAggressivelyToNull(entries.get(entries.size() - 1));
 	}
 
+	/** Decode the complete RFC Forwarded entry before trusting any of its fields. */
+	@Nullable
+	private static Map<@NonNull String, @NonNull String> decodedForwardedParameters(@NonNull String entry) {
+		Map<String, String> parameters = new LinkedHashMap<>();
+		for (String component : splitSemicolonAware(entry)) {
+			component = trimHeaderWhitespace(component);
+			if (component.isEmpty())
+				continue;
+			int separator = component.indexOf('=');
+			if (separator <= 0)
+				return null;
+			String name = trimHeaderWhitespace(component.substring(0, separator));
+			if (!validForwardedParameterName(name))
+				return null;
+			String value = decodeForwardedParameterValue(trimHeaderWhitespace(component.substring(separator + 1)));
+			if (value == null)
+				return null;
+			parameters.putIfAbsent(name.toLowerCase(Locale.ROOT), value);
+		}
+		return parameters;
+	}
+
+	private static boolean validForwardedParameterName(@NonNull String name) {
+		if (name.isEmpty())
+			return false;
+		for (int index = 0; index < name.length(); index++) {
+			char character = name.charAt(index);
+			if (!((character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z')
+					|| (character >= '0' && character <= '9') || "!#$%&'*+-.^_`|~".indexOf(character) >= 0))
+				return false;
+		}
+		return true;
+	}
+
+	/** Quoted-pairs have meaning only in RFC Forwarded, not the legacy X-Forwarded fields. */
+	@Nullable
+	private static String decodeForwardedParameterValue(@NonNull String value) {
+		if (value.isEmpty())
+			return null;
+		boolean quoted = value.charAt(0) == '"';
+		if (quoted && (value.length() < 2 || value.charAt(value.length() - 1) != '"'))
+			return null;
+		StringBuilder decoded = new StringBuilder(value.length());
+		int end = value.length() - (quoted ? 1 : 0);
+		for (int index = quoted ? 1 : 0; index < end; index++) {
+			char character = value.charAt(index);
+			if (quoted && character == '\\') {
+				if (++index == end)
+					return null;
+				character = value.charAt(index);
+			} else if (character == '"' || character == '\\') {
+				return null;
+			}
+			if ((character < (quoted ? 0x20 : 0x21) && !(quoted && character == '\t'))
+					|| character == 0x7f || character > 0xff)
+				return null;
+			decoded.append(character);
+		}
+		return decoded.toString();
+	}
+
+	private static boolean validForwardedScheme(@NonNull String scheme) {
+		if (scheme.isEmpty() || !asciiAlpha(scheme.charAt(0)))
+			return false;
+		for (int index = 1; index < scheme.length(); index++) {
+			char character = scheme.charAt(index);
+			if (!asciiAlpha(character) && !(character >= '0' && character <= '9')
+					&& character != '+' && character != '-' && character != '.')
+				return false;
+		}
+		return true;
+	}
+
+	private static boolean asciiAlpha(char character) {
+		return (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z');
+	}
+
 	/**
 	 * Best-effort attempt to determine a client's effective IP address by examining request headers.
 	 * <p>
@@ -1648,24 +1721,18 @@ public final class Utilities {
 					continue;
 				}
 
-				Optional<InetAddress> address = Optional.empty();
-				for (String forwardedHeaderFieldComponent : splitSemicolonAware(entry)) {
-					forwardedHeaderFieldComponent = trimAggressivelyToNull(forwardedHeaderFieldComponent);
-					if (forwardedHeaderFieldComponent == null)
-						continue;
-
-					String[] forwardedHeaderFieldNameAndValue = forwardedHeaderFieldComponent.split(Pattern.quote("="), 2);
-					String name = trimAggressivelyToNull(forwardedHeaderFieldNameAndValue[0]);
-					if (name == null || !"for".equalsIgnoreCase(name))
-						continue;
+				Map<String, String> parameters = decodedForwardedParameters(entry);
+				if (parameters == null) {
+					// Malformed quotation can hide an appended proxy entry from the
+					// list splitter. Preserve it as an unknown hop, never a usable prefix.
 					hasForParameter = true;
-					String value = forwardedHeaderFieldNameAndValue.length == 2
-							? trimAggressivelyToNull(forwardedHeaderFieldNameAndValue[1]) : null;
-					if (value == null)
-						break;
-
-					address = parseForwardedIpLiteral(value);
-					break;
+					addresses.add(Optional.empty());
+					continue;
+				}
+				Optional<InetAddress> address = Optional.empty();
+				if (parameters.containsKey("for")) {
+					hasForParameter = true;
+					address = parseForwardedIpLiteral(parameters.get("for"), false);
 				}
 				addresses.add(address);
 			}
@@ -1702,12 +1769,27 @@ public final class Utilities {
 
 	@NonNull
 	private static Optional<InetAddress> parseForwardedIpLiteral(@Nullable String value) {
+		return parseForwardedIpLiteral(value, true);
+	}
+
+	@NonNull
+	private static Optional<InetAddress> parseForwardedIpLiteral(@Nullable String value, boolean stripQuotes) {
+		if (!stripQuotes && value != null) {
+			// Decoded RFC node identifiers cannot contain quotation or whitespace.
+			// Do not let the legacy parser's trimming or unquoting reinterpret them.
+			for (int index = 0; index < value.length(); index++) {
+				char character = value.charAt(index);
+				if (character <= 0x20 || character >= 0x7f || character == '"' || character == '\'' || character == '\\')
+					return Optional.empty();
+			}
+		}
 		String trimmed = trimAggressivelyToNull(value);
 
 		if (trimmed == null)
 			return Optional.empty();
 
-		trimmed = trimAggressivelyToNull(stripOptionalQuotes(trimmed));
+		if (stripQuotes)
+			trimmed = trimAggressivelyToNull(stripOptionalQuotes(trimmed));
 
 		if (trimmed == null || "unknown".equalsIgnoreCase(trimmed) || trimmed.startsWith("_"))
 			return Optional.empty();
@@ -2440,12 +2522,18 @@ public final class Utilities {
 
 	@NonNull
 	private static Optional<HostPort> parseHostPort(@Nullable String input) {
+		return parseHostPort(input, true);
+	}
+
+	@NonNull
+	private static Optional<HostPort> parseHostPort(@Nullable String input, boolean stripQuotes) {
 		input = trimAggressivelyToNull(input);
 
 		if (input == null)
 			return Optional.empty();
 
-		input = stripOptionalQuotes(input);
+		if (stripQuotes)
+			input = stripOptionalQuotes(input);
 
 		if (input.startsWith("[")) {
 			int close = input.indexOf(']');

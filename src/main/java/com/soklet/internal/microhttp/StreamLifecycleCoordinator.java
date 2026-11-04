@@ -37,7 +37,9 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.LongSupplier;
@@ -75,6 +77,7 @@ public final class StreamLifecycleCoordinator {
 	private int rejectionObservers;
 	private int queuedRejectionObservers;
 	private final ThreadPoolExecutor diagnosticExecutor;
+	private final ThreadPoolExecutor interruptExecutor;
 	private final ScheduledThreadPoolExecutor supervisor;
 	private boolean accepting = true;
 	private boolean forced;
@@ -126,6 +129,9 @@ public final class StreamLifecycleCoordinator {
 		// another reservation's work behind them. Admission remains the work bound.
 		this.terminationExecutor = new ObservationExecutor(capacity, "stream-termination");
 		this.diagnosticExecutor = new ObservationExecutor(capacity, "stream-diagnostic");
+		// One delivery per canceled producer, paid for by its retained reservation.
+		// Idle streams do not allocate an interrupt-delivery worker.
+		this.interruptExecutor = new ObservationExecutor(capacity, "stream-interrupt");
 		this.supervisor = new ScheduledThreadPoolExecutor(1, threadFactory("stream-supervisor"));
 		this.supervisor.setRemoveOnCancelPolicy(true);
 		this.supervisor.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
@@ -264,6 +270,7 @@ public final class StreamLifecycleCoordinator {
 		return awaitExecutor(this.callbackExecutor, absoluteNanoDeadline)
 				&& awaitExecutor(this.terminationExecutor, absoluteNanoDeadline)
 				&& awaitExecutor(this.diagnosticExecutor, absoluteNanoDeadline)
+				&& awaitExecutor(this.interruptExecutor, absoluteNanoDeadline)
 				&& awaitExecutor(this.supervisor, absoluteNanoDeadline);
 	}
 
@@ -273,6 +280,7 @@ public final class StreamLifecycleCoordinator {
 					&& this.callbackExecutor.isTerminated()
 					&& this.terminationExecutor.isTerminated()
 					&& this.diagnosticExecutor.isTerminated()
+					&& this.interruptExecutor.isTerminated()
 					&& this.supervisor.isTerminated();
 		}
 	}
@@ -426,6 +434,8 @@ public final class StreamLifecycleCoordinator {
 		private ProducerTask producerTask;
 		@Nullable
 		private Thread producerThread;
+		@Nullable
+		private ProducerInterruptDelivery producerInterruptDelivery;
 		@Nullable
 		private volatile StreamTerminationReason reason;
 		@Nullable
@@ -603,6 +613,7 @@ public final class StreamLifecycleCoordinator {
 		 */
 		public boolean executeInline(@NonNull Runnable producer) {
 			requireNonNull(producer);
+			ProducerInterruptDelivery interruptDelivery;
 			synchronized (lock) {
 				if (this.producerState == ProducerState.RETIRED)
 					return false;
@@ -615,6 +626,8 @@ public final class StreamLifecycleCoordinator {
 				}
 				this.producerState = ProducerState.RUNNING;
 				this.producerThread = Thread.currentThread();
+				interruptDelivery = new ProducerInterruptDelivery(this.producerThread);
+				this.producerInterruptDelivery = interruptDelivery;
 			}
 			try {
 				callbackExecution.accept(producer);
@@ -623,8 +636,12 @@ public final class StreamLifecycleCoordinator {
 				report(failure);
 				complete();
 			} finally {
+				// A claimed interrupt may invoke a blocking channel-close callback.
+				// Fence thread reuse outside the coordinator lock until it returns.
+				interruptDelivery.retire();
 				synchronized (lock) {
 					this.producerThread = null;
+					this.producerInterruptDelivery = null;
 					this.producerState = ProducerState.EXITED;
 					retireIfFinished();
 				}
@@ -633,8 +650,8 @@ public final class StreamLifecycleCoordinator {
 		}
 
 		/**
-		 * Elects cancelation once. Records the outcome and interrupts an entered
-		 * producer before the framework hook can publish blocking application work.
+		 * Elects cancelation once. Records the outcome and requests interruption of
+		 * an entered producer before publishing the framework termination signal.
 		 * Neither the hook nor this operation enumerates application registrations.
 		 */
 		public boolean cancel(@NonNull StreamTerminationReason reason, @Nullable Throwable cause) {
@@ -643,12 +660,15 @@ public final class StreamLifecycleCoordinator {
 				throw new IllegalArgumentException("Cancelation cannot have the COMPLETED reason");
 			BiConsumer<StreamTerminationReason, Throwable> handler;
 			boolean invoke;
+			InterruptDeliveryTask interruptDelivery;
 			synchronized (lock) {
 				if (!reserveCancelation(reason, cause))
 					return false;
+				interruptDelivery = reserveInterruptDelivery();
 				handler = this.terminationHandler;
 				invoke = claimSignal();
 			}
+			submitInterruptDelivery(interruptDelivery);
 			if (invoke)
 				invokeSignal(requireNonNull(handler));
 			return true;
@@ -667,10 +687,20 @@ public final class StreamLifecycleCoordinator {
 				scheduleCleanupCheck(this.cleanupDeadline);
 			}
 			beginCleanupLocked();
-			if (!this.productionComplete && this.producerThread != null
-					&& !sameInstance(this.producerThread, Thread.currentThread()))
-				this.producerThread.interrupt();
 			return true;
+		}
+
+		@Nullable
+		private InterruptDeliveryTask reserveInterruptDelivery() {
+			if (this.productionComplete || this.producerThread == null
+					|| sameInstance(this.producerThread, Thread.currentThread()))
+				return null;
+			if (this.retainedWork == Long.MAX_VALUE)
+				throw new IllegalStateException("Too many retained streaming work obligations");
+			InterruptDeliveryTask delivery = new InterruptDeliveryTask(this,
+					requireNonNull(this.producerInterruptDelivery), new Work());
+			this.retainedWork++;
+			return delivery;
 		}
 
 		public boolean isCanceled() {
@@ -971,6 +1001,7 @@ public final class StreamLifecycleCoordinator {
 			boolean observerPhase;
 			BiConsumer<StreamTerminationReason, Throwable> handler = null;
 			boolean invoke = false;
+			InterruptDeliveryTask interruptDelivery = null;
 			boolean publishDiagnostic;
 			synchronized (lock) {
 				observerPhase = this.productionComplete;
@@ -1002,10 +1033,12 @@ public final class StreamLifecycleCoordinator {
 						callbackExecutor.getQueue().size() + terminationExecutor.getQueue().size());
 				publishDiagnostic = claimDiagnostic();
 				if (!observerPhase && reserveCancelation(StreamTerminationReason.CLEANUP_TIMEOUT, null)) {
+					interruptDelivery = reserveInterruptDelivery();
 					handler = this.terminationHandler;
 					invoke = claimSignal();
 				}
 			}
+			submitInterruptDelivery(interruptDelivery);
 			// Transport state publication is framework-only and does not wait for a
 			// callback worker. A previously winning cancelation/normal outcome stays.
 			if (invoke)
@@ -1105,6 +1138,81 @@ public final class StreamLifecycleCoordinator {
 
 	private enum GraphContainment { PRESENT, ABSENT, UNKNOWN }
 
+	/** Exact producer-execution fence; never acquired while holding the coordinator lock. */
+	private static final class ProducerInterruptDelivery {
+		private final Thread target;
+		private final ReentrantLock fence = new ReentrantLock();
+		private boolean retired;
+
+		private ProducerInterruptDelivery(Thread target) {
+			this.target = requireNonNull(target);
+		}
+
+		private void deliver() {
+			this.fence.lock();
+			try {
+				if (!this.retired)
+					this.target.interrupt();
+			} finally {
+				this.fence.unlock();
+			}
+		}
+
+		private void retire() {
+			this.fence.lock();
+			try {
+				this.retired = true;
+			} finally {
+				this.fence.unlock();
+			}
+		}
+	}
+
+	private final class InterruptDeliveryTask implements Runnable {
+		private final Reservation reservation;
+		private final ProducerInterruptDelivery delivery;
+		private final Reservation.Work work;
+		private final AtomicBoolean claimed = new AtomicBoolean();
+
+		private InterruptDeliveryTask(Reservation reservation,
+				ProducerInterruptDelivery delivery, Reservation.Work work) {
+			this.reservation = reservation;
+			this.delivery = delivery;
+			this.work = work;
+		}
+
+		@Override
+		public void run() {
+			if (!this.claimed.compareAndSet(false, true))
+				return;
+			try {
+				callbackExecution.accept(this.delivery::deliver);
+			} catch (Throwable failure) {
+				this.reservation.reportCleanupFailure(failure);
+			} finally {
+				this.work.close();
+			}
+		}
+
+		private void rejected(Throwable failure) {
+			// A rejected wrapper may still be delivered late. Retire only work
+			// whose actual execution has not already claimed its physical proof.
+			if (this.claimed.compareAndSet(false, true))
+				this.work.close();
+			this.reservation.reportCleanupFailure(failure);
+		}
+	}
+
+	private void submitInterruptDelivery(@Nullable InterruptDeliveryTask delivery) {
+		if (delivery == null)
+			return;
+		try {
+			this.interruptExecutor.execute(delivery);
+		} catch (Throwable failure) {
+			delivery.rejected(failure);
+		}
+	}
+
 	/** Attaches only when bounded inspection finds no existing path or back edge. */
 	private static void attachProducerEvidence(Throwable primary, @Nullable Throwable secondary) {
 		if (secondary == null || sameInstance(primary, secondary))
@@ -1162,6 +1270,7 @@ public final class StreamLifecycleCoordinator {
 
 		@Override
 		public void run() {
+			ProducerInterruptDelivery interruptDelivery;
 			synchronized (lock) {
 				if (this.reservation.submissionPending && sameInstance(Thread.currentThread(), this.submittingThread))
 					throw new RejectedExecutionException("Streaming producer executor must not run submitted work inline");
@@ -1175,6 +1284,8 @@ public final class StreamLifecycleCoordinator {
 				}
 				this.reservation.producerState = ProducerState.RUNNING;
 				this.reservation.producerThread = Thread.currentThread();
+				interruptDelivery = new ProducerInterruptDelivery(this.reservation.producerThread);
+				this.reservation.producerInterruptDelivery = interruptDelivery;
 			}
 			try {
 				callbackExecution.accept(this.producer);
@@ -1183,8 +1294,13 @@ public final class StreamLifecycleCoordinator {
 				this.reservation.report(failure);
 				this.reservation.complete();
 			} finally {
+				interruptDelivery.retire();
+				// This executor task owns its interruption. Do not carry it into
+				// unrelated work after the delivery fence makes thread reuse safe.
+				Thread.interrupted();
 				synchronized (lock) {
 					this.reservation.producerThread = null;
+					this.reservation.producerInterruptDelivery = null;
 					this.reservation.producerState = ProducerState.EXITED;
 					this.reservation.retireIfFinished();
 				}
@@ -1199,6 +1315,7 @@ public final class StreamLifecycleCoordinator {
 		this.callbackExecutor.shutdown();
 		this.terminationExecutor.shutdown();
 		this.diagnosticExecutor.shutdown();
+		this.interruptExecutor.shutdown();
 		this.supervisor.shutdown();
 	}
 

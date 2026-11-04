@@ -926,6 +926,27 @@ function oneMethodMatching(lexed, file, owner, method, predicate, label,
 function requireStructural(method, pattern, label) {
   if (!pattern.test(method.bodyCode)) fail(`Transport characterization structural assertion failed: ${label}`);
 }
+function requireExactCode(code, expected, label) {
+  if (code.replaceAll(/\s+/gu, '') !== expected) {
+    fail(`Transport characterization structural assertion failed: ${label}`);
+  }
+}
+function requireTopLevelStatement(code, pattern, label) {
+  const statements = [...code.matchAll(pattern)];
+  const statement = statements[0];
+  let depth = 0;
+  if (statement !== undefined) {
+    for (const character of code.slice(0, statement.index)) {
+      if (character === '{') depth++;
+      else if (character === '}') depth--;
+    }
+  }
+  if (statements.length !== 1 || depth !== 0
+    || !/^(?:[\s\S]*[;}])?\s*$/u.test(code.slice(0, statement?.index))) {
+    fail(`Transport characterization structural assertion failed: ${label}`);
+  }
+  return statement;
+}
 function requireLiveLiteral(method, pattern, label) {
   if (!pattern.test(method.bodyCommentFree)) fail(`Transport characterization live-literal assertion failed: ${label}`);
 }
@@ -1789,16 +1810,110 @@ function verifyCharacterizationSources(root, sourceFiles) {
   const closeCompletion = oneConditionalBlock(writableCompletion,
     /\bif\s*\(\s*closeAfterResponse\s*\)\s*\{/gu,
     'the response-completion closeAfterResponse branch must remain unique');
-  if ([...closeCompletion.matchAll(/\bfailSafeClose\s*\(\s*\)\s*;/gu)]
-    .length !== 1) {
-    fail('Transport characterization structural assertion failed: the response-completion path must close when discarded streaming input set closeAfterResponse');
+  // A completed closing response now sends FIN before a finite terminal input
+  // drain. Require the entire handoff and bounded helpers, not merely a close
+  // method name which could be a decoy or leave a persistent parser reachable.
+  const handoff = requireTopLevelStatement(closeCompletion,
+    /\bbeginLingeringClose\s*\(\s*\)\s*;/gu,
+    'the response-completion path must close through one unconditional bounded lingering handoff');
+  if (/\b(?:return|for|while|do)\b/u.test(closeCompletion.slice(0, handoff.index))
+    || closeCompletion.slice(handoff.index + handoff[0].length).trim() !== '') {
+    fail('Transport characterization structural assertion failed: the response-completion path must close through one unconditional bounded lingering handoff');
   }
+  requireExactSimpleAssignments(writableCompletion, 'closeAfterResponse', [],
+    'response completion must not reset its closing decision');
+  const eventLoopType = namedTypes(eventLoop.lexed, eventLoopPath)
+    .find((type) => type.owner === 'com.soklet.internal.microhttp.ConnectionEventLoop');
+  if (eventLoopType === undefined) fail('Missing ConnectionEventLoop owner for terminal drain bounds');
+  const lingeringBounds = directFieldStatements(eventLoop.lexed, eventLoopPath,
+    eventLoopType).filter((field) => field.names.some((name) =>
+      name === 'MAX_LINGERING_CLOSE_DURATION' || name === 'MAX_LINGERING_CLOSE_BYTES'));
+  if (lingeringBounds.length !== 2) fail('Transport characterization structural assertion failed: terminal input drain must have exactly two finite immutable bounds');
+  for (const [name, expected] of [
+    ['MAX_LINGERING_CLOSE_DURATION', 'privatestaticfinalDurationMAX_LINGERING_CLOSE_DURATION=Duration.ofSeconds(1);'],
+    ['MAX_LINGERING_CLOSE_BYTES', 'privatestaticfinallongMAX_LINGERING_CLOSE_BYTES=16L*1024L*1024L;'],
+  ]) {
+    const bound = lingeringBounds.find((field) => field.names.includes(name));
+    if (bound === undefined) fail(`Missing terminal input drain bound ${name}`);
+    requireExactCode(bound.code, expected,
+      'terminal input drain must retain the reviewed one-second and 16-MiB immutable bounds');
+  }
+  const connectionOwner = 'com.soklet.internal.microhttp.ConnectionEventLoop.Connection';
+  const beginLingering = oneMethod(eventLoop.lexed, eventLoopPath,
+    connectionOwner, 'beginLingeringClose');
+  const halfClose = beginLingering.bodyCode.search(/\bsocketChannel\s*\.\s*shutdownOutput\s*\(\s*\)\s*;/u);
+  if (halfClose < 0 || /\b(?:return|for|while|do)\b/u.test(beginLingering.bodyCode.slice(halfClose))) {
+    fail('Transport characterization structural assertion failed: terminal close must half-close output before unconditionally arming the bounded drain');
+  }
+  requireExactCode(beginLingering.bodyCode.slice(0, halfClose),
+    'if(closed.get())return;if(stop.get()||inputHalfClosed||!selectionKey.isValid()){failSafeClose();return;}',
+    'terminal close may return early only for an already closed or immediately closed connection');
+  requireExactSimpleAssignments(beginLingering, 'lingeringClose', ['true'],
+    'terminal close must enter its distinct non-parsing drain phase');
+  requireExactSimpleAssignments(beginLingering, 'lingeringCloseBytesDiscarded', ['0'],
+    'terminal close must start with a fresh byte budget');
+  requireExactSimpleAssignments(beginLingering, 'lingeringCloseTimeoutTask',
+    ['timeoutQueue.schedule(this::failSafeClose,MAX_LINGERING_CLOSE_DURATION)'],
+    'terminal close must arm one finite deadline which physically closes');
+  requireStructural(beginLingering,
+    /socketChannel\s*\.\s*shutdownOutput\s*\(\s*\)\s*;[\s\S]*?lingeringClose\s*=\s*true\s*;[\s\S]*?lingeringCloseBytesDiscarded\s*=\s*0\s*;[\s\S]*?selectionKey\s*\.\s*interestOps\s*\(\s*SelectionKey\s*\.\s*OP_READ\s*\)\s*;[\s\S]*?lingeringCloseTimeoutTask\s*=\s*timeoutQueue\s*\.\s*schedule\s*\(\s*this\s*::\s*failSafeClose\s*,\s*MAX_LINGERING_CLOSE_DURATION\s*\)\s*;/u,
+    'terminal close must install read interest and the absolute close deadline after half-close');
+  for (const statement of [
+    /\bsocketChannel\s*\.\s*shutdownOutput\s*\(\s*\)\s*;/gu,
+    /\blingeringClose\s*=\s*true\s*;/gu,
+    /\blingeringCloseBytesDiscarded\s*=\s*0\s*;/gu,
+    /\bselectionKey\s*\.\s*interestOps\s*\(\s*SelectionKey\s*\.\s*OP_READ\s*\)\s*;/gu,
+  ]) requireTopLevelStatement(beginLingering.bodyCode, statement,
+    'terminal close must install its bounded drain unconditionally');
+  const closeDeadline = requireTopLevelStatement(beginLingering.bodyCode,
+    /\blingeringCloseTimeoutTask\s*=\s*timeoutQueue\s*\.\s*schedule\s*\(\s*this\s*::\s*failSafeClose\s*,\s*MAX_LINGERING_CLOSE_DURATION\s*\)\s*;/gu,
+    'terminal close must unconditionally arm its physical-close deadline');
+  if (beginLingering.bodyCode.slice(closeDeadline.index + closeDeadline[0].length).trim() !== ''
+    || [...beginLingering.bodyCode.matchAll(/\bselectionKey\s*\.\s*interestOps\s*\(/gu)].length !== 1) {
+    fail('Transport characterization structural assertion failed: terminal close must retain read-only interest and its final absolute deadline');
+  }
+  if (/\b(?:parseBufferedRequestAfterResponse|onRequestParsed|onPartialRequestParsed)\s*\(|requestParser\s*\.\s*parse\s*\(/u.test(beginLingering.bodyCode)) {
+    fail('Transport characterization structural assertion failed: terminal close must not parse or dispatch another request');
+  }
+  const lingeringRead = oneMethod(eventLoop.lexed, eventLoopPath,
+    connectionOwner, 'readDuringLingeringClose');
+  requireExactCode(lingeringRead.bodyCode,
+    'longremaining=MAX_LINGERING_CLOSE_BYTES-lingeringCloseBytesDiscarded;'
+      + 'if(remaining<=0){failSafeClose();return;}'
+      + 'buffer.clear();buffer.limit((int)Math.min(buffer.capacity(),remaining));'
+      + 'intcount=SocketChannelIo.read(socketChannel,buffer);'
+      + 'if(count<0){inputHalfClosed=true;failSafeClose();return;}'
+      + 'lingeringCloseBytesDiscarded+=count;'
+      + 'if(lingeringCloseBytesDiscarded>=MAX_LINGERING_CLOSE_BYTES)failSafeClose();',
+    'terminal input drain must read once per turn within remaining bytes and close on EOF or byte exhaustion');
+  const terminalReadable = oneMethod(eventLoop.lexed, eventLoopPath,
+    connectionOwner, 'onReadable');
+  requireStructural(terminalReadable,
+    /^\s*if\s*\(\s*lingeringClose\s*\)\s*\{\s*try\s*\{\s*readDuringLingeringClose\s*\(\s*\)\s*;\s*\}\s*catch\s*\(\s*IOException\s*\|\s*RuntimeException\s+failure\s*\)\s*\{\s*failSafeClose\s*\(\s*\)\s*;\s*\}\s*return\s*;\s*\}/u,
+    'terminal reads must close quietly on failure and return before request parsing');
+  const physicalClose = oneMethodMatching(eventLoop.lexed, eventLoopPath,
+    connectionOwner, 'failSafeClose', (candidate) =>
+      /\bStreamTerminationReason\s+cancelationReason\b/u.test(candidate.signatureCode),
+    'physical connection close with cancellation reason');
+  requireStructural(physicalClose,
+    /^\s*if\s*\(\s*!\s*closed\s*\.\s*compareAndSet\s*\(\s*false\s*,\s*true\s*\)\s*\)\s*return\s*;/u,
+    'physical terminal close must remain idempotent');
+  requireStructural(physicalClose,
+    /if\s*\(\s*lingeringCloseTimeoutTask\s*!=\s*null\s*\)\s*\{\s*lingeringCloseTimeoutTask\s*\.\s*cancel\s*\(\s*\)\s*;\s*lingeringCloseTimeoutTask\s*=\s*null\s*;\s*\}\s*lingeringClose\s*=\s*false\s*;/u,
+    'physical terminal close must cancel and clear the lingering deadline');
+  requireStructural(physicalClose,
+    /try\s*\{\s*selectionKey\s*\.\s*cancel\s*\(\s*\)\s*;\s*\}\s*finally\s*\{\s*CloseUtils\s*\.\s*closeQuietly\s*\(\s*socketChannel\s*\)\s*;\s*connectionCount\s*\.\s*decrementAndGet\s*\(\s*\)\s*;\s*admission\s*\.\s*release\s*\(\s*\)\s*;\s*\}/u,
+    'physical terminal close must release the key, socket, connection count and admission');
   const persistentCompletion = oneConditionalBlock(writableCompletion,
     /\bif\s*\(\s*!\s*closeAfterResponse\s*\)\s*\{/gu,
     'the response-completion persistent branch must remain unique');
   if (!/^\s*parseBufferedRequestAfterResponse\s*\(\s*\)\s*;\s*$/u
     .test(persistentCompletion)) {
     fail('Transport characterization structural assertion failed: the response-completion path may parse buffered input only when closeAfterResponse is false');
+  }
+
+  if ([...writableCompletion.bodyCode.matchAll(/\bparseBufferedRequestAfterResponse\s*\(\s*\)\s*;/gu)].length !== 1) {
+    fail('Transport characterization structural assertion failed: response completion may parse buffered input only in its persistent branch');
   }
 
   const withPort = oneMethod(server.lexed, serverPath, 'com.soklet.McpServer', 'withPort');

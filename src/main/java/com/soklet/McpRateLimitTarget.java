@@ -32,7 +32,7 @@ public enum McpRateLimitTarget {
 	REQUEST,
 
 	/**
-	 * The resolved mandatory limiter additionally applied to a tool call.
+	 * The optional limiter additionally applied to a tool call.
 	 */
 	TOOL
 }

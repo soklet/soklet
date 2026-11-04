@@ -443,7 +443,9 @@ final class McpTypedJsonBinder {
 			McpTypedJsonBindingNode.@NonNull ArrayValue binding,
 			@NonNull McpTypedSchemaPath path, int depth,
 			@NonNull ConversionContext context) {
-		if (value.getClass() != binding.arrayType())
+		// Reference arrays are covariant, including arrays of List/Map
+		// implementations. Primitive arrays still require their exact type.
+		if (!binding.arrayType().isInstance(value))
 			throw javaType(McpTypedJsonBindingException.Operation.TO_JSON, path);
 		context.enterComposite(value, path);
 		try {

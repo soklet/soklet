@@ -49,10 +49,12 @@ import java.lang.reflect.Parameter;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 import static com.soklet.Utilities.trimAggressivelyToNull;
 import static java.lang.String.format;
@@ -88,10 +90,87 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 
 	@NonNull
 	private final SokletConfig sokletConfig;
+	// Exact built-in scalar targets, rather than all JDK types or user subclasses.
+	// This diagnostic never resolves converters or creates application objects.
+	@NonNull
+	private static final Set<@NonNull Class<?>> UNANNOTATED_VALUE_TYPES = Set.of(
+			String.class, Boolean.class, Byte.class, Short.class, Integer.class,
+			Long.class, Float.class, Double.class, Character.class, Number.class,
+			java.math.BigInteger.class, java.math.BigDecimal.class,
+			java.util.UUID.class, java.time.Instant.class, java.util.Date.class,
+			java.time.LocalDate.class, java.time.LocalTime.class,
+			java.time.LocalDateTime.class, java.time.ZoneId.class,
+			java.util.TimeZone.class, java.util.Locale.class, java.util.Currency.class);
 
 	public DefaultResourceMethodParameterProvider(@NonNull SokletConfig sokletConfig) {
 		requireNonNull(sokletConfig);
 		this.sokletConfig = sokletConfig;
+	}
+
+	/** Startup-snapshot diagnostic only; never called from request dispatch. */
+	void warnAboutUnannotatedValueParameters(@NonNull ResourceMethod resourceMethod) {
+		if (!(this.sokletConfig.getInstanceProvider() instanceof DefaultInstanceProvider))
+			return;
+		Parameter[] parameters = requireNonNull(resourceMethod).getMethod().getParameters();
+		for (int index = 0; index < parameters.length; index++) {
+			Parameter parameter = parameters[index];
+			if (hasBasicTypeInjection(parameter.getType()) || hasRequestValueBinding(parameter))
+				continue;
+			ParameterType parameterType = new ParameterType(parameter);
+			if (MultipartField.class.equals(parameterType.getNormalizedType())
+					|| MultipartField.class.equals(parameterType.getListElementType().orElse(null)))
+				continue;
+			Type normalizedType = parameterType.getNormalizedType();
+			Class<?> rawType = null;
+			if (normalizedType instanceof Class<?> typeClass)
+				rawType = typeClass;
+			else if (normalizedType instanceof ParameterizedType parameterizedType
+					&& parameterizedType.getRawType() instanceof Class<?> typeClass)
+				rawType = typeClass;
+			if (rawType == null || !isSuspiciousUnannotatedValueType(rawType))
+				continue;
+			LogEvent event = LogEvent.with(LogEventType.RESOURCE_METHOD_UNANNOTATED_VALUE_PARAMETER,
+					format("Resource Method %s has an unannotated value parameter at index %d (%s). This parameter uses the default InstanceProvider rather than binding request data. Add a request-binding annotation if this is a request value, or configure a custom InstanceProvider for intentional injection.",
+							resourceMethod.getMethod(), index, parameter.getParameterizedType().getTypeName()))
+					.build();
+			try {
+				this.sokletConfig.getAggregateLifecycleObserver().didReceiveLogEvent(event);
+			} catch (Throwable observerFailure) {
+				LifecycleObserverLogFallback.report(observerFailure);
+			}
+		}
+	}
+
+	private static boolean isSuspiciousUnannotatedValueType(@NonNull Class<?> type) {
+		return type.isPrimitive() || type.isEnum() || UNANNOTATED_VALUE_TYPES.contains(type)
+				|| (type.getModule().equals(Collection.class.getModule())
+				&& (Collection.class.isAssignableFrom(type) || Map.class.isAssignableFrom(type)));
+	}
+
+	private static boolean hasRequestValueBinding(@NonNull Parameter parameter) {
+		return parameter.isAnnotationPresent(PathParameter.class)
+				|| parameter.isAnnotationPresent(QueryParameter.class)
+				|| parameter.isAnnotationPresent(FormParameter.class)
+				|| parameter.isAnnotationPresent(RequestHeader.class)
+				|| parameter.isAnnotationPresent(RequestCookie.class)
+				|| parameter.isAnnotationPresent(Multipart.class)
+				|| parameter.isAnnotationPresent(RequestBody.class);
+	}
+
+	// Keep this aligned with extractBasicTypeInjection's dispatch precedence.
+	private static boolean hasBasicTypeInjection(@NonNull Class<?> type) {
+		return type == Request.class || type == ResourceMethod.class
+				|| InstanceProvider.class.isAssignableFrom(type)
+				|| RequestBodyMarshaler.class.isAssignableFrom(type)
+				|| ResponseMarshaler.class.isAssignableFrom(type)
+				|| ValueConverterRegistry.class.isAssignableFrom(type)
+				|| ResourceMethodResolver.class.isAssignableFrom(type)
+				|| ResourceMethodParameterProvider.class.isAssignableFrom(type)
+				|| LifecycleObserver.class.isAssignableFrom(type)
+				|| MetricsCollector.class.isAssignableFrom(type)
+				|| RequestInterceptor.class.isAssignableFrom(type)
+				|| CorsAuthorizer.class.isAssignableFrom(type)
+				|| SseServer.class.isAssignableFrom(type);
 	}
 
 	@NonNull

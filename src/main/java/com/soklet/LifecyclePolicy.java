@@ -260,6 +260,10 @@ public final class LifecyclePolicy {
 		 * noncooperative application code stops. Long-lived streams need an explicit termination
 		 * policy; the surrounding process/container budget must also include forced shutdown
 		 * and operational margin.
+		 * <p>
+		 * The standard HTTP server's one-second lingering-input window also consumes this
+		 * budget, even after a closing response has been written. Short graceful budgets
+		 * can therefore proceed to forced shutdown while a client connection still lingers.
 		 *
 		 * @param gracefulShutdownTimeout graceful shutdown timeout, or
 		 * {@code null} to use the default

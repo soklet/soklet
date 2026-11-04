@@ -1847,7 +1847,7 @@ final class DefaultMcpServer implements McpServer {
 						requireNonNull(lifecycleGeneration));
 			}
 		} catch (IOException | RuntimeException | Error throwable) {
-			Throwable primary = exactStartupFailure(throwable);
+			Throwable primary = exactStartupFailure(throwable, lifecycleGeneration);
 			if (provisionalServerStarted != null) {
 				try {
 					this.mcpMetricEventDelivery.discard(provisionalServerStarted);
@@ -1869,18 +1869,39 @@ final class DefaultMcpServer implements McpServer {
 				throw new UncheckedIOException("Unable to start the MCP server.", exception);
 			if (primary instanceof RuntimeException exception)
 				throw exception;
-			throw (Error) primary;
+			if (primary instanceof Error error)
+				throw error;
+			DefaultMcpServer.<RuntimeException>throwStartupFailure(primary);
+			throw new AssertionError("Unreachable MCP startup failure");
 		}
 	}
 
 	@NonNull
-	private Throwable exactStartupFailure(@NonNull Throwable failure) {
+	private Throwable exactStartupFailure(@NonNull Throwable failure,
+			McpTransportLifecycleAdapter.@Nullable Generation generation) {
 		Throwable requiredFailure = requireNonNull(failure);
 		if (requiredFailure instanceof BuiltInTransportLifecycleAdapter
 				.PrematureTerminationException
 				&& requiredFailure.getCause() != null)
 			return requiredFailure.getCause();
+		// The runtime's checked-I/O signature normalizes other checked callback
+		// failures. Unwrap only that exact recorded primary, never application I/O.
+		Throwable recordedFailure = generation == null ? null
+				: generation.startupFailureCause();
+		if (requiredFailure.getClass() == IOException.class
+				&& recordedFailure != null
+				&& !(recordedFailure instanceof IOException)
+				&& !(recordedFailure instanceof RuntimeException)
+				&& !(recordedFailure instanceof Error)
+				&& sameInstance(requiredFailure.getCause(), recordedFailure))
+			return recordedFailure;
 		return requiredFailure;
+	}
+
+	@SuppressWarnings("unchecked")
+	private static <E extends Throwable> void throwStartupFailure(
+			@NonNull Throwable failure) throws E {
+		throw (E) requireNonNull(failure);
 	}
 
 	void beginMcpMetricsDeferral() {

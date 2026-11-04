@@ -67,6 +67,10 @@ class ConnectionEventLoop {
     private static final long MAX_RESPONSE_BYTES_PER_WRITE_TURN = 1024L * 1024L;
     private static final int MAX_QUEUED_TASKS_PER_TURN = 256;
     private static final int MAX_REMOTE_CLOSE_CAUSE_DEPTH = 32;
+    // A completed closing response must survive unread client data (RFC 9112,
+    // section 9.6), without allowing a peer to retain a connection indefinitely.
+    private static final Duration MAX_LINGERING_CLOSE_DURATION = Duration.ofSeconds(1);
+    private static final long MAX_LINGERING_CLOSE_BYTES = 16L * 1024L * 1024L;
 
     @FunctionalInterface
     private interface ThrowingTask {
@@ -328,6 +332,8 @@ class ConnectionEventLoop {
         @Nullable
         Cancelable responseWriteIdleTimeoutTask;
         @Nullable
+        Cancelable lingeringCloseTimeoutTask;
+        @Nullable
         InFlightDispatch inFlightDispatch;
         boolean requestReadTimeoutBodyPhase;
         long requestReadTimeoutTokenizerMark;
@@ -337,6 +343,8 @@ class ConnectionEventLoop {
         boolean keepAlive;
         boolean closeAfterResponse;
         boolean inputHalfClosed;
+        boolean lingeringClose;
+        long lingeringCloseBytesDiscarded;
         boolean streamingResponseClosesOnInputEnd;
         Handler.StreamingResponseInputPolicy streamingResponseInputPolicy =
                 Handler.StreamingResponseInputPolicy.NONE;
@@ -384,7 +392,32 @@ class ConnectionEventLoop {
             failSafeClose();
         }
 
+        private void runReadableTask() {
+            if (closed.get())
+                return;
+            if (lingeringClose) {
+                // This terminal phase has no request/response callbacks left
+                // to protect. Do not create even a provisional read-failure
+                // observation for ordinary EOF/reset after the final response.
+                onReadable();
+                return;
+            }
+            runConnectionTask("read_error", TransportFailureReason.READ_ERROR,
+                    this::onReadable);
+        }
+
         private void onReadable() {
+            if (lingeringClose) {
+                try {
+                    readDuringLingeringClose();
+                } catch (IOException | RuntimeException failure) {
+                    // No request or response remains to cancel. A reset during
+                    // this terminal drain simply ends the retained connection.
+                    failSafeClose();
+                }
+                return;
+            }
+
             if (draining.get()) {
                 InFlightDispatch dispatch = inFlightDispatch;
 
@@ -817,6 +850,11 @@ class ConnectionEventLoop {
                 requestReadTimeoutTask = null;
             }
             cancelResponseWriteIdleTimeout();
+            // An unsent interim response can be omitted once a final rejection
+            // is ready. A prefix already on the wire must finish before the
+            // final status line; dropping it would corrupt the HTTP response.
+            if (continueResponseBuffer != null && continueResponseBuffer.position() == 0)
+                continueResponseBuffer = null;
             closeAfterResponse = true;
         }
 
@@ -826,7 +864,7 @@ class ConnectionEventLoop {
                 resetResponseWriteIdleTimeoutIfNeeded();
             writableSource = new ByteBufferWritableSource(ByteBuffer.wrap(response));
             try {
-                doOnWritable();
+                writePendingOutput();
             } catch (IOException e) {
                 failSafeClose();
             }
@@ -1167,11 +1205,7 @@ class ConnectionEventLoop {
 
         private void onWritable() {
             try {
-                if (continueResponseBuffer == null) {
-                    doOnWritable();
-                } else {
-                    doOnWritableContinueResponse();
-                }
+                writePendingOutput();
             } catch (StreamingResponseCanceledException e) {
                 failSafeClose(e.getCancelationReason(),
                         e.getCancelationCause().orElse(null));
@@ -1213,6 +1247,13 @@ class ConnectionEventLoop {
             }
         }
 
+        private void writePendingOutput() throws IOException {
+            if (continueResponseBuffer != null)
+                doOnWritableContinueResponse();
+            else
+                doOnWritable();
+        }
+
         private void doOnWritable() throws IOException {
             WritableSource activeWritableSource = writableSource;
             if (activeWritableSource == null) {
@@ -1243,13 +1284,13 @@ class ConnectionEventLoop {
                                 new LogEntry("id", id),
                                 new LogEntry("num_bytes", Long.toString(numBytes)));
                     }
-                    if (closeAfterResponse) { // non-persistent connection, close now
+                    if (closeAfterResponse) { // non-persistent connection
                         if (logger.enabled()) {
                             logger.log(
                                 new LogEntry("event", "close_after_response"),
                                 new LogEntry("id", id));
                         }
-                        failSafeClose();
+                        beginLingeringClose();
                     }
                 } finally {
                     if (deliveredResponse != null)
@@ -1278,6 +1319,54 @@ class ConnectionEventLoop {
                         new LogEntry("num_bytes", Long.toString(numBytes)));
                 }
             }
+        }
+
+        private void beginLingeringClose() throws IOException {
+            if (closed.get())
+                return;
+            if (stop.get() || inputHalfClosed || !selectionKey.isValid()) {
+                failSafeClose();
+                return;
+            }
+
+            // Sending FIN first allows clients to finish reading the response
+            // while their already-started upload is discarded. Never parse or
+            // dispatch any bytes after this terminal response.
+            socketChannel.shutdownOutput();
+            if (requestReadTimeoutTask != null) {
+                requestReadTimeoutTask.cancel();
+                requestReadTimeoutTask = null;
+            }
+            byteTokenizer.clear();
+            requestParser.reset();
+            lingeringClose = true;
+            lingeringCloseBytesDiscarded = 0;
+            selectionKey.interestOps(SelectionKey.OP_READ);
+            lingeringCloseTimeoutTask = timeoutQueue.schedule(this::failSafeClose,
+                    MAX_LINGERING_CLOSE_DURATION);
+        }
+
+        private void readDuringLingeringClose() throws IOException {
+            long remaining = MAX_LINGERING_CLOSE_BYTES - lingeringCloseBytesDiscarded;
+            if (remaining <= 0) {
+                failSafeClose();
+                return;
+            }
+
+            // One bounded nonblocking read per readiness turn keeps other
+            // connections and shutdown/timer tasks responsive, including when a
+            // peer continuously sends data. A zero-byte read waits for readiness.
+            buffer.clear();
+            buffer.limit((int) Math.min(buffer.capacity(), remaining));
+            int count = SocketChannelIo.read(socketChannel, buffer);
+            if (count < 0) {
+                inputHalfClosed = true;
+                failSafeClose();
+                return;
+            }
+            lingeringCloseBytesDiscarded += count;
+            if (lingeringCloseBytesDiscarded >= MAX_LINGERING_CLOSE_BYTES)
+                failSafeClose();
         }
 
         private void onPartialRequestParsed() {
@@ -1316,7 +1405,9 @@ class ConnectionEventLoop {
                 return;
             }
 
-            SocketChannelIo.write(socketChannel, activeContinueResponseBuffer);
+            int numBytes = SocketChannelIo.write(socketChannel, activeContinueResponseBuffer);
+            if (numBytes > 0 && writableSource != null)
+                resetResponseWriteIdleTimeoutIfNeeded();
             if (activeContinueResponseBuffer.hasRemaining()) {
                 if (!selectionKey.isValid()) {
                     failSafeClose();
@@ -1331,7 +1422,10 @@ class ConnectionEventLoop {
                 failSafeClose();
                 return;
             }
-            selectionKey.interestOps(SelectionKey.OP_READ);
+            // A body-read deadline can queue a final rejection while this
+            // interim response is backpressured. Keep writing that final
+            // response rather than returning to request parsing after a 100.
+            selectionKey.interestOps(writableSource == null ? SelectionKey.OP_READ : SelectionKey.OP_WRITE);
         }
 
         private void parseBufferedRequestAfterResponse() {
@@ -1530,6 +1624,11 @@ class ConnectionEventLoop {
                     requestReadTimeoutTask = null;
                 }
                 cancelResponseWriteIdleTimeout();
+                if (lingeringCloseTimeoutTask != null) {
+                    lingeringCloseTimeoutTask.cancel();
+                    lingeringCloseTimeoutTask = null;
+                }
+                lingeringClose = false;
                 if (writableSource != null) {
                     WritableSource source = writableSource;
                     writableSource = null;
@@ -1664,6 +1763,11 @@ class ConnectionEventLoop {
 
         private void beginDrain() {
             if (closed.get())
+                return;
+
+            // The response has already completed; only bounded terminal input
+            // draining remains. Forced stop still closes it in the loop finally.
+            if (lingeringClose)
                 return;
 
             InFlightDispatch dispatch = inFlightDispatch;
@@ -1936,7 +2040,7 @@ class ConnectionEventLoop {
             // Interrupts are not this loop's shutdown signal; stop + wakeup is.
             // A stray callback interrupt must not make select spin forever.
             Thread.interrupted();
-            selector.select(options.selectTimeoutMillis());
+            selector.select(timeoutQueue.selectTimeoutMillis(options.selectTimeoutMillis()));
             Set<SelectionKey> selectedKeys = selector.selectedKeys();
             Iterator<SelectionKey> it = selectedKeys.iterator();
             while (it.hasNext()) {
@@ -1948,9 +2052,7 @@ class ConnectionEventLoop {
                     Object attachment = selKey.attachment();
                     if (attachment instanceof Connection connection) {
                         if (selKey.isReadable()) {
-                            connection.runConnectionTask("read_error",
-                                    TransportFailureReason.READ_ERROR,
-                                    connection::onReadable);
+                            connection.runReadableTask();
                         } else if (selKey.isWritable()) {
                             connection.runConnectionTask("write_error",
                                     TransportFailureReason.WRITE_ERROR,

@@ -105,14 +105,18 @@ class ByteTokenizer {
         int capturedByteCount = Math.min(observedByteCount, maximumBytes);
         byte[] capturedBytes = Arrays.copyOfRange(array, base, base + capturedByteCount);
 
+        clear();
+
+        return new CapturedPrefix(capturedBytes, observedByteCount,
+                capturedByteCount < observedByteCount);
+    }
+
+    void clear() {
         array = new byte[0];
         base = 0;
         position = 0;
         size = 0;
         delimiterSearches.clear();
-
-        return new CapturedPrefix(capturedBytes, observedByteCount,
-                capturedByteCount < observedByteCount);
     }
 
     byte @Nullable [] next(int length) {

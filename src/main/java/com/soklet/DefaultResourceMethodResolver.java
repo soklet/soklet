@@ -420,7 +420,6 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		private void claimOwnership() {
 			this.state = State.LOADING;
 			this.ownerThread = Thread.currentThread();
-			this.capturedClassLoader = this.ownerThread.getContextClassLoader();
 		}
 
 		private void rejectRecursiveOwnerCall() {
@@ -460,13 +459,19 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 			Throwable terminalFailure = null;
 
 			try {
+				// Context-loader access can invoke a Thread override or fail a security
+				// check. Keep it outside the monitor but inside terminal publication.
+				this.capturedClassLoader = Thread.currentThread().getContextClassLoader();
 				loaded = requireNonNull(this.loader.load(this.capturedClassLoader),
 						"Classpath resolver loader returned null");
 				if (loaded.lazyClasspathResolution != null)
 					throw new IllegalStateException(
 							"Classpath resolver loader must return a complete resolver snapshot");
-			} catch (RuntimeException | Error failure) {
-				terminalFailure = failure;
+			} catch (Throwable failure) {
+				// Normalize a callback's unexpected checked escape once, so every
+				// reader observes the same cached terminal failure and original cause.
+				terminalFailure = failure instanceof RuntimeException || failure instanceof Error
+						? failure : new AssertionError("Unexpected checked resolver failure", failure);
 			}
 
 			List<DeadlineWaiter> waitersToSignal;

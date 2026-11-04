@@ -380,19 +380,21 @@ public final class Request {
 		String rawQuery;
 
 		if (pathBuilder != null) {
-			// PathBuilder scenario: check if explicit raw values were provided
+			// Preserve raw components independently: replacing the path must not
+			// regenerate an untouched query's escaping, flags, or parameter order.
 			if (pathBuilder.rawPath != null) {
-				// Explicit raw values provided (e.g. from Copier preserving originals)
 				rawPath = pathBuilder.rawPath;
-				rawQuery = pathBuilder.rawQuery;
 			} else {
-				// No explicit raw values; encode from decoded values
 				if (path.equals("*")) {
 					rawPath = "*";
 				} else {
 					rawPath = Utilities.encodePath(path);
 				}
+			}
 
+			if (pathBuilder.rawQuery != null) {
+				rawQuery = pathBuilder.rawQuery;
+			} else {
 				Map<String, List<String>> queryParameters = requireNonNull(initialQueryParameters);
 				if (queryParameters.isEmpty()) {
 					rawQuery = null;

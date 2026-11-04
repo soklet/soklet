@@ -787,14 +787,15 @@ public class UtilitiesTests {
 	}
 
 	@Test
-	public void forwardedHostValidation_rejectsSpoofedForwardedHostAndFallsBackToHost() {
+	public void forwardedHostValidation_rejectsEntireEntryWithControlCharacters() {
 		Map<String, List<String>> headers = new HashMap<>();
 		headers.put("Host", List.of("internal.soklet.local"));
 		headers.put("Forwarded", List.of("for=203.0.113.60; proto=https; host=\"public.example.com\r\nX-Evil: yes\""));
 
 		Optional<String> prefix = extractEffectiveOrigin(headers);
-		Assertions.assertTrue(prefix.isPresent());
-		Assertions.assertEquals("https://internal.soklet.local", prefix.get());
+		// Control characters invalidate the complete RFC Forwarded entry, so its
+		// proto cannot supply authority after another parameter fails validation.
+		Assertions.assertTrue(prefix.isEmpty());
 	}
 
 	@Test

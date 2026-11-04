@@ -24,6 +24,7 @@ import com.soklet.internal.microhttp.StreamLifecycleCoordinator;
 import com.soklet.SseRequestResult.HandshakeAccepted;
 import com.soklet.SseRequestResult.HandshakeRejected;
 import com.soklet.annotation.SseEventSource;
+import com.soklet.exception.IllegalRequestException;
 import com.soklet.internal.spring.LinkedCaseInsensitiveMap;
 import com.soklet.internal.streaming.ManagedResponseStream;
 import com.soklet.internal.streaming.ManagedSseLifecycle;
@@ -1364,6 +1365,10 @@ public final class Soklet {
 			List<String> values = e.getValue() == null ? List.of() : List.copyOf(e.getValue());
 			finalHeaders.put(headerName, values);
 		}
+		List<String> contentTypes = finalHeaders.getOrDefault("Content-Type", List.of());
+		if (contentTypes == null || contentTypes.size() != 1
+				|| !contentTypes.get(0).split(";", 2)[0].trim().equalsIgnoreCase("text/event-stream"))
+			throw new IllegalArgumentException("An accepted SSE handshake requires exactly one text/event-stream Content-Type");
 
 		return MarshaledResponse.withStatusCode(200)
 				.headers(finalHeaders)
@@ -2844,6 +2849,13 @@ public final class Soklet {
 
 			if (requestHandler == null)
 				throw new IllegalStateException("You must register a request handler prior to simulating SSE Event Source requests");
+			if (request.getHttpMethod() == HttpMethod.GET) {
+				try {
+					DefaultSseServer.validateSseRequestBody(request);
+				} catch (IllegalRequestException failure) {
+					return rejectSseRequestBeforeHandling(request, sseServer, failure);
+				}
+			}
 
 			requestHandler.handleRequest(request, HttpTransportResponseFeedback.fromWriter(feedback, requestResult -> {
 				HttpRequestResult effectiveResult = requestResult;
@@ -2952,6 +2964,45 @@ public final class Soklet {
 			}
 
 			throw new IllegalStateException(format("Encountered unexpected %s: %s", SseHandshakeResult.class.getSimpleName(), sseHandshakeResult));
+		}
+
+		@NonNull
+		private SseRequestResult rejectSseRequestBeforeHandling(@NonNull Request request,
+				@NonNull MockSseServer server, @NonNull IllegalRequestException failure) {
+			Object token = this.executionOwnerToken;
+			try (LifecycleExecutionContext.Scope ignored = token == null ? null : LifecycleExecutionContext.enter(token)) {
+				HttpRequestResult rejected = HttpRequestResult.withMarshaledResponse(MarshaledResponse.fromStatusCode(400))
+						.requestHandlingFailure(failure).effectiveSseRequest(request).build();
+				// Live admission reports rejection even when its custom error marshaler fails.
+				notifySseHandshakeFailure(request, rejected, SseConnection.HandshakeFailureReason.HANDSHAKE_REJECTED, failure);
+				ResponseMarshaler marshaler = server.getSokletConfig().orElseThrow().getResponseMarshaler();
+				MarshaledResponse original = marshaler.forThrowable(request, failure, null);
+				MarshaledResponse response;
+				try {
+					response = ResponseBodyCleanup.transform(original, marshaler::postProcess);
+				} catch (Throwable preparationFailure) {
+					// The transform releases unchecked failures; JVM callbacks can also
+					// emit checked failures that still need their owned channels closed.
+					if (!(preparationFailure instanceof RuntimeException) && !(preparationFailure instanceof Error))
+						MarshaledResponse.closeChannels(original.ownedChannels(), preparationFailure);
+					throw preparationFailure;
+				}
+				boolean materializationOwnsCleanup = false;
+				try {
+					enforceFinalResponseStatusCode(response.getStatusCode());
+					if (response.isStreaming())
+						throw new IllegalArgumentException("SSE handshake rejection responses require a finite body");
+					HttpRequestResult result = projectSimulatedSseRejection(request,
+							rejected.copy().marshaledResponse(response).finish());
+					// The materializer releases every owned channel, including when reading fails.
+					materializationOwnsCleanup = true;
+					return new SseRequestResult.RequestFailed(materializeFiniteSimulationResult(result));
+				} catch (Throwable preparationFailure) {
+					if (!materializationOwnsCleanup)
+						MarshaledResponse.closeChannels(response.ownedChannels(), preparationFailure);
+					throw preparationFailure;
+				}
+			}
 		}
 
 		private void notifySseHandshakeFailure(@NonNull Request request, @NonNull HttpRequestResult requestResult,

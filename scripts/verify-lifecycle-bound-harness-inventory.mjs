@@ -2756,6 +2756,61 @@ const REVIEWED_SCOPED_INTEGRATION_SCOPE_OVERRIDES = checkedReviewMap([
 // console implementation to exercise. Their discovery/closure evidence retires
 // with that source. Three owner tests above retain their policies under the
 // hook/explicit-shutdown names; JVM-hook and async coverage remain executing.
+// Source-bound finite request matrices for the MCP negotiation regression tests.
+// Each exchange has a five-second response wait and five-second completion wait.
+const REVIEWED_MCP_NEGOTIATION_SCOPE_OVERRIDES = checkedReviewMap([
+  ...reviewedScopeFile("src/test/java/com/soklet/McpHttpNegotiationSyntaxTests.java", "162167e9f23cc427c0c73f55603fd764a0a4f3bb6e953cc85e3384c50a601402", [
+    ["quotedCharsetPairsAndOpaqueParameterTextAreAcceptedForEveryRevision","04dd01c94d6f22f7b5a44b65fa019074377485720e3a888f6d592794e9850082",{"controlJoinMillis":150000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
+    ["emptyMediaTypeAndMediaRangeParameterElementsAreIgnored","e4f3de453059dcd915d8c83c2ad2be0b2f9cc85b8cd98f356c472ed0b971f65b",{"controlJoinMillis":60000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
+    ["emptyAcceptMembersAcrossPhysicalFieldsDoNotEraseAdvertisedSupport","f09a7cdf2d58d6b66c54e0ab9d7eb37577648db33aadae77ba62c4c07fae3115",{"controlJoinMillis":90000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
+    ["malformedOrDuplicateContentTypeParametersRemainRejectedBeforeAdmission","15dc15eec987009b36681b788f7f3b0c68b54f74095eacd41bfc6240127a1008",{"controlJoinMillis":270000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
+    ["emptyMembersNeverOverrideExplicitRejectionOrMakeMalformedRangesValid","73f14783e8adca7978dd12e17e8b97d7e5d243544539281f5e8cc199576d9669",{"controlJoinMillis":330000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
+    ["legacySessionGetUsesTheSameEmptyAcceptMemberRules","41754eedaf6de6b77b1ff3485123440b1ddbb0da0da8429f36683108dc4cbc45",{"controlJoinMillis":160000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
+  ]),
+]);
+
+// Five JVM Throwable variants each fail one start and then retry successfully.
+// Ten generations include five failed-start branches and five complete retries.
+// Compatibility controls include every repeated five-second await/poll and fixture close.
+const REVIEWED_MCP_CHECKED_STARTUP_SCOPE_OVERRIDES = checkedReviewMap([
+  ...reviewedScopeFile("src/test/java/com/soklet/McpCheckedStartupLifecycleTests.java", "164e80306a0443557304693b8259fa1f703f11e392b9a93ad73e802de484a350", [
+    ["simulatorStartupFailureClosesEarlierRegistrationAndAllowsFreshRun","db496506f5a234fd4399a14e4f9e86f8741e8d4d79b83f51606e720d475b62ed",{"generation":{"count":10,"mode":"SEQUENTIAL","complete":10,"prior":5,"incomplete":5}}],
+    ["liveStartupFailurePublishesExactTerminalCauseAndReleasesListener","60b5a0dd88b227da969053ee9ef090a1c5ac30ab2c158706e7d6061e29620d8f",{"generation":{"count":10,"mode":"SEQUENTIAL","complete":10,"prior":5,"incomplete":5},"terminalReportCount":10}],
+  ]),
+  ...reviewedScopeFile("src/test/java/com/soklet/internal/mcp/protocol/McpCheckedStartupRuntimeTests.java", "61a43b338d330da40d4f1c9a9fd807af17f1e9ef3d4fae39e1787e2e6d0ccdd6", [
+    ["ownerlessSimulationFailureFencesListenerAndReleasesGeneration","d352d41c5a2cfea0a868bdb6d67fedf9eb440c32649f3d6460af20e59c780c1e",{"generation":{"count":10,"mode":"SEQUENTIAL","complete":10,"prior":5,"incomplete":5},"controlJoinMillis":100000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
+    ["liveStartupFailureNormalizesCheckedCauseAndCompletesCleanup","fedfba450130864297aae3c80572572c1fb33cb14be3f4260cfc2df77e1be576",{"generation":{"count":10,"mode":"SEQUENTIAL","complete":10,"prior":5,"incomplete":5},"controlJoinMillis":75000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
+  ]),
+]);
+
+// The SSE validation matrix runs two live/simulator generations per paired case,
+// six simulator ownership variants, and one failing error-marshaler generation.
+// Each live exchange has one two-second connect plus one absolute two-second read;
+// every fixture has one absolute five-second observation poll. Simulator-only
+// scopes retain conservative report allowances from the shared source helper.
+const REVIEWED_SSE_HANDSHAKE_VALIDATION_SCOPE_OVERRIDES = checkedReviewMap([
+  ...reviewedScopeFile("src/test/java/com/soklet/SseHandshakeValidationTests.java", "5e7061dcd99c76da34fc19a5088891dee68bac344e63a707d2d40666579a608e", [
+    ["originalAcceptedContentTypeFailsWithDiagnosticWhileInterceptorsCanDeny","e8b161ef534a0205c07d73df3d6ae96ef1b5e658436166f4135b52b5383fdda9",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1},"terminalReportCount":1,"controlJoinMillis":38000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
+    ["bodyAndFramingAreRejectedBeforeHandlersInSimulationAndLive","f7dd7d4b1f18de4229c97cefe9c606b65f64e1f43afb6df7489ac362937252ba",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1},"terminalReportCount":1,"controlJoinMillis":50000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
+    ["admissionFailureUsesCustomThrowableHandlerAndPostProcessorExactlyOnce","c69c84c67d6330bfc3f99502d80089bff0fa79bc622bb62fcc971cd7fcaab7a9",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1},"terminalReportCount":1,"controlJoinMillis":14000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
+    ["failedAdmissionPreparationReleasesOnlyOwnedChannels","6f1013dabb895ac5c786213b5c368dc1d54dc8dcb56d340340a5bb957a7264a3",{"generation":{"count":6,"mode":"SEQUENTIAL","complete":6,"prior":5,"incomplete":1},"terminalReportCount":6,"controlJoinMillis":30000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
+    ["failedErrorMarshalerStillReportsAdmissionRejection","d616e164f292f765d36cf05df9067064d0f9d643a169939f0eee114f4b388167",{"generation":{"count":1,"mode":"SINGLE","complete":1,"prior":0,"incomplete":1},"terminalReportCount":1,"controlJoinMillis":5000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
+  ]),
+]);
+
+// The two public simulator scopes each own one 5s/2s/.2s/.2s generation.
+// Their sequential latch/join controls total23s plus one absolute5s raw
+// coordinator drain; application blockers are released in finally. The owner
+// context control constructs but never starts its mock owner: its raw stream
+// coordinator has zero lifecycle-core work and five bounded5s controls.
+const REVIEWED_STREAM_INTERRUPT_DELIVERY_SCOPE_OVERRIDES = checkedReviewMap([
+  ...reviewedScopeFile("src/test/java/com/soklet/SseInterruptDeliveryTests.java", "336f4cbf083b8d5441e7adc27f8839319ff99195851c2e8d6ebc64cc370fd7ea", [
+    ["blockingInterruptibleCloseReturnsIncompleteWithoutRetiringPhysicalWork","9f1b5f097afbd1b59692b20b13c231fc309994a5f8aee8596d6987f7536e9416",{"controlJoinMillis":28000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
+    ["ordinaryInterruptibleCloseCompletesShutdown","ee2962d7dbd828cbf3f11c79400a9df06f9b4703fd01323175ff29bee2531ebc",{"controlJoinMillis":28000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
+    ["interruptTriggeredResourceCloseCarriesTheOwnerSelfWaitGuard","032aea7219b980dbeb8fa8cb0114e0d64408202e99e0f3d15e29dc807c91217c",{"controlledLifecycleCoreMillis":0,"controlJoinMillis":25000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
+  ]),
+]);
+
 const REVIEWED_SCOPE_OVERRIDES = mergeReviewedScopeOverrideMaps(
   REVIEWED_SCOPED_INTEGRATION_SCOPE_OVERRIDES,
   REVIEWED_UNIFIED_API_SCOPE_OVERRIDES,
@@ -2766,7 +2821,11 @@ const REVIEWED_SCOPE_OVERRIDES = mergeReviewedScopeOverrideMaps(
   REVIEWED_STREAMING_SCOPE_OVERRIDES,
   REVIEWED_SCOPE_TOPOLOGY_OVERRIDES,
   REVIEWED_PHASE_POLICY_OVERRIDES,
-  REVIEWED_CONTROL_OVERRIDES);
+  REVIEWED_CONTROL_OVERRIDES,
+  REVIEWED_MCP_NEGOTIATION_SCOPE_OVERRIDES,
+  REVIEWED_MCP_CHECKED_STARTUP_SCOPE_OVERRIDES,
+  REVIEWED_SSE_HANDSHAKE_VALIDATION_SCOPE_OVERRIDES,
+  REVIEWED_STREAM_INTERRUPT_DELIVERY_SCOPE_OVERRIDES);
 
 const REVIEWED_ORPHAN_HELPERS = checkedReviewMap([
   ...reviewedOrphanFile("src/test/java/com/soklet/HandlerTimeoutWorkerReuseTests.java", "b983a075ef61901ba23b7960d714483c134f07255c78c6d1da83039ac946ec1e", [
