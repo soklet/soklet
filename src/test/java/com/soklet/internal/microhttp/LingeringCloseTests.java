@@ -33,6 +33,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -128,7 +129,7 @@ class LingeringCloseTests {
         try {
             eventLoop.start();
             try (Socket socket = connect(eventLoop)) {
-                socket.getOutputStream().write(ascii("GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"));
+                socket.getOutputStream().write(ascii("GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\nsurplus"));
                 assertTrue(readToEnd(socket).endsWith("done"));
                 assertEquals(1, eventLoop.numAdmittedConnections());
                 // Progress during the terminal phase must not extend its absolute deadline.
@@ -235,7 +236,7 @@ class LingeringCloseTests {
                 channel.socket().connect(new InetSocketAddress("127.0.0.1", eventLoop.getPort()), 2_000);
                 channel.configureBlocking(false);
                 long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
-                write(channel, ByteBuffer.wrap(ascii("GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")), deadline);
+                write(channel, ByteBuffer.wrap(ascii("GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\nsurplus")), deadline);
                 assertTrue(readToEnd(channel, deadline).endsWith("done"));
                 // The finite discard ceiling must release capacity even when the peer never sends FIN.
                 try { write(channel, ByteBuffer.wrap(new byte[20 * 1024 * 1024]), deadline); }
@@ -248,7 +249,7 @@ class LingeringCloseTests {
     }
 
     @Test
-    void gracefulDrainWaitsForTerminalInputAndForcedStopDoesNot() throws Exception {
+    void gracefulDrainWaitsForObservedSurplusInputAndForcedStopDoesNot() throws Exception {
         for (boolean force : new boolean[]{false, true}) {
             EventLoop eventLoop = new EventLoop(options(), (request, callback) ->
                     callback.accept(new MicrohttpResponse(200, "OK", List.of(), ascii("done"))));
@@ -256,7 +257,7 @@ class LingeringCloseTests {
                 eventLoop.start();
                 int port = eventLoop.getPort();
                 try (Socket socket = connect(eventLoop)) {
-                    socket.getOutputStream().write(ascii("GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"));
+                    socket.getOutputStream().write(ascii("GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\nsurplus"));
                     assertTrue(readToEnd(socket).endsWith("done"));
                     assertEquals(1, eventLoop.numAdmittedConnections());
                     eventLoop.stopAccepting();
@@ -274,6 +275,90 @@ class LingeringCloseTests {
                 try (ServerSocketChannel rebound = ServerSocketChannel.open()) {
                     rebound.setOption(java.net.StandardSocketOptions.SO_REUSEADDR, true);
                     rebound.bind(new InetSocketAddress("127.0.0.1", port));
+                }
+            } finally {
+                stop(eventLoop);
+            }
+        }
+    }
+
+    @Test
+    void gracefulDrainClosesConsumedRequestsPromptlyAndRetainsEarlyUploads() throws Exception {
+        for (String request : List.of("POST /fixed HTTP/1.1\r\nHost: localhost\r\nContent-Length: 3\r\n\r\nabc",
+                "POST /chunked HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n"
+                        + "3\r\nabc\r\n0\r\nX-Trailer: complete\r\n\r\n",
+                "POST /early HTTP/1.1\r\nHost: localhost\r\nContent-Length: 5000\r\n\r\n")) {
+            AtomicReference<java.util.function.Consumer<MicrohttpResponse>> pending = new AtomicReference<>();
+            EventLoop eventLoop = new EventLoop(options(), (parsed, callback) -> pending.set(callback));
+            try {
+                eventLoop.start();
+                try (Socket socket = connect(eventLoop)) {
+                    socket.getOutputStream().write(ascii(request));
+                    await(() -> pending.get() != null);
+                    eventLoop.stopAccepting();
+                    eventLoop.beginDrain();
+                    boolean earlyUpload = request.contains("/early");
+                    pending.get().accept(new MicrohttpResponse(earlyUpload ? 413 : 200, "Response", List.of(), ascii("done")));
+                    assertTrue(readToEnd(socket).endsWith("done"));
+                    if (earlyUpload) {
+                        assertFalse(eventLoop.join(Duration.ofMillis(200)),
+                                "Early rejection must retain protection even during graceful drain");
+                        assertEquals(1, eventLoop.numAdmittedConnections());
+                        socket.shutdownOutput();
+                        assertTrue(eventLoop.join(Duration.ofSeconds(5)));
+                    } else {
+                        assertTrue(eventLoop.join(Duration.ofMillis(200)),
+                                "An entirely parsed request must not retain an idle one-second terminal drain");
+                    }
+                    assertEquals(0, eventLoop.numAdmittedConnections());
+                }
+            } finally {
+                stop(eventLoop);
+            }
+        }
+    }
+
+    @Test
+    void latePipelinedInputCannotTruncateALargeClosingResponse() throws Exception {
+        for (boolean graceful : new boolean[]{false, true}) {
+            AtomicReference<java.util.function.Consumer<MicrohttpResponse>> pending = new AtomicReference<>();
+            AtomicInteger calls = new AtomicInteger();
+            byte[] body = new byte[256 * 1_024];
+            Arrays.fill(body, (byte) 'x');
+            EventLoop eventLoop = new EventLoop(options(), (request, callback) -> {
+                calls.incrementAndGet();
+                pending.set(callback);
+            });
+            try {
+                eventLoop.start();
+                try (Socket socket = new Socket()) {
+                    socket.setReceiveBufferSize(65_536);
+                    socket.connect(new InetSocketAddress("127.0.0.1", eventLoop.getPort()), 2_000);
+                    socket.getOutputStream().write(ascii("GET /first HTTP/1.1\r\nHost: localhost\r\n"
+                            + (graceful ? "" : "Connection: close\r\n") + "\r\n"));
+                    await(() -> pending.get() != null);
+                    // Standard handlers suspend reads after dispatch. This second request
+                    // therefore remains in the socket, rather than the parsed tokenizer.
+                    socket.getOutputStream().write(ascii("GET /late HTTP/1.1\r\nHost: localhost\r\n\r\n"));
+                    Thread.sleep(100);
+                    if (graceful) {
+                        eventLoop.stopAccepting();
+                        eventLoop.beginDrain();
+                    }
+                    pending.get().accept(new MicrohttpResponse(200, "OK", List.of(), body));
+                    // Keep some response bytes queued in the server's TCP send buffer.
+                    Thread.sleep(100);
+                    byte[] response = readClosingResponse(socket, body.length);
+                    String text = new String(response, StandardCharsets.US_ASCII);
+                    int bodyStart = text.indexOf("\r\n\r\n") + 4;
+                    assertTrue(text.startsWith("HTTP/1.1 200"));
+                    assertTrue(text.contains("\r\nContent-Length: " + body.length + "\r\n"));
+                    assertTrue(text.contains("\r\nConnection: close\r\n"));
+                    assertArrayEquals(body, Arrays.copyOfRange(response, bodyStart, response.length));
+                    assertEquals(1, eventLoop.numAdmittedConnections(), "Queued input must retain the terminal drain");
+                    socket.shutdownOutput();
+                    await(() -> eventLoop.numAdmittedConnections() == 0);
+                    assertEquals(1, calls.get(), "Late input must never dispatch after a closing response");
                 }
             } finally {
                 stop(eventLoop);
@@ -490,6 +575,29 @@ class LingeringCloseTests {
             response.write(bytes, 0, count);
             if (response.size() > 64 * 1_024) fail("Unexpectedly large test response");
         }
+    }
+
+    private static byte[] readClosingResponse(Socket socket, int expectedBodyBytes) throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        ByteArrayOutputStream response = new ByteArrayOutputStream();
+        byte[] bytes = new byte[8_192];
+        try {
+            while (true) {
+                long remaining = deadline - System.nanoTime();
+                if (remaining <= 0) fail("Client response exceeded its deadline");
+                socket.setSoTimeout((int) Math.max(1, TimeUnit.NANOSECONDS.toMillis(remaining)));
+                int count = socket.getInputStream().read(bytes);
+                if (count < 0) break;
+                response.write(bytes, 0, count);
+                if (response.size() > expectedBodyBytes + 65_536) fail("Unexpected response size");
+            }
+        } catch (IOException failure) {
+            // A reset after the complete framed response is harmless for this oracle.
+            int headerEnd = response.toString(StandardCharsets.US_ASCII).indexOf("\r\n\r\n");
+            if (headerEnd < 0 || response.size() - headerEnd - 4 != expectedBodyBytes)
+                throw failure;
+        }
+        return response.toByteArray();
     }
 
     private static String readToEnd(SocketChannel channel, long deadline) throws Exception {

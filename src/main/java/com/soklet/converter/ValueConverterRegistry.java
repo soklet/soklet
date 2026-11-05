@@ -174,7 +174,11 @@ public final class ValueConverterRegistry {
 	@NonNull
 	private static CacheKey extractCacheKeyFromValueConverter(@NonNull ValueConverter<?, ?> valueConverter) {
 		requireNonNull(valueConverter);
-		return new CacheKey(valueConverter.getFromType(), valueConverter.getToType());
+		Type fromType = valueConverter.getFromType();
+		Type toType = valueConverter.getToType();
+		return new CacheKey(
+				PRIMITIVE_TYPES_TO_NONPRIMITIVE_EQUIVALENTS.getOrDefault(fromType, fromType),
+				PRIMITIVE_TYPES_TO_NONPRIMITIVE_EQUIVALENTS.getOrDefault(toType, toType));
 	}
 
 	private ValueConverterRegistry(@NonNull ConcurrentHashMap<@NonNull CacheKey, @NonNull ValueConverter<?, ?>> valueConvertersByCacheKey,
@@ -235,12 +239,12 @@ public final class ValueConverterRegistry {
 		Type normalizedFromType = normalizePrimitiveTypeIfNecessary(fromType);
 		Type normalizedToType = normalizePrimitiveTypeIfNecessary(toType);
 
-		// Reflexive case: from == to
-		if (this.enableReflexiveConversion && normalizedFromType.equals(normalizedToType))
-			return Optional.of((ValueConverter<F, T>) REFLEXIVE_VALUE_CONVERTER);
-
 		CacheKey cacheKey = new CacheKey(normalizedFromType, normalizedToType);
 		ValueConverter<F, T> valueConverter = (ValueConverter<F, T>) getValueConvertersByCacheKey().get(cacheKey);
+
+		// Explicit converters retain precedence over automatic identity conversion.
+		if (valueConverter == null && this.enableReflexiveConversion && normalizedFromType.equals(normalizedToType))
+			return Optional.of((ValueConverter<F, T>) REFLEXIVE_VALUE_CONVERTER);
 
 		// Check the enum converter cache before falling through to creation
 		if (valueConverter == null && this.enumConverterCache != null)

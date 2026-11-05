@@ -342,6 +342,7 @@ class ConnectionEventLoop {
         boolean headRequest;
         boolean keepAlive;
         boolean closeAfterResponse;
+        boolean requestFullyParsed;
         boolean inputHalfClosed;
         boolean lingeringClose;
         long lingeringCloseBytesDiscarded;
@@ -539,6 +540,7 @@ class ConnectionEventLoop {
                         new LogEntry("request_bytes", Integer.toString(byteTokenizer.remaining())));
             }
             if (requestParser.parse()) {
+                requestFullyParsed = true;
                 if (byteTokenizer.position() > options.maxRequestSize()) {
                     try (TransportFailureObserver.Observation ignored =
                                  beginTransportFailure(TransportFailureReason.REQUEST_TOO_LARGE)) {
@@ -842,6 +844,9 @@ class ConnectionEventLoop {
         }
 
         private void prepareForRawErrorResponse() {
+            // A rejection can release the tokenizer before its response is written.
+            // Retain the fact that no complete request boundary was established.
+            requestFullyParsed = false;
             if (selectionKey.isValid() && selectionKey.interestOps() != 0) {
                 selectionKey.interestOps(0);
             }
@@ -1266,6 +1271,11 @@ class ConnectionEventLoop {
                 resetResponseWriteIdleTimeoutIfNeeded();
             }
             if (!activeWritableSource.hasRemaining()) { // response fully written
+                // Capture before clearing streaming counters or parser state. A successful
+                // parse proves this request ended; any additional observed input still
+                // requires the bounded terminal drain, including bytes discarded by a stream.
+                boolean needsLingeringClose = !requestFullyParsed
+                        || byteTokenizer.remaining() > 0 || streamingResponseBytesDiscarded > 0;
                 activeWritableSource.close();
                 writableSource = null; // done with current write source, remove reference
                 MicrohttpResponse deliveredResponse = responseInDelivery;
@@ -1290,7 +1300,7 @@ class ConnectionEventLoop {
                                 new LogEntry("event", "close_after_response"),
                                 new LogEntry("id", id));
                         }
-                        beginLingeringClose();
+                        closeCompletedResponse(needsLingeringClose);
                     }
                 } finally {
                     if (deliveredResponse != null)
@@ -1298,7 +1308,7 @@ class ConnectionEventLoop {
                 }
 
                 if (!closeAfterResponse) { // persistent connection
-                    parseBufferedRequestAfterResponse();
+                    parseBufferedRequestAfterResponse(needsLingeringClose);
                 }
             } else { // response not fully written, switch to or remain in write mode
                 if (!selectionKey.isValid()) {
@@ -1321,7 +1331,49 @@ class ConnectionEventLoop {
             }
         }
 
+        private void closeCompletedResponse(boolean needsLingeringClose) throws IOException {
+            closeAfterResponse = true;
+            if (needsLingeringClose)
+                beginLingeringClose();
+            else
+                closeAfterCompleteRequest();
+        }
+
+        private void closeAfterCompleteRequest() throws IOException {
+            if (closed.get())
+                return;
+            if (stop.get() || inputHalfClosed || !selectionKey.isValid()) {
+                failSafeClose();
+                return;
+            }
+
+            // Normal handlers suspend reads while their response is pending. A later
+            // request can therefore be queued in the socket rather than the tokenizer.
+            // One nonblocking byte detects that case without delaying an idle close.
+            int count;
+            try {
+                buffer.clear();
+                buffer.limit(1);
+                count = SocketChannelIo.read(socketChannel, buffer);
+            } catch (IOException | RuntimeException failure) {
+                // This is terminal input, not a new request or a response-write failure.
+                failSafeClose();
+                return;
+            }
+            if (count > 0) {
+                beginLingeringClose(count);
+            } else {
+                if (count < 0)
+                    inputHalfClosed = true;
+                failSafeClose();
+            }
+        }
+
         private void beginLingeringClose() throws IOException {
+            beginLingeringClose(0);
+        }
+
+        private void beginLingeringClose(long initialBytesDiscarded) throws IOException {
             if (closed.get())
                 return;
             if (stop.get() || inputHalfClosed || !selectionKey.isValid()) {
@@ -1340,7 +1392,7 @@ class ConnectionEventLoop {
             byteTokenizer.clear();
             requestParser.reset();
             lingeringClose = true;
-            lingeringCloseBytesDiscarded = 0;
+            lingeringCloseBytesDiscarded = initialBytesDiscarded;
             selectionKey.interestOps(SelectionKey.OP_READ);
             lingeringCloseTimeoutTask = timeoutQueue.schedule(this::failSafeClose,
                     MAX_LINGERING_CLOSE_DURATION);
@@ -1428,14 +1480,24 @@ class ConnectionEventLoop {
             selectionKey.interestOps(writableSource == null ? SelectionKey.OP_READ : SelectionKey.OP_WRITE);
         }
 
-        private void parseBufferedRequestAfterResponse() {
+        private void parseBufferedRequestAfterResponse(boolean needsLingeringClose) throws IOException {
             if (draining.get()) {
-                failSafeClose(StreamTerminationReason.SERVER_STOPPING, null);
+                // Drain intent is published before its per-connection task runs. It can
+                // arrive during the final write or the body-completion callback, after
+                // this response was prepared as persistent. Keep its pre-cleanup risk.
+                closeCompletedResponse(needsLingeringClose);
                 return;
             }
+            parseBufferedRequestAfterResponse();
+        }
 
+        private void parseBufferedRequestAfterResponse() {
+            // A previous response may have seen a complete next request in its tail.
+            // Only this next request's own parse may establish its closing policy.
+            requestFullyParsed = false;
             try {
                 if (requestParser.parse()) { // subsequent request in buffer
+                    requestFullyParsed = true;
                     if (byteTokenizer.position() > options.maxRequestSize()) {
                         try (TransportFailureObserver.Observation ignored =
                                      beginTransportFailure(TransportFailureReason.REQUEST_TOO_LARGE)) {

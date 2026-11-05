@@ -1587,8 +1587,8 @@ objects in place.
 | --- | --- |
 | `McpServer.fromPort(...)` | `McpServer.withPort(...)`, followed by `build()`; see listener configuration below. |
 | `McpValue`, `McpArray`, `McpObject`, `McpString`, `McpNumber`, `McpBoolean`, `McpNull` | Immutable `McpJsonValue`, `McpJsonArray`, `McpJsonObject`, `McpJsonString`, `McpJsonNumber`, `McpJsonBoolean`, `McpJsonNull`. |
-| `McpHandlerResolver.fromClasspathIntrospection()` / `fromClasses(...)` and `.withTool(...)` / `.withPrompt(...)` | `McpEndpointProvider` / generated `@McpServerEndpoint` providers, or explicit endpoint and operation registrations supplied to `McpServer.Builder`. |
-| `McpEndpoint` implemented by application classes and `McpEndpointRegistration` | Immutable `McpEndpoint.withPath(path, serverInfo, protocolVersions)` with operation registrations; server information belongs to `McpServerInfo`. |
+| `McpHandlerResolver.fromClasspathIntrospection()` / `fromClasses(...)` and `.withTool(...)` / `.withPrompt(...)` | `McpEndpointRegistry` / generated `@McpServerEndpoint` providers, or explicit endpoint and operation registrations supplied to `McpServer.Builder`. |
+| `McpEndpoint` implemented by application classes and `McpEndpointRegistration` | Immutable `McpEndpoint.withPath(path, implementation, protocolVersions)` with operation registrations; implementation metadata belongs to `McpImplementation`. |
 | `McpToolHandler.handle(McpToolHandlerContext)` and `McpSchema` | `McpToolRegistration` with typed `McpToolHandler`, typed arguments and Tool Schema Profile 1. |
 | Old handler, initialization, stored-session and request-result types | Operation-specific registrations and contexts (`McpToolRegistration`, `McpPromptRegistration`, `McpResourceRegistration`, etc.), `McpOperationResult` families, and `McpRequestContext`. |
 | Legacy schema objects | Java-derived Tool Schema Profile 1; raw `McpJsonObject` input can use an authored Profile 1 input schema. |
@@ -2444,7 +2444,8 @@ A converter returning `Optional.empty()` contributes no element to a bound list.
 A required list with no converted elements fails with HTTP 400.
 
 MCP Accept ranges with media parameters other than `q` do not match the JSON or
-SSE representations. Empty trailing Content-Type parameters are rejected.
+SSE representations. JSON Content-Type permits an empty trailing delimiter such as
+`application/json;`.
 Configure reverse proxies to use HTTP/1.1 for the MCP upstream.
 
 ## Final input and callback corrections
@@ -2462,7 +2463,7 @@ Configure reverse proxies to use HTTP/1.1 for the MCP upstream.
   rules, including scheme/host case normalization and ordinary IPv6 variable
   ports. Unpaired UTF-16 surrogates in annotation text fail compilation.
 - Built-in transport observer and metric callbacks now reject waits on their
-  own unpublished shutdown result promptly. Request shutdown with `shutdown()`
+  own unpublished shutdown result promptly. Request shutdown with `requestShutdown()`
   and await it from a separate control thread; keep callbacks nonblocking.
 - Compile each Java module separately. A single `javac` invocation compiling
   multiple named modules is outside the annotation processor's supported scope.

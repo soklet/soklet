@@ -267,7 +267,11 @@ public interface HttpServer {
 		}
 
 		/**
-		 * Sets the maximum duration for reading the HTTP request line and headers.
+		 * Sets the absolute duration for reading the HTTP request line and headers.
+		 * On a persistent connection, this timer also bounds keep-alive idle time and starts
+		 * again after the previous response completes. The next request shares that remaining
+		 * idle/header budget; receiving a header byte does not reset it. Coordinate this value
+		 * with upstream connection-reuse timeouts.
 		 * An in-progress read timeout routes through
 		 * {@link ResponseMarshaler#forUnparsedRequest(UnparsedRequest)}, whose default
 		 * response is {@code 408}. A timeout without request bytes closes quietly.

@@ -261,9 +261,12 @@ public final class LifecyclePolicy {
 		 * policy; the surrounding process/container budget must also include forced shutdown
 		 * and operational margin.
 		 * <p>
-		 * The standard HTTP server's one-second lingering-input window also consumes this
-		 * budget, even after a closing response has been written. Short graceful budgets
-		 * can therefore proceed to forced shutdown while a client connection still lingers.
+		 * After a closing response, the standard HTTP server closes promptly when the
+		 * request was fully consumed and no surplus input was observed, including one
+		 * nonblocking check for input already queued on the socket. If unread input
+		 * may remain, its one-second lingering-input window consumes this budget even
+		 * after the response has been written. Short graceful budgets can therefore
+		 * proceed to forced shutdown while such a client connection still lingers.
 		 *
 		 * @param gracefulShutdownTimeout graceful shutdown timeout, or
 		 * {@code null} to use the default

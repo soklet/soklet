@@ -555,10 +555,10 @@ public final class Request {
 	/**
 	 * The cookies provided by the client for this request.
 	 * <p>
-	 * The keys are the {@code Cookie} header names and the values are {@code Cookie} header values
-	 * (it is possible for a client to send multiple {@code Cookie} headers with the same name).
+	 * The keys are case-sensitive cookie names and the values are their decoded values.
+	 * Repeated occurrences of the same cookie name are retained in the value list.
 	 * <p>
-	 * <em>Note that {@code Cookie} headers, like all request headers, have case-insensitive names per the HTTP spec.</em>
+	 * Cookie names are case-sensitive. The enclosing {@code Cookie} header name is case-insensitive.
 	 * <p>
 	 * Use {@link #getCookie(String)} for a convenience method to access cookie values when only one is expected.
 	 *
@@ -1237,7 +1237,7 @@ public final class Request {
 	 * <p>
 	 * If this method is invoked for a cookie {@code name} with multiple values, Soklet will throw {@link IllegalRequestCookieException}.
 	 * <p>
-	 * <em>Note that {@code Cookie} headers, like all request headers, have case-insensitive names per the HTTP spec.</em>
+	 * Cookie names are case-sensitive. The enclosing {@code Cookie} header name is case-insensitive.
 	 *
 	 * @param name the name of the cookie
 	 * @return the value for the cookie, or {@link Optional#empty()} if none is present

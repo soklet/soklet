@@ -1810,16 +1810,89 @@ function verifyCharacterizationSources(root, sourceFiles) {
   const closeCompletion = oneConditionalBlock(writableCompletion,
     /\bif\s*\(\s*closeAfterResponse\s*\)\s*\{/gu,
     'the response-completion closeAfterResponse branch must remain unique');
-  // A completed closing response now sends FIN before a finite terminal input
-  // drain. Require the entire handoff and bounded helpers, not merely a close
-  // method name which could be a decoy or leave a persistent parser reachable.
+  // Snapshot request-boundary and observed-input evidence before completion
+  // clears the streaming counters. Only a possibly unread tail needs the
+  // finite FIN/drain path; a clean fully parsed request closes immediately.
+  const fullyWritten = oneConditionalBlock(writableCompletion,
+    /\bif\s*\(\s*!\s*activeWritableSource\s*\.\s*hasRemaining\s*\(\s*\)\s*\)\s*\{/gu,
+    'the completed-response branch must remain unique');
+  const lingerDecision = requireTopLevelStatement(fullyWritten,
+    /\bboolean\s+needsLingeringClose\s*=\s*!\s*requestFullyParsed\s*\|\|\s*byteTokenizer\s*\.\s*remaining\s*\(\s*\)\s*>\s*0\s*\|\|\s*streamingResponseBytesDiscarded\s*>\s*0\s*;/gu,
+    'response completion must capture all three unread-input signals before cleanup');
+  requireExactCode(fullyWritten.slice(0,
+    lingerDecision.index + lingerDecision[0].length),
+  'booleanneedsLingeringClose=!requestFullyParsed||byteTokenizer.remaining()>0||streamingResponseBytesDiscarded>0;',
+  'response completion must capture all three unread-input signals before cleanup');
+  requireExactSimpleAssignments(writableCompletion, 'needsLingeringClose',
+    ['!requestFullyParsed||byteTokenizer.remaining()>0||streamingResponseBytesDiscarded>0'],
+    'response completion must not replace its captured unread-input decision');
+  if (/\bparseBufferedRequestAfterResponse\s*\(/u.test(closeCompletion)) {
+    fail('Transport characterization structural assertion failed: response completion may parse buffered input only in its persistent branch');
+  }
   const handoff = requireTopLevelStatement(closeCompletion,
-    /\bbeginLingeringClose\s*\(\s*\)\s*;/gu,
-    'the response-completion path must close through one unconditional bounded lingering handoff');
+    /\bcloseCompletedResponse\s*\(\s*needsLingeringClose\s*\)\s*;/gu,
+    'the response-completion path must close through the captured unread-input decision');
   if (/\b(?:return|for|while|do)\b/u.test(closeCompletion.slice(0, handoff.index))
     || closeCompletion.slice(handoff.index + handoff[0].length).trim() !== '') {
-    fail('Transport characterization structural assertion failed: the response-completion path must close through one unconditional bounded lingering handoff');
+    fail('Transport characterization structural assertion failed: the response-completion path must close through the captured unread-input decision');
   }
+  const connectionOwner = 'com.soklet.internal.microhttp.ConnectionEventLoop.Connection';
+  const connectionType = namedTypes(eventLoop.lexed, eventLoopPath)
+    .find((type) => type.owner === connectionOwner);
+  if (connectionType === undefined) fail('Missing Connection owner for request-boundary evidence');
+  const parseEvidenceField = directFieldStatements(eventLoop.lexed,
+    eventLoopPath, connectionType)
+    .filter((field) => field.names.includes('requestFullyParsed'));
+  if (parseEvidenceField.length !== 1) fail('Missing unique request-boundary evidence field');
+  requireExactCode(parseEvidenceField[0].code, 'booleanrequestFullyParsed;',
+    'new connections must not claim an already complete request boundary');
+  const bufferedParse = oneMethodMatching(eventLoop.lexed, eventLoopPath,
+    connectionOwner, 'parseBufferedRequestAfterResponse', (candidate) =>
+      /\bparseBufferedRequestAfterResponse\s*\(\s*\)/u.test(candidate.signatureCode),
+    'ordinary no-argument buffered parser');
+  const finalHandoff = oneMethodMatching(eventLoop.lexed, eventLoopPath,
+    connectionOwner, 'parseBufferedRequestAfterResponse', (candidate) =>
+      /\bboolean\s+needsLingeringClose\b/u.test(candidate.signatureCode),
+    'post-completion buffered handoff');
+  requireExactCode(finalHandoff.bodyCode,
+    'if(draining.get()){closeCompletedResponse(needsLingeringClose);return;}'
+      + 'parseBufferedRequestAfterResponse();',
+    'the final handoff must route current drain intent through captured unread-input risk before any parser reset');
+  const terminalHandoff = oneMethod(eventLoop.lexed, eventLoopPath,
+    connectionOwner, 'closeCompletedResponse');
+  requireExactSimpleAssignments(terminalHandoff, 'closeAfterResponse', ['true'],
+    'the shared terminal handoff must commit its closing decision');
+  requireExactCode(terminalHandoff.bodyCode,
+    'closeAfterResponse=true;if(needsLingeringClose)beginLingeringClose();elsecloseAfterCompleteRequest();',
+    'the response-completion path must close through the captured unread-input decision');
+  const rawRejection = oneMethod(eventLoop.lexed, eventLoopPath,
+    connectionOwner, 'prepareForRawErrorResponse');
+  requireExactSimpleAssignments(readable, 'requestFullyParsed', ['true'],
+    'the direct read path must mark exactly its successful request parse');
+  requireExactSimpleAssignments(bufferedParse, 'requestFullyParsed',
+    ['false', 'true'],
+    'the persistent path must reset and then mark its own complete request boundary');
+  for (const parseMethod of [readable, bufferedParse]) {
+    const parsed = oneConditionalBlock(parseMethod,
+      /\bif\s*\(\s*requestParser\s*\.\s*parse\s*\(\s*\)\s*\)\s*\{/gu,
+      'the successful request parse branch must remain unique');
+    requireStructural({ bodyCode: parsed },
+      /^\s*requestFullyParsed\s*=\s*true\s*;/u,
+      'only a successful parse may establish the complete request boundary before size rejection');
+  }
+  requireStructural(bufferedParse,
+    /requestFullyParsed\s*=\s*false\s*;\s*try\s*\{\s*if\s*\(\s*requestParser\s*\.\s*parse\s*\(\s*\)\s*\)/u,
+    'the next persistent parse must start with fresh incomplete boundary evidence');
+  requireExactSimpleAssignments(rawRejection, 'requestFullyParsed', ['false'],
+    'raw rejections must retain incomplete request-boundary evidence');
+  requireStructural(rawRejection, /^\s*requestFullyParsed\s*=\s*false\s*;/u,
+    'raw rejections must clear complete-boundary evidence before any input cleanup');
+  if (assignmentsTo({ bodyCode: eventLoop.lexed.code },
+    'requestFullyParsed').length !== 4) {
+    fail('Transport characterization structural assertion failed: only direct parsing, persistent parsing and raw rejection may update request-boundary evidence');
+  }
+  requireStructural(bufferedParse, /^\s*requestFullyParsed\s*=\s*false\s*;/u,
+    'the ordinary buffered parser must begin only after the final handoff drain checkpoint');
   requireExactSimpleAssignments(writableCompletion, 'closeAfterResponse', [],
     'response completion must not reset its closing decision');
   const eventLoopType = namedTypes(eventLoop.lexed, eventLoopPath)
@@ -1838,9 +1911,68 @@ function verifyCharacterizationSources(root, sourceFiles) {
     requireExactCode(bound.code, expected,
       'terminal input drain must retain the reviewed one-second and 16-MiB immutable bounds');
   }
-  const connectionOwner = 'com.soklet.internal.microhttp.ConnectionEventLoop.Connection';
-  const beginLingering = oneMethod(eventLoop.lexed, eventLoopPath,
-    connectionOwner, 'beginLingeringClose');
+  const completeClose = oneMethod(eventLoop.lexed, eventLoopPath,
+    connectionOwner, 'closeAfterCompleteRequest');
+  requireStructural(completeClose,
+    /^\s*if\s*\(\s*closed\s*\.\s*get\s*\(\s*\)\s*\)\s*return\s*;\s*if\s*\(\s*stop\s*\.\s*get\s*\(\s*\)\s*\|\|\s*inputHalfClosed\s*\|\|\s*!\s*selectionKey\s*\.\s*isValid\s*\(\s*\)\s*\)\s*\{\s*failSafeClose\s*\(\s*\)\s*;\s*return\s*;\s*\}/u,
+    'terminal probe must skip already closed, forced, EOF and invalid-key connections');
+  if (/\b(?:for|while|do)\b|\.\s*(?:configureBlocking|select|selectNow|sleep|wait|schedule|interestOps)\s*\(/u.test(completeClose.bodyCode)
+      || /\b(?:parseBufferedRequestAfterResponse|onRequestParsed|onPartialRequestParsed)\s*\(|requestParser\s*\.\s*parse\s*\(|byteTokenizer\s*\.\s*add\s*\(/u.test(completeClose.bodyCode)) {
+    fail('Transport characterization structural assertion failed: terminal probe must not loop, wait, arm readiness or parse another request');
+  }
+  const probeTry = oneConditionalBlock(completeClose, /\btry\s*\{/gu,
+    'the terminal probe read must have one quiet failure boundary');
+  requireTopLevelStatement(completeClose.bodyCode, /\btry\s*\{/gu,
+    'the terminal probe read must be unconditional after its close guards');
+  const probeClear = requireTopLevelStatement(probeTry,
+    /\bbuffer\s*\.\s*clear\s*\(\s*\)\s*;/gu,
+    'terminal probe must clear and limit its buffer to one byte before reading');
+  const probeLimit = requireTopLevelStatement(probeTry,
+    /\bbuffer\s*\.\s*limit\s*\(\s*1\s*\)\s*;/gu,
+    'terminal probe must clear and limit its buffer to one byte before reading');
+  const probeRead = requireTopLevelStatement(probeTry,
+    /\bcount\s*=\s*SocketChannelIo\s*\.\s*read\s*\(\s*socketChannel\s*,\s*buffer\s*\)\s*;/gu,
+    'terminal probe must perform exactly one actual typed socket read');
+  if (probeClear.index >= probeLimit.index || probeLimit.index >= probeRead.index
+      || [...completeClose.bodyCode.matchAll(/\bSocketChannelIo\s*\.\s*read\s*\(/gu)].length !== 1
+      || [...completeClose.bodyCode.matchAll(/\bsocketChannel\s*\.\s*read\s*\(/gu)].length !== 0) {
+    fail('Transport characterization structural assertion failed: terminal probe must perform exactly one actual typed socket read');
+  }
+  requireExactSimpleAssignments(completeClose, 'count',
+    ['SocketChannelIo.read(socketChannel,buffer)'],
+    'terminal probe must preserve the actual one-byte read result');
+  const probeFailure = oneConditionalBlock(completeClose,
+    /\bcatch\s*\(\s*IOException\s*\|\s*RuntimeException\s+failure\s*\)\s*\{/gu,
+    'terminal probe must quietly close on both IO and runtime read failure');
+  requireExactCode(probeFailure, 'failSafeClose();return;',
+    'terminal probe must quietly close on both IO and runtime read failure');
+  const positiveProbe = oneConditionalBlock(completeClose,
+    /\bif\s*\(\s*count\s*>\s*0\s*\)\s*\{/gu,
+    'only a positive probe read may enter the terminal drain');
+  requireExactCode(positiveProbe, 'beginLingeringClose(count);',
+    'positive terminal probe bytes must seed the existing drain byte budget');
+  const emptyProbe = oneConditionalBlock(completeClose, /\belse\s*\{/gu,
+    'zero or EOF terminal probe results must close without waiting');
+  const emptyClose = requireTopLevelStatement(emptyProbe,
+    /\bfailSafeClose\s*\(\s*\)\s*;/gu,
+    'zero or EOF terminal probe results must close without waiting');
+  if (/\b(?:return|for|while|do)\b/u.test(emptyProbe.slice(0, emptyClose.index))
+      || emptyProbe.slice(emptyClose.index + emptyClose[0].length).trim() !== '') {
+    fail('Transport characterization structural assertion failed: zero or EOF terminal probe results must close without waiting');
+  }
+  if ([...eventLoop.lexed.code.matchAll(/\bcloseAfterCompleteRequest\s*\(/gu)].length !== 2) {
+    fail('Transport characterization structural assertion failed: terminal probe must be confined to the closing-response handoff');
+  }
+  const unseededLingering = oneMethodMatching(eventLoop.lexed, eventLoopPath,
+    connectionOwner, 'beginLingeringClose', (candidate) =>
+      /\bbeginLingeringClose\s*\(\s*\)/u.test(candidate.signatureCode),
+    'zero-seed terminal drain wrapper');
+  requireExactCode(unseededLingering.bodyCode, 'beginLingeringClose(0);',
+    'known unread-input handoffs must retain their original zero seed');
+  const beginLingering = oneMethodMatching(eventLoop.lexed, eventLoopPath,
+    connectionOwner, 'beginLingeringClose', (candidate) =>
+      /\blong\s+initialBytesDiscarded\b/u.test(candidate.signatureCode),
+    'probe-seeded terminal drain');
   const halfClose = beginLingering.bodyCode.search(/\bsocketChannel\s*\.\s*shutdownOutput\s*\(\s*\)\s*;/u);
   if (halfClose < 0 || /\b(?:return|for|while|do)\b/u.test(beginLingering.bodyCode.slice(halfClose))) {
     fail('Transport characterization structural assertion failed: terminal close must half-close output before unconditionally arming the bounded drain');
@@ -1850,18 +1982,18 @@ function verifyCharacterizationSources(root, sourceFiles) {
     'terminal close may return early only for an already closed or immediately closed connection');
   requireExactSimpleAssignments(beginLingering, 'lingeringClose', ['true'],
     'terminal close must enter its distinct non-parsing drain phase');
-  requireExactSimpleAssignments(beginLingering, 'lingeringCloseBytesDiscarded', ['0'],
-    'terminal close must start with a fresh byte budget');
+  requireExactSimpleAssignments(beginLingering, 'lingeringCloseBytesDiscarded', ['initialBytesDiscarded'],
+    'terminal close must count already discarded probe bytes in its original byte budget');
   requireExactSimpleAssignments(beginLingering, 'lingeringCloseTimeoutTask',
     ['timeoutQueue.schedule(this::failSafeClose,MAX_LINGERING_CLOSE_DURATION)'],
     'terminal close must arm one finite deadline which physically closes');
   requireStructural(beginLingering,
-    /socketChannel\s*\.\s*shutdownOutput\s*\(\s*\)\s*;[\s\S]*?lingeringClose\s*=\s*true\s*;[\s\S]*?lingeringCloseBytesDiscarded\s*=\s*0\s*;[\s\S]*?selectionKey\s*\.\s*interestOps\s*\(\s*SelectionKey\s*\.\s*OP_READ\s*\)\s*;[\s\S]*?lingeringCloseTimeoutTask\s*=\s*timeoutQueue\s*\.\s*schedule\s*\(\s*this\s*::\s*failSafeClose\s*,\s*MAX_LINGERING_CLOSE_DURATION\s*\)\s*;/u,
+    /socketChannel\s*\.\s*shutdownOutput\s*\(\s*\)\s*;[\s\S]*?lingeringClose\s*=\s*true\s*;[\s\S]*?lingeringCloseBytesDiscarded\s*=\s*initialBytesDiscarded\s*;[\s\S]*?selectionKey\s*\.\s*interestOps\s*\(\s*SelectionKey\s*\.\s*OP_READ\s*\)\s*;[\s\S]*?lingeringCloseTimeoutTask\s*=\s*timeoutQueue\s*\.\s*schedule\s*\(\s*this\s*::\s*failSafeClose\s*,\s*MAX_LINGERING_CLOSE_DURATION\s*\)\s*;/u,
     'terminal close must install read interest and the absolute close deadline after half-close');
   for (const statement of [
     /\bsocketChannel\s*\.\s*shutdownOutput\s*\(\s*\)\s*;/gu,
     /\blingeringClose\s*=\s*true\s*;/gu,
-    /\blingeringCloseBytesDiscarded\s*=\s*0\s*;/gu,
+    /\blingeringCloseBytesDiscarded\s*=\s*initialBytesDiscarded\s*;/gu,
     /\bselectionKey\s*\.\s*interestOps\s*\(\s*SelectionKey\s*\.\s*OP_READ\s*\)\s*;/gu,
   ]) requireTopLevelStatement(beginLingering.bodyCode, statement,
     'terminal close must install its bounded drain unconditionally');
@@ -1907,13 +2039,36 @@ function verifyCharacterizationSources(root, sourceFiles) {
   const persistentCompletion = oneConditionalBlock(writableCompletion,
     /\bif\s*\(\s*!\s*closeAfterResponse\s*\)\s*\{/gu,
     'the response-completion persistent branch must remain unique');
-  if (!/^\s*parseBufferedRequestAfterResponse\s*\(\s*\)\s*;\s*$/u
+  if (!/^\s*parseBufferedRequestAfterResponse\s*\(\s*needsLingeringClose\s*\)\s*;\s*$/u
     .test(persistentCompletion)) {
     fail('Transport characterization structural assertion failed: the response-completion path may parse buffered input only when closeAfterResponse is false');
   }
 
-  if ([...writableCompletion.bodyCode.matchAll(/\bparseBufferedRequestAfterResponse\s*\(\s*\)\s*;/gu)].length !== 1) {
+  if ([...writableCompletion.bodyCode.matchAll(/\bparseBufferedRequestAfterResponse\s*\(/gu)].length !== 1) {
     fail('Transport characterization structural assertion failed: response completion may parse buffered input only in its persistent branch');
+  }
+  const completionFinally = requireTopLevelStatement(fullyWritten,
+    /\bfinally\s*\{/gu,
+    'response body completion must retain its finally before the final handoff');
+  const terminationFinally = oneConditionalBlock({ bodyCode: fullyWritten },
+    /\bfinally\s*\{/gu,
+    'response body completion must retain one finally');
+  requireExactCode(terminationFinally,
+    'if(deliveredResponse!=null)deliverBodyTermination(deliveredResponse);',
+    'response body completion must retain its guarded finally delivery');
+  const finallyStart = completionFinally.index + completionFinally[0].lastIndexOf('{');
+  const finallyEnd = matchingDelimiter(fullyWritten, finallyStart, '{', '}',
+    'response completion finally');
+  const persistentGuard = [...fullyWritten.matchAll(
+    /\bif\s*\(\s*!\s*closeAfterResponse\s*\)\s*\{/gu)];
+  if (persistentGuard.length !== 1 || persistentGuard[0].index <= finallyEnd) {
+    fail('Transport characterization structural assertion failed: the final handoff must run after response body completion callbacks');
+  }
+  const completionReservation = requireTopLevelStatement(fullyWritten,
+    /\bif\s*\(\s*deliveredResponse\s*!=\s*null\s*\)\s*deliveredResponse\s*\.\s*reserveBodyTermination\s*\(\s*StreamTerminationReason\s*\.\s*COMPLETED\s*,\s*null\s*\)\s*;/gu,
+    'response body completion must reserve its completed disposition before callback delivery');
+  if (completionReservation.index >= completionFinally.index) {
+    fail('Transport characterization structural assertion failed: response body completion must reserve its completed disposition before callback delivery');
   }
 
   const withPort = oneMethod(server.lexed, serverPath, 'com.soklet.McpServer', 'withPort');
@@ -1933,6 +2088,76 @@ function verifyCharacterizationSources(root, sourceFiles) {
     || httpVersionStructures[0].index !== httpVersionLiterals[0].index) {
     fail('Transport characterization live-literal assertion failed: MCP request processing must have exactly one HTTP-version read and use it to return the exact HTTP/1.1-only 505 response');
   }
+
+  // Subscription close cancellation may execute arbitrary channel callbacks.
+  // Keep that delivery off lifecycle threads and retain its physical completion.
+  const registrationAttemptOwner = 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.SubscriptionRegistrationCloseAttempt';
+  const registrationOwner = 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime.SubscriptionSourceRegistrationControl';
+  const registrationMethod = (owner, name) => oneMethod(runtime.lexed, runtimePath, owner, name);
+  const cancelRegistration = registrationMethod(registrationAttemptOwner, 'cancel');
+  requireExactCode(cancelRegistration.bodyCode,
+    'booleansubmit;synchronized(lock){cancellationRequested=true;submit=claimInterrupt();}if(submit)submitInterrupt();',
+    'registration cancellation must only elect and submit off-thread delivery outside its lock');
+  const claimRegistrationInterrupt = registrationMethod(registrationAttemptOwner, 'claimInterrupt');
+  requireExactCode(claimRegistrationInterrupt.bodyCode,
+    'if(!cancellationRequested||worker==null||closeCompleted||workerRetired||interruptClaimed)returnfalse;interruptClaimed=true;interruptPending=true;returntrue;',
+    'registration interrupt election must be once-only and retain physical delivery');
+  const bindRegistrationWorker = registrationMethod(registrationAttemptOwner, 'bindWorker');
+  requireStructural(bindRegistrationWorker,
+    /workerBound\s*=\s*true\s*;\s*submit\s*=\s*claimInterrupt\s*\(\s*\)\s*;\s*\}\s*if\s*\(\s*submit\s*\)\s*submitInterrupt\s*\(\s*\)\s*;\s*$/u,
+    'registration late binding must submit elected delivery outside its lock');
+  const registrationAttemptType = namedTypes(runtime.lexed, runtimePath)
+    .find((type) => type.owner === registrationAttemptOwner);
+  if (registrationAttemptType === undefined || [...runtime.lexed.code.slice(
+    registrationAttemptType.bodyStart, registrationAttemptType.bodyEnd)
+    .matchAll(/\.\s*interrupt\s*\(/gu)].length !== 1) {
+    fail('Transport characterization structural assertion failed: registration attempts must interrupt only through their delivery worker');
+  }
+  const submitRegistrationInterrupt = registrationMethod(registrationAttemptOwner, 'submitInterrupt');
+  requireExactCode(submitRegistrationInterrupt.bodyCode,
+    'try{Threaddelivery=requireNonNull(interruptThreadFactory.newThread(this::runInterrupt));delivery.setDaemon(true);delivery.start();}catch(Throwablefailure){finishInterrupt(failure);}',
+    'registration interrupt launch must be daemonized and must not fall back to inline delivery');
+  const runRegistrationInterrupt = registrationMethod(registrationAttemptOwner, 'runInterrupt');
+  requireStructural(runRegistrationInterrupt,
+    /interruptExecution\s*\.\s*accept\s*\(\s*\(\s*\)\s*->\s*\{\s*workerFence\s*\.\s*lock\s*\(\s*\)\s*;\s*try\s*\{\s*Thread\s+target\s*;\s*synchronized\s*\(\s*lock\s*\)\s*\{\s*target\s*=\s*closeCompleted\s*\|\|\s*workerRetired\s*\?\s*null\s*:\s*worker\s*;\s*\}\s*if\s*\(\s*target\s*!=\s*null\s*\)\s*target\s*\.\s*interrupt\s*\(\s*\)\s*;\s*\}\s*finally\s*\{\s*workerFence\s*\.\s*unlock\s*\(\s*\)\s*;\s*\}\s*\}\s*\)\s*;/u,
+    'registration delivery must retain its context and fence retired or completed targets');
+  requireStructural(runRegistrationInterrupt,
+    /catch\s*\(\s*Throwable\s+throwable\s*\)\s*\{\s*failure\s*=\s*throwable\s*;\s*\}\s*finally\s*\{\s*finishInterrupt\s*\(\s*failure\s*\)\s*;\s*\}\s*$/u,
+    'registration delivery must publish physical completion even when interrupt callbacks fail');
+  const retireRegistrationWorker = registrationMethod(registrationAttemptOwner, 'retireWorker');
+  requireExactCode(retireRegistrationWorker.bodyCode,
+    'workerFence.lock();try{synchronized(lock){workerRetired=true;worker=null;}}finally{workerFence.unlock();}',
+    'registration worker retirement must fence in-flight and queued interrupt delivery');
+  const finishRegistrationInterrupt = registrationMethod(registrationAttemptOwner, 'finishInterrupt');
+  requireExactCode(finishRegistrationInterrupt.bodyCode,
+    'synchronized(lock){interruptFailure=failure;interruptPending=false;completeIfFinished();}',
+    'registration physical delivery completion must release only its own pending state');
+  const completeRegistrationClose = registrationMethod(registrationAttemptOwner, 'complete');
+  requireExactCode(completeRegistrationClose.bodyCode,
+    'synchronized(lock){closeCompleted=true;completeIfFinished();}',
+    'registration close completion must retain a physically pending delivery');
+  const completeRegistrationAttempt = registrationMethod(registrationAttemptOwner, 'completeIfFinished');
+  requireExactCode(completeRegistrationAttempt.bodyCode,
+    'if(closeCompleted&&!interruptPending)completion.countDown();',
+    'registration completion barrier must include close and physical interrupt delivery');
+  const beginRegistrationClose = registrationMethod(registrationOwner, 'beginClose');
+  requireStructural(beginRegistrationClose,
+    /^\s*synchronized\s*\(\s*lock\s*\)\s*\{\s*if\s*\(\s*closeAttempt\s*!=\s*null\s*&&\s*!\s*closeAttempt\s*\.\s*completed\s*\(\s*\)\s*\)\s*return\s+closeAttempt\s*;\s*if\s*\(\s*closed\s*\)/u,
+    'registration close must retain the pending attempt before its logical closed shortcut');
+  requireStructural(beginRegistrationClose,
+    /new\s+SubscriptionRegistrationCloseAttempt\s*\(\s*action\s*->\s*\{\s*enterLifecycleProofExecution\s*\(\s*\)\s*;\s*try\s*\([\s\S]*?applicationExecutionObserver\s*\.\s*enterLifecycleExecution\s*\(\s*\)\s*\)\s*\{\s*action\s*\.\s*run\s*\(\s*\)\s*;\s*\}\s*finally\s*\{\s*exitLifecycleProofExecution\s*\(\s*\)\s*;\s*\}/u,
+    'registration interrupt delivery must carry lifecycle proof and self-wait context');
+  const runRegistrationClose = registrationMethod(registrationOwner, 'runClose');
+  requireStructural(runRegistrationClose,
+    /attempt\s*\.\s*retireWorker\s*\(\s*\)\s*;[\s\S]*?synchronized\s*\(\s*lock\s*\)\s*\{[\s\S]*?closed\s*=\s*true\s*;/u,
+    'registration close must fence the worker before publishing logical retirement');
+  requireStructural(runRegistrationClose,
+    /finally\s*\{\s*try\s*\{\s*exitLifecycleProofExecution\s*\(\s*\)\s*;\s*\}\s*finally\s*\{\s*attempt\s*\.\s*complete\s*\(\s*\)\s*;\s*\}\s*\}\s*\}\s*$/u,
+    'registration close must publish completion after exiting its lifecycle context');
+  const registrationClosed = registrationMethod(registrationOwner, 'closed');
+  requireExactCode(registrationClosed.bodyCode,
+    'synchronized(lock){returnclosed&&(closeAttempt==null||closeAttempt.completed());}',
+    'registration physical retirement must not report only logical close completion');
 
   const runtimeType = namedTypes(runtime.lexed, runtimePath).find((type) => type.owner === 'com.soklet.internal.mcp.protocol.McpHttpServerRuntime');
   const fieldNames = directFieldNames(runtime.lexed, runtimePath, runtimeType);

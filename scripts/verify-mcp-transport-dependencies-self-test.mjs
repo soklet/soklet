@@ -37,7 +37,7 @@ const temporaryRoot = mkdtempSync(join(tmpdir(),
   'soklet-mcp-transport-dependencies-self-test-'));
 const goldenRoot = resolve(temporaryRoot, 'golden');
 const OUTBOUND_CHANNEL = 'src/main/java/com/soklet/internal/mcp/transport/McpOutboundChannel.java';
-const EXPECTED_CASE_COUNT = 167;
+const EXPECTED_CASE_COUNT = 224;
 let passedCases = 0;
 
 const FIXTURE_SOURCES = Object.freeze([
@@ -1171,13 +1171,13 @@ try {
     (root) => {
       mutateSource(root, EVENT_LOOP, (source) => replaceAfter(source,
         'if (closeAfterResponse) { // non-persistent connection',
-        'beginLingeringClose();', 'disableReadInterest();'));
+        'closeCompletedResponse(needsLingeringClose);', 'disableReadInterest();'));
     }, /response-completion path must close/u);
 
   // The current terminal handoff preserves the original discard-and-close
   // characterization; each mutation removes one concrete finite-close proof.
   for (const [label, anchor, before, after, diagnostic] of [
-    ["terminal close handoff cannot be conditional","if (closeAfterResponse) { // non-persistent connection","beginLingeringClose();","if (false) { beginLingeringClose(); }","response-completion path must close"],
+    ["terminal close handoff cannot be conditional","if (closeAfterResponse) { // non-persistent connection","closeCompletedResponse(needsLingeringClose);","if (false) { closeCompletedResponse(needsLingeringClose); }","response-completion path must close"],
     ["terminal close duration stays finite and reviewed","class ConnectionEventLoop {","Duration.ofSeconds(1)","Duration.ofSeconds(Long.MAX_VALUE)","one-second and 16-MiB"],
     ["terminal close byte cap stays finite and reviewed","class ConnectionEventLoop {","MAX_LINGERING_CLOSE_BYTES = 16L * 1024L * 1024L","MAX_LINGERING_CLOSE_BYTES = Long.MAX_VALUE","one-second and 16-MiB"],
     ["terminal helper cannot return instead of half-closing","private void beginLingeringClose()","socketChannel.shutdownOutput();","return; // socketChannel.shutdownOutput();","must half-close output"],
@@ -1192,13 +1192,99 @@ try {
     ["physical terminal close stays idempotent","private void failSafeClose(@Nullable StreamTerminationReason cancelationReason","if (!closed.compareAndSet(false, true))","if (false)","physical terminal close must remain idempotent"],
     ["physical terminal close retires its deadline","private void failSafeClose(@Nullable StreamTerminationReason cancelationReason","lingeringCloseTimeoutTask.cancel();","// lingeringCloseTimeoutTask.cancel();","cancel and clear the lingering deadline"],
     ["physical terminal close releases connection admission","private void failSafeClose(@Nullable StreamTerminationReason cancelationReason","admission.release();","// admission.release();","release the key, socket, connection count and admission"],
-    ["terminal closing response cannot parse buffered requests","if (closeAfterResponse) { // non-persistent connection","beginLingeringClose();","parseBufferedRequestAfterResponse(); beginLingeringClose();","may parse buffered input only in its persistent branch"],
+    ["terminal closing response cannot parse buffered requests","if (closeAfterResponse) { // non-persistent connection","closeCompletedResponse(needsLingeringClose);","parseBufferedRequestAfterResponse(); closeCompletedResponse(needsLingeringClose);","may parse buffered input only in its persistent branch"],
   ]) {
     expectRejected(label, (root) => {
       mutateSource(root, EVENT_LOOP, (source) =>
         replaceAfter(source, anchor, before, after));
     }, new RegExp(diagnostic, 'u'));
   }
+
+  // Each input-risk signal and parse-state transition is necessary for the
+  // conditional close policy. Mutations must not restore the old unconditional
+  // linger or accidentally classify an incomplete request as clean.
+  for (const [label, anchor, before, after, diagnostic] of [
+    ['incomplete requests retain terminal drain evidence', 'private void doOnWritable()', '!requestFullyParsed', 'false', 'all three unread-input signals'],
+    ['complete-boundary evidence cannot be inverted', 'private void doOnWritable()', '!requestFullyParsed', 'requestFullyParsed', 'all three unread-input signals'],
+    ['buffered input retains terminal drain evidence', 'private void doOnWritable()', 'byteTokenizer.remaining() > 0', 'false', 'all three unread-input signals'],
+    ['discarded streaming input retains terminal drain evidence', 'private void doOnWritable()', 'streamingResponseBytesDiscarded > 0', 'false', 'all three unread-input signals'],
+    ['one buffered byte is sufficient terminal drain evidence', 'private void doOnWritable()', 'byteTokenizer.remaining() > 0', 'byteTokenizer.remaining() > 1', 'all three unread-input signals'],
+    ['unread-input evidence uses any risk rather than all risks', 'private void doOnWritable()', '|| byteTokenizer.remaining()', '&& byteTokenizer.remaining()', 'all three unread-input signals'],
+    ['unread-input evidence must precede counter cleanup', 'private void doOnWritable()', 'boolean needsLingeringClose =', 'streamingResponseBytesDiscarded = 0; boolean needsLingeringClose =', 'all three unread-input signals'],
+    ['captured unread-input decision cannot be overwritten', 'private void doOnWritable()', 'activeWritableSource.close();', 'needsLingeringClose = false; activeWritableSource.close();', 'captured unread-input decision'],
+    ['clean completed requests close without terminal drain', 'private void closeCompletedResponse(boolean needsLingeringClose)', 'else\n                closeAfterCompleteRequest();', 'else\n                beginLingeringClose();', 'captured unread-input decision'],
+    ['possibly unread input must retain terminal drain', 'private void closeCompletedResponse(boolean needsLingeringClose)', 'if (needsLingeringClose)\n                beginLingeringClose();', 'if (needsLingeringClose)\n                failSafeClose();', 'captured unread-input decision'],
+    ['direct successful parses establish complete request evidence', 'private void doOnReadable()', 'requestFullyParsed = true;', 'requestFullyParsed = false;', 'direct read path must mark'],
+    ['persistent parsing cannot inherit previous completion evidence', 'private void parseBufferedRequestAfterResponse()', 'requestFullyParsed = false;', 'requestFullyParsed = true;', 'persistent path must reset'],
+    ['persistent successful parses establish their own completion evidence', 'private void parseBufferedRequestAfterResponse()', 'requestFullyParsed = true;', 'requestFullyParsed = false;', 'persistent path must reset'],
+    ['raw rejection cannot claim a complete request boundary', 'private void prepareForRawErrorResponse()', 'requestFullyParsed = false;', 'requestFullyParsed = true;', 'raw rejections must retain'],
+    ['new connections start without complete request evidence', 'class Connection {', 'boolean requestFullyParsed;', 'boolean requestFullyParsed = true;', 'new connections must not claim'],
+  ]) {
+    expectRejected(label, (root) => {
+      mutateSource(root, EVENT_LOOP, (source) =>
+        replaceAfter(source, anchor, before, after));
+    }, new RegExp(diagnostic, 'u'));
+  }
+
+  // A clean completed request gets only one nonblocking terminal probe.
+  // Keep the original drain limits and charge its observed byte to that budget.
+  for (const [label, anchor, before, after, diagnostic] of [
+    ['terminal probe skips an already closed connection', 'private void closeAfterCompleteRequest()', 'if (closed.get())', 'if (false)', 'skip already closed'],
+    ['terminal probe skips forced shutdown', 'private void closeAfterCompleteRequest()', 'stop.get() || inputHalfClosed', 'false || inputHalfClosed', 'skip already closed'],
+    ['terminal probe skips already observed EOF', 'private void closeAfterCompleteRequest()', 'stop.get() || inputHalfClosed', 'stop.get() || false', 'skip already closed'],
+    ['terminal probe skips invalid selection keys', 'private void closeAfterCompleteRequest()', '!selectionKey.isValid()', 'false', 'skip already closed'],
+    ['terminal probe reads at most one byte', 'private void closeAfterCompleteRequest()', 'buffer.limit(1);', 'buffer.limit(buffer.capacity());', 'limit its buffer to one byte'],
+    ['terminal probe must perform a real typed read', 'private void closeAfterCompleteRequest()', 'count = SocketChannelIo.read(socketChannel, buffer);', 'count = 0; /* SocketChannelIo.read(socketChannel, buffer) */', 'exactly one actual typed socket read'],
+    ['terminal probe cannot perform two socket reads', 'private void closeAfterCompleteRequest()', 'count = SocketChannelIo.read(socketChannel, buffer);', 'count = SocketChannelIo.read(socketChannel, buffer); count = SocketChannelIo.read(socketChannel, buffer);', 'exactly one actual typed socket read'],
+    ['terminal probe cannot spin on a zero read', 'private void closeAfterCompleteRequest()', 'count = SocketChannelIo.read(socketChannel, buffer);', 'count = SocketChannelIo.read(socketChannel, buffer); while (count == 0) {}', 'must not loop, wait'],
+    ['terminal probe cannot switch the socket to blocking mode', 'private void closeAfterCompleteRequest()', 'buffer.clear();', 'socketChannel.configureBlocking(true); buffer.clear();', 'must not loop, wait'],
+    ['terminal probe quietly handles IO and runtime failures', 'private void closeAfterCompleteRequest()', 'catch (IOException | RuntimeException failure)', 'catch (IOException failure)', 'quietly close on both IO and runtime'],
+    ['terminal probe failure must physically close', '// This is terminal input, not a new request or a response-write failure.', 'failSafeClose();', 'return;', 'quietly close on both IO and runtime'],
+    ['a zero probe read cannot enter the drain', 'private void closeAfterCompleteRequest()', 'if (count > 0)', 'if (count >= 0)', 'only a positive probe read'],
+    ['positive probe read bytes cannot disappear from accounting', 'private void closeAfterCompleteRequest()', 'beginLingeringClose(count);', 'beginLingeringClose(0);', 'positive terminal probe bytes must seed'],
+    ['terminal drain preserves its initial byte charge', 'private void beginLingeringClose(long initialBytesDiscarded)', 'lingeringCloseBytesDiscarded = initialBytesDiscarded;', 'lingeringCloseBytesDiscarded = 0;', 'count already discarded probe bytes'],
+    ['known-risk terminal drain starts without a fictitious probe charge', 'private void beginLingeringClose()', 'beginLingeringClose(0);', 'beginLingeringClose(1);', 'original zero seed'],
+    ['zero and EOF probe results must physically close', 'private void closeAfterCompleteRequest()', 'inputHalfClosed = true;\n                failSafeClose();', 'inputHalfClosed = true;\n                return;', 'zero or EOF terminal probe results must close'],
+    ['persistent responses must never invoke the terminal probe', 'if (!closeAfterResponse) { // persistent connection', 'parseBufferedRequestAfterResponse(needsLingeringClose);', 'closeAfterCompleteRequest(); parseBufferedRequestAfterResponse(needsLingeringClose);', 'confined to the closing-response handoff'],
+  ]) {
+    expectRejected(label, (root) => {
+      mutateSource(root, EVENT_LOOP, (source) =>
+        replaceAfter(source, anchor, before, after));
+    }, new RegExp(diagnostic, 'u'));
+  }
+
+  // Drain intent must be observed at the actual post-callback handoff, with
+  // the same pre-cleanup input-risk snapshot used by an already closing reply.
+  for (const [label, anchor, before, after, diagnostic] of [
+    ['final handoff cannot bypass its drain-aware overload', 'if (!closeAfterResponse) { // persistent connection', 'parseBufferedRequestAfterResponse(needsLingeringClose);', 'parseBufferedRequestAfterResponse();', 'only when closeAfterResponse is false'],
+    ['final drain checkpoint cannot be replaced by an earlier decoy', 'private void parseBufferedRequestAfterResponse(boolean needsLingeringClose)', 'if (draining.get())', 'if (false)', 'final handoff must route current drain intent'],
+    ['final drain route must preserve captured input risk', 'private void parseBufferedRequestAfterResponse(boolean needsLingeringClose)', 'closeCompletedResponse(needsLingeringClose);', 'closeCompletedResponse(false);', 'final handoff must route current drain intent'],
+    ['final drain route cannot close directly over unread input', 'private void parseBufferedRequestAfterResponse(boolean needsLingeringClose)', 'closeCompletedResponse(needsLingeringClose);', 'failSafeClose();', 'final handoff must route current drain intent'],
+    ['final drain checkpoint precedes any parser reset', 'private void parseBufferedRequestAfterResponse(boolean needsLingeringClose)', 'if (draining.get())', 'requestFullyParsed = false; if (draining.get())', 'final handoff must route current drain intent'],
+    ['shared terminal handoff commits the closing decision', 'private void closeCompletedResponse(boolean needsLingeringClose)', 'closeAfterResponse = true;', 'closeAfterResponse = false;', 'shared terminal handoff must commit'],
+    ['ordinary persistent handoff still reaches the original parser', 'private void parseBufferedRequestAfterResponse(boolean needsLingeringClose)', 'parseBufferedRequestAfterResponse();', 'closeAfterCompleteRequest();', 'final handoff must route current drain intent'],
+    ['ordinary parser cannot retain the obsolete abrupt drain close', 'private void parseBufferedRequestAfterResponse()', 'requestFullyParsed = false;', 'if (draining.get()) { failSafeClose(); return; } requestFullyParsed = false;', 'ordinary buffered parser must begin only after'],
+    ['known closing replies use their actual captured risk', 'if (closeAfterResponse) { // non-persistent connection', 'closeCompletedResponse(needsLingeringClose);', 'closeCompletedResponse(false);', 'captured unread-input decision'],
+    ['completed response disposition remains completed during handoff', 'private void doOnWritable()', 'reserveBodyTermination(StreamTerminationReason.COMPLETED, null);', 'reserveBodyTermination(StreamTerminationReason.SERVER_STOPPING, null);', 'reserve its completed disposition'],
+  ]) {
+    expectRejected(label, (root) => {
+      mutateSource(root, EVENT_LOOP, (source) => {
+        const mutated = replaceAfter(source, anchor, before, after);
+        if (label !== 'final drain checkpoint cannot be replaced by an earlier decoy') return mutated;
+        return replaceAfter(mutated, 'private void doOnWritable()',
+          'activeWritableSource.close();', 'if (draining.get()) {} activeWritableSource.close();');
+      });
+    }, new RegExp(diagnostic, 'u'));
+  }
+  expectRejected('final handoff must follow body completion callbacks', (root) => {
+    mutateSource(root, EVENT_LOOP, (source) => {
+      const statement = 'if (!closeAfterResponse) { // persistent connection\n'
+        + '                    parseBufferedRequestAfterResponse(needsLingeringClose);\n                }';
+      assert.ok(source.includes(statement));
+      return replaceAfter(source.replace(statement, ''), 'private void doOnWritable()',
+        'try {', `${statement}\n                try {`);
+    });
+  }, /final handoff must run after response body completion callbacks/u);
 
   expectRejected('streaming input cannot reenter ByteTokenizer', (root) => {
     mutateSource(root, EVENT_LOOP, (source) => replaceAfter(source,
@@ -1271,6 +1357,105 @@ try {
         'FORBIDDEN_LEGACY_MCP_POLICY_HEADERS.contains(lowerName)',
         'false /* FORBIDDEN_LEGACY_MCP_POLICY_HEADERS.contains(lowerName) */'));
     }, /validated admission-policy headers must reject/u);
+
+  // Registration interrupt-delivery ownership mutation controls.
+  expectRejected("registration cancellation cannot interrupt inline", (root) => {
+    mutateSource(root, RUNTIME, (source) => replaceAfter(source,
+      "private void cancel() {",
+      "if (submit)\n\t\t\t\tsubmitInterrupt();",
+      "if (submit)\n\t\t\t\tworker.interrupt();"));
+  }, /registration cancellation must only elect/u);
+
+  expectRejected("registration cancellation must retain pending delivery", (root) => {
+    mutateSource(root, RUNTIME, (source) => replaceAfter(source,
+      "private boolean claimInterrupt() {",
+      "interruptPending = true;",
+      "interruptPending = false;"));
+  }, /registration interrupt election/u);
+
+  expectRejected("registration interrupt delivery must be daemonized", (root) => {
+    mutateSource(root, RUNTIME, (source) => replaceAfter(source,
+      "private void submitInterrupt() {",
+      "delivery.setDaemon(true);",
+      "delivery.setDaemon(false);"));
+  }, /registration interrupt launch/u);
+
+  expectRejected("registration interrupt rejection cannot fall back inline", (root) => {
+    mutateSource(root, RUNTIME, (source) => replaceAfter(source,
+      "private void submitInterrupt() {",
+      "finishInterrupt(failure);",
+      "runInterrupt(); finishInterrupt(failure);"));
+  }, /registration interrupt launch/u);
+
+  expectRejected("registration delivery rechecks retired targets", (root) => {
+    mutateSource(root, RUNTIME, (source) => replaceAfter(source,
+      "private void runInterrupt() {",
+      "target = closeCompleted || workerRetired ? null : worker;",
+      "target = worker;"));
+  }, /registration delivery must retain/u);
+
+  expectRejected("registration delivery publishes completion in finally", (root) => {
+    mutateSource(root, RUNTIME, (source) => replaceAfter(source,
+      "private void runInterrupt() {",
+      "finishInterrupt(failure);",
+      "/* completion omitted */"));
+  }, /registration delivery must publish/u);
+
+  expectRejected("registration retirement retains its worker fence", (root) => {
+    mutateSource(root, RUNTIME, (source) => replaceAfter(source,
+      "private void retireWorker() {",
+      "workerFence.lock();",
+      "/* fence omitted */"));
+  }, /registration worker retirement/u);
+
+  expectRejected("registration close cannot complete ahead of delivery", (root) => {
+    mutateSource(root, RUNTIME, (source) => replaceAfter(source,
+      "private void complete() {",
+      "completeIfFinished();",
+      "completion.countDown();"));
+  }, /registration close completion/u);
+
+  expectRejected("registration barrier requires delivery completion", (root) => {
+    mutateSource(root, RUNTIME, (source) => replaceAfter(source,
+      "private void completeIfFinished() {",
+      "if (closeCompleted && !interruptPending)",
+      "if (closeCompleted)"));
+  }, /registration completion barrier/u);
+
+  expectRejected("registration pending attempt precedes logical close shortcut", (root) => {
+    mutateSource(root, RUNTIME, (source) => replaceAfter(source,
+      "private SubscriptionRegistrationCloseAttempt beginClose(long sequence) {",
+      "if (closeAttempt != null && !closeAttempt.completed())\n\t\t\t\t\treturn closeAttempt;",
+      "if (closed) return SubscriptionRegistrationCloseAttempt.completedSuccessfully();\n\t\t\t\tif (closeAttempt != null && !closeAttempt.completed()) return closeAttempt;"));
+  }, /registration close must retain/u);
+
+  expectRejected("registration interrupt carries lifecycle self-wait context", (root) => {
+    mutateSource(root, RUNTIME, (source) => replaceAfter(source,
+      "private SubscriptionRegistrationCloseAttempt beginClose(long sequence) {",
+      "enterLifecycleProofExecution();",
+      "/* context omitted */"));
+  }, /registration interrupt delivery must carry/u);
+
+  expectRejected("registration closed state retains physical attempt", (root) => {
+    mutateSource(root, RUNTIME, (source) => replaceAfter(source,
+      "private boolean closed() {",
+      "return closed && (closeAttempt == null || closeAttempt.completed());",
+      "return closed;"));
+  }, /registration physical retirement/u);
+
+  expectRejected('registration late binding cannot deliver inline', (root) => {
+    mutateSource(root, RUNTIME, (source) => replaceAfter(source,
+      'private void bindWorker(@NonNull Thread worker) {',
+      'if (submit)\n\t\t\t\tsubmitInterrupt();',
+      'if (submit) worker.interrupt();'));
+  }, /registration late binding must submit/u);
+
+  expectRejected('registration logical retirement follows worker fencing', (root) => {
+    mutateSource(root, RUNTIME, (source) => replaceAfter(source,
+      'private void runClose(',
+      'attempt.retireWorker();',
+      '/* retirement omitted */'));
+  }, /registration close must fence/u);
 
   expectRejected('noncanonical baseline bytes', (root) => {
     const path = resolve(root, BASELINE_PATH);

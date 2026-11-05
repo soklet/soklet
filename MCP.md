@@ -3822,5 +3822,5 @@ SSE responses with `proxy_buffering off`.
 MCP media negotiation requires parameter-free `application/json` and
 `text/event-stream` Accept ranges (apart from `q`). A range with `charset`
 or another media parameter does not match. JSON Content-Type accepts its
-supported charset parameter; trailing empty parameters such as
-`application/json;` are rejected with 415.
+supported charset parameter and permits an empty trailing parameter delimiter,
+for example `application/json;`.

@@ -2811,6 +2811,460 @@ const REVIEWED_STREAM_INTERRUPT_DELIVERY_SCOPE_OVERRIDES = checkedReviewMap([
   ]),
 ]);
 
+// Final deep-dive recovery/registration tests: explicit helper policies and
+// foreground release followed by bounded physical-worker joins.
+const REVIEWED_FINAL_RECOVERY_REGISTRATION_SCOPE_OVERRIDES = checkedReviewMap([
+  [
+    "src/test/java/com/soklet/HttpErrorFallbackTests.java#nullThrowableResponseAlwaysSelectsAFiniteFallback#TEST",
+    {
+      "fileSha256": "1bfb2ca57efd0dfeaddd228613375645029c07d7d2ed4562203120f23d972291",
+      "scopeSha256": "0c5a54b950b00b9c99be2171294b0e9abd1add8edbf6bda9e09e43426c7b662f",
+      "phasePolicy": {
+        "startupMillis": 5000,
+        "startupCancellationMillis": 1000,
+        "gracefulShutdownMillis": 2000,
+        "forcedShutdownMillis": 1000
+      }
+    }
+  ],
+  [
+    "src/test/java/com/soklet/HttpErrorFallbackTests.java#recoveryLoggingDoesNotRenderApplicationThrowables#TEST",
+    {
+      "fileSha256": "1bfb2ca57efd0dfeaddd228613375645029c07d7d2ed4562203120f23d972291",
+      "scopeSha256": "0183b6eef72e7ffe1b1c5c7a783e4b8b80913162897e8b25c205cd7173eff4ad",
+      "phasePolicy": {
+        "startupMillis": 5000,
+        "startupCancellationMillis": 1000,
+        "gracefulShutdownMillis": 2000,
+        "forcedShutdownMillis": 1000
+      }
+    }
+  ],
+  [
+    "src/test/java/com/soklet/HttpErrorFallbackTests.java#failingFallbackPostProcessorRunsOnceAndStillProducesAFiniteResponse#TEST",
+    {
+      "fileSha256": "1bfb2ca57efd0dfeaddd228613375645029c07d7d2ed4562203120f23d972291",
+      "scopeSha256": "054afefd59bfcd48255d2121d5e67730f02649901039b8a28996636fee38ffe1",
+      "phasePolicy": {
+        "startupMillis": 5000,
+        "startupCancellationMillis": 1000,
+        "gracefulShutdownMillis": 2000,
+        "forcedShutdownMillis": 1000
+      }
+    }
+  ],
+  [
+    "src/test/java/com/soklet/HttpErrorFallbackTests.java#nullErrorRecoveryReleasesAbandonedOwnedBodiesButPreservesBorrowedBodies#TEST",
+    {
+      "fileSha256": "1bfb2ca57efd0dfeaddd228613375645029c07d7d2ed4562203120f23d972291",
+      "scopeSha256": "42c31493b0e6fd91f2c6d2df4c52e29397d4544ef6654c814b19b924b47fd9c4",
+      "phasePolicy": {
+        "startupMillis": 5000,
+        "startupCancellationMillis": 1000,
+        "gracefulShutdownMillis": 2000,
+        "forcedShutdownMillis": 1000
+      }
+    }
+  ],
+  [
+    "src/test/java/com/soklet/HttpErrorFallbackTests.java#successfulCustomErrorResponseRemainsSelectedAndFinalizedOnce#TEST",
+    {
+      "fileSha256": "1bfb2ca57efd0dfeaddd228613375645029c07d7d2ed4562203120f23d972291",
+      "scopeSha256": "c0df7107a6d8a59632b86adba132cb8ab1733097aa0c1c912762071179d8bff3",
+      "phasePolicy": {
+        "startupMillis": 5000,
+        "startupCancellationMillis": 1000,
+        "gracefulShutdownMillis": 2000,
+        "forcedShutdownMillis": 1000
+      }
+    }
+  ],
+  [
+    "src/test/java/com/soklet/HttpErrorFallbackTests.java#liveFallbackIsWrittenBeforeHandlerTimeoutAndShutdownRemainsGraceful#TEST",
+    {
+      "fileSha256": "1bfb2ca57efd0dfeaddd228613375645029c07d7d2ed4562203120f23d972291",
+      "scopeSha256": "33c327b7743fb49a6d063e4487ea7301096fb89358e6d5e246734baebfd34a01",
+      "phasePolicy": {
+        "startupMillis": 5000,
+        "startupCancellationMillis": 1000,
+        "gracefulShutdownMillis": 2000,
+        "forcedShutdownMillis": 1000
+      },
+      "controlJoinMillis": 4000
+    }
+  ],
+  [
+    "src/test/java/com/soklet/McpRegistrationInterruptDeliveryTests.java#simulatorPublishesIncompleteWithoutWaitingForInterruptibleChannelClose#TEST",
+    {
+      "fileSha256": "e8b59b56eb8afe3187b273dfbde9b0dab5527ef2c3e862385637449c8754270f",
+      "scopeSha256": "c4d86cb9e3267574f252a8aa2d3178ae869f21efee373444ddecd9e991d1dafe",
+      "controlJoinMillis": 37000,
+      "controlComposition": "REVIEWED_SEQUENTIAL_SOURCE_BOUND"
+    }
+  ],
+  [
+    "src/test/java/com/soklet/McpRegistrationInterruptDeliveryTests.java#cooperativeInterruptionCompletesAndInstallsLifecycleSelfWaitContext#TEST",
+    {
+      "fileSha256": "e8b59b56eb8afe3187b273dfbde9b0dab5527ef2c3e862385637449c8754270f",
+      "scopeSha256": "ddbda479d4414c6c387e8845c4d17a84d4bd728aac33ce7a9d9312d7b13720ae",
+      "controlJoinMillis": 20000,
+      "controlComposition": "REVIEWED_SEQUENTIAL_SOURCE_BOUND"
+    }
+  ]
+], "final recovery/registration scope");
+
+// Q6 drain-refusal observations: source-bound fixture repetition and finite
+// foreground release/socket/physical-join controls; policies remain source-derived.
+const REVIEWED_Q6_HTTP_DRAIN_REJECTION_SCOPE_OVERRIDES = checkedReviewMap([
+  [
+    "src/test/java/com/soklet/HttpDrainRejectionObservationTests.java#eachAdmissionRefusalReportsOnceWithoutApplicationHandling#TEST",
+    {
+      "fileSha256": "3a82249f6ea99ddbdc4eedb5ab51aa4b0fdc19f859c5ed1dd1367d5bc6cffed1",
+      "scopeSha256": "f0deab60c9c65e480d804facf05226e54d9861c11ec11722d993d142af70e7e0",
+      "generation": {
+        "count": 3,
+        "mode": "SEQUENTIAL",
+        "complete": 3,
+        "prior": 2,
+        "incomplete": 1
+      }
+    }
+  ],
+  [
+    "src/test/java/com/soklet/HttpDrainRejectionObservationTests.java#observerAndCollectorFailuresCannotChangeOrDuplicateTheRefusal#TEST",
+    {
+      "fileSha256": "3a82249f6ea99ddbdc4eedb5ab51aa4b0fdc19f859c5ed1dd1367d5bc6cffed1",
+      "scopeSha256": "52083847bea297b392c6b1fe3ae910d08fdee0a5ef088312bf89ee788c89776a",
+      "generation": {
+        "count": 6,
+        "mode": "SEQUENTIAL",
+        "complete": 6,
+        "prior": 5,
+        "incomplete": 1
+      }
+    }
+  ],
+  [
+    "src/test/java/com/soklet/HttpDrainRejectionObservationTests.java#responseOfferFailuresStillReportExactlyOnceAndReleaseAdmissions#TEST",
+    {
+      "fileSha256": "3a82249f6ea99ddbdc4eedb5ab51aa4b0fdc19f859c5ed1dd1367d5bc6cffed1",
+      "scopeSha256": "73b6e857b18424f5c7142994c6cd76a20201e36c14870b29f376c3244f2ba676",
+      "generation": {
+        "count": 4,
+        "mode": "SEQUENTIAL",
+        "complete": 4,
+        "prior": 3,
+        "incomplete": 1
+      }
+    }
+  ],
+  [
+    "src/test/java/com/soklet/HttpDrainRejectionObservationTests.java#blockingCallbacksRemainTrackedAndCannotJoinTheirOwnShutdown#TEST",
+    {
+      "fileSha256": "3a82249f6ea99ddbdc4eedb5ab51aa4b0fdc19f859c5ed1dd1367d5bc6cffed1",
+      "scopeSha256": "25226170e5ee08fa3ed8bdba7aca8b975e16a298a9d3b5e6a8cb61f1543e52a9",
+      "generation": {
+        "count": 2,
+        "mode": "SEQUENTIAL",
+        "complete": 2,
+        "prior": 1,
+        "incomplete": 1
+      },
+      "controlJoinMillis": 22000,
+      "controlComposition": "REVIEWED_SEQUENTIAL_SOURCE_BOUND"
+    }
+  ]
+], "Q6 HTTP drain rejection scope");
+
+// Wrapper execution attribution: exact source-bound owner repetition, finite
+// socket/callback/join controls, and inline fake-adapter zero-duration evidence.
+const REVIEWED_WRAPPER_EXECUTION_CONTEXT_SCOPE_OVERRIDES = checkedReviewMap([
+  [
+    "src/test/java/com/soklet/WrapperCallbackSelfWaitIntegrationTests.java#transparentHttpObserverCannotAwaitItsOwner#TEST",
+    {
+      "fileSha256": "f59b066ba22ca94b4bbb084097b8b3daa83a0c003c3e935f284b4ec523618bd9",
+      "scopeSha256": "fc8a6dc58491f9397abfd9890b72d7ff9ceafa1db0d8715cc3ed4efde71313bd",
+      "generation": {
+        "count": 1,
+        "mode": "SINGLE",
+        "complete": 1,
+        "prior": 0,
+        "incomplete": 1
+      },
+      "controlJoinMillis": 11000,
+      "controlComposition": "REVIEWED_SEQUENTIAL_SOURCE_BOUND"
+    }
+  ],
+  [
+    "src/test/java/com/soklet/WrapperCallbackSelfWaitIntegrationTests.java#owningHttpMetricsCannotCloseItsOwner#TEST",
+    {
+      "fileSha256": "f59b066ba22ca94b4bbb084097b8b3daa83a0c003c3e935f284b4ec523618bd9",
+      "scopeSha256": "fbc514cae6761ed80a549d89b4300095c96a022d35295540d77507f3c8605e33",
+      "generation": {
+        "count": 1,
+        "mode": "SINGLE",
+        "complete": 1,
+        "prior": 0,
+        "incomplete": 1
+      },
+      "controlJoinMillis": 11000,
+      "controlComposition": "REVIEWED_SEQUENTIAL_SOURCE_BOUND"
+    }
+  ],
+  [
+    "src/test/java/com/soklet/WrapperCallbackSelfWaitIntegrationTests.java#nestedHttpObserverCannotCloseItsOwner#TEST",
+    {
+      "fileSha256": "f59b066ba22ca94b4bbb084097b8b3daa83a0c003c3e935f284b4ec523618bd9",
+      "scopeSha256": "78ccfac80d21b8458bb4a689ae55be321d798dac5dfe4fc716e3bfc76a3a8c2a",
+      "generation": {
+        "count": 1,
+        "mode": "SINGLE",
+        "complete": 1,
+        "prior": 0,
+        "incomplete": 1
+      },
+      "controlJoinMillis": 11000,
+      "controlComposition": "REVIEWED_SEQUENTIAL_SOURCE_BOUND"
+    }
+  ],
+  [
+    "src/test/java/com/soklet/WrapperCallbackSelfWaitIntegrationTests.java#transparentSseMetricsCannotAwaitItsOwner#TEST",
+    {
+      "fileSha256": "f59b066ba22ca94b4bbb084097b8b3daa83a0c003c3e935f284b4ec523618bd9",
+      "scopeSha256": "d6496f0eeedbed950c3b5cf8e6400674e090887eb80f89bc7cb0affd07a16557",
+      "generation": {
+        "count": 1,
+        "mode": "SINGLE",
+        "complete": 1,
+        "prior": 0,
+        "incomplete": 1
+      },
+      "controlJoinMillis": 11000,
+      "controlComposition": "REVIEWED_SEQUENTIAL_SOURCE_BOUND"
+    }
+  ],
+  [
+    "src/test/java/com/soklet/WrapperCallbackSelfWaitIntegrationTests.java#owningSseObserverCannotCloseItsOwner#TEST",
+    {
+      "fileSha256": "f59b066ba22ca94b4bbb084097b8b3daa83a0c003c3e935f284b4ec523618bd9",
+      "scopeSha256": "6acd377c0c28196361a8563da46c48e80f38101ceca2466d6c66cc73252a49d0",
+      "generation": {
+        "count": 1,
+        "mode": "SINGLE",
+        "complete": 1,
+        "prior": 0,
+        "incomplete": 1
+      },
+      "controlJoinMillis": 11000,
+      "controlComposition": "REVIEWED_SEQUENTIAL_SOURCE_BOUND"
+    }
+  ],
+  [
+    "src/test/java/com/soklet/WrapperCallbackSelfWaitIntegrationTests.java#nestedSseMetricsCannotCloseItsOwner#TEST",
+    {
+      "fileSha256": "f59b066ba22ca94b4bbb084097b8b3daa83a0c003c3e935f284b4ec523618bd9",
+      "scopeSha256": "cf6f59ef400fae3d88051cffdd2fdcc5d959d3be88fef456f2f6e3fcddc696a6",
+      "generation": {
+        "count": 1,
+        "mode": "SINGLE",
+        "complete": 1,
+        "prior": 0,
+        "incomplete": 1
+      },
+      "controlJoinMillis": 11000,
+      "controlComposition": "REVIEWED_SEQUENTIAL_SOURCE_BOUND"
+    }
+  ],
+  [
+    "src/test/java/com/soklet/WrapperCallbackSelfWaitIntegrationTests.java#wrappedCallbacksMayRequestShutdownAndReturn#TEST",
+    {
+      "fileSha256": "f59b066ba22ca94b4bbb084097b8b3daa83a0c003c3e935f284b4ec523618bd9",
+      "scopeSha256": "2e22897aff6d2f030b247b32df09d11adb0b909885d3a691df4371174b4f573f",
+      "generation": {
+        "count": 2,
+        "mode": "SEQUENTIAL",
+        "complete": 2,
+        "prior": 1,
+        "incomplete": 1
+      },
+      "controlJoinMillis": 22000,
+      "controlComposition": "REVIEWED_SEQUENTIAL_SOURCE_BOUND"
+    }
+  ],
+  [
+    "src/test/java/com/soklet/WrapperCallbackSelfWaitIntegrationTests.java#wrappedCallbackMayAwaitAnUnfinishedUnrelatedOwner#TEST",
+    {
+      "fileSha256": "f59b066ba22ca94b4bbb084097b8b3daa83a0c003c3e935f284b4ec523618bd9",
+      "scopeSha256": "adb7b2ca10165484b43e2f3eb0cb52638cff1f4d360d3015a73f2519c513be54",
+      "generation": {
+        "count": 2,
+        "mode": "SEQUENTIAL",
+        "complete": 2,
+        "prior": 1,
+        "incomplete": 1
+      },
+      "controlJoinMillis": 19050,
+      "controlComposition": "REVIEWED_SEQUENTIAL_SOURCE_BOUND"
+    }
+  ],
+  [
+    "src/test/java/com/soklet/WrapperCallbackSelfWaitIntegrationTests.java#nestedHttpWriterCannotAwaitItsOwner#TEST",
+    {
+      "fileSha256": "f59b066ba22ca94b4bbb084097b8b3daa83a0c003c3e935f284b4ec523618bd9",
+      "scopeSha256": "ba28e83fda1e885fd74f8bdaed1393161c5afda5788d89953adae7619496a847",
+      "generation": {
+        "count": 1,
+        "mode": "SINGLE",
+        "complete": 1,
+        "prior": 0,
+        "incomplete": 1
+      },
+      "controlJoinMillis": 9000,
+      "controlComposition": "REVIEWED_SEQUENTIAL_SOURCE_BOUND"
+    }
+  ],
+  [
+    "src/test/java/com/soklet/WrapperCallbackSelfWaitIntegrationTests.java#nestedHttpAsynchronousPublisherCannotCloseItsOwner#TEST",
+    {
+      "fileSha256": "f59b066ba22ca94b4bbb084097b8b3daa83a0c003c3e935f284b4ec523618bd9",
+      "scopeSha256": "089d35b6a15a0fabd10107533f558bf031af70214c9cb4e6a283acd3e9135fa9",
+      "generation": {
+        "count": 1,
+        "mode": "SINGLE",
+        "complete": 1,
+        "prior": 0,
+        "incomplete": 1
+      },
+      "controlJoinMillis": 9000,
+      "controlComposition": "REVIEWED_SEQUENTIAL_SOURCE_BOUND"
+    }
+  ],
+  [
+    "src/test/java/com/soklet/WrapperCallbackSelfWaitIntegrationTests.java#nestedSseInitializerCannotAwaitItsOwner#TEST",
+    {
+      "fileSha256": "f59b066ba22ca94b4bbb084097b8b3daa83a0c003c3e935f284b4ec523618bd9",
+      "scopeSha256": "d407a044376fa6d87516878acbdddbb89da496e2035e5453be574f26a39ac17d",
+      "generation": {
+        "count": 1,
+        "mode": "SINGLE",
+        "complete": 1,
+        "prior": 0,
+        "incomplete": 1
+      },
+      "controlJoinMillis": 7000,
+      "controlComposition": "REVIEWED_SEQUENTIAL_SOURCE_BOUND"
+    }
+  ],
+  [
+    "src/test/java/com/soklet/WrapperLifecycleExecutionContextTests.java#pairedScopesDeduplicateIdenticalTokensAndCloseOnce#TEST",
+    {
+      "fileSha256": "4ab23a68adc6e2507d98a120984b6ccb0ed1ac4aa7b6b2ccee87236dd532fc36",
+      "scopeSha256": "e8b30c4f10c54fff434db3cac847e22b1d05cbfc7ef416a1187fd5a35b08f997",
+      "phasePolicy": {
+        "startupMillis": 0,
+        "startupCancellationMillis": 0,
+        "gracefulShutdownMillis": 0,
+        "forcedShutdownMillis": 0
+      },
+      "generation": {
+        "count": 1,
+        "mode": "SINGLE",
+        "complete": 1,
+        "prior": 0,
+        "incomplete": 1
+      }
+    }
+  ],
+  [
+    "src/test/java/com/soklet/WrapperLifecycleExecutionContextTests.java#delegatedCallbackRetainsGraphMarkerWithoutSharingChildProof#TEST",
+    {
+      "fileSha256": "4ab23a68adc6e2507d98a120984b6ccb0ed1ac4aa7b6b2ccee87236dd532fc36",
+      "scopeSha256": "df370ed1f69c2e9cbcbc1636f0ad46451663470bd2890c75f0e07b7cf1e4afee",
+      "phasePolicy": {
+        "startupMillis": 0,
+        "startupCancellationMillis": 0,
+        "gracefulShutdownMillis": 0,
+        "forcedShutdownMillis": 0
+      },
+      "generation": {
+        "count": 2,
+        "mode": "SEQUENTIAL",
+        "complete": 2,
+        "prior": 1,
+        "incomplete": 1
+      },
+      "controlJoinMillis": 6000,
+      "controlComposition": "REVIEWED_SEQUENTIAL_SOURCE_BOUND"
+    }
+  ],
+  [
+    "src/test/java/com/soklet/WrapperLifecycleExecutionContextTests.java#preGenerationStartFailuresClearBothInvocationValues#TEST",
+    {
+      "fileSha256": "4ab23a68adc6e2507d98a120984b6ccb0ed1ac4aa7b6b2ccee87236dd532fc36",
+      "scopeSha256": "407c690cda362eb1683e9f44256e9dfaf1480ff4efe8c70c1e29e810e7ff835f",
+      "phasePolicy": {
+        "startupMillis": 0,
+        "startupCancellationMillis": 0,
+        "gracefulShutdownMillis": 0,
+        "forcedShutdownMillis": 0
+      },
+      "generation": {
+        "count": 2,
+        "mode": "SEQUENTIAL",
+        "complete": 2,
+        "prior": 1,
+        "incomplete": 1
+      },
+      "controlJoinMillis": 0,
+      "controlComposition": "REVIEWED_NONBLOCKING_PRECONDITION"
+    }
+  ],
+  [
+    "src/test/java/com/soklet/WrapperLifecycleExecutionContextTests.java#restartAndPostGenerationFailureDoNotRebindAnEarlierGeneration#TEST",
+    {
+      "fileSha256": "4ab23a68adc6e2507d98a120984b6ccb0ed1ac4aa7b6b2ccee87236dd532fc36",
+      "scopeSha256": "0d453507cf30cee5c6358fbadc0b90752df935ad3fded9ac4fb882177e3599e2",
+      "phasePolicy": {
+        "startupMillis": 0,
+        "startupCancellationMillis": 0,
+        "gracefulShutdownMillis": 0,
+        "forcedShutdownMillis": 0
+      },
+      "generation": {
+        "count": 6,
+        "mode": "SEQUENTIAL",
+        "complete": 6,
+        "prior": 5,
+        "incomplete": 1
+      },
+      "controlJoinMillis": 0,
+      "controlComposition": "REVIEWED_NONBLOCKING_PRECONDITION"
+    }
+  ],
+  [
+    "src/test/java/com/soklet/WrapperLifecycleExecutionContextTests.java#legacyDelegateOverloadKeepsOnlyItsOriginalComponentMarker#TEST",
+    {
+      "fileSha256": "4ab23a68adc6e2507d98a120984b6ccb0ed1ac4aa7b6b2ccee87236dd532fc36",
+      "scopeSha256": "ae9bf190ba56fd0351861d9a531ed0bf31da53cc7910f793be354c125234c308",
+      "phasePolicy": {
+        "startupMillis": 0,
+        "startupCancellationMillis": 0,
+        "gracefulShutdownMillis": 0,
+        "forcedShutdownMillis": 0
+      },
+      "generation": {
+        "count": 1,
+        "mode": "SINGLE",
+        "complete": 1,
+        "prior": 0,
+        "incomplete": 1
+      },
+      "controlJoinMillis": 0,
+      "controlComposition": "REVIEWED_NONBLOCKING_PRECONDITION"
+    }
+  ]
+], "wrapper execution-context scope");
+
 const REVIEWED_SCOPE_OVERRIDES = mergeReviewedScopeOverrideMaps(
   REVIEWED_SCOPED_INTEGRATION_SCOPE_OVERRIDES,
   REVIEWED_UNIFIED_API_SCOPE_OVERRIDES,
@@ -2825,9 +3279,40 @@ const REVIEWED_SCOPE_OVERRIDES = mergeReviewedScopeOverrideMaps(
   REVIEWED_MCP_NEGOTIATION_SCOPE_OVERRIDES,
   REVIEWED_MCP_CHECKED_STARTUP_SCOPE_OVERRIDES,
   REVIEWED_SSE_HANDSHAKE_VALIDATION_SCOPE_OVERRIDES,
-  REVIEWED_STREAM_INTERRUPT_DELIVERY_SCOPE_OVERRIDES);
+  REVIEWED_STREAM_INTERRUPT_DELIVERY_SCOPE_OVERRIDES,
+  REVIEWED_FINAL_RECOVERY_REGISTRATION_SCOPE_OVERRIDES,
+  REVIEWED_Q6_HTTP_DRAIN_REJECTION_SCOPE_OVERRIDES,
+  REVIEWED_WRAPPER_EXECUTION_CONTEXT_SCOPE_OVERRIDES);
 
 const REVIEWED_ORPHAN_HELPERS = checkedReviewMap([
+  ...reviewedOrphanFile("src/test/java/com/soklet/WrapperCallbackSelfWaitIntegrationTests.java", "f59b066ba22ca94b4bbb084097b8b3daa83a0c003c3e935f284b4ec523618bd9", [
+  [
+    "start",
+    268,
+    "9c388a60dbe2424239383fc77b5dbffcee4d7c2f97b7d1c5c672208e5bbaa660",
+    {
+      "path": "src/test/java/com/soklet/WrapperCallbackSelfWaitIntegrationTests.java",
+      "line": 118,
+      "lineSha256": "8d7e8eb67bdc2bd8120bf0ef36821961a66d992f7a1142afbef0f2d4f8e3313e",
+      "rationale": "The exact source-bound caller owns this Fixture through its explicit start call or try-with-resources cleanup. Both helpers operate on the already counted Soklet owner; close interrupts a missing-guard callback before its bounded 4s shutdown join and asserts complete termination. Neither helper creates an independent generation."
+    }
+  ],
+  [
+    "close",
+    290,
+    "b773d4516aaec6d45018f595e37e7a282d9c1bd8830d7672bcfb863cc1ffff96",
+    {
+      "path": "src/test/java/com/soklet/WrapperCallbackSelfWaitIntegrationTests.java",
+      "line": 131,
+      "lineSha256": "01153a74afd97ae6f3fa9131bfa23b9ca852db1d2b10660e6692b447e083ae5b",
+      "rationale": "The exact source-bound caller owns this Fixture through its explicit start call or try-with-resources cleanup. Both helpers operate on the already counted Soklet owner; close interrupts a missing-guard callback before its bounded 4s shutdown join and asserts complete termination. Neither helper creates an independent generation."
+    }
+  ]
+]),
+  // Q6 raw HTTP fixture teardown is invoked by the counted try-with-resources scopes.
+  ...reviewedOrphanFile("src/test/java/com/soklet/HttpDrainRejectionObservationTests.java", "3a82249f6ea99ddbdc4eedb5ab51aa4b0fdc19f859c5ed1dd1367d5bc6cffed1", [
+    ["close",220,"71a73e11a48909399128d0b202ac5ccb7827251dec4e880045052707146d7fe3",{"path":"src/test/java/com/soklet/HttpDrainRejectionObservationTests.java","line":50,"lineSha256":"57b971967760c62f6a944a58bf5059cafdc8247595d88e9e14d43361f2f25465","rationale":"The refusal matrix owns Fixture with try-with-resources; its close method stops each already counted standalone HTTP component in finally. The four raw-fixture methods count 3, 6, 4 and 1 component generations under the source POLICY and 90s guards. This helper adds no separate owner or lifecycle generation."}],
+  ]),
   ...reviewedOrphanFile("src/test/java/com/soklet/HandlerTimeoutWorkerReuseTests.java", "b983a075ef61901ba23b7960d714483c134f07255c78c6d1da83039ac946ec1e", [
     // Retired close: the scoped-run migration removed its imperative helper.
   ]),

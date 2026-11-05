@@ -1021,7 +1021,8 @@ final class DefaultSseServer implements SseServer {
 				exactContext.getAdmissionFencedRequestHandler());
 		this.outerRequestAdmissionSupplier = exactContext.builtInDispatchAdmissionSupplier();
 		return getLifecycleAdapter().delegatedRuntime(
-				exactContext.getTransportTerminationSignal(), DefaultSseServer.this::start);
+				exactContext.getTransportTerminationSignal(), exactContext.executionOwnerToken(),
+				DefaultSseServer.this::start);
 	}
 
 	public void initialize(@NonNull SokletConfig sokletConfig,

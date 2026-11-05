@@ -271,8 +271,9 @@ public interface ResponseMarshaler {
 																			 @Nullable ResourceMethod resourceMethod);
 
 	/**
-	 * Prepares an application-dispatched response for a request that is rejected because the server is overloaded (e.g. connection limit reached), triggering an <a href="https://httpwg.org/specs/rfc9110.html#status.503">HTTP 503 Service Unavailable</a>.
+	 * Prepares an application-dispatched overload response (for example, an SSE connection-limit rejection), triggering an <a href="https://httpwg.org/specs/rfc9110.html#status.503">HTTP 503 Service Unavailable</a>.
 	 * <p>
+	 * The built-in standard HTTP connection cap closes excess sockets without an HTTP response.
 	 * Built-in HTTP executor/queue rejection, handler timeouts and shutdown-admission failsafes bypass
 	 * this method, CORS and {@link #postProcess(MarshaledResponse)}. They must remain bounded when no
 	 * application worker is available, and never invoke application callbacks on the selector or timer.

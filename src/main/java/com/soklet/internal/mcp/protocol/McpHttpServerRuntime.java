@@ -113,6 +113,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.LongSupplier;
@@ -17414,13 +17415,23 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		@NonNull
 		private SubscriptionRegistrationCloseAttempt beginClose(long sequence) {
 			synchronized (lock) {
-				if (closed)
-					return SubscriptionRegistrationCloseAttempt.completedSuccessfully();
+				// A successful close can still have physically live interrupt delivery.
 				if (closeAttempt != null && !closeAttempt.completed())
 					return closeAttempt;
+				if (closed)
+					return SubscriptionRegistrationCloseAttempt.completedSuccessfully();
 
 				SubscriptionRegistrationCloseAttempt attempt =
-						new SubscriptionRegistrationCloseAttempt();
+						new SubscriptionRegistrationCloseAttempt(action -> {
+							enterLifecycleProofExecution();
+							try (McpApplicationExecutionObserver.LifecycleScope ignored =
+									applicationExecutionObserver.enterLifecycleExecution()) {
+								action.run();
+							} finally {
+								exitLifecycleProofExecution();
+							}
+						}, action -> new Thread(action,
+								"soklet-mcp-subscription-source-interrupt-" + sequence));
 				closeAttempt = attempt;
 				try {
 					Thread closeThread = new Thread(
@@ -17447,6 +17458,14 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				failure = throwable;
 			} finally {
 				try {
+					// Retire before publishing completion, without holding a runtime
+					// lock while application interrupt callbacks can still be running.
+					try {
+						attempt.retireWorker();
+					} catch (Throwable retirementFailure) {
+						if (failure == null)
+							failure = retirementFailure;
+					}
 					synchronized (lock) {
 						if (failure == null) {
 							closed = true;
@@ -17467,35 +17486,57 @@ final class McpHttpServerRuntime implements AutoCloseable {
 
 		private boolean closed() {
 			synchronized (lock) {
-				return closed;
+				return closed && (closeAttempt == null || closeAttempt.completed());
 			}
 		}
 
 		private @Nullable Throwable latestCloseFailure() {
 			synchronized (lock) {
-				return lastCloseFailure;
+				return lastCloseFailure != null ? lastCloseFailure
+						: closeAttempt == null ? null : closeAttempt.interruptFailure();
 			}
 		}
 	}
 
+	/** One close worker and at most one physically tracked interrupt-delivery worker. */
 	@ThreadSafe
 	private static final class SubscriptionRegistrationCloseAttempt {
 		@NonNull
 		private final CountDownLatch completion;
 		@NonNull
-		private final AtomicReference<@Nullable Thread> worker;
+		private final Object lock;
 		@NonNull
-		private final AtomicBoolean cancellationRequested;
+		private final ReentrantLock workerFence;
+		@NonNull
+		private final Consumer<@NonNull Runnable> interruptExecution;
+		@NonNull
+		private final ThreadFactory interruptThreadFactory;
+		private @Nullable Thread worker;
+		private boolean workerBound;
+		private boolean workerRetired;
+		private boolean closeCompleted;
+		private boolean cancellationRequested;
+		private boolean interruptClaimed;
+		private boolean interruptPending;
+		private @Nullable Throwable interruptFailure;
 
 		private SubscriptionRegistrationCloseAttempt() {
+			this(Runnable::run, action -> new Thread(action,
+					"soklet-mcp-subscription-source-interrupt"));
+		}
+
+		private SubscriptionRegistrationCloseAttempt(
+				@NonNull Consumer<@NonNull Runnable> interruptExecution,
+				@NonNull ThreadFactory interruptThreadFactory) {
 			this.completion = new CountDownLatch(1);
-			this.worker = new AtomicReference<>();
-			this.cancellationRequested = new AtomicBoolean();
+			this.lock = new Object();
+			this.workerFence = new ReentrantLock();
+			this.interruptExecution = requireNonNull(interruptExecution);
+			this.interruptThreadFactory = requireNonNull(interruptThreadFactory);
 		}
 
 		@NonNull
-		private static SubscriptionRegistrationCloseAttempt
-				completedSuccessfully() {
+		private static SubscriptionRegistrationCloseAttempt completedSuccessfully() {
 			SubscriptionRegistrationCloseAttempt attempt =
 					new SubscriptionRegistrationCloseAttempt();
 			attempt.complete();
@@ -17503,23 +17544,111 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		}
 
 		private void complete() {
-			completion.countDown();
+			synchronized (lock) {
+				closeCompleted = true;
+				completeIfFinished();
+			}
 		}
 
 		private void bindWorker(@NonNull Thread worker) {
-			Thread requiredWorker = requireNonNull(worker);
-			if (!this.worker.compareAndSet(null, requiredWorker))
-				throw new IllegalStateException(
-						"A subscription close attempt already has a worker.");
-			if (cancellationRequested.get())
-				requiredWorker.interrupt();
+			boolean submit;
+			synchronized (lock) {
+				if (workerBound)
+					throw new IllegalStateException(
+							"A subscription close attempt already has a worker.");
+				this.worker = requireNonNull(worker);
+				workerBound = true;
+				submit = claimInterrupt();
+			}
+			if (submit)
+				submitInterrupt();
 		}
 
 		private void cancel() {
-			cancellationRequested.set(true);
-			Thread activeWorker = worker.get();
-			if (activeWorker != null)
-				activeWorker.interrupt();
+			boolean submit;
+			synchronized (lock) {
+				cancellationRequested = true;
+				submit = claimInterrupt();
+			}
+			if (submit)
+				submitInterrupt();
+		}
+
+		/** Called only while holding lock; never enters a target's code. */
+		private boolean claimInterrupt() {
+			if (!cancellationRequested || worker == null || closeCompleted
+					|| workerRetired || interruptClaimed)
+				return false;
+			interruptClaimed = true;
+			interruptPending = true;
+			return true;
+		}
+
+		private void submitInterrupt() {
+			try {
+				Thread delivery = requireNonNull(interruptThreadFactory.newThread(
+						this::runInterrupt));
+				delivery.setDaemon(true);
+				delivery.start();
+			} catch (Throwable failure) {
+				finishInterrupt(failure);
+				// Never fall back to interrupting on a phase, owner, or hook thread.
+			}
+		}
+
+		private void runInterrupt() {
+			Throwable failure = null;
+			try {
+				interruptExecution.accept(() -> {
+					workerFence.lock();
+					try {
+						Thread target;
+						synchronized (lock) {
+							target = closeCompleted || workerRetired ? null : worker;
+						}
+						if (target != null)
+							target.interrupt();
+					} finally {
+						workerFence.unlock();
+					}
+				});
+			} catch (Throwable throwable) {
+				failure = throwable;
+			} finally {
+				finishInterrupt(failure);
+			}
+		}
+
+		/** Only the close worker waits for delivery; no runtime/phase lock is held. */
+		private void retireWorker() {
+			workerFence.lock();
+			try {
+				synchronized (lock) {
+					workerRetired = true;
+					worker = null;
+				}
+			} finally {
+				workerFence.unlock();
+			}
+		}
+
+		private void finishInterrupt(@Nullable Throwable failure) {
+			synchronized (lock) {
+				interruptFailure = failure;
+				interruptPending = false;
+				completeIfFinished();
+			}
+		}
+
+		private void completeIfFinished() {
+			if (closeCompleted && !interruptPending)
+				completion.countDown();
+		}
+
+		private @Nullable Throwable interruptFailure() {
+			synchronized (lock) {
+				return interruptFailure;
+			}
 		}
 
 		private boolean await(long timeoutNanos) throws InterruptedException {

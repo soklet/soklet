@@ -1384,6 +1384,11 @@ final class InternalTransportAttachmentContext<H> {
 	}
 
 	@NonNull
+	Object executionOwnerToken() {
+		return this.group.executionOwnerToken();
+	}
+
+	@NonNull
 	InternalTransportTerminationSignal terminationSignal() {
 		return this.terminationSignal;
 	}

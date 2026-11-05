@@ -509,14 +509,47 @@ final class LifecycleExecutionContext {
 
 	@NonNull
 	static Scope enter(@NonNull Object ownerToken) {
+		return enter(ownerToken, null);
+	}
+
+	/** Marks an independent component and its enclosing graph without merging ownership. */
+	@NonNull
+	static Scope enter(@NonNull Object ownerToken, @Nullable Object graphOwnerToken) {
 		Object exactOwnerToken = requireNonNull(ownerToken);
+		Object additionalOwnerToken = sameInstance(exactOwnerToken, graphOwnerToken)
+				? null : graphOwnerToken;
+		Scope scope = new Scope(exactOwnerToken, additionalOwnerToken);
 		IdentityHashMap<Object, Integer> depths = DEPTHS.get();
 		if (depths == null) {
 			depths = new IdentityHashMap<>();
 			DEPTHS.set(depths);
 		}
-		depths.put(exactOwnerToken, depths.getOrDefault(exactOwnerToken, 0) + 1);
-		return new Scope(exactOwnerToken);
+		Integer previousOwnerDepth = depths.get(exactOwnerToken);
+		Integer previousGraphOwnerDepth = additionalOwnerToken == null
+				? null : depths.get(additionalOwnerToken);
+		try {
+			depths.put(exactOwnerToken, previousOwnerDepth == null ? 1 : previousOwnerDepth + 1);
+			if (additionalOwnerToken != null)
+				depths.put(additionalOwnerToken,
+						previousGraphOwnerDepth == null ? 1 : previousGraphOwnerDepth + 1);
+		} catch (RuntimeException | Error failure) {
+			try {
+				if (additionalOwnerToken != null)
+					restore(depths, additionalOwnerToken, previousGraphOwnerDepth);
+			} finally {
+				restore(depths, exactOwnerToken, previousOwnerDepth);
+			}
+			throw failure;
+		}
+		return scope;
+	}
+
+	private static void restore(@NonNull IdentityHashMap<Object, Integer> depths,
+			@NonNull Object ownerToken, @Nullable Integer previousDepth) {
+		if (previousDepth == null)
+			depths.remove(ownerToken);
+		else
+			depths.put(ownerToken, previousDepth);
 	}
 
 	static void requireNonReentrantWait() {
@@ -545,11 +578,14 @@ final class LifecycleExecutionContext {
 	static final class Scope implements AutoCloseable {
 		@NonNull
 		private final Object ownerToken;
+		@Nullable
+		private final Object graphOwnerToken;
 		@NonNull
 		private final AtomicBoolean closed;
 
-		private Scope(@NonNull Object ownerToken) {
+		private Scope(@NonNull Object ownerToken, @Nullable Object graphOwnerToken) {
 			this.ownerToken = requireNonNull(ownerToken);
+			this.graphOwnerToken = graphOwnerToken;
 			this.closed = new AtomicBoolean();
 		}
 
@@ -560,15 +596,25 @@ final class LifecycleExecutionContext {
 			IdentityHashMap<Object, Integer> depths = DEPTHS.get();
 			if (depths == null)
 				throw new IllegalStateException("Lifecycle execution-context underflow");
-			int remaining = depths.getOrDefault(this.ownerToken, 0) - 1;
+			try {
+				if (this.graphOwnerToken != null)
+					leave(depths, this.graphOwnerToken);
+			} finally {
+				leave(depths, this.ownerToken);
+			}
+			// Keep the empty per-thread map for the next callback. All owner tokens
+			// have been removed, so this retains no server or application state.
+		}
+
+		private static void leave(@NonNull IdentityHashMap<Object, Integer> depths,
+				@NonNull Object ownerToken) {
+			int remaining = depths.getOrDefault(ownerToken, 0) - 1;
 			if (remaining < 0)
 				throw new IllegalStateException("Lifecycle execution-context underflow");
 			if (remaining == 0)
-				depths.remove(this.ownerToken);
+				depths.remove(ownerToken);
 			else
-				depths.put(this.ownerToken, remaining);
-			// Keep the empty per-thread map for the next callback. All owner tokens
-			// have been removed, so this retains no server or application state.
+				depths.put(ownerToken, remaining);
 		}
 	}
 }

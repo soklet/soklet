@@ -474,7 +474,8 @@ final class DefaultHttpServer implements HttpServer {
 				exactContext.getAdmissionFencedRequestHandler());
 		this.outerRequestAdmissionSupplier = exactContext.builtInDispatchAdmissionSupplier();
 		return getLifecycleAdapter().delegatedRuntime(
-				exactContext.getTransportTerminationSignal(), DefaultHttpServer.this::start);
+				exactContext.getTransportTerminationSignal(), exactContext.executionOwnerToken(),
+				DefaultHttpServer.this::start);
 	}
 
 	public void start() {
@@ -906,8 +907,7 @@ final class DefaultHttpServer implements HttpServer {
 					if (admission == null) {
 						RejectedExecutionException exception = new RejectedExecutionException(
 								"HTTP request rejected because the server is shutting down");
-						responseConsumer.accept(withConnectionClose(
-								provideMicrohttpFailsafeResponse(503, request, exception)));
+						rejectRequestDuringShutdown(request, responseConsumer, exception);
 						return;
 					}
 
@@ -922,8 +922,7 @@ final class DefaultHttpServer implements HttpServer {
 						releaseLifecycleAdmission(lifecycleAdmissions, request);
 						RejectedExecutionException exception = new RejectedExecutionException(
 								"HTTP request rejected because shutdown won admission");
-						responseConsumer.accept(withConnectionClose(
-								provideMicrohttpFailsafeResponse(503, request, exception)));
+						rejectRequestDuringShutdown(request, responseConsumer, exception);
 						return;
 					}
 
@@ -1053,6 +1052,24 @@ final class DefaultHttpServer implements HttpServer {
 		byte[] body = format("HTTP %s: %s", statusCode, reasonPhrase).getBytes(charset);
 
 		return new MicrohttpResponse(statusCode, reasonPhrase, headers, body);
+	}
+
+	/**
+	 * Refusal remains an inline transport observation, not application handling.
+	 * Offer the finite response first, and still report a failed handoff once.
+	 * The selector owns callback execution until it returns; the offer only queues
+	 * output, so a blocking observer can delay the write and remains shutdown work.
+	 */
+	private void rejectRequestDuringShutdown(@NonNull MicrohttpRequest request,
+			@NonNull Consumer<MicrohttpResponse> responseConsumer,
+			@NonNull RejectedExecutionException exception) {
+		try {
+			responseConsumer.accept(withConnectionClose(
+					provideMicrohttpFailsafeResponse(503, request, exception)));
+		} finally {
+			notifyDidFailToAcceptRequest(request.remoteAddress(), request.uri(),
+					RequestRejectionReason.REQUEST_HANDLER_EXECUTOR_SHUTDOWN, exception);
+		}
 	}
 
 	/** The simulator uses the same finite response as built-in HTTP admission rejection. */

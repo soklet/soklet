@@ -61,6 +61,20 @@ final class BuiltInTransportLifecycleAdapter {
 		TERMINATED_WITHOUT_START
 	}
 
+	/** One exact delegated start carries both proof routing and callback ownership. */
+	private static final class DelegatedStartInvocation {
+		@NonNull
+		private final TransportTerminationSignal signal;
+		@Nullable
+		private final Object graphOwnerToken;
+
+		private DelegatedStartInvocation(@NonNull TransportTerminationSignal signal,
+				@Nullable Object graphOwnerToken) {
+			this.signal = requireNonNull(signal);
+			this.graphOwnerToken = graphOwnerToken;
+		}
+	}
+
 	interface Operations {
 		/** Prompt, signal-only graceful wind-up. */
 		void quiesce();
@@ -138,16 +152,17 @@ final class BuiltInTransportLifecycleAdapter {
 		@Nullable
 		private volatile InternalLifecycleComponentShutdownResult finalizedParticipantResult;
 		@Nullable
-		private volatile TransportTerminationSignal delegatedTerminationSignal;
+		private final DelegatedStartInvocation delegatedStartInvocation;
 		private volatile boolean externallyCommitted;
 		private volatile boolean externallyDiscarded;
 		private volatile long gracefulDeadlineNanos;
 		private volatile long forcedDeadlineNanos;
 
 		private Generation(@NonNull BuiltInTransportLifecycleAdapter owner,
-				@NonNull DeadlineWaiter waiter) {
+				@NonNull DeadlineWaiter waiter,
+				@Nullable DelegatedStartInvocation delegatedStartInvocation) {
 			this(owner, waiter, owner.workers, null, () -> {}, () -> {},
-					CoordinationMode.STANDALONE, null);
+					CoordinationMode.STANDALONE, null, delegatedStartInvocation);
 		}
 
 		private Generation(@NonNull BuiltInTransportLifecycleAdapter owner,
@@ -158,7 +173,7 @@ final class BuiltInTransportLifecycleAdapter {
 				@NonNull InternalControllingEventElection ownerEventElection) {
 			this(owner, waiter, workers, executionOwnerToken,
 					externalShutdownRequested, externalUnexpectedTermination,
-					CoordinationMode.EXTERNAL, ownerEventElection);
+					CoordinationMode.EXTERNAL, ownerEventElection, null);
 		}
 
 		private Generation(@NonNull BuiltInTransportLifecycleAdapter owner,
@@ -167,9 +182,11 @@ final class BuiltInTransportLifecycleAdapter {
 				@NonNull Runnable externalShutdownRequested,
 				@NonNull Runnable externalUnexpectedTermination,
 				@NonNull CoordinationMode coordinationMode,
-				@Nullable InternalControllingEventElection ownerEventElection) {
+				@Nullable InternalControllingEventElection ownerEventElection,
+				@Nullable DelegatedStartInvocation delegatedStartInvocation) {
 			this.owner = requireNonNull(owner);
 			this.coordinationMode = requireNonNull(coordinationMode);
+			this.delegatedStartInvocation = delegatedStartInvocation;
 			this.waiter = requireNonNull(waiter);
 			this.externalShutdownRequested = requireNonNull(
 					externalShutdownRequested);
@@ -242,6 +259,18 @@ final class BuiltInTransportLifecycleAdapter {
 			return this.coordinationMode == CoordinationMode.EXTERNAL;
 		}
 
+		@Nullable
+		private TransportTerminationSignal delegatedTerminationSignal() {
+			return this.delegatedStartInvocation == null
+					? null : this.delegatedStartInvocation.signal;
+		}
+
+		private LifecycleExecutionContext.@NonNull Scope enterExecutionScope() {
+			return LifecycleExecutionContext.enter(this.group.executionOwnerToken(),
+					this.delegatedStartInvocation == null
+							? null : this.delegatedStartInvocation.graphOwnerToken);
+		}
+
 		boolean startAttempted() {
 			return this.transportStartClaimed.get();
 		}
@@ -311,13 +340,14 @@ final class BuiltInTransportLifecycleAdapter {
 			this.generation.callRunner.submit("built-in-" +
 					this.owner.kind.name().toLowerCase(Locale.ROOT) + "-" + phase + "-proof",
 					this.generation.group, () -> {
-						try {
+						try (LifecycleExecutionContext.Scope ignored =
+									 this.generation.enterExecutionScope()) {
 							if (this.owner.operations.awaitTermination(absoluteDeadlineNanos))
 								this.owner.proveTermination(this.generation);
 						} catch (RuntimeException | Error throwable) {
 							this.generation.signal.signalTerminationFailure(throwable);
 							TransportTerminationSignal delegatedSignal =
-									this.generation.delegatedTerminationSignal;
+									this.generation.delegatedTerminationSignal();
 							if (delegatedSignal != null)
 								delegatedSignal.signalTerminationFailure(throwable);
 							throw throwable;
@@ -334,6 +364,8 @@ final class BuiltInTransportLifecycleAdapter {
 		@NonNull
 		private final TransportTerminationSignal signal;
 		@NonNull
+		private final DelegatedStartInvocation startInvocation;
+		@NonNull
 		private final Runnable startAction;
 		@NonNull
 		private DelegatedRuntimeState state;
@@ -347,9 +379,11 @@ final class BuiltInTransportLifecycleAdapter {
 
 		private DelegatedRuntime(@NonNull BuiltInTransportLifecycleAdapter owner,
 				@NonNull TransportTerminationSignal signal,
+				@Nullable Object graphOwnerToken,
 				@NonNull Runnable startAction) {
 			this.owner = requireNonNull(owner);
 			this.signal = requireNonNull(signal);
+			this.startInvocation = new DelegatedStartInvocation(this.signal, graphOwnerToken);
 			this.startAction = requireNonNull(startAction);
 			this.state = DelegatedRuntimeState.NOT_STARTED;
 		}
@@ -368,20 +402,20 @@ final class BuiltInTransportLifecycleAdapter {
 			}
 
 			Throwable startFailure = null;
-			this.owner.delegatedStartSignal.set(this.signal);
+			this.owner.delegatedStartInvocation.set(this.startInvocation);
 			try {
 				this.startAction.run();
 			} catch (RuntimeException | Error failure) {
 				startFailure = failure;
 			} finally {
-				this.owner.delegatedStartSignal.remove();
+				this.owner.delegatedStartInvocation.remove();
 			}
 
 			Generation startedGeneration = null;
 			try {
 				Generation candidate = this.owner.current.get();
 				if (candidate != null
-						&& candidate.delegatedTerminationSignal == this.signal)
+						&& candidate.delegatedTerminationSignal() == this.signal)
 					startedGeneration = candidate;
 				completeStart(startedGeneration);
 			} catch (RuntimeException | Error catchUpFailure) {
@@ -553,7 +587,7 @@ final class BuiltInTransportLifecycleAdapter {
 	@NonNull
 	private final ThreadLocal<Generation> externalStartInvocation;
 	@NonNull
-	private final ThreadLocal<TransportTerminationSignal> delegatedStartSignal;
+	private final ThreadLocal<DelegatedStartInvocation> delegatedStartInvocation;
 
 	BuiltInTransportLifecycleAdapter(@NonNull InternalLifecycleComponentType kind,
 			@NonNull Operations operations, @NonNull Supplier<Duration> gracefulTimeout) {
@@ -597,7 +631,7 @@ final class BuiltInTransportLifecycleAdapter {
 		this.externalCandidate = new AtomicReference<>();
 		this.externalOwnershipClaimed = new AtomicBoolean();
 		this.externalStartInvocation = new ThreadLocal<>();
-		this.delegatedStartSignal = new ThreadLocal<>();
+		this.delegatedStartInvocation = new ThreadLocal<>();
 	}
 
 	@NonNull
@@ -624,8 +658,8 @@ final class BuiltInTransportLifecycleAdapter {
 		if (previous != null && !previous.result.join().isComplete())
 			throw new IllegalStateException(
 					"Built-in transport with retained termination evidence cannot restart");
-		Generation generation = new Generation(this, new DeadlineWaiter(this.clock));
-		generation.delegatedTerminationSignal = this.delegatedStartSignal.get();
+		Generation generation = new Generation(this, new DeadlineWaiter(this.clock),
+				this.delegatedStartInvocation.get());
 		if (!this.current.compareAndSet(previous, generation))
 			throw new IllegalStateException("Concurrent built-in transport start is not supported");
 		return generation;
@@ -781,7 +815,7 @@ final class BuiltInTransportLifecycleAdapter {
 		if (terminationProven)
 			generation.signal.signalTerminated();
 		if (generation.externallyCoordinated()
-				|| generation.delegatedTerminationSignal != null)
+				|| generation.delegatedTerminationSignal() != null)
 			return;
 		requestShutdown(generation);
 		awaitResultUninterruptibly(generation);
@@ -799,7 +833,7 @@ final class BuiltInTransportLifecycleAdapter {
 		// the same bounded evidence behavior for unexpected runtime failures.
 		recordStartupFailure(generation, exactCause);
 		TransportTerminationSignal delegatedSignal =
-				generation.delegatedTerminationSignal;
+				generation.delegatedTerminationSignal();
 		if (delegatedSignal != null) {
 			delegatedSignal.signalTerminationFailure(exactCause);
 			return;
@@ -812,13 +846,19 @@ final class BuiltInTransportLifecycleAdapter {
 	@NonNull
 	TransportRuntime delegatedRuntime(@NonNull TransportTerminationSignal signal,
 			@NonNull Runnable startAction) {
+		return delegatedRuntime(signal, null, startAction);
+	}
+
+	@NonNull
+	TransportRuntime delegatedRuntime(@NonNull TransportTerminationSignal signal,
+			@Nullable Object graphOwnerToken, @NonNull Runnable startAction) {
 		return new DelegatedRuntime(this, requireNonNull(signal),
-				requireNonNull(startAction));
+				graphOwnerToken, requireNonNull(startAction));
 	}
 
 	private void proveTermination(@NonNull Generation generation) {
 		TransportTerminationSignal delegatedSignal =
-				requireNonNull(generation).delegatedTerminationSignal;
+				requireNonNull(generation).delegatedTerminationSignal();
 		if (delegatedSignal != null
 				&& generation.runtime.evidenceReleased.compareAndSet(false, true)) {
 			try {
@@ -1023,8 +1063,7 @@ final class BuiltInTransportLifecycleAdapter {
 	/** Marks inline transport callbacks whose return can be needed for termination. */
 	LifecycleExecutionContext.@Nullable Scope enterCallbackExecution() {
 		Generation generation = this.current.get();
-		return generation == null ? null
-				: LifecycleExecutionContext.enter(generation.group.executionOwnerToken());
+		return generation == null ? null : generation.enterExecutionScope();
 	}
 
 	void runCallback(@NonNull Runnable callback) {

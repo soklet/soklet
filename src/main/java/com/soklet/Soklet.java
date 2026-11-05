@@ -765,7 +765,7 @@ public final class Soklet {
 								throwables.add(t2);
 
 								safelyLog.accept(LogEvent.with(LogEventType.RESPONSE_MARSHALER_FOR_THROWABLE_FAILED,
-												format("An exception occurred while trying to write an exception response for %s", t))
+												"An exception occurred while trying to write an exception response")
 										.throwable(t2)
 										.request(requestHolder.get())
 										.resourceMethod(resourceMethodHolder.get())
@@ -818,7 +818,7 @@ public final class Soklet {
 						throwables.add(t2);
 
 						safelyLog.accept(LogEvent.with(LogEventType.RESPONSE_MARSHALER_FOR_THROWABLE_FAILED,
-										format("An exception occurred while invoking %s::forThrowable when trying to write an exception response for %s", ResponseMarshaler.class.getSimpleName(), t))
+										format("An exception occurred while invoking %s::forThrowable when trying to write an exception response", ResponseMarshaler.class.getSimpleName()))
 								.throwable(t2)
 								.request(requestHolder.get())
 								.resourceMethod(resourceMethodHolder.get())
@@ -827,6 +827,15 @@ public final class Soklet {
 						marshaledResponseHolder.set(provideFailsafeMarshaledResponse(requestHolder.get(), t2));
 					}
 				} finally {
+					// A broken exception marshaler must not turn missing response selection
+					// into a transport write failure or expose null responses to observers.
+					if (marshaledResponseHolder.get() == null) {
+						Throwable failure = requestHandlingFailureHolder.get();
+						if (failure == null)
+							failure = new IllegalStateException("Request handling did not select a response");
+						marshaledResponseHolder.set(provideFailsafeMarshaledResponse(
+								requestHolder.get() == null ? request : requestHolder.get(), failure));
+					}
 					MarshaledResponse selectedResponse = marshaledResponseHolder.get();
 					if (selectedResponse != null && requiresPostProcessing(selectedResponse, postProcessingToken)) {
 						try {

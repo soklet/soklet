@@ -97,6 +97,12 @@ public interface RequestInterceptor {
 	 * Soklet's request lifecycle bookkeeping (for example, metrics correlation and timeout handling)
 	 * is thread-affine to the request-handler thread.
 	 * <p>
+	 * The response generator catches Resource Method failures and returns the response from
+	 * {@link ResponseMarshaler#forThrowable(Request, Throwable, ResourceMethod)} rather than propagating
+	 * the original failure. A transaction wrapper must arrange rollback explicitly, for example by
+	 * having its throwable handler mark the current transaction rollback-only; a returned error status
+	 * alone does not establish whether response generation failed.
+	 * <p>
 	 * The response generator returns an unfinalized response. Soklet applies CORS, postprocessing,
 	 * HEAD projection and transport properties once after this interceptor selects its final response.
 	 * Copying or rebuilding generated parts therefore does not repeat postprocessing.

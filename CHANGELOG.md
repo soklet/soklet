@@ -492,6 +492,28 @@ maintenance or security fixes afterward. See the explicit
 
 ### Correctness Fixes
 
+- Preserve application execution context through HTTP/SSE server decorators so
+  pending callback self-waits fail immediately, while child shutdown proofs
+  remain independent.
+- Report HTTP requests refused by shutdown admission to rejection observers and
+  metrics exactly once, retaining the 503 response and connection-close policy.
+- Isolate MCP publisher-registration interrupt delivery from lifecycle phase
+  delivery. Pending interruption remains tracked through physical completion,
+  allowing simulator shutdown to report incomplete cleanup within its budgets.
+- Select a finite failsafe response before final request callbacks when error
+  recovery fails to produce a response, preserving once-only delivery and
+  request metrics even when application error handling is broken.
+- Honor explicitly registered value converters before same-type conversion
+  shortcuts, including custom String conversion, and normalize primitive and
+  wrapper registration keys consistently with lookup.
+- Preserve bounded HTTP close protection when graceful shutdown begins during
+  the final response write, before the queued connection-drain task runs.
+  Already buffered or queued input follows the same terminal discard policy;
+  fully consumed requests without surplus input still close promptly.
+- Check for input already queued on the socket before otherwise closing a
+  completed HTTP request. A single bounded nonblocking read detects pipelined
+  input that arrived while the handler ran; any byte read counts toward the
+  existing terminal discard limit and activates bounded lingering.
 - Publish default classpath resolver context-loader capture failures to waiting
   callers instead of leaving the shared resolver stuck loading. Preserve failure
   memoization and recursive-access detection.
@@ -506,8 +528,10 @@ maintenance or security fixes afterward. See the explicit
   executors that retain task interrupt status. Inline callers retain their status.
 - Preserve completed closing HTTP responses while unread upload bytes remain by
   half-closing output and draining terminal input within time and byte bounds.
-  The one-second lingering-input window consumes the graceful shutdown budget
-  and can trigger forced shutdown with short budgets.
+  Fully consumed requests with no observed surplus input close promptly; early
+  rejections, uncertain framing, and observed trailing input retain bounded
+  lingering. Where needed, the one-second lingering-input window consumes the
+  graceful shutdown budget and can trigger forced shutdown with short budgets.
   Pending transport deadlines now shorten otherwise longer selector waits.
 - Emit startup-only warnings for suspicious unannotated value parameters handled
   by the default parameter and instance providers. Warnings identify likely

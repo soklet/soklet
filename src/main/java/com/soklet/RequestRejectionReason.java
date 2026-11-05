@@ -30,7 +30,7 @@ public enum RequestRejectionReason {
 	 */
 	REQUEST_HANDLER_QUEUE_FULL,
 	/**
-	 * The request handler executor was shut down.
+	 * Shutdown closed request admission or shut down the request handler executor.
 	 */
 	REQUEST_HANDLER_EXECUTOR_SHUTDOWN,
 	/**

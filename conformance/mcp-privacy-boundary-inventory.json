@@ -40773,10 +40773,10 @@
         },
         {
           "file": "src/main/java/com/soklet/LifecycleInfrastructure.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/LifecycleInfrastructure.java#com.soklet.LifecycleExecutionContext.Scope#close()->Throwable.IllegalStateException@2",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/LifecycleInfrastructure.java#com.soklet.LifecycleExecutionContext.Scope#leave(IdentityHashMap<Object, Integer>,Object)->Throwable.IllegalStateException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "close()",
-          "occurrence": 2,
+          "member": "leave(IdentityHashMap<Object, Integer>,Object)",
+          "occurrence": 1,
           "owner": "com.soklet.LifecycleExecutionContext.Scope",
           "sink": "Throwable.IllegalStateException"
         },
@@ -44503,6 +44503,15 @@
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "handleRequestWithinLifecycle(Request,ServerType,Consumer<HttpRequestResult>)",
           "occurrence": 4,
+          "owner": "com.soklet.Soklet",
+          "sink": "Throwable.IllegalStateException"
+        },
+        {
+          "file": "src/main/java/com/soklet/Soklet.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/Soklet.java#com.soklet.Soklet#handleRequestWithinLifecycle(Request,ServerType,Consumer<HttpRequestResult>)->Throwable.IllegalStateException@5",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "handleRequestWithinLifecycle(Request,ServerType,Consumer<HttpRequestResult>)",
+          "occurrence": 5,
           "owner": "com.soklet.Soklet",
           "sink": "Throwable.IllegalStateException"
         },
@@ -74602,9 +74611,9 @@
     {
       "file": "src/main/java/com/soklet/internal/microhttp/ConnectionEventLoop.java",
       "id": "PRIV-EX-066",
-      "key": "PRIV-MATCH-015:src/main/java/com/soklet/internal/microhttp/ConnectionEventLoop.java#com.soklet.internal.microhttp.ConnectionEventLoop.Connection#beginLingeringClose()->MetricsCollector.invocation.reset@1",
+      "key": "PRIV-MATCH-015:src/main/java/com/soklet/internal/microhttp/ConnectionEventLoop.java#com.soklet.internal.microhttp.ConnectionEventLoop.Connection#beginLingeringClose(long)->MetricsCollector.invocation.reset@1",
       "matcherRuleId": "PRIV-MATCH-015",
-      "member": "beginLingeringClose()",
+      "member": "beginLingeringClose(long)",
       "occurrence": 1,
       "owner": "com.soklet.internal.microhttp.ConnectionEventLoop.Connection",
       "rationale": "This exact invocation is RequestParser.reset() on the private HTTP connection parser after output half-close. It clears local parse state before bounded terminal input discard; the receiver is not a MetricsCollector and no metric, label, log, request value, or Throwable is emitted. Preserve the conservative reset vocabulary matcher.",

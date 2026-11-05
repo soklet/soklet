@@ -217,7 +217,7 @@ public final class Response {
 	 * <p>
 	 * It is possible to send multiple {@code ResponseCookie} values with the same name to the client.
 	 * <p>
-	 * <em>Note that {@code ResponseCookie} values, like all response headers, have case-insensitive names per the HTTP spec.</em>
+	 * Cookie names are case-sensitive. The enclosing {@code Set-Cookie} header name is case-insensitive.
 	 *
 	 * @return the cookies to write to the response
 	 */

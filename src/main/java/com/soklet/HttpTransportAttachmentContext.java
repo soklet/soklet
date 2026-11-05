@@ -80,6 +80,11 @@ public final class HttpTransportAttachmentContext {
 		return this.internalContext.builtInDispatchAdmissionSupplier();
 	}
 
+	@NonNull
+	Object executionOwnerToken() {
+		return this.internalContext.executionOwnerToken();
+	}
+
 	/**
 	 * Acquires this transport member's framework-owned termination capability.
 	 * The attached runtime may retain the signal after {@code attach(...)}
