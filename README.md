@@ -236,13 +236,20 @@ only after successful shutdown. See
 
 Here we use raw `javac` to build and `java` to run.
 
-This example requires JDK 21+ to be installed on your machine ([or see this example of using Docker for Soklet apps](https://github.com/soklet/barebones-app?tab=readme-ov-file#building-and-running-with-docker)). If you need a JDK, Amazon provides [Corretto](https://aws.amazon.com/corretto/) - a free-to-use-commercially, production-ready distribution of [OpenJDK](https://openjdk.org/) that includes long-term support.
+This example requires JDK 21+ to be installed on your machine ([or see the Dockerfile example](https://www.soklet.com/docs/production-readiness#dockerfile)). If you need a JDK, Amazon provides [Corretto](https://aws.amazon.com/corretto/) - a free-to-use-commercially, production-ready distribution of [OpenJDK](https://openjdk.org/) that includes long-term support.
 
 ##### Build
 
 ```shell
 javac -parameters -cp soklet-4.0.0.jar -processor com.soklet.SokletProcessor -d build src/com/soklet/example/App.java
 ```
+
+When recompiling only part of an application, also include the output directory
+(`build` here) on the compiler's `-cp`, along with Soklet and other dependencies.
+`-d` selects the output location but does not make untouched classfiles visible
+to the annotation processor. Otherwise a partial compile can remove their routes
+from the generated index. Recover with a clean compile of all annotated sources,
+and package the generated `META-INF/soklet` resources with the classfiles.
 
 ##### Run
 

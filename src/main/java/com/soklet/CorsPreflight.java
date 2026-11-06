@@ -180,6 +180,23 @@ public final class CorsPreflight {
 		return names;
 	}
 
+	boolean isSafeToReflect() {
+		if (!Cors.isSafeToReflectOrigin(getOrigin()))
+			return false;
+
+		try {
+			for (String name : getAccessControlRequestHeaders()) {
+				Utilities.validateHeaderNameAndValue(name, null);
+				// A legal token such as x%0a can still be prohibited in an outgoing
+				// header value. Deny the whole preflight rather than dropping names.
+				Utilities.validateHeaderNameAndValue("Access-Control-Allow-Headers", name);
+			}
+			return true;
+		} catch (IllegalArgumentException ignored) {
+			return false;
+		}
+	}
+
 	private CorsPreflight(@NonNull String origin,
 												@NonNull HttpMethod accessControlRequestMethod,
 												@Nullable Set<@NonNull String> accessControlRequestHeaders) {

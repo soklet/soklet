@@ -2432,6 +2432,16 @@ notification families: `RESOURCES_LIST_CHANGED`, `RESOURCE_UPDATED`,
 `TOOLS_LIST_CHANGED`, and `PROMPTS_LIST_CHANGED`. Authorized task IDs use the
 separate Tasks publisher described under [Task notifications](#task-notifications).
 
+A client that disappears without a FIN or RST can continue consuming stream
+capacity and its endpoint's admitted authorization/quota-partition subscription
+allowance while the connection remains undetected. Heartbeats provoke writes,
+but a silently unreachable peer may remain until transport failure, lease
+expiry, or application shutdown closes the subscription. Detection time depends
+on the host TCP stack and intervening network infrastructure; it has no universal
+short deadline. Size stream and subscription limits for that retention and test
+dead-peer recovery in your deployment. See [production timeout and capacity
+guidance](https://www.soklet.com/docs/production-readiness#timeouts-and-backpressure).
+
 The following example assumes an application-owned
 `List<McpResourceRegistration> resources` and a thread-safe
 `subscriptionAuthorizer` that checks current permission for the whole requested

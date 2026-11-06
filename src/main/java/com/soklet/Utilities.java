@@ -2138,7 +2138,7 @@ public final class Utilities {
 			if (c > 0x7F || !(c == '!' || c == '#' || c == '$' || c == '%' || c == '&' || c == '\'' || c == '*' || c == '+' ||
 					c == '-' || c == '.' || c == '^' || c == '_' || c == '`' || c == '|' || c == '~' ||
 					Character.isLetterOrDigit(c))) {
-				throw new IllegalArgumentException(format("Illegal header name '%s'. Offending character: '%s'", storedName, printableChar(c)));
+				throw new IllegalArgumentException(format("Illegal header name '%s'. Offending character: '%s'", printableString(storedName), printableChar(c)));
 			}
 		}
 
@@ -2149,7 +2149,7 @@ public final class Utilities {
 		for (int i = 0; i < value.length(); i++) {
 			char c = value.charAt(i);
 			if (c == '\r' || c == '\n' || c == 0x00 || c == 0x7F || c > 0xFF || (c < 0x20 && c != '\t')) {
-				throw new IllegalArgumentException(format("Illegal header value '%s' for header name '%s'. Offending character: '%s'", value, storedName, printableChar(c)));
+				throw new IllegalArgumentException(format("Illegal header value '%s' for header name '%s'. Offending character: '%s'", printableString(value), printableString(storedName), printableChar(c)));
 			}
 		}
 
@@ -2161,7 +2161,7 @@ public final class Utilities {
 			if (b == 0x0D || b == 0x0A || b == 0x00 || (b >= 0x00 && b < 0x20 && b != 0x09)) {
 				throw new IllegalArgumentException(format(
 						"Illegal (percent-encoded) header value '%s' for header name '%s'. Offending octet: 0x%02X",
-						value, storedName, b));
+						printableString(value), printableString(storedName), b));
 			}
 		}
 	}
@@ -2193,7 +2193,8 @@ public final class Utilities {
 		if (c < 0x20 || c == 0x7F)  // control chars
 			return String.format("\\u%04X", (int) c);
 
-		if (Character.isISOControl(c) || Character.getType(c) == Character.FORMAT)
+		if (Character.isISOControl(c) || Character.getType(c) == Character.FORMAT
+				|| Character.getType(c) == Character.LINE_SEPARATOR || Character.getType(c) == Character.PARAGRAPH_SEPARATOR)
 			return String.format("\\u%04X", (int) c);
 
 		return String.valueOf(c);

@@ -533,7 +533,9 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 			try {
 				while (resources.hasMoreElements()) {
 					URL url = resources.nextElement();
-					try (var in = url.openStream();
+					var connection = url.openConnection();
+					connection.setUseCaches(false);
+					try (var in = connection.getInputStream();
 							 var br = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
 						int lineNumber = 0;
 						for (String line; (line = br.readLine()) != null; ) {

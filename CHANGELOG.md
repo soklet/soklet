@@ -4,6 +4,10 @@
 
 ### Breaking Changes
 
+- **HTTP method casing:** method names are case-sensitive. Lowercase methods
+  such as `get` that were previously accepted now receive HTTP `400`; send canonical
+  methods such as `GET` and `POST`.
+
 - **Explicit rate-limit policy:** tool rate limiting is optional. A tool with
   no configured tool, endpoint, or server limiter has no tool rate quota;
   existing transport and execution bounds remain. Removed
@@ -491,6 +495,20 @@ maintenance or security fixes afterward. See the explicit
   [third-party audit](release/THIRD_PARTY_AUDIT.md).
 
 ### Correctness Fixes
+
+- Complete queued MCP deadline cleanup outside terminal-election locks, avoiding
+  a lock-order cycle with disconnect and legacy cancellation. During shutdown,
+  finish canceled queued requests without overflowing the cancellation executor.
+- Avoid interrupting all idle stream-termination observation workers after every
+  completion; surplus workers still retire through their existing idle timeout.
+- Bypass the JDK's shared JAR URL cache when reading generated HTTP/SSE route and
+  MCP provider indexes, so same-path replacements use fresh metadata and closed
+  index readers do not retain cached archive handles.
+- Withhold unsafe CORS origin reflection and explicitly reject preflights whose
+  origin or requested header names cannot safely be reflected. Preserve the
+  original request data, valid credentialed responses, and outgoing-header checks.
+- Escape untrusted header and cookie data in validation diagnostics, including
+  terminal controls and Unicode line separators, without relaxing validation.
 
 - Deliver elected forced-shutdown cleanup even when a zero or very short proof
   budget has already frozen the shutdown result. Retain once-only delivery,

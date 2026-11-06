@@ -188,7 +188,7 @@ public class McpApplicationExecutionTests {
 				execution.runTimerCycle();
 				Assertions.assertEquals(504, secondResponse.get().status());
 				Assertions.assertEquals(2, cleanups.get());
-				awaitCondition(() -> execution.snapshot().activeHandlerSlots() == 1);
+				awaitCondition(() -> execution.snapshot().activeHandlerSlots() == 1 && execution.snapshot().retainedExchanges() == 1);
 				Assertions.assertEquals(1, execution.snapshot().retainedExchanges());
 				Assertions.assertEquals(0, firstPhysicalExits.get(), "A blocking hook still owns physical work.");
 				execution.stop();

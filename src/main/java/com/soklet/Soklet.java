@@ -1202,7 +1202,11 @@ public final class Soklet {
 							.filter(entry -> entry.getKey() != HttpMethod.OPTIONS)
 							.collect(Collectors.toMap(Entry::getKey, Entry::getValue));
 
-					CorsPreflightResponse corsPreflightResponse = corsAuthorizer.authorizePreflight(request, corsPreflight, nonOptionsMatchingResourceMethodsByHttpMethod).orElse(null);
+					// Validate client-supplied reflection candidates before application
+					// authorization, including custom authorizers that reflect them verbatim.
+					CorsPreflightResponse corsPreflightResponse = corsPreflight.isSafeToReflect()
+							? corsAuthorizer.authorizePreflight(request, corsPreflight, nonOptionsMatchingResourceMethodsByHttpMethod).orElse(null)
+							: null;
 
 					// Allow or reject CORS depending on what the function said to do
 					if (corsPreflightResponse != null) {
@@ -1612,7 +1616,7 @@ public final class Soklet {
 		Cors cors = request.getCors().orElse(null);
 
 		// If non-CORS request, nothing further to do (note that CORS preflight was handled earlier)
-		if (cors == null)
+		if (cors == null || !Cors.isSafeToReflectOrigin(cors.getOrigin()))
 			return marshaledResponse;
 
 		// Does the authorizer say we are authorized?

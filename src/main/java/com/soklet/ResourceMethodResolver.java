@@ -86,7 +86,14 @@ public interface ResourceMethodResolver {
 	 * <p>
 	 * <pre>javac -parameters -processor com.soklet.SokletProcessor ...[rest of javac command elided]</pre>
 	 * <p>
-	 * The returned instance is guaranteed to be a JVM-wide singleton.
+	 * The returned instance is a singleton for the class loader that defines Soklet.
+	 * Its first resource-method resolution uses that thread's context class loader
+	 * and permanently caches the resulting route table or failure. Later calls do
+	 * not discover routes again when the context class loader changes.
+	 * <p>
+	 * Applications that share Soklet from a parent class loader, use separate
+	 * application class loaders, or support hot reload should configure an explicit
+	 * {@link #fromClasses(Set)} or {@link #fromMethods(Set)} resolver for each application.
 	 *
 	 * @return a {@code ResourceMethodResolver} which performs classpath introspection against the annotation processor's lookup table
 	 */

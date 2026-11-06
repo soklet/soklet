@@ -68,6 +68,9 @@ final class AllOriginsCorsAuthorizer implements CorsAuthorizer {
 		requireNonNull(request);
 		requireNonNull(cors);
 
+		if (!Cors.isSafeToReflectOrigin(cors.getOrigin()))
+			return Optional.empty();
+
 		return Optional.of(CorsResponse.withAccessControlAllowOrigin(cors.getOrigin())
 				.accessControlAllowCredentials(true)
 				.build());
@@ -100,6 +103,9 @@ final class AllOriginsCorsAuthorizer implements CorsAuthorizer {
 	@NonNull
 	private Optional<CorsPreflightResponse> authorizePreflight(@NonNull CorsPreflight corsPreflight,
 																														 @NonNull Set<@NonNull HttpMethod> availableHttpMethods) {
+		if (!corsPreflight.isSafeToReflect())
+			return Optional.empty();
+
 		// Reflect the requested header names (no "*"), allow methods for the resource, and set a cache TTL.
 		return Optional.of(CorsPreflightResponse.withAccessControlAllowOrigin(corsPreflight.getOrigin())
 				.accessControlAllowMethods(availableHttpMethods)

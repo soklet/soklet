@@ -26,8 +26,11 @@ import java.util.Set;
 import static java.util.Objects.requireNonNull;
 
 /**
- * Immutable, bounded evidence describing activity that remained at the final
- * shutdown boundary.
+ * Immutable, bounded, conservative activity evidence retained at the final shutdown boundary.
+ * Observations may be combined across shutdown phases when complete termination cannot be
+ * proven. A category can therefore describe work that ended after an earlier observation;
+ * the evidence is not a live census of work active at result publication. An empty category
+ * set alone does not prove termination. Published evidence remains unchanged when work exits later.
  */
 @ThreadSafe
 public final class ResidualActivityEvidence {
@@ -48,7 +51,7 @@ public final class ResidualActivityEvidence {
 		this.summary = requireNonNull(summary);
 	}
 
-	/** @return immutable residual-activity categories in enum order */
+	/** @return immutable conservative activity categories in enum order */
 	@NonNull
 	public Set<@NonNull ResidualActivityType> getResidualActivityTypes() {
 		return this.residualActivityTypes;

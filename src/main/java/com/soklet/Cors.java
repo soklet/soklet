@@ -97,6 +97,16 @@ public static Cors fromOrigin(@NonNull HttpMethod httpMethod,
 		return Optional.of(new Cors(httpMethod, originHeaderValue));
 	}
 
+	static boolean isSafeToReflectOrigin(@NonNull String origin) {
+		try {
+			Utilities.validateHeaderNameAndValue("Access-Control-Allow-Origin", origin);
+			return true;
+		} catch (IllegalArgumentException ignored) {
+			// Keep the original request data, but never turn it into an unsafe response header.
+			return false;
+		}
+	}
+
 	private Cors(@NonNull HttpMethod httpMethod,
 							 @NonNull String origin) {
 		requireNonNull(httpMethod);

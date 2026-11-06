@@ -1291,7 +1291,7 @@
         "conformance/official/legacy/run.mjs",
         "conformance/official/legacy/runtime-supplement.mjs"
       ],
-      "rationale": "The candidate-backed 2025 conformance runner is part of the v3 immutable candidate gate. It runs forty-one official revision/scenario pairs and fifteen bounded raw HTTP contracts per 2025 revision using the same POM/main/sources/Javadoc provenance as the modern runner. The HTTP-supplement Java fixture has a 70-second outer guard; Node supervision bounds startup, official CLI scenarios, HTTP requests, GET-reader cleanup and shutdown, with forced process-tree cleanup. The standalone fixture builder compiles under the CI job\u2019s sixty-minute outer guard and has no independent per-command compilation deadline. These externally supervised main methods and their documentation are not ordinary JUnit lifecycle scopes. Development runs remain separately labeled and cannot satisfy the release gate.",
+      "rationale": "The candidate-backed 2025 conformance runner is part of the v3 immutable candidate gate. It runs forty-one official revision/scenario pairs and fifteen bounded raw HTTP contracts per 2025 revision using the same POM/main/sources/Javadoc provenance as the modern runner. The HTTP-supplement Java fixture has a 70-second outer guard; Node supervision bounds startup, official CLI scenarios, HTTP requests, GET-reader cleanup and shutdown, with forced process-tree cleanup. The standalone fixture builder compiles under the CI job’s sixty-minute outer guard and has no independent per-command compilation deadline. These externally supervised main methods and their documentation are not ordinary JUnit lifecycle scopes. Development runs remain separately labeled and cannot satisfy the release gate.",
       "requiredAction": "NONE"
     },
     {
@@ -1692,7 +1692,7 @@
       "paths": [
         "src/test/java/com/soklet/SokletStartupCancellationRegressionTests.java"
       ],
-      "rationale": "One portable source-bound parent test proves cancellation when owner interruption is denied; three separately bounded child-process tests isolate unavailable stdin and Java 21\u201323 SecurityManager owner/worker permissions. The parent cancellation helper owns one alternative lifecycle generation with finite phase policy, cleanup and control joins. Each child has a 25-second exit deadline plus five-second forced reaping, and its actual parent process guard contains failure paths without assigning a synthetic child timeout. Warning and startup callback gates are released or aborted in finally.",
+      "rationale": "One portable source-bound parent test proves cancellation when owner interruption is denied; three separately bounded child-process tests isolate unavailable stdin and Java 21–23 SecurityManager owner/worker permissions. The parent cancellation helper owns one alternative lifecycle generation with finite phase policy, cleanup and control joins. Each child has a 25-second exit deadline plus five-second forced reaping, and its actual parent process guard contains failure paths without assigning a synthetic child timeout. Warning and startup callback gates are released or aborted in finally.",
       "requiredAction": "NONE"
     },
     {
@@ -2021,7 +2021,47 @@
       "paths": [
         "src/test/java/com/soklet/TimeoutSchedulerRecoveryTests.java"
       ],
-      "rationale": "Six pure scheduler unit methods own private raw timer threads with 1\u20132 s gates, completion waits, physical joins and finally shutdown under a 60 s JUnit guard. Transient transfer/expiry fixtures use a 2.56 s wheel and a 1 s completion guard; cancellation controls retain an active tail after detached canceled nodes. They construct no Soklet owner, transport listener or simulation lifecycle generation. Broad lifecycle/timeout-looking candidates remain discovered without fabricating a Soklet phase envelope.",
+      "rationale": "Six pure scheduler unit methods own private raw timer threads with 1–2 s gates, completion waits, physical joins and finally shutdown under a 60 s JUnit guard. Transient transfer/expiry fixtures use a 2.56 s wheel and a 1 s completion guard; cancellation controls retain an active tail after detached canceled nodes. They construct no Soklet owner, transport listener or simulation lifecycle generation. Broad lifecycle/timeout-looking candidates remain discovered without fabricating a Soklet phase envelope.",
+      "closureStatus": "CLOSED",
+      "requiredAction": "NONE"
+    },
+    {
+      "id": "CLASS-CORS-REFLECTION-SAFETY",
+      "classification": "JUNIT_LIFECYCLE",
+      "paths": [
+        "src/test/java/com/soklet/CorsReflectionSafetyTests.java"
+      ],
+      "rationale": "Four simulator methods own 3/3/4/3 sequential generations across built-in, whitelisted and custom reflection authorizers. The source-propagated 2 s startup/200 ms startup-cancellation/200 ms grace/200 ms force policy composes conservatively to7.8/7.8/10.4/7.8 s including all incomplete branches under each60 s guard. No independent control wait, application cleanup or terminal report is added. Every accepted SSE handle closes inside its generation before the next handshake; original request data, ordinary/error responses and safe credentialed behavior remain checked.",
+      "closureStatus": "CLOSED",
+      "requiredAction": "NONE"
+    },
+    {
+      "id": "CLASS-QUEUED-MCP-TERMINAL-BOUNDARY",
+      "classification": "REVIEWED_DISCOVERY_ONLY",
+      "paths": [
+        "src/test/java/com/soklet/internal/mcp/protocol/McpQueuedDeadlineBoundaryRegressionTests.java"
+      ],
+      "rationale": "Four raw application-execution tests start11 component generations: three protocol revisions for each deadline/disconnect/client-cancellation matrix and two stop-backlog configurations (1 active+5 queued,4 active+14 queued). They construct no Soklet owner, transport listener or simulator. Each boundary method has three sequential fixtures; per fixture2 s active entry+2 s physical-hook entry+2 s unrelated cancellation+2 s trigger join+2 s transport join+5 s termination gives45 s foreground controls under60 s. The10 s active/physical-hook safety gates overlap those controls and release in finally before joins. Each backlog fixture permits2 s active entry+2 s stop join+20 ms negative termination+2 s finally stop join+5 s termination; two fixtures compose22.04 s under60 s. Exact physical-exit/response-cleanup counters and zero retained slots/leases prove final cleanup; old-behavior failures are confined to disposable baseline JVMs.",
+      "closureStatus": "CLOSED",
+      "requiredAction": "NONE"
+    },
+    {
+      "id": "CLASS-STREAM-OBSERVATION-EXECUTOR-COMPONENT",
+      "classification": "REVIEWED_DISCOVERY_ONLY",
+      "paths": [
+        "src/test/java/com/soklet/internal/microhttp/StreamObservationExecutorTests.java"
+      ],
+      "rationale": "Two raw ObservationExecutor component tests each own one bounded private executor (capacity4,queue4) and no Soklet owner, transport or simulator. The first permits3 s entry+3 s drain+3 s physical termination=9 s; the second permits3 s entry+3 s drain+3 s idle expiry+eight sequential3 s completion polls+3 s physical termination=36 s under each60 s guard. Five-second callback release gates overlap foreground controls and are released in finally before shutdownNow and3 s termination. The fixture changes its own keepalive only, asserts production30 s, and checks bounded refill/reuse without interrupt herds.",
+      "closureStatus": "CLOSED",
+      "requiredAction": "NONE"
+    },
+    {
+      "id": "CLASS-JAR-INDEX-CACHE-READER",
+      "classification": "REVIEWED_DISCOVERY_ONLY",
+      "paths": [
+        "src/test/java/com/soklet/JarIndexReaderCacheTests.java"
+      ],
+      "rationale": "Four30 s guarded index-reader units use small local JARs and custom resource loaders to verify same-path replacement and real JarFile closure on success/malformed input for HTTP and MCP. They open no listener, worker executor, Soklet owner or simulator generation, and use try-with-resources to close every stream/archive. Lifecycle-looking resolver/resource names and outer guards stay discovered without inventing framework lifecycle phase envelopes.",
       "closureStatus": "CLOSED",
       "requiredAction": "NONE"
     }
@@ -2204,8 +2244,8 @@
     }
   ],
   "discoveryCensus": {
-    "candidateCount": 12607,
-    "candidateSha256": "be0e44c291970be025ef477f4e40ba4533cb69cbe2cfbb5248006e2854c99225",
+    "candidateCount": 12636,
+    "candidateSha256": "5adf9574ba800d932a9cbb96fbdb68596aaf69100f4d1b68491e7eb2e2e0b4f1",
     "candidates": [
       {
         "kinds": [
@@ -12988,6 +13028,105 @@
       },
       {
         "kinds": [
+          "JUNIT_OUTER_GUARD"
+        ],
+        "line": 30,
+        "lineSha256": "948ef639ab0b2932053aad945824ba28d0b2b4e10bbc6ca932136c893459514a",
+        "path": "src/test/java/com/soklet/CorsReflectionSafetyTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 40,
+        "lineSha256": "88a503daf5d2ebf85973b1e479e0c1aa299d2b12d8591537aeb04d27a14eeb10",
+        "path": "src/test/java/com/soklet/CorsReflectionSafetyTests.java"
+      },
+      {
+        "kinds": [
+          "JUNIT_OUTER_GUARD"
+        ],
+        "line": 59,
+        "lineSha256": "948ef639ab0b2932053aad945824ba28d0b2b4e10bbc6ca932136c893459514a",
+        "path": "src/test/java/com/soklet/CorsReflectionSafetyTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 62,
+        "lineSha256": "579a86e60e234dbbb5eb2ef790d6f057598aa339a7c2ac89eff922c68262029b",
+        "path": "src/test/java/com/soklet/CorsReflectionSafetyTests.java"
+      },
+      {
+        "kinds": [
+          "JUNIT_OUTER_GUARD"
+        ],
+        "line": 98,
+        "lineSha256": "948ef639ab0b2932053aad945824ba28d0b2b4e10bbc6ca932136c893459514a",
+        "path": "src/test/java/com/soklet/CorsReflectionSafetyTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 101,
+        "lineSha256": "579a86e60e234dbbb5eb2ef790d6f057598aa339a7c2ac89eff922c68262029b",
+        "path": "src/test/java/com/soklet/CorsReflectionSafetyTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 112,
+        "lineSha256": "531dd4394353f72219ef8d70a175ff3fb431ac2964339163cb9930d3374ea070",
+        "path": "src/test/java/com/soklet/CorsReflectionSafetyTests.java"
+      },
+      {
+        "kinds": [
+          "JUNIT_OUTER_GUARD"
+        ],
+        "line": 123,
+        "lineSha256": "948ef639ab0b2932053aad945824ba28d0b2b4e10bbc6ca932136c893459514a",
+        "path": "src/test/java/com/soklet/CorsReflectionSafetyTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 126,
+        "lineSha256": "301b0fa499ffb18efe56f155facca29ad3cb96f1368b70134e4638ae237fe7e5",
+        "path": "src/test/java/com/soklet/CorsReflectionSafetyTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL",
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 150,
+        "lineSha256": "3dcf3e07d09f85bada418b72737af511433089b13f6bbf7c6ec0949aaf925a46",
+        "path": "src/test/java/com/soklet/CorsReflectionSafetyTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL",
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 151,
+        "lineSha256": "a95cda70b01f28b1176e4e0e576292a0ea1e7bed7b4b093f24e2c57c2952974c",
+        "path": "src/test/java/com/soklet/CorsReflectionSafetyTests.java"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL",
+          "NAMED_TIMEOUT_CANDIDATE"
+        ],
+        "line": 152,
+        "lineSha256": "4d17bb21dd364c8bc6854c669250daf8598629db2107ba780ef604f4894da44d",
+        "path": "src/test/java/com/soklet/CorsReflectionSafetyTests.java"
+      },
+      {
+        "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
         "line": 77,
@@ -21077,6 +21216,14 @@
         "line": 94,
         "lineSha256": "12a3eaff692a4e9594c30d76ae0595b62aeb309021a818e75fe7f2ed1e74d547",
         "path": "src/test/java/com/soklet/InternalTransportEndpointTestCompatibility.java"
+      },
+      {
+        "kinds": [
+          "JUNIT_OUTER_GUARD"
+        ],
+        "line": 50,
+        "lineSha256": "0296afe910cb1469c031dbae308e627c1fac910506d189381f0899a29dd6f786",
+        "path": "src/test/java/com/soklet/JarIndexReaderCacheTests.java"
       },
       {
         "kinds": [
@@ -65614,7 +65761,7 @@
         "kinds": [
           "FIXED_WAIT_CANDIDATE"
         ],
-        "line": 176,
+        "line": 178,
         "lineSha256": "59e487057d11108d8aa0069e40a38ff66906425ca385c9be5677d69a9016b2d2",
         "path": "src/test/java/com/soklet/SseInterruptDeliveryTests.java"
       },
@@ -87691,6 +87838,86 @@
         "kinds": [
           "JUNIT_OUTER_GUARD"
         ],
+        "line": 27,
+        "lineSha256": "158ed2016068067b761a9e2650a699bbf36d5301284e226bc3965e571e96e6ef",
+        "path": "src/test/java/com/soklet/internal/mcp/protocol/McpQueuedDeadlineBoundaryRegressionTests.java"
+      },
+      {
+        "kinds": [
+          "FIXED_WAIT_CANDIDATE"
+        ],
+        "line": 109,
+        "lineSha256": "b89f27ce4f867069be3d8f3c150220f29d61d89f21a2709b44941119f9a36806",
+        "path": "src/test/java/com/soklet/internal/mcp/protocol/McpQueuedDeadlineBoundaryRegressionTests.java"
+      },
+      {
+        "kinds": [
+          "FIXED_WAIT_CANDIDATE"
+        ],
+        "line": 134,
+        "lineSha256": "0d518a1c4115671fa4684f0bb94ded301e34f86a652f939caba51b5b51b99bcb",
+        "path": "src/test/java/com/soklet/internal/mcp/protocol/McpQueuedDeadlineBoundaryRegressionTests.java"
+      },
+      {
+        "kinds": [
+          "FIXED_WAIT_CANDIDATE"
+        ],
+        "line": 136,
+        "lineSha256": "bc8491dc71cafdba489b465f931736d59cf78d2227ffc973205bc29903e715fe",
+        "path": "src/test/java/com/soklet/internal/mcp/protocol/McpQueuedDeadlineBoundaryRegressionTests.java"
+      },
+      {
+        "kinds": [
+          "FIXED_WAIT_CANDIDATE"
+        ],
+        "line": 143,
+        "lineSha256": "bc2d253ed4d3e07fe873aa243c0962178bfe20dd132716fdedaa546136bcc925",
+        "path": "src/test/java/com/soklet/internal/mcp/protocol/McpQueuedDeadlineBoundaryRegressionTests.java"
+      },
+      {
+        "kinds": [
+          "FIXED_WAIT_CANDIDATE"
+        ],
+        "line": 144,
+        "lineSha256": "9bd3f77a87b3b29233fd97ddc84f4d5555a98ad153339973f89193304a377057",
+        "path": "src/test/java/com/soklet/internal/mcp/protocol/McpQueuedDeadlineBoundaryRegressionTests.java"
+      },
+      {
+        "kinds": [
+          "FIXED_WAIT_CANDIDATE"
+        ],
+        "line": 185,
+        "lineSha256": "882ca4845f578fb7173ee21c1c04fca2264d9f66ac6739b7ff9b220a1109f923",
+        "path": "src/test/java/com/soklet/internal/mcp/protocol/McpQueuedDeadlineBoundaryRegressionTests.java"
+      },
+      {
+        "kinds": [
+          "FIXED_WAIT_CANDIDATE"
+        ],
+        "line": 194,
+        "lineSha256": "7137f10eb2e704b1d5d5181a9e87318f9004b48ae33d308a4de5d26305110b56",
+        "path": "src/test/java/com/soklet/internal/mcp/protocol/McpQueuedDeadlineBoundaryRegressionTests.java"
+      },
+      {
+        "kinds": [
+          "FIXED_WAIT_CANDIDATE"
+        ],
+        "line": 206,
+        "lineSha256": "7137f10eb2e704b1d5d5181a9e87318f9004b48ae33d308a4de5d26305110b56",
+        "path": "src/test/java/com/soklet/internal/mcp/protocol/McpQueuedDeadlineBoundaryRegressionTests.java"
+      },
+      {
+        "kinds": [
+          "FIXED_WAIT_CANDIDATE"
+        ],
+        "line": 238,
+        "lineSha256": "030ccf00f4d1ae4fff6fd452e04f8cbcb63a4d3c70e9efb22e12be6b00248041",
+        "path": "src/test/java/com/soklet/internal/mcp/protocol/McpQueuedDeadlineBoundaryRegressionTests.java"
+      },
+      {
+        "kinds": [
+          "JUNIT_OUTER_GUARD"
+        ],
         "line": 57,
         "lineSha256": "158ed2016068067b761a9e2650a699bbf36d5301284e226bc3965e571e96e6ef",
         "path": "src/test/java/com/soklet/internal/mcp/protocol/McpQueuedExecutionWinnerElectionTests.java"
@@ -99703,6 +99930,54 @@
         "kinds": [
           "JUNIT_OUTER_GUARD"
         ],
+        "line": 35,
+        "lineSha256": "158ed2016068067b761a9e2650a699bbf36d5301284e226bc3965e571e96e6ef",
+        "path": "src/test/java/com/soklet/internal/microhttp/StreamObservationExecutorTests.java"
+      },
+      {
+        "kinds": [
+          "FIXED_WAIT_CANDIDATE"
+        ],
+        "line": 50,
+        "lineSha256": "0c36d8e4c23c9ccb5281bf48dddacc7bf7449498c26c3fca36bd6ca2842ddff9",
+        "path": "src/test/java/com/soklet/internal/microhttp/StreamObservationExecutorTests.java"
+      },
+      {
+        "kinds": [
+          "FIXED_WAIT_CANDIDATE"
+        ],
+        "line": 82,
+        "lineSha256": "adcd311fddc490be707cda7c21c51da8d00205629f25e2d1a6e8452fc70dd0c8",
+        "path": "src/test/java/com/soklet/internal/microhttp/StreamObservationExecutorTests.java"
+      },
+      {
+        "kinds": [
+          "FIXED_WAIT_CANDIDATE"
+        ],
+        "line": 123,
+        "lineSha256": "69eec0d8957a19d266ead9d8e5aab2ff8d81209e1030d406306a6d3a7c9fc859",
+        "path": "src/test/java/com/soklet/internal/microhttp/StreamObservationExecutorTests.java"
+      },
+      {
+        "kinds": [
+          "FIXED_WAIT_CANDIDATE"
+        ],
+        "line": 150,
+        "lineSha256": "600c72cbba5dab01e5d6fd52ab6d9d071bdf7f578171110d6a8a2a8bf53c71b2",
+        "path": "src/test/java/com/soklet/internal/microhttp/StreamObservationExecutorTests.java"
+      },
+      {
+        "kinds": [
+          "FIXED_WAIT_CANDIDATE"
+        ],
+        "line": 151,
+        "lineSha256": "9afeb5d4757419b8420c80324c8338d8c023831644c587e75f758ed63a81e759",
+        "path": "src/test/java/com/soklet/internal/microhttp/StreamObservationExecutorTests.java"
+      },
+      {
+        "kinds": [
+          "JUNIT_OUTER_GUARD"
+        ],
         "line": 50,
         "lineSha256": "3b1bf774b68e9dc5a60e779179502c92e68bb2c341b5c2573cf9dc0ec0a3d4a1",
         "path": "src/test/java/com/soklet/internal/microhttp/StreamingDisconnectMonitorTests.java"
@@ -103940,14 +104215,14 @@
       }
     ],
     "countsByKind": {
-      "FIXED_WAIT_CANDIDATE": 3406,
-      "JUNIT_OUTER_GUARD": 680,
-      "LIFECYCLE_SIGNAL": 6963,
-      "NAMED_TIMEOUT_CANDIDATE": 2394,
+      "FIXED_WAIT_CANDIDATE": 3420,
+      "JUNIT_OUTER_GUARD": 687,
+      "LIFECYCLE_SIGNAL": 6971,
+      "NAMED_TIMEOUT_CANDIDATE": 2397,
       "PROCESS_OUTER_GUARD": 24,
       "WORKFLOW_OUTER_GUARD": 15
     },
-    "pathCount": 650
+    "pathCount": 654
   },
   "formatVersion": 2,
   "javascriptGuards": [
@@ -104000,8 +104275,8 @@
     }
   ],
   "junitGuardSummary": {
-    "count": 619,
-    "sha256": "8a94a63d1a48623ce6e75355ff35b6a0a729e0d701b82830cafa7b8fbd79009a"
+    "count": 623,
+    "sha256": "3cdfeadbee597c6e231e7d3eefc5059f6fe477d45f96fa4c8207c2f0247546a8"
   },
   "lifecycleScopes": [
     {
@@ -109237,6 +109512,450 @@
         "testFactory": false,
         "unresolvedFixedControlWaitCount": 0,
         "unresolvedLifecycleRepetitionCount": 0,
+        "unresolvedLifecycleReceiverCount": 0,
+        "unresolvedPolicyBuilderCount": 0,
+        "unresolvedPolicyInstallationCount": 0,
+        "unwrappedDynamicNodeCount": 0
+      }
+    },
+    {
+      "review": {
+        "applicablePathBoundsMillis": {
+          "NORMAL_STARTUP": 2000,
+          "RUNNING_STOP": 400,
+          "NORMAL_START_THEN_RUNNING_STOP": 2400,
+          "SHUTDOWN_DURING_STARTUP_FROM_OUTER_START": 2600,
+          "STARTUP_TIMEOUT_PLUS_ROLLBACK": 2600
+        },
+        "applicationCleanupCount": 0,
+        "applicationCleanupMillis": 0,
+        "branchBoundsMillis": {
+          "COMPLETE_CORE": 7200,
+          "INCOMPLETE_CORE": 7800
+        },
+        "classification": "LOCAL_POLICY_STRICT_FIT",
+        "cleanupProof": null,
+        "closureStatus": "CLOSED",
+        "completeGenerationMultiplier": 3,
+        "controlJoinMillis": 0,
+        "controlProof": null,
+        "controlTopology": "NONE",
+        "controlledCompletionProof": null,
+        "controlledLifecycleCoreMillis": null,
+        "generationCount": 3,
+        "generationMode": "SEQUENTIAL",
+        "generationProof": {
+          "line": 31,
+          "lineSha256": "3ed2337c07bdfeb7bf525e8830133ea51fbef93ae3ad944b608a94894c2b8c3a",
+          "path": "src/test/java/com/soklet/CorsReflectionSafetyTests.java",
+          "rationale": "The full callable hash and independent verifier override bind the reviewed generation topology."
+        },
+        "incompleteBranchCleanupCount": 0,
+        "incompleteGenerationMultiplier": 3,
+        "lifecycleCoreBranchBoundsMillis": {
+          "COMPLETE_CORE": 7200,
+          "INCOMPLETE_CORE": 7800
+        },
+        "outerGuard": {
+          "kind": "EXPLICIT_METHOD_TIMEOUT",
+          "millis": 60000,
+          "path": "src/test/java/com/soklet/CorsReflectionSafetyTests.java"
+        },
+        "phasePolicy": {
+          "controlledStartupMillis": null,
+          "forcedShutdownMillis": 200,
+          "gracefulShutdownMillis": 200,
+          "startupCancellationMillis": 200,
+          "startupMillis": 2000,
+          "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
+        },
+        "policyProof": {
+          "line": 31,
+          "lineSha256": "3ed2337c07bdfeb7bf525e8830133ea51fbef93ae3ad944b608a94894c2b8c3a",
+          "path": "src/test/java/com/soklet/CorsReflectionSafetyTests.java",
+          "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
+        },
+        "priorCompleteGenerationMultiplier": 0,
+        "rationale": "Every applicable lifecycle branch, repeated generation, cleanup/report phase, and control join is composed under the effective outer guard.",
+        "requiredAction": "MIGRATE_POLICY",
+        "requiredReserveMillis": 1,
+        "reserveMillis": 52200,
+        "terminalReportCount": 0,
+        "terminalReportMillis": 0,
+        "totalComposedBoundMillis": 7800
+      },
+      "source": {
+        "applicationRunSiteCount": 0,
+        "cleanupConfigured": false,
+        "disabled": false,
+        "dynamicNodeCount": 0,
+        "dynamicNodeGuardMillis": null,
+        "effectiveOuterTimeoutMillis": 60000,
+        "fileSha256": "89deb09861d9267b39f2a13a6fdf5856aa9b109e6364b87d09b58be7422af831",
+        "fixedControlWaitCount": 0,
+        "fixedControlWaitMillis": 0,
+        "factoryGenerationHasExecution": false,
+        "factoryGenerationFixedControlWaitMillis": 0,
+        "factoryGenerationOuterTimeoutMillis": null,
+        "factoryGenerationOuterTimeoutScope": null,
+        "factoryGenerationUnresolvedFixedControlWaitCount": 0,
+        "generationSiteCount": 1,
+        "hasExecution": true,
+        "hasInlineCleanup": false,
+        "hasInlineNoStartupTimeout": false,
+        "hasInlinePolicy": false,
+        "hasLocalPolicy": true,
+        "hasNoStartupTimeout": false,
+        "id": "SCOPE-491b25b782d08ee1",
+        "inlineCleanupMillis": null,
+        "line": 31,
+        "lineSha256": "3ed2337c07bdfeb7bf525e8830133ea51fbef93ae3ad944b608a94894c2b8c3a",
+        "observedOperations": [
+          "CONFIGURE_POLICY",
+          "RUN_SIMULATOR"
+        ],
+        "outerTimeoutScope": "METHOD",
+        "path": "src/test/java/com/soklet/CorsReflectionSafetyTests.java",
+        "scopeKind": "TEST",
+        "scopeName": "unsafeOriginDoesNotReplaceHttpOrErrorResponsesAndRemainsVisible",
+        "scopeSha256": "b6979c39c0cce96a48ea7751b31ab44c7a4ab14136af943619f5a1c8b30a162b",
+        "terminalReportExpected": false,
+        "testFactory": false,
+        "unresolvedFixedControlWaitCount": 0,
+        "unresolvedLifecycleRepetitionCount": 2,
+        "unresolvedLifecycleReceiverCount": 0,
+        "unresolvedPolicyBuilderCount": 0,
+        "unresolvedPolicyInstallationCount": 0,
+        "unwrappedDynamicNodeCount": 0
+      }
+    },
+    {
+      "review": {
+        "applicablePathBoundsMillis": {
+          "NORMAL_STARTUP": 2000,
+          "RUNNING_STOP": 400,
+          "NORMAL_START_THEN_RUNNING_STOP": 2400,
+          "SHUTDOWN_DURING_STARTUP_FROM_OUTER_START": 2600,
+          "STARTUP_TIMEOUT_PLUS_ROLLBACK": 2600
+        },
+        "applicationCleanupCount": 0,
+        "applicationCleanupMillis": 0,
+        "branchBoundsMillis": {
+          "COMPLETE_CORE": 7200,
+          "INCOMPLETE_CORE": 7800
+        },
+        "classification": "LOCAL_POLICY_STRICT_FIT",
+        "cleanupProof": null,
+        "closureStatus": "CLOSED",
+        "completeGenerationMultiplier": 3,
+        "controlJoinMillis": 0,
+        "controlProof": null,
+        "controlTopology": "NONE",
+        "controlledCompletionProof": null,
+        "controlledLifecycleCoreMillis": null,
+        "generationCount": 3,
+        "generationMode": "SEQUENTIAL",
+        "generationProof": {
+          "line": 60,
+          "lineSha256": "5457297f69752943e4aa824e1260ba7c8780c0de7930ff6cb569f39e8a434001",
+          "path": "src/test/java/com/soklet/CorsReflectionSafetyTests.java",
+          "rationale": "The full callable hash and independent verifier override bind the reviewed generation topology."
+        },
+        "incompleteBranchCleanupCount": 0,
+        "incompleteGenerationMultiplier": 3,
+        "lifecycleCoreBranchBoundsMillis": {
+          "COMPLETE_CORE": 7200,
+          "INCOMPLETE_CORE": 7800
+        },
+        "outerGuard": {
+          "kind": "EXPLICIT_METHOD_TIMEOUT",
+          "millis": 60000,
+          "path": "src/test/java/com/soklet/CorsReflectionSafetyTests.java"
+        },
+        "phasePolicy": {
+          "controlledStartupMillis": null,
+          "forcedShutdownMillis": 200,
+          "gracefulShutdownMillis": 200,
+          "startupCancellationMillis": 200,
+          "startupMillis": 2000,
+          "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
+        },
+        "policyProof": {
+          "line": 60,
+          "lineSha256": "5457297f69752943e4aa824e1260ba7c8780c0de7930ff6cb569f39e8a434001",
+          "path": "src/test/java/com/soklet/CorsReflectionSafetyTests.java",
+          "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
+        },
+        "priorCompleteGenerationMultiplier": 0,
+        "rationale": "Every applicable lifecycle branch, repeated generation, cleanup/report phase, and control join is composed under the effective outer guard.",
+        "requiredAction": "MIGRATE_POLICY",
+        "requiredReserveMillis": 1,
+        "reserveMillis": 52200,
+        "terminalReportCount": 0,
+        "terminalReportMillis": 0,
+        "totalComposedBoundMillis": 7800
+      },
+      "source": {
+        "applicationRunSiteCount": 0,
+        "cleanupConfigured": false,
+        "disabled": false,
+        "dynamicNodeCount": 0,
+        "dynamicNodeGuardMillis": null,
+        "effectiveOuterTimeoutMillis": 60000,
+        "fileSha256": "89deb09861d9267b39f2a13a6fdf5856aa9b109e6364b87d09b58be7422af831",
+        "fixedControlWaitCount": 0,
+        "fixedControlWaitMillis": 0,
+        "factoryGenerationHasExecution": false,
+        "factoryGenerationFixedControlWaitMillis": 0,
+        "factoryGenerationOuterTimeoutMillis": null,
+        "factoryGenerationOuterTimeoutScope": null,
+        "factoryGenerationUnresolvedFixedControlWaitCount": 0,
+        "generationSiteCount": 1,
+        "hasExecution": true,
+        "hasInlineCleanup": false,
+        "hasInlineNoStartupTimeout": false,
+        "hasInlinePolicy": false,
+        "hasLocalPolicy": true,
+        "hasNoStartupTimeout": false,
+        "id": "SCOPE-cbe3e96e6401fdc8",
+        "inlineCleanupMillis": null,
+        "line": 60,
+        "lineSha256": "5457297f69752943e4aa824e1260ba7c8780c0de7930ff6cb569f39e8a434001",
+        "observedOperations": [
+          "CONFIGURE_POLICY",
+          "RUN_SIMULATOR"
+        ],
+        "outerTimeoutScope": "METHOD",
+        "path": "src/test/java/com/soklet/CorsReflectionSafetyTests.java",
+        "scopeKind": "TEST",
+        "scopeName": "unsafePreflightReflectionIsExplicitlyDeniedWithoutDroppingNames",
+        "scopeSha256": "46b37ed2b1ccb852cb0cfcda8c2730f4675d689effc444e4b1c0cd740b11b2fd",
+        "terminalReportExpected": false,
+        "testFactory": false,
+        "unresolvedFixedControlWaitCount": 0,
+        "unresolvedLifecycleRepetitionCount": 2,
+        "unresolvedLifecycleReceiverCount": 0,
+        "unresolvedPolicyBuilderCount": 0,
+        "unresolvedPolicyInstallationCount": 0,
+        "unwrappedDynamicNodeCount": 0
+      }
+    },
+    {
+      "review": {
+        "applicablePathBoundsMillis": {
+          "NORMAL_STARTUP": 2000,
+          "RUNNING_STOP": 400,
+          "NORMAL_START_THEN_RUNNING_STOP": 2400,
+          "SHUTDOWN_DURING_STARTUP_FROM_OUTER_START": 2600,
+          "STARTUP_TIMEOUT_PLUS_ROLLBACK": 2600
+        },
+        "applicationCleanupCount": 0,
+        "applicationCleanupMillis": 0,
+        "branchBoundsMillis": {
+          "COMPLETE_CORE": 9600,
+          "INCOMPLETE_CORE": 10400
+        },
+        "classification": "LOCAL_POLICY_STRICT_FIT",
+        "cleanupProof": null,
+        "closureStatus": "CLOSED",
+        "completeGenerationMultiplier": 4,
+        "controlJoinMillis": 0,
+        "controlProof": null,
+        "controlTopology": "NONE",
+        "controlledCompletionProof": null,
+        "controlledLifecycleCoreMillis": null,
+        "generationCount": 4,
+        "generationMode": "SEQUENTIAL",
+        "generationProof": {
+          "line": 99,
+          "lineSha256": "a611c1ce3e6ae043210f4b908ca8561216bd39a34695f808ca2c3b93e29e25df",
+          "path": "src/test/java/com/soklet/CorsReflectionSafetyTests.java",
+          "rationale": "The full callable hash and independent verifier override bind the reviewed generation topology."
+        },
+        "incompleteBranchCleanupCount": 0,
+        "incompleteGenerationMultiplier": 4,
+        "lifecycleCoreBranchBoundsMillis": {
+          "COMPLETE_CORE": 9600,
+          "INCOMPLETE_CORE": 10400
+        },
+        "outerGuard": {
+          "kind": "EXPLICIT_METHOD_TIMEOUT",
+          "millis": 60000,
+          "path": "src/test/java/com/soklet/CorsReflectionSafetyTests.java"
+        },
+        "phasePolicy": {
+          "controlledStartupMillis": null,
+          "forcedShutdownMillis": 200,
+          "gracefulShutdownMillis": 200,
+          "startupCancellationMillis": 200,
+          "startupMillis": 2000,
+          "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
+        },
+        "policyProof": {
+          "line": 99,
+          "lineSha256": "a611c1ce3e6ae043210f4b908ca8561216bd39a34695f808ca2c3b93e29e25df",
+          "path": "src/test/java/com/soklet/CorsReflectionSafetyTests.java",
+          "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
+        },
+        "priorCompleteGenerationMultiplier": 0,
+        "rationale": "Every applicable lifecycle branch, repeated generation, cleanup/report phase, and control join is composed under the effective outer guard.",
+        "requiredAction": "MIGRATE_POLICY",
+        "requiredReserveMillis": 1,
+        "reserveMillis": 49600,
+        "terminalReportCount": 0,
+        "terminalReportMillis": 0,
+        "totalComposedBoundMillis": 10400
+      },
+      "source": {
+        "applicationRunSiteCount": 0,
+        "cleanupConfigured": false,
+        "disabled": false,
+        "dynamicNodeCount": 0,
+        "dynamicNodeGuardMillis": null,
+        "effectiveOuterTimeoutMillis": 60000,
+        "fileSha256": "89deb09861d9267b39f2a13a6fdf5856aa9b109e6364b87d09b58be7422af831",
+        "fixedControlWaitCount": 0,
+        "fixedControlWaitMillis": 0,
+        "factoryGenerationHasExecution": false,
+        "factoryGenerationFixedControlWaitMillis": 0,
+        "factoryGenerationOuterTimeoutMillis": null,
+        "factoryGenerationOuterTimeoutScope": null,
+        "factoryGenerationUnresolvedFixedControlWaitCount": 0,
+        "generationSiteCount": 2,
+        "hasExecution": true,
+        "hasInlineCleanup": false,
+        "hasInlineNoStartupTimeout": false,
+        "hasInlinePolicy": false,
+        "hasLocalPolicy": true,
+        "hasNoStartupTimeout": false,
+        "id": "SCOPE-def7d69618c7896e",
+        "inlineCleanupMillis": null,
+        "line": 99,
+        "lineSha256": "a611c1ce3e6ae043210f4b908ca8561216bd39a34695f808ca2c3b93e29e25df",
+        "observedOperations": [
+          "CONFIGURE_POLICY",
+          "RUN_SIMULATOR"
+        ],
+        "outerTimeoutScope": "METHOD",
+        "path": "src/test/java/com/soklet/CorsReflectionSafetyTests.java",
+        "scopeKind": "TEST",
+        "scopeName": "safeCredentialedAndUnlistedOriginsKeepTheirExistingBehavior",
+        "scopeSha256": "673ec9d7ac4f5849af95c60c51cee7cc8d8e69874bbf902018355c62ffc5f4d8",
+        "terminalReportExpected": false,
+        "testFactory": false,
+        "unresolvedFixedControlWaitCount": 0,
+        "unresolvedLifecycleRepetitionCount": 2,
+        "unresolvedLifecycleReceiverCount": 0,
+        "unresolvedPolicyBuilderCount": 0,
+        "unresolvedPolicyInstallationCount": 0,
+        "unwrappedDynamicNodeCount": 0
+      }
+    },
+    {
+      "review": {
+        "applicablePathBoundsMillis": {
+          "NORMAL_STARTUP": 2000,
+          "RUNNING_STOP": 400,
+          "NORMAL_START_THEN_RUNNING_STOP": 2400,
+          "SHUTDOWN_DURING_STARTUP_FROM_OUTER_START": 2600,
+          "STARTUP_TIMEOUT_PLUS_ROLLBACK": 2600
+        },
+        "applicationCleanupCount": 0,
+        "applicationCleanupMillis": 0,
+        "branchBoundsMillis": {
+          "COMPLETE_CORE": 7200,
+          "INCOMPLETE_CORE": 7800
+        },
+        "classification": "LOCAL_POLICY_STRICT_FIT",
+        "cleanupProof": null,
+        "closureStatus": "CLOSED",
+        "completeGenerationMultiplier": 3,
+        "controlJoinMillis": 0,
+        "controlProof": null,
+        "controlTopology": "NONE",
+        "controlledCompletionProof": null,
+        "controlledLifecycleCoreMillis": null,
+        "generationCount": 3,
+        "generationMode": "SEQUENTIAL",
+        "generationProof": {
+          "line": 124,
+          "lineSha256": "c06e97e1e657643284d5d03679e220d3c6c26912e769867e7f8416ff2747e7d3",
+          "path": "src/test/java/com/soklet/CorsReflectionSafetyTests.java",
+          "rationale": "The full callable hash and independent verifier override bind the reviewed generation topology."
+        },
+        "incompleteBranchCleanupCount": 0,
+        "incompleteGenerationMultiplier": 3,
+        "lifecycleCoreBranchBoundsMillis": {
+          "COMPLETE_CORE": 7200,
+          "INCOMPLETE_CORE": 7800
+        },
+        "outerGuard": {
+          "kind": "EXPLICIT_METHOD_TIMEOUT",
+          "millis": 60000,
+          "path": "src/test/java/com/soklet/CorsReflectionSafetyTests.java"
+        },
+        "phasePolicy": {
+          "controlledStartupMillis": null,
+          "forcedShutdownMillis": 200,
+          "gracefulShutdownMillis": 200,
+          "startupCancellationMillis": 200,
+          "startupMillis": 2000,
+          "mode": "SOURCE_CONFIGURED_FINITE_WITH_PROOF"
+        },
+        "policyProof": {
+          "line": 124,
+          "lineSha256": "c06e97e1e657643284d5d03679e220d3c6c26912e769867e7f8416ff2747e7d3",
+          "path": "src/test/java/com/soklet/CorsReflectionSafetyTests.java",
+          "rationale": "The full callable hash plus propagated helper/field evidence binds every configured policy phase."
+        },
+        "priorCompleteGenerationMultiplier": 0,
+        "rationale": "Every applicable lifecycle branch, repeated generation, cleanup/report phase, and control join is composed under the effective outer guard.",
+        "requiredAction": "MIGRATE_POLICY",
+        "requiredReserveMillis": 1,
+        "reserveMillis": 52200,
+        "terminalReportCount": 0,
+        "terminalReportMillis": 0,
+        "totalComposedBoundMillis": 7800
+      },
+      "source": {
+        "applicationRunSiteCount": 0,
+        "cleanupConfigured": false,
+        "disabled": false,
+        "dynamicNodeCount": 0,
+        "dynamicNodeGuardMillis": null,
+        "effectiveOuterTimeoutMillis": 60000,
+        "fileSha256": "89deb09861d9267b39f2a13a6fdf5856aa9b109e6364b87d09b58be7422af831",
+        "fixedControlWaitCount": 0,
+        "fixedControlWaitMillis": 0,
+        "factoryGenerationHasExecution": false,
+        "factoryGenerationFixedControlWaitMillis": 0,
+        "factoryGenerationOuterTimeoutMillis": null,
+        "factoryGenerationOuterTimeoutScope": null,
+        "factoryGenerationUnresolvedFixedControlWaitCount": 0,
+        "generationSiteCount": 1,
+        "hasExecution": true,
+        "hasInlineCleanup": false,
+        "hasInlineNoStartupTimeout": false,
+        "hasInlinePolicy": false,
+        "hasLocalPolicy": true,
+        "hasNoStartupTimeout": false,
+        "id": "SCOPE-df955bdbfb8bd3fb",
+        "inlineCleanupMillis": null,
+        "line": 124,
+        "lineSha256": "c06e97e1e657643284d5d03679e220d3c6c26912e769867e7f8416ff2747e7d3",
+        "observedOperations": [
+          "CONFIGURE_POLICY",
+          "RUN_SIMULATOR"
+        ],
+        "outerTimeoutScope": "METHOD",
+        "path": "src/test/java/com/soklet/CorsReflectionSafetyTests.java",
+        "scopeKind": "TEST",
+        "scopeName": "unsafeOriginDoesNotBreakSseHandshakeAndValidCredentialsStillWork",
+        "scopeSha256": "be59dfc15e2bfb31482ed7e1fdd9ddf9ce89b330283cadf8e0cf3c21daece8c1",
+        "terminalReportExpected": false,
+        "testFactory": false,
+        "unresolvedFixedControlWaitCount": 0,
+        "unresolvedLifecycleRepetitionCount": 2,
         "unresolvedLifecycleReceiverCount": 0,
         "unresolvedPolicyBuilderCount": 0,
         "unresolvedPolicyInstallationCount": 0,
@@ -266918,7 +267637,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "336f4cbf083b8d5441e7adc27f8839319ff99195851c2e8d6ebc64cc370fd7ea",
+        "fileSha256": "40de5a4a61e557654d76ec448a6fe4083ecde3254b40a43d3937011e383a479a",
         "fixedControlWaitCount": 6,
         "fixedControlWaitMillis": 23000,
         "factoryGenerationHasExecution": false,
@@ -267030,7 +267749,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "336f4cbf083b8d5441e7adc27f8839319ff99195851c2e8d6ebc64cc370fd7ea",
+        "fileSha256": "40de5a4a61e557654d76ec448a6fe4083ecde3254b40a43d3937011e383a479a",
         "fixedControlWaitCount": 6,
         "fixedControlWaitMillis": 23000,
         "factoryGenerationHasExecution": false,
@@ -267137,7 +267856,7 @@
         "dynamicNodeCount": 0,
         "dynamicNodeGuardMillis": null,
         "effectiveOuterTimeoutMillis": 60000,
-        "fileSha256": "336f4cbf083b8d5441e7adc27f8839319ff99195851c2e8d6ebc64cc370fd7ea",
+        "fileSha256": "40de5a4a61e557654d76ec448a6fe4083ecde3254b40a43d3937011e383a479a",
         "fixedControlWaitCount": 5,
         "fixedControlWaitMillis": 20000,
         "factoryGenerationHasExecution": false,

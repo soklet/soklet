@@ -335,6 +335,9 @@ UTF-8, such as `%FF`, are rejected.
 
 Request parsing also corrects these cases:
 
+- HTTP method names are case-sensitive. Lowercase methods such as `get` that
+  were previously accepted now receive HTTP `400`; send canonical methods such as
+  `GET` and `POST`.
 - An origin-form target such as `//x/admin` retains every path component.
   `getRawPath()` returns `//x/admin`; the existing decoded normalization makes
   `getPath()` return `/x/admin`, preserving `x` when routing.
@@ -1964,6 +1967,12 @@ types replace their old declarations, and retained owners absent from the
 compiler's sources/classpath are removed. Untouched sources, compiled classes
 and dependency JARs must remain visible to the compiler.
 The same visibility and clean-build rules apply to annotated MCP endpoint owners.
+For direct `javac`, always select the classes directory with `-d` and include
+that directory on `-cp` when recompiling only part of an application. `-d` alone
+does not make untouched classfiles visible to the processor. Otherwise a partial
+compile can silently remove their routes from the generated index. Recover with
+a clean compile of all annotated sources, and package the generated
+`META-INF/soklet` resources from the output directory with the classfiles.
 Package only successful compiler output: late javac or cache-publication errors
 can leave partial generated indexes, so recover from those failures with a clean build.
 

@@ -113,9 +113,12 @@ public final class Response {
 
 	/**
 	 * Acquires a builder for {@link Response} instances that are intended to redirect the client.
+	 * The location must be an already encoded ASCII URI reference, relative or absolute.
+	 * Soklet copies it to {@code Location} without URI encoding. Encode non-ASCII components
+	 * before calling this method, for example with {@link java.net.URI#toASCIIString()}.
 	 *
 	 * @param redirectType the kind of redirect to perform, for example {@link RedirectType#HTTP_307_TEMPORARY_REDIRECT}
-	 * @param location     the URL to redirect to
+	 * @param location     the encoded ASCII URI reference to redirect to
 	 * @return the builder
 	 */
 	@NonNull
@@ -128,9 +131,11 @@ public final class Response {
 
 	/**
 	 * Creates a redirect {@link Response} with no additional customization.
+	 * The location has the same encoded ASCII URI-reference requirement as
+	 * {@link #withRedirect(RedirectType, String)}.
 	 *
 	 * @param redirectType the kind of redirect to perform, for example {@link RedirectType#HTTP_307_TEMPORARY_REDIRECT}
-	 * @param location     the URL to redirect to
+	 * @param location     the encoded ASCII URI reference to redirect to
 	 * @return a {@link Response} instance
 	 */
 	@NonNull
@@ -299,6 +304,14 @@ public final class Response {
 			return this;
 		}
 
+		/**
+		 * Configures a redirect using an already encoded ASCII URI reference.
+		 * The location is copied to {@code Location} without URI encoding.
+		 *
+		 * @param redirectType the kind of redirect to perform
+		 * @param location the encoded ASCII URI reference, relative or absolute
+		 * @return this builder
+		 */
 		@NonNull
 		public Builder redirect(@NonNull RedirectType redirectType,
 														@NonNull String location) {

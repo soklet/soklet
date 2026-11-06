@@ -3023,7 +3023,11 @@ final class McpApplicationExecution {
 			// The dispatcher also owns any outstanding interrupt delivery.
 			// Keep exchange/session physical evidence until that tail has exited.
 			handlerFinished.set(true);
-			cleanupRetainedExchange();
+			// Cancel-before-dispatch reports physical exit during the terminal election.
+			// That election's completion releases response ownership after its locks,
+			// before cleanup can enter a transport RequestControl's ownership lock.
+			if (!Thread.holdsLock(terminalLock))
+				cleanupRetainedExchange();
 		}
 
 		@NonNull
@@ -3286,8 +3290,14 @@ final class McpApplicationExecution {
 						boolean releaseCallbacks = cancellation.fixReason(requireNonNull(reason));
 						terminalState = TerminalState.ABANDONED;
 						cancelBeforeDispatch = dispatcher.cancelBeforeDispatch(ticket());
-						if (releaseCallbacks)
-							reserveCancellationCallbacks(cancelBeforeDispatch);
+						if (releaseCallbacks) {
+							// Stop may already have canceled queued tickets. They cannot
+							// register callbacks and must not consume a running sidecar.
+							McpApplicationHandlerDispatcher.TicketState ticketState = ticket().state();
+							reserveCancellationCallbacks(cancelBeforeDispatch
+									|| ticketState == McpApplicationHandlerDispatcher.TicketState.CANCELED
+									|| ticketState == McpApplicationHandlerDispatcher.TicketState.REJECTED);
+						}
 					}
 				}
 			} finally {

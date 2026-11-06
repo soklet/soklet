@@ -17,21 +17,24 @@
 package com.soklet;
 
 /**
- * Categorizes framework-observed work that remains after shutdown.
+ * Categorizes conservative framework-observed activity retained in shutdown evidence.
+ * A category may come from an earlier shutdown observation when complete termination
+ * could not be proven; it does not assert that the work is still active when the
+ * immutable result is published. See {@link ResidualActivityEvidence}.
  * <p>
  * This type may gain reviewed constants in Soklet 4.x; use a forward-compatible default when switching over its values.
  */
 public enum ResidualActivityType {
-	/** An admitted callback remains active. */
+	/** Observed admitted callback activity. */
 	CALLBACK,
-	/** A response or event stream remains active. */
+	/** Observed response or event stream activity. */
 	STREAM,
-	/** A transport connection remains active. */
+	/** Observed transport connection activity. */
 	CONNECTION,
-	/** An event loop remains active. */
+	/** Observed event-loop activity. */
 	EVENT_LOOP,
-	/** An executor task remains active. */
+	/** Observed executor task activity. */
 	EXECUTOR_TASK,
-	/** A tracked lifecycle call remains active. */
+	/** Observed tracked lifecycle call activity. */
 	LIFECYCLE_CALL
 }

@@ -111,7 +111,7 @@ public static WhitelistedOriginsCorsAuthorizer fromAuthorizer(@NonNull Function<
 
 		String origin = normalizeOrigin(cors.getOrigin());
 
-		if (isSuspiciousOrigin(origin))
+		if (isSuspiciousOrigin(origin) || !Cors.isSafeToReflectOrigin(cors.getOrigin()))
 			return Optional.empty();
 
 		Boolean authorized = getAuthorizer().apply(origin);
@@ -157,7 +157,7 @@ public static WhitelistedOriginsCorsAuthorizer fromAuthorizer(@NonNull Function<
 																														 @NonNull Set<@NonNull HttpMethod> availableHttpMethods) {
 		String origin = normalizeOrigin(corsPreflight.getOrigin());
 
-		if (isSuspiciousOrigin(origin))
+		if (isSuspiciousOrigin(origin) || !corsPreflight.isSafeToReflect())
 			return Optional.empty();
 
 		Boolean authorized = getAuthorizer().apply(origin);

@@ -1328,12 +1328,15 @@ public final class StreamLifecycleCoordinator {
 
 	/**
 	 * One observation per admitted lifetime, with at most capacity workers and a
-	 * capacity-sized queue. Core size follows accepted envelopes, including jobs
+	 * capacity-sized queue. Core size tracks the high-water mark of accepted envelopes, including jobs
 	 * whose framework wrapper is still returning after reservation retirement.
 	 * A new observation therefore gets a worker even when older observers block.
 	 * Queuing can cover a returning framework wrapper, never a missing worker
 	 * budget for another admitted application's blocked observation. Idle workers
-	 * are reused and expire; a capacity-sized fixed core is not eagerly created.
+	 * expire after thirty seconds. The core target is retained after expiry, so
+	 * later submissions can refill that target before reusing idle workers.
+	 * Lowering it on every completion would interrupt all idle workers.
+	 * A capacity-sized fixed core is not eagerly created.
 	 * No application code runs under the dispatch lock or inline.
 	 */
 	private static final class ObservationExecutor extends ThreadPoolExecutor {
@@ -1351,7 +1354,8 @@ public final class StreamLifecycleCoordinator {
 			requireNonNull(action);
 			synchronized (this.dispatchLock) {
 				this.pendingTasks++;
-				setCorePoolSize(Math.min(getMaximumPoolSize(), this.pendingTasks));
+				if (this.pendingTasks > getCorePoolSize())
+					setCorePoolSize(Math.min(getMaximumPoolSize(), this.pendingTasks));
 				try {
 					super.execute(() -> {
 						try { action.run(); }
@@ -1367,7 +1371,6 @@ public final class StreamLifecycleCoordinator {
 		private void finishTask() {
 			synchronized (this.dispatchLock) {
 				this.pendingTasks--;
-				setCorePoolSize(Math.min(getMaximumPoolSize(), this.pendingTasks));
 			}
 		}
 	}

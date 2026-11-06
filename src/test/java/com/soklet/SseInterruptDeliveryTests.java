@@ -163,8 +163,10 @@ class SseInterruptDeliveryTests {
 			readEntered.countDown();
 			try {
 				while (isOpen()) {
-					try { Thread.sleep(60_000); }
-					catch (InterruptedException expected) { break; }
+					// An interrupt may wake this sleep before reading the channel blocker.
+					// Stay registered until the interrupt actually closes the channel.
+					try { Thread.sleep(1); }
+					catch (InterruptedException expected) { }
 				}
 			} finally { end(false); }
 		}

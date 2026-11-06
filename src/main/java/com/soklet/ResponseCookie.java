@@ -30,6 +30,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import static com.soklet.Utilities.printableChar;
+import static com.soklet.Utilities.printableString;
 import static com.soklet.Utilities.trimAggressivelyToNull;
 import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
@@ -1063,15 +1065,15 @@ public final class ResponseCookie {
 				// CTL = <US-ASCII control chars (octets 0 - 31) and DEL (127)>
 				if (c <= 0x1F || c == 0x7F) {
 					throw new IllegalArgumentException(
-							name + ": RFC2616 token cannot have control chars");
+							printableString(name) + ": RFC2616 token cannot have control chars");
 				}
 				if (SEPARATOR_CHARS.indexOf(c) >= 0) {
 					throw new IllegalArgumentException(
-							name + ": RFC2616 token cannot have separator chars such as '" + c + "'");
+							printableString(name) + ": RFC2616 token cannot have separator chars such as '" + printableChar(c) + "'");
 				}
 				if (c >= 0x80) {
 					throw new IllegalArgumentException(
-							name + ": RFC2616 token can only have US-ASCII: 0x" + Integer.toHexString(c));
+							printableString(name) + ": RFC2616 token can only have US-ASCII: 0x" + Integer.toHexString(c));
 				}
 			}
 		}
@@ -1090,7 +1092,7 @@ public final class ResponseCookie {
 				char c = value.charAt(i);
 				if (c < 0x21 || c == 0x22 || c == 0x2c || c == 0x3b || c == 0x5c || c == 0x7f) {
 					throw new IllegalArgumentException(
-							"RFC2616 cookie value cannot have '" + c + "'");
+							"RFC2616 cookie value cannot have '" + printableChar(c) + "'");
 				}
 				if (c >= 0x80) {
 					throw new IllegalArgumentException(
@@ -1106,13 +1108,13 @@ public final class ResponseCookie {
 			int char1 = domain.charAt(0);
 			int charN = domain.charAt(domain.length() - 1);
 			if (char1 == '-' || charN == '.' || charN == '-') {
-				throw new IllegalArgumentException("Invalid first/last char in cookie domain: " + domain);
+				throw new IllegalArgumentException("Invalid first/last char in cookie domain: " + printableString(domain));
 			}
 			for (int i = 0, c = -1; i < domain.length(); i++) {
 				int p = c;
 				c = domain.charAt(i);
 				if (DOMAIN_CHARS.indexOf(c) == -1 || (p == '.' && (c == '.' || c == '-')) || (p == '-' && c == '.')) {
-					throw new IllegalArgumentException(domain + ": invalid cookie domain char '" + (char) c + "'");
+					throw new IllegalArgumentException(printableString(domain) + ": invalid cookie domain char '" + printableChar((char) c) + "'");
 				}
 			}
 		}
@@ -1124,56 +1126,56 @@ public final class ResponseCookie {
 			// Check for path traversal attempts
 			if (path.contains("..")) {
 				throw new IllegalArgumentException(
-						"Cookie path must not contain '..' segments (path traversal): " + path
+						"Cookie path must not contain '..' segments (path traversal): " + printableString(path)
 				);
 			}
 
 			// Check for query strings
 			if (path.contains("?")) {
 				throw new IllegalArgumentException(
-						"Cookie path must not contain query strings: " + path
+						"Cookie path must not contain query strings: " + printableString(path)
 				);
 			}
 
 			// Check for fragments
 			if (path.contains("#")) {
 				throw new IllegalArgumentException(
-						"Cookie path must not contain fragments: " + path
+						"Cookie path must not contain fragments: " + printableString(path)
 				);
 			}
 
 			// Check for backslashes (Windows-style paths)
 			if (path.contains("\\")) {
 				throw new IllegalArgumentException(
-						"Cookie path must not contain backslashes: " + path
+						"Cookie path must not contain backslashes: " + printableString(path)
 				);
 			}
 
 			// Check for URL-encoded dots (potential bypass attempt)
 			if (path.contains("%2E") || path.contains("%2e")) {
 				throw new IllegalArgumentException(
-						"Cookie path must not contain encoded dots: " + path
+						"Cookie path must not contain encoded dots: " + printableString(path)
 				);
 			}
 
 			// Must start with forward slash
 			if (!path.startsWith("/")) {
 				throw new IllegalArgumentException(
-						"Cookie path must start with '/': " + path
+						"Cookie path must start with '/': " + printableString(path)
 				);
 			}
 
 			// Check for null bytes
 			if (path.contains("\0") || path.contains("%00")) {
 				throw new IllegalArgumentException(
-						"Cookie path must not contain null bytes: " + path
+						"Cookie path must not contain null bytes: " + printableString(path)
 				);
 			}
 
 			for (int i = 0; i < path.length(); i++) {
 				char c = path.charAt(i);
 				if (c < 0x20 || c > 0x7E || c == ';') {
-					throw new IllegalArgumentException(path + ": Invalid cookie path char '" + c + "'");
+					throw new IllegalArgumentException(printableString(path) + ": Invalid cookie path char '" + printableChar(c) + "'");
 				}
 			}
 		}

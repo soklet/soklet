@@ -199,8 +199,10 @@ public final class McpGeneratedEndpointProviderLoader {
 					McpGeneratedEndpointProviderIndex.RESOURCE_PATH);
 			while (resources.hasMoreElements()) {
 				URL resource = resources.nextElement();
+				var connection = resource.openConnection();
+				connection.setUseCaches(false);
 				try (BufferedReader reader = new BufferedReader(
-						new InputStreamReader(resource.openStream(),
+						new InputStreamReader(connection.getInputStream(),
 								StandardCharsets.UTF_8))) {
 					int lineNumber = 0;
 					for (String line; (line = reader.readLine()) != null; ) {

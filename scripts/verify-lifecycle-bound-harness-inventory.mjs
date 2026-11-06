@@ -126,6 +126,7 @@ const SCOPE_ACTIONS = new Set([
   'RAISE_OUTER_BOUND',
 ]);
 const REQUIRED_EXECUTING_SCOPES = Object.freeze({
+  "src/test/java/com/soklet/CorsReflectionSafetyTests.java": ["unsafeOriginDoesNotReplaceHttpOrErrorResponsesAndRemainsVisible","unsafePreflightReflectionIsExplicitlyDeniedWithoutDroppingNames","safeCredentialedAndUnlistedOriginsKeepTheirExistingBehavior","unsafeOriginDoesNotBreakSseHandshakeAndValidCredentialsStillWork"],
   "src/test/java/com/soklet/internal/mcp/protocol/McpInitialCatalogProjectionFailureTests.java": ["exhaustedCatalogCapacityReturns503AndReleasesTheSubscriptionReservation", "queuedCatalogDeadlineReturns503AndReleasesTheSubscriptionReservation", "activeCatalogDeadlineReturns504AndRetainsPhysicalWorkUntilExit", "failedCatalogPolicyKeepsTheOriginalThrowableAndSanitizesTheResponse"],
   "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionDeadlineWraparoundTests.java": ["capacityRejectionCrossingTheDeadlineRemainsAQueued503"],
   "src/test/java/com/soklet/ForcedShutdownDeliveryTests.java": ["zeroBudgetRetainsDeferredForceAndFrozenEvidenceUntilWorkerReturns", "zeroAndNearZeroForcedBudgetsStillStopRealListenerAndStreamingWriter"],
@@ -264,6 +265,10 @@ const REQUIRED_GENERATION_COUNTS = new Map([
 // inventory nor an accidentally reduced manual override can silently turn a
 // reviewed loop/helper topology back into a single generation.
 const REQUIRED_REVIEWED_GENERATION_COUNTS = new Map([
+  ["src/test/java/com/soklet/CorsReflectionSafetyTests.java#unsafeOriginDoesNotReplaceHttpOrErrorResponsesAndRemainsVisible#TEST", 3],
+  ["src/test/java/com/soklet/CorsReflectionSafetyTests.java#unsafePreflightReflectionIsExplicitlyDeniedWithoutDroppingNames#TEST", 3],
+  ["src/test/java/com/soklet/CorsReflectionSafetyTests.java#safeCredentialedAndUnlistedOriginsKeepTheirExistingBehavior#TEST", 4],
+  ["src/test/java/com/soklet/CorsReflectionSafetyTests.java#unsafeOriginDoesNotBreakSseHandshakeAndValidCredentialsStillWork#TEST", 3],
   ["src/test/java/com/soklet/internal/mcp/protocol/McpInitialCatalogProjectionFailureTests.java#exhaustedCatalogCapacityReturns503AndReleasesTheSubscriptionReservation#TEST", 2],
   ["src/test/java/com/soklet/internal/mcp/protocol/McpInitialCatalogProjectionFailureTests.java#queuedCatalogDeadlineReturns503AndReleasesTheSubscriptionReservation#TEST", 2],
   ["src/test/java/com/soklet/internal/mcp/protocol/McpInitialCatalogProjectionFailureTests.java#activeCatalogDeadlineReturns504AndRetainsPhysicalWorkUntilExit#TEST", 2],
@@ -2820,7 +2825,7 @@ const REVIEWED_SSE_HANDSHAKE_VALIDATION_SCOPE_OVERRIDES = checkedReviewMap([
 // context control constructs but never starts its mock owner: its raw stream
 // coordinator has zero lifecycle-core work and five bounded5s controls.
 const REVIEWED_STREAM_INTERRUPT_DELIVERY_SCOPE_OVERRIDES = checkedReviewMap([
-  ...reviewedScopeFile("src/test/java/com/soklet/SseInterruptDeliveryTests.java", "336f4cbf083b8d5441e7adc27f8839319ff99195851c2e8d6ebc64cc370fd7ea", [
+  ...reviewedScopeFile("src/test/java/com/soklet/SseInterruptDeliveryTests.java", "40de5a4a61e557654d76ec448a6fe4083ecde3254b40a43d3937011e383a479a", [
     ["blockingInterruptibleCloseReturnsIncompleteWithoutRetiringPhysicalWork","9f1b5f097afbd1b59692b20b13c231fc309994a5f8aee8596d6987f7536e9416",{"controlJoinMillis":28000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
     ["ordinaryInterruptibleCloseCompletesShutdown","ee2962d7dbd828cbf3f11c79400a9df06f9b4703fd01323175ff29bee2531ebc",{"controlJoinMillis":28000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
     ["interruptTriggeredResourceCloseCarriesTheOwnerSelfWaitGuard","032aea7219b980dbeb8fa8cb0114e0d64408202e99e0f3d15e29dc807c91217c",{"controlledLifecycleCoreMillis":0,"controlJoinMillis":25000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
@@ -3500,7 +3505,72 @@ const REVIEWED_INITIAL_CATALOG_FAILURE_SCOPE_OVERRIDES = checkedReviewMap(
   ]
 ], 'initial catalog failure scope');
 
+// Each CORS reflection matrix retains every sequential simulator generation.
+// Its source-propagated policy is 2 s startup plus 200 ms cancellation/grace/force.
+// All-incomplete composition is conservative: 7.8/7.8/10.4/7.8 s under 60 s,
+// with no independent waits or application cleanup/report phase.
+const REVIEWED_LAST_DEEP_DIVE_CORS_SCOPE_OVERRIDES = checkedReviewMap(
+[
+  [
+    "src/test/java/com/soklet/CorsReflectionSafetyTests.java#unsafeOriginDoesNotReplaceHttpOrErrorResponsesAndRemainsVisible#TEST",
+    {
+      "fileSha256": "89deb09861d9267b39f2a13a6fdf5856aa9b109e6364b87d09b58be7422af831",
+      "scopeSha256": "b6979c39c0cce96a48ea7751b31ab44c7a4ab14136af943619f5a1c8b30a162b",
+      "generation": {
+        "count": 3,
+        "mode": "SEQUENTIAL",
+        "complete": 3,
+        "prior": 0,
+        "incomplete": 3
+      }
+    }
+  ],
+  [
+    "src/test/java/com/soklet/CorsReflectionSafetyTests.java#unsafePreflightReflectionIsExplicitlyDeniedWithoutDroppingNames#TEST",
+    {
+      "fileSha256": "89deb09861d9267b39f2a13a6fdf5856aa9b109e6364b87d09b58be7422af831",
+      "scopeSha256": "46b37ed2b1ccb852cb0cfcda8c2730f4675d689effc444e4b1c0cd740b11b2fd",
+      "generation": {
+        "count": 3,
+        "mode": "SEQUENTIAL",
+        "complete": 3,
+        "prior": 0,
+        "incomplete": 3
+      }
+    }
+  ],
+  [
+    "src/test/java/com/soklet/CorsReflectionSafetyTests.java#safeCredentialedAndUnlistedOriginsKeepTheirExistingBehavior#TEST",
+    {
+      "fileSha256": "89deb09861d9267b39f2a13a6fdf5856aa9b109e6364b87d09b58be7422af831",
+      "scopeSha256": "673ec9d7ac4f5849af95c60c51cee7cc8d8e69874bbf902018355c62ffc5f4d8",
+      "generation": {
+        "count": 4,
+        "mode": "SEQUENTIAL",
+        "complete": 4,
+        "prior": 0,
+        "incomplete": 4
+      }
+    }
+  ],
+  [
+    "src/test/java/com/soklet/CorsReflectionSafetyTests.java#unsafeOriginDoesNotBreakSseHandshakeAndValidCredentialsStillWork#TEST",
+    {
+      "fileSha256": "89deb09861d9267b39f2a13a6fdf5856aa9b109e6364b87d09b58be7422af831",
+      "scopeSha256": "be59dfc15e2bfb31482ed7e1fdd9ddf9ce89b330283cadf8e0cf3c21daece8c1",
+      "generation": {
+        "count": 3,
+        "mode": "SEQUENTIAL",
+        "complete": 3,
+        "prior": 0,
+        "incomplete": 3
+      }
+    }
+  ]
+], 'last deep dive CORS scope');
+
 const REVIEWED_SCOPE_OVERRIDES = mergeReviewedScopeOverrideMaps(
+  REVIEWED_LAST_DEEP_DIVE_CORS_SCOPE_OVERRIDES,
   REVIEWED_INITIAL_CATALOG_FAILURE_SCOPE_OVERRIDES,
   REVIEWED_RELEASE_REVIEW_CORE_SCOPE_OVERRIDES,
   REVIEWED_SCOPED_INTEGRATION_SCOPE_OVERRIDES,
