@@ -22,6 +22,7 @@ import com.soklet.StreamTerminationReason;
 import com.soklet.internal.microhttp.MicrohttpRequest;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import javax.annotation.concurrent.NotThreadSafe;
 import java.net.InetSocketAddress;
@@ -45,6 +46,71 @@ import java.util.function.BooleanSupplier;
 
 @NotThreadSafe
 public class McpApplicationExecutionTests {
+	@Test
+	@Timeout(60)
+	public void interruptDeliveryRetainsExchangeAndPhysicalCompletionAfterWorkReturns() throws Exception {
+		for (McpProtocolProfile profile : List.of(Mcp20260728ProtocolProfile.INSTANCE,
+				Mcp2025ProtocolProfile.JUNE_18, Mcp2025ProtocolProfile.NOVEMBER_25)) {
+			AtomicLong now = new AtomicLong();
+			CountDownLatch interruptEntered = new CountDownLatch(1);
+			CountDownLatch releaseInterrupt = new CountDownLatch(1);
+			CountDownLatch workEntered = new CountDownLatch(1);
+			CountDownLatch releaseWork = new CountDownLatch(1);
+			CountDownLatch workReturned = new CountDownLatch(1);
+			CountDownLatch physicalExit = new CountDownLatch(1);
+			AtomicInteger physicalExits = new AtomicInteger();
+			AtomicReference<McpApplicationResponse> response = new AtomicReference<>();
+			McpApplicationExecution execution = new McpApplicationExecution(
+					new McpApplicationExecutionConfiguration(1, 1, Duration.ofSeconds(30), Duration.ofDays(1)),
+					now::get, concurrency -> Executors.newFixedThreadPool(concurrency, runnable -> new Thread(runnable) {
+						@Override public void interrupt() {
+							interruptEntered.countDown();
+							awaitLatch(releaseInterrupt);
+							super.interrupt();
+						}
+					}));
+			Thread trigger = new Thread(() -> { now.set(100L); execution.runTimerCycle(); });
+			try {
+				execution.start();
+				execution.dispatch(transportRequest(), request("physical-interrupt-tail"), profile, admissionIdentity(),
+						invocation -> {
+							workEntered.countDown();
+							awaitLatch(releaseWork);
+							workReturned.countDown();
+							return McpApplicationDispatchOutcome.completed(McpWireResult.complete(McpJsonObject.empty()));
+						}, 100L, new McpApplicationResponseWriter() {
+							@Override public boolean write(McpApplicationResponse value) { response.set(value); return true; }
+							@Override public void didFinishPhysicalWork() { physicalExits.incrementAndGet(); physicalExit.countDown(); }
+						}, () -> {});
+				Assertions.assertTrue(workEntered.await(2, TimeUnit.SECONDS));
+				trigger.start();
+				Assertions.assertTrue(interruptEntered.await(2, TimeUnit.SECONDS));
+				trigger.join(1_000L);
+				Assertions.assertFalse(trigger.isAlive(), "Interrupt delivery must not hold the timer caller.");
+				Assertions.assertNotNull(response.get(), "The elected deadline response must already be available.");
+				releaseWork.countDown();
+				Assertions.assertTrue(workReturned.await(2, TimeUnit.SECONDS));
+				Assertions.assertFalse(physicalExit.await(100, TimeUnit.MILLISECONDS),
+						"Legacy/session physical completion must retain the outstanding delivery tail.");
+				Assertions.assertEquals(1, execution.snapshot().activeHandlerSlots());
+				Assertions.assertEquals(1, execution.snapshot().retainedExchanges());
+				execution.stop();
+				Assertions.assertFalse(execution.awaitTermination(Duration.ofMillis(10)));
+				releaseInterrupt.countDown();
+				Assertions.assertTrue(execution.awaitTermination(Duration.ofSeconds(2)));
+				Assertions.assertTrue(physicalExit.await(2, TimeUnit.SECONDS));
+				Assertions.assertEquals(1, physicalExits.get());
+				Assertions.assertEquals(0, execution.snapshot().retainedExchanges());
+			} finally {
+				releaseWork.countDown();
+				releaseInterrupt.countDown();
+				trigger.join(2_000L);
+				execution.stop();
+				Assertions.assertTrue(execution.awaitTermination(Duration.ofSeconds(2)));
+			}
+		}
+	}
+
 	@Test
 	public void disconnect_callbacks_do_not_hold_transport_signaling_or_release_physical_capacity()
 			throws Exception {

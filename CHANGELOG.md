@@ -492,6 +492,25 @@ maintenance or security fixes afterward. See the explicit
 
 ### Correctness Fixes
 
+- Deliver elected forced-shutdown cleanup even when a zero or very short proof
+  budget has already frozen the shutdown result. Retain once-only delivery,
+  startup compensation, and physical-work accounting.
+- Remove allocations from timeout-bucket expiration and retain pending deadlines
+  across transient housekeeping allocation failures. Retry the affected tick;
+  an unexpectedly terminated scheduler rejects new deadlines instead of silently
+  accepting work it cannot deliver.
+- Preserve MCP subscription catalog-policy capacity and deadline outcomes,
+  including queued versus active timeouts, instead of reporting them as generic
+  internal errors. Retain the original cause for genuine policy failures.
+- Reject duplicate custom value-converter registrations after primitive/wrapper
+  normalization, rather than choosing a winner from set iteration order. A
+  single custom converter still overrides its built-in counterpart.
+- Isolate MCP handler interrupt delivery from timeout responses and the shared
+  deadline timer. Retain the exact handler and its capacity until interrupt
+  delivery finishes, preventing late interrupts from reaching a reused worker.
+- Classify HTTP/SSE shutdown using framework-owned termination evidence rather
+  than calling custom executor status methods on the shutdown coordinator.
+  Unproven termination remains incomplete and physically retained.
 - Preserve application execution context through HTTP/SSE server decorators so
   pending callback self-waits fail immediately, while child shutdown proofs
   remain independent.

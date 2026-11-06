@@ -405,6 +405,12 @@ final class McpTransportLifecycleAdapter
 		@Override
 		@NonNull
 		public Set<InternalResidualActivityType> residualActivity() {
+			return frameworkResidualActivity();
+		}
+
+		@Override
+		@NonNull
+		public Set<InternalResidualActivityType> frameworkResidualActivity() {
 			McpServerRuntimeBridge.LifecycleEvidence evidence =
 					runtime().getLifecycleEvidence();
 			EnumSet<InternalResidualActivityType> residual =

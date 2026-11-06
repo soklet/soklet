@@ -613,8 +613,14 @@ public sealed interface McpServer permits DefaultMcpServer {
 		}
 
 		/**
-		 * Sets the maximum duration for reading the HTTP request line and headers.
-		 * The default is 60 seconds.
+		 * Sets the absolute duration for reading the HTTP request line and headers.
+		 * On a persistent connection, this also bounds keep-alive idle time and starts
+		 * again after the previous response completes. The next request shares the remaining
+		 * idle/header budget; receiving a header byte does not reset it.
+		 * <p>
+		 * The default is 60 seconds, which is not above common proxy upstream idle defaults.
+		 * Configure a budget comfortably above the proxy's idle reuse timeout with latency
+		 * and scheduling margin, or configure the proxy to stop reusing connections earlier.
 		 *
 		 * @param requestHeaderTimeout positive finite timeout, or null to restore the
 		 *                             default

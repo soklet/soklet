@@ -2061,6 +2061,10 @@ through `getOperationName()`. This avoids coupling ordinary policy code to wire
 spellings such as `"tools/call"`; inspect `getJsonRpcMethod()` only when the
 exact method text is itself part of the policy.
 
+The MCP listener's 60-second `requestHeaderTimeout` also bounds idle reusable HTTP connections. The next request shares the remaining idle/header budget after the previous response completes; header bytes do not refresh it. Set this above the proxy's upstream idle reuse window with round-trip/jitter margin, or reduce proxy reuse. Common nginx/ALB defaults equal 60 seconds and Caddy's upstream keep-alive default is two minutes. This is separate from semantic `requestTimeout` and SSE stream keep-alives; see [production timeout coordination](https://www.soklet.com/docs/production-readiness#timeouts-and-backpressure).
+
+The built-in subscription quota applies per endpoint and admitted authorization/quota partition on each server instance. An identical application partition key at another endpoint or replica has a separate quota; fleet-wide limits require application coordination.
+
 HTTP `Forwarded` and `X-Forwarded-For` headers are equally inert at this
 boundary: Soklet never turns them into an admission identity or silently
 replaces the application's partition key. If an application deliberately uses
@@ -2074,7 +2078,7 @@ proxy-hop address expected in the forwarded chain, never end-client addresses.
 An untrusted physical peer then causes forwarded values to be ignored in favor
 of the raw socket peer. The trusted proxy or network edge must strip or
 overwrite both header families; usable `Forwarded: for=` values take precedence
-over `X-Forwarded-For`. Never use
+over `X-Forwarded-For`. Effective-origin resolution also reads `X-Forwarded-Proto`, `X-Forwarded-Protocol`, `X-Url-Scheme`, `Front-End-Https`, `X-Forwarded-Ssl`, `X-Forwarded-Host`, and `X-Forwarded-Port`; strip or overwrite those too, validate the public `Host`, and keep optional `Origin` fallback disabled with a proxy allowlist. See the [complete proxy sanitation examples](https://www.soklet.com/docs/production-readiness#forwarded-headers-at-the-edge). Never use
 `McpAdmissionContext.getClientInfo()` as a partition key, and never use
 `TRUST_ALL` where an untrusted client can reach Soklet directly.
 
@@ -2186,6 +2190,14 @@ requests. Soklet interrupts the dispatch thread where applicable after
 cancelation, but Java cannot forcibly stop a non-cooperative handler. Such a
 handler retains its execution slot until it actually exits even if the client
 request has already completed.
+
+Interrupt delivery runs independently of timeout responses and the shared
+deadline timer, since Java interruption can synchronously close application
+channels. Each dispatcher uses at most one daemon interrupt helper per active
+ticket. The main handler dispatcher and the separate session-owner policy
+dispatcher retain their existing admission limits. A ticket keeps its worker
+and physical slot until interrupt delivery finishes; only then can the worker
+be reused, with its interrupt status cleared.
 
 A committed legacy POST SSE disconnect or lost-writer write failure detaches
 that writer without canceling work solely because delivery was lost. Blocked
@@ -3260,7 +3272,7 @@ Implemented framework mappings are stable:
 | Queued request deadline | 503 | `-32603` |
 | Active application-handler request deadline | 200 | `-32603` |
 | Framework-owned protocol-operation deadline | 504 | bodyless |
-| Catalog access-policy deadline | 504 | `-32603` |
+| Active catalog access-policy deadline | 504 | `-32603` |
 | Intentional application `McpJsonRpcException` | 400 | authored error code |
 | Standard or custom header mismatch | 400 | `-32020` |
 | Unsupported protocol version | 400 | `-32022` |
@@ -3271,6 +3283,8 @@ Implemented framework mappings are stable:
 | Application-execution failure or output/protector contract failure | 200 | `-32603` |
 | Framework policy or pre-dispatch protector contract failure | 500 | `-32603` |
 | Unknown request method | 404 | `-32601` |
+
+Initial `subscriptions/listen` catalog baselines use these same pre-commit policy mappings: exhausted handler capacity or a policy deadline while queued returns `503`; a deadline during active catalog-policy work returns `504`; an unrecovered projection failure returns `500`. These responses carry the neutral JSON-RPC `-32603` error. Once SSE is committed, terminal errors stay in that stream.
 
 Readable request IDs retain their original string or integer identity. Error
 factories prevent applications from spoofing JSON-RPC-, MCP-, or Soklet-owned

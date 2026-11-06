@@ -1615,16 +1615,8 @@ SokletConfig config = SokletConfig.withHttpServer(
     @NonNull Function<Request, MarshaledResponse> responseGenerator,
     @NonNull Consumer<MarshaledResponse> responseWriter
   ) {
-    // Here's where you might start a DB transaction.
-    // (MyDatabase is a hypothetical construct)
-    MyDatabase.INSTANCE.beginTransaction();
-
     // Step 1: Invoke the Resource Method and acquire its response
     MarshaledResponse response = responseGenerator.apply(request);
-
-    // Commit the DB transaction before sending the response
-    // to reduce contention by keeping "open" time short
-    MyDatabase.INSTANCE.commitTransaction();
 
     // Set a special header on the response via mutable copy
     response = response.copy().headers((mutableHeaders) -> {
@@ -1636,6 +1628,8 @@ SokletConfig config = SokletConfig.withHttpServer(
   }
 }).build();
 ```
+
+For a database transaction, use the [rollback-aware transaction pattern](https://www.soklet.com/docs/request-lifecycle#request-intercepting). The response generator handles Resource Method failures by returning an error response, so committing merely because it returned can commit failed work. Finish required database work before streaming or transport delivery; a later response-finalization failure or timeout does not undo a committed transaction.
 
 Response Writing: monitor the response writing process for each [`MarshaledResponse`](https://javadoc.soklet.com/com/soklet/MarshaledResponse.html) - sending bytes over the wire - which may terminate exceptionally (e.g. unexpected client disconnect).
 

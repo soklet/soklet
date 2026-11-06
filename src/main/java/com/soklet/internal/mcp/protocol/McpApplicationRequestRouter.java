@@ -2088,7 +2088,8 @@ final class McpApplicationExecution {
 				terminalCleanup);
 
 		McpApplicationHandlerDispatcher.Ticket ticket = dispatcher.newTicket(
-				exchange::runHandler, exchange::submissionFailed);
+				exchange::runHandler, exchange::submissionFailed, ignored -> {},
+				exchange::handlerPhysicalExited);
 		exchange.bindTicket(ticket);
 		requestsByIdentity.put(transportRequest, exchange);
 		retainedExchanges.put(exchangeId, exchange);
@@ -2587,6 +2588,11 @@ final class McpApplicationExecution {
 				"The bounded MCP policy callback produced no result.");
 	}
 
+	/** Framework accounting only, without consulting application executor status. */
+	int activeHandlerSlots() {
+		return dispatcher.snapshot().activeSlots();
+	}
+
 	@NonNull
 	McpApplicationExecutionSnapshot snapshot() {
 		return snapshot(0);
@@ -3010,9 +3016,14 @@ final class McpApplicationExecution {
 			} finally {
 				awaitCancellationCallbacks();
 				handlerRunning.set(false);
-				handlerFinished.set(true);
-				cleanupRetainedExchange();
 			}
+		}
+
+		private void handlerPhysicalExited() {
+			// The dispatcher also owns any outstanding interrupt delivery.
+			// Keep exchange/session physical evidence until that tail has exited.
+			handlerFinished.set(true);
+			cleanupRetainedExchange();
 		}
 
 		@NonNull

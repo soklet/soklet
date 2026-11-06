@@ -71,7 +71,14 @@ public class McpHttpServerRuntimeDiagnosticRedactionTests {
 				new McpCatalogProjectionQueue.Digest(new byte[32]);
 		Object baselines = construct("InitialCatalogBaselines", digest, digest);
 		Object initialProjection = construct("InitialCatalogProjectionResult",
-				enumConstant("CatalogProjectionDisposition", "SUCCEEDED"), baselines);
+				enumConstant("CatalogProjectionDisposition", "SUCCEEDED"), baselines,
+				null, false);
+		Object failedInitialProjection = construct("InitialCatalogProjectionResult",
+				enumConstant("CatalogProjectionDisposition", "FAILED"), null,
+				failure, false);
+		Object queuedInitialProjection = construct("InitialCatalogProjectionResult",
+				enumConstant("CatalogProjectionDisposition", "TIMED_OUT"), null,
+				failure, true);
 
 		URI resourceUri = URI.create("https://example.invalid/" + SECRET);
 		Object context = construct("SubscriptionAuthorizationContextSnapshot",
@@ -138,7 +145,13 @@ public class McpHttpServerRuntimeDiagnosticRedactionTests {
 				"InitialCatalogBaselines{toolsPresent=true, promptsPresent=true}");
 		assertRendering(initialProjection,
 				"InitialCatalogProjectionResult{disposition=SUCCEEDED, "
-						+ "baselinesPresent=true}");
+						+ "baselinesPresent=true, failurePresent=false, queuedTimeout=false}");
+		assertRendering(failedInitialProjection,
+				"InitialCatalogProjectionResult{disposition=FAILED, "
+						+ "baselinesPresent=false, failurePresent=true, queuedTimeout=false}");
+		assertRendering(queuedInitialProjection,
+				"InitialCatalogProjectionResult{disposition=TIMED_OUT, "
+						+ "baselinesPresent=false, failurePresent=true, queuedTimeout=true}");
 		assertRendering(authorizationCheck,
 				"SubscriptionAuthorizationCheck{kind=RENEWAL}");
 		assertRendering(callbackResult,

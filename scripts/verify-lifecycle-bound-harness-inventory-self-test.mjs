@@ -1404,7 +1404,7 @@ run('all named production execution invariants remain live', () => {
     'concurrentCloseCallsJoinOnceAndRestoreEntryInterrupt',
     'prematureTerminationBeforeReadinessNeverBecomesCloseUnexpected',
     'startRacingNewOriginShutdownWaitsForExactNotAttemptedResult',
-    'coordinatorFreezesGateBeforeReadingEvidence',
+    'coordinatorFreezesEvidenceBeforeAllowingForcedCatchUp',
     'stopBeforeRuntimeInstallAndBeforeMarkReadyWinsDeterministically',
     'sealedScopeRetainsRejectedMcpSessionUntilRollbackTerminates',
     'unknownHeaderOccurrencesAreExactRedactedAndMethodBoundedAcrossPolicies',

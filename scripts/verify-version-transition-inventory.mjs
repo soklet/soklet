@@ -153,7 +153,7 @@ const CURRENT_STAGE_FIELDS = Object.freeze([
 ]);
 const CURRENT_STAGE_NAME = 'post-u7';
 export const EXPECTED_CURRENT_STAGE_CENSUS_SHA256 =
-  '2fe05408fbcb11ab3c9fe40d6b25786971f79f6cade2c60a3ceb7235815b9be5';
+  'cd0f038846cd96371d08e7621ccc66b0693e0be3b32b11501be9f780fb4e6d1a';
 export const EXPECTED_BASELINE_GOVERNANCE_SHA256 =
   '862417a75ee2b8aa4c04eff14713b47eedc22060319ef4f369e4ad6beff10afb';
 // These historical checkpoint paragraphs were removed from reader guides.

@@ -2695,7 +2695,7 @@ final class DirectParticipantPhaseGate {
 			return new PhaseDelivery(this.frozenForcedContext, true);
 		}
 		ShutdownContext context = claimPhaseDelivery();
-		return context == null ? null : new PhaseDelivery(context, false);
+		return context == null ? null : new PhaseDelivery(context, this.classificationFrozen);
 	}
 
 	@Nullable
@@ -2732,10 +2732,12 @@ final class DirectParticipantPhaseGate {
 
 	@Nullable
 	private ShutdownContext claimPhaseDelivery() {
-		if (this.classificationFrozen || this.startRunning
-				|| this.requestedContext == null)
+		if (this.startRunning || this.requestedContext == null)
 			return null;
 		ShutdownPhase requestedPhase = this.requestedContext.getShutdownPhase();
+		// Freezing evidence ends the proof wait, not already-elected cleanup.
+		if (this.classificationFrozen && requestedPhase != ShutdownPhase.FORCED)
+			return null;
 		if (this.claimedPhase == ShutdownPhase.FORCED
 				|| this.claimedPhase == requestedPhase)
 			return null;

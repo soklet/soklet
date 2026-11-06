@@ -73,7 +73,7 @@ final class DirectParticipantPhaseGateTests {
 	}
 
 	@Test
-	void classificationFreezeRetainsActiveStartAndRejectsLateCatchUp() {
+	void classificationFreezeRetainsActiveStartAndAllowsForcedCatchUpOnly() {
 		DirectParticipantPhaseGate gate = new DirectParticipantPhaseGate();
 		ShutdownContext forced = context(ShutdownPhase.FORCED);
 
@@ -81,7 +81,9 @@ final class DirectParticipantPhaseGateTests {
 		Assertions.assertNull(gate.requestPhase(forced));
 		gate.freezeForClassification();
 		Assertions.assertTrue(gate.startupCallActive());
-		Assertions.assertNull(gate.completeStartCall());
+		DirectParticipantPhaseGate.PhaseDelivery delivery = gate.completeStartCallDelivery();
+		Assertions.assertSame(forced, delivery.context());
+		Assertions.assertTrue(delivery.afterClassificationFreeze());
 		Assertions.assertTrue(gate.startupCallActive(),
 				"Classification must retain the active-at-freeze fact");
 		Assertions.assertNull(gate.requestPhase(forced));
@@ -153,7 +155,7 @@ final class DirectParticipantPhaseGateTests {
 	}
 
 	@Test
-	void coordinatorFreezesGateBeforeReadingEvidence() throws Exception {
+	void coordinatorFreezesEvidenceBeforeAllowingForcedCatchUp() throws Exception {
 		LifecycleWorkers workers = new LifecycleWorkers((name, task) -> task.run());
 		DeadlineWaiter waiter = new DeadlineWaiter(CLOCK);
 		DirectParticipantPhaseGate gate = new DirectParticipantPhaseGate();
@@ -293,7 +295,9 @@ final class DirectParticipantPhaseGateTests {
 			InternalLifecycleComponentShutdownResult http = result.participantResult(
 					InternalLifecycleComponentType.HTTP).orElseThrow();
 
-			Assertions.assertNull(lateDelivery.get());
+			Assertions.assertEquals(ShutdownPhase.FORCED,
+					lateDelivery.get().getShutdownPhase(),
+					"Frozen evidence must not suppress already-elected forced cleanup");
 			Assertions.assertTrue(everyGateFrozenBeforeResidual.get(),
 					"All participant gates must freeze before any evidence read");
 			Assertions.assertEquals(

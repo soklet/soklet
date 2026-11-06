@@ -102,9 +102,15 @@ final class BuiltInTransportLifecycleAdapter {
 		/** Observe all proof-bearing runtime resources against this exact deadline. */
 		boolean awaitTermination(long absoluteDeadlineNanos) throws InterruptedException;
 
-		/** Positive residual evidence at result freeze. */
+		/** Best-effort residual observation on a tracked proof worker, never the coordinator. */
 		@NonNull
 		Set<InternalResidualActivityType> residualActivity();
+
+		/** Prompt framework-owned evidence only; never invoke application callbacks here. */
+		@NonNull
+		default Set<InternalResidualActivityType> frameworkResidualActivity() {
+			return Set.of();
+		}
 
 		/** Release proof-bearing references only after affirmative termination. */
 		void releaseTerminatedEvidence();
@@ -123,6 +129,8 @@ final class BuiltInTransportLifecycleAdapter {
 		private final DeadlineWaiter waiter;
 		@NonNull
 		private final InternalTerminationGroup group;
+		@NonNull
+		private final LifecycleResidualActivity residualActivity;
 		@NonNull
 		private final InternalTransportTerminationSignal signal;
 		@NonNull
@@ -200,6 +208,7 @@ final class BuiltInTransportLifecycleAdapter {
 			this.group = new InternalTerminationGroup(this.admissionFence,
 					this::terminationGroupChanged, requireNonNull(workers),
 					exactExecutionOwnerToken, ownerEventElection);
+			this.residualActivity = new LifecycleResidualActivity();
 			this.signal = new InternalTransportTerminationSignal(this.group,
 					this.group.root());
 			this.runtime = new AdapterRuntime(owner, this);
@@ -252,7 +261,10 @@ final class BuiltInTransportLifecycleAdapter {
 		@Override
 		@NonNull
 		public Set<InternalResidualActivityType> residualActivity() {
-			return this.owner.operations.residualActivity();
+			if (this.residualActivity.terminationProven())
+				return Set.of();
+			return this.residualActivity.snapshot(
+					this.owner.operations.frameworkResidualActivity());
 		}
 
 		private boolean externallyCoordinated() {
@@ -342,8 +354,15 @@ final class BuiltInTransportLifecycleAdapter {
 					this.generation.group, () -> {
 						try (LifecycleExecutionContext.Scope ignored =
 									 this.generation.enterExecutionScope()) {
-							if (this.owner.operations.awaitTermination(absoluteDeadlineNanos))
+							this.generation.residualActivity.recordObservation(
+									this.owner.operations.residualActivity());
+							if (this.owner.operations.awaitTermination(absoluteDeadlineNanos)) {
+								this.generation.residualActivity.recordTermination();
 								this.owner.proveTermination(this.generation);
+							} else {
+								this.generation.residualActivity.recordObservation(
+										this.owner.operations.residualActivity());
+							}
 						} catch (RuntimeException | Error throwable) {
 							this.generation.signal.signalTerminationFailure(throwable);
 							TransportTerminationSignal delegatedSignal =
@@ -1168,15 +1187,7 @@ final class BuiltInTransportLifecycleAdapter {
 	@NonNull
 	private InternalShutdownResult coordinationFailureResult(
 			@NonNull Generation generation, @NonNull Throwable failure) {
-		Set<InternalResidualActivityType> residual;
-		try {
-			residual = requireNonNull(this.operations.residualActivity(),
-					"operations.residualActivity()");
-		} catch (Throwable diagnosticFailure) {
-			if (!sameInstance(diagnosticFailure, failure))
-				failure.addSuppressed(diagnosticFailure);
-			residual = Set.of();
-		}
+		Set<InternalResidualActivityType> residual = generation.residualActivity.snapshot();
 		InternalLifecycleComponentShutdownResult participant =
 				new InternalLifecycleComponentShutdownResult(this.kind,
 						InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN,

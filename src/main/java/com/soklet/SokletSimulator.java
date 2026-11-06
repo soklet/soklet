@@ -1063,6 +1063,8 @@ public final class SokletSimulator {
 		private final AtomicReference<TrackedLifecycleCallRunner.@Nullable Call<Void>>
 				proofObservation;
 		@NonNull
+		private final LifecycleResidualActivity residualActivity = new LifecycleResidualActivity();
+		@NonNull
 		private final AtomicBoolean startAttempted;
 		@NonNull
 		private final Object phaseDeliveryLock;
@@ -1266,11 +1268,11 @@ public final class SokletSimulator {
 
 		private void beginProofObservation(
 				@NonNull ShutdownContext context) {
-			if (this.kind == InternalLifecycleComponentType.HTTP
+			if (this.kind != InternalLifecycleComponentType.MCP
+					&& (this.kind == InternalLifecycleComponentType.HTTP
 					? this.scope.simulator().httpScopeTerminationProven()
-					: this.kind == InternalLifecycleComponentType.SSE
-							? this.scope.simulator().sseScopeTerminationProven()
-							: this.scope.simulator().mcpScopeTerminationProven()) {
+					: this.scope.simulator().sseScopeTerminationProven())) {
+				this.residualActivity.recordTermination();
 				this.terminationSignal.signalTerminated();
 				return;
 			}
@@ -1286,6 +1288,7 @@ public final class SokletSimulator {
 								+ exactContext.getShutdownPhase().name().toLowerCase(Locale.ROOT),
 						this.terminationGroup, () -> {
 							try {
+								this.residualActivity.recordObservation(queryResidualActivity());
 								if (this.kind == InternalLifecycleComponentType.HTTP
 										? this.scope.simulator().awaitHttpScopeTermination(
 												exactContext.absoluteDeadlineNanos(), this.scope.clock)
@@ -1293,8 +1296,12 @@ public final class SokletSimulator {
 												? this.scope.simulator().awaitSseScopeTermination(
 														exactContext.absoluteDeadlineNanos(), this.scope.clock)
 												: this.scope.simulator().awaitMcpScopeTermination(
-														exactContext.absoluteDeadlineNanos(), this.scope.clock))
+														exactContext.absoluteDeadlineNanos(), this.scope.clock)) {
+									this.residualActivity.recordTermination();
 									this.terminationSignal.signalTerminated();
+								} else {
+									this.residualActivity.recordObservation(queryResidualActivity());
+								}
 							} catch (InterruptedException phaseAdvance) {
 								// A phase advance or result freeze ends only this observation.
 							}
@@ -1339,6 +1346,15 @@ public final class SokletSimulator {
 		@NonNull
 		@Override
 		public Set<InternalResidualActivityType> residualActivity() {
+			// The mock projections contain only framework-owned counters and
+			// conservatively retained references, never application status calls.
+			if (this.residualActivity.terminationProven())
+				return Set.of();
+			return this.residualActivity.snapshot(queryResidualActivity());
+		}
+
+		@NonNull
+		private Set<InternalResidualActivityType> queryResidualActivity() {
 			return switch (this.kind) {
 				case HTTP -> this.scope.simulator().httpScopeResidualActivity();
 				case MCP -> this.scope.simulator().mcpScopeResidualActivity();

@@ -44,6 +44,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -71,6 +74,90 @@ public class McpSubscriptionDeadlineWraparoundTests {
 	private static final McpEndpoint PUBLIC_ENDPOINT = McpEndpoint.withPath("/mcp",
 			McpImplementation.withNameAndVersion(
 					"subscription-deadline-wrap-test", "4.0.0").build(), java.util.Set.of(com.soklet.McpProtocolVersion.V2026_07_28)).build();
+
+	@Test
+	@Timeout(90)
+	public void capacityRejectionCrossingTheDeadlineRemainsAQueued503() throws Exception {
+		WrapClock clock = new WrapClock();
+		RecordingObservation observation = new RecordingObservation();
+		AtomicInteger catalogEntries = new AtomicInteger();
+		McpServerRuntimeBridge.CatalogAccessAdapter catalog = ignored -> new McpServerRuntimeBridge.CatalogAccessSession() {
+			@Override public boolean isToolAccessible(String name) { catalogEntries.incrementAndGet(); return true; }
+			@Override public boolean isPromptAccessible(String name) { return true; }
+			@Override public Optional<com.soklet.McpLocalizationContext> localizationContext() { return Optional.empty(); }
+		};
+		McpHttpServerRuntime runtime = runtime(clock, new TestEventSource(),
+				McpResourceNotificationType.TOOLS_LIST_CHANGED, Optional.of(catalog),
+				(context, features) -> allowed(clock.instant().plusSeconds(3_600)), observation, 1, 1);
+		CountDownLatch openingPaused = new CountDownLatch(1);
+		CountDownLatch releaseOpening = new CountDownLatch(1);
+		CountDownLatch workerEntered = new CountDownLatch(1);
+		CountDownLatch releaseWorkers = new CountDownLatch(1);
+		AtomicReference<McpApplicationExecution> application = new AtomicReference<>();
+		AtomicBoolean firstOpening = new AtomicBoolean(true);
+		AtomicBoolean advanced = new AtomicBoolean();
+		ExecutorService callers = Executors.newFixedThreadPool(2);
+		Future<?> active = null;
+		Future<?> queued = null;
+		McpHttpServerRuntime.setSubscriptionAuthorizationSchedulingTestHooks(
+				new McpHttpServerRuntime.SubscriptionAuthorizationSchedulingTestHooks() {
+					@Override public void beforeInitialCatalogProjection(McpApplicationExecution execution) {
+						application.set(execution);
+						if (firstOpening.compareAndSet(true, false)) {
+							openingPaused.countDown();
+							awaitTestLatch(releaseOpening);
+						}
+					}
+					@Override public void afterInitialCatalogProjectionExecution() {
+						if (advanced.compareAndSet(false, true)) clock.advance(Duration.ofSeconds(6));
+					}
+				});
+		try {
+			int port = runtime.start().getPort();
+			try (McpChunkedHttpClient rejected = listen(port, "capacity-expired", "{\"toolsListChanged\":true}")) {
+				Assertions.assertTrue(openingPaused.await(5, TimeUnit.SECONDS));
+				McpApplicationExecution execution = application.get();
+				awaitCondition(() -> execution.snapshot().activeHandlerSlots() == 0, "Authorization retained a handler slot.");
+				long workerDeadline = clock.nanoTime() + Duration.ofHours(1).toNanos();
+				active = callers.submit(() -> execution.invokeBoundedPolicy(() -> {
+					workerEntered.countDown();
+					awaitTestLatch(releaseWorkers);
+					return Boolean.TRUE;
+				}, workerDeadline));
+				Assertions.assertTrue(workerEntered.await(5, TimeUnit.SECONDS));
+				queued = callers.submit(() -> execution.invokeBoundedPolicy(() -> Boolean.TRUE, workerDeadline));
+				awaitCondition(() -> execution.snapshot().queuedRequests() == 1, "The policy queue did not fill.");
+				releaseOpening.countDown();
+				McpChunkedHttpClient.HttpResponseHead head = rejected.readHead();
+				Assertions.assertEquals(503, head.status(), head.raw());
+				Assertions.assertEquals("{\"jsonrpc\":\"2.0\",\"id\":\"capacity-expired\",\"error\":{\"code\":-32603,\"message\":\"Internal error\"}}",
+						rejected.readFixedBody(head));
+				awaitCondition(() -> observation.outcome.get() != null, "The rejected subscription was not observed.");
+				Assertions.assertEquals(McpRequestOutcome.DEADLINE_EXCEEDED, observation.outcome.get());
+				Assertions.assertTrue(advanced.get());
+				Assertions.assertEquals(0, catalogEntries.get(), "Capacity-rejected policy work cannot have entered.");
+			}
+			releaseWorkers.countDown();
+			active.get(5, TimeUnit.SECONDS);
+			queued.get(5, TimeUnit.SECONDS);
+			try (McpChunkedHttpClient recovered = listen(port, "capacity-recovered", "{\"toolsListChanged\":true}")) {
+				assertSseHead(recovered.readHead());
+				Assertions.assertTrue(recovered.readChunkText().contains("notifications/subscriptions/acknowledged"));
+			}
+		} finally {
+			releaseOpening.countDown();
+			releaseWorkers.countDown();
+			McpHttpServerRuntime.setSubscriptionAuthorizationSchedulingTestHooks(null);
+			callers.shutdownNow();
+			Assertions.assertTrue(callers.awaitTermination(5, TimeUnit.SECONDS));
+			runtime.close();
+		}
+	}
+
+	private static void awaitTestLatch(CountDownLatch latch) {
+		try { Assertions.assertTrue(latch.await(5, TimeUnit.SECONDS)); }
+		catch (InterruptedException exception) { Thread.currentThread().interrupt(); throw new AssertionError(exception); }
+	}
 
 	@Test
 	public void queuedReconciliationReceivesFreshCallbackBudgetAtDispatch() throws Exception {
@@ -359,6 +446,16 @@ public class McpSubscriptionDeadlineWraparoundTests {
 					catalogAccessAdapter,
 			@NonNull McpSubscriptionAuthorizer authorizer,
 			@NonNull RecordingObservation observation) {
+		return runtime(clock, events, notificationType, catalogAccessAdapter, authorizer, observation, 5, 128);
+	}
+
+	@NonNull
+	private static McpHttpServerRuntime runtime(@NonNull WrapClock clock,
+			@NonNull TestEventSource events,
+			@NonNull McpResourceNotificationType notificationType,
+			@NonNull Optional<McpServerRuntimeBridge.@NonNull CatalogAccessAdapter> catalogAccessAdapter,
+			@NonNull McpSubscriptionAuthorizer authorizer,
+			@NonNull RecordingObservation observation, int handlerConcurrency, int handlerQueueCapacity) {
 		McpNormalizedEndpoint.Builder endpointBuilder = McpNormalizedEndpoint
 				.withServerInformation(McpImplementationMetadata.withNameAndVersion(
 						"subscription-deadline-wrap-test", "4.0.0"))
@@ -386,7 +483,7 @@ public class McpSubscriptionDeadlineWraparoundTests {
 		return new McpHttpServerRuntime(
 				McpHttpTransportConfiguration.productionDefaults(0),
 				List.of(binding), McpJsonLimits.productionDefaults(),
-				new McpApplicationExecutionConfiguration(5, 128,
+				new McpApplicationExecutionConfiguration(handlerConcurrency, handlerQueueCapacity,
 						Duration.ofSeconds(60), Duration.ofMillis(10)), clock,
 				McpApplicationHandlerExecutorFactory.production(), ignored -> {},
 				ignored -> {}, Optional.empty(),

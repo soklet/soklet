@@ -839,8 +839,8 @@ class BuiltInTransportLifecycleAdapterTests {
 				InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN,
 				participant.disposition());
 		Assertions.assertEquals(List.of(launchFailure), participant.failures());
-		Assertions.assertEquals(Set.of(InternalResidualActivityType.EVENT_LOOP),
-				participant.residualActivity());
+		Assertions.assertTrue(participant.residualActivity().isEmpty(),
+				"Without a proof worker, application diagnostics cannot safely supply residual detail");
 		Assertions.assertFalse(adapter.result(generation).orElseThrow().isComplete());
 		Assertions.assertEquals(0,
 				workers.active(LifecycleWorkers.Role.COORDINATOR));
@@ -916,8 +916,8 @@ class BuiltInTransportLifecycleAdapterTests {
 				participant.disposition());
 		Assertions.assertEquals(List.of(transportFailure, releaseFailure),
 				participant.failures());
-		Assertions.assertEquals(Set.of(InternalResidualActivityType.EVENT_LOOP),
-				participant.residualActivity());
+		Assertions.assertTrue(participant.residualActivity().isEmpty(),
+				"Release failure cannot trigger another application status query on the coordinator");
 		Assertions.assertEquals(1, operations.releaseCount.get());
 		Assertions.assertFalse(adapter.result(generation).orElseThrow().isComplete());
 		Assertions.assertThrows(IllegalStateException.class, adapter::beginStart);

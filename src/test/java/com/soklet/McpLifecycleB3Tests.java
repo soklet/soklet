@@ -1172,6 +1172,7 @@ class McpLifecycleB3Tests {
 				Duration.ofNanos(5L), Duration.ofNanos(7L), now::get,
 				inlineLifecycleWorkers());
 		McpTransportLifecycleAdapter.Generation generation = adapter.beginStart();
+		operations.expectedOwnerToken = generation.terminationGroup().executionOwnerToken();
 		adapter.markReady(generation);
 
 		adapter.awaitStop(adapter.requestStop());
@@ -1184,8 +1185,11 @@ class McpLifecycleB3Tests {
 				InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN,
 				participant.disposition());
 		Assertions.assertFalse(result.isComplete());
-		Assertions.assertEquals(List.of("quiesce", "await-105", "force",
-				"await-112", "residual"), operations.events);
+		Assertions.assertEquals(List.of("quiesce", "residual", "await-105", "residual",
+				"force", "residual", "await-112", "residual"), operations.events);
+		Assertions.assertEquals(List.of(true, true, true, true),
+				operations.residualOwnerScopes,
+				"Application status observations must stay inside the tracked proof scope.");
 		Assertions.assertEquals(List.of(105L, 112L), operations.deadlines);
 		Assertions.assertEquals(1, operations.quiesceCount.get());
 		Assertions.assertEquals(1, operations.forceCount.get());
@@ -1314,6 +1318,7 @@ class McpLifecycleB3Tests {
 		McpTransportLifecycleAdapter adapter = deterministicAdapter(operations,
 				Duration.ZERO, Duration.ZERO, () -> 0L, workers);
 		McpTransportLifecycleAdapter.Generation generation = adapter.beginStart();
+		operations.expectedOwnerToken = generation.terminationGroup().executionOwnerToken();
 		adapter.markReady(generation);
 
 		adapter.awaitStop(adapter.requestStop());
@@ -1325,8 +1330,11 @@ class McpLifecycleB3Tests {
 		Assertions.assertEquals(0L, quiesceInterrupted.getCount());
 		Assertions.assertEquals(List.of("quiesce", "quiesce-enter",
 				"quiesce-interrupted", "await-0", "quiesce-call-exited",
-				"force-launch", "force", "await-0", "residual", "release"),
-				operations.events);
+				"force-launch", "force", "await-0", "release"),
+				operations.events.stream().filter(event -> !event.equals("residual")).toList());
+		Assertions.assertEquals(List.of(true, true, true),
+				operations.residualOwnerScopes,
+				"Both phase observations stay tracked; successful proof needs no final callback.");
 		Assertions.assertEquals(
 				InternalLifecycleComponentShutdownDisposition.FORCED_TERMINATION,
 				mcpParticipant(adapter.result(generation).orElseThrow()).disposition());
@@ -2748,6 +2756,8 @@ class McpLifecycleB3Tests {
 		private final AtomicInteger releaseCount = new AtomicInteger();
 		private final List<Long> deadlines = new CopyOnWriteArrayList<>();
 		private final List<String> events = new CopyOnWriteArrayList<>();
+		private final List<Boolean> residualOwnerScopes = new CopyOnWriteArrayList<>();
+		private volatile Object expectedOwnerToken;
 		private volatile Runnable onQuiesce = () -> {};
 		private volatile LongConsumer onAwait = deadline -> {};
 
@@ -2782,6 +2792,9 @@ class McpLifecycleB3Tests {
 		@NonNull
 		public Set<InternalResidualActivityType> residualActivity() {
 			this.events.add("residual");
+			Object token = this.expectedOwnerToken;
+			if (token != null)
+				this.residualOwnerScopes.add(LifecycleExecutionContext.isMarked(token));
 			return this.residualActivity;
 		}
 

@@ -619,6 +619,58 @@ final class LifecycleExecutionContext {
 	}
 }
 
+/** Immutable classification evidence; application status queries run only on proof workers. */
+final class LifecycleResidualActivity {
+	private record Snapshot(boolean terminated,
+			@NonNull Set<InternalResidualActivityType> residual) {}
+
+	private static final Snapshot TERMINATED = new Snapshot(true, Set.of());
+	private final AtomicReference<Snapshot> snapshot =
+			new AtomicReference<>(new Snapshot(false, Set.of()));
+
+	void recordTermination() {
+		this.snapshot.set(TERMINATED);
+	}
+
+	boolean terminationProven() {
+		return this.snapshot.get().terminated();
+	}
+
+	void recordObservation(@NonNull Set<InternalResidualActivityType> residual) {
+		Set<InternalResidualActivityType> exact = Set.copyOf(requireNonNull(residual));
+		for (;;) {
+			Snapshot previous = this.snapshot.get();
+			if (previous.terminated())
+				return;
+			EnumSet<InternalResidualActivityType> combined =
+					EnumSet.noneOf(InternalResidualActivityType.class);
+			combined.addAll(previous.residual());
+			combined.addAll(exact);
+			if (this.snapshot.compareAndSet(previous,
+					new Snapshot(false, Set.copyOf(combined))))
+				return;
+		}
+	}
+
+	@NonNull
+	Set<InternalResidualActivityType> snapshot() {
+		return snapshot(Set.of());
+	}
+
+	@NonNull
+	Set<InternalResidualActivityType> snapshot(
+			@NonNull Set<InternalResidualActivityType> frameworkResidual) {
+		Snapshot current = this.snapshot.get();
+		if (current.terminated())
+			return Set.of();
+		EnumSet<InternalResidualActivityType> combined =
+				EnumSet.noneOf(InternalResidualActivityType.class);
+		combined.addAll(current.residual());
+		combined.addAll(requireNonNull(frameworkResidual));
+		return Set.copyOf(combined);
+	}
+}
+
 /** Strong runtime retention plus a precomputed, bounded diagnostic summary. */
 @ThreadSafe
 final class LifecycleRetentionAnchor {

@@ -22,6 +22,7 @@ import org.jspecify.annotations.Nullable;
 import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.ThreadSafe;
 import java.lang.reflect.Type;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -107,6 +108,7 @@ public final class ValueConverterRegistry {
 	 *
 	 * @param customValueConverters the custom value converters to include in the registry
 	 * @return a registry instance with sensible defaults, supplemented with custom converters
+	 * @throws IllegalArgumentException if custom converters register the same primitive/wrapper-normalized type pair
 	 */
 	@NonNull
 	public static ValueConverterRegistry fromDefaultsSupplementedBy(@NonNull Set<@NonNull ValueConverter<?, ?>> customValueConverters) {
@@ -131,8 +133,7 @@ public final class ValueConverterRegistry {
 			valueConvertersByCacheKey.put(extractCacheKeyFromValueConverter(REFLEXIVE_VALUE_CONVERTER), REFLEXIVE_VALUE_CONVERTER);
 
 		// Finally, register any additional converters that were provided
-		for (ValueConverter<?, ?> customValueConverter : customValueConverters)
-			valueConvertersByCacheKey.put(extractCacheKeyFromValueConverter(customValueConverter), customValueConverter);
+		valueConvertersByCacheKey.putAll(uniqueCustomConverters(customValueConverters));
 
 		return new ValueConverterRegistry(valueConvertersByCacheKey, enableReflexiveConversion, enableEnumAutoConversion);
 	}
@@ -156,6 +157,7 @@ public final class ValueConverterRegistry {
 	 *
 	 * @param customValueConverters the custom value converters to include in the registry
 	 * @return a registry instance without defaults or automatic conversions, supplemented with custom converters
+	 * @throws IllegalArgumentException if custom converters register the same primitive/wrapper-normalized type pair
 	 */
 	@NonNull
 	public static ValueConverterRegistry fromBlankSlateSupplementedBy(@NonNull Set<@NonNull ValueConverter<?, ?>> customValueConverters) {
@@ -165,10 +167,24 @@ public final class ValueConverterRegistry {
 				customValueConverters.size() + 1
 		);
 
-		for (ValueConverter<?, ?> customValueConverter : customValueConverters)
-			valueConvertersByCacheKey.put(extractCacheKeyFromValueConverter(customValueConverter), customValueConverter);
+		valueConvertersByCacheKey.putAll(uniqueCustomConverters(customValueConverters));
 
 		return new ValueConverterRegistry(valueConvertersByCacheKey, false, false);
+	}
+
+	@NonNull
+	private static Map<@NonNull CacheKey, @NonNull ValueConverter<?, ?>> uniqueCustomConverters(
+			@NonNull Set<@NonNull ValueConverter<?, ?>> converters) {
+		if (converters.isEmpty())
+			return Map.of();
+		Map<CacheKey, ValueConverter<?, ?>> unique = new HashMap<>();
+		for (ValueConverter<?, ?> converter : converters) {
+			CacheKey key = extractCacheKeyFromValueConverter(converter);
+			if (unique.putIfAbsent(key, converter) != null)
+				throw new IllegalArgumentException(
+						"Multiple custom ValueConverters register the same primitive/wrapper-normalized type pair. Register only one custom converter for each type pair.");
+		}
+		return unique;
 	}
 
 	@NonNull

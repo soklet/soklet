@@ -29,7 +29,9 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
 import static com.soklet.internal.ObjectIdentity.sameInstance;
@@ -44,6 +46,7 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 final class McpApplicationHandlerDispatcher {
+	private static final AtomicLong INTERRUPT_THREAD_SEQUENCE = new AtomicLong();
 	enum Admission {
 		DISPATCHED,
 		QUEUED,
@@ -88,6 +91,9 @@ final class McpApplicationHandlerDispatcher {
 		private final Object interruptLock;
 		private volatile @Nullable Thread handlerThread;
 		private boolean interruptRequested;
+		private boolean interruptDeliveryPending;
+		private @Nullable Thread interruptDeliveryThread;
+		private @Nullable Throwable interruptDeliveryFailure;
 		@NonNull
 		private volatile TicketState state;
 
@@ -116,14 +122,17 @@ final class McpApplicationHandlerDispatcher {
 		}
 
 		void requestInterrupt() {
+			Thread target;
 			synchronized (interruptLock) {
 				if (interruptRequested)
 					return;
 				interruptRequested = true;
-
-				if (handlerThread != null)
-					handlerThread.interrupt();
+				target = handlerThread;
+				if (target == null)
+					return;
+				interruptDeliveryPending = true;
 			}
+			startInterruptDelivery(this, target);
 		}
 
 		@NonNull
@@ -142,6 +151,8 @@ final class McpApplicationHandlerDispatcher {
 	private final McpApplicationExecutionObserver observer;
 	@NonNull
 	private final Runnable slotReleaseObserver;
+	@NonNull
+	private final ThreadFactory interruptThreadFactory;
 	@NonNull
 	private final Queue<@NonNull Ticket> queue;
 	@NonNull
@@ -168,6 +179,19 @@ final class McpApplicationHandlerDispatcher {
 			@NonNull ExecutorService executorService,
 			@NonNull McpApplicationExecutionObserver observer,
 			@NonNull Runnable slotReleaseObserver) {
+		this(concurrency, queueCapacity, executorService, observer, slotReleaseObserver,
+				runnable -> Thread.ofPlatform().inheritInheritableThreadLocals(false)
+						.name("soklet-mcp-interrupt-" + INTERRUPT_THREAD_SEQUENCE.incrementAndGet())
+						.unstarted(runnable));
+	}
+
+	// Internal launch seam permits deterministic failure coverage without a
+	// configurable application executor or an additional public setting.
+	McpApplicationHandlerDispatcher(int concurrency, int queueCapacity,
+			@NonNull ExecutorService executorService,
+			@NonNull McpApplicationExecutionObserver observer,
+			@NonNull Runnable slotReleaseObserver,
+			@NonNull ThreadFactory interruptThreadFactory) {
 		if (concurrency < 1)
 			throw new IllegalArgumentException("Handler concurrency must be positive.");
 
@@ -180,6 +204,7 @@ final class McpApplicationHandlerDispatcher {
 		this.executorService = requireNonNull(executorService);
 		this.observer = requireNonNull(observer);
 		this.slotReleaseObserver = requireNonNull(slotReleaseObserver);
+		this.interruptThreadFactory = requireNonNull(interruptThreadFactory);
 		this.queue = new ArrayDeque<>();
 		this.activeTickets = Collections.newSetFromMap(new IdentityHashMap<>());
 		this.accepting = true;
@@ -422,33 +447,108 @@ final class McpApplicationHandlerDispatcher {
 			Ticket ticket = ticketToRun;
 			Thread.interrupted();
 
+			boolean interruptBeforeEntry;
 			synchronized (ticket.interruptLock) {
 				ticket.handlerThread = Thread.currentThread();
-
-				if (ticket.interruptRequested)
-					Thread.currentThread().interrupt();
+				interruptBeforeEntry = ticket.interruptRequested;
 			}
 
 			Ticket next;
 			try (var scope = ticketMetricScope(ticket)) {
+				// A request accepted before publication belongs to this worker.
+				// Deliver outside the ticket monitor and inside the owner scope;
+				// custom Thread implementations may execute application code here.
+				if (interruptBeforeEntry)
+					performInterrupt(ticket, Thread.currentThread());
 				ticket.work.run();
 			} catch (InterruptedException exception) {
-				Thread.currentThread().interrupt();
+				performInterrupt(ticket, Thread.currentThread());
 				notifyFailure(ticket, exception);
 			} catch (Throwable throwable) {
 				notifyFailure(ticket, throwable);
 			} finally {
+				Throwable interruptFailure;
+				Thread interruptDelivery;
 				synchronized (ticket.interruptLock) {
+					// Interrupt can synchronously close application channels. Never
+					// return/promote this physical worker until that exact delivery
+					// has exited, even when application work has already returned.
+					while (ticket.interruptDeliveryPending) {
+						try {
+							ticket.interruptLock.wait();
+						} catch (InterruptedException ignored) {
+							// Worker interrupt status is cleared below after retirement.
+						}
+					}
 					ticket.handlerThread = null;
+					interruptFailure = ticket.interruptDeliveryFailure;
+					interruptDelivery = ticket.interruptDeliveryThread;
 				}
 
+				// A completed delivery body has no more application calls, but
+				// retain its slot through the helper thread's actual physical exit.
+				if (interruptDelivery != null) {
+					while (interruptDelivery.isAlive()) {
+						try {
+							interruptDelivery.join();
+						} catch (InterruptedException ignored) {
+							// This worker is still fenced against executor reuse.
+						}
+					}
+				}
 				Thread.interrupted();
+				if (interruptFailure != null)
+					notifyFailure(ticket, interruptFailure);
 				next = onHandlerExited(ticket);
 			}
 			// This physical worker already satisfies the application's executor
 			// contract. Drain accepted queued work before returning it to a
 			// direct-handoff executor; do not resubmit from an exiting worker.
 			ticketToRun = next;
+		}
+	}
+
+	private void startInterruptDelivery(@NonNull Ticket ticket, @NonNull Thread target) {
+		try {
+			Thread delivery = requireNonNull(this.interruptThreadFactory.newThread(() -> {
+				try {
+					performInterrupt(ticket, target);
+				} finally {
+					finishInterruptDelivery(ticket);
+				}
+			}), "MCP interrupt thread factory returned null.");
+			delivery.setDaemon(true);
+			synchronized (ticket.interruptLock) {
+				ticket.interruptDeliveryThread = delivery;
+			}
+			delivery.start();
+		} catch (Throwable failure) {
+			// A launch failure must neither strand the retirement fence nor
+			// prevent the timer from publishing its elected timeout response.
+			recordInterruptFailure(ticket, failure);
+			finishInterruptDelivery(ticket);
+		}
+	}
+
+	private void performInterrupt(@NonNull Ticket ticket, @NonNull Thread target) {
+		try (var scope = this.observer.enterLifecycleExecution()) {
+			target.interrupt();
+		} catch (Throwable failure) {
+			recordInterruptFailure(ticket, failure);
+		}
+	}
+
+	private void recordInterruptFailure(@NonNull Ticket ticket, @NonNull Throwable failure) {
+		synchronized (ticket.interruptLock) {
+			if (ticket.interruptDeliveryFailure == null)
+				ticket.interruptDeliveryFailure = failure;
+		}
+	}
+
+	private void finishInterruptDelivery(@NonNull Ticket ticket) {
+		synchronized (ticket.interruptLock) {
+			ticket.interruptDeliveryPending = false;
+			ticket.interruptLock.notifyAll();
 		}
 	}
 

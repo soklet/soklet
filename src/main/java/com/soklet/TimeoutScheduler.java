@@ -21,8 +21,6 @@ import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadFactory;
@@ -49,6 +47,8 @@ final class TimeoutScheduler {
 	private final AtomicBoolean shutdown;
 	private final Thread workerThread;
 	private volatile long currentTick;
+	@Nullable
+	private volatile Throwable terminalFailure;
 
 	TimeoutScheduler(@NonNull ThreadFactory threadFactory) {
 		this(threadFactory, DEFAULT_TICK_DURATION, DEFAULT_TICKS_PER_WHEEL);
@@ -88,8 +88,7 @@ final class TimeoutScheduler {
 		if (delay.isNegative() || delay.isZero())
 			throw new IllegalArgumentException("Delay must be > 0.");
 
-		if (this.shutdown.get())
-			throw new RejectedExecutionException("Timeout scheduler is shut down.");
+		ensureRunning();
 
 		// The worker's completed tick can lag after a pause or a slow cancelation
 		// hook. A newly submitted timeout starts at the current clock position,
@@ -99,8 +98,23 @@ final class TimeoutScheduler {
 		long deadlineTick = saturatedAdd(scheduleTick, ticksFor(delay));
 		ScheduledTask scheduledTask = new ScheduledTask(task, deadlineTick);
 		this.pendingTasks.add(scheduledTask);
+		try {
+			ensureRunning();
+		} catch (RejectedExecutionException unavailable) {
+			scheduledTask.cancel();
+			this.pendingTasks.remove(scheduledTask);
+			throw unavailable;
+		}
 		LockSupport.unpark(this.workerThread);
 		return scheduledTask;
+	}
+
+	private void ensureRunning() {
+		if (this.shutdown.get())
+			throw new RejectedExecutionException("Timeout scheduler is shut down.");
+		Throwable failure = this.terminalFailure;
+		if (failure != null || !this.workerThread.isAlive())
+			throw new RejectedExecutionException("Timeout scheduler worker is unavailable.", failure);
 	}
 
 	boolean isShutdown() {
@@ -158,6 +172,17 @@ final class TimeoutScheduler {
 	}
 
 	private void run() {
+		try {
+			runTicks();
+		} catch (RuntimeException | Error failure) {
+			// Keep explicit shutdown separate from worker failure: callers must
+			// reject new deadlines instead of silently skipping timeout scheduling.
+			this.terminalFailure = failure;
+			throw failure;
+		}
+	}
+
+	private void runTicks() {
 		long nextTickAt = this.startedAtNanos + this.tickNanos;
 
 		while (!this.shutdown.get()) {
@@ -174,10 +199,24 @@ final class TimeoutScheduler {
 			while (!this.shutdown.get() && nextTickAt - now <= 0L) {
 				long tick = this.currentTick + 1L;
 				this.currentTick = tick;
-				transferPendingTasks();
-				expireBucket(tick);
+				processTick(tick);
 				nextTickAt += this.tickNanos;
 				now = System.nanoTime();
+			}
+		}
+	}
+
+	private void processTick(long tick) {
+		while (!this.shutdown.get()) {
+			try {
+				transferPendingTasks();
+				expireBucket(tick);
+				return;
+			} catch (OutOfMemoryError temporaryAllocationFailure) {
+				// Housekeeping detaches no task before retaining its next owner.
+				// Retry this exact tick after transient allocation pressure, without
+				// swallowing unrelated VM failures or spinning while memory is scarce.
+				LockSupport.parkNanos(this, this.tickNanos);
 			}
 		}
 	}
@@ -185,20 +224,27 @@ final class TimeoutScheduler {
 	private void transferPendingTasks() {
 		ScheduledTask scheduledTask;
 
-		while ((scheduledTask = this.pendingTasks.poll()) != null)
+		while (!this.shutdown.get() && (scheduledTask = this.pendingTasks.peek()) != null) {
 			if (!scheduledTask.isCanceled())
-				// schedule() can be paused between reading currentTick and publishing
-				// the task. File overdue work in this tick's bucket before it expires,
-				// rather than waiting a whole wheel rotation for the old bucket.
-				bucketFor(Math.max(scheduledTask.deadlineTick, this.currentTick)).add(scheduledTask);
+				// Leave the queue reference intact if bucket lock acquisition fails.
+				// Overdue publication still belongs to this tick, not a later rotation.
+				bucketFor(Math.max(scheduledTask.deadlineTick, this.currentTick))
+						.add(scheduledTask, this.shutdown);
+			// shutdownNow may concurrently clear the queue; never poll a different
+			// task after that clear or after a scheduling thread publishes again.
+			this.pendingTasks.remove(scheduledTask);
+		}
 	}
 
 	private void expireBucket(long tick) {
-		List<ScheduledTask> expiredTasks = bucketFor(tick).expire(tick);
-
-		for (ScheduledTask expiredTask : expiredTasks)
+		ScheduledTask expiredTask = bucketFor(tick).expire(tick);
+		while (expiredTask != null) {
+			ScheduledTask next = expiredTask.next;
+			expiredTask.next = null;
 			if (!expiredTask.isCanceled())
 				runTask(expiredTask);
+			expiredTask = next;
+		}
 	}
 
 	private void runTask(@NonNull ScheduledTask scheduledTask) {
@@ -289,11 +335,12 @@ final class TimeoutScheduler {
 			this.lock = new ReentrantLock();
 		}
 
-		private void add(@NonNull ScheduledTask scheduledTask) {
+		private void add(@NonNull ScheduledTask scheduledTask,
+				@NonNull AtomicBoolean shutdown) {
 			requireNonNull(scheduledTask);
 			this.lock.lock();
 			try {
-				if (scheduledTask.isCanceled())
+				if (shutdown.get() || scheduledTask.isCanceled())
 					return;
 
 				scheduledTask.bucket = this;
@@ -309,9 +356,10 @@ final class TimeoutScheduler {
 			}
 		}
 
-		@NonNull
-		private List<@NonNull ScheduledTask> expire(long tick) {
-			List<ScheduledTask> expiredTasks = new ArrayList<>();
+		@Nullable
+		private ScheduledTask expire(long tick) {
+			ScheduledTask expiredHead = null;
+			ScheduledTask expiredTail = null;
 			this.lock.lock();
 			try {
 				ScheduledTask scheduledTask = this.head;
@@ -323,7 +371,13 @@ final class TimeoutScheduler {
 						unlink(scheduledTask);
 					} else if (scheduledTask.deadlineTick <= tick) {
 						unlink(scheduledTask);
-						expiredTasks.add(scheduledTask);
+						// Detached tasks reuse their private next link. Cancellation
+						// sees bucket=null, so it cannot modify this worker-owned chain.
+						if (expiredTail == null)
+							expiredHead = scheduledTask;
+						else
+							expiredTail.next = scheduledTask;
+						expiredTail = scheduledTask;
 					}
 
 					scheduledTask = next;
@@ -332,7 +386,7 @@ final class TimeoutScheduler {
 				this.lock.unlock();
 			}
 
-			return expiredTasks;
+			return expiredHead;
 		}
 
 		private void remove(@NonNull ScheduledTask scheduledTask) {
