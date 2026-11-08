@@ -4045,7 +4045,7 @@
     }
   ],
   "currentStage": {
-    "censusSha256": "693b1abef02115e5bb2f53c8082c7f4039fe97e19349e66e4e57985669c6ac9f",
+    "censusSha256": "b2099e8d07eba0fecc16df8645f02ead5a01a792b86322f5a754f6975b5e33c0",
     "d2RemovalAnchors": [
       "api/mcp/phase-4.signatures.jsonl\t54\t0\tapi/mcp/phase-4.signatures.jsonl\te25d18ed313c708589e0341e693b32dbabe6d0a29764d090c3516494bfd20ac3",
       "src/main/java/com/soklet/McpLogLevel.java\t30\t0\tsrc/main/java/com/soklet/McpLogLevel.java\t3a02c08e1250412e2bb783de3cf21423e3ae065d6cd69d592a5887a6977aeec5",
@@ -4055,10 +4055,10 @@
       "src/main/java/com/soklet/McpLogLevel.java"
     ],
     "files": [
-      ".github/workflows/ci.yml\t8a0d2fd69a6a013c411102808887fce0d3f21150815be9300eda23471de2c6a4",
+      ".github/workflows/ci.yml\t281b85725cafa97c5f83409be9823240bb363dadf5181196e1fe0025928e0315",
       ".github/workflows/release-validation.yml\t9cc98d2190e4e75608fb50fe1077394b0836274c334ce9d3b69895451254efc2",
       "BENCHMARKS.md\t75cea8def2326ac9656a4762f397b7c151e0c2a7f7b06861bf5c7a1c274626fa",
-      "CHANGELOG.md\t87ac4da41f6277d9e589aeed99eae47818641184bc9670b3e82ae53044deace9",
+      "CHANGELOG.md\tcba5d7763771ea00c2c1165a34ae22c505e3ccad65235d3827e32de62e9be994",
       "MCP.md\teb9826d7450baa6e78251cc1866566dc5f152fc0e086648b4a17de7148bed3c6",
       "MCP_QUICKSTART.md\tfeceebbab9d521c1ebacc056416dc40caee96d415c09edfc106d2142787c8f91",
       "MIGRATING_TO_4_0.md\t216609930635a08bf970afc98a34fd1b95298f97d5ea6c26fd5dc043d33b9e2a",
@@ -4146,7 +4146,7 @@
       "scripts/release-validation-self-test.mjs\t768b5039b62b5195424e65ec2ab647774c50b64c1e5d8f20ed1bb89552486a42",
       "scripts/validate-release-candidate.sh\ta9785aeceddc1e0e51dd92bc62ea59d208605a6ebeb5ce67d5deee6f0552a396",
       "scripts/verify-d1p-evidence-self-test.mjs\t1a5cb492fd418ba388eb26a84af470480c84f174c2331e4ad96048de99903255",
-      "scripts/verify-lifecycle-bound-harness-inventory.mjs\tf8a11e5e022096768cbcdf6b30461a1abcaf0b80ecf0fa2700bcfc648c6444fa",
+      "scripts/verify-lifecycle-bound-harness-inventory.mjs\t344acd2b9b2f259f8cbdd9a11083f8d4f3a4f48c624c7e04336b7e1205b3c85c",
       "scripts/verify-mcp-roadmap-readiness-self-test.mjs\tf5b018a16168da7109ecca3e2e84c699143d6460b4758c3fa1972e74adb87049",
       "scripts/verify-mcp-roadmap-readiness.mjs\t9c91f39336c9be0bc7431930171821960da20c370b8e71401ffdfa15781b2e40",
       "scripts/verify-mcp-transport-dependencies-self-test.mjs\t61ff86328d45adb9a64ec27be27c92d85c77eb5cf2138d27c81fa994f139d050",
@@ -4333,9 +4333,9 @@
       "TARGET_ONLY\t.github/workflows/ci.yml\t203\t53\t0\t4.0.0\t4.0.0\t-\t-\t-",
       "TARGET_ONLY\t.github/workflows/ci.yml\t213\t76\t0\t4.0.0\t4.0.0\t-\t-\t-",
       "TARGET_ONLY\t.github/workflows/ci.yml\t213\t89\t1\t4.0.0\t4.0.0\t-\t-\t-",
-      "REPLACED\t.github/workflows/ci.yml\t417\t47\t0\t4.0.0-SNAPSHOT\t4.0.0\t.github/workflows/ci.yml\t231\t0",
-      "REPLACED\t.github/workflows/ci.yml\t425\t45\t0\t4.0.0-SNAPSHOT\t4.0.0\t.github/workflows/ci.yml\t239\t0",
-      "TARGET_ONLY\t.github/workflows/ci.yml\t504\t47\t0\t4.0.0\t4.0.0\t-\t-\t-",
+      "REPLACED\t.github/workflows/ci.yml\t422\t47\t0\t4.0.0-SNAPSHOT\t4.0.0\t.github/workflows/ci.yml\t231\t0",
+      "REPLACED\t.github/workflows/ci.yml\t430\t45\t0\t4.0.0-SNAPSHOT\t4.0.0\t.github/workflows/ci.yml\t239\t0",
+      "TARGET_ONLY\t.github/workflows/ci.yml\t509\t47\t0\t4.0.0\t4.0.0\t-\t-\t-",
       "REPLACED\t.github/workflows/release-validation.yml\t598\t26\t0\t4.0.0\t4.0.0\t.github/workflows/release-validation.yml\t107\t0",
       "REPLACED\t.github/workflows/release-validation.yml\t599\t26\t0\t4.0.0\t4.0.0\t.github/workflows/release-validation.yml\t108\t0",
       "REPLACED\t.github/workflows/release-validation.yml\t600\t26\t0\t4.0.0\t4.0.0\t.github/workflows/release-validation.yml\t109\t0",

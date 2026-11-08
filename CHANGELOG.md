@@ -496,6 +496,8 @@ maintenance or security fixes afterward. See the explicit
 
 ### Correctness Fixes
 
+- Publish completed startup-action state before its termination proof, preventing
+  a concurrent shutdown from reporting an incomplete result for finished work.
 - Complete queued MCP deadline cleanup outside terminal-election locks, avoiding
   a lock-order cycle with disconnect and legacy cancellation. During shutdown,
   finish canceled queued requests without overflowing the cancellation executor.

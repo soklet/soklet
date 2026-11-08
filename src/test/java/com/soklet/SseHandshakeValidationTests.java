@@ -287,6 +287,7 @@ class SseHandshakeValidationTests {
 				return new Outcome(http.getMarshaledResponse().getStatusCode(), http.getMarshaledResponse().getHeaders(),
 						new String(http.getMarshaledResponse().bodyBytesOrEmpty(), StandardCharsets.UTF_8), accepted);
 			}
+			int initializersBefore = this.resource.initializers.get();
 			try (Socket socket = new Socket()) {
 				socket.connect(this.address, 2_000);
 				long deadline = System.nanoTime() + Duration.ofSeconds(2).toNanos();
@@ -308,8 +309,11 @@ class SseHandshakeValidationTests {
 				int length = Integer.parseInt(responseHeaders.getOrDefault("Content-Length", List.of("0")).get(0));
 				for (int i=0; i<length; i++) payload.write(read(socket, deadline));
 				String contentType = responseHeaders.getOrDefault("Content-Type", List.of("")).get(0).split(";",2)[0].trim();
-				return new Outcome(status, responseHeaders, payload.toString(StandardCharsets.UTF_8),
-						status == 200 && contentType.equalsIgnoreCase("text/event-stream") && !responseHeaders.containsKey("Content-Length"));
+				boolean accepted = status == 200 && contentType.equalsIgnoreCase("text/event-stream") && !responseHeaders.containsKey("Content-Length");
+				// Peer closure can suppress an initializer that has not entered. These
+				// requests are sequential, so observe this initializer before closing.
+				if (accepted) await(() -> this.resource.initializers.get() > initializersBefore);
+				return new Outcome(status, responseHeaders, payload.toString(StandardCharsets.UTF_8), accepted);
 			}
 		}
 

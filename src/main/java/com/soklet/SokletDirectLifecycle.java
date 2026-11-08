@@ -1963,8 +1963,8 @@ final class SokletDirectLifecycle {
 			// Idempotent group signaling ensures neither can observe completion
 			// before its root proof, even if the other caller is preempted.
 			this.group.recordShutdownIntent();
-			this.signal.signalTerminated();
 			this.active.set(false);
+			this.signal.signalTerminated();
 		}
 
 		@Override @NonNull public InternalLifecycleComponentType kind() { return this.kind; }

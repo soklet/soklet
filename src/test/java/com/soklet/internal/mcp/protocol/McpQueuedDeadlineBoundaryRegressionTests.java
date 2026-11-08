@@ -16,9 +16,12 @@ import java.lang.reflect.Field;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -47,6 +50,83 @@ public class McpQueuedDeadlineBoundaryRegressionTests {
 	public void stoppingManyQueuedRequestsDoesNotOverflowRunningCancellationSidecars() throws Exception {
 		assertStopBacklog(1, 5);
 		assertStopBacklog(4, 14);
+	}
+
+	@Test
+	public void rejectedTicketsDoNotReserveRunningCancellationSidecars() throws Exception {
+		RejectingHandlerExecutor executor = new RejectingHandlerExecutor();
+		McpApplicationExecution execution = new McpApplicationExecution(
+				new McpApplicationExecutionConfiguration(1, 1,
+						Duration.ofSeconds(30), Duration.ofDays(1)), () -> 0L,
+				ignored -> executor);
+		List<McpApplicationCancellationReservation> cancellations = new ArrayList<>();
+		AtomicInteger handlerInvocations = new AtomicInteger();
+		AtomicInteger physicalExits = new AtomicInteger();
+		AtomicInteger responses = new AtomicInteger();
+		AtomicInteger cleanups = new AtomicInteger();
+		AtomicReference<Throwable> cancellationFailure = new AtomicReference<>();
+		try {
+			execution.start();
+			for (int index = 0; index < 5; index++) {
+				MicrohttpRequest transport = transportRequest();
+				execution.dispatch(transport, request("rejected-" + index),
+						Mcp20260728ProtocolProfile.INSTANCE, admissionIdentity(), invocation -> {
+							handlerInvocations.incrementAndGet();
+							return completed();
+						}, 1_000_000L, new McpApplicationResponseWriter() {
+					@Override public boolean write(McpApplicationResponse response) {
+						responses.incrementAndGet();
+						return true;
+					}
+					@Override public void didFinishPhysicalWork() {
+						physicalExits.incrementAndGet();
+						try {
+							// Failed submission has changed the ticket to REJECTED, but
+							// its failure observer has not elected a response yet.
+							McpApplicationCancellationReservation cancellation = execution.tryReserveCancellation(
+									transport, StreamTerminationReason.CLIENT_DISCONNECTED);
+							cancellations.add(cancellation);
+							Assertions.assertTrue(cancellation.registered());
+							Assertions.assertTrue(cancellation.won());
+						} catch (Throwable failure) {
+							cancellationFailure.compareAndSet(null, failure);
+						}
+					}
+				}, cleanups::incrementAndGet);
+				Assertions.assertNull(cancellationFailure.get(),
+						"A rejected ticket must not consume a running-handler cancellation sidecar.");
+			}
+			// Hold every elected completion. If unentered tickets reserved sidecars,
+			// five requests would overflow the one worker plus one queue allowance.
+			Assertions.assertEquals(5, executor.submissions.get());
+			Assertions.assertEquals(5, physicalExits.get());
+			Assertions.assertEquals(5, cancellations.size());
+			Assertions.assertEquals(0, handlerInvocations.get());
+			Assertions.assertEquals(0, responses.get());
+			Assertions.assertEquals(0, cleanups.get());
+			Assertions.assertEquals(0, execution.snapshot().activeHandlerSlots());
+			Assertions.assertEquals(5, execution.snapshot().retainedExchanges());
+			Assertions.assertEquals(5, execution.snapshot().retainedTransportLeases());
+			for (McpApplicationCancellationReservation cancellation : cancellations) {
+				cancellation.complete().run();
+				cancellation.complete().run();
+			}
+			Assertions.assertEquals(5, physicalExits.get());
+			Assertions.assertEquals(5, cleanups.get());
+			Assertions.assertEquals(5, execution.snapshot().abandonedResponses());
+			Assertions.assertEquals(0, execution.snapshot().terminalResponses());
+			Assertions.assertEquals(0, execution.snapshot().retainedExchanges());
+			Assertions.assertEquals(0, execution.snapshot().retainedTransportLeases());
+		} finally {
+			for (McpApplicationCancellationReservation cancellation : cancellations)
+				cancellation.complete().run();
+			execution.stop();
+			boolean terminated = execution.awaitTermination(Duration.ofSeconds(5));
+			// A disposable negative run can lose the failing reservation's completion
+			// when its impossible sidecar overflows. Preserve that original failure.
+			if (!(cancellationFailure.get() instanceof RejectedExecutionException))
+				Assertions.assertTrue(terminated);
+		}
 	}
 
 	private static void assertQueuedPhysicalCompletionOutsideLocks(StreamTerminationReason reason)
@@ -254,7 +334,7 @@ public class McpQueuedDeadlineBoundaryRegressionTests {
 
 	private static McpEffectiveAdmissionIdentity admissionIdentity() {
 		McpNormalizedEndpoint endpoint = McpNormalizedEndpoint.withServerInformation(
-				McpImplementationMetadata.withNameAndVersion("queued-boundary-test", "4.0.0")).build();
+				McpImplementationMetadata.withNameAndVersion("queued-boundary-test", "1.0.0")).build();
 		return McpEffectiveAdmissionIdentity.resolve(endpoint, "/mcp", McpAdmissionIdentity.anonymousInstance());
 	}
 
@@ -267,5 +347,20 @@ public class McpQueuedDeadlineBoundaryRegressionTests {
 		McpJsonRpcEnvelope envelope = new McpJsonRpcEnvelopeCodec(new McpJsonCodec(limits))
 				.decode(json.getBytes(StandardCharsets.UTF_8));
 		return new McpRequestWireMapper(limits).map((McpJsonRpcEnvelope.Request) envelope);
+	}
+
+	private static final class RejectingHandlerExecutor extends AbstractExecutorService {
+		private final AtomicInteger submissions = new AtomicInteger();
+		private volatile boolean shutdown;
+
+		@Override public void execute(Runnable command) {
+			submissions.incrementAndGet();
+			throw new RejectedExecutionException("Synthetic handler submission rejection.");
+		}
+		@Override public void shutdown() { shutdown = true; }
+		@Override public List<Runnable> shutdownNow() { shutdown = true; return List.of(); }
+		@Override public boolean isShutdown() { return shutdown; }
+		@Override public boolean isTerminated() { return shutdown; }
+		@Override public boolean awaitTermination(long timeout, TimeUnit unit) { return shutdown; }
 	}
 }

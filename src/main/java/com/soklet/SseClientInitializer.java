@@ -31,8 +31,9 @@ import javax.annotation.concurrent.ThreadSafe;
  * and its cause. Queue overflow elects {@link StreamTerminationReason#BACKPRESSURE}, even when caught by
  * the initializer. An earlier termination reason still wins. Establishment observation precedes termination
  * observation even if initialization never activates the connection. Do not retain the unicaster after this callback returns.
- * Peer disconnection or server shutdown can interrupt an in-progress initializer. Initialization should
- * cooperate with interruption; its lifecycle capacity remains reserved until the callback physically returns.
+ * Peer disconnection or server shutdown can prevent an initializer from entering or interrupt one already
+ * in progress. Initialization should cooperate with interruption; its lifecycle capacity remains reserved
+ * until the callback physically returns.
  * <p>
  * One initializer instance may be reused concurrently for different clients. Captured application state must
  * support that reuse.

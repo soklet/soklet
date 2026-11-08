@@ -2807,12 +2807,14 @@ const REVIEWED_MCP_CHECKED_STARTUP_SCOPE_OVERRIDES = checkedReviewMap([
 // The SSE validation matrix runs two live/simulator generations per paired case,
 // six simulator ownership variants, and one failing error-marshaler generation.
 // Each live exchange has one two-second connect plus one absolute two-second read;
-// every fixture has one absolute five-second observation poll. Simulator-only
-// scopes retain conservative report allowances from the shared source helper.
+// every fixture has one absolute five-second observation poll. Each accepted
+// live request also retains its own five-second initializer-entry poll before
+// socket closure: two/four accepted requests add10/20 s to the paired cases.
+// Simulator-only scopes retain report allowances from the shared source helper.
 const REVIEWED_SSE_HANDSHAKE_VALIDATION_SCOPE_OVERRIDES = checkedReviewMap([
-  ...reviewedScopeFile("src/test/java/com/soklet/SseHandshakeValidationTests.java", "5e7061dcd99c76da34fc19a5088891dee68bac344e63a707d2d40666579a608e", [
-    ["originalAcceptedContentTypeFailsWithDiagnosticWhileInterceptorsCanDeny","e8b161ef534a0205c07d73df3d6ae96ef1b5e658436166f4135b52b5383fdda9",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1},"terminalReportCount":1,"controlJoinMillis":38000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
-    ["bodyAndFramingAreRejectedBeforeHandlersInSimulationAndLive","f7dd7d4b1f18de4229c97cefe9c606b65f64e1f43afb6df7489ac362937252ba",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1},"terminalReportCount":1,"controlJoinMillis":50000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
+  ...reviewedScopeFile("src/test/java/com/soklet/SseHandshakeValidationTests.java", "e7ecf14a4d01afb762b151f3040d6411dd29554bfa8730ce291ab8edff742906", [
+    ["originalAcceptedContentTypeFailsWithDiagnosticWhileInterceptorsCanDeny","e8b161ef534a0205c07d73df3d6ae96ef1b5e658436166f4135b52b5383fdda9",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1},"terminalReportCount":1,"controlJoinMillis":48000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
+    ["bodyAndFramingAreRejectedBeforeHandlersInSimulationAndLive","f7dd7d4b1f18de4229c97cefe9c606b65f64e1f43afb6df7489ac362937252ba",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1},"terminalReportCount":1,"controlJoinMillis":70000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
     ["admissionFailureUsesCustomThrowableHandlerAndPostProcessorExactlyOnce","c69c84c67d6330bfc3f99502d80089bff0fa79bc622bb62fcc971cd7fcaab7a9",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1},"terminalReportCount":1,"controlJoinMillis":14000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
     ["failedAdmissionPreparationReleasesOnlyOwnedChannels","6f1013dabb895ac5c786213b5c368dc1d54dc8dcb56d340340a5bb957a7264a3",{"generation":{"count":6,"mode":"SEQUENTIAL","complete":6,"prior":5,"incomplete":1},"terminalReportCount":6,"controlJoinMillis":30000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
     ["failedErrorMarshalerStillReportsAdmissionRejection","d616e164f292f765d36cf05df9067064d0f9d643a169939f0eee114f4b388167",{"generation":{"count":1,"mode":"SINGLE","complete":1,"prior":0,"incomplete":1},"terminalReportCount":1,"controlJoinMillis":5000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
@@ -3593,6 +3595,31 @@ const REVIEWED_SCOPE_OVERRIDES = mergeReviewedScopeOverrideMaps(
   REVIEWED_DEADLINE_ISOLATION_SCOPE_OVERRIDES);
 
 const REVIEWED_ORPHAN_HELPERS = checkedReviewMap([
+  // C1 fixture helpers construct/close only NEW owners through an inline launcher.
+  ...reviewedOrphanFile("src/test/java/com/soklet/FrameworkAttemptPublicationTests.java", "da72db7215e7d6625e4aa110626ca769af8aa80c5a6256259f51c07e015d9f4f", [
+  [
+    "create",
+    113,
+    "8d675d6faec41b53cdba6e1d1bd548917e56bd07d26949c0d996b0cb224fd6a1",
+    {
+      "path": "src/test/java/com/soklet/FrameworkAttemptPublicationTests.java",
+      "line": 19,
+      "lineSha256": "8f890fd3c55354198e7b95d2f2a4cb101e2061b569f7bb55530908787a8ec602",
+      "rationale": "All three synchronous proof-publication tests call Fixture.create in try-with-resources and invoke Fixture.close on that same never-started owner. This exact caller starts no managed generation, listener or thread; create supplies the explicitly inline LifecycleWorkers launcher, and close restores the notification callback then synchronously closes NEW. There is no independent execution, synthetic helper guard, wait, phase policy or added lifecycle budget."
+    }
+  ],
+  [
+    "close",
+    157,
+    "d79b8e11d1cdd195b72a43c5c37112dd780cc5b25efac2cbc6b85c2802b6ca5c",
+    {
+      "path": "src/test/java/com/soklet/FrameworkAttemptPublicationTests.java",
+      "line": 19,
+      "lineSha256": "8f890fd3c55354198e7b95d2f2a4cb101e2061b569f7bb55530908787a8ec602",
+      "rationale": "All three synchronous proof-publication tests call Fixture.create in try-with-resources and invoke Fixture.close on that same never-started owner. This exact caller starts no managed generation, listener or thread; create supplies the explicitly inline LifecycleWorkers launcher, and close restores the notification callback then synchronously closes NEW. There is no independent execution, synthetic helper guard, wait, phase policy or added lifecycle budget."
+    }
+  ]
+]),
   ...reviewedOrphanFile("src/test/java/com/soklet/LifecycleStatusIsolationTests.java", "72967c1e2a6374800a541ed35862b96d9582b6d7a1682731d4024b422fe12951", [
   [
     "isTerminated",
