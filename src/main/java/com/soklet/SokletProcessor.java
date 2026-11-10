@@ -2941,11 +2941,11 @@ public final class SokletProcessor extends AbstractProcessor {
 				.append(endpoint.providerSimpleName()).append(" {\n")
 				.append("\tpublic ").append(endpoint.providerSimpleName())
 				.append("() {\n\t}\n\n")
-				.append("\tpublic Class<?> endpointClass() {\n")
+				.append("\tpublic java.lang.Class<?> endpointClass() {\n")
 				.append("\t\treturn ").append(endpoint.endpointQualifiedName())
 				.append(".class;\n\t}\n\n")
-				.append("\tpublic String[] schemaDigests() {\n")
-				.append("\t\treturn new String[] {");
+				.append("\tpublic java.lang.String[] schemaDigests() {\n")
+				.append("\t\treturn new java.lang.String[] {");
 		for (int index = 0; index < endpoint.tools().size(); ++index) {
 			McpToolModel tool = endpoint.tools().get(index);
 			if (index > 0)

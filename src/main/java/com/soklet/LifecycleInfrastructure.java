@@ -16,6 +16,7 @@
 
 package com.soklet;
 
+import com.soklet.internal.HelperThreads;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -40,6 +41,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Supplier;
 
 import static com.soklet.internal.ObjectIdentity.sameInstance;
 import static java.util.Objects.requireNonNull;
@@ -176,7 +178,7 @@ final class LifecycleWorkers {
 
 	private static void launchDaemon(@NonNull String name,
 			@NonNull Runnable runnable) {
-		Thread worker = new Thread(runnable, name);
+		Thread worker = HelperThreads.platform(runnable, name);
 		worker.setDaemon(true);
 		worker.start();
 	}
@@ -296,7 +298,7 @@ final class InternalLifecycleCompletion {
 					() -> this.publicHandoff.complete(immutableResult));
 		} catch (RuntimeException | Error launchFailure) {
 			try {
-				Thread fallback = new Thread(
+				Thread fallback = HelperThreads.platform(
 						() -> this.publicHandoff.complete(immutableResult),
 						"soklet-shutdown-result-handoff-fallback");
 				fallback.setDaemon(true);
@@ -403,6 +405,31 @@ final class InternalLifecycleStateMachine {
 		this.transitionLock.lock();
 		try {
 			return this.state.compareAndSet(State.STARTING, State.READY);
+		} finally {
+			this.transitionLock.unlock();
+		}
+	}
+
+	/**
+	 * Elects startup cancellation against readiness. The owner holds its
+	 * controlling-event boundary before entering this transition boundary, and
+	 * the callbacks only publish internal state; teardown runs after both unlock.
+	 */
+	@NonNull
+	Optional<ShutdownRequest> requestStartupCancellation(
+			@NonNull Runnable recordCancellation,
+			@NonNull Supplier<@NonNull ShutdownRequest> publication) {
+		requireNonNull(recordCancellation);
+		requireNonNull(publication);
+		this.transitionLock.lock();
+		try {
+			State current = this.state.get();
+			if (current != State.NEW && current != State.STARTING)
+				return Optional.empty();
+			recordCancellation.run();
+			// A pre-start cancellation must survive claimStart, not close NEW.
+			return current == State.NEW ? Optional.empty()
+					: Optional.of(requireNonNull(publication.get()));
 		} finally {
 			this.transitionLock.unlock();
 		}

@@ -612,6 +612,8 @@ A custom streaming executor must dispatch asynchronously and start accepted work
 promptly; use direct handoff and rejection to avoid queuing behind long-lived
 producers. Inline or caller-runs execution is rejected.
 
+A custom executor configured with `streamingExecutorServiceSupplier` must execute accepted producer tasks asynchronously and promptly, or throw `RejectedExecutionException` when it cannot accept them. Silent discard policies such as `DiscardPolicy` and `DiscardOldestPolicy` are unsupported: an accepted producer that never starts can retain a streaming lifecycle slot and cause incomplete shutdown.
+
 Custom HTTP request-handler executors must also dispatch asynchronously. A direct
 executor or saturated caller-runs policy now receives a 503 response with
 connection closure before resource handling begins. Use a throwing rejection
@@ -988,6 +990,11 @@ and return a handle only after all configured transports reach readiness. Reusin
 startup failure throws synchronously after attempted teardown. Cancellation or
 interruption before readiness does not return an unready instance.
 
+Startup cancellation competes atomically with readiness. If interruption-driven
+cancellation wins, startup fails after attempted teardown. If readiness wins,
+the caller receives the ready handle and its interrupt flag is restored without
+requesting shutdown of the running lifecycle.
+
 A non-daemon lifecycle owner retains JVM liveness after explicit `run(config)`
 returns and through
 full finalization, including cleanup after the last listener retires. Default HTTP
@@ -1186,6 +1193,35 @@ cancellation failure after attempted teardown; it never returns an unready handl
 
 ### Shared lifecycle policy and changed defaults
 
+Internal control and cleanup helpers do not copy application
+`InheritableThreadLocal` values. This covers lifecycle/process coordination and
+finalization, HTTP/SSE listener and timeout threads, SSE peer monitoring, and MCP
+cancellation, deadline, observation, subscription-cleanup and metric helpers.
+These helpers preserve their creator's context class loader, so application
+resource discovery and callbacks can still use that loader. Explicit Soklet
+lifecycle ownership and self-wait guards continue to propagate.
+
+In the default standalone startup path, an `InheritableThreadLocal` value set on
+the thread calling `Soklet.run(...)` no longer reaches request handlers through
+the lifecycle and listener thread chain. This includes inheritable logging,
+tenant or configuration context. Application handler and protocol-request
+factories and supplied custom executors retain their own inheritance settings,
+but those settings cannot recover values discarded by an earlier helper.
+Custom executors can establish application context independently.
+
+Prefer explicit configuration or service references for application-wide state.
+Obtain request-specific context from the supplied request/context arguments, or
+bind it in `RequestInterceptor.wrapRequest` around
+`requestProcessor.accept(request)`. Restore the previous value, or remove the
+binding when there was none, in `finally`. This scope covers synchronous request
+processing; it does not cover streaming body production. Capture the immutable
+context needed by a streaming producer and bind and restore it separately there.
+
+This policy controls Soklet's helper construction. The tested Java 21/25 runtimes
+can still invoke `childValue` while creating JVM-managed virtual-thread carriers,
+even when the virtual helper itself disables inheritance. Such hooks must remain
+prompt and failure-contained when invoked by the runtime.
+
 The three transport-specific shutdown-deadline setters are removed. Configure
 one `LifecyclePolicy` on `SokletConfig`; it has no hidden HTTP, SSE, or MCP
 graceful cap.
@@ -1356,10 +1392,24 @@ routing path; this also differs from older 3.5.1 observer behavior.
 ### Log-event routing with custom observers
 
 `LifecycleObserver.didReceiveLogEvent(...)` now defaults to a no-op. The
-instance returned by `LifecycleObserver.defaultInstance()` retains the existing
-stderr message and attached-Throwable stack-trace output. `SokletConfig` selects
-that instance when no observer configuration is supplied, so unconfigured
-applications still receive diagnostics.
+instance returned by `LifecycleObserver.defaultInstance()` queues stderr output
+on one daemon worker rather than formatting or writing on the emitting thread.
+It shares a 128-record queue with the failed-observer fallback. Default event
+messages are capped at 4,096 UTF-16 characters without splitting surrogate pairs;
+attached Throwable graphs are not byte-bounded. Unexpected failures retain stack
+diagnostics and routine conditions use terse lines. `SokletConfig` selects that
+instance when no observer configuration is supplied.
+
+The worker retires after one idle second and restarts on demand, allowing its
+class loader to be collected when the application no longer retains it. The
+timeout does not interrupt active formatting or output; a stalled stderr write
+can retain its worker and class loader until it returns.
+
+Console delivery is best effort: a full queue or failed worker start discards
+records, and application shutdown or JVM exit does not flush pending records.
+No additional JVM hook is installed. Use application-owned logging when
+diagnostic delivery must be reliable, and keep custom observer callbacks
+nonblocking because their delivery remains synchronous.
 
 Configuring a custom observer or observer collection replaces the unconfigured
 default. Custom observers that only handle tracing or other lifecycle callbacks
@@ -1371,10 +1421,15 @@ exact event/Throwable identity and callback-failure handling are unchanged.
 
 `OpenTelemetryLifecycleObserver` records spans and does not log events or export
 OpenTelemetry logs. Pair it with your application's logging observer if you
-want routed logs. The standalone terminal report and bounded emergency fallback
-for a failing log observer remain separate stderr channels.
+want routed logs. The standalone terminal report remains a separate bounded
+stderr channel; failed-observer fallback records use the default console worker
+without recursively invoking observers.
 
 ## HTTP, SSE, and custom transports
+
+The default HTTP handler queue also buffers dispatch bursts while idle workers are waking. A very small `requestHandlerQueueCapacity` can therefore return `503` before every handler is busy. Size it for bursts as well as expected steady-state queueing, and measure overload behavior.
+
+The default resource-method handler passes `byte[]` bodies through unchanged and encodes a `String` or another logical body's `toString()` using the marshaler's configured charset, UTF-8 by default. A `charset` declaration in `Content-Type` does not select a different encoder. Keep the declaration and marshaler setting consistent, pre-encode a `byte[]`, or supply a custom resource-method handler when a response needs another encoding.
 
 Startup dispositions are unified, but built-in bind-failure causes retain their
 transport wrappers: HTTP uses `UncheckedIOException`, SSE `IllegalStateException`,
@@ -1653,6 +1708,23 @@ limiters, CORS, start observation and state opening share the separately tunable
 protocol pool: `protocolExecutorConcurrency` and `protocolExecutorQueueCapacity`
 default to 32/128, independent of application-handler executor settings.
 
+Direct built-in catalog pagination on the 2025 revisions and direct
+`catalogAccessPolicy` evaluation hold a protocol worker while they wait for a
+handler slot. A quarter of `protocolExecutorConcurrency`, rounded down, bounds
+concurrent direct invocations permitted to queue: eight at the default of 32,
+and none below four workers. Permission remains held until the bounded
+invocation returns, including while running, so those eight permissions do not
+guarantee eight spare queue entries. Queueing still requires capacity under
+`requestHandlerQueueCapacity` and preserves FIFO order and the original request
+deadline. Without permission, such a request needs a free slot and an empty
+queue, or it returns the existing HTTP `503`/JSON-RPC `-32603` capacity response.
+Raise `protocolExecutorConcurrency` to increase the number of direct invocations
+eligible to queue. Ordinary operation-handler and subscription-projection queue
+behavior is unchanged. Active policy callbacks, session-stream admission,
+subscription authorization and other blocking protocol callbacks can still
+consume the remaining protocol workers; keep their work prompt and bounded.
+No protocol workers are reserved for control requests.
+
 Common annotation replacements are `@McpArgument` → `@McpToolArgument` or
 `@McpPromptArgument`, `@McpListResources` → `@McpResourceList`, and
 `@McpUriParameter` → `@McpResourceUriParameter`. Use `@McpToolProperty` for
@@ -1700,6 +1772,10 @@ byte limits, plus 1,024 bytes of HTTP framing allowance, must also fit within
 its value.
 
 ## Simulator migration
+
+The HTTP simulator preserves the supplied request body: an explicitly supplied empty `byte[]` is present. The built-in HTTP server normalizes an empty wire body to absence. Leave the body unset to model a missing body; a required `@RequestBody` can therefore behave differently if a simulation explicitly supplies an empty array. Use a real listener to test wire-level body normalization.
+
+Simulated SSE enforces `streamingLifecycleCapacity`, but it does not enforce the live transport's `concurrentConnectionLimit`. Use a real SSE listener to test that connection cap; lowering it in the source configuration does not add an equivalent simulator limit.
 
 [`Soklet::runSimulator`](<https://javadoc.soklet.com/com/soklet/Soklet.html>)
 is removed. In the common case, pass the application's completed
@@ -1857,6 +1933,8 @@ The adapter pins its real path, permits links only within it, and rejects escape
 `getResourceAsStream` returns `null` for missing, invalid, or directory resources.
 URLs returned by `getResource` may be opened later, so concurrent tree mutation
 remains outside the supported contract.
+
+`classpathResourceRoot` uses slash-separated class-loader resource names. An empty prefix or `/` selects the classpath root; an ordinary prefix may have one leading `/`. Configured prefixes reject backslashes, NUL, `..` segments, a remaining leading `/`, and a leading Windows drive qualifier. Invalid prefixes fail configuration with `IllegalArgumentException`. Resource lookup paths reject the same forms after their required leading `/`, returning `null` before class-loader access or directory-listing fallback. Use `/` separators on every platform, including Windows.
 
 Concurrent `setAttribute(name, sameValue)` calls share an in-progress binding
 notification. An ordinary follower waits at most 200 milliseconds; on timeout

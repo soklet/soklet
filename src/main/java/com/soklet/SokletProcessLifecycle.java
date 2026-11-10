@@ -16,6 +16,7 @@
 
 package com.soklet;
 
+import com.soklet.internal.HelperThreads;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -102,7 +103,7 @@ final class SokletProcessLifecycle {
 	static Soklet launch(@NonNull SokletConfig config,
 			@Nullable ShutdownCleanup cleanup) {
 		return launch(config, cleanup,
-				task -> new Thread(task, "soklet-process-lifecycle"),
+				task -> HelperThreads.platform(task, "soklet-process-lifecycle"),
 				SokletRunCompletion::launchDaemonHandoff);
 	}
 
@@ -556,7 +557,7 @@ record SokletApplicationEnvironment(
 				LifecycleRuntimeServices.system(), SokletProcessLifecycle.SYSTEM_PROCESS,
 				DefaultLifecycleTerminalReporter.system(),
 				DirectSokletApplicationRuntime::create,
-				(name, task) -> new Thread(task, name));
+				(name, task) -> HelperThreads.platform(task, name));
 	}
 }
 

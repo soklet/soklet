@@ -22,8 +22,10 @@ import org.junit.jupiter.api.Timeout;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -109,13 +111,35 @@ class McpLegacySessionTransportCapacityRuntimeTests {
 			CountDownLatch handlerEntered = new CountDownLatch(1), handlerRelease = new CountDownLatch(1);
 			AtomicReference<Response> first = new AtomicReference<>(), second = new AtomicReference<>();
 			AtomicReference<Throwable> failure = new AtomicReference<>();
+			AtomicInteger resourceEntries = new AtomicInteger();
+			URI queuedUri = URI.create("test:///queued-maintenance-holder");
+			McpSubscriptionEventPublisher publisher = McpSubscriptionEventPublisher.fromInMemoryDefaults();
+			McpToolHandler<McpJsonObject> handler = (request, arguments, features) -> {
+				handlerEntered.countDown();
+				awaitRelease(handlerRelease);
+				return McpCompleteResult.fromToolText("done");
+			};
+			McpEndpoint endpoint = McpEndpoint.withPath("/mcp",
+					McpImplementation.withNameAndVersion("renewal-capacity", "1").build(), Set.of(version))
+					.toolRegistrations(List.of(McpToolRegistration.withName("busy", Set.of(version))
+							.jsonObjectArguments().handler(handler).build()))
+					.resourceRegistrations(List.of(McpResourceRegistration.withUriAndName(queuedUri, "queued", Set.of(version))
+							.handler((request, resource, features) -> {
+								resourceEntries.incrementAndGet();
+								return McpCompleteResult.fromResourceOutput(McpResourceOutput.fromContent(
+										McpTextResourceContents.withUriAndText(resource.getUri(), "queued").build()));
+							}).build()))
+					.sessionProtocolVersions(Set.of(version)).subscriptionProtocolVersions(Set.of(version))
+					.subscriptionConfig(McpSubscriptionConfig.withEventPublisherAndNotificationTypes(publisher,
+							Set.of(McpSubscriptionNotificationType.TOOLS_LIST_CHANGED)).build()).build();
 			List<Thread> callers = new ArrayList<>();
 			try {
 				Fixture fixture = new Fixture(true, builder -> builder.requestHandlerConcurrency(1).requestHandlerQueueCapacity(1)
+						.endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint)))
 						.catalogAccessPolicy(McpCatalogAccessPolicy.fromEvaluators((request, registration, features) -> true,
 								(request, registration, features) -> true))
 						.maximumSubscriptionAuthorizationDuration(Duration.ofSeconds(4)).maximumSubscriptionDuration(Duration.ofSeconds(10)),
-					(request, arguments, features) -> { handlerEntered.countDown(); awaitRelease(handlerRelease); return McpCompleteResult.fromToolText("done"); });
+					handler);
 				Soklet.run(fixture.config, () -> {
 					String session = fixture.initialize("/mcp", version);
 					assertEquals(200, fixture.control("POST", "/mcp", version, session, "alice",
@@ -124,11 +148,15 @@ class McpLegacySessionTransportCapacityRuntimeTests {
 						assertSse(get.readHead());
 						callers.add(toolCaller(fixture, version, session, first, failure)); callers.get(0).start();
 						assertTrue(handlerEntered.await(5, TimeUnit.SECONDS));
-						callers.add(toolCaller(fixture, version, session, second, failure)); callers.get(1).start();
+						// A resource read queues as ordinary handler work, with no
+						// catalog-policy step ahead of it.
+						callers.add(resourceCaller(fixture, version, session, queuedUri, second, failure));
+						callers.get(1).start();
 						await(() -> fixture.server.getDiagnostics().getRequestHandlerQueueDepth() == 1);
+						assertEquals(0, resourceEntries.get(), "The resource read must remain queued behind the held tool.");
 						// This is a routine renewal, with no reconciliation or changed authority.
 						await(() -> maintenance(fixture, McpMetricsEvent.SubscriptionMaintenance.Outcome.CAPACITY_REJECTED));
-						fixture.publisher.publishToolsListChanged();
+						publisher.publishToolsListChanged();
 						boolean received = false;
 						long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
 						while (System.nanoTime() < until) {
@@ -142,6 +170,9 @@ class McpLegacySessionTransportCapacityRuntimeTests {
 						for (Thread caller : callers) { caller.join(5000); assertFalse(caller.isAlive()); }
 					}
 					assertNull(failure.get());
+					assertEquals(200, first.get().status());
+					assertEquals(200, second.get().status());
+					assertEquals(1, resourceEntries.get(), "The ordinary queued read must execute after capacity returns.");
 				});
 			} finally { handlerRelease.countDown(); }
 		}
@@ -220,6 +251,18 @@ class McpLegacySessionTransportCapacityRuntimeTests {
 					"{\"jsonrpc\":\"2.0\",\"id\":\"" + Thread.currentThread().getName() + "\",\"method\":\"tools/call\",\"params\":{\"name\":\"busy\",\"arguments\":{}}}", List.of())); }
 			catch (Throwable throwable) { failure.compareAndSet(null, throwable); }
 		}, "mcp-legacy-handler-capacity-" + System.nanoTime());
+	}
+	private static Thread resourceCaller(Fixture fixture, McpProtocolVersion version, String id, URI uri,
+			AtomicReference<Response> result, AtomicReference<Throwable> failure) {
+		return new Thread(() -> {
+			try {
+				result.set(fixture.control("POST", "/mcp", version, id, "alice",
+						"{\"jsonrpc\":\"2.0\",\"id\":\"queued-resource\",\"method\":\"resources/read\",\"params\":{\"uri\":\""
+								+ uri + "\"}}", List.of()));
+			} catch (Throwable throwable) {
+				failure.compareAndSet(null, throwable);
+			}
+		}, "mcp-legacy-resource-capacity");
 	}
 	private static boolean maintenance(Fixture fixture, McpMetricsEvent.SubscriptionMaintenance.Outcome outcome) {
 		return fixture.events.stream().filter(McpMetricsEvent.SubscriptionMaintenance.class::isInstance)

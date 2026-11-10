@@ -17,6 +17,7 @@
 package com.soklet;
 
 import com.soklet.exception.IllegalRequestException;
+import com.soklet.internal.HelperThreads;
 import com.soklet.internal.microhttp.ConnectionListener;
 import com.soklet.internal.microhttp.EventLoop;
 import com.soklet.internal.microhttp.Handler;
@@ -2901,7 +2902,7 @@ final class DefaultHttpServer implements HttpServer {
 		@NonNull
 		public Thread newThread(@NonNull Runnable runnable) {
 			String name = format("%s-%s", getNamePrefix(), getIdGenerator().incrementAndGet());
-			Thread thread = new Thread(runnable, name);
+			Thread thread = HelperThreads.platform(runnable, name);
 			// Listener threads retain process liveness; application/timeout workers
 			// must remain daemon even when created by a non-daemon listener.
 			thread.setDaemon(true);

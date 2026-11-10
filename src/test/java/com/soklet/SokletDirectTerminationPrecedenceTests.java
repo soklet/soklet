@@ -444,9 +444,23 @@ final class SokletDirectTerminationPrecedenceTests {
 						incomplete.getInternalShutdownResult());
 				Assertions.assertEquals(InternalShutdownDisposition.INCOMPLETE,
 						result.disposition());
-				assertParticipant(result, InternalLifecycleComponentType.HTTP,
-						InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN,
-						List.of(failure));
+				InternalLifecycleComponentShutdownResult participant = result
+						.participantResult(InternalLifecycleComponentType.HTTP).orElseThrow();
+				Assertions.assertEquals(List.of(failure), participant.failures());
+				// The callback advances the fake forced deadline before its tracked
+				// wrapper retires. A snapshot may still contain that lifecycle call;
+				// it must not change the pre-readiness failure or invent other work.
+				if (participant.residualActivity().isEmpty())
+					Assertions.assertEquals(
+							InternalLifecycleComponentShutdownDisposition.TERMINATION_UNKNOWN,
+							participant.disposition());
+				else {
+					Assertions.assertEquals(Set.of(InternalResidualActivityType.LIFECYCLE_CALL),
+							participant.residualActivity());
+					Assertions.assertEquals(
+							InternalLifecycleComponentShutdownDisposition.RESIDUAL_ACTIVITY,
+							participant.disposition());
+				}
 			}
 		}
 	}

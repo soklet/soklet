@@ -1,5 +1,7 @@
 package com.soklet.internal.microhttp;
 
+import com.soklet.internal.HelperThreads;
+
 import com.soklet.MetricsCollector.TransportFailureReason;
 import com.soklet.internal.util.AcceptLoopBackoff;
 import org.jspecify.annotations.Nullable;
@@ -142,7 +144,7 @@ public class EventLoop {
 
         Thread acceptLoopThread;
         try {
-            acceptLoopThread = new Thread(this::run, "event-loop");
+            acceptLoopThread = HelperThreads.platform(this::run, "event-loop");
             // Listener liveness must not inherit the daemon lifecycle caller.
             acceptLoopThread.setDaemon(false);
         } catch (RuntimeException | Error throwable) {

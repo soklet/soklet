@@ -16,6 +16,8 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import com.soklet.internal.HelperThreads;
+
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -26,6 +28,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static java.util.Objects.requireNonNull;
 
@@ -74,9 +77,17 @@ final class McpLegacyHttpObservationDispatcher {
 		// The dispatcher owns the waiting callbacks. This small second queue only
 		// covers a worker that has released its dispatcher slot and is returning
 		// from the previous executor envelope; a direct handoff can reject there.
+		String exactThreadPrefix = requireNonNull(threadPrefix);
+		AtomicLong workerSequence = new AtomicLong(1L);
 		ThreadPoolExecutor observationExecutor = new ThreadPoolExecutor(concurrency,
 				concurrency, 30L, TimeUnit.SECONDS, new LinkedBlockingQueue<>(concurrency),
-				Thread.ofPlatform().daemon().name(requireNonNull(threadPrefix), 1L).factory(),
+				runnable -> {
+					Thread thread = HelperThreads.platform(runnable,
+							exactThreadPrefix + workerSequence.getAndIncrement());
+					thread.setDaemon(true);
+					thread.setPriority(Thread.NORM_PRIORITY);
+					return thread;
+				},
 				new ThreadPoolExecutor.AbortPolicy());
 		observationExecutor.allowCoreThreadTimeOut(true);
 		this.executor = observationExecutor;

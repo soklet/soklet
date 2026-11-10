@@ -26,6 +26,7 @@ import java.io.PrintStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -62,6 +63,7 @@ class SokletApplicationLogFallbackTests {
 				StandardCharsets.UTF_8);
 
 		LifecycleObserverLogFallback.report(failure, errorStream);
+		Assertions.assertTrue(LifecycleLogDispatcher.defaultInstance().awaitIdle(Duration.ofSeconds(5)));
 
 		byte[] bytes = output.toByteArray();
 		Assertions.assertTrue(bytes.length > 0);
@@ -80,7 +82,7 @@ class SokletApplicationLogFallbackTests {
 	}
 
 	@Test
-	void observerFailureWritesDirectlyWithoutRecursivelyCallingObserver() {
+	void observerFailureWritesAsynchronouslyWithoutRecursivelyCallingObserver() throws Exception {
 		AtomicInteger observerCalls = new AtomicInteger();
 		Throwable exactFailure = new IllegalStateException("observer failed");
 		LifecycleObserver observer = new LifecycleObserver() {
@@ -101,6 +103,7 @@ class SokletApplicationLogFallbackTests {
 			Assertions.assertSame(exactFailure, observerFailure);
 			LifecycleObserverLogFallback.report(observerFailure, errorStream);
 		}
+		Assertions.assertTrue(LifecycleLogDispatcher.defaultInstance().awaitIdle(Duration.ofSeconds(5)));
 
 		Assertions.assertEquals(1, observerCalls.get());
 		String rendered = output.toString(StandardCharsets.UTF_8);
@@ -110,7 +113,7 @@ class SokletApplicationLogFallbackTests {
 	}
 
 	@Test
-	void fallbackSinkFailureIsContainedWithoutASecondChannel() {
+	void fallbackSinkFailureIsContainedWithoutASecondChannel() throws Exception {
 		AtomicInteger writes = new AtomicInteger();
 		PrintStream failedSink = new PrintStream(OutputStream.nullOutputStream(),
 				true, StandardCharsets.UTF_8) {
@@ -123,6 +126,7 @@ class SokletApplicationLogFallbackTests {
 
 		Assertions.assertDoesNotThrow(() -> LifecycleObserverLogFallback.report(
 				new IllegalStateException("observer failed"), failedSink));
+		Assertions.assertTrue(LifecycleLogDispatcher.defaultInstance().awaitIdle(Duration.ofSeconds(5)));
 		Assertions.assertEquals(1, writes.get());
 	}
 }

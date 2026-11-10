@@ -58,6 +58,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -192,7 +193,8 @@ class McpInitialCatalogProjectionFailureTests {
                             .forcedShutdownTimeout(Duration.ofMillis(200)).build()).build();
             ShutdownResult shutdown = SokletSimulator.run(config, simulator -> {
                 McpSimulation first = null;
-                McpSimulation queued = null;
+                Thread queuedCaller = null;
+                FutureTask<Boolean> queuedWork = null;
                 McpSimulation failed = null;
                 try {
                     if (mode == Mode.CAPACITY || mode == Mode.QUEUED_TIMEOUT) {
@@ -202,8 +204,15 @@ class McpInitialCatalogProjectionFailureTests {
                         first = simulator.startMcpRequest(request("hold-first", false, false));
                         assertTrue(holdEntered.await(3, TimeUnit.SECONDS));
                         if (mode == Mode.CAPACITY) {
-                            queued = simulator.startMcpRequest(request("hold-queued", false, false));
+                            // A generic policy caller fills the queue behind this held handler
+                            // without depending on the direct-caller waiting allowance. It must
+                            // exhaust the same bound.
+                            queuedWork = new FutureTask<>(() -> application.get().invokeBoundedPolicy(
+                                    () -> Boolean.TRUE, System.nanoTime() + TimeUnit.SECONDS.toNanos(5)));
+                            queuedCaller = new Thread(queuedWork, "mcp-initial-projection-queued-holder");
+                            queuedCaller.start();
                             await(() -> application.get().snapshot().queuedRequests() == 1);
+                            assertFalse(queuedWork.isDone(), "The generic policy caller must remain queued.");
                         }
                         releaseOpening.countDown();
                     } else failed = simulator.startMcpRequest(request("failed", true, prompts));
@@ -229,8 +238,15 @@ class McpInitialCatalogProjectionFailureTests {
                     failOpening.set(false);
                     releasePolicy.countDown();
                     releaseHold.countDown();
+                    FutureTask<Boolean> queuedCompletion = queuedWork;
+                    Thread queuedThread = queuedCaller;
                     await(() -> application.get().snapshot().activeHandlerSlots() == 0
-                            && application.get().snapshot().queuedRequests() == 0);
+                            && application.get().snapshot().queuedRequests() == 0
+                            && (queuedCompletion == null || queuedCompletion.isDone()
+                                    && queuedThread != null && !queuedThread.isAlive()));
+                    if (queuedWork != null)
+                        assertEquals(Boolean.TRUE, queuedWork.get(0, TimeUnit.NANOSECONDS),
+                                "Generic queued work must still run after the holder releases.");
                     try (McpSimulation recovery = simulator.startMcpRequest(request("recovered", true, prompts))) {
                         McpSimulationResponse recovered = recovery.awaitResponse(Duration.ofSeconds(3)).orElseThrow();
                         assertEquals(200, recovered.getStatusCode(), "The failed opening leaked its single subscription reservation.");
@@ -242,7 +258,10 @@ class McpInitialCatalogProjectionFailureTests {
                     releasePolicy.countDown();
                     releaseHold.countDown();
                     if (failed != null) failed.close();
-                    if (queued != null) queued.close();
+                    if (queuedCaller != null) {
+                        queuedCaller.join(TimeUnit.SECONDS.toMillis(1));
+                        assertFalse(queuedCaller.isAlive(), "The generic queued policy caller did not retire.");
+                    }
                     if (first != null) first.close();
                 }
             });

@@ -17,8 +17,10 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
+import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.net.SocketException;
@@ -34,13 +36,23 @@ import java.util.concurrent.TimeoutException;
 final class DefaultLifecycleObserver implements LifecycleObserver {
 	@NonNull
 	private static final DefaultLifecycleObserver DEFAULT_INSTANCE;
+	private final LifecycleLogDispatcher dispatcher;
 
 	static {
 		DEFAULT_INSTANCE = new DefaultLifecycleObserver();
 	}
 
 	private DefaultLifecycleObserver() {
-		// Singleton
+		this(LifecycleLogDispatcher.defaultInstance());
+	}
+
+	private DefaultLifecycleObserver(@NonNull LifecycleLogDispatcher dispatcher) {
+		this.dispatcher = dispatcher;
+	}
+
+	@NonNull
+	static DefaultLifecycleObserver withDispatcher(@NonNull LifecycleLogDispatcher dispatcher) {
+		return new DefaultLifecycleObserver(dispatcher);
 	}
 
 	@NonNull
@@ -50,16 +62,24 @@ final class DefaultLifecycleObserver implements LifecycleObserver {
 
 	@Override
 	public void didReceiveLogEvent(@NonNull LogEvent logEvent) {
-		String message = logEvent.getMessage();
+		// Do not retain LogEvent: it can own an entire request/response graph.
+		String message = LifecycleLogDispatcher.snapshotMessage(logEvent.getMessage());
+		LogEventType type = logEvent.getLogEventType();
 		Throwable throwable = logEvent.getThrowable().orElse(null);
+		PrintStream errorStream = System.err;
+		dispatcher.dispatch(() -> write(type, message, throwable, errorStream));
+	}
+
+	private static void write(LogEventType type, String message,
+			@Nullable Throwable throwable, PrintStream errorStream) {
 
 		if (throwable == null) {
-			System.err.printf("%s::didReceiveLogEvent [%s]: %s%n", LifecycleObserver.class.getSimpleName(), logEvent.getLogEventType().name(), message);
-		} else if (isRoutineFailure(logEvent, throwable)) {
+			errorStream.printf("%s::didReceiveLogEvent [%s]: %s%n", LifecycleObserver.class.getSimpleName(), type.name(), message);
+		} else if (isRoutineFailure(type, message, throwable)) {
 			// Keep the event and exact Throwable available to custom observers, while
 			// avoiding stack rendering and allocation for ordinary control outcomes.
-			System.err.printf("%s::didReceiveLogEvent [%s]: %s (%s: %s)%n",
-					LifecycleObserver.class.getSimpleName(), logEvent.getLogEventType().name(),
+			errorStream.printf("%s::didReceiveLogEvent [%s]: %s (%s: %s)%n",
+					LifecycleObserver.class.getSimpleName(), type.name(),
 					message, throwable.getClass().getName(), routineFailureMessage(throwable));
 		} else {
 			StringWriter stringWriter = new StringWriter();
@@ -67,7 +87,7 @@ final class DefaultLifecycleObserver implements LifecycleObserver {
 			throwable.printStackTrace(printWriter);
 			String throwableWithStackTrace = stringWriter.toString();
 
-			System.err.printf("%s::didReceiveLogEvent [%s]: %s\n%s\n", LifecycleObserver.class.getSimpleName(), logEvent.getLogEventType().name(), message, throwableWithStackTrace);
+			errorStream.printf("%s::didReceiveLogEvent [%s]: %s\n%s\n", LifecycleObserver.class.getSimpleName(), type.name(), message, throwableWithStackTrace);
 		}
 	}
 
@@ -85,20 +105,20 @@ final class DefaultLifecycleObserver implements LifecycleObserver {
 		}
 		return summary.toString();
 	}
-	private static boolean isRoutineFailure(@NonNull LogEvent event,
+	private static boolean isRoutineFailure(@NonNull LogEventType type, @NonNull String message,
 			@NonNull Throwable throwable) {
 		// Nested/suppressed failures can contain unexpected diagnostics even when
 		// the outer exception is a routine interruption or socket close.
 		if (throwable.getCause() != null || throwable.getSuppressed().length != 0)
 			return false;
-		return switch (event.getLogEventType()) {
+		return switch (type) {
 			case SERVER_INTERNAL_ERROR, SSE_SERVER_INTERNAL_ERROR -> throwable instanceof RejectedExecutionException
-					&& ("Request handler executor rejected task".equals(event.getMessage())
-							|| "Request reader executor rejected task".equals(event.getMessage()));
+					&& ("Request handler executor rejected task".equals(message)
+							|| "Request reader executor rejected task".equals(message));
 			case SSE_SERVER_CONNECTION_REJECTED -> throwable instanceof RejectedExecutionException
-					&& "Pending SSE handshake capacity exhausted".equals(event.getMessage());
+					&& "Pending SSE handshake capacity exhausted".equals(message);
 			case REQUEST_PROCESSING_FAILED -> throwable.getClass() == InterruptedException.class;
-			case SERVER_TRANSPORT_FAILURE -> isRoutineTransportEvent(event.getMessage())
+			case SERVER_TRANSPORT_FAILURE -> isRoutineTransportEvent(message)
 					&& (throwable instanceof SocketException
 							|| throwable instanceof SocketTimeoutException
 							|| throwable instanceof ClosedChannelException

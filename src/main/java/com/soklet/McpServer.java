@@ -45,7 +45,16 @@ import static java.util.Objects.requireNonNull;
  * settings govern application dispatch. Configure the protocol budget with
  * {@link Builder#protocolExecutorConcurrency(Integer)} and
  * {@link Builder#protocolExecutorQueueCapacity(Integer)}. Keep shared-pool
- * callbacks bounded. Request-finish observation and its log events use a separate
+ * callbacks bounded. Direct catalog-policy work and built-in 2025 catalog-page
+ * rendering hold their protocol worker while waiting for an application slot.
+ * A quarter of the protocol pool, rounded down, bounds concurrent direct
+ * invocations permitted to queue. Permission remains held until the bounded
+ * invocation returns, including while running; it does not reserve a queue
+ * entry. Other direct invocations need a free slot and an empty handler queue
+ * or return HTTP 503. Active policy callbacks and other blocking protocol work
+ * can still exhaust the pool; no protocol workers are reserved for control
+ * requests.
+ * Request-finish observation and its log events use a separate
  * bounded dispatcher on daemon platform threads; their physical execution remains
  * part of shutdown accounting. Full observation capacity omits the paired
  * observations with a rate-limited diagnostic while requests continue normally.
@@ -976,6 +985,14 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 * bounded pool independently of the application handler executor.
 		 * Catalog/task subscription projections require at least two workers;
 		 * incompatible singleton configurations fail when {@link #build()} is called.
+		 * A quarter of this count, rounded down, also bounds concurrent direct
+		 * catalog and catalog-policy invocations permitted to queue for a handler
+		 * slot. Permission is retained until the bounded invocation returns,
+		 * including while running, and does not reserve a queue entry. The default
+		 * count permits eight such invocations; a count below four permits none.
+		 * Without permission, direct work needs a free slot and an empty handler
+		 * queue or returns HTTP 503. No protocol workers are reserved for control
+		 * requests.
 		 *
 		 * @param protocolExecutorConcurrency positive worker count, or null to restore 32
 		 * @return this builder
@@ -1033,7 +1050,9 @@ public sealed interface McpServer permits DefaultMcpServer {
 
 		/**
 		 * Sets the positive, finite number of admitted requests that may wait for
-		 * an application handler slot. The default is {@code 128}.
+		 * an application handler slot. The default is {@code 128}. Direct catalog
+		 * and catalog-policy work is further limited by
+		 * {@link #protocolExecutorConcurrency(Integer)}.
 		 *
 		 * @param requestHandlerQueueCapacity maximum queued handler dispatches, or
 		 *                                    null to restore the default

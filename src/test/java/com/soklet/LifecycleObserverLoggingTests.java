@@ -24,6 +24,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.util.concurrent.RejectedExecutionException;
@@ -248,6 +249,11 @@ class LifecycleObserverLoggingTests {
 			System.setErr(capturedError);
 			try {
 				action.run();
+				Assertions.assertTrue(LifecycleLogDispatcher.defaultInstance()
+						.awaitIdle(Duration.ofSeconds(5)), "Default log delivery did not drain");
+			} catch (InterruptedException failure) {
+				Thread.currentThread().interrupt();
+				throw new AssertionError("Interrupted waiting for default log delivery", failure);
 			} finally {
 				System.setErr(originalError);
 			}

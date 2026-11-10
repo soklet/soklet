@@ -281,15 +281,33 @@ final class DefaultMultipartParser implements MultipartParser {
 	protected LinkedCaseInsensitiveMap<String> splitHeaders(String readHeaders) {
 		LinkedCaseInsensitiveMap<String> headersBuilder = new LinkedCaseInsensitiveMap<>();
 		String[] headers = readHeaders.split("\r\n", -1);
+		String name = null;
+		StringBuilder value = null;
 		for (String headerLine : headers) {
+			// Only MIME part headers may fold. readHeaders has already enforced
+			// the raw 10 KiB limit, including every continuation's CRLF and whitespace.
+			if (headerLine.indexOf('\r') >= 0 || headerLine.indexOf('\n') >= 0)
+				throw new IllegalRequestBodyException("Multipart part metadata is malformed.");
+			if (!headerLine.isEmpty() && (headerLine.charAt(0) == ' ' || headerLine.charAt(0) == '\t')) {
+				if (value == null)
+					throw new IllegalRequestBodyException("Multipart part metadata is malformed.");
+				// MIME unfolding removes the CRLF, preserving the following whitespace.
+				value.append(headerLine);
+				continue;
+			}
+			if (name != null && value != null)
+				headersBuilder.put(name, value.toString().trim());
+			name = null;
+			value = null;
 			int index = headerLine.indexOf(':');
 			if (index < 0) {
 				continue;
 			}
-			String key = headerLine.substring(0, index);
-			String value = headerLine.substring(index + 1).trim();
-			headersBuilder.put(key, value);
+			name = headerLine.substring(0, index);
+			value = new StringBuilder(headerLine.substring(index + 1));
 		}
+		if (name != null && value != null)
+			headersBuilder.put(name, value.toString().trim());
 		return headersBuilder;
 	}
 

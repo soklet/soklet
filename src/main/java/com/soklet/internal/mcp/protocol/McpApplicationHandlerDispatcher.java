@@ -16,6 +16,8 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import com.soklet.internal.HelperThreads;
+
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -180,9 +182,12 @@ final class McpApplicationHandlerDispatcher {
 			@NonNull McpApplicationExecutionObserver observer,
 			@NonNull Runnable slotReleaseObserver) {
 		this(concurrency, queueCapacity, executorService, observer, slotReleaseObserver,
-				runnable -> Thread.ofPlatform().inheritInheritableThreadLocals(false)
-						.name("soklet-mcp-interrupt-" + INTERRUPT_THREAD_SEQUENCE.incrementAndGet())
-						.unstarted(runnable));
+				runnable -> {
+					Thread thread = HelperThreads.platform(runnable,
+							"soklet-mcp-interrupt-" + INTERRUPT_THREAD_SEQUENCE.incrementAndGet());
+					thread.setPriority(Thread.NORM_PRIORITY);
+					return thread;
+				});
 	}
 
 	// Internal launch seam permits deterministic failure coverage without a
@@ -240,6 +245,17 @@ final class McpApplicationHandlerDispatcher {
 
 	@NonNull
 	Admission admit(@NonNull Ticket ticket) {
+		return admit(ticket, true);
+	}
+
+	/** Reserves an immediately available slot without adding a synchronous caller to the queue. */
+	@NonNull
+	Admission admitIfAvailable(@NonNull Ticket ticket) {
+		return admit(ticket, false);
+	}
+
+	@NonNull
+	private Admission admit(@NonNull Ticket ticket, boolean allowQueue) {
 		requireOwnedTicket(ticket);
 		Ticket ticketToDispatch = null;
 		Admission admission;
@@ -263,11 +279,12 @@ final class McpApplicationHandlerDispatcher {
 						activeSlots);
 				ticketToDispatch = ticket;
 				admission = Admission.DISPATCHED;
-			} else if (queue.size() < queueCapacity || activeSlots < concurrency) {
+			} else if (allowQueue && (queue.size() < queueCapacity || activeSlots < concurrency)) {
 				// An earlier failed handoff can leave accepted queued work waiting
 				// for a physical worker. A fresh admission may start that work, while
 				// preserving its FIFO position and the configured queue bound.
-				if (activeSlots < concurrency) ticketToDispatch = promoteNextLocked();
+				if (activeSlots < concurrency)
+					ticketToDispatch = promoteNextLocked();
 				ticket.state = TicketState.QUEUED;
 				queue.add(ticket);
 				recordHandlerQueued(ticket);
@@ -275,6 +292,10 @@ final class McpApplicationHandlerDispatcher {
 						queue.size());
 				admission = Admission.QUEUED;
 			} else {
+				// Preserve FIFO progress after a failed handoff even when this new
+				// caller cannot queue. Dispatch the older ticket outside the lock.
+				if (activeSlots < concurrency)
+					ticketToDispatch = promoteNextLocked();
 				ticket.state = TicketState.REJECTED;
 				recordHandlerCapacityRejected(ticket);
 				admission = Admission.REJECTED;

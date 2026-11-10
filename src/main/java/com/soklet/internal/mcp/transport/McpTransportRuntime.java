@@ -16,6 +16,8 @@
 
 package com.soklet.internal.mcp.transport;
 
+import com.soklet.internal.HelperThreads;
+
 import com.soklet.StreamTerminationReason;
 import com.soklet.internal.microhttp.EventLoop;
 import com.soklet.internal.microhttp.Handler;
@@ -197,7 +199,7 @@ final class McpTransportRuntime implements AutoCloseable {
 		this.appliedBackpressureCount = new AtomicLong();
 		this.running = new AtomicBoolean();
 		this.stopped = new AtomicBoolean();
-		this.timerThread = new Thread(this::runTimerLoop, "soklet-mcp-timer");
+		this.timerThread = HelperThreads.platform(this::runTimerLoop, "soklet-mcp-timer");
 		this.timerThread.setDaemon(true);
 
 		Options options = OptionsBuilder.newBuilder()

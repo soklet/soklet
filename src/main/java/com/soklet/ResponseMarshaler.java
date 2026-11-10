@@ -31,8 +31,9 @@ import static java.util.Objects.requireNonNull;
 /**
  * Prepares responses for each request scenario Soklet supports (<em>Resource Method</em>, exception, CORS preflight, etc.)
  * <p>
- * The {@link MarshaledResponse} value returned from these methods is what is ultimately sent back to
- * clients as bytes over the wire.
+ * These methods prepare a {@link MarshaledResponse} for Soklet's remaining response processing. Interceptor selection,
+ * CORS, {@link #postProcess(MarshaledResponse)}, HEAD/bodyless projection, and transport framing or compression may still
+ * affect the response sent to the client; see {@link #postProcess(MarshaledResponse)} for phase ownership and exceptions.
  * <p>
  * A standard threadsafe implementation builder can be acquired via {@link #builder()} or {@link #withCharset(Charset)}.
  * This builder allows you to specify, for example, how to turn a <em>Resource Method</em> response object into a wire format (e.g. JSON) and is generally what you want.
@@ -61,7 +62,7 @@ import static java.util.Objects.requireNonNull;
  *   Map<String, List<String>> headers = new HashMap<>(response.getHeaders());
  *   headers.put("Content-Type", List.of("application/json;charset=UTF-8"));
  *
- *   // Tell Soklet: "OK - here is the final response data to send"
+ *   // Supply the prepared body for Soklet's remaining response processing
  *   return MarshaledResponse.withResponse(response)
  *     .headers(headers)
  *     .body(body)

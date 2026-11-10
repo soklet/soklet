@@ -16,6 +16,8 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import com.soklet.internal.HelperThreads;
+
 import com.soklet.internal.mcp.protocol.McpSubscriptionEventSource.Event;
 import com.soklet.internal.mcp.protocol.McpSubscriptionEventSource.Registration;
 import com.soklet.internal.mcp.protocol.McpServerRuntimeBridge.TaskManagerAdapter;
@@ -5609,7 +5611,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				if (!requestControl.beginCatalogPolicyEvaluation())
 					return null;
 				try {
-					CatalogAccessProjection projection = application.invokeBoundedPolicy(
+					CatalogAccessProjection projection = application.invokeBoundedPolicyIfAvailable(
 							() -> {
 								CatalogAccessSession session = requireNonNull(
 										accessAdapter.open(new CatalogAccessInput(
@@ -7783,7 +7785,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			return null;
 		LegacyPageOutcome outcome;
 		try {
-			outcome = application.invokeBoundedPolicy(() -> renderLegacyPage(pager,
+			outcome = application.invokeBoundedPolicyIfAvailable(() -> renderLegacyPage(pager,
 					endpointRuntime, mappedRequest.id(), cursor, endpointPolicy,
 					control, requestContext), control.deadlineNanos(), control.catalogAccessCancellation,
 					control::releaseLegacyPhysicalIfComplete);
@@ -16250,7 +16252,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		@NonNull
 		private static Executor newTransportMetricExecutor() {
 			ThreadFactory threadFactory = runnable -> {
-				Thread thread = new Thread(runnable, "soklet-mcp-metrics-"
+				Thread thread = HelperThreads.platform(runnable, "soklet-mcp-metrics-"
 						+ THREAD_SEQUENCE.incrementAndGet());
 				thread.setDaemon(true);
 				return thread;
@@ -17520,11 +17522,11 @@ final class McpHttpServerRuntime implements AutoCloseable {
 							} finally {
 								exitLifecycleProofExecution();
 							}
-						}, action -> new Thread(action,
+						}, action -> HelperThreads.platform(action,
 								"soklet-mcp-subscription-source-interrupt-" + sequence));
 				closeAttempt = attempt;
 				try {
-					Thread closeThread = new Thread(
+					Thread closeThread = HelperThreads.platform(
 							() -> runClose(attempt),
 							"soklet-mcp-subscription-source-close-" + sequence);
 					closeThread.setDaemon(true);
@@ -17611,7 +17613,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private @Nullable Throwable interruptFailure;
 
 		private SubscriptionRegistrationCloseAttempt() {
-			this(Runnable::run, action -> new Thread(action,
+			this(Runnable::run, action -> HelperThreads.platform(action,
 					"soklet-mcp-subscription-source-interrupt"));
 		}
 

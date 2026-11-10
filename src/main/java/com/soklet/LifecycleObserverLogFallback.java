@@ -24,7 +24,7 @@ import java.nio.charset.StandardCharsets;
 
 import static java.util.Objects.requireNonNull;
 
-/** Direct, bounded stderr fallback for a failed log-observer invocation. */
+/** Bounded, asynchronous stderr fallback for a failed log-observer invocation. */
 @ThreadSafe
 final class LifecycleObserverLogFallback {
 	static final int MAXIMUM_UTF8_BYTES = 1_024;
@@ -40,8 +40,17 @@ final class LifecycleObserverLogFallback {
 
 	static void report(@NonNull Throwable observerFailure,
 			@NonNull PrintStream errorStream) {
+		report(observerFailure, errorStream, LifecycleLogDispatcher.defaultInstance());
+	}
+
+	static void report(@NonNull Throwable observerFailure,
+			@NonNull PrintStream errorStream, @NonNull LifecycleLogDispatcher dispatcher) {
 		Throwable exactFailure = requireNonNull(observerFailure);
 		PrintStream exactErrorStream = requireNonNull(errorStream);
+		dispatcher.dispatch(() -> write(exactFailure, exactErrorStream));
+	}
+
+	private static void write(Throwable exactFailure, PrintStream exactErrorStream) {
 		byte[] record;
 		try {
 			record = DefaultLifecycleTerminalReporter.utf8Prefix(

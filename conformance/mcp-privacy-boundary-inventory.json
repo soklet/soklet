@@ -12831,6 +12831,24 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultMultipartParser.java",
+          "key": "PRIV-MATCH-006:src/main/java/com/soklet/DefaultMultipartParser.java#com.soklet.DefaultMultipartParser#splitHeaders(String)->RequestException.IllegalRequestBodyException@1",
+          "matcherRuleId": "PRIV-MATCH-006",
+          "member": "splitHeaders(String)",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultMultipartParser",
+          "sink": "RequestException.IllegalRequestBodyException"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultMultipartParser.java",
+          "key": "PRIV-MATCH-006:src/main/java/com/soklet/DefaultMultipartParser.java#com.soklet.DefaultMultipartParser#splitHeaders(String)->RequestException.IllegalRequestBodyException@2",
+          "matcherRuleId": "PRIV-MATCH-006",
+          "member": "splitHeaders(String)",
+          "occurrence": 2,
+          "owner": "com.soklet.DefaultMultipartParser",
+          "sink": "RequestException.IllegalRequestBodyException"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultMultipartParser.java",
           "key": "PRIV-MATCH-006:src/main/java/com/soklet/DefaultMultipartParser.java#com.soklet.DefaultMultipartParser.MimeUtils#decodeText(String)->RequestException.IllegalRequestBodyException@1",
           "matcherRuleId": "PRIV-MATCH-006",
           "member": "decodeText(String)",
@@ -39086,6 +39104,24 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultMultipartParser.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMultipartParser.java#com.soklet.DefaultMultipartParser#splitHeaders(String)->Throwable.IllegalRequestBodyException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "splitHeaders(String)",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultMultipartParser",
+          "sink": "Throwable.IllegalRequestBodyException"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultMultipartParser.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMultipartParser.java#com.soklet.DefaultMultipartParser#splitHeaders(String)->Throwable.IllegalRequestBodyException@2",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "splitHeaders(String)",
+          "occurrence": 2,
+          "owner": "com.soklet.DefaultMultipartParser",
+          "sink": "Throwable.IllegalRequestBodyException"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultMultipartParser.java",
           "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMultipartParser.java#com.soklet.DefaultMultipartParser.MimeUtils#decodeText(String)->Throwable.IllegalRequestBodyException@1",
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "decodeText(String)",
@@ -47123,9 +47159,9 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationHandlerDispatcher.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationHandlerDispatcher.java#com.soklet.internal.mcp.protocol.McpApplicationHandlerDispatcher#admit(Ticket)->Throwable.IllegalStateException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationHandlerDispatcher.java#com.soklet.internal.mcp.protocol.McpApplicationHandlerDispatcher#admit(Ticket,boolean)->Throwable.IllegalStateException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "admit(Ticket)",
+          "member": "admit(Ticket,boolean)",
           "occurrence": 1,
           "owner": "com.soklet.internal.mcp.protocol.McpApplicationHandlerDispatcher",
           "sink": "Throwable.IllegalStateException"
@@ -47267,81 +47303,81 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationExecution#invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher)->Throwable.IllegalStateException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationExecution#invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher,boolean)->Throwable.IllegalStateException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher)",
+          "member": "invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher,boolean)",
           "occurrence": 1,
           "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecution",
           "sink": "Throwable.IllegalStateException"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationExecution#invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher)->Throwable.McpApplicationPolicyCanceledException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationExecution#invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher,boolean)->Throwable.McpApplicationPolicyCanceledException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher)",
+          "member": "invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher,boolean)",
           "occurrence": 1,
           "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecution",
           "sink": "Throwable.McpApplicationPolicyCanceledException"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationExecution#invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher)->Throwable.McpApplicationPolicyCanceledException@2",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationExecution#invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher,boolean)->Throwable.McpApplicationPolicyCanceledException@2",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher)",
+          "member": "invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher,boolean)",
           "occurrence": 2,
           "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecution",
           "sink": "Throwable.McpApplicationPolicyCanceledException"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationExecution#invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher)->Throwable.McpApplicationPolicyCapacityException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationExecution#invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher,boolean)->Throwable.McpApplicationPolicyCapacityException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher)",
+          "member": "invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher,boolean)",
           "occurrence": 1,
           "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecution",
           "sink": "Throwable.McpApplicationPolicyCapacityException"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationExecution#invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher)->Throwable.McpApplicationPolicyCapacityException@2",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationExecution#invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher,boolean)->Throwable.McpApplicationPolicyCapacityException@2",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher)",
+          "member": "invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher,boolean)",
           "occurrence": 2,
           "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecution",
           "sink": "Throwable.McpApplicationPolicyCapacityException"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationExecution#invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher)->Throwable.McpApplicationPolicyDeadlineException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationExecution#invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher,boolean)->Throwable.McpApplicationPolicyDeadlineException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher)",
+          "member": "invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher,boolean)",
           "occurrence": 1,
           "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecution",
           "sink": "Throwable.McpApplicationPolicyDeadlineException"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationExecution#invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher)->Throwable.McpApplicationPolicyDeadlineException@2",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationExecution#invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher,boolean)->Throwable.McpApplicationPolicyDeadlineException@2",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher)",
+          "member": "invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher,boolean)",
           "occurrence": 2,
           "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecution",
           "sink": "Throwable.McpApplicationPolicyDeadlineException"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationExecution#invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher)->Throwable.McpApplicationPolicyDeadlineException@3",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationExecution#invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher,boolean)->Throwable.McpApplicationPolicyDeadlineException@3",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher)",
+          "member": "invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher,boolean)",
           "occurrence": 3,
           "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecution",
           "sink": "Throwable.McpApplicationPolicyDeadlineException"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationExecution#invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher)->Throwable.McpApplicationPolicyDeadlineException@4",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationExecution#invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher,boolean)->Throwable.McpApplicationPolicyDeadlineException@4",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher)",
+          "member": "invokeBoundedPolicy(Callable<T>,long,BoundedPolicyCancellation,Runnable,McpApplicationHandlerDispatcher,boolean)",
           "occurrence": 4,
           "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecution",
           "sink": "Throwable.McpApplicationPolicyDeadlineException"
@@ -55824,7 +55860,7 @@
         "src/test/java/com/soklet/SimulatorSseLifecycleTests.java#blockedHandshakeFailureObservationHasABoundedAllowanceAndDoesNotDelayTheResponse",
         "src/test/java/com/soklet/SimulatorSseLifecycleTests.java#callbackFailuresAreLoggedIndependentlyAndDoNotReplaceTheOutcome",
         "src/test/java/com/soklet/SimulatorStreamingAdmissionRejectionTests.java#saturatedRejectionObservationStillReturnsFinite503AndReportsTheSkippedNotification",
-        "src/test/java/com/soklet/SokletApplicationLogFallbackTests.java#observerFailureWritesDirectlyWithoutRecursivelyCallingObserver",
+        "src/test/java/com/soklet/SokletApplicationLogFallbackTests.java#observerFailureWritesAsynchronouslyWithoutRecursivelyCallingObserver",
         "src/test/java/com/soklet/SokletTests.java#requestResults",
         "src/test/java/com/soklet/SseInitializerRuntimeTests.java#checkedInitializerFailureTerminatesWithoutActivation",
         "src/test/java/com/soklet/StreamingCleanupDiagnosticsTests.java#httpFinalizerFailureHasCleanupClassificationAndOriginalStreamContext",
@@ -60455,7 +60491,7 @@
         "src/test/java/com/soklet/LifecycleObserverLoggingTests.java#explicitlySelectedDefaultObserverPrintsOnceAlongsideSilentPeers",
         "src/test/java/com/soklet/LifecycleObserverLoggingTests.java#interfaceDefaultIsSilentAndDoesNotInspectTheThrowable",
         "src/test/java/com/soklet/LifecycleObserverLoggingTests.java#unconfiguredApplicationStillPrintsOneEventAndItsOriginalStackTrace",
-        "src/test/java/com/soklet/SokletApplicationLogFallbackTests.java#observerFailureWritesDirectlyWithoutRecursivelyCallingObserver",
+        "src/test/java/com/soklet/SokletApplicationLogFallbackTests.java#observerFailureWritesAsynchronouslyWithoutRecursivelyCallingObserver",
         "src/test/java/com/soklet/SokletTests.java#requestResults"
       ],
       "category": "LOG",
@@ -60466,36 +60502,36 @@
       "sourcePaths": [
         {
           "file": "src/main/java/com/soklet/DefaultLifecycleObserver.java",
-          "key": "PRIV-MATCH-014:src/main/java/com/soklet/DefaultLifecycleObserver.java#com.soklet.DefaultLifecycleObserver#didReceiveLogEvent(LogEvent)->DirectOutput.System.err.printf@1",
+          "key": "PRIV-MATCH-014:src/main/java/com/soklet/DefaultLifecycleObserver.java#com.soklet.DefaultLifecycleObserver#write(LogEventType,String,Throwable,PrintStream)->DirectOutput.PrintStream.printf@1",
           "matcherRuleId": "PRIV-MATCH-014",
-          "member": "didReceiveLogEvent(LogEvent)",
+          "member": "write(LogEventType,String,Throwable,PrintStream)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultLifecycleObserver",
-          "sink": "DirectOutput.System.err.printf"
+          "sink": "DirectOutput.PrintStream.printf"
         },
         {
           "file": "src/main/java/com/soklet/DefaultLifecycleObserver.java",
-          "key": "PRIV-MATCH-014:src/main/java/com/soklet/DefaultLifecycleObserver.java#com.soklet.DefaultLifecycleObserver#didReceiveLogEvent(LogEvent)->DirectOutput.System.err.printf@2",
+          "key": "PRIV-MATCH-014:src/main/java/com/soklet/DefaultLifecycleObserver.java#com.soklet.DefaultLifecycleObserver#write(LogEventType,String,Throwable,PrintStream)->DirectOutput.PrintStream.printf@2",
           "matcherRuleId": "PRIV-MATCH-014",
-          "member": "didReceiveLogEvent(LogEvent)",
+          "member": "write(LogEventType,String,Throwable,PrintStream)",
           "occurrence": 2,
           "owner": "com.soklet.DefaultLifecycleObserver",
-          "sink": "DirectOutput.System.err.printf"
+          "sink": "DirectOutput.PrintStream.printf"
         },
         {
           "file": "src/main/java/com/soklet/DefaultLifecycleObserver.java",
-          "key": "PRIV-MATCH-014:src/main/java/com/soklet/DefaultLifecycleObserver.java#com.soklet.DefaultLifecycleObserver#didReceiveLogEvent(LogEvent)->DirectOutput.System.err.printf@3",
+          "key": "PRIV-MATCH-014:src/main/java/com/soklet/DefaultLifecycleObserver.java#com.soklet.DefaultLifecycleObserver#write(LogEventType,String,Throwable,PrintStream)->DirectOutput.PrintStream.printf@3",
           "matcherRuleId": "PRIV-MATCH-014",
-          "member": "didReceiveLogEvent(LogEvent)",
+          "member": "write(LogEventType,String,Throwable,PrintStream)",
           "occurrence": 3,
           "owner": "com.soklet.DefaultLifecycleObserver",
-          "sink": "DirectOutput.System.err.printf"
+          "sink": "DirectOutput.PrintStream.printf"
         },
         {
           "file": "src/main/java/com/soklet/DefaultLifecycleObserver.java",
-          "key": "PRIV-MATCH-014:src/main/java/com/soklet/DefaultLifecycleObserver.java#com.soklet.DefaultLifecycleObserver#didReceiveLogEvent(LogEvent)->DirectOutput.Throwable.printStackTrace@1",
+          "key": "PRIV-MATCH-014:src/main/java/com/soklet/DefaultLifecycleObserver.java#com.soklet.DefaultLifecycleObserver#write(LogEventType,String,Throwable,PrintStream)->DirectOutput.Throwable.printStackTrace@1",
           "matcherRuleId": "PRIV-MATCH-014",
-          "member": "didReceiveLogEvent(LogEvent)",
+          "member": "write(LogEventType,String,Throwable,PrintStream)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultLifecycleObserver",
           "sink": "DirectOutput.Throwable.printStackTrace"
@@ -60534,9 +60570,9 @@
       "sourcePaths": [
         {
           "file": "src/main/java/com/soklet/LifecycleObserverLogFallback.java",
-          "key": "PRIV-MATCH-014:src/main/java/com/soklet/LifecycleObserverLogFallback.java#com.soklet.LifecycleObserverLogFallback#report(Throwable,PrintStream)->DirectOutput.PrintStream.write@1",
+          "key": "PRIV-MATCH-014:src/main/java/com/soklet/LifecycleObserverLogFallback.java#com.soklet.LifecycleObserverLogFallback#write(Throwable,PrintStream)->DirectOutput.PrintStream.write@1",
           "matcherRuleId": "PRIV-MATCH-014",
-          "member": "report(Throwable,PrintStream)",
+          "member": "write(Throwable,PrintStream)",
           "occurrence": 1,
           "owner": "com.soklet.LifecycleObserverLogFallback",
           "sink": "DirectOutput.PrintStream.write"
@@ -65619,7 +65655,7 @@
         "src/test/java/com/soklet/SimulatorSseInitializerTests.java#buffered_delivery_preserves_unicast_and_broadcast_error_handlers",
         "src/test/java/com/soklet/SimulatorSseLifecycleTests.java#callbackFailuresAreLoggedIndependentlyAndDoNotReplaceTheOutcome",
         "src/test/java/com/soklet/SimulatorStreamingAdmissionRejectionTests.java#saturatedRejectionObservationStillReturnsFinite503AndReportsTheSkippedNotification",
-        "src/test/java/com/soklet/SokletApplicationLogFallbackTests.java#observerFailureWritesDirectlyWithoutRecursivelyCallingObserver",
+        "src/test/java/com/soklet/SokletApplicationLogFallbackTests.java#observerFailureWritesAsynchronouslyWithoutRecursivelyCallingObserver",
         "src/test/java/com/soklet/SokletTests.java#requestResults",
         "src/test/java/com/soklet/StreamingCleanupDiagnosticsTests.java#httpFinalizerFailureHasCleanupClassificationAndOriginalStreamContext",
         "src/test/java/com/soklet/StreamingCleanupDiagnosticsTests.java#simulatorFinalizerFailureHasCleanupClassificationAndOriginalStreamContext",
@@ -74461,6 +74497,17 @@
       "sink": "MetricsCollector.invocation.snapshot"
     },
     {
+      "file": "src/main/java/com/soklet/DefaultLifecycleObserver.java",
+      "id": "PRIV-EX-067",
+      "key": "PRIV-MATCH-015:src/main/java/com/soklet/DefaultLifecycleObserver.java#com.soklet.DefaultLifecycleObserver#DefaultLifecycleObserver()->MetricsCollector.invocation.defaultInstance@1",
+      "matcherRuleId": "PRIV-MATCH-015",
+      "member": "DefaultLifecycleObserver()",
+      "occurrence": 1,
+      "owner": "com.soklet.DefaultLifecycleObserver",
+      "rationale": "This exact call selects LifecycleLogDispatcher.defaultInstance() for the existing generic log sink. The receiver is not MetricsCollector; it neither creates a metric observation nor emits labels. The unchanged broad defaultInstance matcher is excluded only at this exact source key.",
+      "sink": "MetricsCollector.invocation.defaultInstance"
+    },
+    {
       "file": "src/main/java/com/soklet/DefaultMcpServer.java",
       "id": "PRIV-EX-020",
       "key": "PRIV-MATCH-015:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#DefaultMcpServer(int,String,int,int,int,int,int,Duration,Supplier<ExecutorService>,Duration,Duration,int,int,int,int,int,int,int,Duration,Duration,int,Duration,Duration,Duration,Duration,McpEndpointRegistry,McpAdmissionController,boolean,McpCatalogAccessPolicy,boolean,McpSkillAccessPolicy,boolean,McpSkillVariantSelector,McpSubscriptionAuthorizer,boolean,McpHandlerInterceptor,McpToolResultSanitizer,McpTaskManager,McpSessionConfig,CorsAuthorizer,McpAbsentOriginPolicy,McpUnknownMirroredHeaderPolicy,boolean,boolean,Set<String>,McpRateLimiter,McpRateLimiter,McpRateLimiterRegistry,McpProtectionConfig,McpTraceCorrelationKey,McpLocalizer,McpServer.Builder)->MetricsCollector.invocation.defaultInstance@1",
@@ -74514,6 +74561,17 @@
       "owner": "com.soklet.LifecycleObserver",
       "rationale": "This exact site declares or invokes LifecycleObserver.willWriteResponseStream(StreamingResponseHandle), not MetricsCollector. The broad same-name metric vocabulary matcher remains unchanged. The callback receives the exact application-owned stream handle, already covered by the request/context callback boundary and generic LogEvent attachment boundaries; this exclusion does not claim that the callback is redacted or that it emits no application diagnostics.",
       "sink": "MetricsCollector.override.willWriteResponseStream"
+    },
+    {
+      "file": "src/main/java/com/soklet/LifecycleObserverLogFallback.java",
+      "id": "PRIV-EX-068",
+      "key": "PRIV-MATCH-015:src/main/java/com/soklet/LifecycleObserverLogFallback.java#com.soklet.LifecycleObserverLogFallback#report(Throwable,PrintStream)->MetricsCollector.invocation.defaultInstance@1",
+      "matcherRuleId": "PRIV-MATCH-015",
+      "member": "report(Throwable,PrintStream)",
+      "occurrence": 1,
+      "owner": "com.soklet.LifecycleObserverLogFallback",
+      "rationale": "This exact call selects LifecycleLogDispatcher.defaultInstance() for the existing generic log sink. The receiver is not MetricsCollector; it neither creates a metric observation nor emits labels. The unchanged broad defaultInstance matcher is excluded only at this exact source key.",
+      "sink": "MetricsCollector.invocation.defaultInstance"
     },
     {
       "file": "src/main/java/com/soklet/McpAppResourceMetadata.java",

@@ -273,6 +273,9 @@ public final class Soklet {
 	 * Startup failure or cancellation throws
 	 * synchronously after attempted teardown; interruption before readiness
 	 * requests cancellation and the caller's interrupt status is restored.
+	 * Cancellation competes atomically with readiness. If readiness wins, the
+	 * ready handle is returned with the interrupt status restored, and that
+	 * startup interruption does not request shutdown of the running lifecycle.
 	 *
 	 * @param sokletConfig configuration with unclaimed transport identities
 	 * @return the ready lifecycle handle

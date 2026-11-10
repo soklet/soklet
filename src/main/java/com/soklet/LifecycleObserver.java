@@ -744,7 +744,17 @@ public interface LifecycleObserver {
 	 * {@link LogEventType#MCP_TRACE_CORRELATION} and finish-observer failure events
 	 * use the bounded MCP observation worker. Transport-failure and overload events
 	 * can arrive on HTTP/SSE selector threads. Do not block those threads.
-	 * The default stderr observer prints routine executor shedding, request
+	 * The default stderr observer hands formatting and output to one daemon worker
+	 * with a queue of 128 records, shared with failed-observer fallback logging.
+	 * The worker retires after one idle second and restarts on demand. This timeout
+	 * does not interrupt active formatting or output; a blocked sink can retain
+	 * its worker and class loader until the write returns.
+	 * It captures the current stderr destination and caps event messages at 4,096
+	 * UTF-16 characters without splitting surrogate pairs. Delivery is best effort:
+	 * records are discarded when the queue is full or its worker cannot start,
+	 * and pending records are not flushed by application shutdown or JVM exit.
+	 * The record count is bounded; attached Throwable graphs are not byte-bounded.
+	 * The worker prints routine executor shedding, request
 	 * interruption and socket close/timeout conditions as single lines without
 	 * rendering stacks; the line retains a sanitized failure message capped at 512 characters.
 	 * Unexpected failures and nested diagnostics retain their stack diagnostics.
@@ -756,7 +766,8 @@ public interface LifecycleObserver {
 
 	/**
 	 * Acquires a threadsafe {@link LifecycleObserver} instance with sensible defaults.
-	 * This instance writes log events to stderr, with full attached Throwable
+	 * This instance queues log events for asynchronous, best-effort stderr delivery
+	 * as described by {@link #didReceiveLogEvent(LogEvent)}, with full attached Throwable
 	 * stacks for unexpected failures and terse lines for routine interruption,
 	 * socket close/timeout and known executor-shedding conditions. {@link SokletConfig} selects it when no lifecycle-observer
 	 * configuration is supplied. Configuring custom observers replaces that

@@ -18,6 +18,7 @@ package com.soklet;
 
 import com.soklet.annotation.SseEventSource;
 import com.soklet.exception.IllegalRequestException;
+import com.soklet.internal.HelperThreads;
 import com.soklet.internal.microhttp.StreamLifecycleCoordinator;
 import com.soklet.internal.streaming.ManagedSseLifecycle;
 import com.soklet.internal.util.AcceptLoopBackoff;
@@ -1079,7 +1080,7 @@ final class DefaultSseServer implements SseServer {
 
 			this.requestHandlerExecutorService = getRequestHandlerExecutorServiceSupplier().get();
 			this.requestHandlerTimeoutScheduler = new TimeoutScheduler(runnable -> {
-				Thread thread = new Thread(runnable, "sse-request-handler-timeout");
+				Thread thread = HelperThreads.platform(runnable, "sse-request-handler-timeout");
 				thread.setDaemon(true);
 				return thread;
 			});
@@ -1105,7 +1106,7 @@ final class DefaultSseServer implements SseServer {
 			this.consecutivePendingHandshakeRejections.set(0);
 			this.lifecycleGeneration.incrementAndGet();
 			this.started = true; // set before thread starts to avoid early exit races
-			this.eventLoopThread = new Thread(() -> startInternal(
+			this.eventLoopThread = HelperThreads.platform(() -> startInternal(
 					startedAdapterGeneration), "sse-event-loop");
 			this.eventLoopThread.setDaemon(false);
 			this.eventLoopThread.start();
@@ -2705,13 +2706,14 @@ final class DefaultSseServer implements SseServer {
 		try {
 			// A writer executor may be bounded or use CallerRunsPolicy. The reader
 			// must neither occupy its workers nor run inline ahead of the writer.
-			Thread.ofVirtual().name("soklet-sse-peer-close").start(() -> {
+			Thread monitor = HelperThreads.virtual(() -> {
 				try {
 					monitorClientDisconnect(connection);
 				} finally {
 					work.close();
 				}
-			});
+			}, "soklet-sse-peer-close");
+			monitor.start();
 		} catch (RuntimeException | Error failure) {
 			try {
 				connection.lifecycle.terminate(isStopping() ? StreamTerminationReason.SERVER_STOPPING

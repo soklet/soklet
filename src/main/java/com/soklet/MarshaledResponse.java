@@ -46,7 +46,11 @@ import static java.util.Objects.requireNonNull;
 import static com.soklet.internal.ObjectIdentity.sameInstance;
 
 /**
- * A finalized representation of a {@link Response}, suitable for sending to clients over the wire.
+ * A prepared HTTP response representation, with a transport-ready body descriptor rather than an arbitrary logical body.
+ * <p>
+ * This value does not bypass the remaining response pipeline. Soklet may create replacement responses while applying
+ * interceptor selection, CORS, {@link ResponseMarshaler#postProcess(MarshaledResponse)}, HEAD/bodyless projection,
+ * and transport framing or compression. The original instance is not mutated by these transformations.
  * <p>
  * Your application's {@link ResponseMarshaler} is responsible for taking the {@link Response} returned by a <em>Resource Method</em> as input
  * and converting its {@link Response#getBody()} to a {@link MarshaledResponseBody}.
@@ -102,7 +106,11 @@ public final class MarshaledResponse {
 	private final Object postProcessingToken;
 
 	/**
-	 * Acquires a builder for {@link MarshaledResponse} instances.
+	 * Copies a logical response's status, headers, cookies, and existing {@code byte[]} body into a builder.
+	 * <p>
+	 * This method does not invoke a {@link ResponseMarshaler} or serialize the body. A body of any other type is omitted,
+	 * including {@link String}, {@link MarshaledResponseBody}, and {@link StreamingResponseBody}. Serialize logical data
+	 * explicitly, or configure the returned builder's body or streaming response body before building it.
 	 *
 	 * @param response the logical response whose values are used to prime this builder
 	 * @return the builder
@@ -128,7 +136,8 @@ public final class MarshaledResponse {
 	}
 
 	/**
-	 * Creates a {@link MarshaledResponse} from a logical {@link Response} without additional customization.
+	 * Copies a logical response's status, headers, cookies, and existing {@code byte[]} body without serialization.
+	 * Bodies of other types are omitted, as specified by {@link #withResponse(Response)}.
 	 *
 	 * @param response the logical response whose values are used to construct this instance
 	 * @return a {@link MarshaledResponse} instance

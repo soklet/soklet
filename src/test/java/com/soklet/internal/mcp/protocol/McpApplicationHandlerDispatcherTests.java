@@ -887,6 +887,96 @@ public class McpApplicationHandlerDispatcherTests {
 		}
 	}
 
+	@Test
+	public void immediateAdmissionRejectsWithoutConsumingTheOrdinaryQueue() throws Exception {
+		ManualExecutorService executor = new ManualExecutorService();
+		McpApplicationHandlerDispatcher dispatcher = new McpApplicationHandlerDispatcher(1, 2, executor);
+		AtomicInteger invocations = new AtomicInteger();
+		AtomicReference<Throwable> failure = new AtomicReference<>();
+		McpApplicationHandlerDispatcher.Ticket first = dispatcher.newTicket(
+				invocations::incrementAndGet, failure::set);
+		McpApplicationHandlerDispatcher.Ticket queued = dispatcher.newTicket(
+				invocations::incrementAndGet, failure::set);
+		McpApplicationHandlerDispatcher.Ticket rejected = dispatcher.newTicket(() -> failWork(), failure::set);
+		try {
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.Admission.DISPATCHED,
+					dispatcher.admitIfAvailable(first));
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.Admission.QUEUED, dispatcher.admit(queued));
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.Admission.REJECTED,
+					dispatcher.admitIfAvailable(rejected));
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.TicketState.REJECTED, rejected.state());
+			Assertions.assertEquals(1, dispatcher.snapshot().queueDepth(),
+					"Immediate admission must not use even spare queue capacity.");
+			executor.command().run();
+			Assertions.assertEquals(2, invocations.get());
+			Assertions.assertEquals(0, dispatcher.snapshot().activeSlots());
+			Assertions.assertEquals(0, dispatcher.snapshot().queueDepth());
+			Assertions.assertNull(failure.get());
+			McpApplicationHandlerDispatcher.Ticket canceled = dispatcher.newTicket(() -> failWork(), failure::set);
+			Assertions.assertTrue(dispatcher.cancelBeforeDispatch(canceled));
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.Admission.CANCELED,
+					dispatcher.admitIfAvailable(canceled));
+			dispatcher.beginGracefulDrain();
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.Admission.CLOSED,
+					dispatcher.admitIfAvailable(dispatcher.newTicket(() -> failWork(), failure::set)));
+		} finally {
+			stop(dispatcher, executor);
+		}
+	}
+
+	@Test
+	public void immediateAdmissionRescuesOlderQueuedWorkAfterAFailedHandoff() throws Exception {
+		CountDownLatch secondSubmissionEntered = new CountDownLatch(1);
+		CountDownLatch rejectSecondSubmission = new CountDownLatch(1);
+		RejectSecondSubmissionExecutor executor = new RejectSecondSubmissionExecutor(
+				secondSubmissionEntered, rejectSecondSubmission);
+		McpApplicationHandlerDispatcher dispatcher = new McpApplicationHandlerDispatcher(2, 2, executor);
+		CountDownLatch firstEntered = new CountDownLatch(1);
+		CountDownLatch releaseFirst = new CountDownLatch(1);
+		CountDownLatch queuedRan = new CountDownLatch(2);
+		AtomicReference<Throwable> expectedRejection = new AtomicReference<>();
+		AtomicReference<Throwable> failure = new AtomicReference<>();
+		McpApplicationHandlerDispatcher.Ticket first = dispatcher.newTicket(() -> {
+			firstEntered.countDown();
+			releaseFirst.await();
+		}, failure::set);
+		McpApplicationHandlerDispatcher.Ticket handoff = dispatcher.newTicket(() -> failWork(), expectedRejection::set);
+		McpApplicationHandlerDispatcher.Ticket oldest = dispatcher.newTicket(queuedRan::countDown, failure::set);
+		McpApplicationHandlerDispatcher.Ticket newest = dispatcher.newTicket(queuedRan::countDown, failure::set);
+		Thread submitter = new Thread(() -> dispatcher.admit(handoff), "mcp-immediate-failed-handoff");
+		try {
+			dispatcher.admit(first);
+			Assertions.assertTrue(firstEntered.await(3, TimeUnit.SECONDS));
+			submitter.start();
+			Assertions.assertTrue(secondSubmissionEntered.await(3, TimeUnit.SECONDS));
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.Admission.QUEUED, dispatcher.admit(oldest));
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.Admission.QUEUED, dispatcher.admit(newest));
+			rejectSecondSubmission.countDown();
+			submitter.join(3000);
+			Assertions.assertFalse(submitter.isAlive());
+			Assertions.assertInstanceOf(RejectedExecutionException.class, expectedRejection.get());
+			Assertions.assertEquals(1, dispatcher.snapshot().activeSlots());
+			McpApplicationHandlerDispatcher.Ticket immediate = dispatcher.newTicket(() -> failWork(), failure::set);
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.Admission.REJECTED,
+					dispatcher.admitIfAvailable(immediate));
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.TicketState.DISPATCHED, oldest.state(),
+					"The oldest accepted ticket owns the available slot.");
+			Assertions.assertEquals(McpApplicationHandlerDispatcher.TicketState.QUEUED, newest.state());
+			Assertions.assertEquals(1, dispatcher.snapshot().queueDepth());
+			releaseFirst.countDown();
+			Assertions.assertTrue(queuedRan.await(3, TimeUnit.SECONDS));
+			awaitCondition(() -> dispatcher.snapshot().activeSlots() == 0);
+			Assertions.assertNull(failure.get());
+			Assertions.assertEquals(0, dispatcher.snapshot().queueDepth());
+		} finally {
+			rejectSecondSubmission.countDown();
+			releaseFirst.countDown();
+			submitter.interrupt();
+			submitter.join(3000);
+			stop(dispatcher, executor);
+		}
+	}
+
 	private static ExecutorService singleThreadExecutor(String threadName) {
 		return Executors.newSingleThreadExecutor(runnable -> {
 			Thread thread = new Thread(runnable, threadName);
@@ -1275,4 +1365,5 @@ public class McpApplicationHandlerDispatcherTests {
 	private static final class SubmissionError extends Error {
 		private static final long serialVersionUID = 1L;
 	}
+
 }

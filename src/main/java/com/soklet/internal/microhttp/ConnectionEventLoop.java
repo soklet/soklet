@@ -1,5 +1,7 @@
 package com.soklet.internal.microhttp;
 
+import com.soklet.internal.HelperThreads;
+
 import com.soklet.MetricsCollector.TransportFailureReason;
 import com.soklet.HttpDate;
 import com.soklet.StreamTerminationReason;
@@ -287,7 +289,7 @@ class ConnectionEventLoop {
         Selector openedSelector = Selector.open();
         Thread eventLoopThread;
         try {
-            eventLoopThread = new Thread(this::run, "connection-event-loop");
+            eventLoopThread = HelperThreads.platform(this::run, "connection-event-loop");
             eventLoopThread.setDaemon(false);
         } catch (RuntimeException | Error throwable) {
             CloseUtils.closeQuietly(openedSelector);

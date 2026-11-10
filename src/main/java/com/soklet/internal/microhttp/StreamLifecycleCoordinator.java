@@ -17,6 +17,7 @@
 package com.soklet.internal.microhttp;
 
 import com.soklet.StreamTerminationReason;
+import com.soklet.internal.HelperThreads;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -1377,8 +1378,9 @@ public final class StreamLifecycleCoordinator {
 
 	private static ThreadFactory threadFactory(String prefix) {
 		return runnable -> {
-			Thread thread = new Thread(runnable, prefix + "-" + THREAD_SEQUENCE.incrementAndGet());
+			Thread thread = HelperThreads.platform(runnable, prefix + "-" + THREAD_SEQUENCE.incrementAndGet());
 			thread.setDaemon(true);
+			thread.setPriority(Thread.NORM_PRIORITY);
 			return thread;
 		};
 	}

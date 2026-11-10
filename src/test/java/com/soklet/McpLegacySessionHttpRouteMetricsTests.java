@@ -87,9 +87,15 @@ class McpLegacySessionHttpRouteMetricsTests {
 				}
 				assertEquals(8, fixture.httpStarts.get(), "Every idle GET needs a paired observation despite a two-ticket transient budget.");
 				assertEquals(8L, collector.snapshot().orElseThrow().getActiveRequests());
-				for (String id : ids)
-					assertEquals(204, fixture.control("DELETE", "/mcp", LEGACY.get(0), id, "alice", "", List.of()).status());
-				awaitFinished(fixture, 16);
+				// A DELETE pair holds bounded transient capacity through physical finish. Let each pair
+				// finish before the next DELETE so the two-ticket budget never omits one. A single
+				// absolute deadline bounds these waits, like the one wait it replaces.
+				long finishDeadline = 0L;
+				for (int index = 0; index < ids.size(); index++) {
+					assertEquals(204, fixture.control("DELETE", "/mcp", LEGACY.get(0), ids.get(index), "alice", "", List.of()).status());
+					if (index == 0) finishDeadline = System.nanoTime() + Duration.ofSeconds(3).toNanos();
+					awaitFinished(fixture, 2 * (index + 1), finishDeadline);
+				}
 				assertEquals(16, fixture.httpStarts.get());
 				assertEquals(0L, collector.snapshot().orElseThrow().getActiveRequests());
 			} finally { for (var get : gets) get.close(); }
@@ -204,7 +210,10 @@ class McpLegacySessionHttpRouteMetricsTests {
 	}
 
 	private static void awaitFinished(McpLegacySessionTransportPublicRuntimeTests.Fixture fixture, int count) throws InterruptedException {
-		long until = System.nanoTime() + Duration.ofSeconds(3).toNanos();
+		awaitFinished(fixture, count, System.nanoTime() + Duration.ofSeconds(3).toNanos());
+	}
+
+	private static void awaitFinished(McpLegacySessionTransportPublicRuntimeTests.Fixture fixture, int count, long until) throws InterruptedException {
 		while (fixture.httpFinishes.get() < count && System.nanoTime() < until) Thread.sleep(5);
 		assertEquals(count, fixture.httpFinishes.get());
 	}

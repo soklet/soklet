@@ -16,6 +16,7 @@
 
 package com.soklet;
 
+import com.soklet.internal.HelperThreads;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -39,6 +40,7 @@ final class SokletRunCompletion {
 			this.publicCompletion.minimalCompletionStage();
 	private final Object cleanupOwnerToken = new Object();
 	private final AtomicBoolean publicationClaimed = new AtomicBoolean();
+	private final Runnable beforeStartupCancellation;
 	private volatile @Nullable Soklet soklet;
 	private volatile @Nullable ShutdownResult result;
 	private volatile @Nullable Throwable failure;
@@ -46,12 +48,19 @@ final class SokletRunCompletion {
 	private volatile boolean startupCancellationRequested;
 
 	SokletRunCompletion(LifecycleWorkers.@NonNull Launcher handoffLauncher) {
+		this(handoffLauncher, () -> { });
+	}
+
+	/** Scheduling seam after the readiness read and before startup cancellation. */
+	SokletRunCompletion(LifecycleWorkers.@NonNull Launcher handoffLauncher,
+			@NonNull Runnable beforeStartupCancellation) {
+		this.beforeStartupCancellation = requireNonNull(beforeStartupCancellation);
 		requireNonNull(handoffLauncher).launch("soklet-finalization-result-handoff",
 				this::publishAsyncOutcome);
 	}
 
 	static void launchDaemonHandoff(@NonNull String name, @NonNull Runnable task) {
-		Thread handoff = new Thread(requireNonNull(task), requireNonNull(name));
+		Thread handoff = HelperThreads.platform(requireNonNull(task), requireNonNull(name));
 		handoff.setDaemon(true);
 		handoff.start();
 	}
@@ -87,8 +96,10 @@ final class SokletRunCompletion {
 					break;
 				} catch (InterruptedException interruption) {
 					interrupted = true;
-					if (this.ready.getCount() != 0L)
+					if (this.ready.getCount() != 0L) {
+						this.beforeStartupCancellation.run();
 						cancelStartup();
+					}
 				}
 			}
 			if (!this.reachedReadiness)

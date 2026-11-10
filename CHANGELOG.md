@@ -4,6 +4,20 @@
 
 ### Breaking Changes
 
+- **Internal helper context:** lifecycle/process coordination, finalization,
+  built-in HTTP/SSE listeners and timeouts, SSE peer monitoring, and MCP
+  cancellation, deadlines, observation, subscription cleanup and metric helpers
+  do not copy application `InheritableThreadLocal` values. They preserve the
+  creator's context class loader and explicit Soklet ownership context.
+  In the default standalone startup path, values set on the thread calling
+  `Soklet.run(...)` no longer reach request handlers through the startup/listener
+  thread chain. Application handler and protocol-request factories and custom
+  executors retain their own inheritance settings, but cannot recover values
+  discarded earlier in that chain. Bind request context explicitly in
+  `RequestInterceptor.wrapRequest`, restoring or clearing it in `finally`;
+  streaming producers need their own context binding. JVM-internal carrier-thread
+  creation remains a separate runtime boundary.
+
 - **HTTP method casing:** method names are case-sensitive. Lowercase methods
   such as `get` that were previously accepted now receive HTTP `400`; send canonical
   methods such as `GET` and `POST`.
@@ -98,6 +112,15 @@
   [HTTP values preserve every occurrence](MIGRATING_TO_4_0.md#http-values-preserve-every-occurrence).
 - **Observer logging:** a custom observer replaces the default stderr logger;
   `didReceiveLogEvent` defaults to a no-op. Explicitly configure a logging sink.
+  The default logger and failed-observer fallback use one daemon console worker
+  with a shared 128-record queue; they never perform formatting or stderr I/O
+  on the emitting thread. Default event messages are capped at 4,096 UTF-16
+  characters. The worker retires after one idle second and restarts on demand,
+  releasing its class-loader reference when no logging work is active. The
+  timeout does not interrupt active formatting or writes.
+  Logging is best effort: overflow/start failures discard records,
+  and application shutdown/JVM exit does not flush pending records. Custom
+  observers retain synchronous delivery of the original event and Throwable.
   See [Log-event routing](MIGRATING_TO_4_0.md#log-event-routing-with-custom-observers).
 - **Finite response framing:** the built-in HTTP transport owns framing and
   removes application hop-by-hop headers. Valid bodyless HEAD representation
@@ -495,6 +518,37 @@ maintenance or security fixes afterward. See the explicit
   [third-party audit](release/THIRD_PARTY_AUDIT.md).
 
 ### Correctness Fixes
+
+- Both Servlet adapters reject invalid classpath resource prefixes and lookup
+  paths before class-loader access or directory listing, including backslashes,
+  NUL, traversal segments, extra leading slashes and Windows drive qualifiers.
+- Bound the direct MCP catalog work that waits for a handler slot while
+  holding a protocol worker. A quarter of `protocolExecutorConcurrency`,
+  rounded down, bounds concurrent direct invocations permitted to queue;
+  permission remains held until the bounded invocation returns, including
+  while running. These are not reserved handler-queue entries. Without
+  permission a request needs an immediately free slot and an empty queue or
+  receives the existing capacity `503`. This prevents this queued catalog
+  work from occupying every protocol worker. Active policy callbacks and
+  other blocking protocol work can still exhaust the pool; no workers are
+  reserved for control requests. This covers built-in paged lists on both
+  2025 revisions and direct catalog-access-policy evaluation. Ordinary handler
+  and subscription-projection queue behavior is unchanged.
+- Elect interrupted-startup cancellation atomically against readiness. A
+  cancellation that loses to readiness preserves the running lifecycle and
+  restores the caller's interrupt flag instead of shutting down a ready server.
+- Streaming callback, cleanup, supervision, diagnostic, and interrupt workers
+  no longer inherit application `InheritableThreadLocal` values. Application
+  `childValue` code cannot disrupt their creation or lifecycle finalization;
+  explicit Soklet callback ownership context is unchanged.
+- The annotation processor qualifies generated Java infrastructure types so
+  application classes named `Class` or `String` do not break MCP providers.
+- Multipart MIME part headers unfold CRLF plus leading space/tab continuations
+  before parsing names, filenames, and content types. Existing raw header and
+  parameter limits remain enforced; malformed continuations fail with HTTP 400.
+- `MarshaledResponse` documentation distinguishes prepared representations
+  from final wire output and documents that response-copy factories retain only
+  existing `byte[]` bodies, without serializing other logical body values.
 
 - Publish completed startup-action state before its termination proof, preventing
   a concurrent shutdown from reporting an incomplete result for finished work.

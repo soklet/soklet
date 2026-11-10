@@ -3414,6 +3414,35 @@ have no reserved protocol worker. Sustained admission or policy saturation can
 delay existing subscribers' hints until capacity becomes available. Projection
 deadlines bound application entry and stale output, not notification delivery.
 
+The following direct catalog work holds its protocol worker while it waits for
+an application-handler slot: built-in paged catalog lists (`tools/list`,
+`prompts/list`, `resources/list` and `resources/templates/list`) on
+`2025-06-18` and `2025-11-25`, and the `catalogAccessPolicy` step of
+`tools/call`, `prompts/get`, tool/prompt listing and prompt-argument completion
+on every revision. Soklet gives at most a quarter of
+`protocolExecutorConcurrency`, rounded down, concurrent direct invocations
+permission to use the application-handler queue: eight at the default of 32,
+and none when the pool is smaller than four. Permission is acquired before
+handler admission and retained until the bounded invocation returns, including
+its time running. This limits queue-eligible invocations; it does not reserve
+queue entries, and active permission holders reduce how many others may wait.
+Queueing still requires capacity under the shared
+`requestHandlerQueueCapacity`, preserves FIFO position and uses the original
+request deadline. Without permission, such a request needs a free handler slot
+and an empty queue; otherwise Soklet returns HTTP `503` with JSON-RPC `-32603`
+before that bounded callback enters.
+
+For protocol pools of at least four workers, subscription projections can hold
+up to another half of the pool. These two queueing categories alone cannot
+occupy every protocol worker. The remaining capacity is not reserved for
+`ping`, initialization, cancellation or discovery: active catalog-policy
+callbacks, session-stream admission, subscription authorization and other
+blocking protocol callbacks also consume protocol workers. Keep those callbacks
+prompt and bounded. Raise `protocolExecutorConcurrency` to increase the number
+of direct invocations eligible to queue. Ordinary operation handlers, including
+custom resource-list handlers, and subscription projections retain their
+existing queue behavior.
+
 Finish observation, `MCP_TRACE_CORRELATION` and finish-observer-failure logs run
 on a separate bounded dispatcher using daemon platform threads, away from
 connection event loops and the protocol/application executors. This avoids

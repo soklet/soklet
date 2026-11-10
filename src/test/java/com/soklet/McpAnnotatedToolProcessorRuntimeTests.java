@@ -100,7 +100,7 @@ public class McpAnnotatedToolProcessorRuntimeTests {
 			Assertions.assertTrue(generatedSource.contains(
 					"instanceResolver.apply(requestContext).search("), generatedSource);
 			Assertions.assertTrue(generatedSource.contains(
-					"public String[] schemaDigests()"), generatedSource);
+					"public java.lang.String[] schemaDigests()"), generatedSource);
 			Assertions.assertFalse(generatedSource.contains("InternalMarker"),
 					generatedSource);
 			Assertions.assertTrue(generatedSource.contains("argument0"),

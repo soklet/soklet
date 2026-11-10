@@ -16,6 +16,7 @@
 
 package com.soklet;
 
+import com.soklet.internal.HelperThreads;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
@@ -415,13 +416,18 @@ final class SokletDirectLifecycle {
 
 	/** Records cancellation even before the sole start claim, without closing NEW. */
 	void requestStartupCancellation() {
-		this.startupCancellationRequested.set(true);
-		this.cancellationCause.compareAndSet(null,
-				new InterruptedException("Startup caller was interrupted"));
-		// start checks the flag after claiming STARTING. Together these reads
-		// cannot miss cancellation on either side of the NEW -> STARTING boundary.
-		if (this.stateMachine.state() != InternalLifecycleStateMachine.State.NEW)
-			requestShutdownIntent();
+		Optional<InternalLifecycleStateMachine.ShutdownRequest> shutdownRequest;
+		// Match the ordinary shutdown publication order. In particular, never
+		// take the controlling-event boundary while already holding only the
+		// transition lock: another shutdown publisher acquires them in this order.
+		synchronized (this.controllingEventElection) {
+			shutdownRequest = this.stateMachine.requestStartupCancellation(() -> {
+				this.startupCancellationRequested.set(true);
+				this.cancellationCause.compareAndSet(null,
+						new InterruptedException("Startup caller was interrupted"));
+			}, () -> publishShutdownIntent(StartupOutcomeKind.CANCELED));
+		}
+		shutdownRequest.ifPresent(this::propagateShutdownIntent);
 	}
 
 	void requestShutdownIntent() {
@@ -429,13 +435,21 @@ final class SokletDirectLifecycle {
 	}
 
 	private void requestShutdownIntent(@NonNull StartupOutcomeKind outcome) {
+		propagateShutdownIntent(publishShutdownIntent(outcome));
+	}
+
+	private InternalLifecycleStateMachine.@NonNull ShutdownRequest publishShutdownIntent(
+			@NonNull StartupOutcomeKind outcome) {
 		StartupOutcomeClaim ownerStop = StartupOutcomeClaim.ownerStop(
 				requireNonNull(outcome));
-		InternalLifecycleStateMachine.ShutdownRequest shutdownRequest =
-				this.controllingEventElection.publishShutdownIntent(() ->
+		return this.controllingEventElection.publishShutdownIntent(() ->
 						this.startupOutcome.compareAndSet(null, ownerStop), () ->
 						this.stateMachine.requestShutdownDetailed(
 								this.clock.nanoTime()));
+	}
+
+	private void propagateShutdownIntent(
+			InternalLifecycleStateMachine.@NonNull ShutdownRequest shutdownRequest) {
 		if (shutdownRequest.firstIntent())
 			this.afterFirstShutdownIntentPublished.run();
 		freezeAttachmentWindow();
@@ -2482,7 +2496,7 @@ final class SokletDirectLifecycle {
 						requireNonNull(name), exactHandoff);
 			} catch (RuntimeException | Error launchFailure) {
 				try {
-					Thread fallback = new Thread(exactHandoff, name + "-fallback");
+					Thread fallback = HelperThreads.platform(exactHandoff, name + "-fallback");
 					fallback.setDaemon(true);
 					fallback.start();
 				} catch (RuntimeException | Error fallbackFailure) {

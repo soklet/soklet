@@ -18,14 +18,98 @@ package com.soklet.internal.mcp.transport;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.Socket;
+import java.net.URLClassLoader;
+import java.nio.file.Path;
+import java.nio.file.Files;
+import java.lang.reflect.Field;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import com.soklet.internal.microhttp.EventLoop;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 
 public class McpTransportRuntimeSmokeTests {
+	@Test
+	@Timeout(60)
+	void timerAndTransportLoopsDoNotInvokeInheritanceAndKeepTheContextLoader(@TempDir Path resources) throws Exception {
+		Files.writeString(resources.resolve("transport-helper-context.txt"), "transport-resource", StandardCharsets.UTF_8);
+		AtomicInteger inheritanceCalls = new AtomicInteger();
+		InheritableThreadLocal<String> local = new InheritableThreadLocal<>() {
+			@Override protected String childValue(String value) {
+				inheritanceCalls.incrementAndGet();
+				throw new IllegalStateException("Transport helpers must not invoke inheritance");
+			}
+		};
+		Thread caller = Thread.currentThread();
+		ClassLoader priorLoader = caller.getContextClassLoader();
+		AtomicReference<Throwable> failure = new AtomicReference<>();
+		CountDownLatch timerRan = new CountDownLatch(1);
+		try (URLClassLoader loader = new URLClassLoader(new java.net.URL[]{resources.toUri().toURL()},
+				ClassLoader.getPlatformClassLoader())) {
+			caller.setContextClassLoader(loader);
+			local.set("transport-parent-value");
+			McpMonotonicClock clock = () -> {
+				if (Thread.currentThread().getName().equals("soklet-mcp-timer")) {
+					try {
+						Assertions.assertNull(local.get());
+						Assertions.assertSame(loader, Thread.currentThread().getContextClassLoader());
+						try (InputStream resource = Thread.currentThread().getContextClassLoader()
+								.getResourceAsStream("transport-helper-context.txt")) {
+							Assertions.assertNotNull(resource);
+							Assertions.assertEquals("transport-resource", new String(resource.readAllBytes(), StandardCharsets.UTF_8));
+						}
+					} catch (Throwable unexpected) { failure.compareAndSet(null, unexpected); }
+					finally { timerRan.countDown(); }
+				}
+				return System.nanoTime();
+			};
+			McpTransportConfiguration configuration = new McpTransportConfiguration("127.0.0.1", 0,
+					1, 4, 1, 1, 2, 1_024, 1_024,
+					Duration.ofSeconds(5), Duration.ofSeconds(2), Duration.ofMillis(250), McpThreadStrategy.PLATFORM);
+			McpTransportRuntime runtime = Assertions.assertDoesNotThrow(() ->
+					new McpTransportRuntime(configuration, invocation -> {}, clock));
+			try {
+				runtime.start();
+				Assertions.assertTrue(timerRan.await(5, TimeUnit.SECONDS));
+				Assertions.assertNull(failure.get());
+				Assertions.assertEquals(0, inheritanceCalls.get());
+			} finally {
+				runtime.stop();
+				Assertions.assertTrue(runtime.awaitHandlerTermination(Duration.ofSeconds(5)));
+				Thread timer = reflectedField(runtime, "timerThread", Thread.class);
+				timer.join(5_000);
+				Assertions.assertFalse(timer.isAlive());
+				EventLoop loop = reflectedField(runtime, "eventLoop", EventLoop.class);
+				Thread acceptor = reflectedField(loop, "thread", Thread.class);
+				acceptor.join(5_000);
+				Assertions.assertFalse(acceptor.isAlive());
+				for (Object connectionLoop : reflectedField(loop, "connectionEventLoops", List.class)) {
+					Thread writer = reflectedField(connectionLoop, "thread", Thread.class);
+					writer.join(5_000);
+					Assertions.assertFalse(writer.isAlive());
+				}
+			}
+		} finally {
+			local.remove();
+			caller.setContextClassLoader(priorLoader);
+		}
+		Assertions.assertEquals(0, inheritanceCalls.get());
+	}
+
+	private static <T> T reflectedField(Object target, String name, Class<T> type) throws Exception {
+		Field field = target.getClass().getDeclaredField(name); field.setAccessible(true);
+		return type.cast(field.get(target));
+	}
+
 	@Test
 	public void platform_live_post_uses_independent_listener_and_event_driven_sse_body() throws Exception {
 		runLivePost(McpThreadStrategy.PLATFORM);

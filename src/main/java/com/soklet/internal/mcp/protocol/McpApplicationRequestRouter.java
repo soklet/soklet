@@ -16,6 +16,8 @@
 
 package com.soklet.internal.mcp.protocol;
 
+import com.soklet.internal.HelperThreads;
+
 import com.soklet.CallbackRegistration;
 import com.soklet.CancelationToken;
 import com.soklet.McpRequestContext;
@@ -46,6 +48,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -1615,6 +1618,15 @@ final class McpApplicationExecution {
 	private final AtomicBoolean started;
 	@NonNull
 	private final AtomicBoolean stopped;
+	/**
+	 * Direct protocol callers that may wait in the handler queue while holding
+	 * their protocol worker. Subscription maintenance may hold up to another
+	 * half of a protocol pool of at least four workers. These two waiting
+	 * categories alone cannot exhaust that pool; other protocol work can still
+	 * use the remaining workers.
+	 */
+	@NonNull
+	private final Semaphore directPolicyQueuePermits;
 	@NonNull
 	private final AtomicBoolean quiescing;
 	@NonNull
@@ -1755,6 +1767,8 @@ final class McpApplicationExecution {
 		if (protocolObservationHeadroom < 0)
 			throw new IllegalArgumentException("Protocol observation headroom must be nonnegative.");
 		this.configuration = requireNonNull(configuration);
+		// The headroom is the protocol worker count; pools under four never wait.
+		this.directPolicyQueuePermits = new Semaphore(protocolObservationHeadroom / 4);
 		this.clock = requireNonNull(clock);
 		this.protocolDeadlineCycle = protocolDeadlineCycle;
 		this.defaultRequestInterceptor = requireNonNull(requestInterceptor);
@@ -1763,7 +1777,7 @@ final class McpApplicationExecution {
 				configuration.handlerConcurrency()),
 				"The application handler executor factory returned null.");
 		ThreadFactory cancellationCallbackThreadFactory = runnable -> {
-			Thread thread = new Thread(requireNonNull(runnable),
+			Thread thread = HelperThreads.platform(requireNonNull(runnable),
 					"soklet-mcp-cancellation-"
 							+ CANCELLATION_CALLBACK_THREAD_SEQUENCE.incrementAndGet());
 			thread.setDaemon(true);
@@ -1830,7 +1844,7 @@ final class McpApplicationExecution {
 		this.stopped = new AtomicBoolean();
 		this.quiescing = new AtomicBoolean();
 		this.stoppingReason = new AtomicReference<>();
-		this.timerThread = new Thread(this::runTimerLoop, "soklet-mcp-deadline");
+		this.timerThread = HelperThreads.platform(this::runTimerLoop, "soklet-mcp-deadline");
 		this.timerThread.setDaemon(true);
 	}
 
@@ -2438,12 +2452,45 @@ final class McpApplicationExecution {
 		return invokeBoundedPolicy(callback, deadlineNanos, cancellation, physicalExitObserver, dispatcher);
 	}
 
+	/**
+	 * Direct protocol callers hold their protocol worker while this work waits
+	 * or runs. A bounded number may wait in the handler queue; the rest need an
+	 * immediately free slot. A queue permit is retained until this invocation
+	 * returns, including while its callback runs; other protocol work does not
+	 * receive reserved workers from this allowance.
+	 */
+	@NonNull
+	<T extends @NonNull Object> T invokeBoundedPolicyIfAvailable(
+			@NonNull Callable<@NonNull T> callback, long deadlineNanos,
+			@NonNull BoundedPolicyCancellation cancellation,
+			@NonNull Runnable physicalExitObserver) throws Exception {
+		boolean mayQueue = directPolicyQueuePermits.tryAcquire();
+		try {
+			return invokeBoundedPolicy(callback, deadlineNanos, cancellation,
+					physicalExitObserver, dispatcher, mayQueue);
+		} finally {
+			if (mayQueue)
+				directPolicyQueuePermits.release();
+		}
+	}
+
 	@NonNull
 	private <T extends @NonNull Object> T invokeBoundedPolicy(
 			@NonNull Callable<@NonNull T> callback, long deadlineNanos,
 			@NonNull BoundedPolicyCancellation cancellation,
 			@NonNull Runnable physicalExitObserver,
 			@NonNull McpApplicationHandlerDispatcher policyDispatcher) throws Exception {
+		return invokeBoundedPolicy(callback, deadlineNanos, cancellation,
+				physicalExitObserver, policyDispatcher, true);
+	}
+
+	@NonNull
+	private <T extends @NonNull Object> T invokeBoundedPolicy(
+			@NonNull Callable<@NonNull T> callback, long deadlineNanos,
+			@NonNull BoundedPolicyCancellation cancellation,
+			@NonNull Runnable physicalExitObserver,
+			@NonNull McpApplicationHandlerDispatcher policyDispatcher,
+			boolean allowQueue) throws Exception {
 		requireNonNull(callback);
 		requireNonNull(cancellation);
 		requireNonNull(physicalExitObserver);
@@ -2529,7 +2576,10 @@ final class McpApplicationExecution {
 				admission = stopped.get() || quiescing.get()
 						? McpApplicationHandlerDispatcher.Admission.CLOSED : policyDispatcher.admit(ticket);
 			}
-		} else admission = policyDispatcher.admit(ticket);
+		} else {
+			admission = allowQueue ? policyDispatcher.admit(ticket)
+					: policyDispatcher.admitIfAvailable(ticket);
+		}
 		if (admission == McpApplicationHandlerDispatcher.Admission.REJECTED
 				|| admission == McpApplicationHandlerDispatcher.Admission.CLOSED) {
 			cancellation.completeWithoutInvocation();
