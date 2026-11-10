@@ -17,7 +17,7 @@ Release-facing material is kept separate from the internal evidence ledger:
 - [application-owned OAuth resource-server pattern](MCP_OAUTH_RESOURCE_SERVER.md)
 - [third-party attribution and redistribution audit](THIRD_PARTY_AUDIT.md)
 - [security-claims audit](SECURITY_CLAIMS_AUDIT.md)
-- [current Gitleaks history-scan triage (not an approval)](GITLEAKS_TRIAGE_2026-09-16.md)
+- [September Gitleaks history-scan triage](GITLEAKS_TRIAGE_2026-09-16.md)
 - [owner-approved scanner false-positive dispositions](SCAN_FALSE_POSITIVE_APPROVAL_2026-09-16.md)
 - [September 18 amendment retargeting two exact `Exchange` selectors](SCAN_FALSE_POSITIVE_APPROVAL_AMENDMENT_2026-09-18.md)
 - [G5 promotion runbook](G5_RELEASE_RUNBOOK.md)—checked in but never executed
@@ -27,15 +27,12 @@ Release-facing material is kept separate from the internal evidence ledger:
 - [owner commit and publication-preparation checklist](OWNER_COMMIT_CHECKLIST.md)
 - [historical-source dispositions and reviewed semantic anchors](PLANNING_AUTHORITY_DRIFT_2026-09-13.md)
 
-The format-v2 manifest defines an exact ordered universe of 25 release gates.
-Twenty gates are currently `READY`; none remain `BLOCKED_HARNESS_MISSING`.
-Five downstream gates remain `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`.
+The format-v2 manifest defines 25 ordered release gates. All 25 are configured
+as `READY`, including the five downstream gates at their published commits.
 `candidate-conformance` is `READY` for the exact dependency repin under the
 [September 27 toolchain disposition](../conformance/official/DEPENDENCY_REPIN_DISPOSITION_2026-09-27.md).
-The candidate is still not release-runnable end to end. `READY` means only that a gate has an executable,
-pinned validation path. It never means that the gate passed for a candidate;
-only a typed PASS receipt from the exact candidate workflow can establish
-that.
+`READY` records an executable, pinned validation path. The workflow records
+candidate results in typed PASS receipts tied to the candidate commit.
 
 ## Main website policy
 
@@ -82,10 +79,11 @@ are blocking imported release gates:
 - `release-scans` combines candidate-bound CodeQL, SpotBugs, Gitleaks, and
   runtime-dependency reports. CodeQL and Gitleaks findings require exact,
   candidate-tracked, project-owner exceptions lasting no more than 30 days;
-  HIGH and CRITICAL findings cannot be excepted. The current exception registry
-  records 39 specifically approved historical Gitleaks false positives, expiring
-  `2026-10-16T14:26:19Z`; new, changed or otherwise unapproved findings still fail.
-  See the [scoped owner decision](SCAN_FALSE_POSITIVE_APPROVAL_2026-09-16.md); and
+  HIGH and CRITICAL findings cannot be excepted. The exception registry records
+  each approved finding, its approval reference, and its expiry. The scan gate
+  fails on any finding without a matching current approval.
+  See the [exception registry](release-scan-exceptions.json) and the
+  [November owner decision](SCAN_FALSE_POSITIVE_APPROVAL_RENEWAL_2026-11-10.md).
 - `mcp-benchmarks` executes the registered 3.5.1-versus-4.0.0 JMH comparison,
   retains the raw draft for review, and finalizes only the exact reviewed
   bytes. A score ratio below 0.90 additionally requires a hashed 4.0.0
@@ -626,10 +624,12 @@ adds no official claim or release gate. `MCP-HTTP-020` is now
 `AMB-002`. Generic `Request`, `Throwable`, custom-collector, and
 application-telemetry privacy remain owned by `SOK-PRIV-001`.
 
-Five downstream gates remain `BLOCKED_UNCOMMITTED_LOCAL_MIGRATION`. The manifest
-records their exact public commit pins without treating uncommitted sibling
-work as evidence. The following is historical migration evidence, not the
-acceptance result for the current working tree or a frozen candidate:
+The manifest pins published commits for Barebones, both servlet adapters,
+ToyStore, and OpenTelemetry. Preflight checks verified the Barebones vendored
+JAR and live HTTP responses, both default and override adapter builds, and the
+candidate-only ToyStore and OpenTelemetry builds. The release workflow will
+execute these gates against the committed candidate. The following results
+describe earlier migration work:
 
 - ToyStore's local 4.0 MCP migration passes 14/14 tests, including six MCP
   tests and exact per-request 401/403 coverage, but the migration is
@@ -651,10 +651,8 @@ acceptance result for the current working tree or a frozen candidate:
 
 The 2026-09-13 owner decision supersedes the old servlet compatibility baseline:
 adapters 2.0.0 require core 4.0.0. Their default and explicit-override tests must
-both consume the same exact candidate JAR. The current manifest targets adapter
-and OTel 2.0.0 coordinates but deliberately preserves blocked status and old
-pins until the owner commits reviewed changes and candidate-bound validation
-establishes retrievable replacements.
+both consume the same exact candidate JAR. The manifest targets adapter and
+OTel 2.0.0 coordinates at the published migration commits.
 
 The checksum-pinned TypeScript and Go interoperability harnesses are checked in,
 pass against the local snapshot candidate, and are `READY`; the release run must
@@ -666,7 +664,6 @@ replay, smoke and release soak, the bounded two-listener localization fleet
 fixture, conformance, and candidate
 localization gates.
 
-`scripts/validate-release-candidate.sh` stops on these statuses before building.
 Change a gate to `READY` only in the same reviewed commit that supplies its
 immutable pin and working validation entry point. A branch, tag, dirty sibling
 checkout, or local substitution is never accepted as a pin.
@@ -849,8 +846,7 @@ bash -n release/scripts/install-pinned-corretto-linux-x64.sh
 
 The first command validates the currently recorded pins, exact gate order,
 evidence contracts, toolchain references, and statuses. Adding
-`--require-ready` is expected to fail until the five downstream blockers above
-are resolved.
+`--require-ready` checks that all gates are configured as `READY`.
 
 After the final candidate commit exists, dispatch
 `.github/workflows/release-validation.yml` from that commit and supply the same
