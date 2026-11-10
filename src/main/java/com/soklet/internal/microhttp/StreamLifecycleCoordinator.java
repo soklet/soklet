@@ -30,6 +30,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
@@ -1345,9 +1346,37 @@ public final class StreamLifecycleCoordinator {
 		private int pendingTasks;
 
 		private ObservationExecutor(int capacity, String prefix) {
-			super(0, capacity, 30L, TimeUnit.SECONDS, new LinkedBlockingQueue<>(capacity),
+			this(capacity, prefix, new LinkedBlockingQueue<>(capacity));
+		}
+
+		// Queue injection permits deterministic worker-retirement scheduling tests.
+		private ObservationExecutor(int capacity, String prefix, BlockingQueue<Runnable> queue) {
+			super(0, capacity, 30L, TimeUnit.SECONDS, queue,
 					threadFactory(prefix), new AbortPolicy());
+			setThreadFactory(getThreadFactory());
 			allowCoreThreadTimeOut(true);
+		}
+
+		@Override
+		public void setThreadFactory(@NonNull ThreadFactory factory) {
+			requireNonNull(factory);
+			super.setThreadFactory(worker -> factory.newThread(() -> {
+				try { worker.run(); }
+				finally { workerExited(); }
+			}));
+		}
+
+		private void workerExited() {
+			synchronized (this.dispatchLock) {
+				// TPE has already retired this worker. Its exit can race execute's
+				// worker-count check and queue offer while another observer blocks.
+				// Serializing this repair with submission closes both orderings,
+				// without retaining idle high-water workers or exceeding the core cap.
+				int needed = Math.min(this.pendingTasks, getCorePoolSize());
+				while (getPoolSize() < needed && prestartCoreThread()) {
+					// A retiring peer will perform the same check after its own exit.
+				}
+			}
 		}
 
 		@Override
@@ -1377,8 +1406,10 @@ public final class StreamLifecycleCoordinator {
 	}
 
 	private static ThreadFactory threadFactory(String prefix) {
+		ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
 		return runnable -> {
 			Thread thread = HelperThreads.platform(runnable, prefix + "-" + THREAD_SEQUENCE.incrementAndGet());
+			thread.setContextClassLoader(contextClassLoader);
 			thread.setDaemon(true);
 			thread.setPriority(Thread.NORM_PRIORITY);
 			return thread;

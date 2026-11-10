@@ -290,7 +290,8 @@ public interface ResponseMarshaler {
 																					@Nullable ResourceMethod resourceMethod);
 
 	/**
-	 * Prepares a response for an HTTP {@code OPTIONS} request.
+	 * Prepares a response for an HTTP {@code OPTIONS} request on a path with a
+	 * matching route on that listener. Unknown paths use {@link #forNotFound(Request)}.
 	 * <p>
 	 * Note that CORS preflight responses are handled specially by {@link #forCorsPreflightAllowed(Request, CorsPreflight, CorsPreflightResponse)}
 	 * and {@link #forCorsPreflightRejected(Request, CorsPreflight)} - not this method.
@@ -594,7 +595,8 @@ public interface ResponseMarshaler {
 		@ThreadSafe
 		public interface OptionsHandler {
 			/**
-			 * Prepares a response for an HTTP {@code OPTIONS} request.
+			 * Prepares a response for an HTTP {@code OPTIONS} request on a path with a
+			 * matching route on that listener. Unknown paths use {@link #forNotFound(Request)}.
 			 * <p>
 			 * Note that CORS preflight responses are handled specially by {@link #forCorsPreflightAllowed(Request, CorsPreflight, CorsPreflightResponse)}
 			 * and {@link #forCorsPreflightRejected(Request, CorsPreflight)} - not this method.

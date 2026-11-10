@@ -1537,7 +1537,16 @@ The defaults are 65,536 encoded bytes, 49,152 decoded bytes, a 15-minute
 lifetime, and 10 rounds. `McpProtectionConfig.Builder` exposes
 `maximumEncodedRequestStateSizeInBytes(...)` and
 `maximumDecodedRequestStateSizeInBytes(...)` alongside the lifetime and round
-settings, and validates their combined contract. Framework state is bound to the normalized
+settings. The builder validates positivity and decoded <= encoded, not that
+every continuation will fit. These are maximum rejection limits: decoded bytes
+include canonical framework metadata and application state; built-in encoded
+state also needs encryption-envelope and encoding overhead, including the key
+ID. Custom protectors may use different overhead. A limit can be valid at
+startup yet too small for a particular `input_required` result; sealing then
+fails with the sanitized JSON-RPC `-32603` internal error and emits no new state.
+Size limits using representative continuations, including request IDs and locale
+metadata. There is no universal minimum that guarantees arbitrary state fits.
+Framework state is bound to the normalized
 endpoint path, protocol version, JSON-RPC method, admitted authorization
 partition, and stable request parameters. The parameter digest excludes only
 the retry's `inputResponses` and `requestState` plus transient `_meta`
@@ -3414,34 +3423,42 @@ have no reserved protocol worker. Sustained admission or policy saturation can
 delay existing subscribers' hints until capacity becomes available. Projection
 deadlines bound application entry and stale output, not notification delivery.
 
-The following direct catalog work holds its protocol worker while it waits for
-an application-handler slot: built-in paged catalog lists (`tools/list`,
-`prompts/list`, `resources/list` and `resources/templates/list`) on
-`2025-06-18` and `2025-11-25`, and the `catalogAccessPolicy` step of
-`tools/call`, `prompts/get`, tool/prompt listing and prompt-argument completion
-on every revision. Soklet gives at most a quarter of
-`protocolExecutorConcurrency`, rounded down, concurrent direct invocations
-permission to use the application-handler queue: eight at the default of 32,
-and none when the pool is smaller than four. Permission is acquired before
-handler admission and retained until the bounded invocation returns, including
-its time running. This limits queue-eligible invocations; it does not reserve
-queue entries, and active permission holders reduce how many others may wait.
-Queueing still requires capacity under the shared
-`requestHandlerQueueCapacity`, preserves FIFO position and uses the original
-request deadline. Without permission, such a request needs a free handler slot
-and an empty queue; otherwise Soklet returns HTTP `503` with JSON-RPC `-32603`
-before that bounded callback enters.
+Direct catalog and initial subscription work holds its protocol worker while
+it waits for an application-handler slot. This covers built-in paged catalog
+lists (`tools/list`, `prompts/list`, `resources/list` and
+`resources/templates/list`) on `2025-06-18` and `2025-11-25`, and the
+`catalogAccessPolicy` step of `tools/call`, `prompts/get`, tool/prompt listing
+and prompt-argument completion on every revision. The same bound also covers
+initial 2025 session-GET admission, initial 2025 `resources/subscribe`
+authorization, and modern initial subscription authorization and catalog
+baselines. All of these stages share one allowance across the server's
+endpoints and protocol revisions.
 
-For protocol pools of at least four workers, subscription projections can hold
-up to another half of the pool. These two queueing categories alone cannot
-occupy every protocol worker. The remaining capacity is not reserved for
-`ping`, initialization, cancellation or discovery: active catalog-policy
-callbacks, session-stream admission, subscription authorization and other
-blocking protocol callbacks also consume protocol workers. Keep those callbacks
-prompt and bounded. Raise `protocolExecutorConcurrency` to increase the number
-of direct invocations eligible to queue. Ordinary operation handlers, including
-custom resource-list handlers, and subscription projections retain their
-existing queue behavior.
+At most a quarter of `protocolExecutorConcurrency`, rounded down, concurrent
+direct invocations receive permission to use the application-handler queue:
+eight at the default of 32, and none when the pool is smaller than four.
+Permission is acquired before handler admission and retained until the bounded
+invocation returns, including its time running. This limits queue-eligible
+invocations; it does not reserve queue entries, and active permission holders
+reduce how many others may wait. Queueing still requires capacity under
+`requestHandlerQueueCapacity`, preserves FIFO position and uses the original
+operation deadline. Without permission, such a request needs a free handler
+slot and an empty queue; otherwise Soklet returns the existing capacity
+response before that bounded callback enters. Initial legacy GET and resource
+authorization return bodyless HTTP `503`; modern subscription and catalog
+operations use HTTP `503` with JSON-RPC `-32603`.
+
+For protocol pools of at least four workers, scheduled subscription projections
+can hold up to another half of the pool. These two queueing categories alone
+cannot occupy every protocol worker. The remaining capacity is not reserved
+for `ping`, initialization, cancellation or discovery: running application
+callbacks, other admission hooks and start observers still consume protocol
+workers. Keep those callbacks prompt and bounded. Raise
+`protocolExecutorConcurrency` to increase the number of direct invocations
+eligible to queue. Ordinary operation handlers, including custom resource-list
+handlers, scheduled subscription maintenance and renewals retain their
+existing queue behavior. Session DELETE keeps its independent owner-policy
+dispatcher.
 
 Finish observation, `MCP_TRACE_CORRELATION` and finish-observer-failure logs run
 on a separate bounded dispatcher using daemon platform threads, away from

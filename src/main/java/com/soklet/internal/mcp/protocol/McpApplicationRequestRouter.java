@@ -2312,6 +2312,7 @@ final class McpApplicationExecution {
 				pendingPolicyCancellationSubmissions++;
 			}
 
+			RejectedExecutionException dispatchFailure = null;
 			try {
 				boolean callbackCannotRun;
 				try {
@@ -2340,14 +2341,13 @@ final class McpApplicationExecution {
 							this.callbackChainReleased.countDown();
 						}
 					});
-				} catch (RejectedExecutionException ignored) {
-					// Each running sidecar retains its corresponding dispatcher slot, so
-					// outstanding sidecars cannot exceed handler concurrency. Rejection
-					// before physical drain is therefore an internal lifecycle violation;
-					// keep the gate closed rather than silently dropping public callbacks.
-					throw new IllegalStateException(
-							"Bounded policy cancellation sidecar capacity was violated.",
-							ignored);
+				} catch (RejectedExecutionException failure) {
+					// A rejected task cannot deliver callbacks. Do not run application
+					// code inline or retain the physical ticket behind a gate no worker
+					// can open. Preserve cancellation and release unclaimed registrations.
+					try { this.state.discardCallbacks(); }
+					finally { this.callbackChainReleased.countDown(); }
+					dispatchFailure = failure;
 				}
 			} finally {
 				synchronized (executionBoundaryLock) {
@@ -2357,6 +2357,8 @@ final class McpApplicationExecution {
 						cancellationCallbackExecutor.shutdown();
 				}
 			}
+			if (dispatchFailure != null)
+				reportCancellationDispatchFailure(dispatchFailure);
 		}
 
 		private void awaitCallbackChainRelease() {
@@ -2760,6 +2762,11 @@ final class McpApplicationExecution {
 		}
 	}
 
+	private void reportCancellationDispatchFailure(@NonNull Throwable failure) {
+		try { executionObserver.didFailCancellationDispatch(failure); }
+		catch (Throwable ignored) { /* Diagnostics cannot replace completed cancellation effects. */ }
+	}
+
 	private void finishGracefulDrainIfComplete() {
 		if (!quiescing.get() || stopped.get())
 			return;
@@ -2909,6 +2916,7 @@ final class McpApplicationExecution {
 		private final CountDownLatch cancellationCallbacksFinished = new CountDownLatch(1);
 		private final CountDownLatch cancellationEffectsReady = new CountDownLatch(1);
 		private volatile boolean cancellationCallbacksOutstanding;
+		private @Nullable RejectedExecutionException cancellationDispatchFailure;
 		@NonNull
 		private TerminalState terminalState;
 		private boolean handlerEntryCommitted;
@@ -3364,6 +3372,7 @@ final class McpApplicationExecution {
 					releaseResponseOwnership();
 				} finally {
 					cancellationEffectsReady.countDown();
+					reportCancellationDispatchFailure();
 				}
 			});
 		}
@@ -3376,18 +3385,38 @@ final class McpApplicationExecution {
 				return;
 			}
 			cancellationCallbacksOutstanding = true;
-			cancellationCallbackExecutor.execute(() -> {
-				awaitCancellationLatch(cancellationEffectsReady);
-				try (McpApplicationExecutionObserver.LifecycleScope ignored = executionObserver.enterLifecycleExecution()) {
-					cancellation.releaseCallbacks();
-				}
+			try {
+				cancellationCallbackExecutor.execute(() -> {
+					awaitCancellationLatch(cancellationEffectsReady);
+					try (McpApplicationExecutionObserver.LifecycleScope ignored = executionObserver.enterLifecycleExecution()) {
+						cancellation.releaseCallbacks();
+					}
+					finally { cancellationCallbacksFinished.countDown(); }
+				});
+			} catch (RejectedExecutionException failure) {
+				try { cancellation.discardCallbacks(); }
 				finally { cancellationCallbacksFinished.countDown(); }
-			});
+				cancellationDispatchFailure = failure;
+			}
 		}
 
 		private void awaitCancellationCallbacks() {
-			if (!cancellationCallbacksOutstanding) return;
+			synchronized (terminalLock) {
+				// Cancellation publishes its reason before submitting the sidecar.
+				// Join that election before deciding no callback work was reserved.
+				if (!cancellationCallbacksOutstanding) return;
+			}
 			awaitCancellationLatch(cancellationCallbacksFinished);
+		}
+
+		private void reportCancellationDispatchFailure() {
+			RejectedExecutionException failure;
+			synchronized (terminalLock) {
+				failure = cancellationDispatchFailure;
+				cancellationDispatchFailure = null;
+			}
+			if (failure != null)
+				McpApplicationExecution.this.reportCancellationDispatchFailure(failure);
 		}
 
 		private void awaitCancellationLatch(CountDownLatch latch) {
@@ -3468,7 +3497,10 @@ final class McpApplicationExecution {
 				else
 					abandonedResponses.incrementAndGet();
 				try { releaseResponseOwnership(); }
-				finally { cancellationEffectsReady.countDown(); }
+				finally {
+					cancellationEffectsReady.countDown();
+					reportCancellationDispatchFailure();
+				}
 			}
 		}
 

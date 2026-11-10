@@ -17,11 +17,12 @@
         "src/test/java/com/soklet/McpMetricsEventDeliveryPublicRuntimeTests.java#collectorFailuresKeepRequestContextApplicationOwnedAndLogsRedacted",
         "src/test/java/com/soklet/McpPreAdmissionMetricsEventPublicRuntimeTests.java#throwingAdmissionLogsABoundedFailureTypeWithoutCredentialCarriers",
         "src/test/java/com/soklet/McpRequestObservationPublicRuntimeTests.java#throwingObservationCallbacksKeepRawCarriersApplicationOwnedAndLogsRedacted",
-        "src/test/java/com/soklet/SokletApplicationLogFallbackTests.java#fallbackIsBoundedValidUtf8AndEmitsOnlyTheThrowableClass"
+        "src/test/java/com/soklet/SokletApplicationLogFallbackTests.java#fallbackIsBoundedValidUtf8AndEmitsOnlyTheThrowableClass",
+        "src/test/java/com/soklet/internal/mcp/protocol/McpCancellationDispatchSafetyTests.java#cancellationDispatchDiagnosticOmitsUntrustedFailureDetails"
       ],
       "category": "LOG",
       "classification": "REDACTED",
-      "contract": "Default MCP lifecycle, admission-callback failure, collector-failure, startup, and transport-failure logs use fixed text or bounded diagnostics and do not attach Request, Response, ResourceMethod, or Throwable carriers. Admission failures expose only the configured endpoint path and a throwable class name capped at 256 characters; exception messages, causes, suppressed failures and request credentials are not traversed. Omission of an entire generic HTTP or semantic MCP observation pair under bounded delivery pressure is reported only with fixed text and without carrier attachments. Capacity omission is reported as MCP_SERVER_CONFIGURATION at most once per minute with fixed text; changing its event kind does not add carrier attachments.",
+      "contract": "Default MCP lifecycle, admission-callback failure, collector-failure, startup, and transport-failure logs use fixed text or bounded diagnostics and do not attach Request, Response, ResourceMethod, or Throwable carriers. Admission failures expose only the configured endpoint path and a throwable class name capped at 256 characters; exception messages, causes, suppressed failures and request credentials are not traversed. Omission of an entire generic HTTP or semantic MCP observation pair under bounded delivery pressure is reported only with fixed text and without carrier attachments. Capacity omission is reported as MCP_SERVER_CONFIGURATION at most once per minute with fixed text; changing its event kind does not add carrier attachments. Rejected cancellation-sidecar delivery is reported after transition locks are released using fixed text and only the throwable class name capped at 256 characters; it does not attach the Throwable or inspect its message, causes, or suppressed failures.",
       "id": "PRIV-BOUND-001",
       "name": "Built-in fixed and redacted MCP logs",
       "sourcePaths": [
@@ -30,6 +31,15 @@
           "key": "PRIV-MATCH-001:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#didFailAdmission(String,Throwable)->LogEvent.with:SERVER_INTERNAL_ERROR@1",
           "matcherRuleId": "PRIV-MATCH-001",
           "member": "didFailAdmission(String,Throwable)",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultMcpServer",
+          "sink": "LogEvent.with:SERVER_INTERNAL_ERROR"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultMcpServer.java",
+          "key": "PRIV-MATCH-001:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#didFailCancellationDispatch(Throwable)->LogEvent.with:SERVER_INTERNAL_ERROR@1",
+          "matcherRuleId": "PRIV-MATCH-001",
+          "member": "didFailCancellationDispatch(Throwable)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultMcpServer",
           "sink": "LogEvent.with:SERVER_INTERNAL_ERROR"
@@ -138,6 +148,15 @@
           "key": "PRIV-MATCH-016:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#didFailAdmission(String,Throwable)->LogEvent.attachment.build@1",
           "matcherRuleId": "PRIV-MATCH-016",
           "member": "didFailAdmission(String,Throwable)",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultMcpServer",
+          "sink": "LogEvent.attachment.build"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultMcpServer.java",
+          "key": "PRIV-MATCH-016:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#didFailCancellationDispatch(Throwable)->LogEvent.attachment.build@1",
+          "matcherRuleId": "PRIV-MATCH-016",
+          "member": "didFailCancellationDispatch(Throwable)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultMcpServer",
           "sink": "LogEvent.attachment.build"
@@ -3100,6 +3119,15 @@
           "key": "PRIV-MATCH-005:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#didFailAdmission(String,Throwable)->RequestOrThrowable.declaration@1",
           "matcherRuleId": "PRIV-MATCH-005",
           "member": "didFailAdmission(String,Throwable)",
+          "occurrence": 1,
+          "owner": "com.soklet.DefaultMcpServer",
+          "sink": "RequestOrThrowable.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/DefaultMcpServer.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/DefaultMcpServer.java#com.soklet.DefaultMcpServer#didFailCancellationDispatch(Throwable)->RequestOrThrowable.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "didFailCancellationDispatch(Throwable)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultMcpServer",
           "sink": "RequestOrThrowable.declaration"
@@ -10030,6 +10058,15 @@
           "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationExecutionObserver.java#com.soklet.internal.mcp.protocol.McpApplicationExecutionObserver#didFailAdmission(String,Throwable)->RequestOrThrowable.declaration@1",
           "matcherRuleId": "PRIV-MATCH-005",
           "member": "didFailAdmission(String,Throwable)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecutionObserver",
+          "sink": "RequestOrThrowable.declaration"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationExecutionObserver.java",
+          "key": "PRIV-MATCH-005:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationExecutionObserver.java#com.soklet.internal.mcp.protocol.McpApplicationExecutionObserver#didFailCancellationDispatch(Throwable)->RequestOrThrowable.declaration@1",
+          "matcherRuleId": "PRIV-MATCH-005",
+          "member": "didFailCancellationDispatch(Throwable)",
           "occurrence": 1,
           "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecutionObserver",
           "sink": "RequestOrThrowable.declaration"
@@ -47051,6 +47088,15 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationExecutionObserver.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationExecutionObserver.java#com.soklet.internal.mcp.protocol.McpApplicationExecutionObserver#didFailCancellationDispatch(Throwable)->Throwable.NullPointerException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "didFailCancellationDispatch(Throwable)",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecutionObserver",
+          "sink": "Throwable.NullPointerException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationExecutionObserver.java",
           "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationExecutionObserver.java#com.soklet.internal.mcp.protocol.McpApplicationExecutionObserver#didStartHttpRequest(Request,String)->Throwable.NullPointerException@1",
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "didStartHttpRequest(Request,String)",
@@ -47414,15 +47460,6 @@
           "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationExecution.BoundedPolicyCancellation#bindCancellationTarget(BooleanSupplier)->Throwable.IllegalStateException@1",
           "matcherRuleId": "PRIV-MATCH-011",
           "member": "bindCancellationTarget(BooleanSupplier)",
-          "occurrence": 1,
-          "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecution.BoundedPolicyCancellation",
-          "sink": "Throwable.IllegalStateException"
-        },
-        {
-          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpApplicationRequestRouter.java#com.soklet.internal.mcp.protocol.McpApplicationExecution.BoundedPolicyCancellation#dispatchCancellationIfReady()->Throwable.IllegalStateException@1",
-          "matcherRuleId": "PRIV-MATCH-011",
-          "member": "dispatchCancellationIfReady()",
           "occurrence": 1,
           "owner": "com.soklet.internal.mcp.protocol.McpApplicationExecution.BoundedPolicyCancellation",
           "sink": "Throwable.IllegalStateException"
@@ -49247,9 +49284,9 @@
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime.LegacyUriGrantControl#authorize(long,McpApplicationExecution.BoundedPolicyCancellation,Runnable)->Throwable.McpApplicationPolicyCapacityException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime.LegacyUriGrantControl#authorize(long,boolean,McpApplicationExecution.BoundedPolicyCancellation,Runnable)->Throwable.McpApplicationPolicyCapacityException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "authorize(long,McpApplicationExecution.BoundedPolicyCancellation,Runnable)",
+          "member": "authorize(long,boolean,McpApplicationExecution.BoundedPolicyCancellation,Runnable)",
           "occurrence": 1,
           "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.LegacyUriGrantControl",
           "sink": "Throwable.McpApplicationPolicyCapacityException"

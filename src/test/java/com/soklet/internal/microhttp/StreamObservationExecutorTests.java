@@ -20,12 +20,20 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.time.Duration;
+import java.util.List;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 
@@ -35,6 +43,66 @@ import static org.junit.jupiter.api.Assertions.*;
 @Timeout(60)
 class StreamObservationExecutorTests {
     private static final int CAPACITY = 4;
+
+    @Test
+    void retiringIdleWorkerCannotStrandAnObservationBehindABlockedPeer() throws Exception {
+        ExpiryQueue queue = new ExpiryQueue();
+        Class<?> type = Class.forName(StreamLifecycleCoordinator.class.getName() + "$ObservationExecutor");
+        Constructor<?> constructor = type.getDeclaredConstructor(int.class, String.class, BlockingQueue.class);
+        constructor.setAccessible(true);
+        ThreadPoolExecutor executor = (ThreadPoolExecutor) constructor.newInstance(2, "expiry-race-test", queue);
+        queue.executor = executor;
+        executor.setKeepAliveTime(50, TimeUnit.MILLISECONDS);
+        CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
+        CountDownLatch warm = new CountDownLatch(1), delivered = new CountDownLatch(1);
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        try {
+            executor.execute(() -> hold(entered, release, failure));
+            assertTrue(entered.await(3, TimeUnit.SECONDS));
+            queue.pauseExpiry.set(true);
+            executor.execute(warm::countDown);
+            assertTrue(warm.await(3, TimeUnit.SECONDS));
+            assertTrue(queue.expired.await(3, TimeUnit.SECONDS));
+            assertEquals(2, executor.getPoolSize());
+            // execute has observed both workers before offer permits the idle one
+            // to retire. The remaining worker cannot consume this new observation.
+            queue.pauseOffer.set(true);
+            executor.execute(delivered::countDown);
+            assertTrue(delivered.await(3, TimeUnit.SECONDS));
+            await(() -> executor.getPoolSize() == 1 && executor.getQueue().isEmpty());
+            assertEquals(1, executor.getActiveCount());
+            release.countDown();
+            await(() -> executor.getPoolSize() == 0);
+            assertEquals(2, executor.getCorePoolSize());
+            assertNull(failure.get());
+        } finally {
+            queue.releaseExpiry.countDown(); release.countDown();
+            executor.shutdownNow();
+            assertTrue(executor.awaitTermination(3, TimeUnit.SECONDS));
+        }
+    }
+
+    @Test
+    void lazilyCreatedStreamHelpersUseTheCoordinatorCreationLoader() throws Exception {
+        Thread caller = Thread.currentThread();
+        ClassLoader startupLoader = caller.getContextClassLoader();
+        StreamLifecycleCoordinator owner = new StreamLifecycleCoordinator(2, 1, Duration.ofSeconds(1), ignored -> {});
+        try (URLClassLoader requestLoader = new URLClassLoader("request-helper-test", new URL[0], startupLoader)) {
+            try {
+                caller.setContextClassLoader(requestLoader);
+                for (String name : List.of("callbackExecutor", "terminationExecutor", "diagnosticExecutor", "interruptExecutor", "supervisor")) {
+                    Field field = StreamLifecycleCoordinator.class.getDeclaredField(name);
+                    field.setAccessible(true);
+                    ExecutorService executor = (ExecutorService) field.get(owner);
+                    Thread worker = executor.submit(Thread::currentThread).get(3, TimeUnit.SECONDS);
+                    assertSame(startupLoader, worker.getContextClassLoader(), name);
+                }
+            } finally { caller.setContextClassLoader(startupLoader); }
+        } finally {
+            owner.stopAdmission();
+            assertTrue(owner.awaitTermination(System.nanoTime() + TimeUnit.SECONDS.toNanos(3)));
+        }
+    }
 
     @Test
     void completionDoesNotInterruptIdleWorkersAndBlockedObserversKeepIndependentCapacity() throws Exception {
@@ -156,5 +224,29 @@ class StreamObservationExecutorTests {
     private static final class CountingWorkers {
         private final AtomicInteger created = new AtomicInteger();
         private final AtomicInteger interruptions = new AtomicInteger();
+    }
+
+    private static final class ExpiryQueue extends LinkedBlockingQueue<Runnable> {
+        private final AtomicBoolean pauseExpiry = new AtomicBoolean(), pauseOffer = new AtomicBoolean();
+        private final CountDownLatch expired = new CountDownLatch(1), releaseExpiry = new CountDownLatch(1);
+        private ThreadPoolExecutor executor;
+        private ExpiryQueue() { super(2); }
+        @Override public Runnable poll(long time, TimeUnit unit) throws InterruptedException {
+            Runnable task = super.poll(time, unit);
+            if (task == null && pauseExpiry.compareAndSet(true, false)) {
+                expired.countDown();
+                if (!releaseExpiry.await(3, TimeUnit.SECONDS)) throw new AssertionError("Missing expiry release.");
+            }
+            return task;
+        }
+        @Override public boolean offer(Runnable task) {
+            if (pauseOffer.compareAndSet(true, false)) {
+                releaseExpiry.countDown();
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+                while (executor.getPoolSize() != 1 && System.nanoTime() - deadline < 0L) Thread.onSpinWait();
+                if (executor.getPoolSize() != 1) throw new AssertionError("Idle worker did not retire.");
+            }
+            return super.offer(task);
+        }
     }
 }

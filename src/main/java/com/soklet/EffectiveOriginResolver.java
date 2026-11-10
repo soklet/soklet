@@ -47,6 +47,10 @@ import static java.util.Objects.requireNonNull;
  * Trusted {@code Forwarded host=} and {@code X-Forwarded-Host} values are validated against the same host grammar
  * Soklet applies to {@code Host}; invalid forwarded host values are ignored.
  * <p>
+ * This resolves origin metadata, not an application URL allowlist. Trusted
+ * forwarded protocols are parsed as URI schemes; applications using the value
+ * for HTTP redirects or outbound requests must apply their intended scheme policy.
+ * <p>
  * Defaults: if {@link #allowOriginFallback(Boolean)} is left unset, {@code Origin} fallback is enabled only for
  * {@link TrustPolicy#TRUST_ALL}; otherwise it is disabled.
  */

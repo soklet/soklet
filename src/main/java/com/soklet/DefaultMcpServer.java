@@ -496,6 +496,16 @@ final class DefaultMcpServer implements McpServer {
 			}
 
 			@Override
+			public void didFailCancellationDispatch(@NonNull Throwable failure) {
+				String failureType = requireNonNull(failure).getClass().getName();
+				if (failureType.length() > 256) failureType = failureType.substring(0, 256);
+				safelyLogRequestObservation(lifecycleObserver, LogEvent.with(
+						LogEventType.SERVER_INTERNAL_ERROR,
+						"MCP cancellation callbacks were omitted because their bounded dispatcher rejected delivery (failureType=" + failureType + ").")
+						.build(), null);
+			}
+
+			@Override
 			@NonNull
 			public HttpRequestObservation didStartHttpRequest(@NonNull Request request, @NonNull String endpointPath) {
 				requireNonNull(request);

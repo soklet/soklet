@@ -101,6 +101,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
@@ -6989,6 +6990,18 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			McpLegacySessionTransportAdmission.@Nullable Rejected rejection,
 			McpLegacySessionStore.@Nullable Owner owner, @Nullable McpEffectivePartition partition) { }
 
+	/** Initial subscription work shares the direct catalog wait allowance; scheduled maintenance retains its own bounded admission. */
+	@NonNull
+	private <T extends @NonNull Object> T invokeSubscriptionPolicy(
+			@NonNull McpApplicationExecution application,
+			@NonNull Callable<@NonNull T> callback, long deadline,
+			McpApplicationExecution.@NonNull BoundedPolicyCancellation cancellation,
+			@NonNull Runnable physicalExit, boolean directProtocolCaller) throws Exception {
+		return directProtocolCaller
+				? application.invokeBoundedPolicyIfAvailable(callback, deadline, cancellation, physicalExit)
+				: application.invokeBoundedPolicy(callback, deadline, cancellation, physicalExit);
+	}
+
 	private LegacyHttpAuthorization authorizeLegacyHttp(RequestControl control, Request request,
 			EndpointRuntime endpoint, String revision, Set<McpResourceNotificationType> offered,
 			boolean reauthorization, long deadline,
@@ -7003,7 +7016,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		Runnable exited = () -> { control.legacyHttpPolicyPhysicallyFinished(); work.callbackExited(); };
 		McpLegacySessionTransportAdmission.Decision decision = request.getHttpMethod() == HttpMethod.DELETE
 				? control.application.invokeBoundedSessionOwnerPolicy(admission, deadline, cancellation, exited)
-				: control.application.invokeBoundedPolicy(admission, deadline, cancellation, exited);
+				: invokeSubscriptionPolicy(control.application, admission, deadline, cancellation, exited, !reauthorization);
 		if (decision instanceof McpLegacySessionTransportAdmission.Rejected rejected)
 			return new LegacyHttpAuthorization(null, rejected, null, null);
 		McpLegacySessionTransportAdmission.Accepted accepted = (McpLegacySessionTransportAdmission.Accepted) decision;
@@ -7115,7 +7128,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				}
 				control.reserveLegacyHttpPolicyWork(); target.callbackEntered();
 				try {
-					McpSubscriptionAuthorization decision = target.authorize(deadline, cancellation,
+					McpSubscriptionAuthorization decision = target.authorize(deadline, true, cancellation,
 							() -> { control.legacyHttpPolicyPhysicallyFinished(); target.callbackExited(); });
 					if (!control.protocolProcessingAllowed()) {
 						grant.abort();
@@ -10481,7 +10494,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			if (release != null) release.physicalComplete();
 			if (remove) legacyUriGrantControls.remove(this);
 		}
-		McpSubscriptionAuthorization authorize(long deadline,
+		McpSubscriptionAuthorization authorize(long deadline, boolean directProtocolCaller,
 				McpApplicationExecution.BoundedPolicyCancellation next, Runnable physicalExit) throws Exception {
 			Optional<Object> context; Optional<Instant> previous;
 			McpLegacySessionStore.Grant authorizationGrant;
@@ -10491,14 +10504,14 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			McpSubscriptionAuthorizationContext snapshot = new SubscriptionAuthorizationContextSnapshot(initialContext,
 					context, previous, callbackDeadline, false, false, false, Set.of(URI.create(uri)), Set.of());
 			McpInvocationFeatures features = McpInvocationFeatures.fromFeatures(Map.of(CancelationToken.class, next));
-			return application.invokeBoundedPolicy(() -> {
+			return invokeSubscriptionPolicy(application, () -> {
 				if (!authorizationGrant.tryBeginAuthorization()) throw new McpApplicationPolicyCapacityException();
 				try {
 					return requireNonNull(subscriptionRuntimeConfiguration.authorizer().orElseThrow().authorize(snapshot, features),
 							"The MCP resource authorizer returned null.");
 				} finally { authorizationGrant.finishAuthorization(); }
 			},
-					deadline, next, physicalExit);
+					deadline, next, physicalExit, directProtocolCaller);
 		}
 		void accept(McpSubscriptionAuthorization.Allowed decision, long lease, long acceptedGeneration) {
 			synchronized (lock) {
@@ -10583,7 +10596,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				long deadline = minimumDeadline(now, current.deadlineNanos(), now
 						+ subscriptionRuntimeConfiguration.authorizationTimeout().toNanos());
 				work.callbackEntered(); callbackEntered(); callbackOwned = true;
-				McpSubscriptionAuthorization result = authorize(deadline, next,
+				McpSubscriptionAuthorization result = authorize(deadline, false, next,
 						() -> { physical.close(); callbackExited(); work.callbackExited(); });
 				if (result instanceof McpSubscriptionAuthorization.Denied) {
 					boolean retired = current.retireIfCurrent(generation, McpLegacySessionStore.GrantCause.AUTHORIZATION_DENIED);
@@ -11918,7 +11931,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					Map.of(CancelationToken.class, check.cancellation()));
 			try {
 				SubscriptionAuthorizationCallbackResult callbackResult =
-						application.invokeBoundedPolicy(
+						invokeSubscriptionPolicy(application,
 								() -> {
 									McpSubscriptionAuthorization authorization =
 											authorizer.authorize(check.context(), features);
@@ -11931,7 +11944,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 								},
 								check.deadlineNanos(),
 								check.cancellation(),
-								() -> subscriptionAuthorizationPhysicallyExited(check));
+								() -> subscriptionAuthorizationPhysicallyExited(check),
+								check.kind() == SubscriptionAuthorizationCheckKind.INITIAL);
 				McpSubscriptionAuthorization authorization =
 						callbackResult.authorization();
 				if (authorization instanceof McpSubscriptionAuthorization.Allowed allowed)
@@ -12777,7 +12791,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				return CatalogProjectionExecution.failed(new IllegalStateException(
 						"The MCP subscription endpoint is unavailable."));
 			try {
-				McpCatalogProjectionQueue.Digest digest = application.invokeBoundedPolicy(
+				McpCatalogProjectionQueue.Digest digest = invokeSubscriptionPolicy(application,
 						() -> projectCatalogDigest(endpointRuntime,
 								requiredCheck.family(), requiredCheck.protocolProfile(),
 								requiredCheck.requestContext(),
@@ -12785,7 +12799,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 								requiredCheck.deadlineNanos()),
 						requiredCheck.deadlineNanos(),
 						requiredCheck.cancellation(),
-						() -> catalogProjectionPhysicallyExited(requiredCheck));
+						() -> catalogProjectionPhysicallyExited(requiredCheck),
+						requiredCheck.projection() == null);
 				return CatalogProjectionExecution.succeeded(digest);
 			} catch (McpApplicationPolicyCapacityException exception) {
 				return CatalogProjectionExecution.capacityRejected(exception);

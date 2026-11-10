@@ -54,7 +54,20 @@ class RequestParsingRegressionTests {
 		assertEquals("/files/a?b", copy.getPath());
 		assertEquals("/files/a%3Fb", copy.getRawPath());
 		assertEquals(original.getRawQuery(), copy.getRawQuery());
-		assertThrows(IllegalRequestException.class, () -> original.copy().path("/files/a?b").finish());
+
+		Request rewritten = original.copy().path("/prefix" + original.getPath()).finish();
+		assertEquals("/prefix/files/a?b", rewritten.getPath());
+		assertEquals("/prefix/files/a%3Fb", rewritten.getRawPath());
+		assertEquals("/prefix/files/a%3Fb?selected=ok", rewritten.getRawPathAndQuery());
+		assertEquals(original.getRawQuery(), rewritten.getRawQuery());
+		assertEquals(Map.of("selected", List.of("ok")), rewritten.getQueryParameters());
+
+		Request raw = Request.fromRawUrl(HttpMethod.GET, "/files/a?selected=ok");
+		assertEquals("/files/a", raw.getPath());
+		assertEquals("/files/a", raw.getRawPath());
+		assertEquals(Optional.of("selected=ok"), raw.getRawQuery());
+		assertThrows(IllegalRequestException.class,
+				() -> Request.fromRawUrl(HttpMethod.GET, "/files/a%3Fb?selected=%ZZ"));
 		assertThrows(IllegalRequestException.class, () -> Request.fromPath(HttpMethod.GET, "/files/a?b"));
 	}
 

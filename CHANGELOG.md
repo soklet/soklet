@@ -519,10 +519,27 @@ maintenance or security fixes afterward. See the explicit
 
 ### Correctness Fixes
 
+- Ordinary non-preflight OPTIONS requests now return 404 for paths with no
+  matching route on that listener. Known routes, explicit OPTIONS methods,
+  OPTIONS * and CORS preflight retain their separate behavior.
+- Decoded path rewrites through `Request.Copier.path(...)` preserve literal
+  question marks without treating them as query strings.
+- Streaming observation workers repair missing delivery capacity after idle
+  worker expiry, while retaining finite queues and idle-worker retirement.
+- MCP cancellation reserves callback retention before a handler can release
+  its slot. Rejected sidecar submissions open completion gates and finish
+  terminal effects without running application callbacks inline.
+- Shared metrics collectors retain enabled MCP families when another
+  configuration has only HTTP or SSE listeners.
+- Framework stream helpers capture their context class loader when their
+  thread factory is created, rather than retaining the first request's loader.
+- The annotation processor removes redundant named annotation registrations
+  while retaining universal processing and cooperation with other processors.
 - Both Servlet adapters reject invalid classpath resource prefixes and lookup
   paths before class-loader access or directory listing, including backslashes,
   NUL, traversal segments, extra leading slashes and Windows drive qualifiers.
-- Bound the direct MCP catalog work that waits for a handler slot while
+- Bound direct MCP catalog work and initial session/subscription admission,
+  authorization and catalog baselines that wait for a handler slot while
   holding a protocol worker. A quarter of `protocolExecutorConcurrency`,
   rounded down, bounds concurrent direct invocations permitted to queue;
   permission remains held until the bounded invocation returns, including
@@ -532,8 +549,10 @@ maintenance or security fixes afterward. See the explicit
   work from occupying every protocol worker. Active policy callbacks and
   other blocking protocol work can still exhaust the pool; no workers are
   reserved for control requests. This covers built-in paged lists on both
-  2025 revisions and direct catalog-access-policy evaluation. Ordinary handler
-  and subscription-projection queue behavior is unchanged.
+  2025 revisions, direct catalog-access-policy evaluation, initial 2025 GET and
+  resource-subscription authorization, and modern initial subscription work.
+  They share one allowance; scheduled maintenance, renewal and DELETE cleanup
+  retain their existing dispatchers.
 - Elect interrupted-startup cancellation atomically against readiness. A
   cancellation that loses to readiness preserves the running lifecycle and
   restores the caller's interrupt flag instead of shutting down a ready server.

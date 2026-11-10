@@ -95,6 +95,12 @@ public interface McpApplicationExecutionObserver {
 			throw new NullPointerException("admission failure property");
 	}
 
+	/** Reports unaccepted cancellation callback delivery after transition locks are released. */
+	default void didFailCancellationDispatch(@NonNull Throwable failure) {
+		if (failure == null)
+			throw new NullPointerException("cancellation dispatch failure");
+	}
+
 	/** Begins HTTP observation after selection of a configured MCP endpoint path. */
 	@NonNull
 	default HttpRequestObservation didStartHttpRequest(@NonNull Request request, @NonNull String endpointPath) {

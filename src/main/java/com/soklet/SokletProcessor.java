@@ -284,12 +284,6 @@ public final class SokletProcessor extends AbstractProcessor {
 	private int mcpProcessingErrorCount;
 	private boolean resourceMethodIndexErrorDetected;
 
-	// ---- Supported annotations ----------------------------------------------
-
-	private static final List<Class<? extends Annotation>> HTTP_AND_SSE_ANNOTATIONS = List.of(
-			GET.class, POST.class, PUT.class, PATCH.class, DELETE.class, HEAD.class, OPTIONS.class,
-			SseEventSource.class
-	);
 	// ---- Cache modes ---------------------------------------------------------
 
 	private enum CacheMode {
@@ -401,29 +395,10 @@ public final class SokletProcessor extends AbstractProcessor {
 	@Override
 	@NonNull
 	public Set<@NonNull String> getSupportedAnnotationTypes() {
-		Set<String> out = new LinkedHashSet<>();
-		for (Class<? extends Annotation> c : HTTP_AND_SSE_ANNOTATIONS) {
-			out.add(c.getCanonicalName());
-			Class<? extends Annotation> container = findRepeatableContainer(c);
-			if (container != null) out.add(container.getCanonicalName());
-		}
-		out.add(McpServerEndpoint.class.getCanonicalName());
-		out.add(McpTool.class.getCanonicalName());
-		out.add(McpAppTool.class.getCanonicalName());
-		out.add(McpToolArgument.class.getCanonicalName());
-		out.add(McpToolProperty.class.getCanonicalName());
-		out.add(McpHeader.class.getCanonicalName());
-		out.add(McpPrompt.class.getCanonicalName());
-		out.add(McpPromptArgument.class.getCanonicalName());
-		out.add(McpPromptCompletion.class.getCanonicalName());
-		out.add(McpResource.class.getCanonicalName());
-		out.add(McpResourceCompletion.class.getCanonicalName());
-		out.add(McpResourceUriParameter.class.getCanonicalName());
-		out.add(McpResourceList.class.getCanonicalName());
 		// Keep the processor active when a touched type removes its final Soklet
 		// annotation so stale generated index rows can still be pruned.
-		out.add("*");
-		return out;
+		// The wildcard already includes every named and repeatable annotation.
+		return Set.of("*");
 	}
 
 	@Override

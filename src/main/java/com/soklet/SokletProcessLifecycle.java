@@ -60,9 +60,9 @@ import static java.util.Objects.requireNonNull;
  * result. A blocked output worker may remain after that allowance. No public
  * reporter switch is provided; configure process stderr capture as needed.
  * <p>
- * Shutdown requested during startup may return a terminal result without
- * reaching readiness; it does not by itself cause a startup exception.
- * Inspect the returned result to determine the lifecycle outcome.
+ * Shutdown requested during startup can prevent readiness. Managed public
+ * runs then throw {@link SokletStartupException} with the terminal result;
+ * internal terminal runs can return that result without reaching readiness.
  * <p>
  * JVM shutdown hooks run concurrently with no guaranteed ordering. On a
  * signal-driven JVM shutdown, the JVM may terminate before {@code run(...)},

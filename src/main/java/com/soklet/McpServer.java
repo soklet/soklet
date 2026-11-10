@@ -45,8 +45,9 @@ import static java.util.Objects.requireNonNull;
  * settings govern application dispatch. Configure the protocol budget with
  * {@link Builder#protocolExecutorConcurrency(Integer)} and
  * {@link Builder#protocolExecutorQueueCapacity(Integer)}. Keep shared-pool
- * callbacks bounded. Direct catalog-policy work and built-in 2025 catalog-page
- * rendering hold their protocol worker while waiting for an application slot.
+ * callbacks bounded. Direct catalog work, initial session GET admission,
+ * initial resource/subscription authorization and modern initial catalog
+ * baselines hold their protocol worker while waiting for an application slot.
  * A quarter of the protocol pool, rounded down, bounds concurrent direct
  * invocations permitted to queue. Permission remains held until the bounded
  * invocation returns, including while running; it does not reserve a queue
@@ -986,8 +987,9 @@ public sealed interface McpServer permits DefaultMcpServer {
 		 * Catalog/task subscription projections require at least two workers;
 		 * incompatible singleton configurations fail when {@link #build()} is called.
 		 * A quarter of this count, rounded down, also bounds concurrent direct
-		 * catalog and catalog-policy invocations permitted to queue for a handler
-		 * slot. Permission is retained until the bounded invocation returns,
+		 * catalog and initial subscription invocations permitted to queue for a
+		 * handler slot, including initial session GET admission, resource/subscription
+		 * authorization and modern catalog baselines. Permission is retained until the bounded invocation returns,
 		 * including while running, and does not reserve a queue entry. The default
 		 * count permits eight such invocations; a count below four permits none.
 		 * Without permission, direct work needs a free slot and an empty handler
@@ -1050,8 +1052,8 @@ public sealed interface McpServer permits DefaultMcpServer {
 
 		/**
 		 * Sets the positive, finite number of admitted requests that may wait for
-		 * an application handler slot. The default is {@code 128}. Direct catalog
-		 * and catalog-policy work is further limited by
+		 * an application handler slot. The default is {@code 128}. Direct catalog,
+		 * policy and initial subscription work is further limited by
 		 * {@link #protocolExecutorConcurrency(Integer)}.
 		 *
 		 * @param requestHandlerQueueCapacity maximum queued handler dispatches, or

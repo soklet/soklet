@@ -2002,11 +2002,18 @@ public final class Request {
 			return this;
 		}
 
+		/**
+		 * Replaces the copied request's decoded path. A literal {@code ?} is
+		 * path data and is encoded as {@code %3F} in the raw path; use
+		 * {@link #queryParameters(Map)} to replace query parameters.
+		 *
+		 * @param path decoded path
+		 * @return this copier
+		 */
 		@NonNull
 		public Copier path(@NonNull String path) {
 			requireNonNull(path);
 			this.builder.path(path);
-			this.builder.preserveDecodedPath = false;
 			// Clear preserved raw path since decoded path changed
 			this.builder.rawPath(null);
 			return this;

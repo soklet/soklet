@@ -48,6 +48,8 @@ public interface McpResourceReadContext {
 	 * Values are UTF-8 percent-decoded exactly once: an encoded slash
 	 * ({@code %2F}) becomes {@code /}, while {@code %252F} becomes the literal
 	 * string {@code %2F}. {@link #getUri()} retains the original client URI.
+	 * Captures can be empty and can contain decoded NUL, CR or LF; validate
+	 * values for the intended application use before using them.
 	 * Capturing a variable does not authorize filesystem access or establish
 	 * that a decoded path is safe.
 	 *

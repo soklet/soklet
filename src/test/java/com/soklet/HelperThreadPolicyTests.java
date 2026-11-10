@@ -44,28 +44,47 @@ class HelperThreadPolicyTests {
 	void streamingAuxiliaryFactoryPreservesTheConstructingContextLoader() throws Exception {
 		ClassLoader original = Thread.currentThread().getContextClassLoader();
 		int originalPriority = Thread.currentThread().getPriority();
-		ClassLoader intended = new ClassLoader(original) {};
+		ClassLoader startupLoader = new ClassLoader(original) {};
+		ClassLoader requestLoader = new ClassLoader(original) {};
 		AtomicReference<ClassLoader> observed = new AtomicReference<>();
+		AtomicReference<String> observedLocal = new AtomicReference<>();
+		AtomicInteger inherited = new AtomicInteger();
+		InheritableThreadLocal<String> local = new InheritableThreadLocal<>() {
+			@Override protected String childValue(String value) {
+				inherited.incrementAndGet();
+				throw new AssertionError("Streaming helpers must not inherit request context");
+			}
+		};
 		Thread worker = null;
 		try {
 			var method = StreamLifecycleCoordinator.class.getDeclaredMethod("threadFactory", String.class);
 			method.setAccessible(true);
+			Thread.currentThread().setContextClassLoader(startupLoader);
 			ThreadFactory factory = (ThreadFactory) method.invoke(null, "stream-loader-policy");
-			Thread.currentThread().setContextClassLoader(intended);
+			// Lazy worker creation under a request must keep the factory's loader.
+			Thread.currentThread().setContextClassLoader(requestLoader);
+			local.set("request context");
 			Thread.currentThread().setPriority(Thread.NORM_PRIORITY + 1);
-			worker = factory.newThread(() -> observed.set(Thread.currentThread().getContextClassLoader()));
+			worker = factory.newThread(() -> {
+				observed.set(Thread.currentThread().getContextClassLoader());
+				observedLocal.set(local.get());
+			});
 			Assertions.assertEquals(Thread.State.NEW, worker.getState());
 			Assertions.assertTrue(worker.isDaemon());
 			Assertions.assertFalse(worker.isVirtual());
 			Assertions.assertEquals(Math.min(Thread.NORM_PRIORITY,
 					Thread.currentThread().getThreadGroup().getMaxPriority()), worker.getPriority());
-			Assertions.assertSame(intended, worker.getContextClassLoader());
+			Assertions.assertSame(startupLoader, worker.getContextClassLoader());
 			Thread.currentThread().setContextClassLoader(original);
+			local.remove();
 			worker.start();
 			worker.join(5_000);
 			Assertions.assertFalse(worker.isAlive());
-			Assertions.assertSame(intended, observed.get());
+			Assertions.assertSame(startupLoader, observed.get());
+			Assertions.assertNull(observedLocal.get());
+			Assertions.assertEquals(0, inherited.get());
 		} finally {
+			local.remove();
 			Thread.currentThread().setContextClassLoader(original);
 			Thread.currentThread().setPriority(originalPriority);
 			if (worker != null && worker.isAlive()) {

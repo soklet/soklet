@@ -34,6 +34,10 @@ import static java.util.Objects.requireNonNull;
 /**
  * Represents the result of a {@link com.soklet.annotation.SseEventSource} "handshake".
  * <p>
+ * Return an explicit acceptance or rejection. With the default marshaler, a
+ * {@code null} result sends HTTP 204 without an internal-error diagnostic;
+ * browser {@code EventSource} clients then stop reconnecting.
+ * <p>
  * Once a handshake has been accepted, you may acquire a broadcaster via {@link SseServer#acquireBroadcaster(ResourcePath)}. After any configured client initializer returns successfully and the connection joins that broadcaster, it can receive subsequently broadcast Server-Sent Events. Broadcasts published before the connection joins are not buffered for it.
  * <p>
  * You might have a JavaScript Server-Sent Event client that looks like this:

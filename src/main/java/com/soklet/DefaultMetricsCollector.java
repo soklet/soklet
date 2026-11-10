@@ -258,21 +258,18 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	void initialize(@NonNull SokletConfig sokletConfig) {
 		requireNonNull(sokletConfig);
 		if (sokletConfig.getSseServer().isPresent()) this.includeSseMetrics.set(true);
-		this.includeMcpHandlerMetrics.set(sokletConfig.getMcpServer().isPresent());
-		this.includeMcpTransportMetrics.set(
-				sokletConfig.getMcpServer().isPresent());
-		this.includeMcpServerMetrics.set(
-				sokletConfig.getMcpServer().isPresent());
-		this.includeMcpRequestBoundaryMetrics.set(
-				sokletConfig.getMcpServer().isPresent());
-		this.includeMcpRequestLifecycleMetrics.set(
-				sokletConfig.getMcpServer().isPresent());
-		this.includeMcpRequestStreamLifecycleMetrics.set(
-				sokletConfig.getMcpServer().isPresent());
-		this.includeMcpSubscriptionLifecycleMetrics.set(
-				sokletConfig.getMcpServer().isPresent());
-		this.includeMcpKeepAliveMetrics.set(
-				sokletConfig.getMcpServer().isPresent());
+		// One collector may serve multiple configurations. A configuration without
+		// MCP must not hide families already enabled by another configuration/event.
+		if (sokletConfig.getMcpServer().isPresent()) {
+			this.includeMcpHandlerMetrics.set(true);
+			this.includeMcpTransportMetrics.set(true);
+			this.includeMcpServerMetrics.set(true);
+			this.includeMcpRequestBoundaryMetrics.set(true);
+			this.includeMcpRequestLifecycleMetrics.set(true);
+			this.includeMcpRequestStreamLifecycleMetrics.set(true);
+			this.includeMcpSubscriptionLifecycleMetrics.set(true);
+			this.includeMcpKeepAliveMetrics.set(true);
+		}
 	}
 
 	@Override

@@ -600,7 +600,11 @@ one prepaid observation per lifetime. Workers grow with outstanding work and
 are reused; idle workers expire. Observations can run more concurrently than
 the callback setting, so observers must support concurrent delivery. A blocked
 observation retains its own slot without queuing another admitted stream's
-observation behind it. Blocked cancelation workers can still queue later cancel
+observation behind it. Worker-exit repair preserves this delivery capacity
+when an idle observation worker retires. Stream helper thread factories capture
+their context class loader at creation; lazy workers do not retain a later
+request's loader. This is independent of the JDK virtual-thread carrier
+limitation. Blocked cancelation workers can still queue later cancel
 batches; all admitted application work remains counted until it exits.
 
 Precommit HTTP streaming rejection now reports the finite failsafe status to request write/finish observers and metrics, with bounded termination observation retaining the original rejected stream. The finite response and request finish do not wait for termination observers. These observers use a separate bounded allowance on the managed callback executor; accepted work remains tracked through shutdown. Capacity exhaustion while accepting omits that notification and logs `RESPONSE_STREAM_CANCELED`; omissions during graceful drain or forced shutdown are not logged. Admitted streams retain their reserved callback jobs. Transport handoff exceptions reach `didFailToWriteResponse` instead of being reported as successful writes.
@@ -1530,6 +1534,15 @@ headers. `Content-Length`, `Transfer-Encoding`, and other unsupported hop-by-hop
 headers still fail the accepted handshake because they can conflict with
 stream framing.
 
+Ordinary non-preflight `OPTIONS` requests now use not-found handling when no
+route matches on that listener, returning 404 by default instead of 204 with
+`Allow: OPTIONS`. Known routes retain automatic OPTIONS, explicit OPTIONS
+handlers still run, and `OPTIONS *` and CORS preflight keep their separate paths.
+
+`Request.Copier.path(...)` accepts a decoded path. A literal `?` from an encoded
+`%3F` remains path data during a rewrite; query parameters use their separate
+APIs. The ordinary path factories still reject accidental query strings.
+
 The standard HTTP server now separates its body-only request bound from its
 aggregate request bound. Configure
 `HttpServer.Builder.maximumRequestBodySizeInBytes(...)` when payload capacity
@@ -1708,21 +1721,25 @@ limiters, CORS, start observation and state opening share the separately tunable
 protocol pool: `protocolExecutorConcurrency` and `protocolExecutorQueueCapacity`
 default to 32/128, independent of application-handler executor settings.
 
-Direct built-in catalog pagination on the 2025 revisions and direct
-`catalogAccessPolicy` evaluation hold a protocol worker while they wait for a
-handler slot. A quarter of `protocolExecutorConcurrency`, rounded down, bounds
+Direct built-in catalog pagination on the 2025 revisions, direct
+`catalogAccessPolicy` evaluation, initial 2025 session-GET admission and resource
+subscription authorization, and modern initial subscription authorization and
+catalog baselines hold a protocol worker while they wait for a handler slot.
+They share one allowance across the server's endpoints and protocol revisions. A quarter of `protocolExecutorConcurrency`, rounded down, bounds
 concurrent direct invocations permitted to queue: eight at the default of 32,
 and none below four workers. Permission remains held until the bounded
 invocation returns, including while running, so those eight permissions do not
 guarantee eight spare queue entries. Queueing still requires capacity under
 `requestHandlerQueueCapacity` and preserves FIFO order and the original request
 deadline. Without permission, such a request needs a free slot and an empty
-queue, or it returns the existing HTTP `503`/JSON-RPC `-32603` capacity response.
-Raise `protocolExecutorConcurrency` to increase the number of direct invocations
-eligible to queue. Ordinary operation-handler and subscription-projection queue
-behavior is unchanged. Active policy callbacks, session-stream admission,
-subscription authorization and other blocking protocol callbacks can still
-consume the remaining protocol workers; keep their work prompt and bounded.
+queue, or it returns the existing capacity response: bodyless HTTP `503` for
+initial legacy GET/resource authorization, or HTTP `503` with JSON-RPC `-32603`
+for modern subscriptions and catalog operations. Raise `protocolExecutorConcurrency` to increase the number of direct invocations
+eligible to queue. Ordinary operation handlers, scheduled subscription
+projections and renewals retain their queue behavior; session DELETE keeps its
+independent owner-policy dispatcher. Running callbacks, other admission hooks
+and start observers can still consume the remaining protocol workers; keep
+their work prompt and bounded.
 No protocol workers are reserved for control requests.
 
 Common annotation replacements are `@McpArgument` → `@McpToolArgument` or

@@ -223,6 +223,38 @@ public class RequestTests {
 	}
 
 	@Test
+	public void copyRewritesDecodedQuestionMarkWithoutChangingQueryParameters() {
+		Request request = Request.fromRawUrl(HttpMethod.GET,
+				"/api/v1/files/what%3F.txt?q=a%20b&n=1");
+
+		Request rewritten = request.copy()
+				.path(request.getPath().substring("/api/v1".length()))
+				.finish();
+
+		Assertions.assertEquals("/files/what?.txt", rewritten.getPath());
+		Assertions.assertEquals("/files/what%3F.txt", rewritten.getRawPath());
+		Assertions.assertEquals("q=a%20b&n=1", rewritten.getRawQuery().orElseThrow());
+		Assertions.assertEquals(Map.of("q", List.of("a b"), "n", List.of("1")),
+				rewritten.getQueryParameters());
+		Assertions.assertEquals("/api/v1/files/what%3F.txt", request.getRawPath());
+	}
+
+	@Test
+	public void copyRewritesDecodedPathAndQueryParametersIndependently() {
+		Request request = Request.fromRawUrl(HttpMethod.GET, "/old?original=value");
+
+		Request rewritten = request.copy()
+				.path("/files/what?.txt")
+				.queryParameters(Map.of("q", List.of("new value")))
+				.finish();
+
+		Assertions.assertEquals("/files/what%3F.txt?q=new%20value", rewritten.getRawPathAndQuery());
+		Assertions.assertEquals(Map.of("q", List.of("new value")), rewritten.getQueryParameters());
+		Assertions.assertThrows(IllegalRequestException.class,
+				() -> Request.fromPath(HttpMethod.GET, "/bad?query=value"));
+	}
+
+	@Test
 	public void copyUpdatesRawQueryWhenQueryParametersChange() {
 		Request request = Request.withRawUrl(HttpMethod.GET, "/search?q=one%20two&lang=en").build();
 

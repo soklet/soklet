@@ -3793,7 +3793,108 @@ const REVIEWED_A9_A5_SCOPE_OVERRIDES = checkedReviewMap(
 ]
 , 'admission and readiness boundary controls');
 
+// Exact-source subscription admission and route-aware OPTIONS fixtures.
+// N3 fixed polling/interrupt controls are 25 s, or 35 s for initial baselines;
+// socket I/O separately retains per-read and shared-batch deadlines.
+// OPTIONS uses eight 2 s connect plus absolute 3 s capture controls (40 s).
+// The preflight authorizer matrix owns two sequential simulator generations.
+const REVIEWED_OPEN_LOWS_SCOPE_OVERRIDES = checkedReviewMap(
+[
+  [
+    "src/test/java/com/soklet/McpSubscriptionProtocolSaturationTests.java#juneSessionGetAdmissionSharesCatalogAllowanceAndKeepsCancellationAvailable#TEST",
+    {
+      "fileSha256": "20c8c21098b7f683c19f18c88b8333dc0b8db097f62abef6f31c68fbf3c44272",
+      "scopeSha256": "0a2bc81fcc1161b3e3c6fe278a95cc5f334c5da7fee3770bbb7db8899d8e4c2a",
+      "controlJoinMillis": 25000,
+      "controlComposition": "REVIEWED_SEQUENTIAL_SOURCE_BOUND"
+    }
+  ],
+  [
+    "src/test/java/com/soklet/McpSubscriptionProtocolSaturationTests.java#novemberSessionGetAdmissionLeavesDedicatedDeleteCleanupAvailable#TEST",
+    {
+      "fileSha256": "20c8c21098b7f683c19f18c88b8333dc0b8db097f62abef6f31c68fbf3c44272",
+      "scopeSha256": "c101649f859074507582124b1ac72b568f41d2b90db9197e4a137dbcc40c794b",
+      "controlJoinMillis": 25000,
+      "controlComposition": "REVIEWED_SEQUENTIAL_SOURCE_BOUND"
+    }
+  ],
+  [
+    "src/test/java/com/soklet/McpSubscriptionProtocolSaturationTests.java#juneResourceAuthorizationSharesCatalogAllowanceAndKeepsCancellationAvailable#TEST",
+    {
+      "fileSha256": "20c8c21098b7f683c19f18c88b8333dc0b8db097f62abef6f31c68fbf3c44272",
+      "scopeSha256": "84e0b6a8090c8b2fabd0baa74fed973b72f630ee9485681b65ba04bd0c4fd964",
+      "controlJoinMillis": 25000,
+      "controlComposition": "REVIEWED_SEQUENTIAL_SOURCE_BOUND"
+    }
+  ],
+  [
+    "src/test/java/com/soklet/McpSubscriptionProtocolSaturationTests.java#novemberResourceAuthorizationSharesCatalogAllowanceAndKeepsCancellationAvailable#TEST",
+    {
+      "fileSha256": "20c8c21098b7f683c19f18c88b8333dc0b8db097f62abef6f31c68fbf3c44272",
+      "scopeSha256": "d8c1989e7f375c4807b267d0145ec0d68a40f5f131689d4c0d3a2cc07b4ee9eb",
+      "controlJoinMillis": 25000,
+      "controlComposition": "REVIEWED_SEQUENTIAL_SOURCE_BOUND"
+    }
+  ],
+  [
+    "src/test/java/com/soklet/McpSubscriptionProtocolSaturationTests.java#modernInitialAuthorizationSharesCatalogAllowanceAndReleasesRejectedReservations#TEST",
+    {
+      "fileSha256": "20c8c21098b7f683c19f18c88b8333dc0b8db097f62abef6f31c68fbf3c44272",
+      "scopeSha256": "1c8e68b37fa8841d9c513e833f9cf7fd785c2ad3aa8f0608d2d8008ec2bd1bd5",
+      "controlJoinMillis": 25000,
+      "controlComposition": "REVIEWED_SEQUENTIAL_SOURCE_BOUND"
+    }
+  ],
+  [
+    "src/test/java/com/soklet/McpSubscriptionProtocolSaturationTests.java#initialBaselinesRetainOneSharedAllowanceAfterAuthorizersReleaseTheirSlots#TEST",
+    {
+      "fileSha256": "20c8c21098b7f683c19f18c88b8333dc0b8db097f62abef6f31c68fbf3c44272",
+      "scopeSha256": "1dddadd1e756216ba911ca691460ffc8e19c59878184c2abd6b3cb41ea0d1106",
+      "controlJoinMillis": 35000,
+      "controlComposition": "REVIEWED_SEQUENTIAL_SOURCE_BOUND"
+    }
+  ],
+  [
+    "src/test/java/com/soklet/OptionsMissingRouteTests.java#unknownPathsAndRoutesOnAnotherListenerUseNotFound#TEST",
+    {
+      "fileSha256": "4d32529188a5770244de047a1be2624bf2ffd3e54a59a8d13d32a6e8e9f7777b",
+      "scopeSha256": "5b002abdc577f1383bd1007054ea6628f32a18041565035133860c8335717c69"
+    }
+  ],
+  [
+    "src/test/java/com/soklet/OptionsMissingRouteTests.java#automaticExplicitAndServerWideOptionsKeepTheirOwnHandlers#TEST",
+    {
+      "fileSha256": "4d32529188a5770244de047a1be2624bf2ffd3e54a59a8d13d32a6e8e9f7777b",
+      "scopeSha256": "0f0561666acb6863c05c48e833ee373428be0ca97f3e1b3aed2d43b511c7de76"
+    }
+  ],
+  [
+    "src/test/java/com/soklet/OptionsMissingRouteTests.java#corsPreflightStillUsesItsAuthorizerEvenForAnUnknownPath#TEST",
+    {
+      "fileSha256": "4d32529188a5770244de047a1be2624bf2ffd3e54a59a8d13d32a6e8e9f7777b",
+      "scopeSha256": "1fcc82ca01970d559e836a023373b82844be382d429b1ed02b5843acfa6fac58",
+      "generation": {
+        "count": 2,
+        "mode": "SEQUENTIAL",
+        "complete": 2,
+        "prior": 1,
+        "incomplete": 1
+      }
+    }
+  ],
+  [
+    "src/test/java/com/soklet/OptionsMissingRouteTests.java#realHttpRequestsDistinguishMissingRoutesFromOptionsCapabilities#TEST",
+    {
+      "fileSha256": "4d32529188a5770244de047a1be2624bf2ffd3e54a59a8d13d32a6e8e9f7777b",
+      "scopeSha256": "0c2407188777f4479f4ab487299e4195e8a7302522fe28822894ba72edfa468a",
+      "controlJoinMillis": 40000
+    }
+  ]
+]
+, 'open lows subscription and OPTIONS controls');
+
 const REVIEWED_SCOPE_OVERRIDES = mergeReviewedScopeOverrideMaps(
+  REVIEWED_OPEN_LOWS_SCOPE_OVERRIDES,
   REVIEWED_A9_A5_SCOPE_OVERRIDES,
   REVIEWED_INTERNAL_HELPER_RAW_SCOPE_OVERRIDES,
   REVIEWED_FINAL_HARDENING_STREAM_SCOPE_OVERRIDES,

@@ -49,6 +49,27 @@ public class McpServerStartMetricsAggregationTests {
 			"soklet_mcp_shutdowns_total";
 
 	@Test
+	void sharedCollectorKeepsMcpFamiliesWhenAnotherConfigurationHasOnlyHttp() {
+		DefaultMetricsCollector collector = DefaultMetricsCollector.defaultInstance();
+		McpEndpoint endpoint = McpEndpoint.withPath("/mcp", McpImplementation.withNameAndVersion(
+				"shared-metrics", "4.0.0").build(), Set.of(McpProtocolVersion.V2026_07_28)).build();
+		McpServer server = McpServer.withPort(0).endpointRegistry(McpEndpointRegistry.fromEndpoints(List.of(endpoint))).build();
+		SokletConfig mcp = SokletConfig.withMcpServer(server).metricsCollector(collector).build();
+		SokletConfig http = SokletConfig.withHttpServer(HttpServer.fromPort(0)).metricsCollector(collector).build();
+		collector.initialize(mcp);
+		collector.didRecordMcpMetricsEvent(McpMetricsEvent.serverStarted());
+		MetricsCollector.SnapshotTextOptions options = MetricsCollector.SnapshotTextOptions
+				.fromMetricsFormat(MetricsCollector.MetricsFormat.PROMETHEUS);
+		String before = collector.snapshotText(options).orElseThrow();
+		collector.initialize(http);
+		Assertions.assertEquals(before, collector.snapshotText(options).orElseThrow());
+		Assertions.assertEquals(1L, collector.snapshot().orElseThrow().getMcpMetrics().getServerStarts());
+		DefaultMetricsCollector httpOnly = DefaultMetricsCollector.defaultInstance();
+		httpOnly.initialize(http);
+		Assertions.assertFalse(httpOnly.snapshotText(options).orElseThrow().contains(SERVER_STARTS_METRIC_NAME));
+	}
+
+	@Test
 	public void snapshotContractUsesBoxedNonnegativeServerStarts()
 			throws Exception {
 		Method getter = McpMetricsSnapshot.class.getMethod("getServerStarts");

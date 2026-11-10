@@ -190,6 +190,11 @@ public final class McpProtectionConfig {
 
 		/**
 		 * Sets the maximum encoded request-state size. The default is 65,536 bytes.
+		 * <p>
+		 * This is a rejection ceiling, not a guaranteed continuation capacity.
+		 * Built-in protection also needs envelope and encoding overhead; custom
+		 * protectors may use a different amount. A particular continuation can
+		 * exceed a valid configured limit when it is sealed.
 		 *
 		 * @param maximumEncodedRequestStateSizeInBytes positive byte limit, or
 		 *                                             {@code null} to restore the
@@ -209,6 +214,10 @@ public final class McpProtectionConfig {
 
 		/**
 		 * Sets the maximum decoded request-state size. The default is 49,152 bytes.
+		 * <p>
+		 * Canonical framework metadata and application state both count toward
+		 * this rejection ceiling. Builder validation cannot guarantee that a
+		 * particular continuation will fit.
 		 *
 		 * @param maximumDecodedRequestStateSizeInBytes positive byte limit, or
 		 *                                             {@code null} to restore the

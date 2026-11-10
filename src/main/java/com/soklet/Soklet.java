@@ -1226,6 +1226,9 @@ public final class Soklet {
 							.build();
 				} else {
 					// Just a normal OPTIONS response (non-CORS-preflight).
+					if (matchingResourceMethodsByHttpMethod.isEmpty())
+						return HttpRequestResult.withMarshaledResponse(responseMarshaler.forNotFound(request)).build();
+
 					// If there's a matching OPTIONS resource method for this OPTIONS request, then invoke it.
 					ResourceMethod optionsResourceMethod = matchingResourceMethodsByHttpMethod.get(HttpMethod.OPTIONS);
 
