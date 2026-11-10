@@ -26,7 +26,10 @@ import java.nio.channels.SeekableByteChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.LinkOption;
+import java.nio.file.attribute.BasicFileAttributeView;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
 import java.util.List;
@@ -75,12 +78,37 @@ class SecureStaticFileAccessTests {
     void sameSizeAndTimeReplacementIsRejected(@TempDir Path directory) throws Exception {
         Path root = Files.createDirectory(directory.resolve("public"));
         Path asset = Files.writeString(root.resolve("asset.txt"), "public");
-        BasicFileAttributes expected = Files.readAttributes(asset, BasicFileAttributes.class);
-        SecureStaticFileRoot access = new SecureStaticFileRoot(root);
         Path replacement = Files.writeString(directory.resolve("replacement.txt"), "secret");
-        Files.setLastModifiedTime(replacement, expected.lastModifiedTime());
+        // Creation-time setters are optional. Their effectiveness, including any
+        // metadata preservation during the move, is checked on the final path.
+        try {
+            Files.getFileAttributeView(asset, BasicFileAttributeView.class, LinkOption.NOFOLLOW_LINKS)
+                    .setTimes(null, null, FileTime.fromMillis(1_000));
+            Files.getFileAttributeView(replacement, BasicFileAttributeView.class, LinkOption.NOFOLLOW_LINKS)
+                    .setTimes(null, null, FileTime.fromMillis(61_000));
+        } catch (UnsupportedOperationException unsupportedCreationTime) {
+            // Native file keys may still distinguish the replacement.
+        }
+        Files.setLastModifiedTime(replacement, Files.getLastModifiedTime(asset));
+        BasicFileAttributes expected = Files.readAttributes(asset, BasicFileAttributes.class);
+        StaticFileIoFailureTests.Provider provider = new StaticFileIoFailureTests.Provider(directory);
+        provider.preserveDirectoryAttributes(root);
+        SecureStaticFileRoot access = new SecureStaticFileRoot(provider.wrap(root));
         Files.move(replacement, asset, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-        assertThrows(IOException.class, () -> access.open(asset, expected));
+        BasicFileAttributes replaced = Files.readAttributes(asset, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+        assertTrue(replaced.isRegularFile());
+        assertEquals("secret", Files.readString(asset), "The native replacement must have occurred");
+        assertEquals(expected.size(), replaced.size(), "Fixture must preserve file size");
+        assertEquals(expected.lastModifiedTime(), replaced.lastModifiedTime(), "Fixture must preserve modification time");
+        boolean distinguishable = expected.fileKey() != null
+                ? !java.util.Objects.equals(expected.fileKey(), replaced.fileKey())
+                : !expected.creationTime().equals(replaced.creationTime());
+        assumeTrue(distinguishable, "Native replacement has no distinct file key/creation time after move: "
+                + "before key=" + expected.fileKey() + ", creation=" + expected.creationTime()
+                + "; after key=" + replaced.fileKey() + ", creation=" + replaced.creationTime());
+        assertThrows(SecureStaticFileRoot.FileChangedException.class, () -> {
+            try (SeekableByteChannel ignored = access.open(provider.wrap(asset), expected)) { }
+        });
     }
 
     @Test
@@ -102,12 +130,23 @@ class SecureStaticFileAccessTests {
     void rootReplacementRequiresANewHelper(@TempDir Path directory) throws Exception {
         Path root = Files.createDirectory(directory.resolve("public"));
         Path asset = Files.writeString(root.resolve("asset.txt"), "public");
+        Path replacement = Files.createDirectory(directory.resolve("replacement-public"));
+        Files.writeString(replacement.resolve("asset.txt"), "secret");
+        Files.setLastModifiedTime(root, FileTime.fromMillis(1_000));
+        Files.setLastModifiedTime(replacement, FileTime.fromMillis(61_000));
+        BasicFileAttributes expectedRoot = Files.readAttributes(root, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
         BasicFileAttributes expected = Files.readAttributes(asset, BasicFileAttributes.class);
         SecureStaticFileRoot access = new SecureStaticFileRoot(root);
         Files.move(root, directory.resolve("old-public"));
-        Files.createDirectory(root);
-        Files.writeString(root.resolve("asset.txt"), "secret");
-        assertThrows(IOException.class, () -> access.open(asset, expected));
+        Files.move(replacement, root);
+        BasicFileAttributes replacedRoot = Files.readAttributes(root, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+        assertTrue(replacedRoot.isDirectory());
+        assertEquals("secret", Files.readString(root.resolve("asset.txt")));
+        assertNotEquals(expectedRoot.lastModifiedTime(), replacedRoot.lastModifiedTime(),
+                "The native replacement must retain distinguishable directory metadata after the move");
+        assertThrows(SecureStaticFileRoot.FileChangedException.class, () -> {
+            try (SeekableByteChannel ignored = access.open(asset, expected)) { }
+        });
     }
 
     @Test

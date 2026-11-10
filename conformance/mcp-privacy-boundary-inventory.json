@@ -36770,6 +36770,7 @@
         "src/test/java/com/soklet/SseTests.java#stoppedHandshakeWriterDoesNotRecordATransportFailureButIndependentWriteFailureStillDoes",
         "src/test/java/com/soklet/StaticFileIdentityTests.java#bothSymlinkModesServeProvidersWithoutFileKeys",
         "src/test/java/com/soklet/StaticFileIdentityTests.java#missingFileKeysStillDetectMetadataChangesBeforeDelivery",
+        "src/test/java/com/soklet/StaticFilesTests.java#followingSymlinksRejectsCapturedTargetReplacementWithStableRootIdentity",
         "src/test/java/com/soklet/StaticFilesTests.java#staticFilesDoesNotFollowAReplacementAfterResponseConstruction",
         "src/test/java/com/soklet/StaticFilesTests.java#staticFilesRejectsARegularReplacementWithTheSameLength",
         "src/test/java/com/soklet/StaticFilesTests.java#staticFilesSecureBodyReachesBuiltInHttpTransport",

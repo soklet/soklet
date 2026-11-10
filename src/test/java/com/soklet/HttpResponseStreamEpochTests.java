@@ -75,19 +75,17 @@ class HttpResponseStreamEpochTests {
 			Soklet.run(config(server, observation, resource), () -> {
 				try (Socket socket = new Socket("127.0.0.1", port)) {
 					socket.setSoTimeout(5000);
+					long preDispatchNanos = System.nanoTime();
 					socket.getOutputStream().write("GET /epoch HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
 							.getBytes(StandardCharsets.US_ASCII));
 					await(producerExecutor.entered);
 					assertFalse(observation.prepared.await(200, TimeUnit.MILLISECONDS), "Preparation must follow successful source submission");
-					assertNull(observation.producerEnteredAt.get());
-					Instant submissionReleasedAt = Instant.now();
+					assertNull(observation.producerEnteredNanos.get());
 					producerExecutor.release.countDown();
 					String wire = new String(socket.getInputStream().readAllBytes(), StandardCharsets.US_ASCII);
 					assertTrue(wire.startsWith("HTTP/1.1 200"), wire); assertTrue(wire.contains("payload"), wire);
 					await(observation.terminated);
-					assertTrue(observation.preparedHandle.get().getEstablishedAt().isBefore(submissionReleasedAt),
-							"The admitted epoch precedes source submission, including a possible pre-preparation cancellation");
-					observation.assertTerminalEpoch();
+					observation.assertTerminalEpoch(preDispatchNanos, producerExecutor.enteredNanos.get());
 				}
 		});
 		} finally {
@@ -103,14 +101,16 @@ class HttpResponseStreamEpochTests {
 		ExecutorService dispatchExecutor = Executors.newSingleThreadExecutor();
 		try {
 			SokletSimulator.run(SimulatorConfig.fromSokletConfig(config(HttpServer.withPort(0).build(), observation, resource)), simulator -> {
+				long preDispatchNanos = System.nanoTime();
 				var result = dispatchExecutor.submit(() -> simulator.performHttpRequest(Request.fromPath(HttpMethod.GET, "/epoch")));
 				try {
 					await(observation.handlingEntered);
 					assertFalse(observation.terminated.await(200, TimeUnit.MILLISECONDS));
-					assertNull(observation.producerEnteredAt.get());
+					assertNull(observation.producerEnteredNanos.get());
 					observation.releaseHandling.countDown();
 					assertEquals(7L, result.get(5, TimeUnit.SECONDS).getMarshaledResponse().getBodyLength());
-					await(observation.terminated); observation.assertTerminalEpoch();
+					await(observation.terminated);
+					observation.assertTerminalEpoch(preDispatchNanos, observation.preparedCallbackNanos.get());
 				} catch (Exception exception) { throw new AssertionError(exception); }
 				finally { observation.releaseHandling.countDown(); }
 			});
@@ -141,7 +141,7 @@ class HttpResponseStreamEpochTests {
 		Resource(Observation observation) { this.observation = observation; }
 		@GET("/epoch") public MarshaledResponse stream() {
 			return MarshaledResponse.withStatusCode(200).stream(stream -> {
-				this.observation.producerEnteredAt.set(Instant.now());
+				this.observation.producerEnteredNanos.set(System.nanoTime());
 				stream.write("payload".getBytes(StandardCharsets.US_ASCII));
 			}).build();
 		}
@@ -153,7 +153,8 @@ class HttpResponseStreamEpochTests {
 				releaseHandling = new CountDownLatch(1), terminated = new CountDownLatch(1);
 		final AtomicReference<StreamingResponseHandle> preparedHandle = new AtomicReference<>();
 		final AtomicReference<StreamTermination> metricsTerminal = new AtomicReference<>(), lifecycleTerminal = new AtomicReference<>();
-		final AtomicReference<Instant> producerEnteredAt = new AtomicReference<>(), terminalCallbackAt = new AtomicReference<>();
+		final AtomicReference<Long> preparedCallbackNanos = new AtomicReference<>(),
+				producerEnteredNanos = new AtomicReference<>(), terminalCallbackNanos = new AtomicReference<>();
 		final boolean blockHandling;
 		final LifecycleObserver lifecycle = new LifecycleObserver() {
 			@Override public void didReceiveLogEvent(LogEvent event) { fail(event.getMessage()); }
@@ -163,7 +164,7 @@ class HttpResponseStreamEpochTests {
 				if (blockHandling) { handlingEntered.countDown(); await(releaseHandling); }
 			}
 			@Override public void didTerminateResponseStream(StreamingResponseHandle handle, StreamTermination terminal) {
-				terminalCallbackAt.set(Instant.now()); assertSame(preparedHandle.get(), handle);
+				terminalCallbackNanos.set(System.nanoTime()); assertSame(preparedHandle.get(), handle);
 				lifecycleTerminal.set(terminal); terminated.countDown();
 			}
 		};
@@ -172,6 +173,7 @@ class HttpResponseStreamEpochTests {
 			defaults.didStartRequestHandling(type, request, method);
 		}
 		@Override public void willWriteResponseStream(StreamingResponseHandle handle) {
+			preparedCallbackNanos.set(System.nanoTime());
 			preparedHandle.set(handle); defaults.willWriteResponseStream(handle); prepared.countDown();
 		}
 		@Override public void didFinishRequestHandling(ServerType type, Request request, ResourceMethod method,
@@ -183,12 +185,28 @@ class HttpResponseStreamEpochTests {
 			assertSame(preparedHandle.get(), handle); metricsTerminal.set(terminal);
 			defaults.didTerminateResponseStream(handle, terminal, duration, bytes);
 		}
-		void assertTerminalEpoch() {
+		void assertTerminalEpoch(long preDispatchNanos, Long lowerBoundStartedNanos) {
+			assertNotNull(lowerBoundStartedNanos);
+			assertNotNull(preparedCallbackNanos.get());
+			assertNotNull(producerEnteredNanos.get());
+			assertNotNull(terminalCallbackNanos.get());
+			assertNotNull(metricsTerminal.get());
 			assertSame(metricsTerminal.get(), lifecycleTerminal.get());
 			assertEquals(StreamTerminationReason.COMPLETED, lifecycleTerminal.get().getReason());
-			Instant terminal = preparedHandle.get().getEstablishedAt().plus(lifecycleTerminal.get().getDuration());
-			assertFalse(terminal.isBefore(producerEnteredAt.get()), "Terminal time must include the interval before production");
-			assertFalse(terminal.isAfter(terminalCallbackAt.get()), "Terminal time must exclude subsequent observer dispatch");
+			assertTrue(preparedCallbackNanos.get() - preDispatchNanos >= 0L, "Preparation must follow dispatch");
+			assertTrue(lowerBoundStartedNanos - preDispatchNanos >= 0L, "The lower bound must follow dispatch");
+			assertTrue(producerEnteredNanos.get() - lowerBoundStartedNanos >= 0L, "Production must follow the held gate");
+			assertTrue(terminalCallbackNanos.get() - producerEnteredNanos.get() >= 0L, "Termination observation must follow production");
+			assertTrue(terminalCallbackNanos.get() - preparedCallbackNanos.get() >= 0L, "Termination observation must follow preparation");
+			Duration duration = lifecycleTerminal.get().getDuration();
+			Duration minimum = Duration.ofNanos(producerEnteredNanos.get() - lowerBoundStartedNanos);
+			Duration maximum = Duration.ofNanos(terminalCallbackNanos.get() - preDispatchNanos);
+			// Integration bounds use one monotonic clock. The deterministic test above
+			// proves the exact wall-clock anchor independently of clock resolution/steps.
+			assertTrue(duration.compareTo(minimum) >= 0,
+					() -> "Stream lifetime " + duration + " must include the held interval " + minimum);
+			assertTrue(duration.compareTo(maximum) <= 0,
+					() -> "Stream lifetime " + duration + " must fit inside dispatch/observer interval " + maximum);
 			assertEquals(0L, defaults.snapshot().orElseThrow().getActiveRequests());
 		}
 	}
@@ -196,7 +214,10 @@ class HttpResponseStreamEpochTests {
 	private static final class GatedSubmissionExecutor extends AbstractExecutorService {
 		final ExecutorService delegate = Executors.newSingleThreadExecutor();
 		final CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
-		@Override public void execute(Runnable command) { entered.countDown(); await(release); delegate.execute(command); }
+		final AtomicReference<Long> enteredNanos = new AtomicReference<>();
+		@Override public void execute(Runnable command) {
+			enteredNanos.set(System.nanoTime()); entered.countDown(); await(release); delegate.execute(command);
+		}
 		@Override public void shutdown() { delegate.shutdown(); }
 		@Override public List<Runnable> shutdownNow() { release.countDown(); return delegate.shutdownNow(); }
 		@Override public boolean isShutdown() { return delegate.isShutdown(); }

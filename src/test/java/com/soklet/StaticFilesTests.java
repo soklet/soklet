@@ -21,6 +21,7 @@ import com.soklet.annotation.GET;
 import com.soklet.annotation.PathParameter;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
@@ -37,6 +38,8 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.LinkOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -421,6 +424,8 @@ public class StaticFilesTests {
 		Path indexHtml = tempDir.resolve("index.html");
 		Files.writeString(appJs, "console.log('hi');", StandardCharsets.UTF_8);
 		Files.writeString(indexHtml, "<!doctype html>", StandardCharsets.UTF_8);
+		Path wellKnown = Files.createDirectories(tempDir.resolve(".well-known"));
+		Files.writeString(wellKnown.resolve("security.txt"), "contact: mailto:security@example.com", StandardCharsets.UTF_8);
 		StaticFiles staticFiles = StaticFiles.withRoot(tempDir).trustedImmutableRoot(true)
 				.indexFileNames(List.of("index.html"))
 				.build();
@@ -444,9 +449,6 @@ public class StaticFilesTests {
 		Assertions.assertTrue(staticFiles.marshaledResponseFor(tempDir.resolve("app.js").toString(), Request.fromPath(HttpMethod.GET, "/assets/secret")).isEmpty());
 		Assertions.assertTrue(staticFiles.marshaledResponseFor("nested\\app.js", Request.fromPath(HttpMethod.GET, "/assets/app.js")).isEmpty());
 
-		Path wellKnown = tempDir.resolve(".well-known");
-		Files.createDirectories(wellKnown);
-		Files.writeString(wellKnown.resolve("security.txt"), "contact: mailto:security@example.com", StandardCharsets.UTF_8);
 		Assertions.assertTrue(staticFiles.marshaledResponseFor(".well-known/security.txt", Request.fromPath(HttpMethod.GET, "/assets/.well-known/security.txt")).isPresent());
 		Assertions.assertTrue(staticFiles.marshaledResponseFor("a".repeat(4097), Request.fromPath(HttpMethod.GET, "/assets/long")).isEmpty());
 	}
@@ -583,19 +585,22 @@ public class StaticFilesTests {
 				Map.entry("mpd", "application/dash+xml"),
 				Map.entry("vtt", "text/vtt; charset=UTF-8")
 		);
+		for (Map.Entry<String, String> entry : contentTypesByExtension.entrySet()) {
+			String extension = entry.getKey();
+			Path file = tempDir.resolve("example-" + extension + "." + extension);
+			Files.writeString(file, "abcdef", StandardCharsets.UTF_8);
+		}
+		Path uppercaseFile = tempDir.resolve("example.JSON");
+		Files.writeString(uppercaseFile, "{}", StandardCharsets.UTF_8);
 		StaticFiles staticFiles = StaticFiles.withRoot(tempDir).trustedImmutableRoot(true).build();
 
 		for (Map.Entry<String, String> entry : contentTypesByExtension.entrySet()) {
 			String extension = entry.getKey();
 			Path file = tempDir.resolve("example-" + extension + "." + extension);
-			Files.writeString(file, "abcdef", StandardCharsets.UTF_8);
-
 			MarshaledResponse response = staticFiles.marshaledResponseFor(file.getFileName().toString(), Request.fromPath(HttpMethod.GET, "/" + file.getFileName())).orElseThrow();
 			Assertions.assertEquals(List.of(entry.getValue()), response.getHeaders().get("Content-Type"), extension);
 		}
 
-		Path uppercaseFile = tempDir.resolve("example.JSON");
-		Files.writeString(uppercaseFile, "{}", StandardCharsets.UTF_8);
 		MarshaledResponse uppercaseResponse = staticFiles.marshaledResponseFor("example.JSON", Request.fromPath(HttpMethod.GET, "/example.JSON")).orElseThrow();
 		Assertions.assertEquals(List.of("application/json; charset=UTF-8"), uppercaseResponse.getHeaders().get("Content-Type"));
 	}
@@ -1008,18 +1013,56 @@ public class StaticFilesTests {
 		try {
 			Files.createSymbolicLink(link, target.getFileName());
 		} catch (UnsupportedOperationException | IOException unavailable) {
-			return;
+			Assumptions.abort("Symbolic links are unavailable for this fixture: " + unavailable);
 		}
 		StaticFiles staticFiles = StaticFiles.withRoot(root).trustedImmutableRoot(true).followSymlinks(true).build();
 		MarshaledResponse response = staticFiles.marshaledResponseFor("link.txt",
 				Request.fromPath(HttpMethod.GET, "/link.txt")).orElseThrow();
+		Assertions.assertEquals("public", new String(response.bodyBytesOrEmpty(), StandardCharsets.UTF_8));
 		Files.delete(link);
 		Files.createSymbolicLink(link, secret);
-		Assertions.assertEquals("public", new String(response.bodyBytesOrEmpty(), StandardCharsets.UTF_8));
+		byte[] delivered;
+		try {
+			delivered = response.bodyBytesOrEmpty();
+		} catch (UncheckedIOException observedMutation) {
+			// Retargeting violates the immutable-root contract. Rejecting the observed
+			// directory change is as safe as opening the originally captured target.
+			Assertions.assertInstanceOf(SecureStaticFileRoot.FileChangedException.class, observedMutation.getCause());
+			return;
+		}
+		Assertions.assertEquals("public", new String(delivered, StandardCharsets.UTF_8));
+	}
 
+	@Test
+	public void followingSymlinksRejectsCapturedTargetReplacementWithStableRootIdentity(@TempDir Path tempDir) throws IOException {
+		Path root = Files.createDirectory(tempDir.resolve("public"));
+		Path target = Files.writeString(root.resolve("target.txt"), "public", StandardCharsets.UTF_8);
+		Path secret = Files.writeString(tempDir.resolve("secret.txt"), "secret", StandardCharsets.UTF_8);
+		try {
+			Files.createSymbolicLink(root.resolve("link.txt"), target.getFileName());
+		} catch (UnsupportedOperationException | IOException unavailable) {
+			Assumptions.abort("Symbolic links are unavailable for this fixture: " + unavailable);
+		}
+		StaticFileIoFailureTests.Provider provider = new StaticFileIoFailureTests.Provider(tempDir);
+		provider.nullFileKeys = true;
+		provider.preserveDirectoryAttributes(root);
+		Path wrappedRoot = provider.wrap(root);
+		BasicFileAttributes originalRoot = Files.readAttributes(wrappedRoot, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+		StaticFiles staticFiles = StaticFiles.withRoot(wrappedRoot).trustedImmutableRoot(true).followSymlinks(true).build();
+		MarshaledResponse response = staticFiles.marshaledResponseFor("link.txt",
+				Request.fromPath(HttpMethod.GET, "/link.txt")).orElseThrow();
+		Assertions.assertEquals("public", new String(response.bodyBytesOrEmpty(), StandardCharsets.UTF_8));
 		Files.delete(target);
 		Files.createSymbolicLink(target, secret);
-		Assertions.assertThrows(UncheckedIOException.class, response::bodyBytesOrEmpty);
+		Assertions.assertTrue(Files.isSymbolicLink(target), "The captured real target must now be a link");
+		Assertions.assertFalse(Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS));
+		BasicFileAttributes currentRoot = Files.readAttributes(wrappedRoot, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+		Assertions.assertNull(currentRoot.fileKey());
+		Assertions.assertEquals(originalRoot.creationTime(), currentRoot.creationTime());
+		Assertions.assertEquals(originalRoot.lastModifiedTime(), currentRoot.lastModifiedTime());
+		Assertions.assertEquals(originalRoot.size(), currentRoot.size());
+		UncheckedIOException rejected = Assertions.assertThrows(UncheckedIOException.class, response::bodyBytesOrEmpty);
+		Assertions.assertInstanceOf(SecureStaticFileRoot.FileChangedException.class, rejected.getCause());
 	}
 
 	@Test

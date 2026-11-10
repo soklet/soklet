@@ -148,6 +148,7 @@ class StaticFileIoFailureTests {
         private String operation;
         private Path deniedReadPath;
         private RuntimeException noFollowFailure;
+        private final Map<Path, BasicFileAttributes> directorySnapshots = new HashMap<>();
         boolean nullFileKeys;
 
         Provider(Path directory) {
@@ -156,6 +157,13 @@ class StaticFileIoFailureTests {
         }
         Path wrap(Path path) { return new WrappedPath(path); }
         Path unwrap(Path path) { return ((WrappedPath) path).delegate; }
+        // Isolate file/no-follow checks from incidental parent-directory metadata
+        // changes. Real attributes still supply the target's type and identity.
+        void preserveDirectoryAttributes(Path directory) throws IOException {
+            BasicFileAttributes attributes = Files.readAttributes(directory, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+            assertTrue(attributes.isDirectory());
+            directorySnapshots.put(directory.toAbsolutePath().normalize(), attributes);
+        }
         void fail(String operation) throws IOException {
             if (failure != null && operation.equals(this.operation)) throw failure;
         }
@@ -199,16 +207,21 @@ class StaticFileIoFailureTests {
         @Override public <A extends BasicFileAttributes> A readAttributes(Path path, Class<A> type, LinkOption... options) throws IOException {
             fail("attributes");
             A attributes = Files.readAttributes(unwrap(path), type, options);
+            if (type == BasicFileAttributes.class) {
+                BasicFileAttributes snapshot = directorySnapshots.get(unwrap(path).toAbsolutePath().normalize());
+                if (snapshot != null) attributes = type.cast(snapshot);
+            }
             if (!nullFileKeys || type != BasicFileAttributes.class) return attributes;
+            A observed = attributes;
             return type.cast(new BasicFileAttributes() {
-                @Override public FileTime lastModifiedTime() { return attributes.lastModifiedTime(); }
-                @Override public FileTime lastAccessTime() { return attributes.lastAccessTime(); }
-                @Override public FileTime creationTime() { return attributes.creationTime(); }
-                @Override public boolean isRegularFile() { return attributes.isRegularFile(); }
-                @Override public boolean isDirectory() { return attributes.isDirectory(); }
-                @Override public boolean isSymbolicLink() { return attributes.isSymbolicLink(); }
-                @Override public boolean isOther() { return attributes.isOther(); }
-                @Override public long size() { return attributes.size(); }
+                @Override public FileTime lastModifiedTime() { return observed.lastModifiedTime(); }
+                @Override public FileTime lastAccessTime() { return observed.lastAccessTime(); }
+                @Override public FileTime creationTime() { return observed.creationTime(); }
+                @Override public boolean isRegularFile() { return observed.isRegularFile(); }
+                @Override public boolean isDirectory() { return observed.isDirectory(); }
+                @Override public boolean isSymbolicLink() { return observed.isSymbolicLink(); }
+                @Override public boolean isOther() { return observed.isOther(); }
+                @Override public long size() { return observed.size(); }
                 @Override public Object fileKey() { return null; }
             });
         }

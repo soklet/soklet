@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 public class McpJsonCodecTests {
 	private static final Path CORPUS_ROOT = Path.of(
@@ -468,7 +469,8 @@ public class McpJsonCodecTests {
 			actualPaths = paths
 					.filter(Files::isRegularFile)
 					.map(CORPUS_ROOT::relativize)
-					.map(Path::toString)
+					.map(path -> StreamSupport.stream(path.spliterator(), false)
+							.map(Path::toString).collect(Collectors.joining("/")))
 					.filter(path -> !path.equals("manifest.sha256"))
 					.collect(Collectors.toCollection(LinkedHashSet::new));
 		}

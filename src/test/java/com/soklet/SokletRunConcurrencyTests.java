@@ -18,6 +18,7 @@ package com.soklet;
 
 import com.soklet.annotation.GET;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
@@ -103,6 +104,14 @@ final class SokletRunConcurrencyTests {
 
 	@Test
 	void automaticJvmHookJoinsApplicationCleanup() throws Exception {
+		assertChildFinalizes("exit");
+	}
+
+	@Test
+	void externalNormalTerminationJoinsApplicationCleanupWhereSupported() throws Exception {
+		// Check the platform capability before opening a child process log.
+		Assumptions.assumeTrue(ProcessHandle.current().supportsNormalTermination(),
+				"The current JVM does not support normal process termination");
 		assertChildFinalizes("signal");
 	}
 
@@ -126,10 +135,12 @@ final class SokletRunConcurrencyTests {
 			while (!Files.exists(ready) && child.isAlive() && System.nanoTime() < deadline)
 				Thread.sleep(10);
 			Assertions.assertTrue(Files.exists(ready), () -> childOutput(output));
-			if (mode.equals("enter")) {
+			if (mode.equals("enter") || mode.equals("exit")) {
 				child.getOutputStream().write('\n');
 				child.getOutputStream().flush();
 			} else if (mode.equals("signal")) {
+				Assumptions.assumeTrue(child.supportsNormalTermination(),
+						"Process.destroy() does not request normal termination on this platform; portable JVM-hook coverage uses System.exit(0)");
 				child.destroy();
 			}
 			Assertions.assertTrue(child.waitFor(10, TimeUnit.SECONDS),
@@ -141,7 +152,8 @@ final class SokletRunConcurrencyTests {
 		} finally {
 			if (child.isAlive()) {
 				child.destroyForcibly();
-				child.waitFor(5, TimeUnit.SECONDS);
+				Assertions.assertTrue(child.waitFor(5, TimeUnit.SECONDS),
+						"Child JVM was not reaped after forced cleanup");
 			}
 		}
 	}
@@ -196,6 +208,15 @@ final class SokletRunConcurrencyTests {
 				input.start();
 			}
 			Files.writeString(Path.of(args[1]), "ready");
+			if (args[0].equals("exit")) {
+				// The parent releases this gate only after readiness. The JVM hook,
+				// rather than requestShutdown(), must own application cleanup.
+				String command = new java.io.BufferedReader(new java.io.InputStreamReader(System.in,
+						StandardCharsets.UTF_8)).readLine();
+				if (command == null)
+					throw new IllegalStateException("The parent did not request JVM exit");
+				System.exit(0);
+			}
 			if (args[0].equals("return"))
 				soklet.requestShutdown();
 			// Deliberately do not await: the lifecycle owner/hook must finish cleanup.

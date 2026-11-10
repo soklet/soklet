@@ -5,7 +5,12 @@ import com.soklet.annotation.SseEventSource;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
+import java.nio.file.AccessDeniedException;
+import java.nio.file.FileSystemException;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.NotDirectoryException;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
@@ -18,6 +23,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.*;
 
 class Round12CoreRegressionTests {
 	@Test
@@ -114,13 +120,84 @@ class Round12CoreRegressionTests {
 	}
 
 	@Test
-	void finiteAncestorSymlinkTraversalsBeyondTheOsBudgetAreMissing(@TempDir Path root) throws Exception {
+	void finiteAncestorSymlinkTraversalsWithinTheOsBudgetServeTheirTarget(@TempDir Path root) throws Exception {
 		Files.writeString(root.resolve("asset.txt"), "asset");
-		Files.createSymbolicLink(root.resolve("self"), Path.of("."));
+		try {
+			Files.createSymbolicLink(root.resolve("self"), Path.of("."));
+		} catch (UnsupportedOperationException | IOException unavailable) {
+			abort("Symbolic links are unavailable for this fixture: " + unavailable);
+		}
 		StaticFiles files = StaticFiles.withRoot(root).trustedImmutableRoot(true).followSymlinks(true).build();
-		for (int count : List.of(41, 48, 64)) {
+		for (int count : List.of(1, 2, 4)) {
 			String path = "self/".repeat(count) + "asset.txt";
-			assertTrue(files.marshaledResponseFor(path, Request.fromPath(HttpMethod.GET, "/" + path)).isEmpty(), path);
+			assertEquals(root.resolve("asset.txt").toRealPath(), root.resolve(path).toRealPath());
+			assertEquals("asset", new String(files.marshaledResponseFor(path,
+					Request.fromPath(HttpMethod.GET, "/" + path)).orElseThrow().bodyBytesOrEmpty(),
+					java.nio.charset.StandardCharsets.UTF_8), path);
+		}
+	}
+
+	@Test
+	void finiteAncestorSymlinkTraversalsBeyondTheOsBudgetAreMissing(@TempDir Path directory) throws Exception {
+		Path root = Files.createDirectory(directory.resolve("public"));
+		Path asset = Files.writeString(root.resolve("asset.txt"), "asset");
+		try {
+			Files.createSymbolicLink(root.resolve("self"), Path.of("."));
+		} catch (UnsupportedOperationException | IOException unavailable) {
+			abort("Symbolic links are unavailable for this fixture: " + unavailable);
+		}
+		assertEquals(asset.toRealPath(), root.resolve("self/asset.txt").toRealPath(),
+				"The fixture must support ordinary native symlink resolution");
+		Map<Integer, Path> nativeTargets = new java.util.LinkedHashMap<>();
+		FileSystemException nativeFailure = null;
+		int failedDepth = 0;
+		for (int depth : List.of(1, 41, 48, 64, 128, 256)) {
+			Path candidate = root.resolve("self/".repeat(depth) + "asset.txt");
+			try {
+				nativeTargets.put(depth, candidate.toRealPath());
+			} catch (NoSuchFileException | NotDirectoryException | AccessDeniedException unrelatedFailure) {
+				throw unrelatedFailure;
+			} catch (FileSystemException exhaustedTraversal) {
+				nativeFailure = exhaustedTraversal;
+				failedDepth = depth;
+				break;
+			}
+		}
+		assumeTrue(nativeFailure != null,
+				"Native provider resolved every finite traversal through depth 256; no budget boundary was observed");
+		// Probe first so a low native limit does not require creating irrelevant
+		// deeper ordinary paths that may exceed this provider's path-length limit.
+		Map<Integer, Path> lengthControls = new java.util.LinkedHashMap<>();
+		Path ordinaryDirectory = Files.createDirectory(directory.resolve("path-length-control"));
+		for (int depth = 1; depth <= failedDepth; depth++) {
+			ordinaryDirectory = Files.createDirectory(ordinaryDirectory.resolve("step"));
+			if (nativeTargets.containsKey(depth) || depth == failedDepth)
+				lengthControls.put(depth, Files.writeString(ordinaryDirectory.resolve("asset.txt"), "asset"));
+		}
+		StaticFiles files = StaticFiles.withRoot(root).trustedImmutableRoot(true).followSymlinks(true).build();
+		for (Map.Entry<Integer, Path> control : lengthControls.entrySet()) {
+			int depth = control.getKey();
+			String path = "self/".repeat(depth) + "asset.txt";
+			Path candidate = root.resolve(path);
+			Path lengthControl = control.getValue();
+			assertTrue(lengthControl.toString().length() > candidate.toString().length());
+			assertEquals("asset", Files.readString(lengthControl.toRealPath()),
+					"A longer native path without symlinks must work; this is not a path-length probe");
+			if (depth != failedDepth) {
+				assertEquals(asset.toRealPath(), nativeTargets.get(depth), path);
+				assertEquals("asset", new String(files.marshaledResponseFor(path,
+						Request.fromPath(HttpMethod.GET, "/" + path)).orElseThrow().bodyBytesOrEmpty(),
+						java.nio.charset.StandardCharsets.UTF_8), path);
+				continue;
+			}
+			// The sole repeated link still resolves to this immutable directory, its
+			// terminal asset exists, and a longer ordinary path worked above.
+			assertEquals(Path.of("."), Files.readSymbolicLink(root.resolve("self")));
+			assertEquals("asset", Files.readString(asset));
+			FileSystemException repeatedFailure = assertThrows(FileSystemException.class, candidate::toRealPath);
+			assertEquals(nativeFailure.getClass(), repeatedFailure.getClass());
+			assertTrue(files.marshaledResponseFor(path, Request.fromPath(HttpMethod.GET, "/" + path)).isEmpty(),
+					"Native failure at depth " + depth + ": " + nativeFailure);
 		}
 	}
 

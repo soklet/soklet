@@ -341,6 +341,12 @@ public class SokletProcessorRouteIndexPersistenceTests {
 		}
 	}
 
+	private static String unicodeDescription(String value) {
+		return "codePoints=" + value.codePoints()
+				.mapToObj(point -> String.format(java.util.Locale.ROOT, "U+%04X", point)).toList()
+				+ ", utf8Base64=" + Base64.getEncoder().encodeToString(value.getBytes(StandardCharsets.UTF_8));
+	}
+
 	// Shared by processor regressions that exercise real incremental javac output.
 	static class Fixture {
 		final Path directory, sources, classes, cache, alpha, beta, plain;
@@ -481,15 +487,26 @@ public class SokletProcessorRouteIndexPersistenceTests {
 			String classpath = classes + System.getProperty("path.separator") + System.getProperty("java.class.path");
 			for (Path dependency : dependencies) classpath += System.getProperty("path.separator") + dependency;
 			List<String> command = new ArrayList<>(List.of(Path.of(System.getProperty("java.home"), "bin", "java").toString(),
-					"-cp", classpath, "example.Verification", classes.toUri().toString()));
-			for (Path dependency : dependencies) command.add(dependency.toUri().toString());
+					"-cp", classpath, "example.Verification", classes.toUri().toASCIIString()));
+			for (Path dependency : dependencies) command.add(dependency.toUri().toASCIIString());
 			command.add("--");
-			command.addAll(List.of(paths));
+			List<String> inputDiagnostics = new ArrayList<>();
+			for (String path : paths) {
+				// Keep route values independent of the native child-argument encoding.
+				command.add(Base64.getEncoder().encodeToString(path.getBytes(StandardCharsets.UTF_8)));
+				inputDiagnostics.add("parent expected " + unicodeDescription(path));
+			}
+			for (String line : Files.readAllLines(index(), StandardCharsets.UTF_8)) {
+				if (!line.isBlank()) inputDiagnostics.add("parent index " + unicodeDescription(
+						new String(Base64.getDecoder().decode(line.split("\\|", -1)[1]), StandardCharsets.UTF_8)));
+			}
+			Files.write(directory.resolve("verification-inputs.txt"), inputDiagnostics, StandardCharsets.US_ASCII);
+			String inputEvidence = String.join("\n", inputDiagnostics);
 			Path output = directory.resolve("verification.log");
 			Process process = new ProcessBuilder(command).redirectErrorStream(true).redirectOutput(output.toFile()).start();
 			try {
-				assertTrue(process.waitFor(10, TimeUnit.SECONDS));
-				assertEquals(0, process.exitValue(), Files.readString(output));
+				assertTrue(process.waitFor(10, TimeUnit.SECONDS), "Verification child timed out.\n" + inputEvidence);
+				assertEquals(0, process.exitValue(), inputEvidence + "\n" + Files.readString(output));
 			} finally {
 				if (process.isAlive()) process.destroyForcibly();
 			}
@@ -500,28 +517,52 @@ public class SokletProcessorRouteIndexPersistenceTests {
 			package example;
 			import com.soklet.*;
 			import java.net.*;
+			import java.nio.charset.StandardCharsets;
 			import java.util.*;
 			public class Verification {
 			  public static void main(String[] arguments) throws Exception {
+			    System.out.println("child native.encoding=" + System.getProperty("native.encoding")
+			      + ", file.encoding=" + System.getProperty("file.encoding"));
 			    List<URL> roots = new ArrayList<>(); int separator = 0;
 			    while (!arguments[separator].equals("--")) roots.add(URI.create(arguments[separator++]).toURL());
+			    List<String> expectedPaths = new ArrayList<>();
+			    for (int i = separator + 1; i < arguments.length; i++) {
+			      String path = new String(Base64.getDecoder().decode(arguments[i]), StandardCharsets.UTF_8);
+			      expectedPaths.add(path);
+			      System.out.println("child expected " + unicodeDescription(path));
+			    }
 			    try (URLClassLoader loader = new URLClassLoader(roots.toArray(URL[]::new), Verification.class.getClassLoader()) {
 			      @Override public Enumeration<URL> getResources(String name) throws java.io.IOException {
 			        return name.equals("META-INF/soklet/resource-method-lookup-table") ? findResources(name) : super.getResources(name);
 			      }
 			    }) {
 			      Thread.currentThread().setContextClassLoader(loader);
+			      Enumeration<URL> indexes = loader.getResources("META-INF/soklet/resource-method-lookup-table");
+			      while (indexes.hasMoreElements()) {
+			        var connection = indexes.nextElement().openConnection();
+			        connection.setUseCaches(false);
+			        try (var input = connection.getInputStream()) {
+			          for (String line : new String(input.readAllBytes(), StandardCharsets.UTF_8).lines().toList())
+			            if (!line.isBlank()) System.out.println("child index " + unicodeDescription(
+			              new String(Base64.getDecoder().decode(line.split("[|]", -1)[1]), StandardCharsets.UTF_8)));
+			        }
+			      }
 			      ResourceMethodResolver resolver = ResourceMethodResolver.fromClasspathIntrospection();
 			      Set<Class<?>> owners = new HashSet<>();
 			      for (ResourceMethod method : resolver.getResourceMethods()) owners.add(method.getMethod().getDeclaringClass());
 			      if (!resolver.getResourceMethods().equals(ResourceMethodResolver.fromClasses(owners).getResourceMethods()))
 			        throw new AssertionError("Indexed and reflective route declarations differ");
-			      Set<String> expected = new HashSet<>(Arrays.asList(arguments).subList(separator + 1, arguments.length));
+			      Set<String> expected = new HashSet<>(expectedPaths);
 			      Set<String> actual = new HashSet<>();
-			      for (ResourceMethod method : resolver.getResourceMethods())
+			      for (ResourceMethod method : resolver.getResourceMethods()) {
+			        System.out.println("child discovered " + method.getHttpMethod() + " sse=" + method.isSseEventSource()
+			          + " " + unicodeDescription(method.getResourcePathDeclaration().getPath()));
 			        if (method.getHttpMethod() == HttpMethod.GET && !method.isSseEventSource())
 			          actual.add(method.getResourcePathDeclaration().getPath());
-			      if (!expected.equals(actual)) throw new AssertionError("Expected " + expected + " but found " + actual);
+			      }
+			      if (!expected.equals(actual)) throw new AssertionError("Expected "
+			        + expected.stream().map(Verification::unicodeDescription).toList() + " but found "
+			        + actual.stream().map(Verification::unicodeDescription).toList());
 			      for (ResourceMethod method : resolver.getResourceMethods()) {
 			        if (!method.isSseEventSource()) continue;
 			        ResourceMethod selected = resolver.resourceMethodForRequest(
@@ -531,12 +572,17 @@ public class SokletProcessorRouteIndexPersistenceTests {
 			        if (!SseHandshakeResult.class.isAssignableFrom(selected.getMethod().getReturnType())) throw new AssertionError("Invalid SSE return type");
 			        if (selected.getMethod().getParameterCount() == 0 && !(selected.getMethod().invoke(owner) instanceof SseHandshakeResult)) throw new AssertionError("Invalid SSE return value");
 			      }
-			      for (int i = separator + 1; i < arguments.length; i++) {
-			        ResourceMethod method = resolver.resourceMethodForRequest(Request.withPath(HttpMethod.GET, arguments[i]).build(), ServerType.HTTP).orElseThrow();
+			      for (String path : expectedPaths) {
+			        ResourceMethod method = resolver.resourceMethodForRequest(Request.withPath(HttpMethod.GET, path).build(), ServerType.HTTP).orElseThrow();
 			        Object owner = method.getMethod().getDeclaringClass().getConstructor().newInstance();
-			        if (!arguments[i].equals(method.getMethod().invoke(owner))) throw new AssertionError("Wrong resource method");
+			        if (!path.equals(method.getMethod().invoke(owner))) throw new AssertionError("Wrong resource method for " + unicodeDescription(path));
 			      }
 			    }
+			  }
+			  private static String unicodeDescription(String value) {
+			    return "codePoints=" + value.codePoints()
+			      .mapToObj(point -> String.format(Locale.ROOT, "U+%04X", point)).toList()
+			      + ", utf8Base64=" + Base64.getEncoder().encodeToString(value.getBytes(StandardCharsets.UTF_8));
 			  }
 			}
 			""";

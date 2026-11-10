@@ -891,7 +891,7 @@ const REVIEWED_SCOPE_TOPOLOGY_OVERRIDES = checkedReviewMap([
     ["publisherIdentityIsGroupedPerServerAndSharedAcrossServers","e472a11ec8fb6f5a657074c2b55870ae7ad80d49d9b8924fc6bdd94aa8f24889",{"generation":{"count":3,"mode":"SEQUENTIAL","complete":3,"prior":2,"incomplete":1}}],
     ["validListenUsesAdmissionAndRequestLimiterOnly","f107f5c9e9d1456283a6b3b75e4431d026c9269980fb55b0f5f5a58cabd83345",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1}}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeBoundaryTests.java", "adb0dd2e2fecfe61e9acadeb7b76a88d1a2f5dd5c5e4ce1ab7ed86c457ca7eb8", [
+  ...reviewedScopeFile("src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeBoundaryTests.java", "aaf16d49f95b7c6016a944766a9a2bf00dcf1a51197285dc1441a7dfff14885c", [
     ["gracefulShutdownReservationBeatsConcurrentPublisherExactlyOnce","975a4aa52ecee3afb3c905969b29d88ff12e1da27d04002ecdbe3634776a2662",{"controlJoinMillis":5000,"controlComposition":"REVIEWED_OVERLAP_OR_DUPLICATE"}],
     ["blockingRegistrationCloseIsBoundedAndNeverRetriedConcurrently","e3329ccdae4d8c4e5cb6743b0fa76199f1afa3662a9e44e35279144ce9d83f40",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1}}],
     ["deactivatedGenerationCannotPublishIntoRestartedServer","7d47ff10bbfd4624e0802078ca71b36eceec76b30496b1e967735c43fbadbdcb",{"generation":{"count":2,"mode":"SEQUENTIAL","complete":2,"prior":1,"incomplete":1}}],
@@ -1142,7 +1142,7 @@ const REVIEWED_CONTROL_OVERRIDES = checkedReviewMap([
   // 75-second method guard retains thirteen seconds. The symlink probe has
   // one six-second exchange and retains four seconds under the default guard.
   // Callable and whole-file hashes bind both owners and the helper's controls.
-  ...reviewedScopeFile("src/test/java/com/soklet/StaticFilesTests.java", "09c5c211c1e056606e623af09f682c9a4744e55c9b14fd6506356b982fdc6232", [
+  ...reviewedScopeFile("src/test/java/com/soklet/StaticFilesTests.java", "9fbfff10e9b078a07b41e818c75cb82e7b9af36c1b28ec2950316cd4c244ef50", [
     ["staticFilesSecureBodyReachesBuiltInHttpTransport","de1a0c9276b18a670f7a63f64057d1f8d635ff67e608b4e04d5f0facbb24efd6",{"controlJoinMillis":12000}],
     ["staticFilesLiveTransportNeverServesPostValidationSymlink","335087c63cf5cbfb33dcb0cd3f0265f296428a3252b38bae947da0c6fb6f163b",{"controlJoinMillis":6000}],
   ]),
@@ -1196,7 +1196,7 @@ const REVIEWED_CONTROL_OVERRIDES = checkedReviewMap([
   ...reviewedScopeFile("src/test/java/com/soklet/internal/mcp/protocol/McpHttpServerRequestScopedSseTests.java", "27493b08e8de3ab5db28f52c2f7a8ece54ca336f2b4702a49a832b5a4385d398", [
     ["shutdown_closes_committed_stream_and_runtime_restarts_cleanly","56025a56f7defe06f6eda65fa1b8882607880ca71c1daa149ca069518aae340a",{"controlComposition":"REVIEWED_LIFECYCLE_CORE_DEDUPLICATION","controlJoinMillis":15000}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeBoundaryTests.java", "adb0dd2e2fecfe61e9acadeb7b76a88d1a2f5dd5c5e4ce1ab7ed86c457ca7eb8", [
+  ...reviewedScopeFile("src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeBoundaryTests.java", "aaf16d49f95b7c6016a944766a9a2bf00dcf1a51197285dc1441a7dfff14885c", [
     ["commonLifecycleAwaitRescansRegistrationAfterCloseAttemptCompletes","1b6c55192d0294ab2be799dc20bc6bada8002817bd219aa572ed0865dfde9c9a",{"controlledLifecycleCoreMillis":5000,"controlJoinMillis":15000,"controlComposition":"REVIEWED_LIFECYCLE_CORE_DEDUPLICATION"}],
     ["commonLifecycleForceRetriesAQuiesceRegistrationCloseFailure","ed74ab5cbf8185b3f1e3a30c80ead352af39ebb40dab22715b5489a8e9fffd61",{"controlJoinMillis":9000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
     ["commonLifecycleForceInterruptsAnOwnedBlockingRegistrationClose","c6d71cd9a87bfd649cbcdfc18d9b0f2a1fc9c210a8822784af0435f77fdb3dff",{"controlJoinMillis":7000,"controlComposition":"REVIEWED_SEQUENTIAL_SOURCE_BOUND"}],
@@ -2360,7 +2360,7 @@ const REVIEWED_UNIFIED_API_SCOPE_OVERRIDES = checkedReviewMap([
     ["startupFailureIsSynchronousAndFinishesEligibleCleanupBeforeThrowing","bc8116353b3214481205f1bc2cf728ad808526f47d7226914049ef62fea207f4",{"phasePolicy":{"startupMillis":5000,"startupCancellationMillis":1000,"gracefulShutdownMillis":1000,"forcedShutdownMillis":1000}}],
     ["nullArgumentsFailBeforeClaimingTransports","1fb3c0745de1d0e594a0faad51ec21478d33a932da294815c9c684c817f875b9",{"phasePolicy":{"startupMillis":5000,"startupCancellationMillis":1000,"gracefulShutdownMillis":1000,"forcedShutdownMillis":1000},"generation":{"count":5,"mode":"ONE_FULL_PLUS_PREINIT_REJECTIONS","complete":1,"prior":0,"incomplete":1},"terminalReportCount":1}],
   ]),
-  ...reviewedScopeFile("src/test/java/com/soklet/SokletRunConcurrencyTests.java", "78879b2794a2a8146cbd5c6d695703150f541246f0b64c36c42651ccf9cb198a", [
+  ...reviewedScopeFile("src/test/java/com/soklet/SokletRunConcurrencyTests.java", "b8453d0aad54cdcf9aae86dfb95cf8fc3506a6ff1def3161e7a799a8e47f2a92", [
     ["blockingAsyncConsumerCannotDelayBlockingWaitOrKeepLifecycleOwnerAlive","50c9519b63bd3caad495d7f43c98581a48437ea2b8e639920a3029e1cfa157f4",{"controlJoinMillis":5000,"controlComposition":"REVIEWED_FOREGROUND_RELEASE"}],
   ]),
   ...reviewedScopeFile("src/test/java/com/soklet/internal/mcp/protocol/McpLegacyProgressPublicRuntimeTests.java", "6a8345bfa9965dbfa5c93dd63fb2cb02ae994a20a4016223de1c773f86162b38", [
@@ -3893,7 +3893,29 @@ const REVIEWED_OPEN_LOWS_SCOPE_OVERRIDES = checkedReviewMap(
 ]
 , 'open lows subscription and OPTIONS controls');
 
+// Windows portability review: the handoff test owns one existing runtime.
+// Worker entry, response handoff, readiness-driven drain, actual projection
+// completion and final ready-frame drain share one absolute 5 s deadline
+// established before worker submission. The scheduler-idle poll checks running
+// and queued workers under the scheduler lock and never resets that deadline. Each
+// concurrently held projection worker has a 5 s gate released in finally; these
+// overlapping component holds are not sequential owner generations. The caller
+// then permits the existing 5 s awaitClean poll: 10 s fixed control in total.
+const REVIEWED_WINDOWS_HANDOFF_SCOPE_OVERRIDES = checkedReviewMap(
+[
+  [
+    "src/test/java/com/soklet/internal/mcp/protocol/McpSubscriptionRuntimeBoundaryTests.java#eventPublishedDuringResponseHandoffFollowsAcknowledgment#TEST",
+    {
+      "fileSha256": "aaf16d49f95b7c6016a944766a9a2bf00dcf1a51197285dc1441a7dfff14885c",
+      "scopeSha256": "b3b933bbfa5e72d2280e8764603d397224787e58c6887049e37219328642482b",
+      "controlJoinMillis": 10000,
+      "controlComposition": "REVIEWED_SEQUENTIAL_SOURCE_BOUND"
+    }
+  ]
+], 'Windows handoff shared-deadline controls');
+
 const REVIEWED_SCOPE_OVERRIDES = mergeReviewedScopeOverrideMaps(
+  REVIEWED_WINDOWS_HANDOFF_SCOPE_OVERRIDES,
   REVIEWED_OPEN_LOWS_SCOPE_OVERRIDES,
   REVIEWED_A9_A5_SCOPE_OVERRIDES,
   REVIEWED_INTERNAL_HELPER_RAW_SCOPE_OVERRIDES,
@@ -4206,8 +4228,8 @@ const REVIEWED_ORPHAN_HELPERS = checkedReviewMap([
   ...reviewedOrphanFile("src/test/java/com/soklet/McpObservationIsolationTests.java", "bf4ecdc5efbfd53fd21c144ec42824902da53766cebe9af999c521b40cb0835f", [
     // Retired close: the scoped-run migration removed its imperative helper.
   ]),
-  ...reviewedOrphanFile("src/test/java/com/soklet/SokletRunConcurrencyTests.java", "78879b2794a2a8146cbd5c6d695703150f541246f0b64c36c42651ccf9cb198a", [
-    ["main",176,"92f212e7817b80a7792f25737bf847df021fd08df55000c4ab5188d4d0deb92f",{"path":"src/test/java/com/soklet/SokletRunConcurrencyTests.java","line":122,"lineSha256":"08b6eb9eb95002498da87c9492ec0a03590011ead0c66b930ae8ed658df7aae8","rationale":"The three source-bound parent tests invoke this exact child through ProcessBuilder. Each parent uses a ten-second readiness deadline, ten-second exit wait, and five-second forced-reap finally under its sixty-second JUnit guard. The child owns one public lifecycle with explicit 5/1/1/1-second policy and three-second cleanup, and proves application-owned keypress shutdown, automatic JVM-hook, and returned-main finalization without borrowing a synthetic child guard."}],
+  ...reviewedOrphanFile("src/test/java/com/soklet/SokletRunConcurrencyTests.java", "b8453d0aad54cdcf9aae86dfb95cf8fc3506a6ff1def3161e7a799a8e47f2a92", [
+    ["main",188,"5bfa8a1beb199c51c1d4971bf4aa408b9a657eaa724c42a8b220e8a7d9d00702",{"path":"src/test/java/com/soklet/SokletRunConcurrencyTests.java","line":131,"lineSha256":"08b6eb9eb95002498da87c9492ec0a03590011ead0c66b930ae8ed658df7aae8","rationale":"The four source-bound parent tests invoke this exact child through ProcessBuilder. Every parent retains a ten-second readiness deadline, ten-second exit wait, and asserted five-second forced-reap finally under its sixty-second JUnit guard. The child owns one public lifecycle with explicit 5/1/1/1-second policy and three-second cleanup. Enter requests application shutdown; exit waits for the parent readiness release then calls System.exit(0), proving JVM-hook cleanup without a preceding public shutdown request; return requests shutdown without a public waiter. The signal test checks ProcessHandle.current().supportsNormalTermination() before ProcessBuilder starts a child. The child-specific normal-termination check remains in place, with forced reap in finally if that check aborts. These are alternative child modes, not concurrent or extra parent lifecycle generations, and the process-only parent tests do not lend the child a synthetic JUnit helper guard."}],
   ]),
   ...reviewedOrphanFile("src/test/java/com/soklet/SokletTestScope.java", "adc09d2ee5842fa42b56a3afaf2918c2e96c3703d5bd9f09ab4ee33703d2f609", [
     ["shutdown",44,"979f71ba6740a4ba5651ac031adf03ad77b8ee27c6dfd1617a202d1799b0f752",{"path":"src/test/java/com/soklet/external/HttpStreamGracefulShutdownTests.java","line":67,"lineSha256":"839d9e2b25942a2a5a6b6250ae462f05deaeb4690d935d49df55ad0038c3eeb5","rationale":"This exact external test invokes the test-only shutdown adapter on its already-counted fixture owner. The helper requests shutdown and returns the same async observation stage; it creates no lifecycle generation, blocking wait, or independent guard."}],

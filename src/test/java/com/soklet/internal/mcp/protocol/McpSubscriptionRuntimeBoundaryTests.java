@@ -53,12 +53,14 @@ import java.nio.channels.SocketChannel;
 import java.nio.channels.spi.SelectorProvider;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -209,62 +211,124 @@ public class McpSubscriptionRuntimeBoundaryTests {
 				McpApplicationClock.SYSTEM,
 				subscriptionConfiguration(4, Duration.ofSeconds(1),
 						Duration.ofMinutes(1)));
-		AtomicReference<MicrohttpResponse> responseReference =
-				new AtomicReference<>();
+		AtomicReference<MicrohttpResponse> responseReference = new AtomicReference<>();
 		AtomicReference<Throwable> callbackFailure = new AtomicReference<>();
 		CountDownLatch responseOffered = new CountDownLatch(1);
+		CountDownLatch releaseProjection = new CountDownLatch(1);
+		List<Object> blockers = new ArrayList<>();
+		McpHttpServerRuntime.TaskNotificationProjectionScheduler scheduler = null;
 		WritableSource bodySource = null;
 
 		try {
 			InetSocketAddress address = runtime.start();
+			ThreadPoolExecutor executor = processor(runtime);
+			Field schedulerField = executor.getClass().getDeclaredField("taskNotificationProjectionScheduler");
+			schedulerField.setAccessible(true);
+			scheduler = (McpHttpServerRuntime.TaskNotificationProjectionScheduler) schedulerField.get(executor);
+			Field workersField = scheduler.getClass().getDeclaredField("maximumWorkers");
+			workersField.setAccessible(true);
+			int workers = workersField.getInt(scheduler);
+			Field schedulerLockField = scheduler.getClass().getDeclaredField("lock");
+			schedulerLockField.setAccessible(true);
+			Object schedulerLock = schedulerLockField.get(scheduler);
+			Field scheduledWorkersField = scheduler.getClass().getDeclaredField("workersScheduled");
+			scheduledWorkersField.setAccessible(true);
+			CountDownLatch workersEntered = new CountDownLatch(workers);
+			CountDownLatch workersFinished = new CountDownLatch(workers);
+			for (int worker = 0; worker < workers; worker++) blockers.add(new Object());
+			Assertions.assertTrue(scheduler.tryReserveOwners(blockers));
+			long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+			for (Object blocker : blockers) {
+				scheduler.execute(new McpHttpServerRuntime.TaskNotificationProjectionJob(blocker, () -> {
+					workersEntered.countDown();
+					try {
+						if (!releaseProjection.await(5, TimeUnit.SECONDS))
+							callbackFailure.compareAndSet(null, new AssertionError("Projection gate was not released."));
+					} catch (InterruptedException interrupted) {
+						Thread.currentThread().interrupt();
+						callbackFailure.compareAndSet(null, interrupted);
+					} finally { workersFinished.countDown(); }
+				}, () -> callbackFailure.compareAndSet(null, new AssertionError("Projection blocker was rejected."))));
+			}
+			Assertions.assertTrue(workersEntered.await(Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS),
+					"Projection workers did not enter the controlled gate.");
 			submit(runtime, address,
 					subscriptionRequest(address, "handoff-boundary"), response -> {
 						try {
 							if (!responseReference.compareAndSet(null, response))
-								throw new AssertionError(
-										"The subscription response was offered more than once.");
-							// This callback is the transport handoff boundary. An event accepted
-							// here must follow the already-queued acknowledgment on the wire.
+								throw new AssertionError("The subscription response was offered more than once.");
+							// Accept the event at handoff, but hold its asynchronous projection
+							// until the test has drained the already-queued acknowledgment.
 							source.publishResourcesListChanged();
-						} catch (Throwable throwable) {
-							callbackFailure.set(throwable);
-						} finally {
-							responseOffered.countDown();
-						}
+						} catch (Throwable throwable) { callbackFailure.set(throwable); }
+						finally { responseOffered.countDown(); }
 					});
-
-			Assertions.assertTrue(responseOffered.await(5, TimeUnit.SECONDS),
+			Assertions.assertTrue(responseOffered.await(Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS),
 					"The subscription response was not offered.");
 			Assertions.assertNull(callbackFailure.get());
 			MicrohttpResponse response = responseReference.get();
 			Assertions.assertNotNull(response);
 			Assertions.assertTrue(response.streaming());
 			bodySource = newBodySource(response);
-			bodySource.writeReadyCallback(() -> {
-				// The test drains the queued frames directly.
-			});
+			Semaphore writeReady = new Semaphore(0);
+			bodySource.writeReadyCallback(writeReady::release);
 			bodySource.start();
-			PartialWriteSocketChannel socket =
-					new PartialWriteSocketChannel(Integer.MAX_VALUE);
-			for (int write = 0; write < 8 && bodySource.isReadyToWrite(); write++)
-				bodySource.writeTo(socket, Long.MAX_VALUE);
-
-			String wire = socket.writtenText();
-			int acknowledgment = wire.indexOf(
-					"\"method\":\"notifications/subscriptions/acknowledged\"");
-			int event = wire.indexOf(
-					"\"method\":\"notifications/resources/list_changed\"");
-			Assertions.assertTrue(acknowledgment >= 0, wire);
-			Assertions.assertTrue(event > acknowledgment,
-					"The response-handoff event was lost or preceded its acknowledgment: "
-							+ wire);
+			PartialWriteSocketChannel socket = new PartialWriteSocketChannel(Integer.MAX_VALUE);
+			String expectedAck = acknowledgment("handoff-boundary");
+			String expectedEvent = resourceListChanged("handoff-boundary");
+			boolean projectionReleased = false;
+			String wire;
+			for (;;) {
+				while (bodySource.isReadyToWrite() && System.nanoTime() < deadline)
+					bodySource.writeTo(socket, Long.MAX_VALUE);
+				wire = socket.writtenText();
+				if (!projectionReleased && wire.contains(expectedAck)) {
+					Assertions.assertFalse(wire.contains(expectedEvent), wire);
+					projectionReleased = true;
+					releaseProjection.countDown();
+				}
+				if (wire.contains(expectedEvent)) break;
+				long remaining = deadline - System.nanoTime();
+				Assertions.assertTrue(remaining > 0 && writeReady.tryAcquire(remaining, TimeUnit.NANOSECONDS),
+						"Timed out awaiting projected event; ready=" + bodySource.isReadyToWrite()
+								+ "; subscriptions=" + runtime.diagnosticsSnapshot().activeSubscriptions() + "; wire=" + wire);
+			}
+			Assertions.assertTrue(workersFinished.await(Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS));
+			for (;;) {
+				long remaining = deadline - System.nanoTime();
+				Assertions.assertTrue(remaining > 0,
+						"Projection or ready output did not settle before the handoff deadline.");
+				if (projectionSchedulerIdle(scheduler, schedulerLock, scheduledWorkersField)) {
+					while (bodySource.isReadyToWrite() && System.nanoTime() < deadline)
+						bodySource.writeTo(socket, Long.MAX_VALUE);
+					if (projectionSchedulerIdle(scheduler, schedulerLock, scheduledWorkersField)
+							&& !bodySource.isReadyToWrite())
+						break;
+				}
+				Thread.yield();
+			}
+			wire = socket.writtenText();
+			Assertions.assertNull(callbackFailure.get());
+			int acknowledgment = wire.indexOf(expectedAck);
+			int event = wire.indexOf(expectedEvent);
+			Assertions.assertTrue(acknowledgment >= 0 && event > acknowledgment, wire);
+			Assertions.assertEquals(-1, wire.indexOf(expectedEvent, event + expectedEvent.length()), wire);
 			bodySource.close(StreamTerminationReason.CLIENT_DISCONNECTED, null);
 			bodySource = null;
 			awaitClean(runtime);
 		} finally {
-			if (bodySource != null)
-				bodySource.close(StreamTerminationReason.CLIENT_DISCONNECTED, null);
+			releaseProjection.countDown();
+			if (scheduler != null) scheduler.releaseOwners(blockers);
+			if (bodySource != null) bodySource.close(StreamTerminationReason.CLIENT_DISCONNECTED, null);
 			runtime.close();
+		}
+	}
+
+	private static boolean projectionSchedulerIdle(
+			McpHttpServerRuntime.TaskNotificationProjectionScheduler scheduler,
+			Object schedulerLock, Field scheduledWorkersField) throws IllegalAccessException {
+		synchronized (schedulerLock) {
+			return scheduledWorkersField.getInt(scheduler) == 0 && scheduler.queuedJobCount() == 0;
 		}
 	}
 

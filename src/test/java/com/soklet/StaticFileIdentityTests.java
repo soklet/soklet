@@ -5,6 +5,9 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.LinkOption;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
 import java.time.Instant;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.nio.charset.StandardCharsets;
@@ -206,6 +209,11 @@ class StaticFileIdentityTests {
         for (boolean followSymlinks : List.of(false, true)) {
             Path root = Files.createDirectory(directory.resolve("public-" + followSymlinks));
             Files.writeString(root.resolve("asset.txt"), "public");
+            Path replacement = Files.createDirectory(directory.resolve("replacement-" + followSymlinks));
+            Files.writeString(replacement.resolve("asset.txt"), "secret");
+            Files.setLastModifiedTime(root, FileTime.fromMillis(1_000));
+            Files.setLastModifiedTime(replacement, FileTime.fromMillis(61_000));
+            BasicFileAttributes expected = Files.readAttributes(root, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
             java.util.concurrent.atomic.AtomicInteger resolverCalls = new java.util.concurrent.atomic.AtomicInteger();
             StaticFiles files = StaticFiles.withRoot(root).trustedImmutableRoot(true).followSymlinks(followSymlinks)
                     .accessResolver((path, attributes) -> {
@@ -213,8 +221,12 @@ class StaticFileIdentityTests {
                         return StaticFiles.Access.ALLOW;
                     }).build();
             Files.move(root, directory.resolve("old-" + followSymlinks));
-            Files.createDirectory(root);
-            Files.writeString(root.resolve("asset.txt"), "secret");
+            Files.move(replacement, root);
+            BasicFileAttributes replaced = Files.readAttributes(root, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+            assertTrue(replaced.isDirectory());
+            assertEquals("secret", Files.readString(root.resolve("asset.txt")));
+            assertNotEquals(expected.lastModifiedTime(), replaced.lastModifiedTime(),
+                    "The native replacement must retain distinguishable directory metadata after the move");
             assertTrue(files.marshaledResponseFor("asset.txt", request("asset.txt")).isEmpty());
             assertEquals(0, resolverCalls.get(), "Validate the root before exposing replacement metadata");
         }

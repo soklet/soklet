@@ -95,7 +95,11 @@ class McpCancellationDispatchSafetyTests {
                 assertEquals(1, fixture.execution.snapshot().retainedExchanges());
                 assertEquals(0, fixture.physicalExits.get());
                 releaseCallback.countDown();
-                await(() -> fixture.physicalExits.get() == 1);
+                await(() -> {
+                    McpApplicationExecutionSnapshot snapshot = fixture.execution.snapshot();
+                    return fixture.physicalExits.get() == 1 && snapshot.activeHandlerSlots() == 0
+                            && snapshot.retainedExchanges() == 0;
+                });
                 assertEquals(0, fixture.execution.snapshot().activeHandlerSlots());
                 assertEquals(0, fixture.execution.snapshot().retainedExchanges());
             } finally {
@@ -124,7 +128,11 @@ class McpCancellationDispatchSafetyTests {
                 assertEquals(0, callbacks.get(), "An unaccepted callback must not run inline.");
                 assertEquals(1, fixture.execution.snapshot().activeHandlerSlots());
                 release.countDown();
-                await(() -> fixture.physicalExits.get() == 1);
+                await(() -> {
+                    McpApplicationExecutionSnapshot snapshot = fixture.execution.snapshot();
+                    return fixture.physicalExits.get() == 1 && snapshot.activeHandlerSlots() == 0
+                            && snapshot.retainedExchanges() == 0 && snapshot.retainedTransportLeases() == 0;
+                });
                 assertEquals(0, fixture.execution.snapshot().retainedExchanges());
                 assertEquals(0, fixture.execution.snapshot().retainedTransportLeases());
                 assertEquals(1, fixture.execution.snapshot().abandonedResponses());
