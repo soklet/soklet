@@ -217,6 +217,18 @@
       "scanner": "gitleaks"
     },
     {
+      "approvalReference": "release/SCAN_FALSE_POSITIVE_APPROVAL_RENEWAL_2026-11-10.md#supplemental-owner-approval",
+      "approvedAt": "2026-11-10T23:32:56Z",
+      "commit": "47eeff6a907a0579b025b6b526b6ade1edbb1344",
+      "expiresAt": "2026-12-10T23:32:56Z",
+      "fingerprint": "87cd5d1db520859cdd2387f58dedd0d5606904ac99473a064d818d1bf5b458b4",
+      "owner": "Soklet project owner (user in this task)",
+      "path": "docs/streaming-api-milestone-2-verification.json",
+      "rationale": "Public SHA-256 digest in the verification manifest’s sourceSha256 map.",
+      "ruleId": "generic-api-key",
+      "scanner": "gitleaks"
+    },
+    {
       "approvalReference": "release/SCAN_FALSE_POSITIVE_APPROVAL_RENEWAL_2026-11-10.md#owner-approval",
       "approvedAt": "2026-11-10T22:47:21Z",
       "commit": "4dbb2cd65f00ba5d50425c9a7a8af595960c6b67",
@@ -237,6 +249,114 @@
       "owner": "Soklet project owner (user in this task)",
       "path": "src/test/java/com/soklet/RequestParameterFailureDiagnosticsTests.java",
       "rationale": "Deliberate synthetic privacy/redaction canary in a regression test; not a deployment credential.",
+      "ruleId": "generic-api-key",
+      "scanner": "gitleaks"
+    },
+    {
+      "approvalReference": "release/SCAN_FALSE_POSITIVE_APPROVAL_RENEWAL_2026-11-10.md#supplemental-owner-approval",
+      "approvedAt": "2026-11-10T23:32:56Z",
+      "commit": "5a16494f9eeba11c1aac6693726d9b15ad0cc4bf",
+      "expiresAt": "2026-12-10T23:32:56Z",
+      "fingerprint": "1f937faec29382cdc9a965763f00551e7917d06600513e02c051d27846885a47",
+      "owner": "Soklet project owner (user in this task)",
+      "path": "api/mcp/current-incompatibilities.jsonl",
+      "rationale": "Generated public API field incompatibility metadata with type, site, and binary/source compatibility flags.",
+      "ruleId": "generic-api-key",
+      "scanner": "gitleaks"
+    },
+    {
+      "approvalReference": "release/SCAN_FALSE_POSITIVE_APPROVAL_RENEWAL_2026-11-10.md#supplemental-owner-approval",
+      "approvedAt": "2026-11-10T23:32:56Z",
+      "commit": "5a16494f9eeba11c1aac6693726d9b15ad0cc4bf",
+      "expiresAt": "2026-12-10T23:32:56Z",
+      "fingerprint": "023aba515ea5dc8d0d625414d77289efaed0df58cde035e7cd0518a5006862c1",
+      "owner": "Soklet project owner (user in this task)",
+      "path": "scripts/verify-lifecycle-bound-harness-inventory.mjs",
+      "rationale": "Historical source path passed to the lifecycle verifier’s reviewed orphan-file inventory.",
+      "ruleId": "generic-api-key",
+      "scanner": "gitleaks"
+    },
+    {
+      "approvalReference": "release/SCAN_FALSE_POSITIVE_APPROVAL_RENEWAL_2026-11-10.md#supplemental-owner-approval",
+      "approvedAt": "2026-11-10T23:32:56Z",
+      "commit": "5a16494f9eeba11c1aac6693726d9b15ad0cc4bf",
+      "expiresAt": "2026-12-10T23:32:56Z",
+      "fingerprint": "122b99796b9365c2fa4e7ebe618a259c926c60c428973252ef4e2c4d9b4f5e84",
+      "owner": "Soklet project owner (user in this task)",
+      "path": "scripts/verify-lifecycle-bound-harness-inventory.mjs",
+      "rationale": "Static lifecycle proof metadata for reviewed test bounds, generations, or terminal report counts.",
+      "ruleId": "generic-api-key",
+      "scanner": "gitleaks"
+    },
+    {
+      "approvalReference": "release/SCAN_FALSE_POSITIVE_APPROVAL_RENEWAL_2026-11-10.md#supplemental-owner-approval",
+      "approvedAt": "2026-11-10T23:32:56Z",
+      "commit": "5a16494f9eeba11c1aac6693726d9b15ad0cc4bf",
+      "expiresAt": "2026-12-10T23:32:56Z",
+      "fingerprint": "529dc0f9bc2f8f2d41c38172cb8e07c4623c188992acacc3b73c79a2e97231f9",
+      "owner": "Soklet project owner (user in this task)",
+      "path": "scripts/verify-lifecycle-bound-harness-inventory.mjs",
+      "rationale": "Static lifecycle proof metadata for reviewed test bounds, generations, or terminal report counts.",
+      "ruleId": "generic-api-key",
+      "scanner": "gitleaks"
+    },
+    {
+      "approvalReference": "release/SCAN_FALSE_POSITIVE_APPROVAL_RENEWAL_2026-11-10.md#supplemental-owner-approval",
+      "approvedAt": "2026-11-10T23:32:56Z",
+      "commit": "5a16494f9eeba11c1aac6693726d9b15ad0cc4bf",
+      "expiresAt": "2026-12-10T23:32:56Z",
+      "fingerprint": "c46299b574b80ec45daa695bf76d0b826c980b5eca870bfa95f10a9de671573e",
+      "owner": "Soklet project owner (user in this task)",
+      "path": "scripts/verify-lifecycle-bound-harness-inventory.mjs",
+      "rationale": "Static lifecycle proof metadata for reviewed test bounds, generations, or terminal report counts.",
+      "ruleId": "generic-api-key",
+      "scanner": "gitleaks"
+    },
+    {
+      "approvalReference": "release/SCAN_FALSE_POSITIVE_APPROVAL_RENEWAL_2026-11-10.md#supplemental-owner-approval",
+      "approvedAt": "2026-11-10T23:32:56Z",
+      "commit": "5a16494f9eeba11c1aac6693726d9b15ad0cc4bf",
+      "expiresAt": "2026-12-10T23:32:56Z",
+      "fingerprint": "ebd804598306c775502e35c20f9770f62d184db79d5550a1dc23fff2778732a7",
+      "owner": "Soklet project owner (user in this task)",
+      "path": "scripts/verify-lifecycle-bound-harness-inventory.mjs",
+      "rationale": "Static lifecycle proof metadata for reviewed test bounds, generations, or terminal report counts.",
+      "ruleId": "generic-api-key",
+      "scanner": "gitleaks"
+    },
+    {
+      "approvalReference": "release/SCAN_FALSE_POSITIVE_APPROVAL_RENEWAL_2026-11-10.md#supplemental-owner-approval",
+      "approvedAt": "2026-11-10T23:32:56Z",
+      "commit": "5a16494f9eeba11c1aac6693726d9b15ad0cc4bf",
+      "expiresAt": "2026-12-10T23:32:56Z",
+      "fingerprint": "57dea8ff4a23fd347ceaaa85a496b0b4593e59d795f90462f1177e858b132f82",
+      "owner": "Soklet project owner (user in this task)",
+      "path": "src/test/java/com/soklet/McpRequestObservationPublicRuntimeTests.java",
+      "rationale": "Public token-format identifier in an expected trace-log message in a regression test.",
+      "ruleId": "generic-api-key",
+      "scanner": "gitleaks"
+    },
+    {
+      "approvalReference": "release/SCAN_FALSE_POSITIVE_APPROVAL_RENEWAL_2026-11-10.md#supplemental-owner-approval",
+      "approvedAt": "2026-11-10T23:32:56Z",
+      "commit": "5a16494f9eeba11c1aac6693726d9b15ad0cc4bf",
+      "expiresAt": "2026-12-10T23:32:56Z",
+      "fingerprint": "5fd5c9ec9f0d3466570ab8988fa57271af85a0ecb5e50d7844e8b6aa96c637cc",
+      "owner": "Soklet project owner (user in this task)",
+      "path": "src/test/java/com/soklet/McpRequestObservationPublicRuntimeTests.java",
+      "rationale": "Public token-format identifier in an expected trace-log message in a regression test.",
+      "ruleId": "generic-api-key",
+      "scanner": "gitleaks"
+    },
+    {
+      "approvalReference": "release/SCAN_FALSE_POSITIVE_APPROVAL_RENEWAL_2026-11-10.md#supplemental-owner-approval",
+      "approvedAt": "2026-11-10T23:32:56Z",
+      "commit": "5a16494f9eeba11c1aac6693726d9b15ad0cc4bf",
+      "expiresAt": "2026-12-10T23:32:56Z",
+      "fingerprint": "fdfa90bc1d74c700d9beb00c261178955d35201c9cffc5c74a6db07726373a05",
+      "owner": "Soklet project owner (user in this task)",
+      "path": "src/test/java/com/soklet/McpRequestObservationPublicRuntimeTests.java",
+      "rationale": "Public token-format identifier in an expected trace-log message in a regression test.",
       "ruleId": "generic-api-key",
       "scanner": "gitleaks"
     },
@@ -409,6 +529,18 @@
       "scanner": "gitleaks"
     },
     {
+      "approvalReference": "release/SCAN_FALSE_POSITIVE_APPROVAL_RENEWAL_2026-11-10.md#supplemental-owner-approval",
+      "approvedAt": "2026-11-10T23:32:56Z",
+      "commit": "94cf98f6fcab13f6022e3ce62d7a3df436fcca0a",
+      "expiresAt": "2026-12-10T23:32:56Z",
+      "fingerprint": "8907fb25b30f38f1dad58d8f411e38b9de65343d8081cf9acb6dc21c00505ae3",
+      "owner": "Soklet project owner (user in this task)",
+      "path": "verification/interoperability/inspector/config-self-test.mjs",
+      "rationale": "Fixed disposable bearer value used by the Inspector config self-test to assert construction and redaction.",
+      "ruleId": "generic-api-key",
+      "scanner": "gitleaks"
+    },
+    {
       "approvalReference": "release/SCAN_FALSE_POSITIVE_APPROVAL_RENEWAL_2026-11-10.md#owner-approval",
       "approvedAt": "2026-11-10T22:47:21Z",
       "commit": "960b8e05b1b2565522d30225b8a1be632e3b83ba",
@@ -457,6 +589,54 @@
       "scanner": "gitleaks"
     },
     {
+      "approvalReference": "release/SCAN_FALSE_POSITIVE_APPROVAL_RENEWAL_2026-11-10.md#supplemental-owner-approval",
+      "approvedAt": "2026-11-10T23:32:56Z",
+      "commit": "b0b5432ec2f7c00b20ff8af7a6a6c8119b889b36",
+      "expiresAt": "2026-12-10T23:32:56Z",
+      "fingerprint": "b10d7d0fd5aa8a0cfcffd1fbbc063e0ebb597d3d9d37c79d09c4b68b396ce7da",
+      "owner": "Soklet project owner (user in this task)",
+      "path": "scripts/verify-lifecycle-bound-harness-inventory.mjs",
+      "rationale": "Static lifecycle proof metadata for reviewed test bounds, generations, or terminal report counts.",
+      "ruleId": "generic-api-key",
+      "scanner": "gitleaks"
+    },
+    {
+      "approvalReference": "release/SCAN_FALSE_POSITIVE_APPROVAL_RENEWAL_2026-11-10.md#supplemental-owner-approval",
+      "approvedAt": "2026-11-10T23:32:56Z",
+      "commit": "c5de42e7c6a99d2f04ed004709e8e60b5fed5970",
+      "expiresAt": "2026-12-10T23:32:56Z",
+      "fingerprint": "0a01a3078838df0e50a5e5040c8476f7beecab472b83fa0cf92373f7e64460be",
+      "owner": "Soklet project owner (user in this task)",
+      "path": "scripts/verify-lifecycle-bound-harness-inventory.mjs",
+      "rationale": "Static lifecycle proof metadata for reviewed test bounds, generations, or terminal report counts.",
+      "ruleId": "generic-api-key",
+      "scanner": "gitleaks"
+    },
+    {
+      "approvalReference": "release/SCAN_FALSE_POSITIVE_APPROVAL_RENEWAL_2026-11-10.md#supplemental-owner-approval",
+      "approvedAt": "2026-11-10T23:32:56Z",
+      "commit": "c5de42e7c6a99d2f04ed004709e8e60b5fed5970",
+      "expiresAt": "2026-12-10T23:32:56Z",
+      "fingerprint": "12a181ab30f75bca72b8851bf7f5c41ea20d5db7354efc11df560045635d10e2",
+      "owner": "Soklet project owner (user in this task)",
+      "path": "scripts/verify-lifecycle-bound-harness-inventory.mjs",
+      "rationale": "Static lifecycle proof metadata for reviewed test bounds, generations, or terminal report counts.",
+      "ruleId": "generic-api-key",
+      "scanner": "gitleaks"
+    },
+    {
+      "approvalReference": "release/SCAN_FALSE_POSITIVE_APPROVAL_RENEWAL_2026-11-10.md#supplemental-owner-approval",
+      "approvedAt": "2026-11-10T23:32:56Z",
+      "commit": "c5de42e7c6a99d2f04ed004709e8e60b5fed5970",
+      "expiresAt": "2026-12-10T23:32:56Z",
+      "fingerprint": "d53957c55c55780fb263d4762f1d7d249904692faa1a323fc503269659be22b0",
+      "owner": "Soklet project owner (user in this task)",
+      "path": "scripts/verify-lifecycle-bound-harness-inventory.mjs",
+      "rationale": "Historical source path passed to the lifecycle verifier’s reviewed orphan-file inventory.",
+      "ruleId": "generic-api-key",
+      "scanner": "gitleaks"
+    },
+    {
       "approvalReference": "release/SCAN_FALSE_POSITIVE_APPROVAL_RENEWAL_2026-11-10.md#owner-approval",
       "approvedAt": "2026-11-10T22:47:21Z",
       "commit": "d7c2aaea92db7bcf30f64c54d62c4d87ba6c1ab8",
@@ -465,6 +645,30 @@
       "owner": "Soklet project owner (user in this task)",
       "path": "src/test/java/examples/mcp/McpResourceCursorApplicationPatternsTests.java",
       "rationale": "Deterministic fixed test key for cursor/state integration tests; source constructs local test servers or explicitly documents managed production keys as separate.",
+      "ruleId": "generic-api-key",
+      "scanner": "gitleaks"
+    },
+    {
+      "approvalReference": "release/SCAN_FALSE_POSITIVE_APPROVAL_RENEWAL_2026-11-10.md#supplemental-owner-approval",
+      "approvedAt": "2026-11-10T23:32:56Z",
+      "commit": "fbce5efa1388b5f8db1395aa105522cf9bc45f30",
+      "expiresAt": "2026-12-10T23:32:56Z",
+      "fingerprint": "da2db8258882948264e54465ca3ad40ccf9b6ad21cb22f535c26623e5a6b3a4c",
+      "owner": "Soklet project owner (user in this task)",
+      "path": "scripts/verify-lifecycle-bound-harness-inventory.mjs",
+      "rationale": "Static lifecycle proof metadata for reviewed test bounds, generations, or terminal report counts.",
+      "ruleId": "generic-api-key",
+      "scanner": "gitleaks"
+    },
+    {
+      "approvalReference": "release/SCAN_FALSE_POSITIVE_APPROVAL_RENEWAL_2026-11-10.md#supplemental-owner-approval",
+      "approvedAt": "2026-11-10T23:32:56Z",
+      "commit": "fbce5efa1388b5f8db1395aa105522cf9bc45f30",
+      "expiresAt": "2026-12-10T23:32:56Z",
+      "fingerprint": "fc13d529ef59f48f8dac62657ccb564d85aa6953958f38917b7c487d07e8dda6",
+      "owner": "Soklet project owner (user in this task)",
+      "path": "scripts/verify-lifecycle-bound-harness-inventory.mjs",
+      "rationale": "Static lifecycle proof metadata for reviewed test bounds, generations, or terminal report counts.",
       "ruleId": "generic-api-key",
       "scanner": "gitleaks"
     }
