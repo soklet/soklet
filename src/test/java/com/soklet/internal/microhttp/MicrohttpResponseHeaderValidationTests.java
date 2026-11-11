@@ -19,6 +19,7 @@ package com.soklet.internal.microhttp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.InvocationTargetException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
@@ -47,6 +48,42 @@ public class MicrohttpResponseHeaderValidationTests {
 
 		Assertions.assertEquals("HTTP/1.1 200 OK\r\n"
 				+ "X-!#$%&'*+-.^_`|~: one\ttwo\u0080\u0085\u00E9\u00FF\r\n\r\n", serialized);
+	}
+
+	@Test
+	public void headerGrowthHonorsTheExactSerializedSizeLimit() {
+		String padding = "a".repeat(512);
+		MicrohttpResponse response = new MicrohttpResponse(200, "OK",
+				List.of(new Header("X-Padding", padding)), new byte[0]);
+		byte[] expected = ("HTTP/1.1 200 OK\r\nX-Padding: " + padding + "\r\n\r\n")
+				.getBytes(StandardCharsets.US_ASCII);
+
+		Assertions.assertArrayEquals(expected,
+				response.serialize("HTTP/1.1", List.of(), expected.length));
+		Assertions.assertThrows(IllegalArgumentException.class,
+				() -> response.serialize("HTTP/1.1", List.of(), expected.length - 1));
+	}
+
+	@Test
+	public void headCapacityAboveTheIntRangeIsRejectedBeforeAllocation() throws Exception {
+		Class<?> writerType = Class.forName(MicrohttpResponse.class.getName() + "$HeadWriter");
+		var constructor = writerType.getDeclaredConstructor(int.class, int.class);
+		constructor.setAccessible(true);
+		Object writer = constructor.newInstance(0, Integer.MAX_VALUE);
+		var size = writerType.getDeclaredField("size");
+		size.setAccessible(true);
+		size.setInt(writer, Integer.MAX_VALUE - 1);
+		var bytes = writerType.getDeclaredField("bytes");
+		bytes.setAccessible(true);
+		byte[] original = (byte[]) bytes.get(writer);
+		var ensureCapacity = writerType.getDeclaredMethod("ensureCapacity", int.class);
+		ensureCapacity.setAccessible(true);
+
+		InvocationTargetException failure = Assertions.assertThrows(InvocationTargetException.class,
+				() -> ensureCapacity.invoke(writer, 2));
+		Assertions.assertInstanceOf(IllegalArgumentException.class, failure.getCause());
+		Assertions.assertSame(original, bytes.get(writer));
+		Assertions.assertEquals(Integer.MAX_VALUE - 1, size.getInt(writer));
 	}
 
 	private static void assertRejectedResponseHeader(Header header) {

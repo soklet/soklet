@@ -27,6 +27,7 @@ import java.io.ByteArrayOutputStream;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -43,6 +44,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
 /**
  * Value, secrecy, and concurrency contracts for MCP security controls.
@@ -572,6 +574,43 @@ public class McpSecurityControlsTests {
 	}
 
 	@Test
+	public void builtInSealingUsesFreshSecureRandomBytesAndClearsNonceBuffers()
+			throws Exception {
+		List<byte[]> entropyBuffers = new ArrayList<>();
+		DefaultMcpSecurityKeyManagers controls = new DefaultMcpSecurityKeyManagers(
+				protectionConfig("active", 0), null, secureRandom(destination -> {
+					int call = entropyBuffers.size();
+					entropyBuffers.add(destination);
+					copyExact(bytesFromLength(64 + call * 32, destination.length),
+							destination);
+				}), 10L, 0L);
+		McpRequestStateProtectionContext context = protectionContext(32);
+		byte[] plaintext = new byte[]{1, 2, 3};
+		String first = controls.sealRequestState(context, plaintext);
+		String second = controls.sealRequestState(context, plaintext);
+		int nonceOffset = 1 + 1 + "active".length() + 1
+				+ "soklet-mcp-protection-v1".length() + 32;
+
+		Assertions.assertEquals(3, entropyBuffers.size());
+		Assertions.assertArrayEquals(bytesFromLength(96, 12),
+				Arrays.copyOfRange(envelope(first), nonceOffset, nonceOffset + 12));
+		Assertions.assertArrayEquals(bytesFromLength(128, 12),
+				Arrays.copyOfRange(envelope(second), nonceOffset, nonceOffset + 12));
+		Assertions.assertEquals(epochNumber(first), epochNumber(second));
+		Assertions.assertNotEquals(first, second);
+		Assertions.assertArrayEquals(plaintext,
+				controls.openRequestState(context, first));
+		Assertions.assertArrayEquals(plaintext,
+				controls.openRequestState(context, second));
+		assertWiped(entropyBuffers.get(1), entropyBuffers.get(2));
+
+		byte[] changedNonce = envelope(second);
+		changedNonce[nonceOffset] ^= 1;
+		assertInvalidState(() -> controls.openRequestState(context,
+				protectedState(changedNonce)));
+	}
+
+	@Test
 	public void builtInProfilePinsKdfAeadHeaderCiphertextAndTag()
 			throws Exception {
 		DefaultMcpSecurityKeyManagers controls = deterministicControls(
@@ -776,7 +815,7 @@ public class McpSecurityControlsTests {
 
 		AtomicInteger entropyCalls = new AtomicInteger();
 		DefaultMcpSecurityKeyManagers failedNonce =
-				new DefaultMcpSecurityKeyManagers(config, null, destination -> {
+				new DefaultMcpSecurityKeyManagers(config, null, secureRandom(destination -> {
 					int call = entropyCalls.getAndIncrement();
 					if (call == 0)
 						copyExact(bytesFromLength(8, 24), destination);
@@ -784,7 +823,7 @@ public class McpSecurityControlsTests {
 						throw new IllegalStateException("simulated entropy failure");
 					else
 						copyExact(bytesFromLength(40, 12), destination);
-				}, 1L, 0L);
+				}), 1L, 0L);
 		assertUnavailable(() -> failedNonce.sealRequestState(context,
 				new byte[]{1}));
 		String afterFailure = failedNonce.sealRequestState(context,
@@ -796,9 +835,9 @@ public class McpSecurityControlsTests {
 	public void concurrentSealsNeverOverallocateAnEpoch() throws Exception {
 		AtomicInteger entropyCalls = new AtomicInteger();
 		DefaultMcpSecurityKeyManagers controls = new DefaultMcpSecurityKeyManagers(
-				protectionConfig("active", 0), null, destination ->
+				protectionConfig("active", 0), null, secureRandom(destination ->
 						Arrays.fill(destination,
-								(byte) entropyCalls.incrementAndGet()), 2L, 0L);
+								(byte) entropyCalls.incrementAndGet())), 2L, 0L);
 		McpRequestStateProtectionContext context = protectionContext(32);
 		CountDownLatch start = new CountDownLatch(1);
 		ExecutorService executor = Executors.newFixedThreadPool(8);
@@ -955,13 +994,13 @@ public class McpSecurityControlsTests {
 				McpProtectionConfig.withKeyring(McpProtectionKeyring
 						.withActiveKey(protectionKey("first", 0))
 						.addVerificationKey(protectionKey("second", 32)).build())
-						.build(), null, destination -> {
+						.build(), null, secureRandom(destination -> {
 					int call = entropyCalls.getAndIncrement();
 					if (call == 2)
 						throw new IllegalStateException(
 								"simulated activation entropy failure");
 					Arrays.fill(destination, (byte) (64 + call));
-				}, 10L, 0L);
+				}), 10L, 0L);
 		McpRequestStateProtectionContext context = protectionContext(64);
 		String beforeFailure = controls.sealRequestState(context, new byte[]{1});
 		Object sealerContext = activeSealerContextReference(controls);
@@ -1671,7 +1710,8 @@ public class McpSecurityControlsTests {
 	}
 
 	private static final class SequenceEntropy
-			implements DefaultMcpSecurityKeyManagers.EntropySource {
+			extends SecureRandom {
+		private static final long serialVersionUID = 1L;
 		private final List<byte[]> values;
 		private final AtomicInteger index = new AtomicInteger();
 
@@ -1689,7 +1729,8 @@ public class McpSecurityControlsTests {
 	}
 
 	private static final class BlockingNonceEntropy
-			implements DefaultMcpSecurityKeyManagers.EntropySource {
+			extends SecureRandom {
+		private static final long serialVersionUID = 1L;
 		private final AtomicInteger calls = new AtomicInteger();
 		private final CountDownLatch nonceEntered = new CountDownLatch(1);
 		private final CountDownLatch releaseNonce = new CountDownLatch(1);
@@ -1711,5 +1752,16 @@ public class McpSecurityControlsTests {
 			copyExact(bytesFromLength(64 + call * 32, destination.length),
 					destination);
 		}
+	}
+
+	private static SecureRandom secureRandom(Consumer<byte[]> nextBytes) {
+		return new SecureRandom() {
+			private static final long serialVersionUID = 1L;
+
+			@Override
+			public void nextBytes(byte[] destination) {
+				nextBytes.accept(destination);
+			}
+		};
 	}
 }

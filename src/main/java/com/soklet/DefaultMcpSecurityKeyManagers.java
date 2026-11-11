@@ -154,7 +154,7 @@ final class DefaultMcpSecurityKeyManagers
 	@NonNull
 	private final Object lock;
 	@NonNull
-	private final EntropySource entropySource;
+	private final SecureRandom secureRandom;
 	private final long maximumInvocationsPerEpoch;
 	private final long initialEpochNumber;
 	@NonNull
@@ -179,20 +179,20 @@ final class DefaultMcpSecurityKeyManagers
 	DefaultMcpSecurityKeyManagers(@Nullable McpProtectionConfig protectionConfig,
 			@Nullable McpTraceCorrelationKey traceCorrelationKey) {
 		this(protectionConfig, traceCorrelationKey,
-				new SecureRandomEntropySource(),
+				new SecureRandom(),
 				MAXIMUM_INVOCATIONS_PER_EPOCH, 0L);
 	}
 
 	DefaultMcpSecurityKeyManagers(@Nullable McpProtectionConfig protectionConfig,
 			@Nullable McpTraceCorrelationKey traceCorrelationKey,
-			@NonNull EntropySource entropySource,
+			@NonNull SecureRandom secureRandom,
 			long maximumInvocationsPerEpoch, long initialEpochNumber) {
 		if (maximumInvocationsPerEpoch < 1
 				|| maximumInvocationsPerEpoch > MAXIMUM_INVOCATIONS_PER_EPOCH)
 			throw new IllegalArgumentException(
 					"Maximum request-state invocations per epoch must be between 1 and 2^32.");
 		this.lock = new Object();
-		this.entropySource = requireNonNull(entropySource);
+		this.secureRandom = requireNonNull(secureRandom);
 		this.maximumInvocationsPerEpoch = maximumInvocationsPerEpoch;
 		this.initialEpochNumber = initialEpochNumber;
 		this.protectionMode = protectionConfig == null
@@ -231,7 +231,7 @@ final class DefaultMcpSecurityKeyManagers
 					== McpProtectionMode.DEVELOPMENT_EPHEMERAL) {
 				byte[] keyMaterial = new byte[DEVELOPMENT_KEY_BYTES];
 				try {
-					this.entropySource.nextBytes(keyMaterial);
+					this.secureRandom.nextBytes(keyMaterial);
 					this.activeProtectionKey = OwnedSecretKey.fromBytes(
 							DEVELOPMENT_KEY_ID, keyMaterial);
 				} catch (RuntimeException exception) {
@@ -500,7 +500,7 @@ final class DefaultMcpSecurityKeyManagers
 			byte[] envelopeBytes = null;
 			try {
 				try {
-					this.entropySource.nextBytes(nonce);
+					this.secureRandom.nextBytes(nonce);
 				} catch (RuntimeException exception) {
 					throw McpRequestStateProtectionException
 							.fromProtectorUnavailable();
@@ -849,7 +849,7 @@ final class DefaultMcpSecurityKeyManagers
 		byte[] sealerEpoch = null;
 		byte[] derivedKey = null;
 		try {
-			this.entropySource.nextBytes(activationPrefix);
+			this.secureRandom.nextBytes(activationPrefix);
 			prk = hkdfExtract(masterKey);
 			sealerEpoch = sealerEpoch(activationPrefix, epochNumber);
 			derivedKey = hkdfExpand(prk, sealerEpoch);
@@ -1269,23 +1269,6 @@ final class DefaultMcpSecurityKeyManagers
 
 	private static byte @NonNull [] bytes(@NonNull String value) {
 		return value.getBytes(StandardCharsets.UTF_8);
-	}
-
-	@FunctionalInterface
-	interface EntropySource {
-		void nextBytes(byte @NonNull [] destination);
-	}
-
-	@ThreadSafe
-	private static final class SecureRandomEntropySource
-			implements EntropySource {
-		@NonNull
-		private final SecureRandom secureRandom = new SecureRandom();
-
-		@Override
-		public void nextBytes(byte @NonNull [] destination) {
-			this.secureRandom.nextBytes(destination);
-		}
 	}
 
 	private static final class SealerUnavailableException

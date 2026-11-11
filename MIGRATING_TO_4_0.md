@@ -51,12 +51,17 @@ and [Java 24 release notes](https://www.oracle.com/java/technologies/javase/24-r
 4. Pass the completed application configuration to
    [`SokletSimulator`](https://javadoc.soklet.com/com/soklet/SokletSimulator.html);
    add a simulator-specific builder only where a test needs an override.
-5. Recompile all annotation-driven code with `-parameters` and
+5. Clean and recompile all annotation-driven code with `-parameters` and
    `SokletProcessor` enabled.
 6. Update deployment termination budgets, lifecycle observers, metrics, and
    downstream integrations.
 7. Exercise the application through a real loopback listener in addition to
    off-network simulation.
+
+Processor cache keys and generated MCP provider names now use SHA-256. A clean,
+complete first compilation rebuilds the route and endpoint metadata in the new
+cache namespace. An older persistent cache alone cannot restore unchanged owners
+during a partial compilation after the upgrade.
 
 ### CORS preflight authorization
 

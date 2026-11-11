@@ -585,7 +585,9 @@ function evaluateReleaseScanReports({
   const approvalByKey = new Map(approvals.map((approval) => [findingKey(approval), approval]));
   for (const finding of findings) {
     if (finding.severity === 'HIGH' || finding.severity === 'CRITICAL')
-      fail(`${finding.scanner} ${finding.severity} finding cannot be excepted: ${finding.path}`);
+      fail(`${finding.scanner} ${finding.severity} finding cannot be excepted: `
+        + `${finding.path}:${finding.sourceIdentity.startLine}:${finding.sourceIdentity.startColumn} `
+        + `(${finding.ruleId})`);
     if (!approvalByKey.delete(findingKey(finding)))
       fail(`${finding.scanner} finding has no exact unexpired exception: ${finding.path}`);
   }

@@ -1173,7 +1173,7 @@ public final class StreamingMicrohttpResponses {
 				int lastBufferIndex = this.bufferIndex;
 				long remainingBudget = maxBytes - totalWritten;
 				while (lastBufferIndex < this.buffers.length - 1
-						&& this.buffers[lastBufferIndex].remaining() < remainingBudget) {
+						&& (long) this.buffers[lastBufferIndex].remaining() < remainingBudget) {
 					remainingBudget -= this.buffers[lastBufferIndex].remaining();
 					lastBufferIndex++;
 				}

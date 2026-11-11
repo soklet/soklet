@@ -464,7 +464,7 @@ public final class MicrohttpResponse {
 
             int newCapacity = this.bytes.length;
 
-            while (newCapacity < requiredCapacity) {
+            while ((long) newCapacity < requiredCapacity) {
                 int doubled = newCapacity <= Integer.MAX_VALUE / 2
                         ? newCapacity * 2 : Integer.MAX_VALUE;
                 newCapacity = Math.min(this.maximumSize,

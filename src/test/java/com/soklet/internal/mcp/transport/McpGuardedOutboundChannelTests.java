@@ -438,6 +438,28 @@ public class McpGuardedOutboundChannelTests {
 		Assertions.assertEquals(2, releases.get());
 	}
 
+	@Test
+	public void long_byte_budgets_drain_small_frames_and_terminal_without_narrowing() throws Exception {
+		for (long budget : new long[] {(long) Integer.MAX_VALUE + 1L, Long.MAX_VALUE}) {
+			RecordingListener listener = new RecordingListener();
+			McpOutboundChannel channel = channel(1, 8, listener);
+			Assertions.assertEquals(McpOutboundChannel.OfferResult.ACCEPTED, channel.offer(ascii("hello")));
+			Assertions.assertTrue(channel.completeWithoutPayload());
+			try (WritableSource source = channel.newWritableSource();
+					TestSocketChannel socket = new TestSocketChannel(Integer.MAX_VALUE)) {
+				source.start();
+				Assertions.assertEquals(15L, source.writeTo(socket, budget));
+				Assertions.assertEquals("5\r\nhello\r\n0\r\n\r\n",
+						new String(socket.writtenBytes(), StandardCharsets.US_ASCII));
+				Assertions.assertFalse(source.hasRemaining());
+				Assertions.assertTrue(channel.isTerminalWritten());
+				Assertions.assertEquals(0, channel.snapshot().bufferedBytes());
+				Assertions.assertEquals(StreamTerminationReason.COMPLETED, listener.reason.get());
+				Assertions.assertEquals(1, listener.terminations.get());
+			}
+		}
+	}
+
 	private static byte[] ascii(String value) { return value.getBytes(StandardCharsets.US_ASCII); }
 	private static McpOutboundChannel channel(int frames, int bytes, RecordingListener listener) {
 		return new McpOutboundChannel(frames, bytes, bytes, System::nanoTime, listener);

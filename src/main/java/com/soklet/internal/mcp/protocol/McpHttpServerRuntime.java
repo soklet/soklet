@@ -6955,7 +6955,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 	}
 
 	/** A logical timeout never releases a physical control or maintenance reservation. */
-	private final class LegacyHttpPolicyWork {
+	final class LegacyHttpPolicyWork {
 		private int callbacks;
 		private boolean logicalComplete;
 		private boolean released;
@@ -6968,11 +6968,20 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			this.budget = cleanup ? legacyCleanupControlBudget : legacyHttpControlBudget;
 		}
 		synchronized boolean reservePartition(McpEffectivePartition candidate) {
+			if (logicalComplete) return false;
 			if (partition != null) return true;
 			if (!budget.reserve(candidate)) return false;
 			partition = candidate; return true;
 		}
-		synchronized void callbackEntered() { callbacks++; }
+		synchronized boolean reservePartitionAndEnterCallback(McpEffectivePartition candidate) {
+			if (!reservePartition(candidate)) return false;
+			callbacks++;
+			return true;
+		}
+		synchronized void callbackEntered() throws McpApplicationPolicyCapacityException {
+			if (logicalComplete) throw new McpApplicationPolicyCapacityException();
+			callbacks++;
+		}
 		void callbackExited() { synchronized (this) { callbacks--; } releaseIfComplete(); }
 		void complete() { synchronized (this) { logicalComplete = true; } releaseIfComplete(); }
 		private void releaseIfComplete() {
@@ -7009,7 +7018,7 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		long remaining = deadline - applicationClock.nanoTime();
 		if (remaining <= 0L) throw new McpApplicationPolicyDeadlineException(true);
 		Instant publicDeadline = applicationClock.instant().plusNanos(remaining);
-		control.reserveLegacyHttpPolicyWork(); work.callbackEntered();
+		work.callbackEntered(); control.reserveLegacyHttpPolicyWork();
 		java.util.concurrent.Callable<McpLegacySessionTransportAdmission.Decision> admission =
 				() -> requireNonNull(legacyTransportAdmission).admit(request, endpoint.path(), revision,
 						offered, reauthorization, publicDeadline, cancellation);
@@ -7033,8 +7042,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		McpEffectivePartition partition = McpEffectiveAdmissionIdentity.resolve(
 				endpoint.binding().revisionEndpoint(revision).orElseThrow(), endpoint.path(), accepted.identity())
 				.authorizationPartition();
-		if (!work.reservePartition(partition)) throw new McpApplicationPolicyCapacityException();
-		control.reserveLegacyHttpPolicyWork(); work.callbackEntered();
+		if (!work.reservePartitionAndEnterCallback(partition)) throw new McpApplicationPolicyCapacityException();
+		control.reserveLegacyHttpPolicyWork();
 		McpLegacySessionStore.Owner owner = control.application.invokeBoundedSessionOwnerPolicy(
 				() -> new McpLegacySessionStore.Owner(requireNonNull(legacySessionOwnerResolver)
 						.resolve(accepted.identity()), !accepted.identity().authenticated()), deadline,
@@ -10591,11 +10600,11 @@ final class McpHttpServerRuntime implements AutoCloseable {
 			McpLegacySessionStore.GrantWork physical = held.orElseThrow();
 			boolean callbackOwned = false;
 			try {
-				if (!work.reservePartition(partition)) { retryCapacity(current, generation); return; }
 				long now = applicationClock.nanoTime();
 				long deadline = minimumDeadline(now, current.deadlineNanos(), now
 						+ subscriptionRuntimeConfiguration.authorizationTimeout().toNanos());
-				work.callbackEntered(); callbackEntered(); callbackOwned = true;
+				if (!work.reservePartitionAndEnterCallback(partition)) { retryCapacity(current, generation); return; }
+				callbackEntered(); callbackOwned = true;
 				McpSubscriptionAuthorization result = authorize(deadline, false, next,
 						() -> { physical.close(); callbackExited(); work.callbackExited(); });
 				if (result instanceof McpSubscriptionAuthorization.Denied) {

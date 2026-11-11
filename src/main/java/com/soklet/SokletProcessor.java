@@ -186,6 +186,9 @@ import static java.util.Objects.requireNonNull;
  *
  * <p><strong>Important</strong>: This processor will never create a project-root <code>.soklet</code> directory by default.
  * Persistent caching is only enabled when <code>cacheMode=persistent</code> <em>and</em> <code>soklet.cacheDir</code> is set.
+ * Persistent cache keys and generated MCP provider names use SHA-256. When upgrading from a processor that used
+ * SHA-1 cache keys, perform a clean, complete compilation to rebuild all route and endpoint metadata; an older
+ * persistent snapshot alone cannot supply unchanged owners during a partial compilation.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -4990,13 +4993,7 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	private static String hashPath(String input) {
-		try {
-			MessageDigest digest = MessageDigest.getInstance("SHA-1");
-			byte[] bytes = digest.digest(input.getBytes(StandardCharsets.UTF_8));
-			return toHex(bytes);
-		} catch (NoSuchAlgorithmException e) {
-			return Integer.toHexString(input.hashCode());
-		}
+		return sha256Hex(input.getBytes(StandardCharsets.UTF_8));
 	}
 
 	private static String toHex(byte[] bytes) {

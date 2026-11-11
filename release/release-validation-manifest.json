@@ -365,7 +365,7 @@
       "access": "PUBLIC_READ_ONLY",
       "artifactChecksum": null,
       "artifactIdentity": "soklet/barebones-app-source",
-      "commit": "57a9729b96a496c657f6ce48d84533858a4144fc",
+      "commit": "db745c91ec0daa43731d08b2fabe2ae5676f221f",
       "defaultArtifactIdentity": null,
       "defaultArtifactSha256": null,
       "evidenceContract": "soklet.release.barebones-app.v2",

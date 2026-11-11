@@ -570,7 +570,10 @@ try {
   configureCodeqlFinding(highCodeql, { securitySeverity: '8.1' });
   assert.throws(
     () => prepareReleaseScanEvidence(highCodeql),
-    /codeql HIGH finding cannot be excepted/,
+    {
+      message: 'codeql HIGH finding cannot be excepted: '
+        + 'src/main/java/com/soklet/Example.java:7:5 (java/example-security-rule)',
+    },
   );
   assertions++;
 
@@ -578,7 +581,10 @@ try {
   configureCodeqlFinding(criticalCodeql, { securitySeverity: '9.1' });
   assert.throws(
     () => prepareReleaseScanEvidence(criticalCodeql),
-    /codeql CRITICAL finding cannot be excepted/,
+    {
+      message: 'codeql CRITICAL finding cannot be excepted: '
+        + 'src/main/java/com/soklet/Example.java:7:5 (java/example-security-rule)',
+    },
   );
   assertions++;
 
@@ -641,7 +647,10 @@ try {
 
   const high = fixture('high-finding');
   configureFinding(high, { finding: gitleaksFinding({ severity: 'HIGH' }) });
-  assert.throws(() => prepareReleaseScanEvidence(high), /HIGH finding cannot be excepted/);
+  assert.throws(() => prepareReleaseScanEvidence(high), {
+    message: 'gitleaks HIGH finding cannot be excepted: '
+      + 'src/test/resources/example.properties:12:7 (generic-api-key)',
+  });
   assertions++;
 
   const mismatchedReports = fixture('mismatched-reports');

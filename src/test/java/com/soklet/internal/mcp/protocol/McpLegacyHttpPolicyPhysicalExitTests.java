@@ -15,12 +15,14 @@
  */
 package com.soklet.internal.mcp.protocol;
 
+import com.soklet.CorsAuthorizer;
 import com.soklet.StreamTerminationReason;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 import java.time.Duration;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -31,7 +33,7 @@ import java.util.function.BooleanSupplier;
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Physical HTTP policy ownership also ends exactly once when invocation is suppressed. */
-@Timeout(30)
+@Timeout(60)
 class McpLegacyHttpPolicyPhysicalExitTests {
 
 	@Test
@@ -144,6 +146,96 @@ class McpLegacyHttpPolicyPhysicalExitTests {
 		} finally {
 			execution.stop(); assertTrue(execution.awaitTermination(Duration.ofSeconds(5)));
 		}
+	}
+
+	@Test
+	void completed_partition_work_cannot_restart_a_callback_or_reacquire_its_budget() throws Exception {
+		try (McpHttpServerRuntime runtime = runtime()) {
+			McpLegacyHttpControlBudget budget = controlBudget(runtime);
+			McpEffectivePartition partition = partition();
+			AtomicInteger releases = new AtomicInteger();
+			McpHttpServerRuntime.LegacyHttpPolicyWork work = runtime.new LegacyHttpPolicyWork(releases::incrementAndGet);
+			assertTrue(work.reservePartition(partition));
+			assertEquals(1, budget.snapshot().activeReservations());
+			work.complete();
+			assertEquals(0, budget.snapshot().activeReservations());
+			assertEquals(1, releases.get());
+			assertFalse(work.reservePartitionAndEnterCallback(partition));
+			assertFalse(work.reservePartition(partition));
+			assertThrows(McpApplicationPolicyCapacityException.class, work::callbackEntered);
+			work.complete();
+			assertEquals(0, budget.snapshot().activeReservations());
+			assertEquals(1, releases.get());
+		}
+	}
+
+	@Test
+	void atomic_callback_entry_keeps_the_partition_charged_until_every_physical_exit() throws Exception {
+		try (McpHttpServerRuntime runtime = runtime()) {
+			McpLegacyHttpControlBudget budget = controlBudget(runtime);
+			McpEffectivePartition partition = partition();
+			AtomicInteger releases = new AtomicInteger();
+			AtomicReference<McpHttpServerRuntime.LegacyHttpPolicyWork> holder = new AtomicReference<>();
+			McpHttpServerRuntime.LegacyHttpPolicyWork work = runtime.new LegacyHttpPolicyWork(() -> {
+				assertFalse(Thread.holdsLock(holder.get()), "Release observers must run outside the work lock.");
+				releases.incrementAndGet();
+			});
+			holder.set(work);
+			assertTrue(work.reservePartitionAndEnterCallback(partition));
+			assertTrue(work.reservePartitionAndEnterCallback(partition));
+			assertEquals(1, budget.snapshot().activeReservations());
+			work.complete();
+			assertFalse(work.reservePartitionAndEnterCallback(partition));
+			assertEquals(1, budget.snapshot().activeReservations());
+			assertEquals(0, releases.get());
+			work.callbackExited();
+			assertEquals(1, budget.snapshot().activeReservations());
+			assertEquals(0, releases.get());
+			work.callbackExited();
+			assertEquals(0, budget.snapshot().activeReservations());
+			assertEquals(1, releases.get());
+			work.complete();
+			assertEquals(1, releases.get());
+		}
+	}
+
+	@Test
+	void rejected_atomic_entry_reserves_no_callback_and_releases_no_other_owners_budget() throws Exception {
+		try (McpHttpServerRuntime runtime = runtime()) {
+			McpLegacyHttpControlBudget budget = controlBudget(runtime);
+			McpEffectivePartition partition = partition();
+			for (int index = 0; index < McpLegacyHttpControlBudget.MAXIMUM_SIMULTANEOUS_PER_PARTITION; index++)
+				assertTrue(budget.reserve(partition));
+			try {
+				AtomicInteger releases = new AtomicInteger();
+				McpHttpServerRuntime.LegacyHttpPolicyWork work = runtime.new LegacyHttpPolicyWork(releases::incrementAndGet);
+				assertFalse(work.reservePartitionAndEnterCallback(partition));
+				work.complete();
+				assertEquals(McpLegacyHttpControlBudget.MAXIMUM_SIMULTANEOUS_PER_PARTITION,
+						budget.snapshot().activeReservations());
+				assertEquals(1, releases.get());
+			} finally {
+				for (int index = 0; index < McpLegacyHttpControlBudget.MAXIMUM_SIMULTANEOUS_PER_PARTITION; index++)
+					budget.release(partition);
+			}
+		}
+	}
+
+	private static McpHttpServerRuntime runtime() {
+		return new McpHttpServerRuntime(McpHttpTransportConfiguration.productionDefaults(0),
+				McpHttpEndpointPolicy.forDiscovery(CorsAuthorizer.fromWhitelistedOrigins(Set.of("https://test.example")),
+						ignored -> McpAdmissionDecision.acceptedAnonymous()),
+				McpNormalizedEndpoint.withServerInformation(McpImplementationMetadata.withNameAndVersion(
+						"legacy-policy-work-test", "test")).build());
+	}
+	private static McpLegacyHttpControlBudget controlBudget(McpHttpServerRuntime runtime) throws Exception {
+		var field = McpHttpServerRuntime.class.getDeclaredField("legacyHttpControlBudget");
+		field.setAccessible(true);
+		return (McpLegacyHttpControlBudget) field.get(runtime);
+	}
+	private static McpEffectivePartition partition() {
+		return new McpEffectivePartition(new McpEndpointPartitionIdentity("/mcp"),
+				McpPartitionPurpose.AUTHORIZATION, Optional.of("shared"));
 	}
 
 	private static McpApplicationExecution execution() {

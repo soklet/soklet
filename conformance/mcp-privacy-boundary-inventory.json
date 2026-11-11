@@ -37918,27 +37918,27 @@
         },
         {
           "file": "src/main/java/com/soklet/DefaultMcpSecurityKeyManagers.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpSecurityKeyManagers.java#com.soklet.DefaultMcpSecurityKeyManagers#DefaultMcpSecurityKeyManagers(McpProtectionConfig,McpTraceCorrelationKey,EntropySource,long,long)->Throwable.IllegalArgumentException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpSecurityKeyManagers.java#com.soklet.DefaultMcpSecurityKeyManagers#DefaultMcpSecurityKeyManagers(McpProtectionConfig,McpTraceCorrelationKey,SecureRandom,long,long)->Throwable.IllegalArgumentException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "DefaultMcpSecurityKeyManagers(McpProtectionConfig,McpTraceCorrelationKey,EntropySource,long,long)",
+          "member": "DefaultMcpSecurityKeyManagers(McpProtectionConfig,McpTraceCorrelationKey,SecureRandom,long,long)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultMcpSecurityKeyManagers",
           "sink": "Throwable.IllegalArgumentException"
         },
         {
           "file": "src/main/java/com/soklet/DefaultMcpSecurityKeyManagers.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpSecurityKeyManagers.java#com.soklet.DefaultMcpSecurityKeyManagers#DefaultMcpSecurityKeyManagers(McpProtectionConfig,McpTraceCorrelationKey,EntropySource,long,long)->Throwable.IllegalArgumentException@2",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpSecurityKeyManagers.java#com.soklet.DefaultMcpSecurityKeyManagers#DefaultMcpSecurityKeyManagers(McpProtectionConfig,McpTraceCorrelationKey,SecureRandom,long,long)->Throwable.IllegalArgumentException@2",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "DefaultMcpSecurityKeyManagers(McpProtectionConfig,McpTraceCorrelationKey,EntropySource,long,long)",
+          "member": "DefaultMcpSecurityKeyManagers(McpProtectionConfig,McpTraceCorrelationKey,SecureRandom,long,long)",
           "occurrence": 2,
           "owner": "com.soklet.DefaultMcpSecurityKeyManagers",
           "sink": "Throwable.IllegalArgumentException"
         },
         {
           "file": "src/main/java/com/soklet/DefaultMcpSecurityKeyManagers.java",
-          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpSecurityKeyManagers.java#com.soklet.DefaultMcpSecurityKeyManagers#DefaultMcpSecurityKeyManagers(McpProtectionConfig,McpTraceCorrelationKey,EntropySource,long,long)->Throwable.IllegalStateException@1",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/DefaultMcpSecurityKeyManagers.java#com.soklet.DefaultMcpSecurityKeyManagers#DefaultMcpSecurityKeyManagers(McpProtectionConfig,McpTraceCorrelationKey,SecureRandom,long,long)->Throwable.IllegalStateException@1",
           "matcherRuleId": "PRIV-MATCH-011",
-          "member": "DefaultMcpSecurityKeyManagers(McpProtectionConfig,McpTraceCorrelationKey,EntropySource,long,long)",
+          "member": "DefaultMcpSecurityKeyManagers(McpProtectionConfig,McpTraceCorrelationKey,SecureRandom,long,long)",
           "occurrence": 1,
           "owner": "com.soklet.DefaultMcpSecurityKeyManagers",
           "sink": "Throwable.IllegalStateException"
@@ -49282,6 +49282,15 @@
           "occurrence": 1,
           "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.InitialCatalogProjectionResult",
           "sink": "Throwable.IllegalArgumentException"
+        },
+        {
+          "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",
+          "key": "PRIV-MATCH-011:src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java#com.soklet.internal.mcp.protocol.McpHttpServerRuntime.LegacyHttpPolicyWork#callbackEntered()->Throwable.McpApplicationPolicyCapacityException@1",
+          "matcherRuleId": "PRIV-MATCH-011",
+          "member": "callbackEntered()",
+          "occurrence": 1,
+          "owner": "com.soklet.internal.mcp.protocol.McpHttpServerRuntime.LegacyHttpPolicyWork",
+          "sink": "Throwable.McpApplicationPolicyCapacityException"
         },
         {
           "file": "src/main/java/com/soklet/internal/mcp/protocol/McpHttpServerRuntime.java",

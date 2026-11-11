@@ -110,6 +110,20 @@ public class StreamingChunkGatheringTests {
         }
     }
 
+    @Test
+    public void longByteBudgetsDrainSmallChunksWithoutNarrowing() throws Exception {
+        for (long budget : new long[] {(long) Integer.MAX_VALUE + 1L, Long.MAX_VALUE}) {
+            Chunk chunk = Chunk.payload("hello");
+            try (RecordingSocketChannel socket = new RecordingSocketChannel(Integer.MAX_VALUE)) {
+                assertEquals(10L, chunk.writeTo(socket, budget));
+                assertEquals("5\r\nhello\r\n", socket.text());
+                assertEquals(1, socket.gatheringWrites);
+                assertEquals(5, chunk.payloadWritten());
+                assertTrue(chunk.isComplete());
+            }
+        }
+    }
+
     // Exercise the private queue item without producer threads or a network timing race.
     private record Chunk(Object value) {
         private static final Class<?> TYPE;

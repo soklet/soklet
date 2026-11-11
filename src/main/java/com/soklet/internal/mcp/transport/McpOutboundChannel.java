@@ -1088,7 +1088,7 @@ public final class McpOutboundChannel {
 				int lastBufferIndex = bufferIndex;
 				long remainingBudget = maximumBytes - written;
 				while (lastBufferIndex < buffers.length - 1
-						&& buffers[lastBufferIndex].remaining() < remainingBudget) {
+						&& (long) buffers[lastBufferIndex].remaining() < remainingBudget) {
 					remainingBudget -= buffers[lastBufferIndex].remaining();
 					lastBufferIndex++;
 				}
