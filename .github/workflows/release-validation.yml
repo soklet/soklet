@@ -1,0 +1,75 @@
+# This workflow registers manual dispatch on the default branch.
+# The selected candidate ref supplies the release validation jobs.
+name: Release Candidate Validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: Produce evidence, finalize a reviewed benchmark, or validate a candidate
+        required: true
+        default: produce
+        type: choice
+        options:
+          - produce
+          - finalize-benchmark
+          - validate
+      candidate_commit:
+        description: Full immutable Soklet candidate commit SHA
+        required: true
+        type: string
+      benchmark_approval_reference:
+        description: Durable approval reference for executing the registered MCP benchmark policy
+        required: false
+        type: string
+      benchmark_draft_run_id:
+        description: Produce-phase workflow run ID containing the reviewed benchmark draft
+        required: false
+        type: string
+      benchmark_draft_artifact_name:
+        description: Exact benchmark draft artifact name from the produce phase
+        required: false
+        type: string
+      benchmark_reviewed_draft_sha256:
+        description: SHA-256 of the exact benchmark draft approved by the reviewer
+        required: false
+        type: string
+      benchmark_signoff_reference:
+        description: Durable signoff URI ending in the approved draft SHA-256
+        required: false
+        type: string
+      benchmark_regression_approval_reference:
+        description: Separate project-owner regression approval URI ending in the approved draft SHA-256
+        required: false
+        type: string
+      release_scans_bundle_run_id:
+        description: Workflow run ID containing the accepted release-scan bundle
+        required: false
+        type: string
+      release_scans_bundle_artifact_name:
+        description: Exact accepted release-scan artifact name
+        required: false
+        type: string
+      benchmark_bundle_run_id:
+        description: Workflow run ID containing the finalized benchmark bundle
+        required: false
+        type: string
+      benchmark_bundle_artifact_name:
+        description: Exact finalized benchmark artifact name
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  registration-notice:
+    name: Select the reviewed candidate ref
+    runs-on: ubuntu-24.04
+    timeout-minutes: 1
+    steps:
+      - name: Report the required branch selection
+        shell: bash
+        run: |
+          printf '%s\n' '::error::Select the reviewed candidate branch in the Run workflow menu to execute release validation.'
+          exit 1
