@@ -4045,7 +4045,7 @@
     }
   ],
   "currentStage": {
-    "censusSha256": "ddad443dcc0ed020089b265db7970745aa52eb7060ea1c11926e55492db7a5c8",
+    "censusSha256": "1092126d7dad8767b2775f674eb606aba7e32eb0ec32e996ac50dec319c3a3b4",
     "d2RemovalAnchors": [
       "api/mcp/phase-4.signatures.jsonl\t54\t0\tapi/mcp/phase-4.signatures.jsonl\te25d18ed313c708589e0341e693b32dbabe6d0a29764d090c3516494bfd20ac3",
       "src/main/java/com/soklet/McpLogLevel.java\t30\t0\tsrc/main/java/com/soklet/McpLogLevel.java\t3a02c08e1250412e2bb783de3cf21423e3ae065d6cd69d592a5887a6977aeec5",
@@ -4058,7 +4058,7 @@
       ".github/workflows/ci.yml\t8a0d2fd69a6a013c411102808887fce0d3f21150815be9300eda23471de2c6a4",
       ".github/workflows/release-validation.yml\t9cc98d2190e4e75608fb50fe1077394b0836274c334ce9d3b69895451254efc2",
       "BENCHMARKS.md\t75cea8def2326ac9656a4762f397b7c151e0c2a7f7b06861bf5c7a1c274626fa",
-      "CHANGELOG.md\t62dc889d3dad328b6d16929bbfb63b22e00b80952cf05f73e574331da575b2d0",
+      "CHANGELOG.md\t5a890eab89841f15da4884ecd0dd096304a973f6d7532fa3b0f8566ffb9aa00c",
       "MCP.md\t400f9b20bfeca8e7b3b13bad60f27ee9a95eed70a18fb64d45d27cf73f3e3edd",
       "MCP_QUICKSTART.md\tfeceebbab9d521c1ebacc056416dc40caee96d415c09edfc106d2142787c8f91",
       "MIGRATING_TO_4_0.md\t6adc32bdae23092276b7596deb62817b630dc59e19a4945910ee254d6a561f8b",

@@ -954,7 +954,7 @@ maintenance or security fixes afterward. See the explicit
 
 ### Known Limitations
 
-- **JSON microbenchmark regression:** the reviewed single-thread JDK 21 run of
+- **JSON benchmark regression:** the reviewed single-thread JDK 21 run of
   a 274-byte JSON-RPC request measured parsing throughput 23.4% lower and writing
   throughput 7.3% lower than Soklet 3.5.1. These fixed-payload results do not
   measure end-to-end server performance. Strict UTF-8 handling and JSON resource
