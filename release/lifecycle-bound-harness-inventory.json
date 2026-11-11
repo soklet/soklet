@@ -2404,8 +2404,8 @@
     }
   ],
   "discoveryCensus": {
-    "candidateCount": 12925,
-    "candidateSha256": "e67c5a281f3fce715e86af31b8fdddde8ff6aee38333838af8af9f9c913a0c07",
+    "candidateCount": 12926,
+    "candidateSha256": "1626fd48c772254dba1ac73634a51b44220b6b7c21bc547011869962b21eb6ad",
     "candidates": [
       {
         "kinds": [
@@ -7122,7 +7122,15 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 2057,
+        "line": 1002,
+        "lineSha256": "5f21dfadae09bf46d637796ac8ec2a80682ed2effd426317dfb5857c4a4764a6",
+        "path": "scripts/import-release-harness-evidence-self-test.mjs"
+      },
+      {
+        "kinds": [
+          "LIFECYCLE_SIGNAL"
+        ],
+        "line": 2056,
         "lineSha256": "3874f56e0ef6aec09350d49e83df58f7f87f4b6d30a29f96b0fdd9ce86669c67",
         "path": "scripts/import-release-harness-evidence.mjs"
       },
@@ -106719,7 +106727,7 @@
     "countsByKind": {
       "FIXED_WAIT_CANDIDATE": 3579,
       "JUNIT_OUTER_GUARD": 704,
-      "LIFECYCLE_SIGNAL": 7076,
+      "LIFECYCLE_SIGNAL": 7077,
       "NAMED_TIMEOUT_CANDIDATE": 2435,
       "PROCESS_OUTER_GUARD": 24,
       "WORKFLOW_OUTER_GUARD": 15

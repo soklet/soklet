@@ -1284,10 +1284,9 @@ function parseCandidateReleaseScanApprovals(bytes) {
 function validateEmptySpotBugs(bytes) {
   const label = 'SpotBugs XML report';
   const text = bytes.toString('utf8');
-  const prolog = '<?xml version="1.0" encoding="UTF-8"?>\n';
+  const prolog = text.match(/^<\?xml version="1\.0" encoding="[Uu][Tt][Ff]-8"\?>\n/u);
   if (!Buffer.from(text, 'utf8').equals(bytes)
-      || text.includes('\r') || !text.endsWith('\n')
-      || !text.startsWith(prolog)) {
+      || text.includes('\r') || prolog === null) {
     fail(`${label} is malformed or contains a finding/error.`);
   }
 
@@ -1365,7 +1364,7 @@ function validateEmptySpotBugs(bytes) {
     return { name, selfClosing };
   };
 
-  const body = text.slice(prolog.length);
+  const body = text.slice(prolog[0].length);
   const stack = [];
   let cursor = 0;
   let rootSeen = false;

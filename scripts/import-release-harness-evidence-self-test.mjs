@@ -997,6 +997,58 @@ function run() {
     }
 
     const approvedScanContract = configuration.contracts.get('release-scans');
+    // SpotBugs 4.10.4 emits a lowercase encoding label and no terminal newline.
+    const spotbugsBody = "<BugCollection sequence='0' release='' version='4.10.4'>"
+      + "<Project projectName='Soklet'><Jar>target/classes</Jar></Project>"
+      + "<Errors missingClasses='0' errors='0'></Errors>"
+      + "<FindBugsSummary total_classes='1' total_bugs='0'>"
+      + "<FileStats path='com/soklet/Example.java' bugCount='0'></FileStats>"
+      + '</FindBugsSummary><ClassFeatures></ClassFeatures><History></History></BugCollection>';
+    for (const [label, encoding, ending] of [
+      ['spotbugs-pinned-output', 'utf-8', ''],
+      ['spotbugs-uppercase-no-final-lf', 'UTF-8', ''],
+      ['spotbugs-lowercase-final-lf', 'utf-8', '\n'],
+      ['spotbugs-mixedcase-encoding', 'uTf-8', ''],
+    ]) {
+      const report = `<?xml version="1.0" encoding="${encoding}"?>\n${spotbugsBody}${ending}`;
+      const bundle = validBundle(approvedScanContract, candidate, NOW);
+      replaceDirectoryEntry(bundle, 'scan-reports', '01-spotbugs.xml', report);
+      Object.assign(bundle, wrapContent(bundle.content));
+      const evidenceRoot = materializeBundleRoles(root, label, approvedScanContract, bundle);
+      const bundlePath = join(root, `${String(fixtureOrdinal++).padStart(3, '0')}-${label}.json`);
+      const builtBundle = createReleaseHarnessBundle({
+        candidateIdentityProvider: () => clone(candidate),
+        candidateRoot: root,
+        evidenceRoot,
+        gate: 'release-scans',
+        now: NOW,
+        outputPath: bundlePath,
+        registryPath: configuration.registryPath,
+      });
+      assert.deepEqual(builtBundle, bundle, label);
+      const outputPath = join(root, `${String(fixtureOrdinal++).padStart(3, '0')}-${label}-receipt.json`);
+      const receipt = importReleaseHarnessEvidence({
+        bundlePath,
+        candidateIdentityProvider: () => clone(candidate),
+        candidateRoot: root,
+        gate: 'release-scans',
+        now: NOW,
+        outputPath,
+        registryPath: configuration.registryPath,
+      });
+      assert.equal(receipt.gate, 'release-scans', label);
+      assert.deepEqual(verifyImportedBundleReceipt({
+        bundlePath,
+        candidateIdentityProvider: () => clone(candidate),
+        candidateRoot: root,
+        now: NOW,
+        receiptPath: outputPath,
+        registryPath: configuration.registryPath,
+      }), receipt, label);
+      const reportsPath = approvedScanContract.roles.find(({ name }) => name === 'scan-reports').path;
+      assert.equal(readFileSync(join(evidenceRoot, reportsPath, '01-spotbugs.xml'), 'utf8'), report, label);
+      assertionCount += 4;
+    }
     const approvedScan = approvedScanFixture();
     const approvedScanBundle = validBundle(approvedScanContract, candidate, NOW);
     applyApprovedScanFixture(approvedScanBundle, approvedScan);
@@ -1681,6 +1733,26 @@ function run() {
           + '<BugCollection>&hidden;</BugCollection>\n',
       ),
     });
+    const spotbugsProlog = '<?xml version="1.0" encoding="utf-8"?>\n';
+    for (const [label, report] of [
+      ['spotbugs-pinned-finding', `${spotbugsProlog}<BugCollection><BugInstance/></BugCollection>`],
+      ['spotbugs-pinned-error', `${spotbugsProlog}<BugCollection><Errors><Error/></Errors></BugCollection>`],
+      ['spotbugs-pinned-prefixed-finding', `${spotbugsProlog}<BugCollection><sb:BugInstance/></BugCollection>`],
+      ['spotbugs-pinned-prefixed-error', `${spotbugsProlog}<BugCollection><sb:Error/></BugCollection>`],
+      ['spotbugs-pinned-entity', `${spotbugsProlog}<!DOCTYPE BugCollection [<!ENTITY hidden "content">]>`
+        + '<BugCollection>&hidden;</BugCollection>'],
+      ['spotbugs-pinned-truncation', `${spotbugsProlog}${spotbugsBody.slice(0, -1)}`],
+      ['spotbugs-pinned-trailing-junk', `${spotbugsProlog}${spotbugsBody}junk`],
+      ['spotbugs-non-utf8-encoding', `<?xml version="1.0" encoding="ISO-8859-1"?>\n${spotbugsBody}`],
+      ['spotbugs-uppercase-declaration', `<?XML version="1.0" encoding="utf-8"?>\n${spotbugsBody}`],
+      ['spotbugs-wrong-xml-version', `<?xml version="1.1" encoding="utf-8"?>\n${spotbugsBody}`],
+      ['spotbugs-carriage-return', `${spotbugsProlog}${spotbugsBody}\r\n`],
+    ]) {
+      expectImportFailure({
+        candidate, configuration, gate: 'release-scans', label, root,
+        mutate: (bundle) => replaceDirectoryEntry(bundle, 'scan-reports', '01-spotbugs.xml', report),
+      });
+    }
     expectImportFailure({
       candidate, configuration, gate: 'release-scans', label: 'wrong-scan-pin', root,
       mutate: (bundle) => {
