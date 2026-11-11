@@ -2,7 +2,9 @@
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
+  existsSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -55,6 +57,15 @@ function fixture(name, value = sarif()) {
   mkdirSync(directory);
   writeFileSync(join(directory, 'java.sarif'), JSON.stringify(value), 'utf8');
   return directory;
+}
+
+function git(directory, args) {
+  const result = spawnSync('git', ['-C', directory, ...args], {
+    encoding: 'utf8',
+    timeout: 10_000,
+  });
+  assert.equal(result.status, 0, result.stderr);
+  return result.stdout.trim();
 }
 
 try {
@@ -205,6 +216,173 @@ try {
     /does not bind the exact candidate commit/,
   );
   assertions++;
+
+  // Reuse an existing commit in a disposable clone. This fixture never creates
+  // a commit, and the checkout proves identity independently of SARIF metadata.
+  const sourceRoot = resolve(scriptDirectory, '..');
+  const checkout = join(root, 'candidate-checkout');
+  git(root, ['clone', '--quiet', '--shared', '--no-checkout', sourceRoot, checkout]);
+  const checkoutCommit = git(checkout, ['rev-parse', 'HEAD']);
+  git(checkout, ['checkout', '--quiet', '--detach', checkoutCommit]);
+  const repositoryUri = 'https://github.com/example/soklet';
+  git(checkout, ['remote', 'set-url', 'origin', repositoryUri]);
+  const environment = {
+    GITHUB_ACTIONS: 'true',
+    GITHUB_REPOSITORY: 'example/soklet',
+    GITHUB_RUN_ATTEMPT: '1',
+    GITHUB_RUN_ID: '123',
+    GITHUB_SERVER_URL: 'https://github.com',
+    GITHUB_SHA: checkoutCommit,
+    GITHUB_WORKFLOW_REF: 'example/soklet/.github/workflows/release-validation.yml@refs/heads/release',
+    GITHUB_WORKFLOW_SHA: checkoutCommit,
+    GITHUB_WORKSPACE: checkout,
+  };
+  const missingProvenance = sarif({ findings: [retainedFinding] });
+  delete missingProvenance.runs[0].versionControlProvenance;
+  missingProvenance.runs[0].properties = { existingScannerProperty: true };
+  const missingProvenanceInput = fixture('missing-provenance', missingProvenance);
+  const supplementedOutput = join(root, 'supplemented-output.sarif');
+  prepareCodeqlReleaseReport({
+    candidateCommit: checkoutCommit,
+    candidateRoot: checkout,
+    environment,
+    inputRoot: missingProvenanceInput,
+    outputPath: supplementedOutput,
+  });
+  const supplemented = JSON.parse(readFileSync(supplementedOutput, 'utf8'));
+  const originalBytes = readFileSync(join(missingProvenanceInput, 'java.sarif'));
+  assert.deepEqual(readFileSync(`${supplementedOutput}.source`), originalBytes);
+  assert.deepEqual(supplemented.runs[0].versionControlProvenance,
+    [{ repositoryUri, revisionId: checkoutCommit }]);
+  const normalization = supplemented.runs[0].properties.sokletReleaseProvenance;
+  assert.deepEqual(normalization, {
+    repositoryUri,
+    revisionId: checkoutCommit,
+    source: 'verified-github-actions-checkout',
+    sourceSarifFile: 'supplemented-output.sarif.source',
+    sourceSarifSha256: createHash('sha256').update(originalBytes).digest('hex'),
+    workflowRef: environment.GITHUB_WORKFLOW_REF,
+    workflowRunAttempt: '1',
+    workflowRunId: '123',
+    workflowSha: checkoutCommit,
+  });
+  delete supplemented.runs[0].versionControlProvenance;
+  delete supplemented.runs[0].properties.sokletReleaseProvenance;
+  assert.deepEqual(supplemented, missingProvenance);
+  assertions += 4;
+
+  assert.throws(() => prepareCodeqlReleaseReport({
+    candidateCommit: checkoutCommit,
+    inputRoot: missingProvenanceInput,
+    outputPath: join(root, 'unbound-output.sarif'),
+  }), /no version-control provenance/);
+  assertions++;
+
+  for (const [field, value] of [
+    ['GITHUB_ACTIONS', 'false'],
+    ['GITHUB_SHA', 'b'.repeat(40)],
+    ['GITHUB_WORKFLOW_SHA', 'b'.repeat(40)],
+    ['GITHUB_WORKSPACE', root],
+    ['GITHUB_REPOSITORY', 'elsewhere/soklet'],
+    ['GITHUB_SERVER_URL', 'https://example.com'],
+    ['GITHUB_RUN_ID', ''],
+    ['GITHUB_RUN_ATTEMPT', '0'],
+    ['GITHUB_WORKFLOW_REF', 'example/soklet/scripts/untrusted.mjs'],
+  ]) {
+    assert.throws(() => prepareCodeqlReleaseReport({
+      candidateCommit: checkoutCommit,
+      candidateRoot: checkout,
+      environment: { ...environment, [field]: value },
+      inputRoot: missingProvenanceInput,
+      outputPath: join(root, `wrong-${field}.sarif`),
+    }), /matching GitHub Actions candidate\/workflow identity/, field);
+    assertions++;
+  }
+
+  const emptyProvenance = sarif();
+  emptyProvenance.runs[0].versionControlProvenance = [];
+  prepareCodeqlReleaseReport({
+    candidateCommit: checkoutCommit,
+    candidateRoot: checkout,
+    environment,
+    inputRoot: fixture('empty-provenance', emptyProvenance),
+    outputPath: join(root, 'empty-provenance-output.sarif'),
+  });
+  assertions++;
+
+  for (const [name, provenance] of [
+    ['null-provenance', null],
+    ['object-provenance', {}],
+    ['conflicting-revision', [{ repositoryUri, revisionId: 'b'.repeat(40) }]],
+    ['conflicting-repository', [{ repositoryUri: 'https://github.com/elsewhere/soklet', revisionId: checkoutCommit }]],
+    ['conflicting-extra-entry', [
+      { repositoryUri, revisionId: checkoutCommit },
+      { repositoryUri, revisionId: 'b'.repeat(40) },
+    ]],
+  ]) {
+    const report = sarif();
+    report.runs[0].versionControlProvenance = provenance;
+    const outputPath = join(root, `${name}-output.sarif`);
+    assert.throws(() => prepareCodeqlReleaseReport({
+      candidateCommit: checkoutCommit,
+      candidateRoot: checkout,
+      environment,
+      inputRoot: fixture(name, report),
+      outputPath,
+    }), /malformed version-control provenance|does not bind the exact candidate/);
+    assert.equal(existsSync(outputPath), false);
+    assert.equal(existsSync(`${outputPath}.source`), false);
+    assertions += 3;
+  }
+
+  const dirtyPath = join(checkout, 'LICENSE');
+  const cleanBytes = readFileSync(dirtyPath);
+  writeFileSync(dirtyPath, 'changed source\n');
+  assert.throws(() => prepareCodeqlReleaseReport({
+    candidateCommit: checkoutCommit,
+    candidateRoot: checkout,
+    environment,
+    inputRoot: missingProvenanceInput,
+    outputPath: join(root, 'dirty-output.sarif'),
+  }), /clean candidate commit\/repository/);
+  writeFileSync(dirtyPath, cleanBytes);
+  assertions++;
+
+  git(checkout, ['remote', 'set-url', 'origin', 'https://github.com/elsewhere/soklet']);
+  assert.throws(() => prepareCodeqlReleaseReport({
+    candidateCommit: checkoutCommit,
+    candidateRoot: checkout,
+    environment,
+    inputRoot: missingProvenanceInput,
+    outputPath: join(root, 'wrong-origin-output.sarif'),
+  }), /clean candidate commit\/repository/);
+  git(checkout, ['remote', 'set-url', 'origin', repositoryUri]);
+  assertions++;
+
+  assert.throws(() => prepareCodeqlReleaseReport({
+    candidateCommit,
+    candidateRoot: checkout,
+    environment: { ...environment, GITHUB_SHA: candidateCommit, GITHUB_WORKFLOW_SHA: candidateCommit },
+    inputRoot: missingProvenanceInput,
+    outputPath: join(root, 'wrong-checkout-output.sarif'),
+  }), /clean candidate commit\/repository/);
+  assertions++;
+
+  const cliOutput = join(root, 'cli-output.sarif');
+  const cli = spawnSync(process.execPath, [
+    scriptPath, missingProvenanceInput, cliOutput, checkoutCommit, checkout,
+  ], {
+    encoding: 'utf8',
+    env: { ...process.env, ...environment },
+    timeout: 10_000,
+  });
+  assert.equal(cli.status, 0, cli.stderr);
+  assert.deepEqual(
+    JSON.parse(readFileSync(cliOutput, 'utf8')).runs[0].versionControlProvenance,
+    [{ repositoryUri, revisionId: checkoutCommit }],
+  );
+  assert.deepEqual(readFileSync(`${cliOutput}.source`), originalBytes);
+  assertions += 3;
 
   const usage = spawnSync(process.execPath, [scriptPath], { encoding: 'utf8' });
   assert.equal(usage.status, 64);

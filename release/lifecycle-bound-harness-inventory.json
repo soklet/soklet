@@ -2396,7 +2396,7 @@
   ],
   "discoveryCensus": {
     "candidateCount": 12914,
-    "candidateSha256": "c8b0610f71ac70eedbc0e2b7ec5785918350af8c571f0ae9988d62d1b18a8812",
+    "candidateSha256": "71f1d2c3156c9ce3498ffa5444b9c1d7abfa0a966087778a79f5647f5b5e13e1",
     "candidates": [
       {
         "kinds": [
@@ -7145,7 +7145,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 194,
+        "line": 195,
         "lineSha256": "dcd3262a211f1af40edc1807e505aa216d55de274c06a72e7390044f0cd313c6",
         "path": "scripts/produce-release-benchmarks-self-test.mjs"
       },
@@ -7153,7 +7153,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 523,
+        "line": 558,
         "lineSha256": "a09bd11ed16de532fd66ea6f237e87fd2b4c761c45bf71f8717d36f53da1ec3c",
         "path": "scripts/produce-release-benchmarks.mjs"
       },
@@ -7161,7 +7161,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 525,
+        "line": 560,
         "lineSha256": "359102407b5fa069c68d7dcf5f422aaed1f6132e7c07811e461b3d448db3cbf5",
         "path": "scripts/produce-release-benchmarks.mjs"
       },
@@ -7169,7 +7169,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 526,
+        "line": 561,
         "lineSha256": "45d548c5357376484bc69314c5ea92f6618f292740f8400276547bbd82507c88",
         "path": "scripts/produce-release-benchmarks.mjs"
       },
@@ -7177,7 +7177,7 @@
         "kinds": [
           "LIFECYCLE_SIGNAL"
         ],
-        "line": 540,
+        "line": 575,
         "lineSha256": "dcd3262a211f1af40edc1807e505aa216d55de274c06a72e7390044f0cd313c6",
         "path": "scripts/produce-release-benchmarks.mjs"
       },

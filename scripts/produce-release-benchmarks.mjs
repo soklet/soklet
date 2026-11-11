@@ -204,18 +204,44 @@ function requiredLinuxValue(path, label) {
   return requireString(value, label);
 }
 
-function cpuInfoField(name) {
-  const cpuInfo = readRegularFile('/proc/cpuinfo', 'Linux CPU information',
-    4 * 1024 * 1024).toString('utf8');
-  const match = cpuInfo.match(new RegExp(`^${name}\\s*:\\s*(.+)$`, 'mu'));
-  if (match === null)
+function cpuInfoField(cpuInfo, name) {
+  const match = cpuInfo.match(new RegExp(
+    `^${name}[\\t ]*:[\\t ]*([^\\r\\n]*)$`, 'mu'));
+  if (match === null) {
+    if (name === 'microcode')
+      return 'unavailable:proc/cpuinfo:microcode';
     fail(`Linux CPU information does not expose ${name}.`);
+  }
   return requireString(match[1].trim(), `Linux CPU ${name}`);
 }
 
-function turboState() {
-  const intel = '/sys/devices/system/cpu/intel_pstate/no_turbo';
-  if (existsSync(intel)) {
+function linuxInterfaceExists(path) {
+  try {
+    lstatSync(path);
+    return true;
+  } catch (error) {
+    if (error.code === 'ENOENT')
+      return false;
+    throw error;
+  }
+}
+
+function scalingGovernor(cpuRoot) {
+  const policy = join(cpuRoot, 'cpu0', 'cpufreq');
+  if (!linuxInterfaceExists(policy))
+    return 'unavailable:cpu0/cpufreq/scaling_governor';
+  const governor = requiredLinuxValue(join(policy, 'scaling_governor'),
+    'CPU scaling governor');
+  const available = requiredLinuxValue(join(policy, 'scaling_available_governors'),
+    'CPU available scaling governors');
+  if (!available.split(/\s+/u).includes(governor))
+    fail('CPU scaling governor is not listed in scaling_available_governors.');
+  return governor;
+}
+
+function turboState(cpuRoot) {
+  const intel = join(cpuRoot, 'intel_pstate', 'no_turbo');
+  if (linuxInterfaceExists(intel)) {
     const value = requiredLinuxValue(intel, 'Intel no-turbo state');
     if (value === '0')
       return 'enabled:intel_pstate/no_turbo=0';
@@ -223,8 +249,8 @@ function turboState() {
       return 'disabled:intel_pstate/no_turbo=1';
     fail('Intel no-turbo state is not 0 or 1.');
   }
-  const boost = '/sys/devices/system/cpu/cpufreq/boost';
-  if (existsSync(boost)) {
+  const boost = join(cpuRoot, 'cpufreq', 'boost');
+  if (linuxInterfaceExists(boost)) {
     const value = requiredLinuxValue(boost, 'CPU boost state');
     if (value === '0')
       return 'disabled:cpufreq/boost=0';
@@ -232,7 +258,21 @@ function turboState() {
       return 'enabled:cpufreq/boost=1';
     fail('CPU boost state is not 0 or 1.');
   }
-  fail('The runner does not expose a supported turbo/boost state interface.');
+  return 'unavailable:intel_pstate/no_turbo,cpufreq/boost';
+}
+
+export function captureBenchmarkCpuEnvironment({
+  cpuInfoPath = '/proc/cpuinfo',
+  cpuRoot = '/sys/devices/system/cpu',
+} = {}) {
+  const cpuInfo = readRegularFile(cpuInfoPath, 'Linux CPU information',
+    4 * 1024 * 1024).toString('utf8');
+  return {
+    cpuModel: cpuInfoField(cpuInfo, 'model name'),
+    governor: scalingGovernor(cpuRoot),
+    microcode: cpuInfoField(cpuInfo, 'microcode'),
+    turboState: turboState(cpuRoot),
+  };
 }
 
 function captureEnvironment() {
@@ -248,17 +288,12 @@ function captureEnvironment() {
   if (architecture !== 'x86_64')
     fail(`MCP release benchmark architecture is ${architecture}, not x86_64.`);
   return {
+    ...captureBenchmarkCpuEnvironment(),
     architecture,
-    cpuModel: cpuInfoField('model name'),
-    governor: requiredLinuxValue(
-      '/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor',
-      'CPU scaling governor'),
     image: `ubuntu-24.04@${imageVersion}`,
     kernel: requireString(run('/usr/bin/uname', ['-r']).trim(), 'Linux kernel'),
-    microcode: cpuInfoField('microcode'),
     sameBoot: true,
     samePhysicalRunner: true,
-    turboState: turboState(),
   };
 }
 

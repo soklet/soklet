@@ -126,6 +126,7 @@ jobs:
         uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
         with:
           category: "/language:java-kotlin"
+          checkout_path: ${{ github.workspace }}
           output: ${{ runner.temp }}/codeql-sarif
 
       - name: Prepare canonical release-scan report
@@ -135,6 +136,7 @@ jobs:
           "${{ steps.analyze.outputs.sarif-output }}"
           "${{ runner.temp }}/release-scans-codeql/00-codeql-java.sarif"
           "${{ inputs.candidate_commit }}"
+          "${{ github.workspace }}"
 
       - name: Upload candidate-bound CodeQL report
         if: ${{ inputs.candidate_commit != '' }}

@@ -11,7 +11,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import {
   canonicalJson,
   createReleaseHarnessBundle,
@@ -20,6 +20,7 @@ import {
   verifyReleaseHarnessConfiguration,
 } from './import-release-harness-evidence.mjs';
 import {
+  captureBenchmarkCpuEnvironment,
   finalizeMcpReleaseBenchmarks,
   summarizeJmhResults,
 } from './produce-release-benchmarks.mjs';
@@ -302,6 +303,97 @@ function finalizeFixture(fixture, overrides = {}) {
 }
 
 try {
+  const cpuRoot = join(selfTestRoot, 'linux-cpu');
+  const cpuInfoPath = join(selfTestRoot, 'cpuinfo');
+  mkdirSync(join(cpuRoot, 'cpu0'), { recursive: true });
+  writeFileSync(cpuInfoPath, 'model name\t: self-test-cpu\n', 'utf8');
+  const captureCpu = () => captureBenchmarkCpuEnvironment({ cpuRoot, cpuInfoPath });
+  const unavailableCpu = {
+    cpuModel: 'self-test-cpu',
+    governor: 'unavailable:cpu0/cpufreq/scaling_governor',
+    microcode: 'unavailable:proc/cpuinfo:microcode',
+    turboState: 'unavailable:intel_pstate/no_turbo,cpufreq/boost',
+  };
+  assert.deepEqual(captureCpu(), unavailableCpu);
+  assertionCount++;
+
+  writeFileSync(cpuInfoPath, 'microcode\t: 0x123\n', 'utf8');
+  assert.throws(captureCpu, /does not expose model name/u);
+  writeFileSync(cpuInfoPath, 'model name\t: self-test-cpu\nmicrocode\t:\nflags\t: test\n',
+    'utf8');
+  assert.throws(captureCpu, /Linux CPU microcode must be a nonempty/u);
+  rmSync(cpuInfoPath);
+  assert.throws(captureCpu, /Linux CPU information does not exist/u);
+  writeFileSync(cpuInfoPath, 'model name\t: self-test-cpu\nmicrocode\t: 0x123\n',
+    'utf8');
+  assertionCount += 3;
+
+  function writeCpuValue(path, value) {
+    const absolutePath = join(cpuRoot, path);
+    mkdirSync(dirname(absolutePath), { recursive: true });
+    writeFileSync(absolutePath, value, 'utf8');
+  }
+
+  const governorPath = join(cpuRoot, 'cpu0/cpufreq/scaling_governor');
+  writeCpuValue('cpu0/cpufreq/scaling_governor', 'performance\n');
+  writeCpuValue('cpu0/cpufreq/scaling_available_governors', 'performance powersave\n');
+  writeCpuValue('intel_pstate/no_turbo', '0\n');
+  assert.deepEqual(captureCpu(), {
+    cpuModel: 'self-test-cpu',
+    governor: 'performance',
+    microcode: '0x123',
+    turboState: 'enabled:intel_pstate/no_turbo=0',
+  });
+  assertionCount++;
+
+  writeCpuValue('cpu0/cpufreq/scaling_governor', 'invalid\n');
+  assert.throws(captureCpu, /not listed in scaling_available_governors/u);
+  writeCpuValue('cpu0/cpufreq/scaling_governor', '\n');
+  assert.throws(captureCpu, /CPU scaling governor must be a nonempty/u);
+  rmSync(governorPath);
+  assert.throws(captureCpu, /CPU scaling governor does not exist/u);
+  mkdirSync(governorPath);
+  assert.throws(captureCpu, /CPU scaling governor must be a bounded regular/u);
+  rmSync(governorPath, { recursive: true });
+  writeCpuValue('cpu0/cpufreq/scaling_governor', 'performance\n');
+  writeCpuValue('cpu0/cpufreq/scaling_available_governors', '\n');
+  assert.throws(captureCpu, /CPU available scaling governors must be a nonempty/u);
+  writeCpuValue('cpu0/cpufreq/scaling_available_governors', 'performance powersave\n');
+  assertionCount += 5;
+
+  writeCpuValue('intel_pstate/no_turbo', '1\n');
+  assert.equal(captureCpu().turboState, 'disabled:intel_pstate/no_turbo=1');
+  writeCpuValue('cpufreq/boost', '1\n');
+  writeCpuValue('intel_pstate/no_turbo', '2\n');
+  assert.throws(captureCpu, /Intel no-turbo state is not 0 or 1/u);
+  writeCpuValue('intel_pstate/no_turbo', '\n');
+  assert.throws(captureCpu, /Intel no-turbo state must be a nonempty/u);
+  rmSync(join(cpuRoot, 'intel_pstate/no_turbo'));
+  assert.equal(captureCpu().turboState, 'enabled:cpufreq/boost=1');
+  writeCpuValue('cpufreq/boost', '0\n');
+  assert.equal(captureCpu().turboState, 'disabled:cpufreq/boost=0');
+  writeCpuValue('cpufreq/boost', '2\n');
+  assert.throws(captureCpu, /CPU boost state is not 0 or 1/u);
+  rmSync(join(cpuRoot, 'cpufreq/boost'));
+  assert.equal(captureCpu().turboState, unavailableCpu.turboState);
+  assertionCount += 7;
+
+  const unavailable = finalizationFixture('unavailable-cpu-interfaces');
+  Object.assign(unavailable.draft.environment, unavailableCpu);
+  unavailable.reviewedDraftSha256 = sha256(writeCanonical(unavailable.draftPath,
+    unavailable.draft));
+  finalizeFixture(unavailable);
+  const unavailableEvidence = JSON.parse(readFileSync(
+    join(unavailable.evidenceRoot, 'mcp-benchmarks.json'), 'utf8'));
+  assert.deepEqual(unavailableEvidence.environment, unavailable.draft.environment);
+  assert.equal(verifyReleaseHarnessEvidenceDirectory({
+    candidateRoot: unavailable.candidateRoot,
+    evidenceRoot: unavailable.evidenceRoot,
+    gate: 'mcp-benchmarks',
+    registryPath: registry.registryPath,
+  }).candidate.candidateCommit, candidate.candidateCommit);
+  assertionCount += 2;
+
   const accepted = finalizationFixture('accepted');
   const bundle = finalizeFixture(accepted);
   assert.match(bundle.contentSha256, /^[0-9a-f]{64}$/u);

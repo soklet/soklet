@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   existsSync,
   lstatSync,
@@ -9,7 +11,7 @@ import {
   realpathSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, isAbsolute, parse, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, parse, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const MAXIMUM_REPORT_BYTES = 64 * 1024 * 1024;
@@ -105,6 +107,58 @@ function requireSuccessfulInvocations(run, label) {
     validateSuccessfulInvocation(invocation, `${label}.invocations[${index}]`));
 }
 
+function readGit(candidateRoot, args) {
+  const result = spawnSync('git', ['-C', candidateRoot, ...args], {
+    encoding: 'utf8',
+    maxBuffer: 1024 * 1024,
+    timeout: 10_000,
+  });
+  if (result.status !== 0)
+    fail(`Unable to verify the CodeQL candidate checkout with git ${args[0]}.`);
+  return result.stdout.trim();
+}
+
+function verifiedCheckoutProvenance(candidateRoot, candidateCommit, environment) {
+  const root = requireAbsolutePath(candidateRoot, 'CodeQL candidate checkout');
+  requireNonsymlinkComponents(root, 'CodeQL candidate checkout');
+  if (!existsSync(root) || !lstatSync(root).isDirectory()
+      || realpathSync(root) !== root) {
+    fail('CodeQL candidate checkout must be a real nonsymlink directory.');
+  }
+  if (environment.GITHUB_ACTIONS !== 'true'
+      || environment.GITHUB_SHA !== candidateCommit
+      || environment.GITHUB_WORKFLOW_SHA !== candidateCommit
+      || environment.GITHUB_WORKSPACE !== root
+      || environment.GITHUB_SERVER_URL !== 'https://github.com'
+      || typeof environment.GITHUB_REPOSITORY !== 'string'
+      || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/u.test(environment.GITHUB_REPOSITORY)
+      || !/^[1-9][0-9]*$/u.test(environment.GITHUB_RUN_ID ?? '')
+      || !/^[1-9][0-9]*$/u.test(environment.GITHUB_RUN_ATTEMPT ?? '')
+      || typeof environment.GITHUB_WORKFLOW_REF !== 'string'
+      || !environment.GITHUB_WORKFLOW_REF.startsWith(
+        `${environment.GITHUB_REPOSITORY}/.github/workflows/`,
+      )
+      || !/\.ya?ml@[^\s]+$/u.test(environment.GITHUB_WORKFLOW_REF)) {
+    fail('CodeQL checkout provenance requires matching GitHub Actions candidate/workflow identity.');
+  }
+  const repositoryUri = `${environment.GITHUB_SERVER_URL}/${environment.GITHUB_REPOSITORY}`;
+  const origin = readGit(root, ['remote', 'get-url', 'origin']);
+  if (readGit(root, ['rev-parse', '--show-toplevel']) !== root
+      || readGit(root, ['rev-parse', '--verify', 'HEAD']) !== candidateCommit
+      || readGit(root, ['status', '--porcelain=v1', '--untracked-files=no']) !== ''
+      || (origin !== repositoryUri && origin !== `${repositoryUri}.git`)) {
+    fail('CodeQL candidate checkout does not match the clean candidate commit/repository.');
+  }
+  return {
+    repositoryUri,
+    revisionId: candidateCommit,
+    workflowRef: environment.GITHUB_WORKFLOW_REF,
+    workflowRunAttempt: environment.GITHUB_RUN_ATTEMPT,
+    workflowRunId: environment.GITHUB_RUN_ID,
+    workflowSha: environment.GITHUB_WORKFLOW_SHA,
+  };
+}
+
 function readSarif(inputRoot) {
   requireNonsymlinkComponents(inputRoot, 'CodeQL SARIF input directory');
   if (!existsSync(inputRoot))
@@ -166,10 +220,16 @@ function readSarif(inputRoot) {
       fail(`CodeQL SARIF run ${index + 1} has no results array.`);
     requireSuccessfulInvocations(run, `CodeQL SARIF run ${index + 1}`);
   });
-  return value;
+  return { value, bytes };
 }
 
-export function prepareCodeqlReleaseReport({ candidateCommit, inputRoot, outputPath }) {
+export function prepareCodeqlReleaseReport({
+  candidateCommit,
+  candidateRoot,
+  environment = process.env,
+  inputRoot,
+  outputPath,
+}) {
   if (typeof candidateCommit !== 'string' || !/^[0-9a-f]{40}$/u.test(candidateCommit))
     fail('CodeQL candidate commit must be a full lowercase 40-hex object ID.');
   const absoluteInputRoot = requireAbsolutePath(inputRoot, 'CodeQL SARIF input');
@@ -184,23 +244,59 @@ export function prepareCodeqlReleaseReport({ candidateCommit, inputRoot, outputP
       || realpathSync(outputDirectory) !== outputDirectory) {
     fail('CodeQL release-report output directory must be a real nonsymlink directory.');
   }
-  const value = readSarif(absoluteInputRoot);
+  const checkout = candidateRoot === undefined
+    ? null : verifiedCheckoutProvenance(candidateRoot, candidateCommit, environment);
+  const sourceOutputPath = `${absoluteOutputPath}.source`;
+  if (checkout !== null && existsSync(sourceOutputPath))
+    fail(`CodeQL source-report output already exists: ${sourceOutputPath}`);
+  const { value, bytes } = readSarif(absoluteInputRoot);
   value.runs.forEach((run, index) => {
-    if (!Array.isArray(run.versionControlProvenance)
-        || run.versionControlProvenance.length === 0) {
-      fail(`CodeQL SARIF run ${index + 1} has no version-control provenance.`);
+    if (run.versionControlProvenance === undefined
+        || (Array.isArray(run.versionControlProvenance)
+          && run.versionControlProvenance.length === 0)) {
+      if (checkout === null)
+        fail(`CodeQL SARIF run ${index + 1} has no version-control provenance.`);
+      run.versionControlProvenance = [{
+        repositoryUri: checkout.repositoryUri,
+        revisionId: checkout.revisionId,
+      }];
     }
+    if (!Array.isArray(run.versionControlProvenance))
+      fail(`CodeQL SARIF run ${index + 1} has malformed version-control provenance.`);
     for (const [entryIndex, entry] of run.versionControlProvenance.entries()) {
       if (entry === null || typeof entry !== 'object' || Array.isArray(entry)
           || entry.revisionId !== candidateCommit
-          || typeof entry.repositoryUri !== 'string' || entry.repositoryUri.length === 0) {
+          || typeof entry.repositoryUri !== 'string' || entry.repositoryUri.length === 0
+          || (checkout !== null && entry.repositoryUri !== checkout.repositoryUri
+            && entry.repositoryUri !== `${checkout.repositoryUri}.git`)) {
         fail(
           `CodeQL SARIF run ${index + 1} version-control provenance ${entryIndex + 1} `
             + 'does not bind the exact candidate commit/repository.',
         );
       }
     }
+    if (checkout !== null) {
+      if (run.properties !== undefined && (run.properties === null
+          || typeof run.properties !== 'object' || Array.isArray(run.properties))) {
+        fail(`CodeQL SARIF run ${index + 1} has malformed properties.`);
+      }
+      if (Object.hasOwn(run.properties ?? {}, 'sokletReleaseProvenance'))
+        fail(`CodeQL SARIF run ${index + 1} already contains release normalization provenance.`);
+      run.properties = {
+        ...run.properties,
+        sokletReleaseProvenance: {
+          ...checkout,
+          source: 'verified-github-actions-checkout',
+          sourceSarifFile: basename(sourceOutputPath),
+          sourceSarifSha256: createHash('sha256').update(bytes).digest('hex'),
+        },
+      };
+    }
   });
+  if (checkout !== null) {
+    verifiedCheckoutProvenance(candidateRoot, candidateCommit, environment);
+    writeFileSync(sourceOutputPath, bytes, { flag: 'wx' });
+  }
   writeFileSync(absoluteOutputPath, canonicalJson(value), { encoding: 'utf8', flag: 'wx' });
   return { outputPath: absoluteOutputPath, runCount: value.runs.length };
 }
@@ -208,12 +304,13 @@ export function prepareCodeqlReleaseReport({ candidateCommit, inputRoot, outputP
 function usage() {
   console.error(
     'Usage: node scripts/prepare-codeql-release-report.mjs '
-      + '<absolute-sarif-directory> <absolute-output-file> <candidate-commit>',
+      + '<absolute-sarif-directory> <absolute-output-file> <candidate-commit> '
+      + '[absolute-candidate-checkout]',
   );
 }
 
 function main() {
-  if (process.argv.length !== 5) {
+  if (process.argv.length !== 5 && process.argv.length !== 6) {
     usage();
     process.exitCode = 64;
     return;
@@ -221,6 +318,7 @@ function main() {
   try {
     const result = prepareCodeqlReleaseReport({
       candidateCommit: process.argv[4],
+      candidateRoot: process.argv[5],
       inputRoot: process.argv[2],
       outputPath: process.argv[3],
     });
