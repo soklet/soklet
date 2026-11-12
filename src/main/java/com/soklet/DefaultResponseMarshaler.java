@@ -613,72 +613,72 @@ final class DefaultResponseMarshaler implements ResponseMarshaler {
 	}
 
 	@NonNull
-	protected Optional<UnparsedRequestHandler> getUnparsedRequestHandler() {
+	protected Optional<@NonNull UnparsedRequestHandler> getUnparsedRequestHandler() {
 		return Optional.ofNullable(this.unparsedRequestHandler);
 	}
 
 	@NonNull
-	protected Optional<ResourceMethodHandler> getResourceMethodHandler() {
+	protected Optional<@NonNull ResourceMethodHandler> getResourceMethodHandler() {
 		return Optional.ofNullable(this.resourceMethodHandler);
 	}
 
 	@NonNull
-	protected Optional<NotFoundHandler> getNotFoundHandler() {
+	protected Optional<@NonNull NotFoundHandler> getNotFoundHandler() {
 		return Optional.ofNullable(this.notFoundHandler);
 	}
 
 	@NonNull
-	protected Optional<MethodNotAllowedHandler> getMethodNotAllowedHandler() {
+	protected Optional<@NonNull MethodNotAllowedHandler> getMethodNotAllowedHandler() {
 		return Optional.ofNullable(this.methodNotAllowedHandler);
 	}
 
 	@NonNull
-	protected Optional<ContentTooLargeHandler> getContentTooLargeHandler() {
+	protected Optional<@NonNull ContentTooLargeHandler> getContentTooLargeHandler() {
 		return Optional.ofNullable(this.contentTooLargeHandler);
 	}
 
 	@NonNull
-	protected Optional<ServiceUnavailableHandler> getServiceUnavailableHandler() {
+	protected Optional<@NonNull ServiceUnavailableHandler> getServiceUnavailableHandler() {
 		return Optional.ofNullable(this.serviceUnavailableHandler);
 	}
 
 	@NonNull
-	protected Optional<OptionsHandler> getOptionsHandler() {
+	protected Optional<@NonNull OptionsHandler> getOptionsHandler() {
 		return Optional.ofNullable(this.optionsHandler);
 	}
 
 	@NonNull
-	protected Optional<OptionsSplatHandler> getOptionsSplatHandler() {
+	protected Optional<@NonNull OptionsSplatHandler> getOptionsSplatHandler() {
 		return Optional.ofNullable(this.optionsSplatHandler);
 	}
 
 	@NonNull
-	protected Optional<ThrowableHandler> getThrowableHandler() {
+	protected Optional<@NonNull ThrowableHandler> getThrowableHandler() {
 		return Optional.ofNullable(this.throwableHandler);
 	}
 
 	@NonNull
-	protected Optional<HeadHandler> getHeadHandler() {
+	protected Optional<@NonNull HeadHandler> getHeadHandler() {
 		return Optional.ofNullable(this.headHandler);
 	}
 
 	@NonNull
-	protected Optional<CorsPreflightAllowedHandler> getCorsPreflightAllowedHandler() {
+	protected Optional<@NonNull CorsPreflightAllowedHandler> getCorsPreflightAllowedHandler() {
 		return Optional.ofNullable(this.corsPreflightAllowedHandler);
 	}
 
 	@NonNull
-	protected Optional<CorsPreflightRejectedHandler> getCorsPreflightRejectedHandler() {
+	protected Optional<@NonNull CorsPreflightRejectedHandler> getCorsPreflightRejectedHandler() {
 		return Optional.ofNullable(this.corsPreflightRejectedHandler);
 	}
 
 	@NonNull
-	protected Optional<CorsAllowedHandler> getCorsAllowedHandler() {
+	protected Optional<@NonNull CorsAllowedHandler> getCorsAllowedHandler() {
 		return Optional.ofNullable(this.corsAllowedHandler);
 	}
 
 	@NonNull
-	protected Optional<PostProcessor> getPostProcessor() {
+	protected Optional<@NonNull PostProcessor> getPostProcessor() {
 		return Optional.ofNullable(this.postProcessor);
 	}
 }

@@ -16,6 +16,7 @@
 
 package com.soklet.internal.util;
 
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
@@ -63,7 +64,7 @@ public final class HostHeaderValidator {
 	 * @return the parsed address, or empty when the candidate is not an IPv6
 	 * address literal
 	 */
-	public static Optional<InetAddress> parseIpv6AddressLiteral(
+	public static @NonNull Optional<@NonNull InetAddress> parseIpv6AddressLiteral(
 			@Nullable String literal) {
 		if (literal == null || !isValidIpv6Address(literal))
 			return Optional.empty();
@@ -75,7 +76,7 @@ public final class HostHeaderValidator {
 		}
 	}
 
-	private static String trimOws(String value) {
+	private static @NonNull String trimOws(@NonNull String value) {
 		int start = 0;
 		int end = value.length();
 
@@ -96,7 +97,7 @@ public final class HostHeaderValidator {
 		return value.substring(start, end);
 	}
 
-	private static boolean isValidHostPort(String value) {
+	private static boolean isValidHostPort(@NonNull String value) {
 		if (value.startsWith("[")) {
 			int close = value.indexOf(']');
 			if (close <= 0)
@@ -136,11 +137,11 @@ public final class HostHeaderValidator {
 		return isValidHostName(value);
 	}
 
-	private static boolean isValidHostName(String host) {
+	private static boolean isValidHostName(@NonNull String host) {
 		return isValidIpv4Address(host) || isValidRegName(host);
 	}
 
-	private static boolean isValidPort(String port) {
+	private static boolean isValidPort(@NonNull String port) {
 		if (port.isEmpty() || port.length() > 5)
 			return false;
 
@@ -157,7 +158,7 @@ public final class HostHeaderValidator {
 		return true;
 	}
 
-	private static boolean isValidIpv4Address(String host) {
+	private static boolean isValidIpv4Address(@NonNull String host) {
 		String[] parts = host.split("\\.", -1);
 		if (parts.length != 4)
 			return false;
@@ -180,7 +181,7 @@ public final class HostHeaderValidator {
 		return true;
 	}
 
-	private static boolean isValidIpLiteral(String literal) {
+	private static boolean isValidIpLiteral(@NonNull String literal) {
 		if (literal.isEmpty() || literal.indexOf('%') != -1)
 			return false;
 
@@ -191,7 +192,7 @@ public final class HostHeaderValidator {
 		return isValidIpv6Address(literal);
 	}
 
-	private static boolean isValidIpv6Address(String literal) {
+	private static boolean isValidIpv6Address(@NonNull String literal) {
 		if (literal.isEmpty())
 			return false;
 
@@ -259,7 +260,7 @@ public final class HostHeaderValidator {
 		return segments < 8;
 	}
 
-	private static boolean isValidH16(String part) {
+	private static boolean isValidH16(@NonNull String part) {
 		if (part.isEmpty() || part.length() > 4)
 			return false;
 
@@ -271,7 +272,7 @@ public final class HostHeaderValidator {
 		return true;
 	}
 
-	private static boolean isValidIpvFuture(String literal) {
+	private static boolean isValidIpvFuture(@NonNull String literal) {
 		int dot = literal.indexOf('.');
 		if (dot < 2 || dot == literal.length() - 1)
 			return false;
@@ -290,7 +291,7 @@ public final class HostHeaderValidator {
 		return true;
 	}
 
-	private static boolean isValidRegName(String host) {
+	private static boolean isValidRegName(@NonNull String host) {
 		if (host.isEmpty())
 			return false;
 

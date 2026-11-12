@@ -1,13 +1,15 @@
 package com.soklet.internal.microhttp;
 
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import java.time.Duration;
 import java.util.List;
 
-public record Options(String host, int port, boolean reuseAddr, boolean reusePort, Duration resolution,
-                      Duration requestHeaderTimeout, Duration requestBodyTimeout, Duration responseWriteIdleTimeout,
+public record Options(@Nullable String host, int port, boolean reuseAddr, boolean reusePort, @NonNull Duration resolution,
+                      @NonNull Duration requestHeaderTimeout, @NonNull Duration requestBodyTimeout, @NonNull Duration responseWriteIdleTimeout,
                       int readBufferSize, int acceptLength, int maxRequestSize, int maxRequestBodySize, int maxHeaderCount,
                       int maxHeadersSize, int maxRequestTargetLength, int maxConnections, int concurrency,
-                      List<Header> earlyErrorResponseHeaders,
+                      @NonNull List<@NonNull Header> earlyErrorResponseHeaders,
                       int unparsedRequestCaptureLimitInBytes,
                       int unparsedResponseSizeLimitInBytes) {
 
@@ -15,8 +17,8 @@ public record Options(String host, int port, boolean reuseAddr, boolean reusePor
         earlyErrorResponseHeaders = List.copyOf(earlyErrorResponseHeaders);
     }
 
-    public Options(String host, int port, boolean reuseAddr, boolean reusePort, Duration resolution,
-                   Duration requestHeaderTimeout, Duration requestBodyTimeout, Duration responseWriteIdleTimeout,
+    public Options(@Nullable String host, int port, boolean reuseAddr, boolean reusePort, @NonNull Duration resolution,
+                   @NonNull Duration requestHeaderTimeout, @NonNull Duration requestBodyTimeout, @NonNull Duration responseWriteIdleTimeout,
                    int readBufferSize, int acceptLength, int maxRequestSize, int maxHeaderCount,
                    int maxHeadersSize, int maxRequestTargetLength, int maxConnections, int concurrency) {
         this(host, port, reuseAddr, reusePort, resolution, requestHeaderTimeout, requestBodyTimeout,
@@ -38,7 +40,7 @@ public record Options(String host, int port, boolean reuseAddr, boolean reusePor
         }
     }
 
-    public static OptionsBuilder builder() {
+    public static @NonNull OptionsBuilder builder() {
         return OptionsBuilder.newBuilder();
     }
 }

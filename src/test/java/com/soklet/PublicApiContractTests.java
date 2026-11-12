@@ -19,13 +19,17 @@ package com.soklet;
 import com.sun.source.tree.CompilationUnitTree;
 import com.sun.source.tree.MethodTree;
 import com.sun.source.tree.Tree;
+import com.sun.source.tree.TypeParameterTree;
+import com.sun.source.tree.VariableTree;
 import com.sun.source.util.JavacTask;
 import com.sun.source.util.TreePath;
+import com.sun.source.util.TreePathScanner;
 import com.sun.source.util.Trees;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.NotThreadSafe;
@@ -59,8 +63,9 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.function.Function;
 
-/** Source-inventory contracts for the exported 4.0 public API surface. */
+/** Explicit nullability for owned declarations and thread safety for the exported API. */
 @ThreadSafe
 class PublicApiContractTests {
 	private static final String THREAD_SAFE = ThreadSafe.class.getName();
@@ -77,14 +82,8 @@ class PublicApiContractTests {
 			"com.soklet.converter.ValueConversionException",
 			"com.soklet.exception.BadRequestException");
 
-	private static final Set<String> EXPORTED_PACKAGES = Set.of(
-			"com.soklet",
-			"com.soklet.annotation",
-			"com.soklet.converter",
-			"com.soklet.exception");
-
 	@Test
-	void exportedSourceInventoryHasThreadSafetyAndReferenceNullnessContracts()
+	void ownedDeclarationsHaveNullnessAndExportedTypesHaveThreadSafetyContracts()
 			throws Exception {
 		JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
 		Assertions.assertNotNull(compiler,
@@ -146,36 +145,173 @@ class PublicApiContractTests {
 							: " must declare exactly one thread-safety marker; found ")
 							+ actual);
 
-				for (Element enclosed : type.getEnclosedElements()) {
-					if (enclosed.getKind() == ElementKind.FIELD
-							&& enclosed.getModifiers().contains(Modifier.PUBLIC)
-							&& !enclosed.asType().getKind().isPrimitive())
-						inspectNullness(binaryName + "#"
-								+ enclosed.getSimpleName() + " field",
-								enclosed.asType(), true, false, mismatches);
-					if (!(enclosed instanceof ExecutableElement method)
-							|| !method.getModifiers().contains(Modifier.PUBLIC)
-							|| !isSourceAuthoredMethod(method, trees))
-						continue;
-					String methodOwner = binaryName + "#"
-							+ method.getSimpleName();
-					for (int index = 0; index < method.getParameters().size();
-							++index) {
-						TypeMirror parameterType = method.getParameters().get(index)
-								.asType();
-						if (!parameterType.getKind().isPrimitive())
-							inspectNullness(methodOwner + " parameter " + index,
-									parameterType, true, false, mismatches);
-					}
-					if (method.getReturnType().getKind() != TypeKind.VOID
-							&& !method.getReturnType().getKind().isPrimitive())
-						inspectNullness(methodOwner + " return",
-								method.getReturnType(), true, false, mismatches);
-				}
 			}
+			inspectOwnedDeclarations(compilationUnits, trees, elements, mismatches);
 			Assertions.assertTrue(mismatches.isEmpty(),
-					() -> "Exported source-contract mismatches:\n - "
+					() -> "Owned nullability/exported thread-safety mismatches:\n - "
 							+ String.join("\n - ", mismatches));
+		}
+	}
+
+	@Test
+	void corsCallbacksAcceptNullableResultsAndNonNullResultFunctions()
+			throws Exception {
+		for (Method method : CorsAuthorizer.class.getDeclaredMethods()) {
+			if (!method.getName().equals("fromWhitelistedOrigins")
+					&& !method.getName().equals("fromWhitelistAuthorizer"))
+				continue;
+			for (AnnotatedType parameter : method.getAnnotatedParameterTypes()) {
+				if (!(parameter instanceof AnnotatedParameterizedType callback)
+						|| callback.getType().getTypeName().startsWith("java.util.Set"))
+					continue;
+				assertExactNullness(callback, NonNull.class);
+				assertExactNullness(callback.getAnnotatedActualTypeArguments()[0], NonNull.class);
+				AnnotatedWildcardType result = Assertions.assertInstanceOf(
+						AnnotatedWildcardType.class, callback.getAnnotatedActualTypeArguments()[1]);
+				Assertions.assertEquals(Boolean.class, result.getAnnotatedUpperBounds()[0].getType());
+				assertExactNullness(result.getAnnotatedUpperBounds()[0], Nullable.class);
+			}
+		}
+		Function<@NonNull String, @NonNull Boolean> allow = origin -> true;
+		Function<@NonNull String, @Nullable Boolean> unspecified = origin -> null;
+		String origin = "https://example.test";
+		Request request = Request.withPath(HttpMethod.GET, "/").build();
+		Cors cors = Cors.fromOrigin(HttpMethod.GET, origin);
+		Assertions.assertEquals(Boolean.TRUE, CorsAuthorizer.fromWhitelistedOrigins(
+				Set.of(origin), allow).authorize(request, cors).orElseThrow()
+				.getAccessControlAllowCredentials().orElseThrow());
+		Assertions.assertTrue(CorsAuthorizer.fromWhitelistAuthorizer(allow, unspecified)
+				.authorize(request, cors).orElseThrow().getAccessControlAllowCredentials().isEmpty());
+		Assertions.assertTrue(CorsAuthorizer.fromWhitelistAuthorizer(unspecified, allow)
+				.authorize(request, cors).isEmpty());
+	}
+
+	@Test
+	void nullnessGuardDiscoversProtectedInheritedAndNestedTypeUses(
+			@TempDir Path directory) throws Exception {
+		Path source = directory.resolve("NullnessProbe.java");
+		Files.writeString(source, """
+				package com.soklet.contractprobe;
+				import java.util.List;
+				import java.util.Optional;
+				import org.jspecify.annotations.NonNull;
+				import org.jspecify.annotations.Nullable;
+				public class NullnessProbe extends Hidden {
+				  public String field;
+				  protected String protectedField;
+				  public @Nullable @NonNull String conflicting;
+				  public @Nullable int primitiveAnnotation;
+				  public NullnessProbe(String missing) {}
+				  public String missingReturn() { return ""; }
+				  protected void protectedParameter(String missing) {}
+				  public @NonNull List<String> missingArgument() { return List.of(); }
+				  public @NonNull List<? extends String> missingBound() { return List.of(); }
+				  public @NonNull List<@NonNull ?> wildcardAnnotation() { return List.of(); }
+				  public @NonNull String[] missingArrayDimension() { return new String[0]; }
+				  public String @NonNull [] missingComponent() { return new String[0]; }
+				  public @Nullable byte @NonNull [] primitiveComponentAnnotation() { return new byte[0]; }
+				  public @NonNull Optional<@Nullable String> nullableOptionalPayload() { return Optional.empty(); }
+				  public @Nullable String nullableValue() { return null; }
+				  public @NonNull List<?> wildcard() { return List.of(); }
+				  public <T> @Nullable T echo(@Nullable T value) { return value; }
+				  public byte @NonNull [] primitiveComponents() { return new byte[0]; }
+				  public int primitive() { return 0; }
+				  public interface Nested { String missing(); }
+				  protected interface ProtectedNested { String missing(); }
+				}
+				class Hidden { public String inherited() { return ""; } }
+				""", StandardCharsets.UTF_8);
+		JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+		Assertions.assertNotNull(compiler, "A full JDK is required");
+		DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
+		try (StandardJavaFileManager files = compiler.getStandardFileManager(
+				diagnostics, Locale.ROOT, StandardCharsets.UTF_8)) {
+			JavacTask task = (JavacTask) compiler.getTask(null, files,
+					diagnostics, List.of("--release", "21", "-proc:none",
+							"-classpath", System.getProperty("java.class.path")), null,
+					files.getJavaFileObjectsFromPaths(List.of(source)));
+			List<CompilationUnitTree> units = new ArrayList<>();
+			task.parse().forEach(units::add);
+			task.analyze();
+			Assertions.assertTrue(diagnostics.getDiagnostics().stream()
+					.noneMatch(value -> value.getKind() == Diagnostic.Kind.ERROR),
+					() -> diagnostics.getDiagnostics().toString());
+			Trees trees = Trees.instance(task);
+			Elements elements = task.getElements();
+			List<String> failures = new ArrayList<>();
+			for (TypeElement type : exportedTypes(units, trees, elements))
+				inspectReferenceNullness(type, trees, elements, failures);
+			for (String member : List.of("#field field", "#protectedField field",
+					"#conflicting field", "#primitiveAnnotation field",
+					"#<init> parameter 0", "#missingReturn return",
+					"#protectedParameter parameter 0", "#missingArgument return type argument 0",
+					"#missingBound return type argument 0 wildcard upper bound",
+					"#wildcardAnnotation return type argument 0",
+					"#missingArrayDimension return", "#missingComponent return array component",
+					"#primitiveComponentAnnotation return array component",
+					"#nullableOptionalPayload return type argument 0", "#inherited return",
+					"$Nested#missing return", "$ProtectedNested#missing return"))
+				Assertions.assertTrue(failures.stream().anyMatch(value -> value.contains(member)),
+						() -> member + " was not checked: " + failures);
+			Assertions.assertEquals(17, failures.size(), failures::toString);
+		}
+	}
+
+	@Test
+	void ownedNullnessGuardFindsPrivatePackageRecordAndExplicitBoundContracts(
+			@TempDir Path directory) throws Exception {
+		Path implementation = directory.resolve("ImplementationProbe.java");
+		Files.writeString(implementation, """
+				package com.soklet.internal.contractprobe;
+				import java.util.List;
+				import org.jspecify.annotations.NonNull;
+				import org.jspecify.annotations.Nullable;
+				final class ImplementationProbe {
+				  private String privateField;
+				  Object packageField;
+				  private Object helper(Object value) { return value; }
+				  private record Frame(String text) {}
+				  private static class Bounded<T extends Number> {}
+				  private static class Parametric<T extends @Nullable Object> {
+				    T echo(T value) { return value; }
+				  }
+				  private @NonNull List<?> wildcard() { return List.of(); }
+				  private void primitive(int value) {}
+				}
+				""", StandardCharsets.UTF_8);
+		Path excluded = directory.resolve("SpringProbe.java");
+		Files.writeString(excluded, """
+				package com.soklet.internal.spring;
+				class SpringProbe { String unchangedVendorContract() { return ""; } }
+				""", StandardCharsets.UTF_8);
+		Path included = directory.resolve("SpringlikeProbe.java");
+		Files.writeString(included, """
+				package com.soklet.internal.springlike;
+				class SpringlikeProbe { String ownedContract() { return ""; } }
+				""", StandardCharsets.UTF_8);
+		JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+		Assertions.assertNotNull(compiler, "A full JDK is required");
+		DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
+		try (StandardJavaFileManager files = compiler.getStandardFileManager(
+				diagnostics, Locale.ROOT, StandardCharsets.UTF_8)) {
+			JavacTask task = (JavacTask) compiler.getTask(null, files,
+					diagnostics, List.of("--release", "21", "-proc:none",
+							"-classpath", System.getProperty("java.class.path")), null,
+					files.getJavaFileObjectsFromPaths(List.of(implementation, excluded, included)));
+			List<CompilationUnitTree> units = new ArrayList<>();
+			task.parse().forEach(units::add);
+			task.analyze();
+			Assertions.assertTrue(diagnostics.getDiagnostics().stream()
+					.noneMatch(value -> value.getKind() == Diagnostic.Kind.ERROR),
+					() -> diagnostics.getDiagnostics().toString());
+			List<String> failures = new ArrayList<>();
+			inspectOwnedDeclarations(units, Trees.instance(task), task.getElements(), failures);
+			for (String member : List.of("#privateField field", "#packageField field",
+					"#helper return", "#helper parameter 0", "$Frame#text field",
+					"Bounded type parameter T bound 0", "SpringlikeProbe#ownedContract return"))
+				Assertions.assertTrue(failures.stream().anyMatch(value -> value.contains(member)),
+						() -> member + " was not checked: " + failures);
+			Assertions.assertEquals(7, failures.size(), failures::toString);
 		}
 	}
 
@@ -302,7 +438,9 @@ class PublicApiContractTests {
 		for (CompilationUnitTree compilationUnit : compilationUnits) {
 			String packageName = compilationUnit.getPackageName() == null ? ""
 					: compilationUnit.getPackageName().toString();
-			if (!EXPORTED_PACKAGES.contains(packageName))
+			if ((!packageName.equals("com.soklet") && !packageName.startsWith("com.soklet."))
+					|| packageName.equals("com.soklet.internal")
+					|| packageName.startsWith("com.soklet.internal."))
 				continue;
 			for (Tree declaration : compilationUnit.getTypeDecls()) {
 				Element element = trees.getElement(
@@ -322,8 +460,109 @@ class PublicApiContractTests {
 		result.add(type);
 		for (Element enclosed : type.getEnclosedElements()) {
 			if (enclosed instanceof TypeElement nestedType
-					&& nestedType.getModifiers().contains(Modifier.PUBLIC))
+					&& isVisible(nestedType))
 				appendExportedType(nestedType, result);
+		}
+	}
+
+	private static boolean isVisible(Element element) {
+		return element.getModifiers().contains(Modifier.PUBLIC)
+				|| element.getModifiers().contains(Modifier.PROTECTED);
+	}
+
+	private static void inspectOwnedDeclarations(List<CompilationUnitTree> units,
+			Trees trees, Elements elements, List<String> mismatches) {
+		for (CompilationUnitTree unit : units) {
+			String packageName = unit.getPackageName() == null ? ""
+					: unit.getPackageName().toString();
+			if ((!packageName.equals("com.soklet") && !packageName.startsWith("com.soklet."))
+					|| packageName.equals("com.soklet.internal.spring")
+					|| packageName.startsWith("com.soklet.internal.spring."))
+				continue;
+			new TreePathScanner<Void, Void>() {
+				@Override
+				public Void visitVariable(VariableTree declaration, Void unused) {
+					Element field = trees.getElement(getCurrentPath());
+					if (field != null && field.getKind() == ElementKind.FIELD)
+						inspectNullness(sourceOwner(field, elements) + " field", field.asType(),
+								true, false, isExportedMember(field), mismatches);
+					return super.visitVariable(declaration, unused);
+				}
+
+				@Override
+				public Void visitMethod(MethodTree declaration, Void unused) {
+					Element member = trees.getElement(getCurrentPath());
+					if (member instanceof ExecutableElement method
+							&& trees.getSourcePositions().getEndPosition(unit, declaration) >= 0) {
+						String owner = sourceOwner(method, elements);
+						boolean exported = isExportedMember(method);
+						for (int index = 0; index < method.getParameters().size(); ++index)
+							inspectNullness(owner + " parameter " + index,
+									method.getParameters().get(index).asType(), true, false,
+									exported, mismatches);
+						if (method.getReturnType().getKind() != TypeKind.VOID)
+							inspectNullness(owner + " return", method.getReturnType(),
+									true, false, exported, mismatches);
+					}
+					return super.visitMethod(declaration, unused);
+				}
+
+				@Override
+				public Void visitTypeParameter(TypeParameterTree declaration, Void unused) {
+					Element parameter = trees.getElement(getCurrentPath());
+					String owner = parameter.getEnclosingElement()
+							+ " type parameter " + declaration.getName();
+					for (int index = 0; index < declaration.getBounds().size(); ++index) {
+						Tree bound = declaration.getBounds().get(index);
+						inspectNullness(owner + " bound " + index, trees.getTypeMirror(
+								new TreePath(getCurrentPath(), bound)), true, false, false, mismatches);
+					}
+					return super.visitTypeParameter(declaration, unused);
+				}
+			}.scan(unit, null);
+		}
+	}
+
+	private static String sourceOwner(Element member, Elements elements) {
+		Element owner = member.getEnclosingElement();
+		return (owner instanceof TypeElement type ? elements.getBinaryName(type) : owner)
+				+ "#" + member.getSimpleName();
+	}
+
+	private static boolean isExportedMember(Element member) {
+		if (!isVisible(member))
+			return false;
+		Element owner = member.getEnclosingElement();
+		for (; owner instanceof TypeElement; owner = owner.getEnclosingElement())
+			if (!isVisible(owner))
+				return false;
+		String packageName = owner == null ? "" : owner.toString();
+		return !packageName.equals("com.soklet.internal")
+				&& !packageName.startsWith("com.soklet.internal.");
+	}
+
+	private static void inspectReferenceNullness(TypeElement type, Trees trees,
+			Elements elements, List<String> mismatches) {
+		String binaryName = elements.getBinaryName(type).toString();
+		for (Element member : elements.getAllMembers(type)) {
+			if (!isVisible(member))
+				continue;
+			if (member.getKind() == ElementKind.FIELD
+					&& trees.getPath(member) != null)
+				inspectNullness(binaryName + "#" + member.getSimpleName() + " field",
+						member.asType(), true, false, mismatches);
+			if (!(member instanceof ExecutableElement method)
+					|| !isSourceAuthoredMethod(method, trees))
+				continue;
+			String owner = binaryName + "#" + method.getSimpleName();
+			for (int index = 0; index < method.getParameters().size(); ++index) {
+				TypeMirror parameterType = method.getParameters().get(index).asType();
+				inspectNullness(owner + " parameter " + index, parameterType,
+						true, false, mismatches);
+			}
+			if (method.getReturnType().getKind() != TypeKind.VOID)
+				inspectNullness(owner + " return", method.getReturnType(),
+						true, false, mismatches);
 		}
 	}
 
@@ -335,7 +574,26 @@ class PublicApiContractTests {
 
 	private static void inspectNullness(String owner, TypeMirror type,
 			boolean root, boolean requireNonNull, List<String> mismatches) {
-		if ((root || requiresNestedNullness(type))
+		inspectNullness(owner, type, root, requireNonNull, true, mismatches);
+	}
+
+	private static void inspectNullness(String owner, TypeMirror type,
+			boolean root, boolean requireNonNull, boolean enforceOptionalPayload,
+			List<String> mismatches) {
+		if (type.getKind().isPrimitive() || type.getKind() == TypeKind.WILDCARD) {
+			if (type.getAnnotationMirrors().stream().anyMatch(annotation ->
+					annotation.getAnnotationType().toString().equals(NonNull.class.getName())
+							|| annotation.getAnnotationType().toString().equals(Nullable.class.getName())))
+				mismatches.add(owner + " has nullness on a "
+						+ (type.getKind().isPrimitive() ? "primitive" : "wildcard") + " type: " + type);
+			if (type.getKind().isPrimitive())
+				return;
+		}
+		boolean parametric = type.getKind() == TypeKind.TYPEVAR
+				&& type.getAnnotationMirrors().stream().noneMatch(annotation ->
+					annotation.getAnnotationType().toString().equals(NonNull.class.getName())
+							|| annotation.getAnnotationType().toString().equals(Nullable.class.getName()));
+		if (!parametric && (root || requiresNestedNullness(type))
 				&& !(requireNonNull ? hasExactNullness(type, NonNull.class)
 						: hasAnyExactNullness(type)))
 			mismatches.add(owner + (root ? "" : " nested type")
@@ -348,21 +606,21 @@ class PublicApiContractTests {
 			List<? extends TypeMirror> arguments = declaredType.getTypeArguments();
 			for (int index = 0; index < arguments.size(); ++index)
 				inspectNullness(owner + " type argument " + index,
-						arguments.get(index), false, optional, mismatches);
+						arguments.get(index), false, optional && enforceOptionalPayload,
+						enforceOptionalPayload, mismatches);
 		} else if (type instanceof ArrayType arrayType) {
 			TypeMirror componentType = arrayType.getComponentType();
-			if (!componentType.getKind().isPrimitive())
-				inspectNullness(owner + " array component", componentType,
-						false, false, mismatches);
+			inspectNullness(owner + " array component", componentType,
+					false, false, enforceOptionalPayload, mismatches);
 		} else if (type instanceof WildcardType wildcardType) {
 			TypeMirror extendsBound = wildcardType.getExtendsBound();
 			if (extendsBound != null)
 				inspectNullness(owner + " wildcard upper bound",
-						extendsBound, false, requireNonNull, mismatches);
+						extendsBound, false, requireNonNull, enforceOptionalPayload, mismatches);
 			TypeMirror superBound = wildcardType.getSuperBound();
 			if (superBound != null)
 				inspectNullness(owner + " wildcard lower bound", superBound,
-						false, requireNonNull, mismatches);
+						false, requireNonNull, enforceOptionalPayload, mismatches);
 		}
 	}
 

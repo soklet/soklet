@@ -38,9 +38,9 @@ public final class UnparsedRequestRejection {
         REQUEST_TOO_LARGE
     }
 
-    private final Reason reason;
+    private final @NonNull Reason reason;
     private final @Nullable InetSocketAddress remoteAddress;
-    private final byte[] capturedBytes;
+    private final byte @NonNull [] capturedBytes;
     private final long observedByteCount;
     private final boolean captureTruncated;
 

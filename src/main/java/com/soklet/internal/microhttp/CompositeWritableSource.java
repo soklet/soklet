@@ -16,6 +16,7 @@
 
 package com.soklet.internal.microhttp;
 
+import org.jspecify.annotations.NonNull;
 import com.soklet.StreamTerminationReason;
 import org.jspecify.annotations.Nullable;
 
@@ -33,9 +34,9 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 class CompositeWritableSource implements WritableSource {
-    private final Queue<WritableSource> sources;
+    private final @NonNull Queue<@NonNull WritableSource> sources;
 
-    CompositeWritableSource(Collection<? extends WritableSource> sources) {
+    CompositeWritableSource(@NonNull Collection<? extends @NonNull WritableSource> sources) {
         requireNonNull(sources);
         this.sources = new ArrayDeque<>(sources.size());
         for (WritableSource source : sources) {
@@ -51,14 +52,14 @@ class CompositeWritableSource implements WritableSource {
     }
 
     @Override
-    public void writeReadyCallback(Runnable callback) {
+    public void writeReadyCallback(@NonNull Runnable callback) {
         for (WritableSource source : sources) {
             source.writeReadyCallback(callback);
         }
     }
 
     @Override
-    public long writeTo(SocketChannel socketChannel, long maxBytes) throws IOException {
+    public long writeTo(@NonNull SocketChannel socketChannel, long maxBytes) throws IOException {
         requireNonNull(socketChannel);
 
         if (maxBytes <= 0) {

@@ -1,4 +1,5 @@
 package com.soklet.internal.microhttp;
 
-public record Header(String name, String value) {
+import org.jspecify.annotations.NonNull;
+public record Header(@NonNull String name, @NonNull String value) {
 }

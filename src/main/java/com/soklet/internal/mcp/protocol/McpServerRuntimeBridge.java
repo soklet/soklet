@@ -107,7 +107,7 @@ public final class McpServerRuntimeBridge {
 	@NonNull
 	private static final String TASKS_EXTENSION_IDENTIFIER =
 			"io.modelcontextprotocol/tasks";
-	private static final String SKILLS_EXTENSION_IDENTIFIER =
+	private static final @NonNull String SKILLS_EXTENSION_IDENTIFIER =
 			"io.modelcontextprotocol/skills";
 	@NonNull
 	private static final McpJsonCodec CANONICAL_JSON_CODEC =
@@ -1136,7 +1136,7 @@ public final class McpServerRuntimeBridge {
 	}
 
 	/** Configures the explicitly selected 2025 session views before this listener starts. */
-	public void configureLegacySessions(@NonNull Optional<com.soklet.McpSessionConfig> sessionConfig) {
+	public void configureLegacySessions(@NonNull Optional<com.soklet.@NonNull McpSessionConfig> sessionConfig) {
 		requireNonNull(sessionConfig);
 		Map<String, Set<String>> revisionsByPath = new LinkedHashMap<>();
 		for (EndpointPlan endpointPlan : executableEndpointPlans) {
@@ -1243,9 +1243,9 @@ public final class McpServerRuntimeBridge {
 		return Set.copyOf(families);
 	}
 
-	private record DefaultSessionTransportAdmissionContext(Request request, McpEndpoint endpoint,
-			McpProtocolVersion protocolVersion, Set<McpSubscriptionNotificationType> notificationTypes,
-			boolean reauthorization, Instant deadline) implements McpSessionTransportAdmissionContext {
+	private record DefaultSessionTransportAdmissionContext(@NonNull Request request, @NonNull McpEndpoint endpoint,
+			@NonNull McpProtocolVersion protocolVersion, @NonNull Set<@NonNull McpSubscriptionNotificationType> notificationTypes,
+			boolean reauthorization, @NonNull Instant deadline) implements McpSessionTransportAdmissionContext {
 		private DefaultSessionTransportAdmissionContext {
 			requireNonNull(request); requireNonNull(endpoint); requireNonNull(protocolVersion); requireNonNull(deadline);
 			notificationTypes = Set.copyOf(requireNonNull(notificationTypes));
@@ -1256,7 +1256,7 @@ public final class McpServerRuntimeBridge {
 		@Override @NonNull public Set<@NonNull McpSubscriptionNotificationType> getNotificationTypes() { return this.notificationTypes; }
 		@Override @NonNull public Boolean isReauthorization() { return this.reauthorization; }
 		@Override @NonNull public Instant getDeadline() { return this.deadline; }
-		@Override public String toString() {
+		@Override public @NonNull String toString() {
 			return "DefaultSessionTransportAdmissionContext[request=<redacted>, endpoint=<redacted>, protocolVersion="
 					+ protocolVersion.getWireValue() + ", notificationTypeCount=" + notificationTypes.size()
 					+ ", reauthorization=" + reauthorization + ", deadline=<redacted>]";
@@ -1641,7 +1641,7 @@ public final class McpServerRuntimeBridge {
 				requestObservationAdapter.orElseThrow();
 		McpRuntimeObservationSink observationSink = new McpRuntimeObservationSink() {
 			@Override
-			public McpRuntimeRequestObservation didStartRequest(McpRuntimeRequestInput input) {
+			public @NonNull McpRuntimeRequestObservation didStartRequest(@NonNull McpRuntimeRequestInput input) {
 				RequestObservation publicObservation = requireNonNull(
 						observationAdapter.didStartRequest(toObservationInput(input, publicEndpoint)),
 						"The MCP request-observation adapter returned null.");
@@ -1718,7 +1718,7 @@ public final class McpServerRuntimeBridge {
 			}
 
 			@Override
-			public Optional<McpRequestContext> contextForOmittedRequest(McpRuntimeRequestInput input) {
+			public @NonNull Optional<@NonNull McpRequestContext> contextForOmittedRequest(@NonNull McpRuntimeRequestInput input) {
 				return requireNonNull(observationAdapter.contextForOmittedRequest(
 						toObservationInput(input, publicEndpoint)),
 						"The MCP request-context adapter returned null.");
@@ -1775,7 +1775,7 @@ public final class McpServerRuntimeBridge {
 	 * router. The transport selects one view before admission or dispatch.
 	 */
 	@NonNull
-	private static Map<String, McpNormalizedEndpoint> revisionEndpoints(
+	private static Map<@NonNull String, @NonNull McpNormalizedEndpoint> revisionEndpoints(
 			@NonNull McpNormalizedEndpoint complete,
 			@NonNull EndpointPlan endpointPlan) {
 		McpEndpoint publicEndpoint = endpointPlan.endpoint();
@@ -2442,7 +2442,7 @@ public final class McpServerRuntimeBridge {
 	@ThreadSafe
 	public record CompletionInvocation(@NonNull PromptInvocation base,
 			@NonNull String argumentName, @NonNull String argumentValue,
-			@NonNull Map<String, String> contextArguments) {
+			@NonNull Map<@NonNull String, @NonNull String> contextArguments) {
 		public CompletionInvocation {
 			requireNonNull(base);
 			requireNonNull(argumentName);
@@ -4925,7 +4925,7 @@ public final class McpServerRuntimeBridge {
 			@NonNull McpApplicationInvocation invocation,
 			@NonNull McpEndpoint publicEndpoint,
 			@NonNull String argumentName, @NonNull String argumentValue,
-			@NonNull Map<String, String> contextArguments) throws Exception {
+			@NonNull Map<@NonNull String, @NonNull String> contextArguments) throws Exception {
 		McpJsonRpcMessage.Request request = invocation.request();
 		McpRequestMetadata requestMetadata = request.params().metadata();
 		PromptInvocation base = new PromptInvocation(
@@ -4981,7 +4981,7 @@ public final class McpServerRuntimeBridge {
 						: Optional.of(resultMetadata)));
 	}
 
-	private static McpApplicationDispatchOutcome invokeSkills(@NonNull SkillsPlan plan,
+	private static @NonNull McpApplicationDispatchOutcome invokeSkills(@NonNull SkillsPlan plan,
 			@NonNull McpApplicationInvocation invocation, @NonNull McpEndpoint publicEndpoint) throws Exception {
 		McpJsonRpcMessage.Request request = invocation.request();
 		McpRequestMetadata metadata = request.params().metadata();
@@ -5019,7 +5019,7 @@ public final class McpServerRuntimeBridge {
 		};
 	}
 
-	private static McpApplicationDispatchOutcome invokePrompt(@NonNull PromptPlan promptPlan,
+	private static @NonNull McpApplicationDispatchOutcome invokePrompt(@NonNull PromptPlan promptPlan,
 			@NonNull McpInputRequestPlan inputRequestPlan,
 			@NonNull McpApplicationInvocation invocation,
 			@NonNull McpEndpoint publicEndpoint,

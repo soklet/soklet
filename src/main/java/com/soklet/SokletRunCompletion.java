@@ -33,14 +33,14 @@ import static java.util.Objects.requireNonNull;
  * outcome never creates threads or invokes application callbacks on the owner.
  */
 final class SokletRunCompletion {
-	private final CountDownLatch ready = new CountDownLatch(1);
-	private final CountDownLatch finished = new CountDownLatch(1);
-	private final CompletableFuture<ShutdownResult> publicCompletion = new CompletableFuture<>();
-	private final CompletionStage<ShutdownResult> publicView =
+	private final @NonNull CountDownLatch ready = new CountDownLatch(1);
+	private final @NonNull CountDownLatch finished = new CountDownLatch(1);
+	private final @NonNull CompletableFuture<@NonNull ShutdownResult> publicCompletion = new CompletableFuture<>();
+	private final @NonNull CompletionStage<@NonNull ShutdownResult> publicView =
 			this.publicCompletion.minimalCompletionStage();
-	private final Object cleanupOwnerToken = new Object();
-	private final AtomicBoolean publicationClaimed = new AtomicBoolean();
-	private final Runnable beforeStartupCancellation;
+	private final @NonNull Object cleanupOwnerToken = new Object();
+	private final @NonNull AtomicBoolean publicationClaimed = new AtomicBoolean();
+	private final @NonNull Runnable beforeStartupCancellation;
 	private volatile @Nullable Soklet soklet;
 	private volatile @Nullable ShutdownResult result;
 	private volatile @Nullable Throwable failure;
@@ -160,7 +160,7 @@ final class SokletRunCompletion {
 	}
 
 	@NonNull
-	CompletionStage<ShutdownResult> async() {
+	CompletionStage<@NonNull ShutdownResult> async() {
 		return this.publicView;
 	}
 

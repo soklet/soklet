@@ -161,7 +161,7 @@ public abstract class AbstractValueConverter<F, T> implements ValueConverter<F, 
 	}
 
 	@NonNull
-	static List<Type> genericTypesForClass(@Nullable Class<?> valueConverterClass) {
+	static List<@NonNull Type> genericTypesForClass(@Nullable Class<?> valueConverterClass) {
 		if (valueConverterClass == null)
 			return List.of();
 		return genericTypesFor(valueConverterClass, Map.of(), new HashSet<>());
@@ -175,7 +175,7 @@ public abstract class AbstractValueConverter<F, T> implements ValueConverter<F, 
 	}
 
 	@NonNull
-	private static List<Type> genericTypesFor(@Nullable Type candidate,
+	private static List<@NonNull Type> genericTypesFor(@Nullable Type candidate,
 			@NonNull Map<@NonNull TypeVariable<?>, @NonNull Type> inherited,
 			@NonNull Set<@NonNull Class<?>> activeClasses) {
 		if (candidate == null)
@@ -261,7 +261,7 @@ public abstract class AbstractValueConverter<F, T> implements ValueConverter<F, 
 				resolvedArguments);
 	}
 
-	private static Type @NonNull [] resolve(Type @NonNull [] types,
+	private static @NonNull Type @NonNull [] resolve(@NonNull Type @NonNull [] types,
 			@NonNull Map<@NonNull TypeVariable<?>, @NonNull Type> substitutions) {
 		Type[] resolved = new Type[types.length];
 		for (int index = 0; index < types.length; ++index)
@@ -324,11 +324,11 @@ public abstract class AbstractValueConverter<F, T> implements ValueConverter<F, 
 	}
 
 	private static final class ResolvedWildcardType implements WildcardType {
-		private final Type @NonNull [] upperBounds;
-		private final Type @NonNull [] lowerBounds;
+		private final @NonNull Type @NonNull [] upperBounds;
+		private final @NonNull Type @NonNull [] lowerBounds;
 
-		private ResolvedWildcardType(Type @NonNull [] upperBounds,
-				Type @NonNull [] lowerBounds) {
+		private ResolvedWildcardType(@NonNull Type @NonNull [] upperBounds,
+				@NonNull Type @NonNull [] lowerBounds) {
 			this.upperBounds = requireNonNull(upperBounds).clone();
 			this.lowerBounds = requireNonNull(lowerBounds).clone();
 			for (Type bound : this.upperBounds)
@@ -338,12 +338,12 @@ public abstract class AbstractValueConverter<F, T> implements ValueConverter<F, 
 		}
 
 		@Override
-		public Type @NonNull [] getUpperBounds() {
+		public @NonNull Type @NonNull [] getUpperBounds() {
 			return upperBounds.clone();
 		}
 
 		@Override
-		public Type @NonNull [] getLowerBounds() {
+		public @NonNull Type @NonNull [] getLowerBounds() {
 			return lowerBounds.clone();
 		}
 
@@ -376,7 +376,7 @@ public abstract class AbstractValueConverter<F, T> implements ValueConverter<F, 
 		}
 
 		@NonNull
-		private static String joinedTypeNames(Type @NonNull [] types) {
+		private static String joinedTypeNames(@NonNull Type @NonNull [] types) {
 			StringBuilder names = new StringBuilder();
 			for (int index = 0; index < types.length; ++index) {
 				if (index > 0)
@@ -393,10 +393,10 @@ public abstract class AbstractValueConverter<F, T> implements ValueConverter<F, 
 		private final Type rawType;
 		@Nullable
 		private final Type ownerType;
-		private final Type @NonNull [] arguments;
+		private final @NonNull Type @NonNull [] arguments;
 
 		private ResolvedParameterizedType(@NonNull Type rawType,
-				@Nullable Type ownerType, Type @NonNull [] arguments) {
+				@Nullable Type ownerType, @NonNull Type @NonNull [] arguments) {
 			this.rawType = requireNonNull(rawType);
 			this.ownerType = ownerType;
 			this.arguments = requireNonNull(arguments).clone();
@@ -405,7 +405,7 @@ public abstract class AbstractValueConverter<F, T> implements ValueConverter<F, 
 		}
 
 		@Override
-		public Type @NonNull [] getActualTypeArguments() {
+		public @NonNull Type @NonNull [] getActualTypeArguments() {
 			return arguments.clone();
 		}
 

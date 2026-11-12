@@ -64,7 +64,7 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class McpGeneratedEndpointProviderLoader {
-	private static final String ABSENT_OUTPUT_SCHEMA_DIGEST =
+	private static final @NonNull String ABSENT_OUTPUT_SCHEMA_DIGEST =
 			"NO_OUTPUT_SCHEMA";
 	@NonNull
 	private static final String METADATA_SETUP_GUIDANCE =
@@ -190,7 +190,7 @@ public final class McpGeneratedEndpointProviderLoader {
 	}
 
 	@NonNull
-	private static Map<String, McpGeneratedEndpointProviderIndex.Entry> readEntries(
+	private static Map<@NonNull String, McpGeneratedEndpointProviderIndex.@NonNull Entry> readEntries(
 			@NonNull ClassLoader classLoader) {
 		List<McpGeneratedEndpointProviderIndex.Entry> discovered =
 				new ArrayList<>();
@@ -402,7 +402,7 @@ public final class McpGeneratedEndpointProviderLoader {
 	private static void verifySchemaDigests(
 			McpGeneratedEndpointProviderIndex.@NonNull Entry entry,
 			@NonNull McpEndpoint endpoint,
-			String @NonNull [] schemaDigests) {
+			@NonNull String @NonNull [] schemaDigests) {
 		List<McpToolRegistration<?>> tools = endpoint.getToolRegistrations();
 		if (schemaDigests.length != tools.size() * 3)
 			throw schemaMismatch(entry);

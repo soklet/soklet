@@ -512,6 +512,29 @@ class ConditionalLingeringCloseTests {
         }
     }
 
+    @Test
+    void connectionSnapshotsMissingGenericAndInternetPeerAddressesOnce() throws Exception {
+        SocketAddress genericAddress = new SocketAddress() {
+            @Override public String toString() { return "controlled-peer"; }
+        };
+        for (SocketAddress peer : new SocketAddress[]{null,
+                new InetSocketAddress("127.0.0.1", 12345), genericAddress}) {
+            try (Fixture fixture = new Fixture(1024, peer)) {
+                assertSame(peer, field(fixture.connection, "peerAddress"));
+                assertSame(peer instanceof InetSocketAddress ? peer : null,
+                        field(fixture.connection, "remoteAddress"));
+                assertEquals(1, fixture.socket.peerAddressLookups);
+                fixture.read(CLOSE);
+                assertEquals(1, fixture.requests.size());
+                assertSame(peer instanceof InetSocketAddress ? peer : null,
+                        fixture.requests.get(0).remoteAddress());
+                assertEquals(1, fixture.socket.peerAddressLookups);
+                fixture.respond(200);
+                fixture.assertPromptClose();
+            }
+        }
+    }
+
     private enum DrainBoundary {
         BEFORE_PREPARATION,
         FINAL_WRITE,
@@ -534,6 +557,11 @@ class ConditionalLingeringCloseTests {
         final Object connection;
 
         Fixture(int maxRequestSize) throws Exception {
+            this(maxRequestSize, null);
+        }
+
+        Fixture(int maxRequestSize, SocketAddress peer) throws Exception {
+            this.socket.peerAddress = peer;
             Handler handler = new Handler() {
                 @Override public void handle(MicrohttpRequest request, Consumer<MicrohttpResponse> callback) {
                     requests.add(request);
@@ -568,10 +596,9 @@ class ConditionalLingeringCloseTests {
                     (Runnable) releases::incrementAndGet);
             Class<?> type = Class.forName(ConnectionEventLoop.class.getName() + "$Connection");
             Constructor<?> constructor = type.getDeclaredConstructor(ConnectionEventLoop.class,
-                    SocketChannel.class, SelectionKey.class, InetSocketAddress.class,
-                    EventLoop.ConnectionAdmission.class);
+                    SocketChannel.class, SelectionKey.class, EventLoop.ConnectionAdmission.class);
             constructor.setAccessible(true);
-            Object connection = constructor.newInstance(loop, socket, key, null, admission);
+            Object connection = constructor.newInstance(loop, socket, key, admission);
             ((AtomicInteger) field(loop, "connectionCount")).incrementAndGet();
             return connection;
         }
@@ -706,6 +733,8 @@ class ConditionalLingeringCloseTests {
         int closes;
         int reads;
         int lastReadLimit;
+        int peerAddressLookups;
+        SocketAddress peerAddress;
         long bytesRead;
         IOException ioFailure;
         RuntimeException runtimeFailure;
@@ -751,7 +780,7 @@ class ConditionalLingeringCloseTests {
         @Override public boolean isConnectionPending() { return false; }
         @Override public boolean connect(SocketAddress address) { return true; }
         @Override public boolean finishConnect() { return true; }
-        @Override public SocketAddress getRemoteAddress() { return null; }
+        @Override public SocketAddress getRemoteAddress() { peerAddressLookups++; return peerAddress; }
         @Override public SocketAddress getLocalAddress() { return null; }
         @Override protected void implCloseSelectableChannel() { closes++; }
         @Override protected void implConfigureBlocking(boolean blocking) {}

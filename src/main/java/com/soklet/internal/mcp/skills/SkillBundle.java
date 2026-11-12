@@ -11,6 +11,8 @@
  */
 package com.soklet.internal.mcp.skills;
 
+
+import org.jspecify.annotations.NonNull;
 import com.soklet.internal.mcp.protocol.McpJsonLimits;
 import com.soklet.internal.mcp.protocol.McpJsonObject;
 
@@ -37,14 +39,14 @@ import static java.util.Objects.requireNonNull;
  */
 final class SkillBundle {
 	static final int MAXIMUM_TOTAL_BYTES = 16 * 1024 * 1024;
-	private final SkillPaths paths;
-	private final Map<String, byte[]> files;
-	private final SkillDocumentMetadata documentMetadata;
-	private final List<Resource> resources;
+	private final @NonNull SkillPaths paths;
+	private final @NonNull Map<@NonNull String, byte @NonNull []> files;
+	private final @NonNull SkillDocumentMetadata documentMetadata;
+	private final @NonNull List<@NonNull Resource> resources;
 	private final long sizeInBytes;
 
-	private SkillBundle(SkillPaths paths, Map<String, byte[]> files,
-			SkillDocumentMetadata documentMetadata, List<Resource> resources, long sizeInBytes) {
+	private SkillBundle(@NonNull SkillPaths paths, @NonNull Map<@NonNull String, byte @NonNull []> files,
+			@NonNull SkillDocumentMetadata documentMetadata, @NonNull List<@NonNull Resource> resources, long sizeInBytes) {
 		this.paths = paths;
 		this.files = Collections.unmodifiableMap(files);
 		this.documentMetadata = documentMetadata;
@@ -52,7 +54,7 @@ final class SkillBundle {
 		this.sizeInBytes = sizeInBytes;
 	}
 
-	static SkillBundle fromFiles(Map<String, byte[]> files, SkillYamlLimits yamlLimits, McpJsonLimits jsonLimits) {
+	static @NonNull SkillBundle fromFiles(@NonNull Map<@NonNull String, byte @NonNull []> files, @NonNull SkillYamlLimits yamlLimits, @NonNull McpJsonLimits jsonLimits) {
 		requireNonNull(files, "Skills files are required.");
 		requireNonNull(yamlLimits, "Skills YAML limits are required.");
 		requireNonNull(jsonLimits, "Skills JSON limits are required.");
@@ -100,23 +102,23 @@ final class SkillBundle {
 		return new SkillBundle(paths, owned, metadata, resources, size);
 	}
 
-	String name() { return this.documentMetadata.name(); }
-	String description() { return this.documentMetadata.description(); }
-	McpJsonObject documentMetadata() { return this.documentMetadata.metadata(); }
-	List<String> filePaths() { return this.paths.paths(); }
-	SkillPaths paths() { return this.paths; }
-	List<Resource> resources() { return this.resources; }
+	@NonNull String name() { return this.documentMetadata.name(); }
+	@NonNull String description() { return this.documentMetadata.description(); }
+	@NonNull McpJsonObject documentMetadata() { return this.documentMetadata.metadata(); }
+	@NonNull List<@NonNull String> filePaths() { return this.paths.paths(); }
+	@NonNull SkillPaths paths() { return this.paths; }
+	@NonNull List<@NonNull Resource> resources() { return this.resources; }
 	long sizeInBytes() { return this.sizeInBytes; }
 
 	/** Construction-time conversion; owned arrays never leave this package boundary. */
-	Map<String, SkillFileContents> fileContents(McpJsonLimits limits) {
+	@NonNull Map<@NonNull String, @NonNull SkillFileContents> fileContents(@NonNull McpJsonLimits limits) {
 		Map<String, SkillFileContents> contents = new LinkedHashMap<>();
 		for (Map.Entry<String, byte[]> entry : this.files.entrySet())
 			contents.put(entry.getKey(), SkillFileContents.from(entry.getKey(), entry.getValue(), limits));
 		return Collections.unmodifiableMap(contents);
 	}
 
-	boolean contentEquals(SkillBundle other) {
+	boolean contentEquals(@NonNull SkillBundle other) {
 		if (this == other) return true;
 		if (!filePaths().equals(other.filePaths())) return false;
 		for (String path : filePaths())
@@ -124,7 +126,7 @@ final class SkillBundle {
 		return true;
 	}
 
-	boolean fileContentEquals(String path, SkillBundle other, String otherPath) {
+	boolean fileContentEquals(@NonNull String path, @NonNull SkillBundle other, @NonNull String otherPath) {
 		return Arrays.equals(this.files.get(path), other.files.get(otherPath));
 	}
 
@@ -132,13 +134,13 @@ final class SkillBundle {
 	// digests are only a cached, bounded source for the value's hash code.
 	int contentHashCode() { return this.resources.hashCode(); }
 
-	Optional<byte[]> findFileBytes(String path) {
+	@NonNull Optional<byte @NonNull []> findFileBytes(@NonNull String path) {
 		requireNonNull(path, "A Skills logical path is required.");
 		byte[] bytes = this.files.get(path);
 		return bytes == null ? Optional.empty() : Optional.of(bytes.clone());
 	}
 
-	private static MessageDigest sha256() {
+	private static @NonNull MessageDigest sha256() {
 		try {
 			return MessageDigest.getInstance("SHA-256");
 		} catch (NoSuchAlgorithmException exception) {
@@ -147,14 +149,14 @@ final class SkillBundle {
 		}
 	}
 
-	private static IllegalArgumentException invalid() {
+	private static @NonNull IllegalArgumentException invalid() {
 		return new IllegalArgumentException("Invalid Skills bundle files.");
 	}
 
 	@Override
-	public String toString() { return "SkillBundle[redacted]"; }
+	public @NonNull String toString() { return "SkillBundle[redacted]"; }
 
-	record Resource(String path, String digest, long size) {
-		@Override public String toString() { return "SkillBundle.Resource[redacted]"; }
+	record Resource(@NonNull String path, @NonNull String digest, long size) {
+		@Override public @NonNull String toString() { return "SkillBundle.Resource[redacted]"; }
 	}
 }

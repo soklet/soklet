@@ -139,8 +139,8 @@ final class DefaultHttpServer implements HttpServer {
 	static final Integer DEFAULT_STREAMING_CALLBACK_CONCURRENCY;
 	@NonNull
 	static final Duration DEFAULT_STREAMING_CLEANUP_TIMEOUT;
-	private static final Integer UNPARSED_REQUEST_CAPTURE_LIMIT_IN_BYTES;
-	private static final Integer UNPARSED_RESPONSE_SIZE_LIMIT_IN_BYTES;
+	private static final @NonNull Integer UNPARSED_REQUEST_CAPTURE_LIMIT_IN_BYTES;
+	private static final @NonNull Integer UNPARSED_RESPONSE_SIZE_LIMIT_IN_BYTES;
 
 	static {
 		DEFAULT_HOST = "0.0.0.0";
@@ -218,9 +218,9 @@ final class DefaultHttpServer implements HttpServer {
 	@NonNull
 	private final ReentrantLock lock;
 	@NonNull
-	private final Supplier<ExecutorService> requestHandlerExecutorServiceSupplier;
+	private final Supplier<@NonNull ExecutorService> requestHandlerExecutorServiceSupplier;
 	@NonNull
-	private final Supplier<ExecutorService> streamingExecutorServiceSupplier;
+	private final Supplier<@NonNull ExecutorService> streamingExecutorServiceSupplier;
 	@NonNull
 	private final BuiltInTransportLifecycleAdapter lifecycleAdapter;
 	@NonNull
@@ -242,13 +242,13 @@ final class DefaultHttpServer implements HttpServer {
 	@Nullable
 	private volatile ExecutorService requestHandlerExecutorService;
 	@Nullable
-	private volatile Supplier<Optional<AdmissionFence.Admission>> outerRequestAdmissionSupplier;
+	private volatile Supplier<@NonNull Optional<AdmissionFence.@NonNull Admission>> outerRequestAdmissionSupplier;
 	@Nullable
 	private volatile ExecutorService streamingExecutorService;
 	@Nullable
 	private volatile StreamLifecycleCoordinator streamLifecycleCoordinator;
 	@Nullable
-	private volatile Supplier<StreamLifecycleCoordinator> streamLifecycleCoordinatorFactoryForTests;
+	private volatile Supplier<@NonNull StreamLifecycleCoordinator> streamLifecycleCoordinatorFactoryForTests;
 	@Nullable
 	private volatile ScheduledExecutorService streamingTimeoutExecutorService;
 	@Nullable
@@ -681,7 +681,7 @@ final class DefaultHttpServer implements HttpServer {
 								HttpMethod httpMethod;
 
 								try {
-									String normalizedMethod = microhttpRequest.method();
+									String normalizedMethod = microhttpRequest.parsedMethod();
 
 									if (normalizedMethod.equals("PRI"))
 										throw new IllegalRequestException("HTTP/2.0 Connection Preface specified, but Soklet only supports HTTP/1.1");
@@ -691,7 +691,7 @@ final class DefaultHttpServer implements HttpServer {
 									throw new IllegalRequestException("Unsupported HTTP method specified");
 								}
 
-								request = Request.withRawUrl(httpMethod, microhttpRequest.uri())
+								request = Request.withRawUrl(httpMethod, microhttpRequest.parsedUri())
 										.lifecycleAdmission(dispatchAdmission == null ? null : dispatchAdmission.outer())
 										.multipartParser(getMultipartParser())
 										.idGenerator(getIdGenerator())
@@ -740,7 +740,7 @@ final class DefaultHttpServer implements HttpServer {
 										// Resolve transport-owned protocol replacement synchronously, so
 										// write/finish observation receives the response actually offered.
 										microhttpResponse = StreamingMicrohttpResponses.forRequestVersion(
-												microhttpResponse, microhttpRequest.version());
+												microhttpResponse, microhttpRequest.parsedVersion());
 									} catch (Throwable preparationFailure) {
 										Runnable reportRejection = () -> {
 											if (requestResult.getMarshaledResponse().isStreaming()) {
@@ -900,7 +900,7 @@ final class DefaultHttpServer implements HttpServer {
 			Handler handler = new Handler() {
 				@Override
 				public void handle(@NonNull MicrohttpRequest request,
-						@NonNull Consumer<MicrohttpResponse> responseConsumer) {
+						@NonNull Consumer<@NonNull MicrohttpResponse> responseConsumer) {
 					AdmissionFence.Admission builtInAdmission = getLifecycleAdapter()
 							.tryAdmit(lifecycleGeneration).orElse(null);
 					HttpDispatchAdmission admission = builtInAdmission == null ? null
@@ -948,7 +948,7 @@ final class DefaultHttpServer implements HttpServer {
 				}
 
 				@Override
-				public Handler.StreamingResponseInputPolicy streamingResponseInputPolicy(
+				public Handler.@NonNull StreamingResponseInputPolicy streamingResponseInputPolicy(
 						@NonNull MicrohttpRequest request) {
 					return Handler.StreamingResponseInputPolicy.RETAIN;
 				}
@@ -956,7 +956,7 @@ final class DefaultHttpServer implements HttpServer {
 				@Override
 				public boolean handleUnparsedRequest(
 						@NonNull UnparsedRequestRejection rejection,
-						@NonNull Consumer<byte[]> responseConsumer) {
+						@NonNull Consumer<byte @NonNull []> responseConsumer) {
 					AdmissionFence.Admission admission = getLifecycleAdapter()
 							.tryAdmit(lifecycleGeneration).orElse(null);
 					if (admission == null)
@@ -1044,7 +1044,7 @@ final class DefaultHttpServer implements HttpServer {
 		return provideDefaultMicrohttpFailsafeResponse(statusCode);
 	}
 
-	private static MicrohttpResponse provideDefaultMicrohttpFailsafeResponse(int statusCode) {
+	private static @NonNull MicrohttpResponse provideDefaultMicrohttpFailsafeResponse(int statusCode) {
 		Charset charset = StandardCharsets.UTF_8;
 		String reasonPhrase = StatusCode.fromStatusCode(statusCode)
 				.map(StatusCode::getReasonPhrase)
@@ -1062,7 +1062,7 @@ final class DefaultHttpServer implements HttpServer {
 	 * output, so a blocking observer can delay the write and remains shutdown work.
 	 */
 	private void rejectRequestDuringShutdown(@NonNull MicrohttpRequest request,
-			@NonNull Consumer<MicrohttpResponse> responseConsumer,
+			@NonNull Consumer<@NonNull MicrohttpResponse> responseConsumer,
 			@NonNull RejectedExecutionException exception) {
 		try {
 			responseConsumer.accept(withConnectionClose(
@@ -1074,11 +1074,11 @@ final class DefaultHttpServer implements HttpServer {
 	}
 
 	/** The simulator uses the same finite response as built-in HTTP admission rejection. */
-	static MarshaledResponse provideDefaultStreamingAdmissionRejection() {
+	static @NonNull MarshaledResponse provideDefaultStreamingAdmissionRejection() {
 		return describeFiniteTransportResponse(withConnectionClose(provideDefaultMicrohttpFailsafeResponse(503)));
 	}
 
-	private static MarshaledResponse describeFiniteTransportResponse(MicrohttpResponse response) {
+	private static @NonNull MarshaledResponse describeFiniteTransportResponse(@NonNull MicrohttpResponse response) {
 		Map<String, List<String>> headers = new LinkedCaseInsensitiveMap<>();
 		for (Header header : response.headers())
 			Utilities.addParsedHeader(headers, header.name(), header.value());
@@ -1091,7 +1091,7 @@ final class DefaultHttpServer implements HttpServer {
 		return builder.build();
 	}
 
-	private static RuntimeException propagateResponseWriteFailure(Throwable throwable) {
+	private static @NonNull RuntimeException propagateResponseWriteFailure(@NonNull Throwable throwable) {
 		if (throwable instanceof Error error) throw error;
 		return throwable instanceof RuntimeException runtimeException ? runtimeException
 				: new IllegalStateException("Unable to hand response to HTTP transport.", throwable);
@@ -1103,7 +1103,7 @@ final class DefaultHttpServer implements HttpServer {
 	}
 
 	private static void releaseLifecycleAdmission(
-			@NonNull Map<MicrohttpRequest, HttpDispatchAdmission> admissions,
+			@NonNull Map<@NonNull MicrohttpRequest, @NonNull HttpDispatchAdmission> admissions,
 			@NonNull MicrohttpRequest request) {
 		HttpDispatchAdmission admission = admissions.remove(requireNonNull(request));
 		if (admission != null)
@@ -1114,7 +1114,7 @@ final class DefaultHttpServer implements HttpServer {
 			AdmissionFence.@Nullable Admission outer) implements AutoCloseable {
 		@Nullable
 		static HttpDispatchAdmission acquire(AdmissionFence.@NonNull Admission builtIn,
-				@Nullable Supplier<Optional<AdmissionFence.Admission>> outerSupplier) {
+				@Nullable Supplier<@NonNull Optional<AdmissionFence.@NonNull Admission>> outerSupplier) {
 			if (outerSupplier == null)
 				return new HttpDispatchAdmission(builtIn, null);
 			try {
@@ -1148,8 +1148,7 @@ final class DefaultHttpServer implements HttpServer {
 
 		List<Header> headers = new ArrayList<>();
 
-		if (response.headers() != null)
-			headers.addAll(response.headers());
+		headers.addAll(response.headers());
 
 		headers.add(new Header("Connection", "close"));
 		return response.withHeaders(headers);
@@ -1159,16 +1158,12 @@ final class DefaultHttpServer implements HttpServer {
 		requireNonNull(response);
 
 		List<Header> headers = response.headers();
-		if (headers == null)
-			return false;
 
 		for (Header header : headers) {
 			if (!"Connection".equalsIgnoreCase(header.name()))
 				continue;
 
-			String value = header.value();
-			if (value == null)
-				continue;
+			String value = java.util.Objects.requireNonNullElse(header.value(), "");
 
 			for (String part : value.split(",", -1)) {
 				if ("close".equalsIgnoreCase(part.trim()))
@@ -1206,7 +1201,7 @@ final class DefaultHttpServer implements HttpServer {
 
 	private boolean submitUnparsedRequest(
 			@NonNull UnparsedRequestRejection rejection,
-			@NonNull Consumer<byte[]> responseConsumer,
+			@NonNull Consumer<byte @NonNull []> responseConsumer,
 			AdmissionFence.@NonNull Admission admission) {
 		return UnparsedRequestResponseSupport.submit(this.requestHandlerExecutorService,
 				this.requestHandlerTimeoutScheduler, getRequestHandlerTimeout(), () -> UnparsedRequest
@@ -1264,37 +1259,37 @@ final class DefaultHttpServer implements HttpServer {
 			}
 
 			@Override
-			public void log(@Nullable LogEntry... logEntries) {
+			public void log(@Nullable LogEntry @Nullable ... logEntries) {
 				// Trace logging is disabled for the embedded transport by default.
 			}
 
 			@Override
 			public void log(@Nullable Exception e,
-											@Nullable LogEntry... logEntries) {
+											@Nullable LogEntry @Nullable ... logEntries) {
 				// Trace logging is disabled for the embedded transport by default.
 			}
 
 			@Override
-			public void logFailure(@Nullable LogEntry... logEntries) {
+			public void logFailure(@Nullable LogEntry @Nullable ... logEntries) {
 				logTransportFailure(null, logEntries);
 			}
 
 			@Override
 			public void logFailure(@Nullable Exception e,
-														 @Nullable LogEntry... logEntries) {
+														 @Nullable LogEntry @Nullable ... logEntries) {
 				logTransportFailure(e, logEntries);
 			}
 
 			@Override
 			public void logFailure(@Nullable Throwable throwable,
-														 @Nullable LogEntry... logEntries) {
+														 @Nullable LogEntry @Nullable ... logEntries) {
 				logTransportFailure(throwable, logEntries);
 			}
 		};
 	}
 
 	private void logTransportFailure(@Nullable Throwable throwable,
-																	 @Nullable LogEntry... logEntries) {
+																	 @Nullable LogEntry @Nullable ... logEntries) {
 		String event = valueForLogEntry("event", logEntries).orElse("unknown");
 		MetricsCollector.TransportFailureReason reason = transportFailureReasonFor(event);
 		String connectionId = valueForLogEntry("id", logEntries).orElse(null);
@@ -1311,8 +1306,8 @@ final class DefaultHttpServer implements HttpServer {
 	}
 
 	@NonNull
-	private static Optional<String> valueForLogEntry(@NonNull String key,
-																									 @Nullable LogEntry... logEntries) {
+	private static Optional<@NonNull String> valueForLogEntry(@NonNull String key,
+																									 @Nullable LogEntry @Nullable ... logEntries) {
 		requireNonNull(key);
 
 		if (logEntries == null)
@@ -1328,7 +1323,7 @@ final class DefaultHttpServer implements HttpServer {
 		return Optional.empty();
 	}
 
-	private static MetricsCollector.TransportFailureReason transportFailureReasonFor(@Nullable String event) {
+	private static MetricsCollector.@NonNull TransportFailureReason transportFailureReasonFor(@Nullable String event) {
 		if (event == null)
 			return MetricsCollector.TransportFailureReason.UNKNOWN;
 
@@ -1358,7 +1353,7 @@ final class DefaultHttpServer implements HttpServer {
 		requireNonNull(microhttpRequest);
 
 		Map<String, List<String>> headers = new LinkedCaseInsensitiveMap<>();
-		for (Header header : microhttpRequest.headers())
+		for (Header header : microhttpRequest.parsedHeaders())
 			Utilities.addParsedHeader(headers, header.name(), header.value());
 
 		Utilities.freezeStringValueLists(headers);
@@ -1503,11 +1498,11 @@ final class DefaultHttpServer implements HttpServer {
 						idleTimeout,
 						streamingForcedShutdownStarted,
 						new StreamingMicrohttpResponses.TerminationListener() {
-							@Override public void didTerminate(Instant establishedAt, Duration streamDuration,
+							@Override public void didTerminate(@NonNull Instant establishedAt, @NonNull Duration streamDuration,
 									@Nullable StreamTerminationReason cancelationReason, @Nullable Throwable throwable) {
 								didTerminate(establishedAt, streamDuration, cancelationReason, throwable, System.nanoTime(), 0L);
 							}
-							@Override public void didTerminate(Instant establishedAt, Duration streamDuration,
+							@Override public void didTerminate(@NonNull Instant establishedAt, @NonNull Duration streamDuration,
 									@Nullable StreamTerminationReason cancelationReason, @Nullable Throwable throwable,
 									long terminatedNanos, long bodyBytes) {
 							try { marshaledResponse.close(); }
@@ -1620,7 +1615,7 @@ final class DefaultHttpServer implements HttpServer {
 	}
 
 	@NonNull
-	static Map<String, List<String>> simulatedFiniteResponseHeaders(Request request, MarshaledResponse response,
+	static Map<@NonNull String, @NonNull List<@NonNull String>> simulatedFiniteResponseHeaders(@NonNull Request request, @NonNull MarshaledResponse response,
 			@Nullable Long headRepresentationLength) {
 		List<Header> fields = new ArrayList<>();
 		for (Map.Entry<String, List<String>> entry : response.getHeaders().entrySet())
@@ -1642,7 +1637,7 @@ final class DefaultHttpServer implements HttpServer {
 	}
 
 	@NonNull
-	private static List<Header> finiteResponseHeaders(@NonNull List<Header> headers, int statusCode, boolean head) {
+	private static List<@NonNull Header> finiteResponseHeaders(@NonNull List<@NonNull Header> headers, int statusCode, boolean head) {
 		Set<String> connectionNamedHeaders = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
 		boolean close = false;
 		for (Header header : headers) {
@@ -1676,7 +1671,7 @@ final class DefaultHttpServer implements HttpServer {
 	}
 
 	@NonNull
-	private static List<Header> finiteContentLengthHeaders(@NonNull List<Header> headers, @Nullable Request request,
+	private static List<@NonNull Header> finiteContentLengthHeaders(@NonNull List<@NonNull Header> headers, @Nullable Request request,
 			int statusCode, long bodyLength, @Nullable Long headRepresentationLength) {
 		if (statusCode == 204 || statusCode == 304) return headers;
 		if (statusCode == 205) {
@@ -1695,7 +1690,7 @@ final class DefaultHttpServer implements HttpServer {
 		return result;
 	}
 
-	private static boolean validUpgradeValue(String value) {
+	private static boolean validUpgradeValue(@NonNull String value) {
 		for (String entry : value.split(",", -1)) {
 			String protocol = entry.trim();
 			if (protocol.isEmpty()) return false;
@@ -2050,7 +2045,7 @@ final class DefaultHttpServer implements HttpServer {
 	}
 
 	@NonNull
-	private static List<String> normalizeHeaderValues(@NonNull List<String> values) {
+	private static List<@NonNull String> normalizeHeaderValues(@NonNull List<@NonNull String> values) {
 		return List.copyOf(requireNonNull(values));
 	}
 
@@ -2066,7 +2061,7 @@ final class DefaultHttpServer implements HttpServer {
 	}
 
 	protected void safelyCollectMetrics(@NonNull String message,
-																			@NonNull Consumer<MetricsCollector> metricsConsumer) {
+																			@NonNull Consumer<@NonNull MetricsCollector> metricsConsumer) {
 		requireNonNull(message);
 		requireNonNull(metricsConsumer);
 
@@ -2430,7 +2425,7 @@ final class DefaultHttpServer implements HttpServer {
 		}
 
 		@NonNull
-		private static Optional<EncodingPreference> fromHeaderValue(@Nullable String headerValue) {
+		private static Optional<@NonNull EncodingPreference> fromHeaderValue(@Nullable String headerValue) {
 			String trimmed = headerValue == null ? "" : Utilities.trimHeaderWhitespace(headerValue);
 
 			if (trimmed.isEmpty())
@@ -2597,22 +2592,22 @@ final class DefaultHttpServer implements HttpServer {
 	}
 
 	@NonNull
-	protected Optional<ExecutorService> getRequestHandlerExecutorService() {
+	protected Optional<@NonNull ExecutorService> getRequestHandlerExecutorService() {
 		return Optional.ofNullable(this.requestHandlerExecutorService);
 	}
 
 	@NonNull
-	protected Optional<ExecutorService> getStreamingExecutorService() {
+	protected Optional<@NonNull ExecutorService> getStreamingExecutorService() {
 		return Optional.ofNullable(this.streamingExecutorService);
 	}
 
 	@NonNull
-	protected Optional<ScheduledExecutorService> getStreamingTimeoutExecutorService() {
+	protected Optional<@NonNull ScheduledExecutorService> getStreamingTimeoutExecutorService() {
 		return Optional.ofNullable(this.streamingTimeoutExecutorService);
 	}
 
 	@NonNull
-	protected Optional<TimeoutScheduler> getRequestHandlerTimeoutScheduler() {
+	protected Optional<@NonNull TimeoutScheduler> getRequestHandlerTimeoutScheduler() {
 		return Optional.ofNullable(this.requestHandlerTimeoutScheduler);
 	}
 
@@ -2622,22 +2617,22 @@ final class DefaultHttpServer implements HttpServer {
 	}
 
 	@NonNull
-	protected Optional<RequestHandler> getServerListener() {
+	protected Optional<@NonNull RequestHandler> getServerListener() {
 		return Optional.ofNullable(this.requestHandler);
 	}
 
 	@NonNull
-	protected Optional<EventLoop> getEventLoop() {
+	protected Optional<@NonNull EventLoop> getEventLoop() {
 		return Optional.ofNullable(this.eventLoop);
 	}
 
 	@NonNull
-	protected Supplier<ExecutorService> getRequestHandlerExecutorServiceSupplier() {
+	protected Supplier<@NonNull ExecutorService> getRequestHandlerExecutorServiceSupplier() {
 		return this.requestHandlerExecutorServiceSupplier;
 	}
 
 	@NonNull
-	protected Supplier<ExecutorService> getStreamingExecutorServiceSupplier() {
+	protected Supplier<@NonNull ExecutorService> getStreamingExecutorServiceSupplier() {
 		return this.streamingExecutorServiceSupplier;
 	}
 
@@ -2647,7 +2642,7 @@ final class DefaultHttpServer implements HttpServer {
 	}
 
 	@NonNull
-	protected Optional<RequestHandler> getRequestHandler() {
+	protected Optional<@NonNull RequestHandler> getRequestHandler() {
 		return Optional.ofNullable(this.requestHandler);
 	}
 
@@ -2660,14 +2655,14 @@ final class DefaultHttpServer implements HttpServer {
 		this.startSetupHook = requireNonNull(startSetupHook);
 	}
 
-	void setStreamLifecycleCoordinatorFactoryForTests(@NonNull Supplier<StreamLifecycleCoordinator> streamLifecycleCoordinatorFactory) {
+	void setStreamLifecycleCoordinatorFactoryForTests(@NonNull Supplier<@NonNull StreamLifecycleCoordinator> streamLifecycleCoordinatorFactory) {
 		if (this.streamLifecycleCoordinator != null)
 			throw new IllegalStateException("Streaming lifecycle coordinator is already initialized.");
 		this.streamLifecycleCoordinatorFactoryForTests = requireNonNull(streamLifecycleCoordinatorFactory);
 	}
 
 	@NonNull
-	Optional<StreamLifecycleCoordinator> getStreamLifecycleCoordinatorForTests() {
+	Optional<@NonNull StreamLifecycleCoordinator> getStreamLifecycleCoordinatorForTests() {
 		return Optional.ofNullable(this.streamLifecycleCoordinator);
 	}
 
@@ -2729,7 +2724,7 @@ final class DefaultHttpServer implements HttpServer {
 	private final class HttpLifecycleOperations
 			implements BuiltInTransportLifecycleAdapter.Operations {
 		@NonNull
-		private final AtomicReference<HttpRuntimeSnapshot> retainedSnapshot =
+		private final AtomicReference<@Nullable HttpRuntimeSnapshot> retainedSnapshot =
 				new AtomicReference<>();
 
 		@Override
@@ -2830,7 +2825,7 @@ final class DefaultHttpServer implements HttpServer {
 
 		@Override
 		@NonNull
-		public Set<InternalResidualActivityType> residualActivity() {
+		public Set<@NonNull InternalResidualActivityType> residualActivity() {
 			HttpRuntimeSnapshot snapshot = retained();
 			Set<InternalResidualActivityType> kinds =
 					EnumSet.noneOf(InternalResidualActivityType.class);

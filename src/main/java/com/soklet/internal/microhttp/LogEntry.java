@@ -1,4 +1,5 @@
 package com.soklet.internal.microhttp;
 
-public record LogEntry(String key, String value) {
+import org.jspecify.annotations.NonNull;
+public record LogEntry(@NonNull String key, @NonNull String value) {
 }

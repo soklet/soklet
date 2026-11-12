@@ -135,8 +135,8 @@ final class McpLegacyRequestWireMapper {
 		});
 	}
 
-	private static Optional<McpJsonObject> optionalObject(
-			@NonNull Map<String, McpJsonValue> fields, @NonNull String name,
+	private static @NonNull Optional<@NonNull McpJsonObject> optionalObject(
+			@NonNull Map<@NonNull String, @NonNull McpJsonValue> fields, @NonNull String name,
 			McpJsonRpcEnvelope.@NonNull Request request) {
 		McpJsonValue value = fields.get(name);
 		if (value == null)
@@ -146,7 +146,7 @@ final class McpLegacyRequestWireMapper {
 		return Optional.of(object);
 	}
 
-	private static McpWireDecodingException invalidParams(
+	private static @NonNull McpWireDecodingException invalidParams(
 			McpJsonRpcEnvelope.@NonNull Request request) {
 		return McpWireDecodingException.invalidParams(
 				"Request parameters do not match the 2025 MCP wire contract.",

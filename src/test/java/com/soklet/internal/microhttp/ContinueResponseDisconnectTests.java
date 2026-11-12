@@ -26,7 +26,6 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.net.SocketOption;
@@ -133,10 +132,9 @@ class ContinueResponseDisconnectTests {
                     new AtomicInteger(1), (Runnable) releases::incrementAndGet);
             Class<?> type = Class.forName(ConnectionEventLoop.class.getName() + "$Connection");
             Constructor<?> constructor = type.getDeclaredConstructor(ConnectionEventLoop.class,
-                    SocketChannel.class, SelectionKey.class, InetSocketAddress.class,
-                    EventLoop.ConnectionAdmission.class);
+                    SocketChannel.class, SelectionKey.class, EventLoop.ConnectionAdmission.class);
             constructor.setAccessible(true);
-            connection = constructor.newInstance(loop, socket, key, null, admission);
+            connection = constructor.newInstance(loop, socket, key, admission);
             ((AtomicInteger) field(loop, "connectionCount")).set(1);
         }
 
@@ -256,7 +254,7 @@ class ContinueResponseDisconnectTests {
         @Override public boolean isConnectionPending() { return false; }
         @Override public boolean connect(SocketAddress address) { return true; }
         @Override public boolean finishConnect() { return true; }
-        @Override public SocketAddress getRemoteAddress() { throw new UnsupportedOperationException(); }
+        @Override public SocketAddress getRemoteAddress() { return null; }
         @Override public SocketAddress getLocalAddress() { throw new UnsupportedOperationException(); }
         @Override protected void implCloseSelectableChannel() {}
         @Override protected void implConfigureBlocking(boolean blocking) {}

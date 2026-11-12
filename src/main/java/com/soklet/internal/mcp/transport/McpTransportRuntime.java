@@ -436,7 +436,7 @@ final class McpTransportRuntime implements AutoCloseable {
 		}
 
 		long exchangeId = exchangeSequence.incrementAndGet();
-		String requestId = new String(request.body(), StandardCharsets.UTF_8);
+		String requestId = new String(request.parsedBody(), StandardCharsets.UTF_8);
 		long deadlineNanos = clock.nanoTime()
 				+ configuration.requestDeadline().toNanos();
 		Exchange exchange = new Exchange(
@@ -569,7 +569,7 @@ final class McpTransportRuntime implements AutoCloseable {
 		private final boolean subscriptionRequest;
 		private final long deadlineNanos;
 		@NonNull
-		private final Consumer<MicrohttpResponse> callback;
+		private final Consumer<@NonNull MicrohttpResponse> callback;
 		@NonNull
 		private final AtomicReference<@Nullable Cancellation> cancellation;
 		@NonNull

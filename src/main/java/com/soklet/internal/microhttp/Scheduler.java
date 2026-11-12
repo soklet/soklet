@@ -1,5 +1,6 @@
 package com.soklet.internal.microhttp;
 
+import org.jspecify.annotations.NonNull;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -17,16 +18,16 @@ import java.util.TreeSet;
  */
 class Scheduler {
 
-    private final Clock clock;
+    private final @NonNull Clock clock;
     private final long clockOrigin;
-    private final SortedSet<Task> tasks;
+    private final @NonNull SortedSet<@NonNull Task> tasks;
     private long counter;
 
     Scheduler() {
         this(new SystemClock());
     }
 
-    Scheduler(Clock clock) {
+    Scheduler(@NonNull Clock clock) {
         this.clock = clock;
         this.clockOrigin = clock.nanoTime();
         this.tasks = new TreeSet<>(Comparator.comparing((Task t) -> t.time).thenComparing(t -> t.id));
@@ -49,7 +50,7 @@ class Scheduler {
                 : Math.min(maximumMillis, nextTaskMillis);
     }
 
-    Cancelable schedule(Runnable task, Duration duration) {
+    @NonNull Cancelable schedule(@NonNull Runnable task, @NonNull Duration duration) {
         if (duration.isNegative())
             throw new IllegalArgumentException("Scheduled duration must not be negative");
         long delay;
@@ -65,7 +66,7 @@ class Scheduler {
         return t;
     }
 
-	    List<Runnable> expired() {
+	    @NonNull List<@NonNull Runnable> expired() {
 	        long time = elapsedNanos();
 	        List<Runnable> result = new ArrayList<>();
 	        Iterator<Task> it = tasks.iterator();
@@ -89,11 +90,11 @@ class Scheduler {
     }
 
     class Task implements Cancelable {
-        final Runnable task;
+        final @NonNull Runnable task;
         final long time;
         final long id;
 
-        Task(Runnable task, long time, long id) {
+        Task(@NonNull Runnable task, long time, long id) {
             this.task = task;
             this.time = time;
             this.id = id;

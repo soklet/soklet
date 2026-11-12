@@ -11,6 +11,7 @@
  */
 package com.soklet.internal.microhttp;
 
+import org.jspecify.annotations.NonNull;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
@@ -19,7 +20,7 @@ import java.nio.channels.SocketChannel;
 public final class SocketChannelIo {
     private SocketChannelIo() { }
 
-    static int read(SocketChannel channel, ByteBuffer buffer) throws IOException {
+    static int read(@NonNull SocketChannel channel, @NonNull ByteBuffer buffer) throws IOException {
         try {
             return channel.read(buffer);
         } catch (IOException failure) {
@@ -27,7 +28,7 @@ public final class SocketChannelIo {
         }
     }
 
-    public static int write(SocketChannel channel, ByteBuffer buffer) throws IOException {
+    public static int write(@NonNull SocketChannel channel, @NonNull ByteBuffer buffer) throws IOException {
         try {
             return channel.write(buffer);
         } catch (IOException failure) {
@@ -35,7 +36,7 @@ public final class SocketChannelIo {
         }
     }
 
-    public static long writeGathering(SocketChannel channel, ByteBuffer[] buffers, int offset, int length) throws IOException {
+    public static long writeGathering(@NonNull SocketChannel channel, @NonNull ByteBuffer @NonNull [] buffers, int offset, int length) throws IOException {
         try {
             return channel.write(buffers, offset, length);
         } catch (IOException failure) {
@@ -44,7 +45,7 @@ public final class SocketChannelIo {
     }
 
     static final class SocketIoException extends IOException {
-        SocketIoException(IOException cause) {
+        SocketIoException(@NonNull IOException cause) {
             super("The connection could not complete socket IO", cause);
         }
     }

@@ -52,22 +52,22 @@ final class UnparsedRequestResponseSupport {
 
 	private UnparsedRequestResponseSupport() {}
 
-	record PreparedResponse(byte[] serializedBytes, MicrohttpResponse response) {}
+	record PreparedResponse(byte @NonNull [] serializedBytes, @NonNull MicrohttpResponse response) {}
 
 	/** The caller's response consumer must only enqueue framework work, never invoke application code. */
 	static boolean submit(@Nullable ExecutorService executor, @Nullable TimeoutScheduler scheduler,
-						  @NonNull Duration timeout, @NonNull Supplier<UnparsedRequest> requestSupplier,
+						  @NonNull Duration timeout, @NonNull Supplier<@NonNull UnparsedRequest> requestSupplier,
 						  @Nullable ResponseMarshaler responseMarshaler, @NonNull LifecycleObserver observer,
-						  @NonNull Consumer<LogEvent> logger, @NonNull Consumer<byte[]> responseConsumer,
+						  @NonNull Consumer<@NonNull LogEvent> logger, @NonNull Consumer<byte @NonNull []> responseConsumer,
 						  @NonNull Runnable completion) {
 		return submit(executor, scheduler, timeout, requestSupplier, responseMarshaler, observer,
 				logger, responseConsumer, completion, () -> null);
 	}
 
 	static boolean submit(@Nullable ExecutorService executor, @Nullable TimeoutScheduler scheduler,
-			@NonNull Duration timeout, @NonNull Supplier<UnparsedRequest> requestSupplier,
+			@NonNull Duration timeout, @NonNull Supplier<@NonNull UnparsedRequest> requestSupplier,
 			@Nullable ResponseMarshaler responseMarshaler, @NonNull LifecycleObserver observer,
-			@NonNull Consumer<LogEvent> logger, @NonNull Consumer<byte[]> responseConsumer,
+			@NonNull Consumer<@NonNull LogEvent> logger, @NonNull Consumer<byte @NonNull []> responseConsumer,
 			@NonNull Runnable completion,
 			@NonNull Supplier<LifecycleExecutionContext.@Nullable Scope> callbackExecution) {
 		requireNonNull(callbackExecution);
@@ -130,7 +130,7 @@ final class UnparsedRequestResponseSupport {
 	static PreparedResponse marshal(@NonNull UnparsedRequest request,
 									@Nullable ResponseMarshaler responseMarshaler,
 									@NonNull LifecycleObserver observer,
-									@NonNull Consumer<LogEvent> logger,
+									@NonNull Consumer<@NonNull LogEvent> logger,
 									@NonNull BooleanSupplier active) {
 		return marshal(request, responseMarshaler, observer, logger, active, () -> null);
 	}
@@ -138,7 +138,7 @@ final class UnparsedRequestResponseSupport {
 	@Nullable
 	static PreparedResponse marshal(@NonNull UnparsedRequest request,
 			@Nullable ResponseMarshaler responseMarshaler, @NonNull LifecycleObserver observer,
-			@NonNull Consumer<LogEvent> logger, @NonNull BooleanSupplier active,
+			@NonNull Consumer<@NonNull LogEvent> logger, @NonNull BooleanSupplier active,
 			@NonNull Supplier<LifecycleExecutionContext.@Nullable Scope> callbackExecution) {
 		try (LifecycleExecutionContext.Scope ignored = requireNonNull(callbackExecution).get()) {
 			return marshalWithinCallback(request, responseMarshaler, observer, logger, active);
@@ -148,7 +148,7 @@ final class UnparsedRequestResponseSupport {
 	@Nullable
 	private static PreparedResponse marshalWithinCallback(@NonNull UnparsedRequest request,
 			@Nullable ResponseMarshaler responseMarshaler, @NonNull LifecycleObserver observer,
-			@NonNull Consumer<LogEvent> logger, @NonNull BooleanSupplier active) {
+			@NonNull Consumer<@NonNull LogEvent> logger, @NonNull BooleanSupplier active) {
 		if (!active.getAsBoolean()) return null;
 		try { observer.didRejectUnparsedRequest(request); }
 		catch (Throwable throwable) {
@@ -174,7 +174,7 @@ final class UnparsedRequestResponseSupport {
 		}
 	}
 
-	private static void logMarshalingFailure(Consumer<LogEvent> logger, Throwable throwable) {
+	private static void logMarshalingFailure(@NonNull Consumer<@NonNull LogEvent> logger, @NonNull Throwable throwable) {
 		logger.accept(LogEvent.with(LogEventType.RESPONSE_MARSHALER_FOR_UNPARSED_REQUEST_FAILED,
 				"Unable to marshal a response for an unparsed request; using the built-in response")
 				.throwable(throwable).build());
@@ -184,7 +184,7 @@ final class UnparsedRequestResponseSupport {
 		if (task != null) task.cancel();
 	}
 
-	static PreparedResponse prepare(
+	static @NonNull PreparedResponse prepare(
 			@NonNull MarshaledResponse marshaledResponse) {
 		requireNonNull(marshaledResponse);
 

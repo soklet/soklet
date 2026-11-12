@@ -16,6 +16,8 @@
 
 package com.soklet.internal.mcp.skills;
 
+
+import org.jspecify.annotations.NonNull;
 import com.soklet.internal.mcp.protocol.McpJsonArray;
 import com.soklet.internal.mcp.protocol.McpJsonBoolean;
 import com.soklet.internal.mcp.protocol.McpJsonLimits;
@@ -47,24 +49,24 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 final class SkillYamlResolver {
-	private final SkillYamlBudget budget;
-	private final McpJsonLimits jsonLimits;
+	private final @NonNull SkillYamlBudget budget;
+	private final @NonNull McpJsonLimits jsonLimits;
 
-	SkillYamlResolver(SkillYamlBudget budget, McpJsonLimits jsonLimits) {
+	SkillYamlResolver(@NonNull SkillYamlBudget budget, @NonNull McpJsonLimits jsonLimits) {
 		this.budget = requireNonNull(budget);
 		this.jsonLimits = requireNonNull(jsonLimits);
 	}
 
-	McpJsonValue resolve(SkillYamlNode root) {
+	@NonNull McpJsonValue resolve(@NonNull SkillYamlNode root) {
 		return new Resolution().resolve(requireNonNull(root), 1, true);
 	}
 
 	private final class Resolution {
-		private final Map<String, Anchor> anchors = new HashMap<>();
+		private final @NonNull Map<@NonNull String, @NonNull Anchor> anchors = new HashMap<>();
 		private int jsonNodes;
 		private long outputBytes;
 
-		private McpJsonValue resolve(SkillYamlNode node, int depth, boolean jsonNode) {
+		private @NonNull McpJsonValue resolve(@NonNull SkillYamlNode node, int depth, boolean jsonNode) {
 			Position position = node.position();
 			budget.work(1, position);
 
@@ -133,7 +135,7 @@ final class SkillYamlResolver {
 			return result;
 		}
 
-		private String resolvedTag(SkillYamlNode node) {
+		private @NonNull String resolvedTag(@NonNull SkillYamlNode node) {
 			String tag = node.properties().tag();
 			if (tag != null)
 				budget.work(tag.length(), node.position());
@@ -160,7 +162,7 @@ final class SkillYamlResolver {
 			};
 		}
 
-		private McpJsonValue scalar(SkillYamlNode.Scalar scalar, String tag) {
+		private @NonNull McpJsonValue scalar(SkillYamlNode.@NonNull Scalar scalar, @NonNull String tag) {
 			String value = scalar.value();
 			Position position = scalar.position();
 			budget.scalarLength(value.length(), position);
@@ -208,7 +210,7 @@ final class SkillYamlResolver {
 			return new McpJsonString(value);
 		}
 
-		private McpJsonNumber number(String value, NumericKind kind, Position position) {
+		private @NonNull McpJsonNumber number(@NonNull String value, @NonNull NumericKind kind, @NonNull Position position) {
 			if (value.length() > jsonLimits.maximumNumberLengthInCharacters()
 					|| value.length() > jsonLimits.maximumTokenLengthInCharacters())
 				throw failure(Reason.NUMBER_LIMIT, position);
@@ -230,7 +232,7 @@ final class SkillYamlResolver {
 			return new McpJsonNumber(number);
 		}
 
-		private void checkExponent(String value, Position position) {
+		private void checkExponent(@NonNull String value, @NonNull Position position) {
 			// Hexadecimal e/E is a digit, not an exponent.
 			if (value.startsWith("0x") || value.startsWith("0o"))
 				return;
@@ -251,7 +253,7 @@ final class SkillYamlResolver {
 			}
 		}
 
-		private void chargeResolved(McpJsonValue value, int depth, boolean jsonNode, Position position) {
+		private void chargeResolved(@NonNull McpJsonValue value, int depth, boolean jsonNode, @NonNull Position position) {
 			budget.work(1, position);
 			chargeNode(depth, jsonNode, position);
 			if (value instanceof McpJsonString string) {
@@ -284,7 +286,7 @@ final class SkillYamlResolver {
 			}
 		}
 
-		private void chargeNode(int depth, boolean jsonNode, Position position) {
+		private void chargeNode(int depth, boolean jsonNode, @NonNull Position position) {
 			budget.node(depth, position);
 			if (jsonNode) {
 				if (depth > jsonLimits.maximumNestingDepth())
@@ -294,7 +296,7 @@ final class SkillYamlResolver {
 			}
 		}
 
-		private void chargeString(String value, Position position) {
+		private void chargeString(@NonNull String value, @NonNull Position position) {
 			if (value.length() > jsonLimits.maximumStringLengthInCharacters())
 				throw failure(Reason.SCALAR_LIMIT, position);
 			budget.work(value.length(), position);
@@ -326,7 +328,7 @@ final class SkillYamlResolver {
 			chargeOutput(bytes, position);
 		}
 
-		private void chargeNumber(BigDecimal value, Position position) {
+		private void chargeNumber(@NonNull BigDecimal value, @NonNull Position position) {
 			long adjustedExponent = (long) value.precision() - value.scale() - 1;
 			long length = canonicalNumberLength(value);
 			if (Math.abs(adjustedExponent) > jsonLimits.maximumExponentMagnitude()
@@ -336,33 +338,33 @@ final class SkillYamlResolver {
 			chargeOutput(length, position);
 		}
 
-		private void chargeLiteral(int length, Position position) {
+		private void chargeLiteral(int length, @NonNull Position position) {
 			if (length > jsonLimits.maximumTokenLengthInCharacters())
 				throw failure(Reason.SCALAR_LIMIT, position);
 			chargeOutput(length, position);
 		}
 
-		private void chargeOutput(long amount, Position position) {
+		private void chargeOutput(long amount, @NonNull Position position) {
 			if (amount > jsonLimits.maximumOutputBytes() - outputBytes)
 				throw failure(Reason.OUTPUT_LIMIT, position);
 			outputBytes += amount;
 		}
 	}
 
-	private static boolean isNull(String value) {
+	private static boolean isNull(@NonNull String value) {
 		return value.isEmpty() || value.equals("null") || value.equals("Null")
 				|| value.equals("NULL") || value.equals("~");
 	}
 
-	private static boolean isTrue(String value) {
+	private static boolean isTrue(@NonNull String value) {
 		return value.equals("true") || value.equals("True") || value.equals("TRUE");
 	}
 
-	private static boolean isFalse(String value) {
+	private static boolean isFalse(@NonNull String value) {
 		return value.equals("false") || value.equals("False") || value.equals("FALSE");
 	}
 
-	private static NumericKind numericKind(String value) {
+	private static @NonNull NumericKind numericKind(@NonNull String value) {
 		if (value.startsWith("0o") && digits(value, 2, 8))
 			return NumericKind.OCTAL;
 		if (value.startsWith("0x") && digits(value, 2, 16))
@@ -400,7 +402,7 @@ final class SkillYamlResolver {
 		return offset != value.length() ? NumericKind.NONE : point || exponent ? NumericKind.FLOAT : NumericKind.INTEGER;
 	}
 
-	private static boolean digits(String value, int offset, int radix) {
+	private static boolean digits(@NonNull String value, int offset, int radix) {
 		if (offset == value.length())
 			return false;
 		for (int index = offset; index < value.length(); ++index) {
@@ -419,7 +421,7 @@ final class SkillYamlResolver {
 	}
 
 	// Mirrors McpJsonCodec's canonical BigDecimal spelling without constructing it.
-	private static long canonicalNumberLength(BigDecimal value) {
+	private static long canonicalNumberLength(@NonNull BigDecimal value) {
 		int precision = value.precision();
 		long adjustedExponent = (long) precision - value.scale() - 1;
 		long signLength = value.signum() < 0 ? 1 : 0;
@@ -438,7 +440,7 @@ final class SkillYamlResolver {
 		return signLength + (precision == 1 ? 1 : (long) precision + 1) + 2 + exponentDigits;
 	}
 
-	private static SkillYamlException failure(Reason reason, Position position) {
+	private static @NonNull SkillYamlException failure(@NonNull Reason reason, @NonNull Position position) {
 		return new SkillYamlException(reason, position.line(), position.column());
 	}
 

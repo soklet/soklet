@@ -48,7 +48,7 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 final class McpApplicationHandlerDispatcher {
-	private static final AtomicLong INTERRUPT_THREAD_SEQUENCE = new AtomicLong();
+	private static final @NonNull AtomicLong INTERRUPT_THREAD_SEQUENCE = new AtomicLong();
 	enum Admission {
 		DISPATCHED,
 		QUEUED,

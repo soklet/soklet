@@ -1,5 +1,6 @@
 package com.soklet.internal.microhttp;
 
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.time.Duration;
@@ -8,11 +9,11 @@ import java.util.List;
 import static java.util.Objects.requireNonNull;
 
 public class OptionsBuilder {
-    private String host;
+    private @Nullable String host;
     private int port;
     private boolean reuseAddr;
     private boolean reusePort;
-    private Duration resolution;
+    private @NonNull Duration resolution;
     @Nullable
     private Duration requestHeaderTimeout;
     @Nullable
@@ -29,7 +30,7 @@ public class OptionsBuilder {
     private int maxRequestTargetLength;
     private int maxConnections;
     private int concurrency;
-    private List<Header> earlyErrorResponseHeaders;
+    private @NonNull List<@NonNull Header> earlyErrorResponseHeaders;
     private int unparsedRequestCaptureLimitInBytes;
     private int unparsedResponseSizeLimitInBytes;
 
@@ -56,11 +57,11 @@ public class OptionsBuilder {
         this.unparsedResponseSizeLimitInBytes = 64 * 1024;
     }
 
-    public static OptionsBuilder newBuilder() {
+    public static @NonNull OptionsBuilder newBuilder() {
         return new OptionsBuilder();
     }
 
-    public Options build() {
+    public @NonNull Options build() {
         int resolvedMaxRequestBodySize = this.maxRequestBodySize == null
             ? this.maxRequestSize : this.maxRequestBodySize;
 
@@ -105,57 +106,57 @@ public class OptionsBuilder {
             this.unparsedResponseSizeLimitInBytes);
     }
 
-    public OptionsBuilder withHost(String host) {
+    public @NonNull OptionsBuilder withHost(@Nullable String host) {
         this.host = host;
         return this;
     }
 
-    public OptionsBuilder withPort(int port) {
+    public @NonNull OptionsBuilder withPort(int port) {
         this.port = port;
         return this;
     }
 
-    public OptionsBuilder withReuseAddr(boolean reuseAddr) {
+    public @NonNull OptionsBuilder withReuseAddr(boolean reuseAddr) {
         this.reuseAddr = reuseAddr;
         return this;
     }
 
-    public OptionsBuilder withReusePort(boolean reusePort) {
+    public @NonNull OptionsBuilder withReusePort(boolean reusePort) {
         this.reusePort = reusePort;
         return this;
     }
 
-    public OptionsBuilder withResolution(Duration resolution) {
+    public @NonNull OptionsBuilder withResolution(@NonNull Duration resolution) {
         this.resolution = resolution;
         return this;
     }
 
-    public OptionsBuilder withRequestHeaderTimeout(Duration requestHeaderTimeout) {
+    public @NonNull OptionsBuilder withRequestHeaderTimeout(@Nullable Duration requestHeaderTimeout) {
         this.requestHeaderTimeout = requestHeaderTimeout;
         return this;
     }
 
-    public OptionsBuilder withRequestBodyTimeout(Duration requestBodyTimeout) {
+    public @NonNull OptionsBuilder withRequestBodyTimeout(@Nullable Duration requestBodyTimeout) {
         this.requestBodyTimeout = requestBodyTimeout;
         return this;
     }
 
-    public OptionsBuilder withResponseWriteIdleTimeout(Duration responseWriteIdleTimeout) {
+    public @NonNull OptionsBuilder withResponseWriteIdleTimeout(@Nullable Duration responseWriteIdleTimeout) {
         this.responseWriteIdleTimeout = responseWriteIdleTimeout;
         return this;
     }
 
-    public OptionsBuilder withReadBufferSize(int readBufferSize) {
+    public @NonNull OptionsBuilder withReadBufferSize(int readBufferSize) {
         this.readBufferSize = readBufferSize;
         return this;
     }
 
-    public OptionsBuilder withAcceptLength(int acceptLength) {
+    public @NonNull OptionsBuilder withAcceptLength(int acceptLength) {
         this.acceptLength = acceptLength;
         return this;
     }
 
-    public OptionsBuilder withMaxRequestSize(int maxRequestSize) {
+    public @NonNull OptionsBuilder withMaxRequestSize(int maxRequestSize) {
         this.maxRequestSize = maxRequestSize;
         return this;
     }
@@ -164,32 +165,32 @@ public class OptionsBuilder {
      * Sets the body-only request limit independently from the aggregate buffered-request limit.
      * The configured value is preserved if {@link #withMaxRequestSize(int)} is called afterward.
      */
-    public OptionsBuilder withMaxRequestBodySize(int maxRequestBodySize) {
+    public @NonNull OptionsBuilder withMaxRequestBodySize(int maxRequestBodySize) {
         this.maxRequestBodySize = maxRequestBodySize;
         return this;
     }
 
-    public OptionsBuilder withMaxHeaderCount(int maxHeaderCount) {
+    public @NonNull OptionsBuilder withMaxHeaderCount(int maxHeaderCount) {
         this.maxHeaderCount = maxHeaderCount;
         return this;
     }
 
-    public OptionsBuilder withMaxHeadersSize(int maxHeadersSize) {
+    public @NonNull OptionsBuilder withMaxHeadersSize(int maxHeadersSize) {
         this.maxHeadersSize = maxHeadersSize;
         return this;
     }
 
-    public OptionsBuilder withMaxRequestTargetLength(int maxRequestTargetLength) {
+    public @NonNull OptionsBuilder withMaxRequestTargetLength(int maxRequestTargetLength) {
         this.maxRequestTargetLength = maxRequestTargetLength;
         return this;
     }
 
-    public OptionsBuilder withMaxConnections(int maxConnections) {
+    public @NonNull OptionsBuilder withMaxConnections(int maxConnections) {
         this.maxConnections = maxConnections;
         return this;
     }
 
-    public OptionsBuilder withConcurrency(int concurrency) {
+    public @NonNull OptionsBuilder withConcurrency(int concurrency) {
         this.concurrency = concurrency;
         return this;
     }
@@ -197,18 +198,18 @@ public class OptionsBuilder {
     /**
      * Adds fixed response headers to parser-owned HTTP errors that occur before request dispatch.
      */
-    public OptionsBuilder withEarlyErrorResponseHeaders(List<Header> headers) {
+    public @NonNull OptionsBuilder withEarlyErrorResponseHeaders(@NonNull List<@NonNull Header> headers) {
         requireNonNull(headers);
         this.earlyErrorResponseHeaders = List.copyOf(headers);
         return this;
     }
 
-    public OptionsBuilder withUnparsedRequestCaptureLimitInBytes(int limit) {
+    public @NonNull OptionsBuilder withUnparsedRequestCaptureLimitInBytes(int limit) {
         this.unparsedRequestCaptureLimitInBytes = limit;
         return this;
     }
 
-    public OptionsBuilder withUnparsedResponseSizeLimitInBytes(int limit) {
+    public @NonNull OptionsBuilder withUnparsedResponseSizeLimitInBytes(int limit) {
         this.unparsedResponseSizeLimitInBytes = limit;
         return this;
     }

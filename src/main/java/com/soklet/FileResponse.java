@@ -163,17 +163,17 @@ final class FileResponse {
 	}
 
 	@NonNull
-	private Optional<EntityTag> getEntityTag() {
+	private Optional<@NonNull EntityTag> getEntityTag() {
 		return Optional.ofNullable(this.entityTag);
 	}
 
 	@NonNull
-	private Optional<Instant> getLastModified() {
+	private Optional<@NonNull Instant> getLastModified() {
 		return Optional.ofNullable(this.lastModified).map(ConditionalRequestEvaluator::truncateToSeconds);
 	}
 
 	@NonNull
-	private Optional<String> getCacheControl() {
+	private Optional<@NonNull String> getCacheControl() {
 		return Optional.ofNullable(this.cacheControl);
 	}
 
@@ -188,7 +188,7 @@ final class FileResponse {
 	}
 
 	@NonNull
-	private Optional<BasicFileAttributes> getAttributes() {
+	private Optional<@NonNull BasicFileAttributes> getAttributes() {
 		return Optional.ofNullable(this.attributes);
 	}
 
@@ -353,7 +353,7 @@ final class FileResponse {
 			);
 		}
 
-		ConditionalRequestEvaluator.RequestContext toConditionalRequestContext() {
+		ConditionalRequestEvaluator.@NonNull RequestContext toConditionalRequestContext() {
 			return new ConditionalRequestEvaluator.RequestContext(
 					httpMethod(),
 					ifMatchHeaderValue(),

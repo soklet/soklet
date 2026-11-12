@@ -11,9 +11,10 @@
  */
 package com.soklet.internal.microhttp;
 
+import org.jspecify.annotations.Nullable;
 import java.io.IOException;
 
 /** A response source failed before completing its declared body; this is not a peer close. */
 final class ResponseBodySourceException extends IOException {
-    ResponseBodySourceException(String message, Throwable cause) { super(message, cause); }
+    ResponseBodySourceException(@Nullable String message, @Nullable Throwable cause) { super(message, cause); }
 }

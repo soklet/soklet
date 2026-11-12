@@ -14,6 +14,8 @@ package com.soklet.internal.mcp.skills;
 import com.soklet.internal.mcp.protocol.McpJsonObject;
 import com.soklet.internal.mcp.protocol.McpJsonString;
 import com.soklet.internal.mcp.protocol.McpJsonValue;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
@@ -37,17 +39,17 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 final class SkillDocumentMetadata {
-	private final String name;
-	private final String description;
-	private final McpJsonObject metadata;
+	private final @NonNull String name;
+	private final @NonNull String description;
+	private final @NonNull McpJsonObject metadata;
 
-	private SkillDocumentMetadata(String name, String description, McpJsonObject metadata) {
+	private SkillDocumentMetadata(@NonNull String name, @NonNull String description, @NonNull McpJsonObject metadata) {
 		this.name = name;
 		this.description = description;
 		this.metadata = metadata;
 	}
 
-	static SkillDocumentMetadata from(McpJsonObject metadata) {
+	static @NonNull SkillDocumentMetadata from(@NonNull McpJsonObject metadata) {
 		requireNonNull(metadata, "Skills document metadata is required.");
 		String name = requireString(metadata.members().get("name"), "name");
 		validateName(name);
@@ -69,11 +71,11 @@ final class SkillDocumentMetadata {
 		return new SkillDocumentMetadata(name, description, metadata);
 	}
 
-	String name() { return this.name; }
-	String description() { return this.description; }
-	McpJsonObject metadata() { return this.metadata; }
+	@NonNull String name() { return this.name; }
+	@NonNull String description() { return this.description; }
+	@NonNull McpJsonObject metadata() { return this.metadata; }
 
-	private static void validateName(String name) {
+	private static void validateName(@NonNull String name) {
 		validateLength(name, 64, "name");
 		boolean previousHyphen = true;
 		for (int offset = 0; offset < name.length();) {
@@ -97,7 +99,7 @@ final class SkillDocumentMetadata {
 		}
 	}
 
-	private static void validateLength(String value, int maximumCodePoints, String field) {
+	private static void validateLength(@NonNull String value, int maximumCodePoints, @NonNull String field) {
 		if (value.isEmpty()) throw invalid(field, "must not be empty");
 		if (value.length() > maximumCodePoints * 2)
 			throw invalid(field, "exceeds " + maximumCodePoints + " code points");
@@ -115,21 +117,21 @@ final class SkillDocumentMetadata {
 		}
 	}
 
-	private static void validateOptionalString(McpJsonObject metadata, String key) {
+	private static void validateOptionalString(@NonNull McpJsonObject metadata, @NonNull String key) {
 		if (metadata.members().containsKey(key)) requireString(metadata.members().get(key), key);
 	}
 
-	private static String requireString(McpJsonValue value, String field) {
+	private static @NonNull String requireString(@Nullable McpJsonValue value, @NonNull String field) {
 		if (value == null) throw invalid(field, "is required");
 		if (!(value instanceof McpJsonString string)) throw invalid(field, "must be a string");
 		return string.value();
 	}
 
 	/** Callers supply fixed field labels/rules and fixed limits, never authored keys or values. */
-	private static IllegalArgumentException invalid(String field, String rule) {
+	private static @NonNull IllegalArgumentException invalid(@NonNull String field, @NonNull String rule) {
 		return new IllegalArgumentException("Skills field '" + field + "' " + rule + ".");
 	}
 
 	@Override
-	public String toString() { return "SkillDocumentMetadata[redacted]"; }
+	public @NonNull String toString() { return "SkillDocumentMetadata[redacted]"; }
 }

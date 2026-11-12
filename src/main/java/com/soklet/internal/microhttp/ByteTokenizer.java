@@ -1,5 +1,6 @@
 package com.soklet.internal.microhttp;
 
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.nio.ByteBuffer;
@@ -15,14 +16,14 @@ import java.util.List;
  */
 class ByteTokenizer {
     private static final int MAX_IDLE_CAPACITY = 8 * 1024;
-    private byte[] array = new byte[0];
+    private byte @NonNull [] array = new byte[0];
     private int base;
     private int position;
     private int size;
     private long totalBytesAdded;
     // The HTTP parser alternates between SPACE and CRLF at the same position.
     // Remember both searches so fragmented tokens only scan newly added bytes.
-    private final List<DelimiterSearch> delimiterSearches = new ArrayList<>(2);
+    private final @NonNull List<@NonNull DelimiterSearch> delimiterSearches = new ArrayList<>(2);
 
     int size() {
         return size - base;
@@ -80,7 +81,7 @@ class ByteTokenizer {
         }
     }
 
-    void add(ByteBuffer buffer) {
+    void add(@NonNull ByteBuffer buffer) {
         int bufferLen = buffer.remaining();
         if (array.length - size < bufferLen) {
             compactInPlace();
@@ -93,7 +94,7 @@ class ByteTokenizer {
         totalBytesAdded += bufferLen;
     }
 
-    CapturedPrefix capturePrefixAndRelease(int endExclusive, int maximumBytes) {
+    @NonNull CapturedPrefix capturePrefixAndRelease(int endExclusive, int maximumBytes) {
         if (endExclusive < base || endExclusive > size) {
             throw new IllegalArgumentException("Capture boundary is outside the buffered request.");
         }
@@ -128,7 +129,7 @@ class ByteTokenizer {
         return result;
     }
 
-    byte @Nullable [] next(byte[] delimiter) {
+    byte @Nullable [] next(byte @NonNull [] delimiter) {
         int index = indexOf(delimiter);
         if (index < 0) {
             return null;
@@ -139,7 +140,7 @@ class ByteTokenizer {
     }
 
     @Nullable
-    String nextAsciiString(byte[] delimiter, String field) {
+    String nextAsciiString(byte @NonNull [] delimiter, @NonNull String field) {
         int index = indexOf(delimiter);
         if (index < 0) {
             return null;
@@ -156,7 +157,7 @@ class ByteTokenizer {
         return result;
     }
 
-    int nextLength(byte[] delimiter) {
+    int nextLength(byte @NonNull [] delimiter) {
         int index = indexOf(delimiter);
         if (index < 0) {
             return -1;
@@ -175,11 +176,11 @@ class ByteTokenizer {
         return array[index];
     }
 
-    String string(int startInclusive, int endExclusive, Charset charset) {
+    @NonNull String string(int startInclusive, int endExclusive, @NonNull Charset charset) {
         return new String(array, startInclusive, endExclusive - startInclusive, charset);
     }
 
-    boolean asciiEquals(int startInclusive, int endExclusive, String value) {
+    boolean asciiEquals(int startInclusive, int endExclusive, @NonNull String value) {
         int length = endExclusive - startInclusive;
         if (value.length() != length) {
             return false;
@@ -198,7 +199,7 @@ class ByteTokenizer {
         position = index;
     }
 
-    int indexOf(byte[] delimiter) {
+    int indexOf(byte @NonNull [] delimiter) {
         if (delimiter.length == 0)
             return position;
 
@@ -241,12 +242,12 @@ class ByteTokenizer {
     }
 
     private static final class DelimiterSearch {
-        private final byte[] delimiter;
+        private final byte @NonNull [] delimiter;
         private int position = -1;
         private int nextSearchPosition;
         private int foundIndex = -1;
 
-        private DelimiterSearch(byte[] delimiter) {
+        private DelimiterSearch(byte @NonNull [] delimiter) {
             this.delimiter = delimiter.clone();
         }
     }
@@ -282,7 +283,7 @@ class ByteTokenizer {
         return Math.max((int) requiredCapacity, doubledCapacity);
     }
 
-    record CapturedPrefix(byte[] bytes, long observedByteCount, boolean truncated) {
+    record CapturedPrefix(byte @NonNull [] bytes, long observedByteCount, boolean truncated) {
     }
 
 }

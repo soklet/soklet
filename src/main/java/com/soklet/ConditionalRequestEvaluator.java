@@ -120,7 +120,7 @@ final class ConditionalRequestEvaluator {
 	}
 
 	@NonNull
-	static Optional<String> headerValueFor(@NonNull Request request, @NonNull String headerName) {
+	static Optional<@NonNull String> headerValueFor(@NonNull Request request, @NonNull String headerName) {
 		requireNonNull(request);
 		requireNonNull(headerName);
 		return request.getHeaderValues(headerName)

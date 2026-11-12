@@ -31,10 +31,10 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 final class LifecycleInterruptDelivery {
-	private final Object monitor = new Object();
+	private final @NonNull Object monitor = new Object();
 	@NonNull
 	private final Runnable afterDelivery;
-	private final AtomicBoolean completionClaimed = new AtomicBoolean();
+	private final @NonNull AtomicBoolean completionClaimed = new AtomicBoolean();
 	@Nullable
 	private Thread target;
 	private boolean requested;

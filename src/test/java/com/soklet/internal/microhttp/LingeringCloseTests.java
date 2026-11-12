@@ -427,10 +427,9 @@ class LingeringCloseTests {
                     new AtomicInteger(1), (Runnable) releases::incrementAndGet);
             Class<?> type = Class.forName(ConnectionEventLoop.class.getName() + "$Connection");
             Constructor<?> constructor = type.getDeclaredConstructor(ConnectionEventLoop.class,
-                    SocketChannel.class, SelectionKey.class, InetSocketAddress.class,
-                    EventLoop.ConnectionAdmission.class);
+                    SocketChannel.class, SelectionKey.class, EventLoop.ConnectionAdmission.class);
             constructor.setAccessible(true);
-            connection = constructor.newInstance(loop, socket, key, null, admission);
+            connection = constructor.newInstance(loop, socket, key, admission);
             ((AtomicInteger) reflectedField(loop, "connectionCount")).set(1);
         }
 
@@ -524,7 +523,7 @@ class LingeringCloseTests {
         @Override public boolean isConnectionPending() { return false; }
         @Override public boolean connect(SocketAddress address) { return true; }
         @Override public boolean finishConnect() { return true; }
-        @Override public SocketAddress getRemoteAddress() { throw new UnsupportedOperationException(); }
+        @Override public SocketAddress getRemoteAddress() { return null; }
         @Override public SocketAddress getLocalAddress() { throw new UnsupportedOperationException(); }
         @Override protected void implCloseSelectableChannel() { closes++; }
         @Override protected void implConfigureBlocking(boolean blocking) {}

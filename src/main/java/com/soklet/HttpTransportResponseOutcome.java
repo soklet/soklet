@@ -49,7 +49,7 @@ abstract sealed class HttpTransportResponseOutcome permits HttpTransportResponse
 
 	/** The offered response lost transport ownership; no replacement response is implied. */
 	static final class NotWritten extends HttpTransportResponseOutcome {
-		private final RejectedExecutionException writeFailure = new RejectedExecutionException(
+		private final @NonNull RejectedExecutionException writeFailure = new RejectedExecutionException(
 				"HTTP response was not written because response ownership has already been claimed.");
 
 		private NotWritten() {}
@@ -60,13 +60,13 @@ abstract sealed class HttpTransportResponseOutcome permits HttpTransportResponse
 	}
 
 	static final class Accepted extends HttpTransportResponseOutcome {
-		private static final Accepted DEFAULT_INSTANCE = new Accepted();
+		private static final @NonNull Accepted DEFAULT_INSTANCE = new Accepted();
 
 		private Accepted() {}
 	}
 
 	static final class Replaced extends HttpTransportResponseOutcome {
-		private final MarshaledResponse marshaledResponse;
+		private final @NonNull MarshaledResponse marshaledResponse;
 		private final @Nullable Throwable preparationFailure;
 		private final @Nullable Throwable writeFailure;
 
@@ -81,10 +81,10 @@ abstract sealed class HttpTransportResponseOutcome permits HttpTransportResponse
 		MarshaledResponse getMarshaledResponse() { return this.marshaledResponse; }
 
 		@NonNull
-		Optional<Throwable> getPreparationFailure() { return Optional.ofNullable(this.preparationFailure); }
+		Optional<@NonNull Throwable> getPreparationFailure() { return Optional.ofNullable(this.preparationFailure); }
 
 		@NonNull
-		Optional<Throwable> getWriteFailure() { return Optional.ofNullable(this.writeFailure); }
+		Optional<@NonNull Throwable> getWriteFailure() { return Optional.ofNullable(this.writeFailure); }
 
 		void rethrowWriteFailure() {
 			Throwable failure = getWriteFailure().orElse(null);

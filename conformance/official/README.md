@@ -16,9 +16,9 @@ repository, not a separate product or published `soklet-mcp` artifact.
 
 The dedicated CI job checks out the official suite at the exact commit in
 `upstream-pins.json`, verifies its complete source tree plus package, lockfile,
-and vendored-schema hashes, installs exactly the lockfile with lifecycle
-scripts disabled, and builds its CLI explicitly. Before any upstream code is
-executed, CI downloads the pinned Linux-x64 Node archive, verifies both the
+and vendored-schema hashes, installs the checked-in dependency refresh with
+lifecycle scripts disabled, and builds its CLI explicitly. Before any upstream
+code is executed, CI downloads the pinned Linux-x64 Node archive, verifies both the
 checksum manifest and archive against reviewed SHA-256 values, extracts it,
 and verifies the exact bundled npm version. After the explicit build, the
 runner also requires the generated `dist/index.js` byte count and SHA-256 to
@@ -30,9 +30,24 @@ never uses `npx`, a floating package, the suite's composite action, `--suite`,
 “Complete source tree” means the reviewed digest of every regular file after
 the documented exclusions; any missing, changed, or unmanifested file fails
 before upstream execution. The suite install/build receives an allowlisted,
-secret-free environment, an isolated npm cache, and `/dev/null` npm user/global
+secret-free environment, an isolated npm cache, and empty npm user/global
 configuration. `scripts/install-pinned-node-linux-x64.sh` records the verified
 distribution as CI evidence.
+
+CI installs the current dependency lock at `dependencies/package-lock.json`,
+using `dependencies.mjs prepare` after verifying the original upstream source.
+The refresh changes resolved dependencies without changing upstream
+`package.json`, schema-validator versions, source, scenarios, or assertions.
+After installation, build, and the advisory audit, `dependencies.mjs restore`
+restores the original upstream lock and verifies the full source and built CLI.
+The installed dependencies remain refreshed. This keeps the upstream source
+pin independently verifiable while allowing dependency security updates.
+
+The November 12 refresh removes all high and critical audit findings. The
+remaining findings concern minimatch in the development-only ESLint chain and
+esbuild's Windows development server; the Linux conformance job runs neither
+lint nor a development server. Audit results remain visible and advisory.
+The older September proposal is historical and is not the current install lock.
 
 `upstream-pins.json` records the immutable suite and final-specification
 identities, hashes, toolchain versions, and scenario-inventory digests.
@@ -572,8 +587,12 @@ The `byte` format is annotation-only, matching the official suite.
 
 First obtain the exact source commit recorded in `upstream-pins.json`. Before
 installing or building it, run `verifyOfficialSuite(..., {requireBuilt:false})`
-as the CI job does. Install with `npm ci --ignore-scripts`, explicitly run
-`npm run build`, and rerun the normal verifier. With that exact built checkout,
+as the CI job does. Run `node conformance/official/dependencies.mjs prepare
+/absolute/pinned-suite`, install there with `npm ci --ignore-scripts`, explicitly
+run `npm run build`, and capture `npm audit --package-lock-only --json` while the
+refreshed lock is in place. Then run `node conformance/official/dependencies.mjs
+restore /absolute/pinned-suite` to verify the original source and built CLI.
+With that exact built checkout,
 compile and execute the local checkpoint as follows:
 
 ```sh
@@ -835,6 +854,18 @@ source-tree Soklet classpath. These results are development evidence only;
 they do not set `releaseCandidateEvidence: true` and do not replace the
 required release-mode run against checksum-matched immutable JAR, POM,
 sources, and Javadocs artifacts.
+
+## Updating dependencies
+
+Refresh resolved dependencies in an isolated checkout of the pinned upstream
+commit with `npm audit fix --package-lock-only --ignore-scripts`, without
+`--force`. Review the dependency changes and copy the resulting lock to
+`dependencies/package-lock.json`. The helper verifies unchanged root package
+declarations and schema-validator versions; npm verifies archive integrity.
+Run the dependency helper self-test, install/build/audit/restore sequence, and
+full local, official, and legacy conformance checks. Dependency-only updates
+do not require changing protocol source, schema, scenario expectations, or
+historical audit records.
 
 ## Updating a pin
 

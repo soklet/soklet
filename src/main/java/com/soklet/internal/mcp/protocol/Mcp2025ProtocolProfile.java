@@ -17,6 +17,7 @@
 package com.soklet.internal.mcp.protocol;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.LinkedHashMap;
@@ -294,7 +295,7 @@ final class Mcp2025ProtocolProfile implements McpProtocolProfile {
 		return McpWireResult.complete(new McpJsonObject(fields), canonicalResult.metadata());
 	}
 
-	private McpJsonValue projectToolContent(McpJsonValue content) {
+	private @NonNull McpJsonValue projectToolContent(@NonNull McpJsonValue content) {
 		McpJsonValue projected = content;
 		if ("2025-06-18".equals(revision) && content instanceof McpJsonObject object
 				&& new McpJsonString("resource_link").equals(object.members().get("type"))
@@ -307,7 +308,7 @@ final class Mcp2025ProtocolProfile implements McpProtocolProfile {
 		return projected;
 	}
 
-	private void validateContent(McpJsonValue content) {
+	private void validateContent(@Nullable McpJsonValue content) {
 		if (!(content instanceof McpJsonObject object)
 				|| !(object.members().get("type") instanceof McpJsonString type)
 				|| !LEGACY_CONTENT_TYPES.contains(type.value()))

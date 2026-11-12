@@ -104,11 +104,11 @@ final class BuiltInTransportLifecycleAdapter {
 
 		/** Best-effort residual observation on a tracked proof worker, never the coordinator. */
 		@NonNull
-		Set<InternalResidualActivityType> residualActivity();
+		Set<@NonNull InternalResidualActivityType> residualActivity();
 
 		/** Prompt framework-owned evidence only; never invoke application callbacks here. */
 		@NonNull
-		default Set<InternalResidualActivityType> frameworkResidualActivity() {
+		default Set<@NonNull InternalResidualActivityType> frameworkResidualActivity() {
 			return Set.of();
 		}
 
@@ -138,11 +138,11 @@ final class BuiltInTransportLifecycleAdapter {
 		@NonNull
 		private final TrackedLifecycleCallRunner callRunner;
 		@NonNull
-		private final CompletableFuture<InternalShutdownResult> result;
+		private final CompletableFuture<@NonNull InternalShutdownResult> result;
 		@NonNull
 		private final AtomicBoolean shutdownClaimed;
 		@NonNull
-		private final AtomicReference<GenerationStartupState> startupState;
+		private final AtomicReference<@NonNull GenerationStartupState> startupState;
 		@NonNull
 		private final AtomicReference<@Nullable Throwable> startupFailure;
 		@NonNull
@@ -260,7 +260,7 @@ final class BuiltInTransportLifecycleAdapter {
 
 		@Override
 		@NonNull
-		public Set<InternalResidualActivityType> residualActivity() {
+		public Set<@NonNull InternalResidualActivityType> residualActivity() {
 			if (this.residualActivity.terminationProven())
 				return Set.of();
 			return this.residualActivity.snapshot(
@@ -588,9 +588,9 @@ final class BuiltInTransportLifecycleAdapter {
 	@NonNull
 	private final Operations operations;
 	@NonNull
-	private final Supplier<Duration> gracefulTimeout;
+	private final Supplier<@NonNull Duration> gracefulTimeout;
 	@NonNull
-	private final Supplier<Duration> forcedTimeout;
+	private final Supplier<@NonNull Duration> forcedTimeout;
 	@NonNull
 	private final NanoClock clock;
 	@NonNull
@@ -598,18 +598,18 @@ final class BuiltInTransportLifecycleAdapter {
 	@NonNull
 	private final TrackedLifecycleCallRunner callRunner;
 	@NonNull
-	private final AtomicReference<Generation> current;
+	private final AtomicReference<@Nullable Generation> current;
 	@NonNull
-	private final AtomicReference<Generation> externalCandidate;
+	private final AtomicReference<@Nullable Generation> externalCandidate;
 	@NonNull
 	private final AtomicBoolean externalOwnershipClaimed;
 	@NonNull
-	private final ThreadLocal<Generation> externalStartInvocation;
+	private final ThreadLocal<@Nullable Generation> externalStartInvocation;
 	@NonNull
-	private final ThreadLocal<DelegatedStartInvocation> delegatedStartInvocation;
+	private final ThreadLocal<@Nullable DelegatedStartInvocation> delegatedStartInvocation;
 
 	BuiltInTransportLifecycleAdapter(@NonNull InternalLifecycleComponentType kind,
-			@NonNull Operations operations, @NonNull Supplier<Duration> gracefulTimeout) {
+			@NonNull Operations operations, @NonNull Supplier<@NonNull Duration> gracefulTimeout) {
 		this(kind, operations, gracefulTimeout,
 				() -> Duration.ofSeconds(3),
 				NanoClock.system(), new LifecycleWorkers());
@@ -617,14 +617,14 @@ final class BuiltInTransportLifecycleAdapter {
 
 	BuiltInTransportLifecycleAdapter(@NonNull InternalLifecycleComponentType kind,
 			@NonNull Operations operations,
-			@NonNull Supplier<Duration> gracefulTimeout,
-			@NonNull Supplier<Duration> forcedTimeout) {
+			@NonNull Supplier<@NonNull Duration> gracefulTimeout,
+			@NonNull Supplier<@NonNull Duration> forcedTimeout) {
 		this(kind, operations, gracefulTimeout, forcedTimeout,
 				NanoClock.system(), new LifecycleWorkers());
 	}
 
 	BuiltInTransportLifecycleAdapter(@NonNull InternalLifecycleComponentType kind,
-			@NonNull Operations operations, @NonNull Supplier<Duration> gracefulTimeout,
+			@NonNull Operations operations, @NonNull Supplier<@NonNull Duration> gracefulTimeout,
 			@NonNull Duration forcedTimeout, @NonNull NanoClock clock,
 			@NonNull LifecycleWorkers workers) {
 		this(kind, operations, gracefulTimeout, () -> forcedTimeout, clock,
@@ -635,8 +635,8 @@ final class BuiltInTransportLifecycleAdapter {
 
 	BuiltInTransportLifecycleAdapter(@NonNull InternalLifecycleComponentType kind,
 			@NonNull Operations operations,
-			@NonNull Supplier<Duration> gracefulTimeout,
-			@NonNull Supplier<Duration> forcedTimeout, @NonNull NanoClock clock,
+			@NonNull Supplier<@NonNull Duration> gracefulTimeout,
+			@NonNull Supplier<@NonNull Duration> forcedTimeout, @NonNull NanoClock clock,
 			@NonNull LifecycleWorkers workers) {
 		this.kind = requireNonNull(kind);
 		this.operations = requireNonNull(operations);
@@ -947,7 +947,7 @@ final class BuiltInTransportLifecycleAdapter {
 	}
 
 	@NonNull
-	Optional<Throwable> finalizeExternallyCoordinatedEvidence(
+	Optional<@NonNull Throwable> finalizeExternallyCoordinatedEvidence(
 			@NonNull Generation generation,
 			@NonNull InternalLifecycleComponentShutdownResult participantResult) {
 		requireExternallyCoordinated(generation);
@@ -1021,7 +1021,7 @@ final class BuiltInTransportLifecycleAdapter {
 	}
 
 	@NonNull
-	Optional<AdmissionFence.Admission> tryAdmit(@NonNull Generation generation) {
+	Optional<AdmissionFence.@NonNull Admission> tryAdmit(@NonNull Generation generation) {
 		requireNonNull(generation);
 		if (this.current.get() != generation || generation.result.isDone())
 			return Optional.empty();
@@ -1062,20 +1062,20 @@ final class BuiltInTransportLifecycleAdapter {
 	}
 
 	@NonNull
-	Optional<InternalShutdownResult> result() {
+	Optional<@NonNull InternalShutdownResult> result() {
 		Generation generation = this.current.get();
 		return generation == null ? Optional.empty() : result(generation);
 	}
 
 	@NonNull
-	Optional<InternalShutdownResult> result(@NonNull Generation generation) {
+	Optional<@NonNull InternalShutdownResult> result(@NonNull Generation generation) {
 		requireOwned(generation);
 		return !generation.result.isDone()
 				? Optional.empty() : Optional.of(generation.result.join());
 	}
 
 	@NonNull
-	Optional<Generation> generation() {
+	Optional<@NonNull Generation> generation() {
 		return Optional.ofNullable(this.current.get());
 	}
 
@@ -1098,13 +1098,13 @@ final class BuiltInTransportLifecycleAdapter {
 	}
 
 	@NonNull
-	List<InternalTerminationEvent> terminationEvents(@NonNull Generation generation) {
+	List<@NonNull InternalTerminationEvent> terminationEvents(@NonNull Generation generation) {
 		requireCurrent(generation);
 		return generation.group.primaryEventsInSequence();
 	}
 
 	@NonNull
-	Optional<LifecycleRetentionSummary> retentionSummary() {
+	Optional<@NonNull LifecycleRetentionSummary> retentionSummary() {
 		Generation generation = this.current.get();
 		return generation == null || generation.retentionAnchor == null
 				? Optional.empty()
@@ -1322,13 +1322,13 @@ final class BuiltInTransportLifecycleAdapter {
 		}
 
 		@NonNull
-		static List<InternalLifecycleComponentShutdownResult> participants(
+		static List<@NonNull InternalLifecycleComponentShutdownResult> participants(
 				@NonNull InternalLifecycleComponentShutdownResult result) {
 			return java.util.List.of(result);
 		}
 
 		@NonNull
-		static List<InternalLifecycleCoordinator.Participant> participants(
+		static List<InternalLifecycleCoordinator.@NonNull Participant> participants(
 				InternalLifecycleCoordinator.@NonNull Participant participant) {
 			return java.util.List.of(participant);
 		}

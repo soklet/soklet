@@ -30,16 +30,16 @@ import java.util.regex.Pattern;
 
 /** RFC 6265 section 5.1.1 cookie dates have a fixed year cutoff and ignore weekdays. */
 final class CookieDate {
-	private static final Pattern DELIMITERS = Pattern.compile("[\\x09\\x20-\\x2f\\x3b-\\x40\\x5b-\\x60\\x7b-\\x7e]+");
-	private static final Pattern TIME = Pattern.compile("([0-9]{1,2}):([0-9]{1,2}):([0-9]{1,2})(?:[^0-9].*)?", Pattern.DOTALL);
-	private static final Pattern DAY = Pattern.compile("([0-9]{1,2})(?:[^0-9].*)?", Pattern.DOTALL);
-	private static final Pattern YEAR = Pattern.compile("([0-9]{2,4})(?:[^0-9].*)?", Pattern.DOTALL);
-	private static final List<String> MONTHS = List.of("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec");
+	private static final @NonNull Pattern DELIMITERS = Pattern.compile("[\\x09\\x20-\\x2f\\x3b-\\x40\\x5b-\\x60\\x7b-\\x7e]+");
+	private static final @NonNull Pattern TIME = Pattern.compile("([0-9]{1,2}):([0-9]{1,2}):([0-9]{1,2})(?:[^0-9].*)?", Pattern.DOTALL);
+	private static final @NonNull Pattern DAY = Pattern.compile("([0-9]{1,2})(?:[^0-9].*)?", Pattern.DOTALL);
+	private static final @NonNull Pattern YEAR = Pattern.compile("([0-9]{2,4})(?:[^0-9].*)?", Pattern.DOTALL);
+	private static final @NonNull List<@NonNull String> MONTHS = List.of("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec");
 
 	private CookieDate() {}
 
 	@NonNull
-	static Optional<Instant> parse(@NonNull String value) {
+	static Optional<@NonNull Instant> parse(@NonNull String value) {
 		int hour = -1, minute = -1, second = -1, day = -1, month = -1, year = -1;
 		for (String token : DELIMITERS.split(value, -1)) {
 			Matcher timeMatch = TIME.matcher(token);

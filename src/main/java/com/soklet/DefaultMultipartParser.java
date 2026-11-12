@@ -61,7 +61,7 @@ final class DefaultMultipartParser implements MultipartParser {
 	@NonNull
 	private static final DefaultMultipartParser DEFAULT_INSTANCE;
 	@NonNull
-	private static final Map<String, Charset> MULTIPART_TEXT_CHARSETS = multipartTextCharsets();
+	private static final Map<@NonNull String, @NonNull Charset> MULTIPART_TEXT_CHARSETS = multipartTextCharsets();
 	private static final int MAXIMUM_HEADER_PARAMETERS = 128;
 	private static final int MAXIMUM_ENCODED_WORDS = 128;
 
@@ -135,7 +135,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		if (contentTypeHeader == null)
 			throw new MissingRequestHeaderException("The 'Content-Type' header must be specified for multipart requests.", "Content-Type");
 
-		Map<String, String> contentTypeHeaderFields = extractFields(contentTypeHeader);
+		Map<@NonNull String, @Nullable String> contentTypeHeaderFields = extractFields(contentTypeHeader);
 
 		// Validate boundary before using it
 		String boundary = contentTypeHeaderFields.get("boundary");
@@ -173,7 +173,7 @@ final class DefaultMultipartParser implements MultipartParser {
 				// Use a case-insensitive map for simplified lookups
 				Map<String, String> headers = splitHeaders(multipartStream.readHeaders());
 				String contentDisposition = trimAggressivelyToNull(headers.get("Content-Disposition"));
-				Map<String, String> contentDispositionFields = Map.of();
+				Map<@NonNull String, @Nullable String> contentDispositionFields = Map.of();
 
 				if (contentDisposition != null) {
 					ParameterParser parser = new ParameterParser();
@@ -234,7 +234,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		return Utilities.immutableValueLists(multipartFieldsByName, false);
 	}
 
-	private static Map<String, Charset> multipartTextCharsets() {
+	private static @NonNull Map<@NonNull String, @NonNull Charset> multipartTextCharsets() {
 		Map<String, Charset> charsets = new HashMap<>();
 		// Resolve only fixed standard charsets. Unsupported names must never
 		// trigger a provider scan for each parameter in an untrusted upload.
@@ -248,7 +248,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		return Map.copyOf(charsets);
 	}
 
-	private static String decodeMultipartText(byte[] bytes, String charsetName) throws UnsupportedEncodingException {
+	private static @NonNull String decodeMultipartText(byte @NonNull [] bytes, @NonNull String charsetName) throws UnsupportedEncodingException {
 		Charset charset = MULTIPART_TEXT_CHARSETS.get(charsetName.toLowerCase(Locale.ROOT));
 		if (charset == null)
 			throw new UnsupportedEncodingException("Unsupported multipart text encoding.");
@@ -278,7 +278,7 @@ final class DefaultMultipartParser implements MultipartParser {
 
 	// *** START Selenium UploadFileHandler source ***
 
-	protected LinkedCaseInsensitiveMap<String> splitHeaders(String readHeaders) {
+	protected @NonNull LinkedCaseInsensitiveMap<@NonNull String> splitHeaders(@NonNull String readHeaders) {
 		LinkedCaseInsensitiveMap<String> headersBuilder = new LinkedCaseInsensitiveMap<>();
 		String[] headers = readHeaders.split("\r\n", -1);
 		String name = null;
@@ -311,8 +311,8 @@ final class DefaultMultipartParser implements MultipartParser {
 		return headersBuilder;
 	}
 
-	protected LinkedCaseInsensitiveMap<String> extractFields(String contentTypeHeader) {
-		LinkedCaseInsensitiveMap<String> fieldsBuilder = new LinkedCaseInsensitiveMap<>();
+	protected @NonNull LinkedCaseInsensitiveMap<@Nullable String> extractFields(@Nullable String contentTypeHeader) {
+		LinkedCaseInsensitiveMap<@Nullable String> fieldsBuilder = new LinkedCaseInsensitiveMap<>();
 		if (contentTypeHeader == null)
 			return fieldsBuilder;
 
@@ -332,9 +332,9 @@ final class DefaultMultipartParser implements MultipartParser {
 		ParameterParser parser = new ParameterParser(false);
 		parser.setLowerCaseNames(true);
 
-		Map<String, String> parsedParameters = parser.parse(parameters, ';');
+		Map<@NonNull String, @Nullable String> parsedParameters = parser.parse(parameters, ';');
 
-		for (Map.Entry<String, String> entry : parsedParameters.entrySet()) {
+		for (Map.Entry<@NonNull String, @Nullable String> entry : parsedParameters.entrySet()) {
 			String key = trimAggressivelyToNull(entry.getKey());
 
 			if (key == null)
@@ -381,7 +381,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		/**
 		 * Nop implementation.
 		 */
-		ProgressListener NOP = (bytesRead, contentLength, items) -> {
+		@NonNull ProgressListener NOP = (bytesRead, contentLength, items) -> {
 			// nop
 		};
 
@@ -416,7 +416,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 *
 		 * @param msg the error message.
 		 */
-		public FileUploadException(final String msg) {
+		public FileUploadException(final @Nullable String msg) {
 			super(msg);
 		}
 
@@ -427,7 +427,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * @param msg   The exceptions detail message.
 		 * @param cause The exceptions cause.
 		 */
-		public FileUploadException(final String msg, final Throwable cause) {
+		public FileUploadException(final @Nullable String msg, final @Nullable Throwable cause) {
 			super(msg, cause);
 		}
 	}
@@ -448,7 +448,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * classes field, which is available since Java
 		 * 1.4 only.
 		 */
-		private final FileUploadException cause;
+		private final @Nullable FileUploadException cause;
 
 		/**
 		 * Creates a {@code FileUploadIOException} with the
@@ -456,7 +456,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 *
 		 * @param pCause The exceptions cause, if any, or null.
 		 */
-		public FileUploadIOException(final FileUploadException pCause) {
+		public FileUploadIOException(final @Nullable FileUploadException pCause) {
 			// We're not doing super(pCause) cause of 1.3 compatibility.
 			cause = pCause;
 		}
@@ -468,7 +468,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 */
 		@SuppressWarnings("sync-override") // Field is final
 		@Override
-		public Throwable getCause() {
+		public @Nullable Throwable getCause() {
 			return cause;
 		}
 
@@ -496,7 +496,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * header, or {@code null} if the item does not have a header
 		 * of that name
 		 */
-		String getHeader(String name);
+		@Nullable String getHeader(@NonNull String name);
 
 		/**
 		 * <p>
@@ -514,7 +514,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * requested header. If the item does not have any headers of
 		 * that name, return an empty {@code Iterator}
 		 */
-		Iterator<String> getHeaders(String name);
+		@NonNull Iterator<@NonNull String> getHeaders(@NonNull String name);
 
 		/**
 		 * <p>
@@ -525,7 +525,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * headers provided with this file item. If the item does not have
 		 * any headers return an empty {@code Iterator}
 		 */
-		Iterator<String> getHeaderNames();
+		@NonNull Iterator<@NonNull String> getHeaderNames();
 
 	}
 
@@ -543,7 +543,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 *
 		 * @return the {@link FileItemHeaders} present for this item.
 		 */
-		FileItemHeaders getHeaders();
+		@Nullable FileItemHeaders getHeaders();
 
 		/**
 		 * Sets the headers read from within an item.  Implementations of
@@ -554,7 +554,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * @param headers the instance that holds onto the headers
 		 *                for this instance.
 		 */
-		void setHeaders(FileItemHeaders headers);
+		void setHeaders(@Nullable FileItemHeaders headers);
 
 	}
 
@@ -600,7 +600,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * @throws IOException           An I/O error occurred.
 		 * @see ItemSkippedException
 		 */
-		InputStream openStream() throws IOException;
+		@NonNull InputStream openStream() throws IOException;
 
 		/**
 		 * Returns the content type passed by the browser or {@code null} if
@@ -609,7 +609,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * @return The content type passed by the browser or {@code null} if
 		 * not defined.
 		 */
-		String getContentType();
+		@Nullable String getContentType();
 
 		/**
 		 * Returns the original file name in the client's file system, as provided by
@@ -619,7 +619,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 *
 		 * @return The original file name in the client's file system.
 		 */
-		String getName();
+		@Nullable String getName();
 
 		/**
 		 * Returns the name of the field in the multipart form corresponding to
@@ -627,7 +627,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 *
 		 * @return The name of the form field.
 		 */
-		String getFieldName();
+		@NonNull String getFieldName();
 
 		/**
 		 * Determines whether a {@code FileItem} instance represents a simple form field.
@@ -660,7 +660,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		/**
 		 * The file name causing the exception.
 		 */
-		private final String name;
+		private final @NonNull String name;
 
 		/**
 		 * Creates a new instance.
@@ -668,7 +668,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * @param pName    The file name causing the exception.
 		 * @param pMessage A human readable error message.
 		 */
-		public InvalidFileNameException(final String pName, final String pMessage) {
+		public InvalidFileNameException(final @NonNull String pName, final @Nullable String pMessage) {
 			super(pMessage);
 			name = pName;
 		}
@@ -678,7 +678,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 *
 		 * @return the invalid file name.
 		 */
-		public String getName() {
+		public @NonNull String getName() {
 			return name;
 		}
 
@@ -722,7 +722,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * @return Number of bytes, which have been copied.
 		 * @throws IOException An I/O error occurred.
 		 */
-		public static long copy(final InputStream inputStream, final OutputStream outputStream,
+		public static long copy(final @NonNull InputStream inputStream, final @Nullable OutputStream outputStream,
 														final boolean closeOutputStream)
 				throws IOException {
 			return copy(inputStream, outputStream, closeOutputStream, new byte[DEFAULT_BUFFER_SIZE]);
@@ -746,9 +746,9 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * @return Number of bytes, which have been copied.
 		 * @throws IOException An I/O error occurred.
 		 */
-		public static long copy(final InputStream inputStream,
-														final OutputStream outputStream, final boolean closeOutputStream,
-														final byte[] buffer)
+		public static long copy(final @NonNull InputStream inputStream,
+														final @Nullable OutputStream outputStream, final boolean closeOutputStream,
+														final byte @NonNull [] buffer)
 				throws IOException {
 			try (OutputStream out = outputStream;
 					 InputStream in = inputStream) {
@@ -787,7 +787,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * @return Unmodified file name, if valid.
 		 * @throws InvalidFileNameException The file name was found to be invalid.
 		 */
-		public static String checkFileName(final String fileName) {
+		public static @Nullable String checkFileName(final @Nullable String fileName) {
 			if (fileName != null && fileName.indexOf('\u0000') != -1) {
 				// pFileName.replace("\u0000", "\\0")
 				final StringBuilder sb = new StringBuilder();
@@ -873,7 +873,7 @@ final class DefaultMultipartParser implements MultipartParser {
 			/**
 			 * The listener to invoke.
 			 */
-			private final ProgressListener listener;
+			private final @Nullable ProgressListener listener;
 
 			/**
 			 * Number of expected bytes, if known, or -1.
@@ -897,7 +897,7 @@ final class DefaultMultipartParser implements MultipartParser {
 			 * @param pListener      The listener to invoke.
 			 * @param pContentLength The expected content length.
 			 */
-			public ProgressNotifier(final ProgressListener pListener, final long pContentLength) {
+			public ProgressNotifier(final @Nullable ProgressListener pListener, final long pContentLength) {
 				listener = pListener;
 				contentLength = pContentLength;
 			}
@@ -966,31 +966,31 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * A byte sequence that marks the end of {@code header-part}
 		 * ({@code CRLFCRLF}).
 		 */
-		protected static final byte[] HEADER_SEPARATOR = {CR, LF, CR, LF};
+		protected static final byte @NonNull [] HEADER_SEPARATOR = {CR, LF, CR, LF};
 
 		/**
 		 * A byte sequence that that follows a delimiter that will be
 		 * followed by an encapsulation ({@code CRLF}).
 		 */
-		protected static final byte[] FIELD_SEPARATOR = {CR, LF};
+		protected static final byte @NonNull [] FIELD_SEPARATOR = {CR, LF};
 
 		/**
 		 * A byte sequence that that follows a delimiter of the last
 		 * encapsulation in the stream ({@code --}).
 		 */
-		protected static final byte[] STREAM_TERMINATOR = {DASH, DASH};
+		protected static final byte @NonNull [] STREAM_TERMINATOR = {DASH, DASH};
 
 		/**
 		 * A byte sequence that precedes a boundary ({@code CRLF--}).
 		 */
-		protected static final byte[] BOUNDARY_PREFIX = {CR, LF, DASH, DASH};
+		protected static final byte @NonNull [] BOUNDARY_PREFIX = {CR, LF, DASH, DASH};
 
 		// ----------------------------------------------------------- Data members
 
 		/**
 		 * The input stream from which data is read.
 		 */
-		private final InputStream input;
+		private final @NonNull InputStream input;
 
 		/**
 		 * The length of the boundary token plus the leading {@code CRLF--}.
@@ -1006,12 +1006,12 @@ final class DefaultMultipartParser implements MultipartParser {
 		/**
 		 * The byte sequence that partitions the stream.
 		 */
-		private final byte[] boundary;
+		private final byte @NonNull [] boundary;
 
 		/**
 		 * The table for Knuth-Morris-Pratt search algorithm.
 		 */
-		private final int[] boundaryTable;
+		private final int @NonNull [] boundaryTable;
 
 		/**
 		 * The length of the buffer used for processing the request.
@@ -1021,7 +1021,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		/**
 		 * The buffer used for processing the request.
 		 */
-		private final byte[] buffer;
+		private final byte @NonNull [] buffer;
 
 		/**
 		 * The index of first valid character in the buffer.
@@ -1068,10 +1068,10 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * @throws IllegalArgumentException If the buffer size is too small
 		 * @since 1.3.1
 		 */
-		public MultipartStream(final InputStream input,
-													 final byte[] boundary,
+		public MultipartStream(final @NonNull InputStream input,
+													 final byte @NonNull [] boundary,
 													 final int bufSize,
-													 final ProgressNotifier pNotifier) {
+													 final @Nullable ProgressNotifier pNotifier) {
 
 			if (boundary == null) {
 				throw new IllegalArgumentException("boundary may not be null");
@@ -1112,9 +1112,9 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * @param pNotifier An object for calling the progress listener, if any.
 		 * @see #MultipartStream(InputStream, byte[], int, ProgressNotifier)
 		 */
-		public MultipartStream(final InputStream input,
-													 final byte[] boundary,
-													 final ProgressNotifier pNotifier) {
+		public MultipartStream(final @NonNull InputStream input,
+													 final byte @NonNull [] boundary,
+													 final @Nullable ProgressNotifier pNotifier) {
 			this(input, boundary, DEFAULT_BUFSIZE, pNotifier);
 		}
 
@@ -1126,7 +1126,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 *
 		 * @return The encoding used to read part headers.
 		 */
-		public String getHeaderEncoding() {
+		public @Nullable String getHeaderEncoding() {
 			return headerEncoding;
 		}
 
@@ -1136,7 +1136,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 *
 		 * @param encoding The encoding used to read part headers.
 		 */
-		public void setHeaderEncoding(final String encoding) {
+		public void setHeaderEncoding(final @Nullable String encoding) {
 			headerEncoding = encoding;
 		}
 
@@ -1236,7 +1236,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 *                                  has a different length than the one
 		 *                                  being currently parsed.
 		 */
-		public void setBoundary(final byte[] boundary)
+		public void setBoundary(final byte @NonNull [] boundary)
 				throws IllegalBoundaryException {
 			if (boundary.length != boundaryLength - BOUNDARY_PREFIX.length) {
 				throw new IllegalBoundaryException(
@@ -1283,7 +1283,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * @throws FileUploadIOException    if the bytes read from the stream exceeded the size limits.
 		 * @throws MalformedStreamException if the stream ends unexpectedly.
 		 */
-		public String readHeaders() throws FileUploadIOException, MalformedStreamException {
+		public @NonNull String readHeaders() throws FileUploadIOException, MalformedStreamException {
 			int i = 0;
 			byte b;
 			// to support multi-byte characters
@@ -1342,7 +1342,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * @throws MalformedStreamException if the stream ends unexpectedly.
 		 * @throws IOException              if an i/o error occurs.
 		 */
-		public int readBodyData(final OutputStream output)
+		public int readBodyData(final @Nullable OutputStream output)
 				throws MalformedStreamException, IOException {
 			return (int) Streams.copy(newInputStream(), output, false); // N.B. Streams.copy closes the input stream
 		}
@@ -1352,7 +1352,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 *
 		 * @return A new instance of {@link ItemInputStream}.
 		 */
-		public ItemInputStream newInputStream() {
+		public @NonNull ItemInputStream newInputStream() {
 			return new ItemInputStream();
 		}
 
@@ -1410,8 +1410,8 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * @return {@code true} if {@code count} first bytes in arrays
 		 * {@code a} and {@code b} are equal.
 		 */
-		public static boolean arrayequals(final byte[] a,
-																			final byte[] b,
+		public static boolean arrayequals(final byte @NonNull [] a,
+																			final byte @NonNull [] b,
 																			final int count) {
 			for (int i = 0; i < count; i++) {
 				if (a[i] != b[i]) {
@@ -1471,7 +1471,7 @@ final class DefaultMultipartParser implements MultipartParser {
 			 *
 			 * @param message The detail message.
 			 */
-			public MalformedStreamException(final String message) {
+			public MalformedStreamException(final @Nullable String message) {
 				super(message);
 			}
 
@@ -1500,7 +1500,7 @@ final class DefaultMultipartParser implements MultipartParser {
 			 *
 			 * @param message The detail message.
 			 */
-			public IllegalBoundaryException(final String message) {
+			public IllegalBoundaryException(final @Nullable String message) {
 				super(message);
 			}
 
@@ -1617,7 +1617,7 @@ final class DefaultMultipartParser implements MultipartParser {
 			 * @throws IOException An I/O error occurred.
 			 */
 			@Override
-			public int read(final byte[] b, final int off, final int len) throws IOException {
+			public int read(final byte @NonNull [] b, final int off, final int len) throws IOException {
 				if (closed) {
 					throw new FileItemStream.ItemSkippedException();
 				}
@@ -1772,7 +1772,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		/**
 		 * String to be parsed.
 		 */
-		private char[] chars = null;
+		private char @Nullable [] chars = null;
 
 		/**
 		 * Current position in the string.
@@ -1816,7 +1816,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * @param quoted {@code true} if quotation marks are expected, {@code false} otherwise.
 		 * @return the token
 		 */
-		private String getToken(final boolean quoted) {
+		private @Nullable String getToken(final boolean quoted) {
 			// Trim leading white spaces
 			while (i1 < i2 && Character.isWhitespace(chars[i1])) {
 				i1++;
@@ -1858,7 +1858,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * @param charray the array of characters to test against
 		 * @return {@code true} if the character is present in the array of characters, {@code false} otherwise.
 		 */
-		private boolean isOneOf(final char ch, final char[] charray) {
+		private boolean isOneOf(final char ch, final char @NonNull [] charray) {
 			var result = false;
 			for (final char element : charray) {
 				if (ch == element) {
@@ -1876,7 +1876,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * @param separator the name/value pairs separator
 		 * @return a map of name/value pairs
 		 */
-		public Map<String, String> parse(final char[] charArray, final char separator) {
+		public @NonNull Map<@NonNull String, @Nullable String> parse(final char @Nullable [] charArray, final char separator) {
 			if (charArray == null) {
 				return new LinkedHashMap<>();
 			}
@@ -1892,12 +1892,12 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * @param separator the name/value pairs separator
 		 * @return a map of name/value pairs
 		 */
-		public Map<String, String> parse(final char[] charArray, final int offset, final int length, final char separator) {
+		public @NonNull Map<@NonNull String, @Nullable String> parse(final char @Nullable [] charArray, final int offset, final int length, final char separator) {
 
 			if (charArray == null) {
 				return new LinkedHashMap<>();
 			}
-			final var params = new LinkedHashMap<String, String>();
+			final var params = new LinkedHashMap<@NonNull String, @Nullable String>();
 			this.chars = charArray.clone();
 			this.pos = offset;
 			this.len = length;
@@ -1943,7 +1943,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * @param separator the name/value pairs separator
 		 * @return a map of name/value pairs
 		 */
-		public Map<String, String> parse(final String str, final char separator) {
+		public @NonNull Map<@NonNull String, @Nullable String> parse(final @Nullable String str, final char separator) {
 			if (str == null) {
 				return new LinkedHashMap<>();
 			}
@@ -1958,7 +1958,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * @param separators the name/value pairs separators
 		 * @return a map of name/value pairs
 		 */
-		public Map<String, String> parse(final String str, final char[] separators) {
+		public @NonNull Map<@NonNull String, @Nullable String> parse(final @Nullable String str, final char @Nullable [] separators) {
 			if (separators == null || separators.length == 0) {
 				return new LinkedHashMap<>();
 			}
@@ -1982,7 +1982,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * @param terminators the array of terminating characters. Any of these characters when encountered outside the quotation marks signify the end of the token
 		 * @return the token
 		 */
-		private String parseQuotedToken(final char[] terminators) {
+		private @Nullable String parseQuotedToken(final char @NonNull [] terminators) {
 			if (!this.decodeParameterValues)
 				return parseContentTypeValue(terminators);
 
@@ -2013,7 +2013,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		}
 
 		/** Content-Type uses HTTP quoted-pairs rather than browser filename escaping. */
-		private String parseContentTypeValue(final char[] terminators) {
+		private @Nullable String parseContentTypeValue(final char @NonNull [] terminators) {
 			while (hasChar() && Character.isWhitespace(chars[pos]))
 				pos++;
 			if (!hasChar() || chars[pos] != '"')
@@ -2048,7 +2048,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * @param terminators the array of terminating characters. Any of these characters when encountered signify the end of the token
 		 * @return the token
 		 */
-		private String parseToken(final char[] terminators) {
+		private @Nullable String parseToken(final char @NonNull [] terminators) {
 			char ch;
 			i1 = pos;
 			i2 = pos;
@@ -2100,7 +2100,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * @return Decoded text based on charset encoding
 		 * @throws UnsupportedEncodingException The requested character set wasn't found.
 		 */
-		static String decodeText(final String encodedText) throws UnsupportedEncodingException {
+		static @NonNull String decodeText(final @NonNull String encodedText) throws UnsupportedEncodingException {
 			final var langDelimitStart = encodedText.indexOf('\'');
 			if (langDelimitStart == -1) {
 				// missing charset
@@ -2125,7 +2125,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * @param text - ASCII text input
 		 * @return Byte array of characters decoded from ASCII table
 		 */
-		private static byte[] fromHex(final String text) {
+		private static byte @NonNull [] fromHex(final @NonNull String text) {
 			final var shift = 4;
 			final var out = new ByteArrayOutputStream(text.length());
 			for (var i = 0; i < text.length(); ) {
@@ -2149,7 +2149,7 @@ final class DefaultMultipartParser implements MultipartParser {
 			return out.toByteArray();
 		}
 
-		private static String getJavaCharset(final String mimeCharset) {
+		private static @NonNull String getJavaCharset(final @NonNull String mimeCharset) {
 			// good enough for standard values
 			return mimeCharset;
 		}
@@ -2160,7 +2160,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * @param paramName The parameter, which is being checked.
 		 * @return {@code true}, if encoded as per RFC 2231, {@code false} otherwise
 		 */
-		static boolean hasEncodedValue(final String paramName) {
+		static boolean hasEncodedValue(final @Nullable String paramName) {
 			if (paramName != null) {
 				return paramName.lastIndexOf('*') == paramName.length() - 1;
 			}
@@ -2173,7 +2173,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * @param paramName The parameter, which is being inspected.
 		 * @return stripped {@code paramName} of Asterisk (*), if RFC2231 encoded
 		 */
-		static String stripDelimiter(final String paramName) {
+		static @NonNull String stripDelimiter(final @NonNull String paramName) {
 			if (hasEncodedValue(paramName)) {
 				final var paramBuilder = new StringBuilder(paramName);
 				paramBuilder.deleteCharAt(paramName.lastIndexOf('*'));
@@ -2199,22 +2199,22 @@ final class DefaultMultipartParser implements MultipartParser {
 		/**
 		 * If the text contains any encoded tokens, those tokens will be marked with "=?".
 		 */
-		private static final String ENCODED_TOKEN_MARKER = "=?";
+		private static final @NonNull String ENCODED_TOKEN_MARKER = "=?";
 
 		/**
 		 * If the text contains any encoded tokens, those tokens will terminate with "=?".
 		 */
-		private static final String ENCODED_TOKEN_FINISHER = "?=";
+		private static final @NonNull String ENCODED_TOKEN_FINISHER = "?=";
 
 		/**
 		 * The linear whitespace chars sequence.
 		 */
-		private static final String LINEAR_WHITESPACE = " \t\r\n";
+		private static final @NonNull String LINEAR_WHITESPACE = " \t\r\n";
 
 		/**
 		 * Mappings between MIME and Java charset.
 		 */
-		private static final Map<String, String> MIME2JAVA = new HashMap<>();
+		private static final @NonNull Map<@NonNull String, @NonNull String> MIME2JAVA = new HashMap<>();
 
 		static {
 			MIME2JAVA.put("iso-2022-cn", "ISO2022CN");
@@ -2237,7 +2237,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * @return The decoded text string.
 		 * @throws UnsupportedEncodingException if the detected encoding in the input text is not supported.
 		 */
-		static String decodeText(final String text) throws UnsupportedEncodingException {
+		static @NonNull String decodeText(final @NonNull String text) throws UnsupportedEncodingException {
 			// if the text contains any encoded tokens, those tokens will be marked with "=?". If the
 			// source string doesn't contain that sequent, no decoding is required.
 			if (!text.contains(ENCODED_TOKEN_MARKER)) {
@@ -2319,7 +2319,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		}
 
 		/** Returns null for an unsupported or malformed encoded word, without exception allocation. */
-		private static String decodeWord(final String word) {
+		private static @Nullable String decodeWord(final @NonNull String word) {
 			if (!word.startsWith(ENCODED_TOKEN_MARKER) || !word.endsWith(ENCODED_TOKEN_FINISHER))
 				return null;
 			int charsetEnd = word.indexOf('?', 2);
@@ -2379,11 +2379,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * @param charset The MIME standard name.
 		 * @return The Java equivalent for this name.
 		 */
-		private static String javaCharset(final String charset) {
-			// nothing in, nothing out.
-			if (charset == null) {
-				return null;
-			}
+		private static @NonNull String javaCharset(final @NonNull String charset) {
 			final var mappedCharset = MIME2JAVA.get(charset.toLowerCase(Locale.ENGLISH));
 			// if there is no mapping, then the original name is used. Many of the MIME character set
 			// names map directly back into Java. The reverse isn't necessarily true.
@@ -2414,7 +2410,7 @@ final class DefaultMultipartParser implements MultipartParser {
 		 * @return the number of bytes produced.
 		 * @throws IOException if an IO error occurs
 		 */
-		public static int decode(final byte[] data, final OutputStream out) throws IOException {
+		public static int decode(final byte @NonNull [] data, final @NonNull OutputStream out) throws IOException {
 			var off = 0;
 			final var length = data.length;
 			final var endOffset = off + length;
@@ -2489,7 +2485,7 @@ final class DefaultMultipartParser implements MultipartParser {
 	// *** END commons-fileupload source ***
 
 	/** Decodes the numeric-reference subset historically emitted by legacy form clients. */
-	private static String decodeNumericFilenameReferences(String input) {
+	private static @NonNull String decodeNumericFilenameReferences(@NonNull String input) {
 		StringBuilder result = null;
 		int copiedThrough = 0;
 		for (int offset = 0; offset < input.length() - 2; offset++) {
@@ -2543,7 +2539,7 @@ final class DefaultMultipartParser implements MultipartParser {
 // Created 2020-06-22
 	protected static class HTMLUtilities {
 		// Tables optimized for smallest .class size (without resorting to compression)
-		private static final String[] NAMES =
+		private static final @NonNull String @NonNull [] NAMES =
 				{"excl", "quot", "num", "dollar", "percnt", "amp", "apos", "lpar", "rpar", "ast", "midast", "plus", "comma",
 						"period", "sol", "colon", "semi", "lt", "equals", "GT", "quest", "commat", "lbrack", "lsqb", "bsol",
 						"rbrack", "rsqb", "Hat", "lowbar", "UnderBar", "DiacriticalGrave", "grave", "lbrace", "lcub", "verbar",
@@ -2761,7 +2757,7 @@ final class DefaultMultipartParser implements MultipartParser {
 						"NotNestedGreaterGreater", "smtes", "lates", "NotPrecedesEqual", "npre", "npreceq", "NotSucceedsEqual",
 						"nsce", "nsucceq", "nsubE", "nsubseteqq", "nsupE", "nsupseteqq", "varsubsetneqq", "vsubnE",
 						"varsupsetneqq", "vsupnE", "nparsl"};
-		private static final int[] CODEPOINTS =
+		private static final int @NonNull [] CODEPOINTS =
 				{33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 42, 43, 44, 46, 47, 58, 59, 60, 61, 62, 63, 64, 91, 91, 92, 93, 93,
 						94, 95, 95, 96, 96, 123, 123, 124, 124, 124, 125, 125, 160, 160, 161, 162, 163, 164, 165, 166, 167, 168,
 						168, 168, 168, 169, 170, 171, 172, 173, 174, 174, 175, 175, 176, 177, 177, 178, 179, 180, 180, 181, 182,
@@ -2879,7 +2875,7 @@ final class DefaultMultipartParser implements MultipartParser {
 						120140, 120141, 120142, 120143, 120144, 120146, 120147, 120148, 120149, 120150, 120151, 120152, 120153,
 						120154, 120155, 120156, 120157, 120158, 120159, 120160, 120161, 120162, 120163, 120164, 120165, 120166,
 						120167, 120168, 120169, 120170, 120171};
-		private static final long[] COMBINED_DIACRITICALS =
+		private static final long @NonNull [] COMBINED_DIACRITICALS =
 				{0x003C020D2L, 0x003D020E5L, 0x003E020D2L, 0x00660006AL, 0x205F0200AL, 0x219D00338L, 0x220200338L,
 						0x2220020D2L, 0x22290FE00L, 0x222A0FE00L, 0x223C020D2L, 0x223D00331L, 0x223E00333L, 0x224200338L,
 						0x224200338L, 0x224B00338L, 0x224D020D2L, 0x224E00338L, 0x224E00338L, 0x224F00338L, 0x224F00338L,
@@ -2897,7 +2893,7 @@ final class DefaultMultipartParser implements MultipartParser {
 
 		private static final int MIN_ESCAPE;
 		private static final int MAX_ESCAPE;
-		private static final HashMap<String, int[]> LOOKUP_MAP;
+		private static final @NonNull HashMap<@NonNull String, int @NonNull []> LOOKUP_MAP;
 
 		static {
 			int minEscape = Integer.MAX_VALUE;
@@ -2924,7 +2920,7 @@ final class DefaultMultipartParser implements MultipartParser {
 			LOOKUP_MAP = lookupMap;
 		}
 
-		public static String unescapeHtml(String input) {
+		public static @NonNull String unescapeHtml(@NonNull String input) {
 			StringBuilder result = null;
 
 			int len = input.length();

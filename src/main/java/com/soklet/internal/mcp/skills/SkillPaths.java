@@ -11,6 +11,8 @@
  */
 package com.soklet.internal.mcp.skills;
 
+
+import org.jspecify.annotations.NonNull;
 import java.nio.charset.StandardCharsets;
 import java.text.Normalizer;
 import java.util.ArrayList;
@@ -29,18 +31,18 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 final class SkillPaths {
-	static final String ROOT = "SKILL.md";
+	static final @NonNull String ROOT = "SKILL.md";
 	static final int MAXIMUM_FILES = 512;
 	static final int MAXIMUM_PATH_UTF_8_BYTES = 8_192;
 
-	private final List<String> paths;
+	private final @NonNull List<@NonNull String> paths;
 
-	private SkillPaths(List<String> paths) {
+	private SkillPaths(@NonNull List<@NonNull String> paths) {
 		this.paths = List.copyOf(paths);
 	}
 
 	/** Validates every key before a future bundle loader is allowed to copy bytes. */
-	static SkillPaths from(Collection<String> logicalPaths) {
+	static @NonNull SkillPaths from(@NonNull Collection<@NonNull String> logicalPaths) {
 		requireNonNull(logicalPaths, "Skills logical paths are required.");
 		if (logicalPaths.size() > MAXIMUM_FILES) throw invalid();
 		List<Path> validated = new ArrayList<>();
@@ -72,9 +74,9 @@ final class SkillPaths {
 		return new SkillPaths(ordered);
 	}
 
-	List<String> paths() { return this.paths; }
+	@NonNull List<@NonNull String> paths() { return this.paths; }
 
-	private static byte[] validate(String path) {
+	private static byte @NonNull [] validate(@NonNull String path) {
 		// UTF-16 length is a lower bound on the UTF-8 size of valid scalar text.
 		if (path.isEmpty() || path.length() > MAXIMUM_PATH_UTF_8_BYTES) throw invalid();
 		int bytes = 0;
@@ -101,18 +103,18 @@ final class SkillPaths {
 		return path.getBytes(StandardCharsets.UTF_8);
 	}
 
-	private static void validateSegment(String path, int start, int end) {
+	private static void validateSegment(@NonNull String path, int start, int end) {
 		int length = end - start;
 		if (length == 0 || length == 1 && path.charAt(start) == '.'
 				|| length == 2 && path.charAt(start) == '.' && path.charAt(start + 1) == '.') throw invalid();
 	}
 
-	private static IllegalArgumentException invalid() {
+	private static @NonNull IllegalArgumentException invalid() {
 		return new IllegalArgumentException("Invalid Skills logical paths.");
 	}
 
 	@Override
-	public String toString() { return "SkillPaths[redacted]"; }
+	public @NonNull String toString() { return "SkillPaths[redacted]"; }
 
-	private record Path(String value, byte[] utf8) {}
+	private record Path(@NonNull String value, byte @NonNull [] utf8) {}
 }

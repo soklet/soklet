@@ -455,7 +455,7 @@ interface SokletApplicationRuntimeFactory {
 	@NonNull
 	SokletApplicationRuntime create(@NonNull SokletConfig config,
 			@NonNull LifecycleRuntimeServices services,
-			@NonNull Consumer<InternalLifecycleCoreSnapshot> coreSnapshotPublisher);
+			@NonNull Consumer<@NonNull InternalLifecycleCoreSnapshot> coreSnapshotPublisher);
 }
 
 interface SokletApplicationRuntime {
@@ -467,7 +467,7 @@ interface SokletApplicationRuntime {
 	InternalLifecycleCoreSnapshot awaitCore() throws InterruptedException;
 
 	@NonNull
-	Optional<RuntimeException> terminalFailure(
+	Optional<@NonNull RuntimeException> terminalFailure(
 			@NonNull InternalShutdownResult result);
 
 	@NonNull
@@ -497,7 +497,7 @@ final class DirectSokletApplicationRuntime implements SokletApplicationRuntime {
 	@NonNull
 	static DirectSokletApplicationRuntime create(@NonNull SokletConfig config,
 			@NonNull LifecycleRuntimeServices services,
-			@NonNull Consumer<InternalLifecycleCoreSnapshot> publisher) {
+			@NonNull Consumer<@NonNull InternalLifecycleCoreSnapshot> publisher) {
 		return new DirectSokletApplicationRuntime(Soklet.fromConfig(config,
 				services, publisher));
 	}
@@ -522,7 +522,7 @@ final class DirectSokletApplicationRuntime implements SokletApplicationRuntime {
 
 	@NonNull
 	@Override
-	public Optional<RuntimeException> terminalFailure(
+	public Optional<@NonNull RuntimeException> terminalFailure(
 			@NonNull InternalShutdownResult result) {
 		return this.soklet.getDirectLifecycle().applicationTerminalFailure(
 				requireNonNull(result));

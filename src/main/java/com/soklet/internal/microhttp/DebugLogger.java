@@ -1,5 +1,6 @@
 package com.soklet.internal.microhttp;
 
+import org.jspecify.annotations.NonNull;
 import java.time.Duration;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -13,7 +14,7 @@ public class DebugLogger implements Logger {
     }
 
     @Override
-    public void log(LogEntry... entries) {
+    public void log(@NonNull LogEntry @NonNull ... entries) {
         long uptime = Duration.ofNanos(System.nanoTime() - epoch).toMillis();
         String text = Stream.of(entries)
                 .map(e -> e.key() + "=" + e.value())
@@ -22,7 +23,7 @@ public class DebugLogger implements Logger {
     }
 
     @Override
-    public void log(Exception e, LogEntry... entries) {
+    public void log(@NonNull Exception e, @NonNull LogEntry @NonNull ... entries) {
         e.printStackTrace();
         log(entries);
     }

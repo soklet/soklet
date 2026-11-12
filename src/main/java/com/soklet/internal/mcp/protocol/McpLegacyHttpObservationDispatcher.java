@@ -39,12 +39,12 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 final class McpLegacyHttpObservationDispatcher {
-	private final Object lock = new Object();
+	private final @NonNull Object lock = new Object();
 	private final long transientCapacity;
 	private final long getCapacity;
-	private final ExecutorService executor;
-	private final McpApplicationHandlerDispatcher dispatcher;
-	private final Runnable exitObserver;
+	private final @NonNull ExecutorService executor;
+	private final @NonNull McpApplicationHandlerDispatcher dispatcher;
+	private final @NonNull Runnable exitObserver;
 	private long reservations;
 	private long getReservations;
 	private boolean accepting = true;
@@ -111,7 +111,7 @@ final class McpLegacyHttpObservationDispatcher {
 	}
 
 	final class Reservation {
-		private final AtomicBoolean submitted = new AtomicBoolean();
+		private final @NonNull AtomicBoolean submitted = new AtomicBoolean();
 		private final boolean get;
 		private Reservation(boolean get) { this.get = get; }
 		void finish(@NonNull Runnable callback, @NonNull Runnable physicalExit) {

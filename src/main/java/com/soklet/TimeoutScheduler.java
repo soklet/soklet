@@ -38,14 +38,14 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 final class TimeoutScheduler {
-	private static final Duration DEFAULT_TICK_DURATION = Duration.ofMillis(10);
+	private static final @NonNull Duration DEFAULT_TICK_DURATION = Duration.ofMillis(10);
 	private static final int DEFAULT_TICKS_PER_WHEEL = 1024;
 	private final long tickNanos;
 	private final long startedAtNanos;
-	private final Bucket[] buckets;
-	private final ConcurrentLinkedQueue<ScheduledTask> pendingTasks;
-	private final AtomicBoolean shutdown;
-	private final Thread workerThread;
+	private final @NonNull Bucket @NonNull [] buckets;
+	private final @NonNull ConcurrentLinkedQueue<@NonNull ScheduledTask> pendingTasks;
+	private final @NonNull AtomicBoolean shutdown;
+	private final @NonNull Thread workerThread;
 	private volatile long currentTick;
 	@Nullable
 	private volatile Throwable terminalFailure;
@@ -294,7 +294,7 @@ final class TimeoutScheduler {
 		@NonNull
 		private final Runnable task;
 		private final long deadlineTick;
-		private final AtomicBoolean canceled;
+		private final @NonNull AtomicBoolean canceled;
 		@Nullable
 		private volatile Bucket bucket;
 		@Nullable

@@ -271,7 +271,7 @@ final class McpJsonRpcEnvelopeCodec {
 			@NonNull Map<@NonNull String, @NonNull McpJsonValue> members,
 			@NonNull Optional<@NonNull McpJsonRpcId> readableId,
 			@NonNull Optional<@NonNull String> readableMethod,
-			@NonNull String envelopeDescription, @NonNull String... fieldNames) {
+			@NonNull String envelopeDescription, @NonNull String @NonNull ... fieldNames) {
 		for (String fieldName : fieldNames) {
 			if (members.containsKey(fieldName))
 				throw invalidEnvelope("A " + envelopeDescription

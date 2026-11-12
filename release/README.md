@@ -95,6 +95,13 @@ Keep reports redacted. The secrets report includes historical findings and test
 fixtures; triage findings on their technical merits. A scanner result is not a
 release approval record.
 
+The official conformance job installs the current dependency refresh from
+`conformance/official/dependencies/package-lock.json`. Its prepare/build/audit/
+restore sequence preserves the upstream source and CLI integrity checks.
+See [conformance dependency installation](../conformance/official/README.md).
+The September dependency disposition retained below is historical; its old
+lockfile and audit counts do not describe the current CI installation.
+
 Longer tests remain available when relevant:
 
 ```sh

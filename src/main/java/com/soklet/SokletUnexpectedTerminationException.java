@@ -30,6 +30,7 @@ public final class SokletUnexpectedTerminationException
 	@NonNull
 	private final UnexpectedShutdownComponentTermination
 			unexpectedShutdownComponentTermination;
+	@Nullable
 	private final InternalTerminationEvent internalUnexpectedTermination;
 
 	SokletUnexpectedTerminationException(

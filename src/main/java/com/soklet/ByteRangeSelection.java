@@ -194,7 +194,7 @@ public final class ByteRangeSelection {
 	}
 
 	@NonNull
-	private static Optional<DecimalDigits> parseNonnegativeInteger(@NonNull String text) {
+	private static Optional<@NonNull DecimalDigits> parseNonnegativeInteger(@NonNull String text) {
 		requireNonNull(text);
 		if (text.isEmpty())
 			return Optional.empty();
@@ -210,8 +210,8 @@ public final class ByteRangeSelection {
 	}
 
 	/** Keeps arbitrary-size range ordering exact without constructing arbitrary-precision integers. */
-	private record DecimalDigits(String value) implements Comparable<DecimalDigits> {
-		@Override public int compareTo(DecimalDigits other) {
+	private record DecimalDigits(@NonNull String value) implements Comparable<DecimalDigits> {
+		@Override public int compareTo(@NonNull DecimalDigits other) {
 			int lengthOrder = Integer.compare(value.length(), other.value.length());
 			return lengthOrder != 0 ? lengthOrder : value.compareTo(other.value);
 		}

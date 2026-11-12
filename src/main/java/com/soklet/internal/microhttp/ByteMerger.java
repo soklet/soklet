@@ -1,5 +1,8 @@
 package com.soklet.internal.microhttp;
 
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -10,12 +13,12 @@ import java.util.List;
 class ByteMerger {
 
     private static final int BLOCK_SIZE = 8192;
-    private final List<byte[]> arrays = new ArrayList<>();
-    private byte[] pending;
+    private final @NonNull List<byte @NonNull []> arrays = new ArrayList<>();
+    private byte @Nullable [] pending;
     private int pendingLength;
     private long size;
 
-    void add(byte[] array) {
+    void add(byte @NonNull [] array) {
         size += array.length;
         int offset = 0;
         while (offset < array.length) {
@@ -40,13 +43,13 @@ class ByteMerger {
         }
     }
 
-    byte[] merge() {
+    byte @NonNull [] merge() {
         if (size > Integer.MAX_VALUE)
             throw new IllegalStateException("Merged byte array length exceeds maximum supported size.");
         return merge(Integer.MAX_VALUE);
     }
 
-    byte[] merge(int maxLength) {
+    byte @NonNull [] merge(int maxLength) {
         if (maxLength < 0)
             throw new IllegalArgumentException("Maximum length must be >= 0.");
         if (size > maxLength)

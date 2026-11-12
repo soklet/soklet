@@ -63,7 +63,7 @@ final class AllOriginsCorsAuthorizer implements CorsAuthorizer {
 
 	@NonNull
 	@Override
-	public Optional<CorsResponse> authorize(@NonNull Request request,
+	public Optional<@NonNull CorsResponse> authorize(@NonNull Request request,
 																					@NonNull Cors cors) {
 		requireNonNull(request);
 		requireNonNull(cors);
@@ -78,7 +78,7 @@ final class AllOriginsCorsAuthorizer implements CorsAuthorizer {
 
 	@NonNull
 	@Override
-	public Optional<CorsPreflightResponse> authorizePreflight(@NonNull Request request,
+	public Optional<@NonNull CorsPreflightResponse> authorizePreflight(@NonNull Request request,
 																														@NonNull CorsPreflight corsPreflight,
 																														@NonNull Map<@NonNull HttpMethod, @NonNull ResourceMethod> availableResourceMethodsByHttpMethod) {
 		requireNonNull(request);
@@ -90,7 +90,7 @@ final class AllOriginsCorsAuthorizer implements CorsAuthorizer {
 
 	@NonNull
 	@Override
-	public Optional<CorsPreflightResponse> authorizePreflight(@NonNull Request request,
+	public Optional<@NonNull CorsPreflightResponse> authorizePreflight(@NonNull Request request,
 																														@NonNull CorsPreflight corsPreflight,
 																														@NonNull Set<@NonNull HttpMethod> availableHttpMethods) {
 		requireNonNull(request);
@@ -101,7 +101,7 @@ final class AllOriginsCorsAuthorizer implements CorsAuthorizer {
 	}
 
 	@NonNull
-	private Optional<CorsPreflightResponse> authorizePreflight(@NonNull CorsPreflight corsPreflight,
+	private Optional<@NonNull CorsPreflightResponse> authorizePreflight(@NonNull CorsPreflight corsPreflight,
 																														 @NonNull Set<@NonNull HttpMethod> availableHttpMethods) {
 		if (!corsPreflight.isSafeToReflect())
 			return Optional.empty();

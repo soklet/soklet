@@ -52,7 +52,7 @@ interface McpLegacySessionTransportAdmission {
 			notificationTypes = Set.copyOf(requireNonNull(notificationTypes));
 		}
 
-		@Override public String toString() {
+		@Override public @NonNull String toString() {
 			return "Accepted[identity=<redacted>, validUntil=<redacted>, notificationTypeCount=" + notificationTypes.size() + "]";
 		}
 	}
@@ -63,7 +63,7 @@ interface McpLegacySessionTransportAdmission {
 			headers = List.copyOf(requireNonNull(headers));
 		}
 
-		@Override public String toString() {
+		@Override public @NonNull String toString() {
 			return "Rejected[statusCode=" + statusCode + ", headers=<redacted>]";
 		}
 	}

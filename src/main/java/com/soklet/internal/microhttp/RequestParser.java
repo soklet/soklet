@@ -1,5 +1,6 @@
 package com.soklet.internal.microhttp;
 
+import org.jspecify.annotations.NonNull;
 import com.soklet.internal.util.HostHeaderValidator;
 import org.jspecify.annotations.Nullable;
 
@@ -11,25 +12,25 @@ import java.util.Locale;
 
 class RequestParser {
 
-    private static final byte[] CRLF = "\r\n".getBytes(StandardCharsets.US_ASCII);
-    private static final byte[] SPACE = " ".getBytes(StandardCharsets.US_ASCII);
-    private static final String HTTP_VERSION_PREFIX = "HTTP/1.";
+    private static final byte @NonNull [] CRLF = "\r\n".getBytes(StandardCharsets.US_ASCII);
+    private static final byte @NonNull [] SPACE = " ".getBytes(StandardCharsets.US_ASCII);
+    private static final @NonNull String HTTP_VERSION_PREFIX = "HTTP/1.";
 
-    private static final String HEADER_CONTENT_LENGTH = "Content-Length";
-    private static final String HEADER_TRANSFER_ENCODING = "Transfer-Encoding";
-    private static final String HEADER_HOST = "Host";
-    private static final String HEADER_EXPECT = "Expect";
-    private static final String HEADER_ACCEPT = "Accept";
-    private static final String HEADER_ACCEPT_ENCODING = "Accept-Encoding";
-    private static final String HEADER_ACCEPT_LANGUAGE = "Accept-Language";
-    private static final String HEADER_CACHE_CONTROL = "Cache-Control";
-    private static final String HEADER_CONNECTION = "Connection";
-    private static final String HEADER_CONTENT_TYPE = "Content-Type";
-    private static final String HEADER_COOKIE = "Cookie";
-    private static final String HEADER_ORIGIN = "Origin";
-    private static final String HEADER_USER_AGENT = "User-Agent";
-    private static final String CHUNKED = "chunked";
-    private static final byte[] EMPTY_BODY = new byte[]{};
+    private static final @NonNull String HEADER_CONTENT_LENGTH = "Content-Length";
+    private static final @NonNull String HEADER_TRANSFER_ENCODING = "Transfer-Encoding";
+    private static final @NonNull String HEADER_HOST = "Host";
+    private static final @NonNull String HEADER_EXPECT = "Expect";
+    private static final @NonNull String HEADER_ACCEPT = "Accept";
+    private static final @NonNull String HEADER_ACCEPT_ENCODING = "Accept-Encoding";
+    private static final @NonNull String HEADER_ACCEPT_LANGUAGE = "Accept-Language";
+    private static final @NonNull String HEADER_CACHE_CONTROL = "Cache-Control";
+    private static final @NonNull String HEADER_CONNECTION = "Connection";
+    private static final @NonNull String HEADER_CONTENT_TYPE = "Content-Type";
+    private static final @NonNull String HEADER_COOKIE = "Cookie";
+    private static final @NonNull String HEADER_ORIGIN = "Origin";
+    private static final @NonNull String HEADER_USER_AGENT = "User-Agent";
+    private static final @NonNull String CHUNKED = "chunked";
+    private static final byte @NonNull [] EMPTY_BODY = new byte[]{};
 
     private static final int RADIX_HEX = 16;
     private static final int MAXIMUM_METHOD_LENGTH = 64;
@@ -48,20 +49,20 @@ class RequestParser {
         DONE
     }
 
-    private final ByteTokenizer tokenizer;
+    private final @NonNull ByteTokenizer tokenizer;
     private final @Nullable InetSocketAddress remoteAddress;
     private final int maxRequestSize;
     private final int maxHeaderCount;
     private final int maxHeadersSize;
     private final int maxRequestTargetLength;
 
-    private State state = State.METHOD;
+    private @NonNull State state = State.METHOD;
     private int contentLength;
     private boolean contentLengthHeaderPresent;
     private long contentLengthHeader;
     private boolean transferEncodingHeaderPresent;
     @Nullable
-    private List<String> transferEncodings;
+    private List<@NonNull String> transferEncodings;
     private int hostHeaderCount;
     @Nullable
     private String hostHeaderValue;
@@ -85,22 +86,22 @@ class RequestParser {
     @Nullable
     private String version;
     @Nullable
-    private List<Header> headers;
+    private List<@NonNull Header> headers;
     private byte @Nullable [] body;
 
-    RequestParser(ByteTokenizer tokenizer) {
+    RequestParser(@NonNull ByteTokenizer tokenizer) {
         this(tokenizer, null, Integer.MAX_VALUE);
     }
 
-    RequestParser(ByteTokenizer tokenizer, @Nullable InetSocketAddress remoteAddress) {
+    RequestParser(@NonNull ByteTokenizer tokenizer, @Nullable InetSocketAddress remoteAddress) {
         this(tokenizer, remoteAddress, Integer.MAX_VALUE);
     }
 
-    RequestParser(ByteTokenizer tokenizer, @Nullable InetSocketAddress remoteAddress, int maxRequestSize) {
+    RequestParser(@NonNull ByteTokenizer tokenizer, @Nullable InetSocketAddress remoteAddress, int maxRequestSize) {
         this(tokenizer, remoteAddress, maxRequestSize, Integer.MAX_VALUE, Integer.MAX_VALUE);
     }
 
-    RequestParser(ByteTokenizer tokenizer,
+    RequestParser(@NonNull ByteTokenizer tokenizer,
                   @Nullable InetSocketAddress remoteAddress,
                   int maxRequestSize,
                   int maxHeaderCount,
@@ -108,7 +109,7 @@ class RequestParser {
         this(tokenizer, remoteAddress, maxRequestSize, maxHeaderCount, Integer.MAX_VALUE, maxRequestTargetLength);
     }
 
-    RequestParser(ByteTokenizer tokenizer,
+    RequestParser(@NonNull ByteTokenizer tokenizer,
                   @Nullable InetSocketAddress remoteAddress,
                   int maxRequestSize,
                   int maxHeaderCount,
@@ -144,8 +145,7 @@ class RequestParser {
         return true;
     }
 
-    @SuppressWarnings("NullAway")
-    MicrohttpRequest request() {
+    @NonNull MicrohttpRequest request() {
         // This can be called after a parse failure to decide whether enough of the
         // request line was read to send an error response. In that case, some fields
         // are intentionally still null.
@@ -391,11 +391,11 @@ class RequestParser {
         }
     }
 
-    private RequestTooLargeException requestTooLarge(RequestTooLargeException.Reason reason) {
+    private @NonNull RequestTooLargeException requestTooLarge(RequestTooLargeException.@NonNull Reason reason) {
         return new RequestTooLargeException(reason);
     }
 
-    private Header parseHeaderLine(int start, int end) {
+    private @NonNull Header parseHeaderLine(int start, int end) {
         int colonIndex = indexOfColon(start, end);
         if (colonIndex <= start) {
             throw new MalformedRequestException("malformed header line");
@@ -428,7 +428,7 @@ class RequestParser {
         return start < end && (tokenizer.rawByte(start) == ' ' || tokenizer.rawByte(start) == '\t');
     }
 
-    private String parseHeaderName(int start, int end) {
+    private @NonNull String parseHeaderName(int start, int end) {
         switch (end - start) {
             case 4:
                 if (tokenizer.asciiEquals(start, end, HEADER_HOST)) return HEADER_HOST;
@@ -623,7 +623,7 @@ class RequestParser {
         throw new MalformedRequestException("invalid chunk extension");
     }
 
-    static int parseChunkSizeToken(String sizeToken, long maxRequestSize) {
+    static int parseChunkSizeToken(@NonNull String sizeToken, long maxRequestSize) {
         if (sizeToken.isEmpty()) {
             throw new MalformedRequestException("invalid chunk size");
         }
@@ -723,7 +723,7 @@ class RequestParser {
         return true;
     }
 
-    private void observeHeader(Header header) {
+    private void observeHeader(@NonNull Header header) {
         if (header.name().equalsIgnoreCase(HEADER_CONTENT_LENGTH)) {
             observeContentLengthHeader(header);
         } else if (header.name().equalsIgnoreCase(HEADER_TRANSFER_ENCODING)) {
@@ -738,13 +738,8 @@ class RequestParser {
         }
     }
 
-    private void observeExpectHeader(Header header) {
+    private void observeExpectHeader(@NonNull Header header) {
         String value = header.value();
-        if (value == null) {
-            unsupportedExpectationPresent = true;
-            return;
-        }
-
         for (String part : value.split(",", -1)) {
             String expectation = part.trim();
             if (expectation.isEmpty()) {
@@ -757,13 +752,13 @@ class RequestParser {
         }
     }
 
-    private void observeContentLengthHeader(Header header) {
+    private void observeContentLengthHeader(@NonNull Header header) {
         try {
             if (contentLengthHeaderPresent) {
                 throw new MalformedRequestException("multiple content-length headers");
             }
 
-            String value = header.value() == null ? "" : header.value().trim();
+            String value = header.value().trim();
             if (value.isEmpty()) {
                 throw new MalformedRequestException("invalid content-length header value");
             }
@@ -781,14 +776,10 @@ class RequestParser {
         }
     }
 
-    private void observeTransferEncodingHeader(Header header) {
+    private void observeTransferEncodingHeader(@NonNull Header header) {
         transferEncodingHeaderPresent = true;
 
         String value = header.value();
-        if (value == null) {
-            return;
-        }
-
         for (String part : value.split(",", -1)) {
             String normalized = normalizeTransferEncoding(part);
             if (normalized != null) {
@@ -818,7 +809,7 @@ class RequestParser {
         return trimmed.toLowerCase(Locale.ROOT);
     }
 
-    private boolean hasOnlyChunkedEncoding(@Nullable List<String> transferEncodings) {
+    private boolean hasOnlyChunkedEncoding(@Nullable List<@NonNull String> transferEncodings) {
         return transferEncodings != null && transferEncodings.size() == 1 && CHUNKED.equals(transferEncodings.get(0));
     }
 

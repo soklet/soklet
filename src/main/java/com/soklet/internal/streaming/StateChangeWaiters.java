@@ -32,8 +32,8 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class StateChangeWaiters {
-	private final Object monitor;
-	private final Set<Thread> waiters = new HashSet<>();
+	private final @NonNull Object monitor;
+	private final @NonNull Set<@NonNull Thread> waiters = new HashSet<>();
 
 	public StateChangeWaiters(@NonNull Object monitor) {
 		this.monitor = requireNonNull(monitor);

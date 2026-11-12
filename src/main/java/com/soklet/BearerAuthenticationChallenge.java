@@ -142,7 +142,7 @@ public final class BearerAuthenticationChallenge {
 		return this.headerValue;
 	}
 
-	private String render() {
+	private @NonNull String render() {
 		List<String> parameters = new ArrayList<>();
 		if (this.realm != null)
 			parameters.add("realm=" + quoted(this.realm));
@@ -163,12 +163,12 @@ public final class BearerAuthenticationChallenge {
 		return "Bearer " + String.join(", ", parameters);
 	}
 
-	private static String quoted(@NonNull String value) {
+	private static @NonNull String quoted(@NonNull String value) {
 		return "\"" + value.replace("\\", "\\\\")
 				.replace("\"", "\\\"") + "\"";
 	}
 
-	private static URI requireMetadataUri(@NonNull URI uri) {
+	private static @NonNull URI requireMetadataUri(@NonNull URI uri) {
 		requireNonNull(uri);
 		if (!uri.isAbsolute() || uri.getHost() == null
 				|| !("https".equalsIgnoreCase(uri.getScheme())
@@ -179,7 +179,7 @@ public final class BearerAuthenticationChallenge {
 		return uri;
 	}
 
-	private static URI requireErrorUri(@NonNull URI uri) {
+	private static @NonNull URI requireErrorUri(@NonNull URI uri) {
 		requireNonNull(uri);
 		if (!uri.isAbsolute())
 			throw new IllegalArgumentException(
@@ -188,7 +188,7 @@ public final class BearerAuthenticationChallenge {
 		return uri;
 	}
 
-	private static String requireQuotedRealm(@NonNull String realm) {
+	private static @NonNull String requireQuotedRealm(@NonNull String realm) {
 		requireNonNull(realm);
 		for (int index = 0; index < realm.length(); index++) {
 			char character = realm.charAt(index);
@@ -199,7 +199,7 @@ public final class BearerAuthenticationChallenge {
 		return realm;
 	}
 
-	private static String requireBearerText(@NonNull String value,
+	private static @NonNull String requireBearerText(@NonNull String value,
 			@NonNull String field, boolean allowSpace) {
 		requireNonNull(value);
 		for (int index = 0; index < value.length(); index++) {
@@ -215,7 +215,7 @@ public final class BearerAuthenticationChallenge {
 		return value;
 	}
 
-	private static List<String> validatedScopes(
+	private static @NonNull List<@NonNull String> validatedScopes(
 			@NonNull List<@NonNull String> requiredScopes) {
 		requireNonNull(requiredScopes);
 		LinkedHashSet<String> distinct = new LinkedHashSet<>();

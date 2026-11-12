@@ -616,6 +616,6 @@ public final class ParameterizedHeaderValue {
 					|| c == '|' || c == '~';
 		}
 
-		private static final char[] HEX = "0123456789ABCDEF".toCharArray();
+		private static final char @NonNull [] HEX = "0123456789ABCDEF".toCharArray();
 	}
 }

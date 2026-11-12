@@ -320,7 +320,7 @@ public final class McpEndpoint {
 							.collect(java.util.stream.Collectors.toSet())));
 	}
 
-	private String versionContext(Set<McpProtocolVersion> versions) {
+	private @NonNull String versionContext(@NonNull Set<@NonNull McpProtocolVersion> versions) {
 		return " (endpoint " + this.path + "; revisions " + versions.stream()
 				.map(McpProtocolVersion::getWireValue).sorted().collect(java.util.stream.Collectors.joining(", ")) + ").";
 	}

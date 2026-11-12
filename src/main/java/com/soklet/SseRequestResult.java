@@ -75,20 +75,20 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 	 */
 	@ThreadSafe
 	final class HandshakeAccepted implements SseRequestResult, AutoCloseable {
-		private final SseHandshakeResult.Accepted sseHandshakeResult;
-		private final Request request;
-		private final HttpRequestResult requestResult;
-		private final Soklet.MockSseServer server;
-		private final Object lock = new Object();
-		private final Channel<SseEvent> events = new Channel<>();
-		private final Channel<SseComment> comments = new Channel<>();
-		private final Consumer<SseEvent> broadcastEvents = event -> broadcast(this.events, event);
-		private final Consumer<SseComment> broadcastComments = comment -> broadcast(this.comments, comment);
-		private final ManagedSseLifecycle lifecycle;
-		private final MockSseUnicaster unicaster;
-		private final StreamLifecycleCoordinator.Reservation reservation;
-		private final SseConnection connectionSnapshot;
-		private final CountDownLatch establishmentFinished = new CountDownLatch(1);
+		private final SseHandshakeResult.@NonNull Accepted sseHandshakeResult;
+		private final @NonNull Request request;
+		private final @NonNull HttpRequestResult requestResult;
+		private final Soklet.@NonNull MockSseServer server;
+		private final @NonNull Object lock = new Object();
+		private final @NonNull Channel<@NonNull SseEvent> events = new Channel<>();
+		private final @NonNull Channel<@NonNull SseComment> comments = new Channel<>();
+		private final @NonNull Consumer<@NonNull SseEvent> broadcastEvents = event -> broadcast(this.events, event);
+		private final @NonNull Consumer<@NonNull SseComment> broadcastComments = comment -> broadcast(this.comments, comment);
+		private final @NonNull ManagedSseLifecycle lifecycle;
+		private final @NonNull MockSseUnicaster unicaster;
+		private final StreamLifecycleCoordinator.@NonNull Reservation reservation;
+		private final @NonNull SseConnection connectionSnapshot;
+		private final @NonNull CountDownLatch establishmentFinished = new CountDownLatch(1);
 		private boolean establishmentEntered;
 		private boolean active;
 		private boolean reading;
@@ -231,7 +231,7 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 			register(this.comments, requireNonNull(commentConsumer));
 		}
 
-		private <T> void register(Channel<T> channel, Consumer<T> consumer) {
+		private <T> void register(@NonNull Channel<T> channel, @NonNull Consumer<T> consumer) {
 			boolean drain = this.lifecycle.whileOpen(() -> {
 				synchronized (this.lock) {
 					if (channel.consumer != null)
@@ -245,7 +245,7 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 				drain(channel);
 		}
 
-		private <T> void broadcast(Channel<T> channel, T payload) {
+		private <T> void broadcast(@NonNull Channel<T> channel, T payload) {
 			try {
 				enqueue(channel, payload, true);
 			} catch (IllegalStateException failure) {
@@ -256,7 +256,7 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 			}
 		}
 
-		private <T> void enqueue(Channel<T> channel, T payload, boolean broadcast) {
+		private <T> void enqueue(@NonNull Channel<T> channel, T payload, boolean broadcast) {
 			requireNonNull(payload);
 			boolean drain;
 			try {
@@ -285,14 +285,14 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 				drain(channel);
 		}
 
-		private <T> boolean claimDrain(Channel<T> channel) {
+		private <T> boolean claimDrain(@NonNull Channel<T> channel) {
 			if (channel.draining || channel.consumer == null || channel.pending.isEmpty())
 				return false;
 			channel.draining = true;
 			return true;
 		}
 
-		private <T> void drain(Channel<T> channel) {
+		private <T> void drain(@NonNull Channel<T> channel) {
 			StreamLifecycleCoordinator.Reservation.Work work = this.lifecycle.retainWork();
 			if (work == null)
 				return;
@@ -345,7 +345,7 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 			this.reservation.dispatchTermination(this::notifyTermination);
 		}
 
-		private void handleConsumerError(Throwable throwable, boolean broadcast) {
+		private void handleConsumerError(@NonNull Throwable throwable, boolean broadcast) {
 			Consumer<Throwable> handler = (broadcast ? this.server.getBroadcastErrorHandler()
 					: this.server.getUnicastErrorHandler()).get();
 			if (handler != null) {
@@ -371,21 +371,21 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 		}
 
 		private static final class Channel<T> {
-			private final java.util.ArrayDeque<Pending<T>> pending = new java.util.ArrayDeque<>();
+			private final java.util.@NonNull ArrayDeque<@NonNull Pending<T>> pending = new java.util.ArrayDeque<>();
 			private @Nullable Consumer<T> consumer;
 			private boolean draining;
 			private void clear() { this.pending.clear(); this.consumer = null; this.draining = false; }
 		}
 
 		private record Pending<T>(T payload, boolean broadcast, boolean capturedBeforeReading) {}
-		private record Delivery<T>(Consumer<T> consumer, T payload, boolean broadcast) {}
+		private record Delivery<T>(@NonNull Consumer<T> consumer, T payload, boolean broadcast) {}
 		private static final class SimulatedSseConnection implements SseConnection {
-			private final Request request;
-			private final ResourceMethod resourceMethod;
-			private final Instant establishedAt;
+			private final @NonNull Request request;
+			private final @NonNull ResourceMethod resourceMethod;
+			private final @NonNull Instant establishedAt;
 			private final @Nullable Object clientContext;
-			private SimulatedSseConnection(Request request, ResourceMethod resourceMethod,
-					Instant establishedAt, @Nullable Object clientContext) {
+			private SimulatedSseConnection(@NonNull Request request, @NonNull ResourceMethod resourceMethod,
+					@NonNull Instant establishedAt, @Nullable Object clientContext) {
 				this.request = request;
 				this.resourceMethod = resourceMethod;
 				this.establishedAt = establishedAt;
@@ -394,7 +394,7 @@ public sealed interface SseRequestResult permits SseRequestResult.HandshakeAccep
 			@Override public @NonNull Request getRequest() { return this.request; }
 			@Override public @NonNull ResourceMethod getResourceMethod() { return this.resourceMethod; }
 			@Override public @NonNull Instant getEstablishedAt() { return this.establishedAt; }
-			@Override public @NonNull Optional<Object> getClientContext() { return Optional.ofNullable(this.clientContext); }
+			@Override public @NonNull Optional<@NonNull Object> getClientContext() { return Optional.ofNullable(this.clientContext); }
 		}
 		private static final class QueueCapacityExceededException extends IllegalStateException {
 			private QueueCapacityExceededException() { super("The simulated SSE connection queue is full"); }

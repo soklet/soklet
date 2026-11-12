@@ -115,40 +115,40 @@ final class DefaultMcpSecurityKeyManagers
 			"soklet-mcp-protection-v1";
 	@NonNull
 	private static final String DEVELOPMENT_KEY_ID = "development-ephemeral";
-	@NonNull
-	private static final byte[] PROTECTION_PROFILE_BYTES = bytes(
+
+	private static final byte @NonNull [] PROTECTION_PROFILE_BYTES = bytes(
 			PROTECTION_PROFILE);
-	@NonNull
-	private static final byte[] PROTECTION_PROFILE_SALT = sha256(bytes(
+
+	private static final byte @NonNull [] PROTECTION_PROFILE_SALT = sha256(bytes(
 			PROTECTION_PROFILE + "\0"));
-	@NonNull
-	private static final byte[] REQUEST_STATE_KEY_LABEL = bytes(
+
+	private static final byte @NonNull [] REQUEST_STATE_KEY_LABEL = bytes(
 			"soklet-mcp-request-state-aead-v1\0");
-	@NonNull
-	private static final byte[] REQUEST_STATE_AAD_DOMAIN = bytes(
+
+	private static final byte @NonNull [] REQUEST_STATE_AAD_DOMAIN = bytes(
 			"soklet-mcp-request-state-gcm-aad-v1\0");
 	private static final byte ACTIVE_ROLE = 0x01;
 	private static final byte VERIFICATION_ROLE = 0x02;
 	@NonNull
 	private static final String TRACE_ALGORITHM =
 			"soklet-mcp-trace-correlation-v1";
-	@NonNull
-	private static final byte[] TRACE_TOKEN_DOMAIN = bytes(
+
+	private static final byte @NonNull [] TRACE_TOKEN_DOMAIN = bytes(
 			TRACE_ALGORITHM + "\0");
-	@NonNull
-	private static final byte[] PROTECTION_ENTRY_DOMAIN = bytes(
+
+	private static final byte @NonNull [] PROTECTION_ENTRY_DOMAIN = bytes(
 			"soklet-mcp-key-fingerprint-v2\0");
-	@NonNull
-	private static final byte[] PROTECTION_FINGERPRINT_SALT = sha256(bytes(
+
+	private static final byte @NonNull [] PROTECTION_FINGERPRINT_SALT = sha256(bytes(
 			"soklet-mcp-key-fingerprint-extract-v2\0"));
-	@NonNull
-	private static final byte[] PROTECTION_RING_DOMAIN = bytes(
+
+	private static final byte @NonNull [] PROTECTION_RING_DOMAIN = bytes(
 			"soklet-mcp-keyring-fingerprint-v2\0");
-	@NonNull
-	private static final byte[] TRACE_ENTRY_DOMAIN = bytes(
+
+	private static final byte @NonNull [] TRACE_ENTRY_DOMAIN = bytes(
 			"soklet-mcp-trace-key-fingerprint-v1\0");
-	@NonNull
-	private static final byte[] TRACE_CONFIGURATION_DOMAIN = bytes(
+
+	private static final byte @NonNull [] TRACE_CONFIGURATION_DOMAIN = bytes(
 			"soklet-mcp-trace-key-configuration-fingerprint-v1\0");
 
 	@NonNull
@@ -972,7 +972,7 @@ final class DefaultMcpSecurityKeyManagers
 		}
 	}
 
-	@Nullable
+
 	private byte @Nullable [] protectionKeyMaterialSnapshot(
 			@NonNull String keyId) {
 		synchronized (this.lock) {

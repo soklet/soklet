@@ -57,7 +57,7 @@ public final class EffectiveClientIpResolver {
 	@Nullable
 	private InetSocketAddress remoteAddress;
 	@Nullable
-	private Predicate<InetSocketAddress> trustedProxyPredicate;
+	private Predicate<@NonNull InetSocketAddress> trustedProxyPredicate;
 
 	/**
 	 * Acquires a resolver seeded with raw request headers and a trust policy.
@@ -170,7 +170,7 @@ public final class EffectiveClientIpResolver {
 	}
 
 	@Nullable
-	Predicate<InetSocketAddress> getTrustedProxyPredicate() {
+	Predicate<@NonNull InetSocketAddress> getTrustedProxyPredicate() {
 		return this.trustedProxyPredicate;
 	}
 }

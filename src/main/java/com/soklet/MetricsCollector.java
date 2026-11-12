@@ -688,7 +688,7 @@ public interface MetricsCollector {
 		@NonNull
 		private final MetricsFormat metricsFormat;
 		@Nullable
-		private final Predicate<MetricSample> metricFilter;
+		private final Predicate<@NonNull MetricSample> metricFilter;
 		@NonNull
 		private final HistogramFormat histogramFormat;
 		@NonNull
@@ -847,7 +847,7 @@ public interface MetricsCollector {
 			@NonNull
 			private final MetricsFormat metricsFormat;
 			@Nullable
-			private Predicate<MetricSample> metricFilter;
+			private Predicate<@NonNull MetricSample> metricFilter;
 			@NonNull
 			private HistogramFormat histogramFormat;
 			@Nullable
@@ -2001,7 +2001,7 @@ public interface MetricsCollector {
 	final class Histogram {
 		private final long @NonNull [] bucketBoundaries;
 		@NonNull
-		private final LongAdder[] bucketCounts;
+		private final LongAdder @NonNull [] bucketCounts;
 		@NonNull
 		private final DoubleAdder sum;
 		@NonNull

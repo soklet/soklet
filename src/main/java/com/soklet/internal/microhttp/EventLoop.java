@@ -1,5 +1,6 @@
 package com.soklet.internal.microhttp;
 
+import org.jspecify.annotations.NonNull;
 import com.soklet.internal.HelperThreads;
 
 import com.soklet.MetricsCollector.TransportFailureReason;
@@ -29,22 +30,22 @@ import java.util.concurrent.atomic.AtomicLong;
  * request parsing, and request dispatching.
  */
 public class EventLoop {
-    private final Options options;
-    private final Logger logger;
-    private final ConnectionListener connectionListener;
-    private final TransportFailureObserver transportFailureObserver;
+    private final @NonNull Options options;
+    private final @NonNull Logger logger;
+    private final @NonNull ConnectionListener connectionListener;
+    private final @NonNull TransportFailureObserver transportFailureObserver;
 
-    private final Selector selector;
-    private final AtomicBoolean stopAccepting;
-    private final AtomicBoolean stopConnections;
-    private final AtomicBoolean draining;
-    private final AtomicBoolean unexpectedTerminationNotified;
-    private final AtomicInteger admittedConnections;
-    private final ServerSocketChannel serverSocketChannel;
-    private final List<ConnectionEventLoop> connectionEventLoops;
-    private final Thread thread;
-    private final Object lifecycleLock;
-    private final Object unexpectedTerminationLock;
+    private final @NonNull Selector selector;
+    private final @NonNull AtomicBoolean stopAccepting;
+    private final @NonNull AtomicBoolean stopConnections;
+    private final @NonNull AtomicBoolean draining;
+    private final @NonNull AtomicBoolean unexpectedTerminationNotified;
+    private final @NonNull AtomicInteger admittedConnections;
+    private final @NonNull ServerSocketChannel serverSocketChannel;
+    private final @NonNull List<@NonNull ConnectionEventLoop> connectionEventLoops;
+    private final @NonNull Thread thread;
+    private final @NonNull Object lifecycleLock;
+    private final @NonNull Object unexpectedTerminationLock;
     private volatile boolean coordinatorOwnsUnexpectedTermination;
     private TransportFailureObserver.@Nullable Observation
             unexpectedTerminationObservation;
@@ -56,11 +57,11 @@ public class EventLoop {
 
     // Tracks a run of back-to-back accept() failures so the loop can escalate its backoff and
     // coalesce its logging instead of storming. Touched on the accept-loop thread; AtomicLong for safe publication.
-    private final AtomicLong consecutiveAcceptFailures = new AtomicLong();
+    private final @NonNull AtomicLong consecutiveAcceptFailures = new AtomicLong();
 
     @FunctionalInterface
     interface SocketAcceptor {
-        SocketChannel accept() throws IOException;
+        @Nullable SocketChannel accept() throws IOException;
     }
 
     /**
@@ -69,12 +70,12 @@ public class EventLoop {
      * call {@link #release()}; only the first call changes the global admission count.
      */
     static final class ConnectionAdmission {
-        private final AtomicInteger admittedConnections;
-        private final AtomicBoolean released;
-		private final Runnable didRelease;
+        private final @NonNull AtomicInteger admittedConnections;
+        private final @NonNull AtomicBoolean released;
+		private final @NonNull Runnable didRelease;
 
-        private ConnectionAdmission(AtomicInteger admittedConnections,
-															Runnable didRelease) {
+        private ConnectionAdmission(@NonNull AtomicInteger admittedConnections,
+															@NonNull Runnable didRelease) {
             this.admittedConnections = admittedConnections;
             this.released = new AtomicBoolean();
 			this.didRelease = didRelease;
@@ -88,29 +89,29 @@ public class EventLoop {
         }
     }
 
-    public EventLoop(Handler handler) throws IOException {
+    public EventLoop(@NonNull Handler handler) throws IOException {
         this(Options.builder().build(), NoopLogger.instance(), handler,
                 NoopConnectionListener.instance(), TransportFailureObserver.disabledInstance());
     }
 
-    public EventLoop(Options options, Handler handler) throws IOException {
+    public EventLoop(@NonNull Options options, @NonNull Handler handler) throws IOException {
         this(options, NoopLogger.instance(), handler, NoopConnectionListener.instance(),
                 TransportFailureObserver.disabledInstance());
     }
 
-    public EventLoop(Options options, Logger logger, Handler handler) throws IOException {
+    public EventLoop(@NonNull Options options, @NonNull Logger logger, @NonNull Handler handler) throws IOException {
         this(options, logger, handler, NoopConnectionListener.instance(),
                 TransportFailureObserver.disabledInstance());
     }
 
-    public EventLoop(Options options, Logger logger, Handler handler, ConnectionListener connectionListener) throws IOException {
+    public EventLoop(@NonNull Options options, @NonNull Logger logger, @NonNull Handler handler, @Nullable ConnectionListener connectionListener) throws IOException {
         this(options, logger, handler, connectionListener,
                 TransportFailureObserver.disabledInstance());
     }
 
-    public EventLoop(Options options, Logger logger, Handler handler,
-                     ConnectionListener connectionListener,
-                     TransportFailureObserver transportFailureObserver) throws IOException {
+    public EventLoop(@NonNull Options options, @NonNull Logger logger, @NonNull Handler handler,
+                     @Nullable ConnectionListener connectionListener,
+                     @Nullable TransportFailureObserver transportFailureObserver) throws IOException {
         this.options = options;
         this.logger = logger;
         this.connectionListener = connectionListener == null ? NoopConnectionListener.instance() : connectionListener;
@@ -167,7 +168,7 @@ public class EventLoop {
         }
     }
 
-    private ServerSocketChannel openServerSocketChannel(InetSocketAddress address) throws IOException {
+    private @NonNull ServerSocketChannel openServerSocketChannel(@NonNull InetSocketAddress address) throws IOException {
         ServerSocketChannel openedServerSocketChannel = ServerSocketChannel.open();
 
         try {
@@ -195,7 +196,7 @@ public class EventLoop {
      * Returns the effective local address of the bound listener. This is authoritative when
      * port zero was requested and avoids reconstructing diagnostics from configured values.
      */
-    public InetSocketAddress getLocalAddress() throws IOException {
+    public @NonNull InetSocketAddress getLocalAddress() throws IOException {
         SocketAddress localAddress = serverSocketChannel.getLocalAddress();
 
         if (localAddress instanceof InetSocketAddress inetSocketAddress) {
@@ -265,7 +266,7 @@ public class EventLoop {
         }
     }
 
-    private void handleUnexpectedTermination(Throwable throwable) {
+    private void handleUnexpectedTermination(@NonNull Throwable throwable) {
         synchronized (unexpectedTerminationLock) {
             if (!unexpectedTerminationNotified.compareAndSet(false, true)) {
                 awaitUnexpectedTerminationRuntimeCleanup();
@@ -365,7 +366,7 @@ public class EventLoop {
         return acceptReadyConnection(serverSocketChannel::accept);
     }
 
-    boolean acceptReadyConnection(SocketAcceptor socketAcceptor) throws IOException {
+    boolean acceptReadyConnection(@NonNull SocketAcceptor socketAcceptor) throws IOException {
         if (stopAccepting.get() || stopConnections.get()) {
             return false;
         }
@@ -440,7 +441,7 @@ public class EventLoop {
         }
     }
 
-    private ConnectionEventLoop leastConnections() {
+    private @NonNull ConnectionEventLoop leastConnections() {
         return connectionEventLoops.stream()
                 .min(Comparator.comparing(ConnectionEventLoop::connectionLoad))
                 .get();
@@ -540,7 +541,7 @@ public class EventLoop {
         joinConnectionLoops();
     }
 
-    public boolean join(Duration timeout) throws InterruptedException {
+    public boolean join(@NonNull Duration timeout) throws InterruptedException {
         long timeoutNanos = Math.max(0L, timeout.toNanos());
         long deadlineNanos = System.nanoTime() + timeoutNanos;
         return joinUntil(deadlineNanos);
@@ -577,7 +578,7 @@ public class EventLoop {
                 && connectionEventLoops.stream().allMatch(ConnectionEventLoop::isTerminated);
     }
 
-    private boolean joinThread(Thread threadToJoin, long deadlineNanos)
+    private boolean joinThread(@NonNull Thread threadToJoin, long deadlineNanos)
             throws InterruptedException {
         while (threadToJoin.isAlive()) {
             long remainingNanos = remainingNanos(deadlineNanos,
@@ -596,7 +597,7 @@ public class EventLoop {
         return deadlineNanos - nowNanos;
     }
 
-    public boolean awaitConnectionsDrained(Duration timeout) throws InterruptedException {
+    public boolean awaitConnectionsDrained(@NonNull Duration timeout) throws InterruptedException {
         long deadlineNanos = System.nanoTime() + Math.max(0L, timeout.toNanos());
 
         while (admittedConnections.get() > 0) {
@@ -645,7 +646,7 @@ public class EventLoop {
         connectionEventLoops.forEach(ConnectionEventLoop::closeBeforeStart);
     }
 
-    private void handleAcceptFailure(IOException e) {
+    private void handleAcceptFailure(@NonNull IOException e) {
         long failures = consecutiveAcceptFailures.incrementAndGet();
         try (TransportFailureObserver.Observation ignored =
                      TransportFailureObservations.beginSafely(transportFailureObserver,
@@ -664,7 +665,7 @@ public class EventLoop {
         backoffAfterAcceptFailure(failures);
     }
 
-    private void handleConnectionSetupFailure(RuntimeException e) {
+    private void handleConnectionSetupFailure(@NonNull RuntimeException e) {
         long failures = consecutiveAcceptFailures.incrementAndGet();
 
         try (TransportFailureObserver.Observation ignored =

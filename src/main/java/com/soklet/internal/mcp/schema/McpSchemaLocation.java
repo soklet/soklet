@@ -42,7 +42,7 @@ record McpSchemaLocation(
 	}
 
 	@NonNull
-	McpSchemaLocation child(@NonNull String... segments) {
+	McpSchemaLocation child(@NonNull String @NonNull ... segments) {
 		requireNonNull(segments);
 		List<@NonNull String> childSegments = new ArrayList<>(pointerSegments.size()
 				+ segments.length);

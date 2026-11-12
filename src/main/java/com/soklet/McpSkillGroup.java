@@ -113,7 +113,7 @@ public final class McpSkillGroup {
 	@NonNull
 	public String toString() { return "McpSkillGroup[redacted]"; }
 
-	private static IllegalArgumentException invalid() {
+	private static @NonNull IllegalArgumentException invalid() {
 		return new IllegalArgumentException("Invalid Skills group.");
 	}
 }

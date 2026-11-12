@@ -342,7 +342,7 @@ public sealed interface McpServer permits DefaultMcpServer {
 		@NonNull
 		private static final Duration DEFAULT_REQUEST_BODY_TIMEOUT =
 				Duration.ofSeconds(60);
-		private static final Duration DEFAULT_WRITE_TIMEOUT =
+		private static final @NonNull Duration DEFAULT_WRITE_TIMEOUT =
 				Duration.ofSeconds(30);
 		private int port;
 		private int maximumCursorSizeInBytes;

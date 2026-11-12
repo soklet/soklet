@@ -357,9 +357,9 @@ public final class MarshaledResponse {
 		closeChannels(ownedChannels(), null);
 	}
 
-	boolean isPostProcessedFor(Object token) { return sameInstance(this.postProcessingToken, token); }
+	boolean isPostProcessedFor(@NonNull Object token) { return sameInstance(this.postProcessingToken, token); }
 
-	MarshaledResponse markPostProcessed(Object token) {
+	@NonNull MarshaledResponse markPostProcessed(@NonNull Object token) {
 		requireNonNull(token);
 		if (isPostProcessedFor(token)) return this;
 		Copier copier = copy();
@@ -372,7 +372,7 @@ public final class MarshaledResponse {
 				&& channel.getCloseOnComplete();
 	}
 
-	List<FileChannel> ownedChannels() {
+	@NonNull List<@NonNull FileChannel> ownedChannels() {
 		if (!(this.body instanceof MarshaledResponseBody.FileChannel channel) || !channel.getCloseOnComplete())
 			return this.retainedChannels;
 		List<FileChannel> channels = new ArrayList<>(this.retainedChannels);
@@ -380,14 +380,14 @@ public final class MarshaledResponse {
 		return channels;
 	}
 
-	MarshaledResponse retainingChannels(List<FileChannel> channels) {
+	@NonNull MarshaledResponse retainingChannels(@NonNull List<@NonNull FileChannel> channels) {
 		if (channels.isEmpty()) return this;
 		Copier copier = copy();
 		copier.builder.retainChannels(channels);
 		return copier.finish();
 	}
 
-	private static List<FileChannel> retainedChannels(List<FileChannel> candidates,
+	private static @NonNull List<@NonNull FileChannel> retainedChannels(@NonNull List<@NonNull FileChannel> candidates,
 			@Nullable MarshaledResponseBody body) {
 		if (candidates.isEmpty()) return List.of();
 		java.util.Set<FileChannel> seen = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
@@ -402,7 +402,7 @@ public final class MarshaledResponse {
 		return List.copyOf(retained);
 	}
 
-	static void closeChannels(List<FileChannel> channels, @Nullable Throwable primaryFailure) {
+	static void closeChannels(@NonNull List<@NonNull FileChannel> channels, @Nullable Throwable primaryFailure) {
 		if (channels.isEmpty()) return;
 		Throwable failure = primaryFailure;
 		java.util.Set<FileChannel> seen = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
@@ -482,11 +482,11 @@ public final class MarshaledResponse {
 		@Nullable
 		private StreamingResponseBody streamingResponseBody;
 		@NonNull
-		private List<FileChannel> retainedChannels = List.of();
+		private List<@NonNull FileChannel> retainedChannels = List.of();
 		@Nullable
 		private Object postProcessingToken;
 
-		private void retainChannels(List<FileChannel> channels) {
+		private void retainChannels(@NonNull List<@NonNull FileChannel> channels) {
 			if (channels.isEmpty()) return;
 			if (this.retainedChannels.isEmpty()) this.retainedChannels = new ArrayList<>();
 			this.retainedChannels.addAll(channels);
@@ -1062,18 +1062,18 @@ public final class MarshaledResponse {
 		}
 	}
 
-	private static MarshaledResponseBody.File fileBody(@NonNull Path path) {
+	private static MarshaledResponseBody.@NonNull File fileBody(@NonNull Path path) {
 		Long size = fileSize(path);
 		return new MarshaledResponseBody.File(path, 0L, size);
 	}
 
-	private static MarshaledResponseBody.File fileBody(@NonNull Path path, @NonNull Long offset, @NonNull Long count) {
+	private static MarshaledResponseBody.@NonNull File fileBody(@NonNull Path path, @NonNull Long offset, @NonNull Long count) {
 		Long size = fileSize(path);
 		validateRangeWithinLength(offset, count, size);
 		return new MarshaledResponseBody.File(path, offset, count);
 	}
 
-	private static MarshaledResponseBody.FileChannel fileChannelBody(@NonNull FileChannel fileChannel,
+	private static MarshaledResponseBody.@NonNull FileChannel fileChannelBody(@NonNull FileChannel fileChannel,
 																																	 @NonNull Long offset,
 																																	 @NonNull Long count,
 																																	 @NonNull Boolean closeOnComplete) {
@@ -1153,7 +1153,7 @@ public final class MarshaledResponse {
 		}
 	}
 
-	private static byte @NonNull [] materializeSecureFile(MarshaledResponseBody.SecureFile file) {
+	private static byte @NonNull [] materializeSecureFile(MarshaledResponseBody.@NonNull SecureFile file) {
 		if (file.getCount() > Integer.MAX_VALUE)
 			throw new IllegalStateException("Response body is too large to materialize as a byte array.");
 		byte[] bytes = new byte[Math.toIntExact(file.getCount())];
@@ -1210,8 +1210,8 @@ public final class MarshaledResponse {
 		}
 	}
 
-	@NonNull
-	private static byte[] materializeByteBuffer(@NonNull ByteBuffer byteBuffer) {
+
+	private static byte @NonNull [] materializeByteBuffer(@NonNull ByteBuffer byteBuffer) {
 		requireNonNull(byteBuffer);
 
 		ByteBuffer duplicate = byteBuffer.asReadOnlyBuffer();

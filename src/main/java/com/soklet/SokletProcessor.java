@@ -196,13 +196,13 @@ import static java.util.Objects.requireNonNull;
 public final class SokletProcessor extends AbstractProcessor {
 	// ---- Options ------------------------------------------------------------
 
-	private static final String PROCESSOR_OPTION_CACHE_MODE = "soklet.cacheMode";
-	private static final String PROCESSOR_OPTION_CACHE_DIR = "soklet.cacheDir";
-	private static final String PROCESSOR_OPTION_PRUNE_DELETED = "soklet.pruneDeleted";
-	private static final String PROCESSOR_OPTION_DEBUG = "soklet.debug";
+	private static final @NonNull String PROCESSOR_OPTION_CACHE_MODE = "soklet.cacheMode";
+	private static final @NonNull String PROCESSOR_OPTION_CACHE_DIR = "soklet.cacheDir";
+	private static final @NonNull String PROCESSOR_OPTION_PRUNE_DELETED = "soklet.pruneDeleted";
+	private static final @NonNull String PROCESSOR_OPTION_DEBUG = "soklet.debug";
 
-	private static final String PERSISTENT_CACHE_INDEX_DIR = "resource-methods";
-	private static final String MCP_PERSISTENT_CACHE_INDEX_DIR =
+	private static final @NonNull String PERSISTENT_CACHE_INDEX_DIR = "resource-methods";
+	private static final @NonNull String MCP_PERSISTENT_CACHE_INDEX_DIR =
 			"mcp-endpoints";
 	private static final int MAXIMUM_MCP_RESOURCE_URI_UTF_8_BYTES = 1_048_576;
 	private static final int MAXIMUM_MCP_ANNOTATED_RESOURCE_URI_UTF_8_BYTES =
@@ -212,17 +212,17 @@ public final class SokletProcessor extends AbstractProcessor {
 	private static final int MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_VARIABLES = 32;
 	private static final int MAXIMUM_MCP_RESOURCE_URI_TEMPLATE_VARIABLE_NAME_UTF_8_BYTES =
 			128;
-	private static final String MCP_ABSENT_OUTPUT_SCHEMA_DIGEST =
+	private static final @NonNull String MCP_ABSENT_OUTPUT_SCHEMA_DIGEST =
 			"NO_OUTPUT_SCHEMA";
 
 	// ---- Index paths ---------------------------------------------------------
 
-	static final String RESOURCE_METHOD_LOOKUP_TABLE_PATH = "META-INF/soklet/resource-method-lookup-table";
-	private static final String OUTPUT_ROOT_MARKER_PATH = "META-INF/soklet/.soklet-output-root";
+	static final @NonNull String RESOURCE_METHOD_LOOKUP_TABLE_PATH = "META-INF/soklet/resource-method-lookup-table";
+	private static final @NonNull String OUTPUT_ROOT_MARKER_PATH = "META-INF/soklet/.soklet-output-root";
 
-	private static final String SIDE_CAR_DIR_NAME = "soklet";
-	private static final String SIDE_CAR_INDEX_FILENAME = "resource-method-lookup-table";
-	private static final String MCP_SIDE_CAR_INDEX_FILENAME =
+	private static final @NonNull String SIDE_CAR_DIR_NAME = "soklet";
+	private static final @NonNull String SIDE_CAR_INDEX_FILENAME = "resource-method-lookup-table";
+	private static final @NonNull String MCP_SIDE_CAR_INDEX_FILENAME =
 			"mcp-endpoint-descriptor-providers";
 	// Keep the unresolved-type preflight inside the production typed-schema
 	// traversal envelope. Crossing either bound delegates to the schema compiler,
@@ -232,56 +232,56 @@ public final class SokletProcessor extends AbstractProcessor {
 
 	// ---- JSR-269 services ----------------------------------------------------
 
-	private Types types;
-	private Elements elements;
-	private Messager messager;
-	private Filer filer;
+	private @NonNull Types types;
+	private @NonNull Elements elements;
+	private @NonNull Messager messager;
+	private @NonNull Filer filer;
 
 	private boolean debugEnabled;
 	private boolean pruneDeletedEnabled;
-	private CacheMode cacheMode;
+	private @NonNull CacheMode cacheMode;
 
 	// Cached mirrors resolved in init()
-	private TypeMirror sseHandshakeResultType;   // com.soklet.SseHandshakeResult
-	private TypeElement pathParameterElement;    // com.soklet.annotation.PathParameter
-	private TypeMirror mcpRequestContextType;
-	private TypeMirror mcpInvocationFeaturesType;
-	private TypeMirror cancelationTokenType;
-	private TypeMirror mcpProgressReporterType;
-	private TypeMirror mcpPromptOutputType;
-	private TypeMirror mcpArgumentCompletionResultType;
-	private TypeMirror mcpCompletionContextType;
-	private TypeMirror mcpPromptCompletionContextType;
-	private TypeMirror mcpResourceCompletionContextType;
-	private TypeMirror mcpResourceOutputType;
-	private TypeMirror mcpResourcePageType;
-	private TypeMirror mcpResourceReadContextType;
-	private TypeMirror mcpResourceListContextType;
-	private TypeMirror mcpOperationResultType;
-	private TypeMirror mcpTaskCreatedResultType;
-	private TypeMirror mcpTaskCreationContextType;
-	private TypeMirror stringType;
-	private TypeMirror optionalType;
-	private TypeMirror exceptionType;
-	private TypeMirror errorType;
+	private @Nullable TypeMirror sseHandshakeResultType;   // com.soklet.SseHandshakeResult
+	private @Nullable TypeElement pathParameterElement;    // com.soklet.annotation.PathParameter
+	private @Nullable TypeMirror mcpRequestContextType;
+	private @Nullable TypeMirror mcpInvocationFeaturesType;
+	private @Nullable TypeMirror cancelationTokenType;
+	private @Nullable TypeMirror mcpProgressReporterType;
+	private @Nullable TypeMirror mcpPromptOutputType;
+	private @Nullable TypeMirror mcpArgumentCompletionResultType;
+	private @Nullable TypeMirror mcpCompletionContextType;
+	private @Nullable TypeMirror mcpPromptCompletionContextType;
+	private @Nullable TypeMirror mcpResourceCompletionContextType;
+	private @Nullable TypeMirror mcpResourceOutputType;
+	private @Nullable TypeMirror mcpResourcePageType;
+	private @Nullable TypeMirror mcpResourceReadContextType;
+	private @Nullable TypeMirror mcpResourceListContextType;
+	private @Nullable TypeMirror mcpOperationResultType;
+	private @Nullable TypeMirror mcpTaskCreatedResultType;
+	private @Nullable TypeMirror mcpTaskCreationContextType;
+	private @Nullable TypeMirror stringType;
+	private @Nullable TypeMirror optionalType;
+	private @Nullable TypeMirror exceptionType;
+	private @Nullable TypeMirror errorType;
 
 	// Collected during this compilation invocation
-	private final List<ResourceMethodDeclaration> collected = new ArrayList<>();
-	private final Map<String, Element> collectedResourceMethodElements = new LinkedHashMap<>();
-	private final Set<String> deferredResourceOwners = new LinkedHashSet<>();
-	private final Set<String> touchedTopLevelBinaries = new LinkedHashSet<>();
+	private final @NonNull List<@NonNull ResourceMethodDeclaration> collected = new ArrayList<>();
+	private final @NonNull Map<@NonNull String, @NonNull Element> collectedResourceMethodElements = new LinkedHashMap<>();
+	private final @NonNull Set<@NonNull String> deferredResourceOwners = new LinkedHashSet<>();
+	private final @NonNull Set<@NonNull String> touchedTopLevelBinaries = new LinkedHashSet<>();
 	private boolean resourceMethodAmbiguityDetected;
-	private final List<McpEndpointProviderDeclaration> collectedMcpEndpoints =
+	private final @NonNull List<@NonNull McpEndpointProviderDeclaration> collectedMcpEndpoints =
 			new ArrayList<>();
-	private final Set<String> touchedMcpTopLevelBinaries =
+	private final @NonNull Set<@NonNull String> touchedMcpTopLevelBinaries =
 			new LinkedHashSet<>();
-	private final Set<String> generatedMcpProviderBinaries =
+	private final @NonNull Set<@NonNull String> generatedMcpProviderBinaries =
 			new LinkedHashSet<>();
-	private final Set<String> processedMcpEndpointBinaries =
+	private final @NonNull Set<@NonNull String> processedMcpEndpointBinaries =
 			new LinkedHashSet<>();
-	private final Map<String, TypeElement> pendingMcpEndpoints =
+	private final @NonNull Map<@NonNull String, @NonNull TypeElement> pendingMcpEndpoints =
 			new LinkedHashMap<>();
-	private final Map<String, String> mcpEndpointBinaryByPath =
+	private final @NonNull Map<@NonNull String, @NonNull String> mcpEndpointBinaryByPath =
 			new LinkedHashMap<>();
 	private boolean mcpProcessingErrorDetected;
 	private int mcpProcessingErrorCount;
@@ -477,9 +477,9 @@ public final class SokletProcessor extends AbstractProcessor {
 	/**
 	 * Collects and validates each annotated method occurrence (repeatable-aware, without reflection).
 	 */
-	private void collect(RoundEnvironment roundEnv,
-											 HttpMethod httpMethod,
-											 Class<? extends Annotation> baseAnnotation,
+	private void collect(@NonNull RoundEnvironment roundEnv,
+											 @NonNull HttpMethod httpMethod,
+											 @NonNull Class<? extends @NonNull Annotation> baseAnnotation,
 											 boolean sseEventSource) {
 
 		TypeElement base = elements.getTypeElement(baseAnnotation.getCanonicalName());
@@ -997,7 +997,7 @@ public final class SokletProcessor extends AbstractProcessor {
 		}
 	}
 
-	private McpEndpointModel validateMcpEndpoint(
+	private @Nullable McpEndpointModel validateMcpEndpoint(
 			@NonNull TypeElement endpointType,
 			@NonNull TypeElement toolAnnotation,
 			@NonNull TypeElement argumentAnnotation,
@@ -1531,7 +1531,7 @@ public final class SokletProcessor extends AbstractProcessor {
 		return List.copyOf(annotations);
 	}
 
-	private McpToolModel validateMcpTool(@NonNull ExecutableElement method,
+	private @Nullable McpToolModel validateMcpTool(@NonNull ExecutableElement method,
 			@NonNull TypeElement argumentAnnotation,
 			@NonNull TypeElement headerAnnotation) {
 		int errorsBefore = mcpProcessingErrorCount;
@@ -1804,7 +1804,7 @@ public final class SokletProcessor extends AbstractProcessor {
 				List.copyOf(inputRequestDeclarations), requestStateMode,
 				appToolMetadata,
 				List.copyOf(bindings),
-				sha256Hex(inputSchemaBytes), structuredOutputType == null
+				sha256Hex(inputSchemaBytes), outputSchemaBytes == null
 						? MCP_ABSENT_OUTPUT_SCHEMA_DIGEST
 						: sha256Hex(outputSchemaBytes), protocolVersions);
 	}
@@ -1899,7 +1899,7 @@ public final class SokletProcessor extends AbstractProcessor {
 		return true;
 	}
 
-	private McpPromptModel validateMcpPrompt(
+	private @Nullable McpPromptModel validateMcpPrompt(
 			@NonNull ExecutableElement method,
 			@NonNull TypeElement argumentAnnotation) {
 		int errorsBefore = mcpProcessingErrorCount;
@@ -2072,7 +2072,7 @@ public final class SokletProcessor extends AbstractProcessor {
 				requestStateMode, List.copyOf(bindings), protocolVersions);
 	}
 
-	private McpResourceModel validateMcpResource(
+	private @Nullable McpResourceModel validateMcpResource(
 			@NonNull ExecutableElement method,
 			@NonNull TypeElement uriParameterAnnotation) {
 		int errorsBefore = mcpProcessingErrorCount;
@@ -2322,11 +2322,13 @@ public final class SokletProcessor extends AbstractProcessor {
 				requestStateMode, List.copyOf(bindings), protocolVersions);
 	}
 
-	private McpResourceListModel validateMcpResourceList(
+	private @Nullable McpResourceListModel validateMcpResourceList(
 			@NonNull ExecutableElement method) {
 		int errorsBefore = mcpProcessingErrorCount;
 		AnnotationMirror annotation = findAnnotation(method,
 				McpResourceList.class.getCanonicalName());
+		if (annotation == null)
+			return null;
 		List<String> protocolVersions = validateMcpProtocolVersions(method,
 				annotation, "@McpResourceList", "protocolVersions", true);
 		validateMcpReleasedAdapterVersions(method, "@McpResourceList",
@@ -2395,7 +2397,7 @@ public final class SokletProcessor extends AbstractProcessor {
 				protocolVersions);
 	}
 
-	private McpCompletionModel validateMcpCompletion(
+	private @Nullable McpCompletionModel validateMcpCompletion(
 			@NonNull ExecutableElement method, boolean prompt) {
 		int errorsBefore = mcpProcessingErrorCount;
 		String annotationName = prompt
@@ -2521,14 +2523,14 @@ public final class SokletProcessor extends AbstractProcessor {
 						annotationName);
 	}
 
-	private static List<String> parseLevelOneTemplateVariables(
+	private static @Nullable List<@NonNull String> parseLevelOneTemplateVariables(
 			@NonNull String template) {
 		McpResourceTemplateValidation.Template parsed = parseLevelOneResourceTemplate(
 				template);
 		return parsed == null ? null : List.copyOf(parsed.variableNames());
 	}
 
-	private static McpResourceTemplateValidation.Template parseLevelOneResourceTemplate(
+	private static McpResourceTemplateValidation.@Nullable Template parseLevelOneResourceTemplate(
 			@NonNull String template) {
 		// Validation and overlap decisions must use the same grammar, URI
 		// normalization, and finite budgets as runtime resource routing.
@@ -2661,7 +2663,7 @@ public final class SokletProcessor extends AbstractProcessor {
 				|| "-._~:/?#[]@!$&'()*+,;=".indexOf(character) >= 0;
 	}
 
-	private static McpTemplateLiteralToken templateLiteralToken(
+	private static @Nullable McpTemplateLiteralToken templateLiteralToken(
 			@NonNull String template, int index) {
 		char character = template.charAt(index);
 		if (character == '%')
@@ -2680,7 +2682,7 @@ public final class SokletProcessor extends AbstractProcessor {
 				true, Character.charCount(codePoint));
 	}
 
-	private static McpTemplateLiteralToken percentEncodedTemplateLiteralToken(
+	private static @Nullable McpTemplateLiteralToken percentEncodedTemplateLiteralToken(
 			@NonNull String template, int index) {
 		int firstByte = percentEncodedByte(template, index);
 		if (firstByte < 0)
@@ -3067,7 +3069,7 @@ public final class SokletProcessor extends AbstractProcessor {
 						+ argumentIndex++;
 				source.append("\t\tvar ").append(argumentBuilder)
 						.append(" = com.soklet.McpPromptArgumentDeclaration.withName(")
-						.append(javaStringLiteral(binding.publishedName()))
+						.append(javaStringLiteral(binding.promptArgumentName()))
 						.append(");\n");
 				appendOptionalBuilderCall(source, argumentBuilder, "title",
 						binding.title());
@@ -3186,7 +3188,7 @@ public final class SokletProcessor extends AbstractProcessor {
 					source.append(", ");
 				first = false;
 				source.append("@com.soklet.annotation.McpToolProperty(name = ")
-						.append(javaStringLiteral(binding.publishedName()))
+						.append(javaStringLiteral(binding.toolArgumentName()))
 						.append(", title = ")
 						.append(javaStringLiteral(binding.title()))
 						.append(", description = ")
@@ -3199,7 +3201,7 @@ public final class SokletProcessor extends AbstractProcessor {
 							.append(") ");
 				source
 						.append(mcpSourceType(binding.type())).append(' ')
-						.append(binding.carrierName());
+						.append(binding.toolCarrierName());
 			}
 			source.append(") {\n\t}\n");
 		}
@@ -3304,7 +3306,7 @@ public final class SokletProcessor extends AbstractProcessor {
 
 	@NonNull
 	private static String invocationArguments(
-			@NonNull List<McpParameterBinding> bindings) {
+			@NonNull List<@NonNull McpParameterBinding> bindings) {
 		List<String> arguments = new ArrayList<>(bindings.size());
 		for (McpParameterBinding binding : bindings) {
 			arguments.add(switch (binding.kind()) {
@@ -3317,7 +3319,7 @@ public final class SokletProcessor extends AbstractProcessor {
 				case TASK_CREATION_CONTEXT ->
 						"invocationFeatures.getTaskCreationContext().orElseThrow()";
 				case TOOL_ARGUMENT -> "arguments.getConvertedArguments()."
-						+ binding.carrierName() + "()";
+						+ binding.toolCarrierName() + "()";
 			});
 		}
 		return String.join(", ", arguments);
@@ -3325,7 +3327,7 @@ public final class SokletProcessor extends AbstractProcessor {
 
 	@NonNull
 	private static String promptInvocationArguments(
-			@NonNull List<McpPromptParameterBinding> bindings) {
+			@NonNull List<@NonNull McpPromptParameterBinding> bindings) {
 		List<String> arguments = new ArrayList<>(bindings.size());
 		for (McpPromptParameterBinding binding : bindings) {
 			arguments.add(switch (binding.kind()) {
@@ -3337,10 +3339,10 @@ public final class SokletProcessor extends AbstractProcessor {
 						"invocationFeatures.getProgressReporter()";
 				case PROMPT_ARGUMENT -> binding.required()
 						? "promptGetContext.findArgument("
-								+ javaStringLiteral(binding.publishedName())
+								+ javaStringLiteral(binding.promptArgumentName())
 								+ ").orElseThrow()"
 						: "promptGetContext.findArgument("
-								+ javaStringLiteral(binding.publishedName()) + ")";
+								+ javaStringLiteral(binding.promptArgumentName()) + ")";
 			});
 		}
 		return String.join(", ", arguments);
@@ -3348,7 +3350,7 @@ public final class SokletProcessor extends AbstractProcessor {
 
 	@NonNull
 	private static String resourceInvocationArguments(
-			@NonNull List<McpResourceParameterBinding> bindings) {
+			@NonNull List<@NonNull McpResourceParameterBinding> bindings) {
 		List<String> arguments = new ArrayList<>(bindings.size());
 		for (McpResourceParameterBinding binding : bindings) {
 			arguments.add(switch (binding.kind()) {
@@ -3369,7 +3371,7 @@ public final class SokletProcessor extends AbstractProcessor {
 
 	@NonNull
 	private static String resourceListInvocationArguments(
-			@NonNull List<McpResourceListParameterBinding> bindings) {
+			@NonNull List<@NonNull McpResourceListParameterBinding> bindings) {
 		List<String> arguments = new ArrayList<>(bindings.size());
 		for (McpResourceListParameterBinding binding : bindings) {
 			arguments.add(switch (binding) {
@@ -3387,7 +3389,7 @@ public final class SokletProcessor extends AbstractProcessor {
 
 	@NonNull
 	private static String completionInvocationArguments(
-			@NonNull List<McpCompletionParameterBinding> bindings,
+			@NonNull List<@NonNull McpCompletionParameterBinding> bindings,
 			@NonNull String contextVariable) {
 		List<String> arguments = new ArrayList<>(bindings.size());
 		for (McpCompletionParameterBinding binding : bindings) {
@@ -3469,7 +3471,7 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	private boolean isExactType(@NonNull TypeMirror candidate,
-			TypeMirror expected) {
+			@Nullable TypeMirror expected) {
 		return expected != null && types.isSameType(types.erasure(candidate),
 				types.erasure(expected));
 	}
@@ -3485,13 +3487,15 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	private boolean isSubtypeOf(@NonNull TypeMirror candidate,
-			TypeMirror expected) {
+			@Nullable TypeMirror expected) {
 		return expected != null && types.isSubtype(types.erasure(candidate),
 				types.erasure(expected));
 	}
 
-	private AnnotationMirror findAnnotation(@NonNull Element element,
+	private @Nullable AnnotationMirror findAnnotation(@Nullable Element element,
 			@NonNull String annotationTypeName) {
+		if (element == null)
+			return null;
 		for (AnnotationMirror annotation : element.getAnnotationMirrors()) {
 			Element annotationElement = annotation.getAnnotationType().asElement();
 			if (annotationElement instanceof TypeElement annotationType
@@ -3502,8 +3506,10 @@ public final class SokletProcessor extends AbstractProcessor {
 		return null;
 	}
 
-	private AnnotationMirror findAnnotation(@NonNull Element element,
+	private @Nullable AnnotationMirror findAnnotation(@Nullable Element element,
 			@NonNull TypeElement annotationType) {
+		if (element == null)
+			return null;
 		for (AnnotationMirror annotation : element.getAnnotationMirrors())
 			if (isAnnotationType(annotation, annotationType))
 				return annotation;
@@ -3545,7 +3551,7 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	@NonNull
-	private List<String> validateMcpProtocolVersions(@NonNull Element owner,
+	private List<@NonNull String> validateMcpProtocolVersions(@NonNull Element owner,
 			@NonNull AnnotationMirror annotation, @NonNull String annotationName,
 			@NonNull String member, boolean required) {
 		Object raw = annotationMemberWithDefaults(annotation, member);
@@ -3584,8 +3590,8 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	private void validateMcpVersionSubset(@NonNull Element owner,
-			@NonNull String selectionName, @NonNull List<String> versions,
-			@NonNull List<String> containingVersions,
+			@NonNull String selectionName, @NonNull List<@NonNull String> versions,
+			@NonNull List<@NonNull String> containingVersions,
 			@NonNull String containingName) {
 		if (!containingVersions.containsAll(versions))
 			mcpError(owner,
@@ -3594,7 +3600,7 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	private void validateMcpModernOnlyVersions(@NonNull Element owner,
-			@NonNull String annotationName, @NonNull List<String> versions) {
+			@NonNull String annotationName, @NonNull List<@NonNull String> versions) {
 		if (versions.stream().anyMatch(version -> !"V2026_07_28".equals(version)))
 			mcpError(owner,
 					"Soklet: %s currently supports only MCP protocol revision 2026-07-28.",
@@ -3602,7 +3608,7 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	private static boolean schemaDeclaresMirroredHeader(
-			com.soklet.internal.mcp.protocol.McpJsonObject document) {
+			com.soklet.internal.mcp.protocol.@NonNull McpJsonObject document) {
 		var pending = new ArrayDeque<com.soklet.internal.mcp.protocol.McpJsonObject>();
 		pending.add(document);
 		while (!pending.isEmpty()) {
@@ -3628,7 +3634,7 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	private void validateMcpReleasedAdapterVersions(@NonNull Element owner,
-			@NonNull String annotationName, @NonNull List<String> versions) {
+			@NonNull String annotationName, @NonNull List<@NonNull String> versions) {
 		if (versions.contains("V2025_03_26"))
 			mcpError(owner,
 					"Soklet: %s protocol revision 2025-03-26 is not supported by the current compatibility adapter.",
@@ -3636,7 +3642,7 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	@NonNull
-	private static String mcpVersionSetExpression(@NonNull List<String> versions) {
+	private static String mcpVersionSetExpression(@NonNull List<@NonNull String> versions) {
 		return "java.util.Set.of(" + versions.stream()
 				.map(version -> "com.soklet.McpProtocolVersion." + version)
 				.collect(Collectors.joining(", ")) + ")";
@@ -3708,7 +3714,7 @@ public final class SokletProcessor extends AbstractProcessor {
 		return value == null ? "" : value.toString();
 	}
 
-	private Object annotationMemberWithDefaults(
+	private @Nullable Object annotationMemberWithDefaults(
 			@NonNull AnnotationMirror annotation, @NonNull String member) {
 		for (Map.Entry<? extends ExecutableElement, ? extends AnnotationValue>
 				entry : elements.getElementValuesWithDefaults(annotation).entrySet())
@@ -3762,13 +3768,13 @@ public final class SokletProcessor extends AbstractProcessor {
 
 	@FormatMethod
 	private void mcpError(@NonNull Element element, @NonNull String format,
-			Object... arguments) {
+			@Nullable Object @NonNull ... arguments) {
 		mcpProcessingErrorDetected = true;
 		mcpProcessingErrorCount++;
 		error(element, format, arguments);
 	}
 
-	private List<AnnotationMirror> extractOccurrences(ExecutableElement method, TypeElement base, TypeElement container) {
+	private @NonNull List<@NonNull AnnotationMirror> extractOccurrences(@NonNull ExecutableElement method, @Nullable TypeElement base, @Nullable TypeElement container) {
 		List<AnnotationMirror> out = new ArrayList<>();
 
 		for (AnnotationMirror am : method.getAnnotationMirrors()) {
@@ -3795,16 +3801,16 @@ public final class SokletProcessor extends AbstractProcessor {
 	// --- Helpers for parameter annotations ------------------------------------
 
 	private static final class ParamBindings {
-		final Set<String> paramNames;
+		final @NonNull Set<@NonNull String> paramNames;
 		final boolean hadError;
 
-		ParamBindings(Set<String> names, boolean hadError) {
+		ParamBindings(@NonNull Set<@NonNull String> names, boolean hadError) {
 			this.paramNames = names;
 			this.hadError = hadError;
 		}
 	}
 
-	private ParamBindings readPathParameterBindings(ExecutableElement method) {
+	private @NonNull ParamBindings readPathParameterBindings(@NonNull ExecutableElement method) {
 		boolean hadError = false;
 		Set<String> names = new LinkedHashSet<>();
 		if (pathParameterElement == null) return new ParamBindings(names, false);
@@ -3868,11 +3874,11 @@ public final class SokletProcessor extends AbstractProcessor {
 		return valid;
 	}
 
-	private static boolean isAnnotationType(AnnotationMirror am, TypeElement type) {
+	private static boolean isAnnotationType(@NonNull AnnotationMirror am, @NonNull TypeElement type) {
 		return am.getAnnotationType().asElement().equals(type);
 	}
 
-	private static Object readAnnotationMemberValue(AnnotationMirror am, String member) {
+	private static @Nullable Object readAnnotationMemberValue(@NonNull AnnotationMirror am, @NonNull String member) {
 		for (Map.Entry<? extends ExecutableElement, ? extends AnnotationValue> e : am.getElementValues().entrySet()) {
 			if (e.getKey().getSimpleName().contentEquals(member)) {
 				return e.getValue().getValue();
@@ -3881,7 +3887,7 @@ public final class SokletProcessor extends AbstractProcessor {
 		return null;
 	}
 
-	private static String readAnnotationStringMember(AnnotationMirror am, String member) {
+	private static @Nullable String readAnnotationStringMember(@NonNull AnnotationMirror am, @NonNull String member) {
 		Object v = readAnnotationMemberValue(am, member);
 		return (v == null) ? null : v.toString();
 	}
@@ -3890,10 +3896,10 @@ public final class SokletProcessor extends AbstractProcessor {
 
 	private static final class ValidationResult {
 		final boolean ok;
-		final Set<String> placeholders;       // normalized names (no trailing '*')
-		final Map<String, String> original;   // normalized -> original token
+		final @NonNull Set<@NonNull String> placeholders;       // normalized names (no trailing '*')
+		final @NonNull Map<@NonNull String, @NonNull String> original;   // normalized -> original token
 
-		ValidationResult(boolean ok, Set<String> placeholders, Map<String, String> original) {
+		ValidationResult(boolean ok, @NonNull Set<@NonNull String> placeholders, @NonNull Map<@NonNull String, @NonNull String> original) {
 			this.ok = ok;
 			this.placeholders = placeholders;
 			this.original = original;
@@ -3904,7 +3910,7 @@ public final class SokletProcessor extends AbstractProcessor {
 	 * Uses the runtime declaration parser so malformed templates never reach pairwise ambiguity checks.
 	 * Logical names omit the varargs suffix; original tokens retain it for binding diagnostics.
 	 */
-	private ValidationResult validatePathTemplate(Element reportOn, String path) {
+	private @NonNull ValidationResult validatePathTemplate(@NonNull Element reportOn, @Nullable String path) {
 		if (path == null || path.isEmpty()) {
 			return new ValidationResult(false, Collections.emptySet(), Collections.emptyMap());
 		}
@@ -3932,12 +3938,12 @@ public final class SokletProcessor extends AbstractProcessor {
 
 	// --- Existing utilities ----------------------------------------------------
 
-	private static Class<? extends Annotation> findRepeatableContainer(Class<? extends Annotation> base) {
+	private static @Nullable Class<? extends @NonNull Annotation> findRepeatableContainer(@NonNull Class<? extends @NonNull Annotation> base) {
 		Repeatable repeatable = base.getAnnotation(Repeatable.class);
 		return (repeatable == null) ? null : repeatable.value();
 	}
 
-	private String jvmTypeName(TypeMirror t) {
+	private @NonNull String jvmTypeName(@NonNull TypeMirror t) {
 		switch (t.getKind()) {
 			case BOOLEAN:
 				return "boolean";
@@ -3970,7 +3976,7 @@ public final class SokletProcessor extends AbstractProcessor {
 		}
 	}
 
-	private String jvmTypeDescriptor(TypeMirror t) {
+	private @NonNull String jvmTypeDescriptor(@NonNull TypeMirror t) {
 		switch (t.getKind()) {
 			case BOOLEAN:
 				return "Z";
@@ -4111,8 +4117,8 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	@Nullable
-	private PreparedRouteIndex prepareRouteIndex(List<ResourceMethodDeclaration> newlyCollected,
-																	Set<String> touchedTopLevelBinaries) {
+	private PreparedRouteIndex prepareRouteIndex(@NonNull List<@NonNull ResourceMethodDeclaration> newlyCollected,
+																	@NonNull Set<@NonNull String> touchedTopLevelBinaries) {
 
 		Path classOutputRoot = findClassOutputRoot();
 		Path classOutputIndexPath = (classOutputRoot == null ? null : classOutputRoot.resolve(RESOURCE_METHOD_LOOKUP_TABLE_PATH));
@@ -4191,14 +4197,16 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	private void publishRouteIndex(@NonNull PreparedRouteIndex prepared,
-			@NonNull List<ResourceMethodDeclaration> newlyCollected,
-			@NonNull Set<String> touchedTopLevelBinaries) {
+			@NonNull List<@NonNull ResourceMethodDeclaration> newlyCollected,
+			@NonNull Set<@NonNull String> touchedTopLevelBinaries) {
 		writeRoutesIndexResource(prepared.declarations(), prepared.classOutputIndexPath(),
 				touchedTopLevelBinaries, newlyCollected);
-		if (prepared.sideCarIndexPath() != null)
-			writeIndexFileAtomically(prepared.sideCarIndexPath(), prepared.declarations());
-		if (prepared.persistentIndexPath() != null)
-			writeIndexFileAtomically(prepared.persistentIndexPath(), prepared.declarations());
+		Path sidecar = prepared.sideCarIndexPath();
+		if (sidecar != null)
+			writeIndexFileAtomically(sidecar, prepared.declarations());
+		Path persistent = prepared.persistentIndexPath();
+		if (persistent != null)
+			writeIndexFileAtomically(persistent, prepared.declarations());
 		debug("SokletProcessor: wroteIndexSize=%d", prepared.declarations().size());
 	}
 
@@ -4244,8 +4252,8 @@ public final class SokletProcessor extends AbstractProcessor {
 
 	@Nullable
 	private PreparedMcpEndpointIndex prepareMcpEndpointIndex(
-			@NonNull List<McpEndpointProviderDeclaration> newlyCollected,
-			@NonNull Set<String> touchedTopLevelBinaries) {
+			@NonNull List<@NonNull McpEndpointProviderDeclaration> newlyCollected,
+			@NonNull Set<@NonNull String> touchedTopLevelBinaries) {
 		Path classOutputRoot = findClassOutputRoot();
 		Path classOutputIndexPath = classOutputRoot == null ? null
 				: classOutputRoot.resolve(
@@ -4343,8 +4351,8 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	private void publishMcpEndpointIndex(@NonNull PreparedMcpEndpointIndex prepared,
-			@NonNull List<McpEndpointProviderDeclaration> newlyCollected,
-			@NonNull Set<String> touchedTopLevelBinaries) {
+			@NonNull List<@NonNull McpEndpointProviderDeclaration> newlyCollected,
+			@NonNull Set<@NonNull String> touchedTopLevelBinaries) {
 		writeMcpEndpointIndexResource(prepared.declarations(), prepared.classOutputIndexPath(),
 				touchedTopLevelBinaries, newlyCollected);
 		if (mcpProcessingErrorDetected)
@@ -4359,7 +4367,7 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	private boolean readMcpEndpointIndexFromLocation(
-			@NonNull Map<String, McpEndpointProviderDeclaration> output) {
+			@NonNull Map<@NonNull String, @NonNull McpEndpointProviderDeclaration> output) {
 		boolean opened = false;
 		String location = McpGeneratedEndpointProviderIndex.RESOURCE_PATH;
 		try {
@@ -4392,7 +4400,7 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	private boolean readMcpEndpointIndexFromPath(@NonNull Path path,
-			@NonNull Map<String, McpEndpointProviderDeclaration> output) {
+			@NonNull Map<@NonNull String, @NonNull McpEndpointProviderDeclaration> output) {
 		if (!Files.isRegularFile(path))
 			return false;
 		// A sidecar or persistent cache can be the only complete snapshot of
@@ -4421,7 +4429,7 @@ public final class SokletProcessor extends AbstractProcessor {
 	@Nullable
 	private McpEndpointIndexReadProblem readMcpEndpointIndex(
 			@NonNull BufferedReader reader,
-			@NonNull Map<String, McpEndpointProviderDeclaration> output)
+			@NonNull Map<@NonNull String, @NonNull McpEndpointProviderDeclaration> output)
 			throws IOException {
 		long lineNumber = 0;
 		for (String line; (line = reader.readLine()) != null; ) {
@@ -4467,7 +4475,7 @@ public final class SokletProcessor extends AbstractProcessor {
 		return path.toAbsolutePath().normalize().toString();
 	}
 
-	private static McpEndpointProviderDeclaration parseMcpEndpointIndexLine(
+	private static @Nullable McpEndpointProviderDeclaration parseMcpEndpointIndexLine(
 			@NonNull String line) {
 		try {
 			String[] fields = line.split("\\|", -1);
@@ -4492,10 +4500,10 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	private void writeMcpEndpointIndexResource(
-			@NonNull List<McpEndpointProviderDeclaration> declarations,
-			Path directIndexPath,
-			@NonNull Set<String> touchedTopLevelBinaries,
-			@NonNull List<McpEndpointProviderDeclaration> newlyCollected) {
+			@NonNull List<@NonNull McpEndpointProviderDeclaration> declarations,
+			@Nullable Path directIndexPath,
+			@NonNull Set<@NonNull String> touchedTopLevelBinaries,
+			@NonNull List<@NonNull McpEndpointProviderDeclaration> newlyCollected) {
 		Element[] origins = computeMcpOriginatingElements(
 				touchedTopLevelBinaries, newlyCollected);
 		try {
@@ -4532,9 +4540,9 @@ public final class SokletProcessor extends AbstractProcessor {
 		}
 	}
 
-	private Element[] computeMcpOriginatingElements(
-			@NonNull Set<String> touchedTopLevelBinaries,
-			@NonNull List<McpEndpointProviderDeclaration> newlyCollected) {
+	private @NonNull Element @NonNull [] computeMcpOriginatingElements(
+			@NonNull Set<@NonNull String> touchedTopLevelBinaries,
+			@NonNull List<@NonNull McpEndpointProviderDeclaration> newlyCollected) {
 		Set<Element> origins = new LinkedHashSet<>();
 		for (String binaryName : touchedTopLevelBinaries) {
 			TypeElement type = elements.getTypeElement(binaryName);
@@ -4551,7 +4559,7 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	private static void writeMcpEndpointIndex(@NonNull Writer writer,
-			@NonNull List<McpEndpointProviderDeclaration> declarations)
+			@NonNull List<@NonNull McpEndpointProviderDeclaration> declarations)
 			throws IOException {
 		for (McpEndpointProviderDeclaration declaration : declarations) {
 			writer.write(McpGeneratedEndpointProviderIndex.formatLine(
@@ -4564,7 +4572,7 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	private static void writeMcpEndpointIndexAtomically(@NonNull Path target,
-			@NonNull List<McpEndpointProviderDeclaration> declarations)
+			@NonNull List<@NonNull McpEndpointProviderDeclaration> declarations)
 			throws IOException {
 		Path parent = target.getParent();
 		if (parent != null)
@@ -4592,7 +4600,7 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	private void writeMcpEndpointIndexCache(@NonNull Path target,
-			@NonNull List<McpEndpointProviderDeclaration> declarations) {
+			@NonNull List<@NonNull McpEndpointProviderDeclaration> declarations) {
 		try {
 			writeMcpEndpointIndexAtomically(target, declarations);
 		} catch (IOException exception) {
@@ -4607,8 +4615,8 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 
-	private void removeTouchedEntries(Map<String, ResourceMethodDeclaration> merged,
-																		Set<String> touchedTopLevelBinaries) {
+	private void removeTouchedEntries(@NonNull Map<@NonNull String, @NonNull ResourceMethodDeclaration> merged,
+																		@NonNull Set<@NonNull String> touchedTopLevelBinaries) {
 		if (touchedTopLevelBinaries == null || touchedTopLevelBinaries.isEmpty()) return;
 
 		Map<String, Boolean> touchedOwners = new LinkedHashMap<>();
@@ -4622,7 +4630,7 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 
-	private boolean readIndexFromLocation(StandardLocation location, Map<String, ResourceMethodDeclaration> out) {
+	private boolean readIndexFromLocation(@NonNull StandardLocation location, @NonNull Map<@NonNull String, @NonNull ResourceMethodDeclaration> out) {
 		boolean opened = false;
 		String indexLocation = RESOURCE_METHOD_LOOKUP_TABLE_PATH;
 		try {
@@ -4643,7 +4651,7 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 
-	private boolean readIndexFromPath(Path path, Map<String, ResourceMethodDeclaration> out) {
+	private boolean readIndexFromPath(@Nullable Path path, @NonNull Map<@NonNull String, @NonNull ResourceMethodDeclaration> out) {
 		if (path == null || !Files.isRegularFile(path)) return false;
 		try (BufferedReader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
 			Map<String, ResourceMethodDeclaration> snapshot = new LinkedHashMap<>();
@@ -4657,7 +4665,7 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 
-	private void readIndexFromReader(BufferedReader reader, Map<String, ResourceMethodDeclaration> out) throws IOException {
+	private void readIndexFromReader(@NonNull BufferedReader reader, @NonNull Map<@NonNull String, @NonNull ResourceMethodDeclaration> out) throws IOException {
 		String line;
 		while ((line = reader.readLine()) != null) {
 			line = line.trim();
@@ -4670,7 +4678,7 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 
-	private Path findClassOutputRoot() {
+	private @Nullable Path findClassOutputRoot() {
 		// Try to read an existing marker file
 		try {
 			FileObject fo = filer.getResource(StandardLocation.CLASS_OUTPUT, "", OUTPUT_ROOT_MARKER_PATH);
@@ -4692,7 +4700,7 @@ public final class SokletProcessor extends AbstractProcessor {
 		}
 	}
 
-	private Path sideCarIndexPath(Path classOutputRoot) {
+	private @Nullable Path sideCarIndexPath(@Nullable Path classOutputRoot) {
 		if (classOutputRoot == null) return null;
 		Path parent = classOutputRoot.getParent();
 		if (parent == null) return null;
@@ -4702,7 +4710,7 @@ public final class SokletProcessor extends AbstractProcessor {
 		return parent.resolve(SIDE_CAR_DIR_NAME).resolve(outputRootName).resolve(SIDE_CAR_INDEX_FILENAME);
 	}
 
-	private Path mcpSideCarIndexPath(Path classOutputRoot) {
+	private @Nullable Path mcpSideCarIndexPath(@Nullable Path classOutputRoot) {
 		if (classOutputRoot == null) return null;
 		Path parent = classOutputRoot.getParent();
 		if (parent == null) return null;
@@ -4713,7 +4721,7 @@ public final class SokletProcessor extends AbstractProcessor {
 				.resolve(MCP_SIDE_CAR_INDEX_FILENAME);
 	}
 
-	private Path persistentIndexPath(Path classOutputRoot) {
+	private @Nullable Path persistentIndexPath(@Nullable Path classOutputRoot) {
 		if (classOutputRoot == null) return null;
 		Path cacheRoot = persistentCacheRoot();
 		if (cacheRoot == null) return null;
@@ -4722,7 +4730,7 @@ public final class SokletProcessor extends AbstractProcessor {
 		return cacheRoot.resolve(PERSISTENT_CACHE_INDEX_DIR).resolve(key).resolve(SIDE_CAR_INDEX_FILENAME);
 	}
 
-	private Path mcpPersistentIndexPath(Path classOutputRoot) {
+	private @Nullable Path mcpPersistentIndexPath(@Nullable Path classOutputRoot) {
 		if (classOutputRoot == null) return null;
 		Path cacheRoot = persistentCacheRoot();
 		if (cacheRoot == null) return null;
@@ -4738,7 +4746,7 @@ public final class SokletProcessor extends AbstractProcessor {
 	 * Persistent caching is only enabled when soklet.cacheDir is explicitly set.
 	 * This avoids writing project-root ".soklet" directories by default.
 	 */
-	private Path persistentCacheRoot() {
+	private @Nullable Path persistentCacheRoot() {
 		String override = processingEnv.getOptions().get(PROCESSOR_OPTION_CACHE_DIR);
 		if (override == null || override.isBlank()) return null;
 		try {
@@ -4748,13 +4756,13 @@ public final class SokletProcessor extends AbstractProcessor {
 		}
 	}
 
-	private boolean classFileExistsInOutputRoot(Path root, String binaryName) {
+	private boolean classFileExistsInOutputRoot(@Nullable Path root, @NonNull String binaryName) {
 		if (root == null) return true;
 		Path classFile = root.resolve(binaryName.replace('.', '/') + ".class");
 		return Files.isRegularFile(classFile);
 	}
 
-	private Path outputRootFromUri(URI uri, String pathSuffix) {
+	private @Nullable Path outputRootFromUri(@Nullable URI uri, @NonNull String pathSuffix) {
 		if (uri == null || !"file".equalsIgnoreCase(uri.getScheme())) return null;
 		Path file = Paths.get(uri);
 		int segments = countPathSegments(pathSuffix);
@@ -4767,7 +4775,7 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	@Nullable
-	private ResourceMethodDeclaration parseIndexLine(String line) {
+	private ResourceMethodDeclaration parseIndexLine(@NonNull String line) {
 		try {
 			String[] parts = line.split("\\|", -1);
 			if (parts.length != 6 || !(parts[5].equals("true") || parts[5].equals("false"))) return null;
@@ -4801,10 +4809,10 @@ public final class SokletProcessor extends AbstractProcessor {
 	 *   <li>Try direct filesystem write if classOutputIndexPath is available</li>
 	 * </ol>
 	 */
-	private void writeRoutesIndexResource(List<ResourceMethodDeclaration> routes,
-																				Path classOutputIndexPath,
-																				Set<String> touchedTopLevelBinaries,
-																				List<ResourceMethodDeclaration> newlyCollected) {
+	private void writeRoutesIndexResource(@NonNull List<@NonNull ResourceMethodDeclaration> routes,
+																				@Nullable Path classOutputIndexPath,
+																				@NonNull Set<@NonNull String> touchedTopLevelBinaries,
+																				@NonNull List<@NonNull ResourceMethodDeclaration> newlyCollected) {
 		Element[] origins = computeOriginatingElements(touchedTopLevelBinaries, newlyCollected);
 
 		try {
@@ -4843,8 +4851,8 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 
-	private Element[] computeOriginatingElements(Set<String> touchedTopLevelBinaries,
-																							 List<ResourceMethodDeclaration> newlyCollected) {
+	private @NonNull Element @NonNull [] computeOriginatingElements(@Nullable Set<@NonNull String> touchedTopLevelBinaries,
+																							 @Nullable List<@NonNull ResourceMethodDeclaration> newlyCollected) {
 		Set<Element> origins = new LinkedHashSet<>();
 
 		// Always include touched top-level types (these are definitely in this compilation)
@@ -4870,7 +4878,7 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 
-	private void writeIndexToWriter(Writer w, List<ResourceMethodDeclaration> routes) throws IOException {
+	private void writeIndexToWriter(@NonNull Writer w, @NonNull List<@NonNull ResourceMethodDeclaration> routes) throws IOException {
 		Base64.Encoder b64 = Base64.getEncoder();
 		for (ResourceMethodDeclaration r : routes) {
 			String params = String.join(";", r.parameterTypes());
@@ -4891,7 +4899,7 @@ public final class SokletProcessor extends AbstractProcessor {
 	/**
 	 * Best-effort atomic cache write. A failed update invalidates the stale snapshot.
 	 */
-	private void writeIndexFileAtomically(Path target, List<ResourceMethodDeclaration> routes) {
+	private void writeIndexFileAtomically(@NonNull Path target, @NonNull List<@NonNull ResourceMethodDeclaration> routes) {
 		if (target == null) return;
 		try {
 			writeIndexFileAtomicallyOrThrow(target, routes);
@@ -4906,7 +4914,7 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 
-	private void writeIndexFileAtomicallyOrThrow(Path target, List<ResourceMethodDeclaration> routes) throws IOException {
+	private void writeIndexFileAtomicallyOrThrow(@NonNull Path target, @NonNull List<@NonNull ResourceMethodDeclaration> routes) throws IOException {
 		Path parent = target.getParent();
 		if (parent != null) Files.createDirectories(parent);
 
@@ -4931,7 +4939,7 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 
-	private static String b64encode(Base64.Encoder enc, String s) {
+	private static @NonNull String b64encode(Base64.@NonNull Encoder enc, @Nullable String s) {
 		byte[] bytes = (s == null ? new byte[0] : s.getBytes(StandardCharsets.UTF_8));
 		return enc.encodeToString(bytes);
 	}
@@ -4939,18 +4947,18 @@ public final class SokletProcessor extends AbstractProcessor {
 	// ---- Messaging ------------------------------------------------------------
 
 	@FormatMethod
-	private void error(Element e, String fmt, Object... args) {
+	private void error(@Nullable Element e, @NonNull String fmt, @Nullable Object @NonNull ... args) {
 		messager.printMessage(Diagnostic.Kind.ERROR, String.format(fmt, args), e);
 	}
 
 	@FormatMethod
-	private void resourceMethodIndexError(@NonNull String format, Object... arguments) {
+	private void resourceMethodIndexError(@NonNull String format, @Nullable Object @NonNull ... arguments) {
 		resourceMethodIndexErrorDetected = true;
 		messager.printMessage(Diagnostic.Kind.ERROR, String.format(format, arguments));
 	}
 
 	@FormatMethod
-	private void mcpError(@NonNull String format, Object... arguments) {
+	private void mcpError(@NonNull String format, @Nullable Object @NonNull ... arguments) {
 		mcpProcessingErrorDetected = true;
 		mcpProcessingErrorCount++;
 		messager.printMessage(Diagnostic.Kind.ERROR,
@@ -4958,14 +4966,14 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	@FormatMethod
-	private void debug(String fmt, Object... args) {
+	private void debug(@NonNull String fmt, @Nullable Object @NonNull ... args) {
 		if (!debugEnabled) return;
 		messager.printMessage(Diagnostic.Kind.NOTE, String.format(fmt, args));
 	}
 
 	// ---- Misc helpers ---------------------------------------------------------
 
-	private static CacheMode parseCacheMode(String option) {
+	private static @NonNull CacheMode parseCacheMode(@Nullable String option) {
 		if (option == null || option.isBlank()) return CacheMode.SIDECAR;
 
 		String normalized = option.trim().toLowerCase(Locale.ROOT);
@@ -4985,18 +4993,18 @@ public final class SokletProcessor extends AbstractProcessor {
 		}
 	}
 
-	private static boolean parseBooleanishOption(String option) {
+	private static boolean parseBooleanishOption(@Nullable String option) {
 		if (option == null) return false;
 		String normalized = option.trim();
 		if (normalized.isEmpty()) return false;
 		return !"false".equalsIgnoreCase(normalized);
 	}
 
-	private static String hashPath(String input) {
+	private static @NonNull String hashPath(@NonNull String input) {
 		return sha256Hex(input.getBytes(StandardCharsets.UTF_8));
 	}
 
-	private static String toHex(byte[] bytes) {
+	private static @NonNull String toHex(byte @NonNull [] bytes) {
 		char[] out = new char[bytes.length * 2];
 		char[] digits = "0123456789abcdef".toCharArray();
 		for (int i = 0; i < bytes.length; i++) {
@@ -5007,7 +5015,7 @@ public final class SokletProcessor extends AbstractProcessor {
 		return new String(out);
 	}
 
-	private static int countPathSegments(String path) {
+	private static int countPathSegments(@NonNull String path) {
 		int count = 1;
 		for (int i = 0; i < path.length(); i++) {
 			if (path.charAt(i) == '/') count++;
@@ -5015,14 +5023,14 @@ public final class SokletProcessor extends AbstractProcessor {
 		return count;
 	}
 
-	private static String generateKey(ResourceMethodDeclaration r) {
+	private static @NonNull String generateKey(@NonNull ResourceMethodDeclaration r) {
 		return r.httpMethod().name() + "|" + r.path() + "|" + r.className() + "|" +
 				r.methodName() + "|" + String.join(";", r.parameterTypes()) + "|" +
 				r.sseEventSource();
 	}
 
 
-	private static List<ResourceMethodDeclaration> dedupeAndOrder(List<ResourceMethodDeclaration> in) {
+	private static @NonNull List<@NonNull ResourceMethodDeclaration> dedupeAndOrder(@NonNull List<@NonNull ResourceMethodDeclaration> in) {
 		Map<String, ResourceMethodDeclaration> byKey = new LinkedHashMap<>();
 		for (ResourceMethodDeclaration r : in) byKey.putIfAbsent(generateKey(r), r);
 
@@ -5035,17 +5043,17 @@ public final class SokletProcessor extends AbstractProcessor {
 		return out;
 	}
 
-	private record PreparedRouteIndex(List<ResourceMethodDeclaration> declarations,
+	private record PreparedRouteIndex(@NonNull List<@NonNull ResourceMethodDeclaration> declarations,
 			@Nullable Path classOutputIndexPath, @Nullable Path sideCarIndexPath,
 			@Nullable Path persistentIndexPath) {}
 
-	private record PreparedMcpEndpointIndex(List<McpEndpointProviderDeclaration> declarations,
+	private record PreparedMcpEndpointIndex(@NonNull List<@NonNull McpEndpointProviderDeclaration> declarations,
 			@Nullable Path classOutputIndexPath, @Nullable Path sideCarIndexPath,
 			@Nullable Path persistentIndexPath) {}
 
-	private record McpEndpointProviderDeclaration(String endpointBinaryName,
-			String providerBinaryName, String topLevelBinaryName,
-			String endpointPath) {}
+	private record McpEndpointProviderDeclaration(@NonNull String endpointBinaryName,
+			@NonNull String providerBinaryName, @NonNull String topLevelBinaryName,
+			@NonNull String endpointPath) {}
 
 	private record McpEndpointIndexReadProblem(long lineNumber,
 			boolean conflicting) {
@@ -5056,26 +5064,26 @@ public final class SokletProcessor extends AbstractProcessor {
 		}
 	}
 
-	private record McpEndpointModel(String packageName,
-			String endpointQualifiedName, String endpointBinaryName,
-			String providerSimpleName, String providerBinaryName, String path,
-			String name, String version, String title, String description,
-			String websiteUrl, String instructions, String toolRateLimiterName,
-			long resourceListCacheTimeToLiveInMilliseconds, String resourceListCacheScope,
+	private record McpEndpointModel(@NonNull String packageName,
+			@NonNull String endpointQualifiedName, @NonNull String endpointBinaryName,
+			@NonNull String providerSimpleName, @NonNull String providerBinaryName, @NonNull String path,
+			@NonNull String name, @NonNull String version, @NonNull String title, @NonNull String description,
+			@NonNull String websiteUrl, @NonNull String instructions, @NonNull String toolRateLimiterName,
+			long resourceListCacheTimeToLiveInMilliseconds, @NonNull String resourceListCacheScope,
 			long resourceTemplateListCacheTimeToLiveInMilliseconds,
-			String resourceTemplateListCacheScope,
-			List<McpToolModel> tools, List<McpPromptModel> prompts,
-			List<McpResourceModel> resources,
+			@NonNull String resourceTemplateListCacheScope,
+			@NonNull List<@NonNull McpToolModel> tools, @NonNull List<@NonNull McpPromptModel> prompts,
+			@NonNull List<@NonNull McpResourceModel> resources,
 			@Nullable McpResourceListModel resourceList,
-			Map<String, McpCompletionModel> promptCompletions,
-			Map<String, McpCompletionModel> resourceCompletions,
-			List<String> protocolVersions, List<String> taskProtocolVersions,
-			List<String> sessionProtocolVersions,
-			List<String> subscriptionProtocolVersions) {}
+			@NonNull Map<@NonNull String, @NonNull McpCompletionModel> promptCompletions,
+			@NonNull Map<@NonNull String, @NonNull McpCompletionModel> resourceCompletions,
+			@NonNull List<@NonNull String> protocolVersions, @NonNull List<@NonNull String> taskProtocolVersions,
+			@NonNull List<@NonNull String> sessionProtocolVersions,
+			@NonNull List<@NonNull String> subscriptionProtocolVersions) {}
 
-	private record McpCompletionModel(ExecutableElement method, String target,
-			List<McpCompletionParameterBinding> bindings,
-			List<String> protocolVersions) {}
+	private record McpCompletionModel(@NonNull ExecutableElement method, @NonNull String target,
+			@NonNull List<@NonNull McpCompletionParameterBinding> bindings,
+			@NonNull List<@NonNull String> protocolVersions) {}
 
 	private enum McpCompletionParameterBinding {
 		REQUEST_CONTEXT,
@@ -5087,16 +5095,16 @@ public final class SokletProcessor extends AbstractProcessor {
 		PROGRESS_REPORTER
 	}
 
-	private record McpToolModel(ExecutableElement method, String name,
-			String title, String description, String rateLimiterName,
+	private record McpToolModel(@NonNull ExecutableElement method, @NonNull String name,
+			@NonNull String title, @NonNull String description, @NonNull String rateLimiterName,
 			boolean structuredContentMirroredAsText,
-			McpToolReturnKind returnKind,
+			@NonNull McpToolReturnKind returnKind,
 			@Nullable TypeMirror structuredOutputType,
-			List<McpInputRequestModel> inputRequestDeclarations,
-			String requestStateMode,
+			@NonNull List<@NonNull McpInputRequestModel> inputRequestDeclarations,
+			@NonNull String requestStateMode,
 			@Nullable McpAppToolMetadata appToolMetadata,
-			List<McpParameterBinding> bindings, String inputSchemaDigest,
-			String outputSchemaDigest, List<String> protocolVersions) {}
+			@NonNull List<@NonNull McpParameterBinding> bindings, @NonNull String inputSchemaDigest,
+			@NonNull String outputSchemaDigest, @NonNull List<@NonNull String> protocolVersions) {}
 
 	private enum McpToolReturnKind {
 		TYPED_COMPLETE,
@@ -5104,19 +5112,33 @@ public final class SokletProcessor extends AbstractProcessor {
 		TASK_CREATED
 	}
 
-	private record McpPromptModel(ExecutableElement method, String name,
-			String title, String description, boolean promptOutputReturn,
-			List<McpInputRequestModel> inputRequestDeclarations,
-			String requestStateMode,
-			List<McpPromptParameterBinding> bindings,
-			List<String> protocolVersions) {}
+	private record McpPromptModel(@NonNull ExecutableElement method, @NonNull String name,
+			@NonNull String title, @NonNull String description, boolean promptOutputReturn,
+			@NonNull List<@NonNull McpInputRequestModel> inputRequestDeclarations,
+			@NonNull String requestStateMode,
+			@NonNull List<@NonNull McpPromptParameterBinding> bindings,
+			@NonNull List<@NonNull String> protocolVersions) {}
 
-	private record McpInputRequestModel(String type,
-			String requirement) {}
+	private record McpInputRequestModel(@NonNull String type,
+			@NonNull String requirement) {}
 
-	private record McpParameterBinding(McpParameterBindingKind kind,
-			String publishedName, String carrierName, TypeMirror type, String title,
-			String description, @Nullable String headerName) {}
+	private record McpParameterBinding(@NonNull McpParameterBindingKind kind,
+			@Nullable String publishedName, @Nullable String carrierName, @NonNull TypeMirror type, @NonNull String title,
+			@NonNull String description, @Nullable String headerName) {
+		@NonNull
+		String toolArgumentName() {
+			if (kind != McpParameterBindingKind.TOOL_ARGUMENT || publishedName == null)
+				throw new IllegalStateException("A tool-argument binding is required for its published name.");
+			return publishedName;
+		}
+
+		@NonNull
+		String toolCarrierName() {
+			if (kind != McpParameterBindingKind.TOOL_ARGUMENT || carrierName == null)
+				throw new IllegalStateException("A tool-argument binding is required for its carrier name.");
+			return carrierName;
+		}
+	}
 
 	private enum McpParameterBindingKind {
 		REQUEST_CONTEXT,
@@ -5128,8 +5150,15 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 	private record McpPromptParameterBinding(
-			McpPromptParameterBindingKind kind, String publishedName,
-			String title, String description, boolean required) {}
+			@NonNull McpPromptParameterBindingKind kind, @Nullable String publishedName,
+			@NonNull String title, @NonNull String description, boolean required) {
+		@NonNull
+		String promptArgumentName() {
+			if (kind != McpPromptParameterBindingKind.PROMPT_ARGUMENT || publishedName == null)
+				throw new IllegalStateException("A prompt-argument binding is required for its published name.");
+			return publishedName;
+		}
+	}
 
 	private enum McpPromptParameterBindingKind {
 		REQUEST_CONTEXT,
@@ -5139,18 +5168,18 @@ public final class SokletProcessor extends AbstractProcessor {
 		PROMPT_ARGUMENT
 	}
 
-	private record McpResourceModel(ExecutableElement method, String address,
-			boolean template, String name, String title, String description,
-			String mimeType, long sizeInBytes,
-			long cacheTimeToLiveInMilliseconds, String cacheScope,
+	private record McpResourceModel(@NonNull ExecutableElement method, @NonNull String address,
+			boolean template, @NonNull String name, @NonNull String title, @NonNull String description,
+			@NonNull String mimeType, long sizeInBytes,
+			long cacheTimeToLiveInMilliseconds, @NonNull String cacheScope,
 			boolean resourceOutputReturn,
-			List<McpInputRequestModel> inputRequestDeclarations,
-			String requestStateMode,
-			List<McpResourceParameterBinding> bindings,
-			List<String> protocolVersions) {}
+			@NonNull List<@NonNull McpInputRequestModel> inputRequestDeclarations,
+			@NonNull String requestStateMode,
+			@NonNull List<@NonNull McpResourceParameterBinding> bindings,
+			@NonNull List<@NonNull String> protocolVersions) {}
 
 	private record McpResourceParameterBinding(
-			McpResourceParameterBindingKind kind,
+			@NonNull McpResourceParameterBindingKind kind,
 			@Nullable String variableName) {}
 
 	private enum McpResourceParameterBindingKind {
@@ -5162,11 +5191,11 @@ public final class SokletProcessor extends AbstractProcessor {
 		URI_PARAMETER
 	}
 
-	private record McpResourceListModel(ExecutableElement method,
-			List<McpResourceListParameterBinding> bindings,
-			List<String> protocolVersions) {}
+	private record McpResourceListModel(@NonNull ExecutableElement method,
+			@NonNull List<@NonNull McpResourceListParameterBinding> bindings,
+			@NonNull List<@NonNull String> protocolVersions) {}
 
-	private record McpTemplateLiteralToken(String value,
+	private record McpTemplateLiteralToken(@NonNull String value,
 			boolean variableConsumable, int sourceLength) {}
 
 	private enum McpResourceListParameterBinding {
@@ -5178,8 +5207,8 @@ public final class SokletProcessor extends AbstractProcessor {
 	}
 
 
-	private record ResourceMethodSpecificityKey(HttpMethod httpMethod,
-																							Boolean sseEventSource,
-			ResourcePathSpecificity specificity) {}
+	private record ResourceMethodSpecificityKey(@NonNull HttpMethod httpMethod,
+																							@NonNull Boolean sseEventSource,
+			@NonNull ResourcePathSpecificity specificity) {}
 
 }

@@ -102,7 +102,7 @@ final class McpLocalizationSchemaWalker {
 
 	@NonNull
 	static String childPointer(@NonNull String parent,
-			@NonNull String... segments) {
+			@NonNull String @NonNull ... segments) {
 		StringBuilder pointer = new StringBuilder(requireNonNull(parent));
 		for (String segment : requireNonNull(segments))
 			pointer.append('/').append(escape(requireNonNull(segment)));

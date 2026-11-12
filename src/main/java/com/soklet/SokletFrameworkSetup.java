@@ -16,6 +16,8 @@
 
 package com.soklet;
 
+
+import org.jspecify.annotations.Nullable;
 import com.soklet.annotation.SseEventSource;
 import org.jspecify.annotations.NonNull;
 
@@ -53,11 +55,11 @@ final class SokletFrameworkSetup {
 	@NonNull
 	private final SokletConfig config;
 	@NonNull
-	private final AtomicReference<State> state;
+	private final AtomicReference<@NonNull State> state;
 	@NonNull
-	private final AtomicReference<Set<ResourceMethod>> resourceMethods;
+	private final AtomicReference<@Nullable Set<@NonNull ResourceMethod>> resourceMethods;
 	@NonNull
-	private final AtomicReference<Throwable> failure;
+	private final AtomicReference<@Nullable Throwable> failure;
 
 	SokletFrameworkSetup(@NonNull SokletConfig config) {
 		this.config = requireNonNull(config);
@@ -68,7 +70,7 @@ final class SokletFrameworkSetup {
 
 	/** Runs the one setup attempt on the caller's tracked lifecycle worker. */
 	@NonNull
-	Set<ResourceMethod> run(@NonNull StartupContext startupContext,
+	Set<@NonNull ResourceMethod> run(@NonNull StartupContext startupContext,
 			@NonNull DeadlineWaiter waiter) {
 		requireNonNull(startupContext);
 		requireNonNull(waiter);
@@ -105,7 +107,7 @@ final class SokletFrameworkSetup {
 		}
 	}
 
-	private void warnAboutUnannotatedValueParameters(@NonNull Set<ResourceMethod> snapshot) {
+	private void warnAboutUnannotatedValueParameters(@NonNull Set<@NonNull ResourceMethod> snapshot) {
 		if (!(this.config.getResourceMethodParameterProvider() instanceof DefaultResourceMethodParameterProvider defaultProvider)
 				|| !(this.config.getInstanceProvider() instanceof DefaultInstanceProvider))
 			return;
@@ -116,7 +118,7 @@ final class SokletFrameworkSetup {
 	}
 
 	@NonNull
-	private Set<ResourceMethod> resolveResourceMethods(
+	private Set<@NonNull ResourceMethod> resolveResourceMethods(
 			@NonNull StartupContext startupContext,
 			@NonNull DeadlineWaiter waiter) {
 		ResourceMethodResolver resolver = this.config.getResourceMethodResolver();
@@ -128,7 +130,7 @@ final class SokletFrameworkSetup {
 	}
 
 	private void validateConfiguredTransports(
-			@NonNull Set<ResourceMethod> resourceMethods) {
+			@NonNull Set<@NonNull ResourceMethod> resourceMethods) {
 		if (resourceMethods.isEmpty()
 				&& (this.config.getHttpServer().isPresent()
 				|| this.config.getSseServer().isPresent()))
@@ -169,7 +171,7 @@ final class SokletFrameworkSetup {
 	}
 
 	static void validateNoRemovedHttpServerInjection(
-			@NonNull Set<ResourceMethod> resourceMethods) {
+			@NonNull Set<@NonNull ResourceMethod> resourceMethods) {
 		List<ResourceMethod> ordered = new ArrayList<>(
 				requireNonNull(resourceMethods));
 		ordered.sort(Comparator

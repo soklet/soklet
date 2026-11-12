@@ -16,6 +16,7 @@
 
 package com.soklet.internal.util;
 
+import org.jspecify.annotations.NonNull;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.function.BooleanSupplier;
 
@@ -81,7 +82,7 @@ public final class AcceptLoopBackoff {
 	 * {@code false} if it completed or ended early because {@code shouldStop} reported {@code true}
 	 */
 	public static boolean sleepBeforeRetry(long millis,
-																				 BooleanSupplier shouldStop) {
+																				 @NonNull BooleanSupplier shouldStop) {
 		long remainingMillis = millis;
 
 		while (remainingMillis > 0L) {

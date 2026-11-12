@@ -164,9 +164,9 @@ final class DefaultMcpLocalizationCatalogExtractor {
 	/** Retains all slots, but applies the aggregate guard only to the modern view. */
 	private static void addCatalogResponse(@NonNull McpEndpoint endpoint,
 			@NonNull CatalogAccumulator catalog,
-			@NonNull List<McpCanonicalLocalizationPlan.ResponsePlan> responses,
-			McpCanonicalLocalizationPlan.ResponseKind kind,
-			@NonNull List<McpCanonicalLocalizationPlan.Slot> slots,
+			@NonNull List<McpCanonicalLocalizationPlan.@NonNull ResponsePlan> responses,
+			McpCanonicalLocalizationPlan.@NonNull ResponseKind kind,
+			@NonNull List<McpCanonicalLocalizationPlan.@NonNull Slot> slots,
 			int maximumLocalizableTextCountPerResponse,
 			boolean deferCallerProjectionBound) {
 		List<McpCanonicalLocalizationPlan.Slot> responseSlots = new ArrayList<>(slots);
@@ -235,7 +235,7 @@ final class DefaultMcpLocalizationCatalogExtractor {
 		};
 	}
 
-	private static boolean hasModernResourceSurface(McpEndpoint endpoint) {
+	private static boolean hasModernResourceSurface(@NonNull McpEndpoint endpoint) {
 		return !endpoint.skillIndex().registrations().isEmpty()
 				|| endpoint.getSkillListHandler().isPresent()
 				|| endpoint.getResourceRegistrations().stream().anyMatch(resource ->
@@ -243,20 +243,20 @@ final class DefaultMcpLocalizationCatalogExtractor {
 	}
 
 	private static void addResponse(
-			@NonNull List<McpCanonicalLocalizationPlan.ResponsePlan>
+			@NonNull List<McpCanonicalLocalizationPlan.@NonNull ResponsePlan>
 					responses,
-			McpCanonicalLocalizationPlan.ResponseKind kind,
-			@NonNull List<McpCanonicalLocalizationPlan.Slot> slots,
+			McpCanonicalLocalizationPlan.@NonNull ResponseKind kind,
+			@NonNull List<McpCanonicalLocalizationPlan.@NonNull Slot> slots,
 			int maximumLocalizableTextCountPerResponse) {
 		addResponse(responses, kind, slots,
 				maximumLocalizableTextCountPerResponse, false);
 	}
 
 	private static void addResponse(
-			@NonNull List<McpCanonicalLocalizationPlan.ResponsePlan>
+			@NonNull List<McpCanonicalLocalizationPlan.@NonNull ResponsePlan>
 					responses,
-			McpCanonicalLocalizationPlan.ResponseKind kind,
-			@NonNull List<McpCanonicalLocalizationPlan.Slot> slots,
+			McpCanonicalLocalizationPlan.@NonNull ResponseKind kind,
+			@NonNull List<McpCanonicalLocalizationPlan.@NonNull Slot> slots,
 			int maximumLocalizableTextCountPerResponse,
 			boolean deferResponseBound) {
 		if (slots.isEmpty())
@@ -272,7 +272,7 @@ final class DefaultMcpLocalizationCatalogExtractor {
 	}
 
 	@NonNull
-	private static List<McpCanonicalLocalizationPlan.Slot>
+	private static List<McpCanonicalLocalizationPlan.@NonNull Slot>
 			discoverySlots(@NonNull McpEndpoint endpoint,
 			@NonNull CatalogAccumulator catalog) {
 		List<McpCanonicalLocalizationPlan.Slot> slots =
@@ -284,7 +284,7 @@ final class DefaultMcpLocalizationCatalogExtractor {
 	}
 
 	@NonNull
-	private static List<McpCanonicalLocalizationPlan.Slot>
+	private static List<McpCanonicalLocalizationPlan.@NonNull Slot>
 			serverInformationSlots(@NonNull McpEndpoint endpoint,
 			@NonNull CatalogAccumulator catalog) {
 		if (!endpoint.isServerInfoIncluded())
@@ -294,7 +294,7 @@ final class DefaultMcpLocalizationCatalogExtractor {
 
 	/** Legacy initialization always publishes serverInfo, independently of result metadata. */
 	@NonNull
-	private static List<McpCanonicalLocalizationPlan.Slot> initializationSlots(
+	private static List<McpCanonicalLocalizationPlan.@NonNull Slot> initializationSlots(
 			@NonNull McpEndpoint endpoint, @NonNull CatalogAccumulator catalog,
 			boolean descriptionIncluded) {
 		List<McpCanonicalLocalizationPlan.Slot> slots = new ArrayList<>(
@@ -306,7 +306,7 @@ final class DefaultMcpLocalizationCatalogExtractor {
 	}
 
 	@NonNull
-	private static List<McpCanonicalLocalizationPlan.Slot> implementationSlots(
+	private static List<McpCanonicalLocalizationPlan.@NonNull Slot> implementationSlots(
 			@NonNull McpEndpoint endpoint, @NonNull CatalogAccumulator catalog,
 			@NonNull String targetPointer, boolean descriptionIncluded) {
 		McpImplementation information = endpoint.getServerInfo();
@@ -325,7 +325,7 @@ final class DefaultMcpLocalizationCatalogExtractor {
 	}
 
 	@NonNull
-	private static List<McpCanonicalLocalizationPlan.Slot> toolSlots(
+	private static List<McpCanonicalLocalizationPlan.@NonNull Slot> toolSlots(
 			@NonNull McpEndpoint endpoint,
 			@NonNull CatalogAccumulator catalog) {
 		List<McpCanonicalLocalizationPlan.Slot> slots = new ArrayList<>();
@@ -355,7 +355,7 @@ final class DefaultMcpLocalizationCatalogExtractor {
 	}
 
 	private static void addSchemaSlots(
-			@NonNull List<McpCanonicalLocalizationPlan.Slot> slots,
+			@NonNull List<McpCanonicalLocalizationPlan.@NonNull Slot> slots,
 			@NonNull CatalogAccumulator catalog, @NonNull String endpointPath,
 			@NonNull String toolName, @NonNull String coordinatePrefix,
 			@NonNull String targetPrefix, @NonNull McpJsonObject document) {
@@ -369,7 +369,7 @@ final class DefaultMcpLocalizationCatalogExtractor {
 	}
 
 	@NonNull
-	private static List<McpCanonicalLocalizationPlan.Slot> promptSlots(
+	private static List<McpCanonicalLocalizationPlan.@NonNull Slot> promptSlots(
 			@NonNull McpEndpoint endpoint,
 			@NonNull CatalogAccumulator catalog) {
 		List<McpCanonicalLocalizationPlan.Slot> slots = new ArrayList<>();
@@ -406,7 +406,7 @@ final class DefaultMcpLocalizationCatalogExtractor {
 	}
 
 	@NonNull
-	private static List<McpCanonicalLocalizationPlan.Slot>
+	private static List<McpCanonicalLocalizationPlan.@NonNull Slot>
 			exactResourceSlots(@NonNull McpEndpoint endpoint,
 			@NonNull CatalogAccumulator catalog) {
 		// A custom resources/list handler owns its descriptors and cursors. Keep
@@ -433,7 +433,7 @@ final class DefaultMcpLocalizationCatalogExtractor {
 	}
 
 	@NonNull
-	private static List<McpCanonicalLocalizationPlan.Slot>
+	private static List<McpCanonicalLocalizationPlan.@NonNull Slot>
 			resourceTemplateSlots(@NonNull McpEndpoint endpoint,
 			@NonNull CatalogAccumulator catalog) {
 		List<McpCanonicalLocalizationPlan.Slot> slots = new ArrayList<>();
@@ -457,7 +457,7 @@ final class DefaultMcpLocalizationCatalogExtractor {
 	}
 
 	private static void addFixedIfNonblank(
-			@NonNull List<McpCanonicalLocalizationPlan.Slot> slots,
+			@NonNull List<McpCanonicalLocalizationPlan.@NonNull Slot> slots,
 			@NonNull CatalogAccumulator catalog, @NonNull String endpointPath,
 			@NonNull McpTextOwnerType ownerType,
 			@NonNull String subjectId, @NonNull String memberPath,
@@ -471,7 +471,7 @@ final class DefaultMcpLocalizationCatalogExtractor {
 	}
 
 	private static void addOwnerIfNonblank(
-			@NonNull List<McpCanonicalLocalizationPlan.Slot> slots,
+			@NonNull List<McpCanonicalLocalizationPlan.@NonNull Slot> slots,
 			@NonNull CatalogAccumulator catalog, @NonNull String endpointPath,
 			@NonNull McpTextOwnerType ownerType,
 			@NonNull String subjectId, @NonNull String memberPath,
@@ -486,7 +486,7 @@ final class DefaultMcpLocalizationCatalogExtractor {
 	}
 
 	private static void addPromptArgumentIfNonblank(
-			@NonNull List<McpCanonicalLocalizationPlan.Slot> slots,
+			@NonNull List<McpCanonicalLocalizationPlan.@NonNull Slot> slots,
 			@NonNull CatalogAccumulator catalog, @NonNull String endpointPath,
 			@NonNull McpTextOwnerType ownerType,
 			@NonNull String subjectId, @NonNull String memberPath,

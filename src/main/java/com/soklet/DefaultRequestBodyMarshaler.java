@@ -47,7 +47,7 @@ final class DefaultRequestBodyMarshaler implements RequestBodyMarshaler {
 
 	@NonNull
 	@Override
-	public Optional<Object> marshalRequestBody(@NonNull Request request,
+	public Optional<@NonNull Object> marshalRequestBody(@NonNull Request request,
 																						 @NonNull ResourceMethod resourceMethod,
 																						 @NonNull Parameter parameter,
 																						 @NonNull Type requestBodyType) {

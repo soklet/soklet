@@ -28,7 +28,7 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 final class LifecycleObserverLogFallback {
 	static final int MAXIMUM_UTF8_BYTES = 1_024;
-	private static final String EMERGENCY_RECORD =
+	private static final @NonNull String EMERGENCY_RECORD =
 			"soklet-lifecycle-observer-log-failure\n";
 
 	private LifecycleObserverLogFallback() {
@@ -50,7 +50,7 @@ final class LifecycleObserverLogFallback {
 		dispatcher.dispatch(() -> write(exactFailure, exactErrorStream));
 	}
 
-	private static void write(Throwable exactFailure, PrintStream exactErrorStream) {
+	private static void write(@NonNull Throwable exactFailure, @NonNull PrintStream exactErrorStream) {
 		byte[] record;
 		try {
 			record = DefaultLifecycleTerminalReporter.utf8Prefix(

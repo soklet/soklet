@@ -42,7 +42,7 @@ final class McpRequestStatePlaintextCodec {
 	private static final int SHA_256_BYTES = 32;
 	private static final int SHA_256_BASE64URL_CHARACTERS = 43;
 	private static final int MAXIMUM_SELECTED_LOCALE_BYTES = 255;
-	private static final Set<@NonNull String> VERSION_1_FIELDS = Set.of(
+	private static final @NonNull Set<@NonNull String> VERSION_1_FIELDS = Set.of(
 			"version", "bindingDigest", "issuedAtEpochSecond",
 			"issuedAtNanoAdjustment", "expiresAtEpochSecond",
 			"expiresAtNanoAdjustment", "round", "originatingRequestId", "state");
@@ -274,7 +274,7 @@ final class McpRequestStatePlaintextCodec {
 
 	@NonNull
 	private static BigDecimal requireNumber(
-			@NonNull Map<String, McpJsonValue> fields,
+			@NonNull Map<@NonNull String, @NonNull McpJsonValue> fields,
 			@NonNull String fieldName) {
 		McpJsonValue value = requireField(fields, fieldName);
 		if (!(value instanceof McpJsonNumber number))
@@ -283,7 +283,7 @@ final class McpRequestStatePlaintextCodec {
 	}
 
 	private static int requireInt(
-			@NonNull Map<String, McpJsonValue> fields,
+			@NonNull Map<@NonNull String, @NonNull McpJsonValue> fields,
 			@NonNull String fieldName) {
 		BigDecimal decimal = requireNumber(fields, fieldName);
 		if (decimal.compareTo(BigDecimal.valueOf(Integer.MIN_VALUE)) < 0
@@ -297,7 +297,7 @@ final class McpRequestStatePlaintextCodec {
 	}
 
 	private static long requireLong(
-			@NonNull Map<String, McpJsonValue> fields,
+			@NonNull Map<@NonNull String, @NonNull McpJsonValue> fields,
 			@NonNull String fieldName) {
 		BigDecimal decimal = requireNumber(fields, fieldName);
 		if (decimal.compareTo(BigDecimal.valueOf(Long.MIN_VALUE)) < 0
@@ -312,7 +312,7 @@ final class McpRequestStatePlaintextCodec {
 
 	@NonNull
 	private static String requireString(
-			@NonNull Map<String, McpJsonValue> fields,
+			@NonNull Map<@NonNull String, @NonNull McpJsonValue> fields,
 			@NonNull String fieldName) {
 		McpJsonValue value = requireField(fields, fieldName);
 		if (!(value instanceof McpJsonString string))
@@ -322,7 +322,7 @@ final class McpRequestStatePlaintextCodec {
 
 	@NonNull
 	private static McpJsonValue requireField(
-			@NonNull Map<String, McpJsonValue> fields,
+			@NonNull Map<@NonNull String, @NonNull McpJsonValue> fields,
 			@NonNull String fieldName) {
 		McpJsonValue value = fields.get(fieldName);
 		if (value == null)

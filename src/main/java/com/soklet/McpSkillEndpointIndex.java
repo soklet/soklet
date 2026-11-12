@@ -11,12 +11,15 @@
  */
 package com.soklet;
 
+
+import org.jspecify.annotations.NonNull;
 import com.soklet.internal.mcp.protocol.McpJsonNumber;
 import com.soklet.internal.mcp.protocol.McpJsonObject;
 import com.soklet.internal.mcp.protocol.McpJsonString;
 import com.soklet.internal.mcp.protocol.McpJsonValue;
 import com.soklet.internal.mcp.protocol.McpSkillResourceCollisionValidator;
 import com.soklet.internal.mcp.skills.McpSkillRuntimeBridge;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.net.URI;
@@ -42,11 +45,11 @@ import java.util.Set;
 @ThreadSafe
 final class McpSkillEndpointIndex {
 	private static final int MAXIMUM_FILE_OWNERS = 16;
-	private final List<McpSkillRegistration> registrations;
-	private final Map<URI, McpSkillRegistration> registrationsByUri;
-	private final Map<URI, File> files;
+	private final @NonNull List<@NonNull McpSkillRegistration> registrations;
+	private final @NonNull Map<@NonNull URI, @NonNull McpSkillRegistration> registrationsByUri;
+	private final @NonNull Map<@NonNull URI, @NonNull File> files;
 
-	private McpSkillEndpointIndex(List<McpSkillRegistration> registrations, Map<URI, File> files) {
+	private McpSkillEndpointIndex(@NonNull List<@NonNull McpSkillRegistration> registrations, @NonNull Map<@NonNull URI, @NonNull File> files) {
 		this.registrations = List.copyOf(registrations);
 		Map<URI, McpSkillRegistration> byUri = new LinkedHashMap<>();
 		for (McpSkillRegistration registration : registrations) byUri.put(registration.getUri(), registration);
@@ -54,8 +57,8 @@ final class McpSkillEndpointIndex {
 		this.files = Collections.unmodifiableMap(files);
 	}
 
-	static McpSkillEndpointIndex from(List<McpSkillRegistration> standalone, List<McpSkillGroup> groups,
-			List<McpResourceRegistration> resources) {
+	static @NonNull McpSkillEndpointIndex from(@NonNull List<@NonNull McpSkillRegistration> standalone, @NonNull List<@NonNull McpSkillGroup> groups,
+			@NonNull List<@NonNull McpResourceRegistration> resources) {
 		List<McpSkillRegistration> aggregate = new ArrayList<>();
 		Set<String> names = new HashSet<>();
 		Set<String> keys = new HashSet<>();
@@ -101,8 +104,8 @@ final class McpSkillEndpointIndex {
 		return new McpSkillEndpointIndex(aggregate, files);
 	}
 
-	private static void addRegistration(McpSkillRegistration registration,
-			List<McpSkillRegistration> aggregate, Set<URI> roots) {
+	private static void addRegistration(@NonNull McpSkillRegistration registration,
+			@NonNull List<@NonNull McpSkillRegistration> aggregate, @NonNull Set<@NonNull URI> roots) {
 		if (!roots.add(registration.getUri())) throw invalid();
 		aggregate.add(registration);
 	}
@@ -113,7 +116,7 @@ final class McpSkillEndpointIndex {
 	 * Origin keys use URI.equals; path segments fold only percent-escape hex case,
 	 * never encoded versus literal characters, path case, or registry authorities.
 	 */
-	private static void requireCompleteDescendants(List<McpSkillRegistration> registrations) {
+	private static void requireCompleteDescendants(@NonNull List<@NonNull McpSkillRegistration> registrations) {
 		Map<URI, Directory> origins = new HashMap<>();
 		for (McpSkillRegistration registration : registrations) {
 			Directory directory = origins.computeIfAbsent(origin(registration.getUri()), ignored -> new Directory());
@@ -134,12 +137,12 @@ final class McpSkillEndpointIndex {
 		}
 	}
 
-	private static URI origin(URI uri) {
+	private static @NonNull URI origin(@NonNull URI uri) {
 		String value = uri.toString();
 		return URI.create(value.substring(0, value.length() - uri.getRawPath().length()) + "/");
 	}
 
-	private static List<String> directorySegments(URI uri) {
+	private static @NonNull List<@NonNull String> directorySegments(@NonNull URI uri) {
 		String path = uri.getRawPath();
 		String directory = path.substring(1, path.length() - "SKILL.md".length());
 		if (directory.isEmpty()) return List.of();
@@ -160,9 +163,9 @@ final class McpSkillEndpointIndex {
 		return List.of(segments);
 	}
 
-	List<McpSkillRegistration> registrations() { return this.registrations; }
-	List<File> files() { return List.copyOf(this.files.values()); }
-	static void preflight(McpEndpoint endpoint) {
+	@NonNull List<@NonNull McpSkillRegistration> registrations() { return this.registrations; }
+	@NonNull List<@NonNull File> files() { return List.copyOf(this.files.values()); }
+	static void preflight(@NonNull McpEndpoint endpoint) {
 		List<List<McpSkillRuntimeBridge.Registration>> slots = new ArrayList<>();
 		for (McpSkillRegistration registration : endpoint.getSkillRegistrations())
 			slots.add(List.of(registration.runtimeRegistration()));
@@ -172,31 +175,31 @@ final class McpSkillEndpointIndex {
 		McpSkillRuntimeBridge.preflightEndpoint(endpoint.getServerInfo(), endpoint.isServerInfoIncluded(),
 				slots, endpoint.getSkillListHandler().isEmpty());
 	}
-	Optional<McpSkillRegistration> findRegistration(URI uri) {
+	@NonNull Optional<@NonNull McpSkillRegistration> findRegistration(@NonNull URI uri) {
 		return Optional.ofNullable(this.registrationsByUri.get(uri));
 	}
-	Optional<File> findFile(URI uri) { return Optional.ofNullable(this.files.get(uri)); }
+	@NonNull Optional<@NonNull File> findFile(@NonNull URI uri) { return Optional.ofNullable(this.files.get(uri)); }
 
 	/** Cache and representation are fixed over every owner, never just an allowed owner. */
-	record File(URI uri, List<McpSkillRegistration> owners, McpCachePolicy cachePolicy, McpJsonObject readResult) {
+	record File(@NonNull URI uri, @NonNull List<@NonNull McpSkillRegistration> owners, @NonNull McpCachePolicy cachePolicy, @NonNull McpJsonObject readResult) {
 		File { owners = List.copyOf(owners); }
-		@Override public String toString() { return "McpSkillEndpointIndex.File[redacted]"; }
+		@Override public @NonNull String toString() { return "McpSkillEndpointIndex.File[redacted]"; }
 	}
 
 	private static final class PendingFile {
-		private final URI uri;
-		private final List<McpSkillRegistration> owners = new ArrayList<>();
-		private Duration timeToLive;
+		private final @NonNull URI uri;
+		private final @NonNull List<@NonNull McpSkillRegistration> owners = new ArrayList<>();
+		private @NonNull Duration timeToLive;
 		private boolean privateScope;
 
-		private PendingFile(URI uri, McpSkillRegistration owner) {
+		private PendingFile(@NonNull URI uri, @NonNull McpSkillRegistration owner) {
 			this.uri = uri;
 			this.owners.add(owner);
 			this.timeToLive = owner.getCachePolicy().getTimeToLive();
 			this.privateScope = owner.getCachePolicy().getScope() == McpCacheScope.PRIVATE;
 		}
 
-		private void addOwner(McpSkillRegistration owner) {
+		private void addOwner(@NonNull McpSkillRegistration owner) {
 			if (this.owners.size() == MAXIMUM_FILE_OWNERS
 					|| !this.owners.get(0).runtimeRegistration().hasSameFile(this.uri, owner.runtimeRegistration()))
 				throw invalid();
@@ -206,7 +209,7 @@ final class McpSkillEndpointIndex {
 			if (policy.getTimeToLive().compareTo(this.timeToLive) < 0) this.timeToLive = policy.getTimeToLive();
 		}
 
-		private File freeze() {
+		private @NonNull File freeze() {
 			McpCachePolicy policy = this.privateScope ? McpCachePolicy.fromPrivateTimeToLive(this.timeToLive)
 					: McpCachePolicy.fromPublicTimeToLive(this.timeToLive);
 			McpJsonObject original = this.owners.get(0).runtimeRegistration().findReadResult(this.uri).orElseThrow();
@@ -218,13 +221,13 @@ final class McpSkillEndpointIndex {
 	}
 
 	private static final class Directory {
-		private final Map<String, Directory> children = new HashMap<>();
-		private McpSkillRegistration registration;
+		private final @NonNull Map<@NonNull String, @NonNull Directory> children = new HashMap<>();
+		private @Nullable McpSkillRegistration registration;
 	}
 
-	private static IllegalStateException invalid() {
+	private static @NonNull IllegalStateException invalid() {
 		return new IllegalStateException("Conflicting or incomplete MCP Skills endpoint configuration.");
 	}
 
-	@Override public String toString() { return "McpSkillEndpointIndex[redacted]"; }
+	@Override public @NonNull String toString() { return "McpSkillEndpointIndex[redacted]"; }
 }

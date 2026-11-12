@@ -68,7 +68,7 @@ import static java.util.Objects.requireNonNull;
 public final class Utilities {
 	private static final byte @NonNull [] EMPTY_BYTE_ARRAY;
 	// Header maps compare names without case; their value-object hashes must do so too.
-	static int headerHashCode(Map<String, List<String>> headers) {
+	static int headerHashCode(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
 		int hash = 0;
 		for (Map.Entry<String, List<String>> header : headers.entrySet())
 			hash += header.getKey().toLowerCase(Locale.ROOT).hashCode() ^ header.getValue().hashCode();
@@ -291,7 +291,7 @@ public final class Utilities {
 	}
 
 	@NonNull
-	static Optional<List<@NonNull String>> extractQueryParameterValuesFromQuery(@NonNull String query,
+	static Optional<@NonNull List<@NonNull String>> extractQueryParameterValuesFromQuery(@NonNull String query,
 																																						 @NonNull String name,
 																																						 @NonNull QueryFormat queryFormat,
 																																						 @NonNull Charset charset) {
@@ -654,7 +654,7 @@ public final class Utilities {
 	 * Splits a Cookie header string into components on ';' but ONLY when not inside a quoted value.
 	 * Supports backslash-escaped quotes within quoted strings.
 	 */
-	private static List<@NonNull String> splitCookieHeaderRespectingQuotes(@NonNull String headerValue) {
+	private static @NonNull List<@NonNull String> splitCookieHeaderRespectingQuotes(@NonNull String headerValue) {
 		List<@NonNull String> parts = new ArrayList<>();
 		StringBuilder current = new StringBuilder(headerValue.length());
 		boolean inQuotes = false;
@@ -888,7 +888,7 @@ public final class Utilities {
 	}
 
 	@NonNull
-	static Optional<String> extractRawQueryFromUrlStrict(@NonNull String url) {
+	static Optional<@NonNull String> extractRawQueryFromUrlStrict(@NonNull String url) {
 		requireNonNull(url);
 
 		url = trimAggressivelyToEmpty(url);
@@ -1138,7 +1138,7 @@ public final class Utilities {
 	}
 
 	@Nullable
-	private static String firstHeaderValue(@Nullable List<String> headerValues) {
+	private static String firstHeaderValue(@Nullable List<@NonNull String> headerValues) {
 		if (headerValues == null || headerValues.isEmpty())
 			return null;
 
@@ -1157,7 +1157,7 @@ public final class Utilities {
 		return null;
 	}
 
-	static void addVaryHeader(@NonNull Map<String, List<String>> headers, @NonNull String fieldName) {
+	static void addVaryHeader(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers, @NonNull String fieldName) {
 		List<String> values = headers.getOrDefault("Vary", List.of());
 		for (String value : values) {
 			for (String token : value.split(",", -1)) {
@@ -1223,7 +1223,7 @@ public final class Utilities {
 	 * @return the effective origin, or {@link Optional#empty()} if it could not be determined
 	 */
 	@NonNull
-	static Optional<String> extractEffectiveOrigin(@NonNull EffectiveOriginResolver effectiveOriginResolver) {
+	static Optional<@NonNull String> extractEffectiveOrigin(@NonNull EffectiveOriginResolver effectiveOriginResolver) {
 		requireNonNull(effectiveOriginResolver);
 		requireNonNull(effectiveOriginResolver.getHeaders());
 		requireNonNull(effectiveOriginResolver.getTrustPolicy());
@@ -1485,13 +1485,13 @@ public final class Utilities {
 	}
 
 	@Nullable
-	private static String forwardedOriginValue(@Nullable List<String> values, EffectiveOriginResolver.@NonNull TrustPolicy trustPolicy) {
+	private static String forwardedOriginValue(@Nullable List<@NonNull String> values, EffectiveOriginResolver.@NonNull TrustPolicy trustPolicy) {
 		return trustPolicy == EffectiveOriginResolver.TrustPolicy.TRUST_PROXY_ALLOWLIST
 				? nearestForwardedEntry(values) : firstHeaderValue(values);
 	}
 
 	@Nullable
-	private static String nearestForwardedEntry(@Nullable List<String> values) {
+	private static String nearestForwardedEntry(@Nullable List<@NonNull String> values) {
 		if (values == null || values.isEmpty())
 			return null;
 		String lastValue = values.get(values.size() - 1);
@@ -1588,7 +1588,7 @@ public final class Utilities {
 	 * @return the effective client IP address, or {@link Optional#empty()} if it could not be determined
 	 */
 	@NonNull
-	static Optional<InetAddress> extractEffectiveClientIp(@NonNull EffectiveClientIpResolver effectiveClientIpResolver) {
+	static Optional<@NonNull InetAddress> extractEffectiveClientIp(@NonNull EffectiveClientIpResolver effectiveClientIpResolver) {
 		requireNonNull(effectiveClientIpResolver);
 		requireNonNull(effectiveClientIpResolver.getHeaders());
 		requireNonNull(effectiveClientIpResolver.getTrustPolicy());
@@ -1661,7 +1661,7 @@ public final class Utilities {
 	}
 
 	@NonNull
-	private static Optional<InetAddress> leftmostAddress(@NonNull List<@NonNull Optional<InetAddress>> addresses) {
+	private static Optional<@NonNull InetAddress> leftmostAddress(@NonNull List<@NonNull Optional<@NonNull InetAddress>> addresses) {
 		requireNonNull(addresses);
 		for (Optional<InetAddress> address : addresses)
 			if (address.isPresent())
@@ -1669,11 +1669,11 @@ public final class Utilities {
 		return Optional.empty();
 	}
 
-	private record ClientIpSelection(@NonNull Optional<InetAddress> address, boolean blocked) {}
+	private record ClientIpSelection(@NonNull Optional<@NonNull InetAddress> address, boolean blocked) {}
 
 	@NonNull
-	private static ClientIpSelection firstUntrustedAddressFromRight(@NonNull List<@NonNull Optional<InetAddress>> addresses,
-																																		 @Nullable Predicate<InetSocketAddress> trustedProxyPredicate) {
+	private static ClientIpSelection firstUntrustedAddressFromRight(@NonNull List<@NonNull Optional<@NonNull InetAddress>> addresses,
+																																		 @Nullable Predicate<@NonNull InetSocketAddress> trustedProxyPredicate) {
 		requireNonNull(addresses);
 
 		if (trustedProxyPredicate == null)
@@ -1697,7 +1697,7 @@ public final class Utilities {
 	}
 
 	@NonNull
-	private static List<@NonNull Optional<InetAddress>> forwardedForAddresses(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
+	private static List<@NonNull Optional<@NonNull InetAddress>> forwardedForAddresses(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
 		requireNonNull(headers);
 		List<String> forwardedHeaders = headers.get("Forwarded");
 
@@ -1744,7 +1744,7 @@ public final class Utilities {
 	}
 
 	@NonNull
-	private static List<@NonNull Optional<InetAddress>> xForwardedForAddresses(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
+	private static List<@NonNull Optional<@NonNull InetAddress>> xForwardedForAddresses(@NonNull Map<@NonNull String, @NonNull List<@NonNull String>> headers) {
 		requireNonNull(headers);
 		List<String> xForwardedForHeaders = headers.get("X-Forwarded-For");
 
@@ -1768,12 +1768,12 @@ public final class Utilities {
 	}
 
 	@NonNull
-	private static Optional<InetAddress> parseForwardedIpLiteral(@Nullable String value) {
+	private static Optional<@NonNull InetAddress> parseForwardedIpLiteral(@Nullable String value) {
 		return parseForwardedIpLiteral(value, true);
 	}
 
 	@NonNull
-	private static Optional<InetAddress> parseForwardedIpLiteral(@Nullable String value, boolean stripQuotes) {
+	private static Optional<@NonNull InetAddress> parseForwardedIpLiteral(@Nullable String value, boolean stripQuotes) {
 		if (!stripQuotes && value != null) {
 			// Decoded RFC node identifiers cannot contain quotation or whitespace.
 			// Do not let the legacy parser's trimming or unquoting reinterpret them.
@@ -1827,7 +1827,7 @@ public final class Utilities {
 	}
 
 	@NonNull
-	static Optional<InetAddress> parseIpLiteral(@Nullable String value) {
+	static Optional<@NonNull InetAddress> parseIpLiteral(@Nullable String value) {
 		String trimmed = trimAggressivelyToNull(value);
 
 		if (trimmed == null)
@@ -1842,7 +1842,7 @@ public final class Utilities {
 	}
 
 	@NonNull
-	private static Optional<InetAddress> parseIpv4Literal(@Nullable String value) {
+	private static Optional<@NonNull InetAddress> parseIpv4Literal(@Nullable String value) {
 		String trimmed = trimAggressivelyToNull(value);
 
 		if (trimmed == null)
@@ -1890,7 +1890,7 @@ public final class Utilities {
 	}
 
 	@NonNull
-	private static Optional<InetAddress> parseIpv6Literal(@Nullable String value) {
+	private static Optional<@NonNull InetAddress> parseIpv6Literal(@Nullable String value) {
 		String trimmed = trimAggressivelyToNull(value);
 
 		return HostHeaderValidator.parseIpv6AddressLiteral(trimmed);
@@ -2045,9 +2045,9 @@ public final class Utilities {
 	// Initialize once, on first use, rather than asking providers about each
 	// client-supplied name. Include aliases to preserve installed-charset support.
 	private static final class HeaderCharsets {
-		private static final Map<String, Charset> BY_NAME = byName();
+		private static final @NonNull Map<@NonNull String, @NonNull Charset> BY_NAME = byName();
 
-		private static Map<String, Charset> byName() {
+		private static @NonNull Map<@NonNull String, @NonNull Charset> byName() {
 			Map<String, Charset> result = new LinkedHashMap<>();
 			for (Charset charset : Charset.availableCharsets().values()) {
 				result.put(charset.name().toLowerCase(Locale.ROOT), charset);
@@ -2349,7 +2349,7 @@ public final class Utilities {
 	 * Header parsing helper
 	 */
 	@NonNull
-	private static List<String> unfold(@NonNull List<String> raw) {
+	private static List<@NonNull String> unfold(@NonNull List<@NonNull String> raw) {
 		requireNonNull(raw);
 		if (raw.isEmpty()) return List.of();
 
@@ -2384,7 +2384,7 @@ public final class Utilities {
 	 * Header parsing helper: split on commas that are not inside a quoted-string; supports \" escapes inside quotes.
 	 */
 	@NonNull
-	private static List<String> splitCommaAware(@NonNull String string) {
+	private static List<@NonNull String> splitCommaAware(@NonNull String string) {
 		requireNonNull(string);
 
 		List<String> out = new ArrayList<>(4);
@@ -2425,7 +2425,7 @@ public final class Utilities {
 	 * Header parsing helper: split on semicolons that are not inside a quoted-string; supports \" escapes inside quotes.
 	 */
 	@NonNull
-	static List<String> splitSemicolonAware(@NonNull String string) {
+	static List<@NonNull String> splitSemicolonAware(@NonNull String string) {
 		requireNonNull(string);
 
 		List<String> out = new ArrayList<>(4);
@@ -2501,13 +2501,13 @@ public final class Utilities {
 		}
 
 		@NonNull
-		public Optional<Integer> getPort() {
+		public Optional<@NonNull Integer> getPort() {
 			return Optional.ofNullable(this.port);
 		}
 	}
 
 	@NonNull
-	private static Optional<HostPort> parseForwardedHostPort(@Nullable String input) {
+	private static Optional<@NonNull HostPort> parseForwardedHostPort(@Nullable String input) {
 		input = trimAggressivelyToNull(input);
 
 		if (input == null)
@@ -2522,12 +2522,12 @@ public final class Utilities {
 	}
 
 	@NonNull
-	private static Optional<HostPort> parseHostPort(@Nullable String input) {
+	private static Optional<@NonNull HostPort> parseHostPort(@Nullable String input) {
 		return parseHostPort(input, true);
 	}
 
 	@NonNull
-	private static Optional<HostPort> parseHostPort(@Nullable String input, boolean stripQuotes) {
+	private static Optional<@NonNull HostPort> parseHostPort(@Nullable String input, boolean stripQuotes) {
 		input = trimAggressivelyToNull(input);
 
 		if (input == null)

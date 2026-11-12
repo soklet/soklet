@@ -15,6 +15,8 @@
 
 package com.soklet;
 
+
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
@@ -45,17 +47,17 @@ import static java.util.Objects.requireNonNull;
  * by a writer that violates the immutable-tree contract.
  */
 final class SecureStaticFileRoot {
-	private final Path configuredRoot;
-	private final Path declaredRoot;
-	private final Path resolvedRoot;
-	private final DirectoryIdentity rootIdentity;
+	private final @NonNull Path configuredRoot;
+	private final @NonNull Path declaredRoot;
+	private final @NonNull Path resolvedRoot;
+	private final @NonNull DirectoryIdentity rootIdentity;
 	private final boolean secureDirectoryStreams;
 
-	SecureStaticFileRoot(Path configuredRoot) {
+	SecureStaticFileRoot(@NonNull Path configuredRoot) {
 		this(configuredRoot, configuredRoot);
 	}
 
-	SecureStaticFileRoot(Path configuredRoot, Path declaredRoot) {
+	SecureStaticFileRoot(@NonNull Path configuredRoot, @NonNull Path declaredRoot) {
 		this.declaredRoot = requireNonNull(declaredRoot).toAbsolutePath().normalize();
 		this.configuredRoot = requireNonNull(configuredRoot).toAbsolutePath().normalize();
 		try {
@@ -83,7 +85,7 @@ final class SecureStaticFileRoot {
 		}
 	}
 
-	SeekableByteChannel open(Path file, BasicFileAttributes expected) throws IOException {
+	@NonNull SeekableByteChannel open(@NonNull Path file, @NonNull BasicFileAttributes expected) throws IOException {
 		try {
 			return openWithProvider(file, expected);
 		} catch (UnsupportedOperationException | IllegalArgumentException failure) {
@@ -91,7 +93,7 @@ final class SecureStaticFileRoot {
 		}
 	}
 
-	private SeekableByteChannel openWithProvider(Path file, BasicFileAttributes expected) throws IOException {
+	private @NonNull SeekableByteChannel openWithProvider(@NonNull Path file, @NonNull BasicFileAttributes expected) throws IOException {
 		requireNonNull(file);
 		if (!sameInstance(file.getFileSystem(), this.configuredRoot.getFileSystem()) || !file.isAbsolute()
 				|| !file.equals(file.normalize()) || !file.startsWith(this.configuredRoot))
@@ -129,8 +131,8 @@ final class SecureStaticFileRoot {
 		}
 	}
 
-	private SeekableByteChannel openSecure(Path relative, List<DirectoryIdentity> directoryKeys,
-			BasicFileAttributes expected) throws IOException {
+	private @NonNull SeekableByteChannel openSecure(@NonNull Path relative, @NonNull List<@NonNull DirectoryIdentity> directoryKeys,
+			@NonNull BasicFileAttributes expected) throws IOException {
 		SeekableByteChannel channel = null;
 		try (DirectoryStream<Path> root = Files.newDirectoryStream(this.resolvedRoot)) {
 			if (!(root instanceof SecureDirectoryStream<Path> secureRoot))
@@ -183,7 +185,7 @@ final class SecureStaticFileRoot {
 		}
 	}
 
-	private SeekableByteChannel openTrustedPath(Path relative, BasicFileAttributes expected) throws IOException {
+	private @NonNull SeekableByteChannel openTrustedPath(@NonNull Path relative, @NonNull BasicFileAttributes expected) throws IOException {
 		Path file = this.resolvedRoot.resolve(relative);
 		checkIdentity(attributes(file), expected);
 		// Providers without SecureDirectoryStream (including macOS JDK 21) use
@@ -210,7 +212,7 @@ final class SecureStaticFileRoot {
 			throw new FileChangedException("Static file root changed; rebuild the static-file helper.");
 	}
 
-	private List<DirectoryIdentity> directoryKeys(Path relative) throws IOException {
+	private @NonNull List<@NonNull DirectoryIdentity> directoryKeys(@NonNull Path relative) throws IOException {
 		List<DirectoryIdentity> keys = new ArrayList<>(relative.getNameCount() - 1);
 		Path current = this.resolvedRoot;
 		for (int index = 0; index < relative.getNameCount() - 1; index++) {
@@ -222,26 +224,26 @@ final class SecureStaticFileRoot {
 		return keys;
 	}
 
-	private static BasicFileAttributes attributes(Path path) throws IOException {
+	private static @NonNull BasicFileAttributes attributes(@NonNull Path path) throws IOException {
 		return Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
 	}
 
-	private static BasicFileAttributes directoryAttributes(SecureDirectoryStream<Path> directory) throws IOException {
+	private static @NonNull BasicFileAttributes directoryAttributes(@NonNull SecureDirectoryStream<@NonNull Path> directory) throws IOException {
 		return directory.getFileAttributeView(BasicFileAttributeView.class).readAttributes();
 	}
 
-	private static void checkDirectory(BasicFileAttributes attributes) throws IOException {
+	private static void checkDirectory(@NonNull BasicFileAttributes attributes) throws IOException {
 		if (!attributes.isDirectory())
 			throw new FileChangedException("Static file traversal requires a directory.");
 	}
 
-	private static void checkDirectoryIdentity(BasicFileAttributes attributes, DirectoryIdentity expected) throws IOException {
+	private static void checkDirectoryIdentity(@NonNull BasicFileAttributes attributes, @NonNull DirectoryIdentity expected) throws IOException {
 		checkDirectory(attributes);
 		if (!expected.equals(DirectoryIdentity.from(attributes)))
 			throw new FileChangedException("Static file directory changed after authorization.");
 	}
 
-	static boolean sameIdentity(BasicFileAttributes current, BasicFileAttributes expected) {
+	static boolean sameIdentity(@NonNull BasicFileAttributes current, @NonNull BasicFileAttributes expected) {
 		Object expectedKey = expected.fileKey();
 		return java.util.Objects.equals(expectedKey, current.fileKey())
 				&& (expectedKey != null || expected.creationTime().equals(current.creationTime()))
@@ -249,7 +251,7 @@ final class SecureStaticFileRoot {
 				&& expected.lastModifiedTime().equals(current.lastModifiedTime());
 	}
 
-	static void checkIdentity(BasicFileAttributes current, BasicFileAttributes expected) throws IOException {
+	static void checkIdentity(@NonNull BasicFileAttributes current, @NonNull BasicFileAttributes expected) throws IOException {
 		if (!current.isRegularFile() || !sameIdentity(current, expected))
 			throw new FileChangedException("Static file changed after authorization.");
 	}
@@ -259,7 +261,7 @@ final class SecureStaticFileRoot {
 	// These snapshots cannot exclude replacement with identical metadata.
 	private record DirectoryIdentity(@Nullable Object fileKey, @Nullable FileTime creationTime,
 			long size, @Nullable FileTime modifiedTime) {
-		static DirectoryIdentity from(BasicFileAttributes attributes) {
+		static @NonNull DirectoryIdentity from(@NonNull BasicFileAttributes attributes) {
 			Object key = attributes.fileKey();
 			return key == null
 					? new DirectoryIdentity(null, attributes.creationTime(), attributes.size(), attributes.lastModifiedTime())
@@ -268,17 +270,17 @@ final class SecureStaticFileRoot {
 	}
 
 	static final class FileChangedException extends IOException {
-		FileChangedException(String message) {
+		FileChangedException(@NonNull String message) {
 			super(message);
 		}
 	}
 
-	private static void checkSize(SeekableByteChannel channel, long expectedSize) throws IOException {
+	private static void checkSize(@NonNull SeekableByteChannel channel, long expectedSize) throws IOException {
 		if (channel.size() != expectedSize)
 			throw new FileChangedException("Static file size changed after authorization.");
 	}
 
-	private static void closeOnFailure(@Nullable AutoCloseable resource, Throwable failure) {
+	private static void closeOnFailure(@Nullable AutoCloseable resource, @NonNull Throwable failure) {
 		if (resource == null)
 			return;
 		try {

@@ -311,7 +311,7 @@ final class McpRuntimeTypedJsonBindingCompiler {
 		return Optional.of(requireNonNull(arguments[0]));
 	}
 
-	private Type @NonNull [] typeArguments(
+	private @NonNull Type @NonNull [] typeArguments(
 			@NonNull ParameterizedType type,
 			@NonNull McpTypedSchemaPath path) {
 		Type[] arguments;
@@ -540,7 +540,7 @@ final class McpRuntimeTypedJsonBindingCompiler {
 		}
 
 		@Override
-		public Type @NonNull [] getActualTypeArguments() {
+		public @NonNull Type @NonNull [] getActualTypeArguments() {
 			return arguments.toArray(Type[]::new);
 		}
 

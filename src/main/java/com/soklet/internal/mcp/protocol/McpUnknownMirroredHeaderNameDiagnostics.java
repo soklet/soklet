@@ -42,8 +42,7 @@ final class McpUnknownMirroredHeaderNameDiagnostics {
 			consumer;
 	@NonNull
 	private final Object lock;
-	@NonNull
-	private final long[] emissionTimestamps;
+	private final long @NonNull [] emissionTimestamps;
 	private int oldestTimestampIndex;
 	private int timestampCount;
 

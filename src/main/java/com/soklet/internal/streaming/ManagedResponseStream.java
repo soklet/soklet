@@ -71,25 +71,25 @@ public final class ManagedResponseStream implements ResponseStream {
 	private enum Phase { NEW, ACTIVE, FINALIZING, CLOSED }
 	private enum AbortMode { CLOSE, SEPARATE, NONE }
 
-	private final Request request;
-	private final CancelationToken cancelationToken;
-	private final BooleanSupplier gracefulShutdownRequested;
-	private final Instant deadline;
-	private final Duration idleTimeout;
-	private final Output output;
-	private final Runnable beginFinalization;
-	private final Consumer<Throwable> failureConsumer;
-	private final Consumer<Throwable> cleanupFailureConsumer;
-	private final AtomicBoolean finalizationStarted = new AtomicBoolean();
-	private final Object failureLock = new Object();
-	private final List<Owned<?>> owned = new ArrayList<>();
-	private final IdentityHashMap<AutoCloseable, Owned<?>> identities = new IdentityHashMap<>();
-	private volatile Phase phase = Phase.NEW;
-	private volatile Thread owner;
-	private volatile Throwable failure;
-	private volatile Throwable pendingLexicalFailure;
-	private final AtomicInteger cleanupDepth = new AtomicInteger();
-	private byte[] staging;
+	private final @NonNull Request request;
+	private final @NonNull CancelationToken cancelationToken;
+	private final @NonNull BooleanSupplier gracefulShutdownRequested;
+	private final @Nullable Instant deadline;
+	private final @Nullable Duration idleTimeout;
+	private final @NonNull Output output;
+	private final @NonNull Runnable beginFinalization;
+	private final @NonNull Consumer<@NonNull Throwable> failureConsumer;
+	private final @NonNull Consumer<@NonNull Throwable> cleanupFailureConsumer;
+	private final @NonNull AtomicBoolean finalizationStarted = new AtomicBoolean();
+	private final @NonNull Object failureLock = new Object();
+	private final @NonNull List<@NonNull Owned<?>> owned = new ArrayList<>();
+	private final @NonNull IdentityHashMap<@NonNull AutoCloseable, @NonNull Owned<?>> identities = new IdentityHashMap<>();
+	private volatile @NonNull Phase phase = Phase.NEW;
+	private volatile @Nullable Thread owner;
+	private volatile @Nullable Throwable failure;
+	private volatile @Nullable Throwable pendingLexicalFailure;
+	private final @NonNull AtomicInteger cleanupDepth = new AtomicInteger();
+	private byte @Nullable [] staging;
 	private volatile int stagedBytes;
 
 	public ManagedResponseStream(@NonNull Request request,
@@ -99,8 +99,8 @@ public final class ManagedResponseStream implements ResponseStream {
 			@Nullable Duration idleTimeout,
 			@NonNull Output output,
 			@NonNull Runnable beginFinalization,
-			@NonNull Consumer<Throwable> failureConsumer,
-			@NonNull Consumer<Throwable> cleanupFailureConsumer) {
+			@NonNull Consumer<@NonNull Throwable> failureConsumer,
+			@NonNull Consumer<@NonNull Throwable> cleanupFailureConsumer) {
 		this.request = requireNonNull(request);
 		this.cancelationToken = requireNonNull(cancelationToken);
 		this.gracefulShutdownRequested = requireNonNull(gracefulShutdownRequested);
@@ -195,7 +195,7 @@ public final class ManagedResponseStream implements ResponseStream {
 		writeInternal(byteBuffer.duplicate());
 	}
 
-	private void writeInternal(ByteBuffer byteBuffer) throws IOException, InterruptedException {
+	private void writeInternal(@NonNull ByteBuffer byteBuffer) throws IOException, InterruptedException {
 		checkOutputLifetime();
 		if (discardTerminalCleanupOutput()) {
 			byteBuffer.position(byteBuffer.limit());
@@ -302,7 +302,7 @@ public final class ManagedResponseStream implements ResponseStream {
 		return true;
 	}
 
-	private void outputInterrupted(InterruptedException interruptedException) throws IOException, InterruptedException {
+	private void outputInterrupted(@NonNull InterruptedException interruptedException) throws IOException, InterruptedException {
 		// Inspect the elected reason before recordFailure can classify an unclaimed interruption itself.
 		try {
 			this.cancelationToken.throwIfCanceled();
@@ -330,7 +330,7 @@ public final class ManagedResponseStream implements ResponseStream {
 		}
 
 		@Override
-		public void write(byte[] bytes, int offset, int length) throws IOException {
+		public void write(byte @NonNull [] bytes, int offset, int length) throws IOException {
 			requireNonNull(bytes);
 			checkFromIndexSize(offset, length, bytes.length);
 			checkLifetime();
@@ -377,7 +377,7 @@ public final class ManagedResponseStream implements ResponseStream {
 		}
 	}
 
-	private static InterruptedIOException interruptedIOException(InterruptedException interruptedException, int acceptedBytes) {
+	private static @NonNull InterruptedIOException interruptedIOException(@NonNull InterruptedException interruptedException, int acceptedBytes) {
 		Thread.currentThread().interrupt();
 		InterruptedIOException interruptedIOException = new InterruptedIOException("Response output was interrupted");
 		interruptedIOException.bytesTransferred = acceptedBytes;
@@ -395,20 +395,20 @@ public final class ManagedResponseStream implements ResponseStream {
 
 	@Override
 	@NonNull
-	public <T extends AutoCloseable> T open(@NonNull StreamResourceFactory<? extends T> streamResourceFactory) throws Exception {
+	public <T extends @NonNull AutoCloseable> T open(@NonNull StreamResourceFactory<? extends T> streamResourceFactory) throws Exception {
 		return acquire(streamResourceFactory, AbortMode.CLOSE, null);
 	}
 
 	@Override
 	@NonNull
-	public <T extends AutoCloseable> T open(@NonNull StreamResourceFactory<? extends T> streamResourceFactory,
+	public <T extends @NonNull AutoCloseable> T open(@NonNull StreamResourceFactory<? extends T> streamResourceFactory,
 			@NonNull ResourceAborter<? super T> resourceAborter) throws Exception {
 		return acquire(streamResourceFactory, AbortMode.SEPARATE, requireNonNull(resourceAborter));
 	}
 
 	@Override
 	@NonNull
-	public <T extends AutoCloseable> T own(@NonNull T resource) throws Exception {
+	public <T extends @NonNull AutoCloseable> T own(@NonNull T resource) throws Exception {
 		requireNonNull(resource);
 		checkOwner();
 		if (this.phase != Phase.ACTIVE || this.cleanupDepth.get() != 0)
@@ -417,28 +417,28 @@ public final class ManagedResponseStream implements ResponseStream {
 	}
 
 	@Override
-	public <T extends AutoCloseable> void using(@NonNull StreamResourceFactory<? extends T> streamResourceFactory,
+	public <T extends @NonNull AutoCloseable> void using(@NonNull StreamResourceFactory<? extends T> streamResourceFactory,
 			@NonNull ResourceConsumer<? super T> resourceConsumer) throws Exception {
 		use(streamResourceFactory, AbortMode.CLOSE, null, resourceConsumer);
 	}
 
 	@Override
-	public <T extends AutoCloseable> void using(@NonNull StreamResourceFactory<? extends T> streamResourceFactory,
+	public <T extends @NonNull AutoCloseable> void using(@NonNull StreamResourceFactory<? extends T> streamResourceFactory,
 			@NonNull ResourceAborter<? super T> resourceAborter,
 			@NonNull ResourceConsumer<? super T> resourceConsumer) throws Exception {
 		use(streamResourceFactory, AbortMode.SEPARATE, requireNonNull(resourceAborter), resourceConsumer);
 	}
 
-	private <T extends AutoCloseable> T acquire(StreamResourceFactory<? extends T> streamResourceFactory,
-			AbortMode abortMode, ResourceAborter<? super T> resourceAborter) throws Exception {
+	private <T extends @NonNull AutoCloseable> @NonNull T acquire(@NonNull StreamResourceFactory<? extends T> streamResourceFactory,
+			@NonNull AbortMode abortMode, @Nullable ResourceAborter<? super T> resourceAborter) throws Exception {
 		requireNonNull(streamResourceFactory);
 		checkAcquisition();
 		T resource = requireNonNull(streamResourceFactory.open(), "Resource factory returned null");
 		return adopt(resource, abortMode, resourceAborter);
 	}
 
-	private <T extends AutoCloseable> T adopt(T resource, AbortMode abortMode,
-			ResourceAborter<? super T> resourceAborter) throws Exception {
+	private <T extends @NonNull AutoCloseable> @NonNull T adopt(@NonNull T resource, @NonNull AbortMode abortMode,
+			@Nullable ResourceAborter<? super T> resourceAborter) throws Exception {
 		if (this.identities.containsKey(resource))
 			throw new IllegalArgumentException("Resource is already owned by this response stream");
 		Owned<T> entry = new Owned<>(resource, abortMode, resourceAborter);
@@ -467,9 +467,9 @@ public final class ManagedResponseStream implements ResponseStream {
 		return resource;
 	}
 
-	private <T extends AutoCloseable> void use(StreamResourceFactory<? extends T> streamResourceFactory,
-			AbortMode abortMode, ResourceAborter<? super T> resourceAborter,
-			ResourceConsumer<? super T> resourceConsumer) throws Exception {
+	private <T extends @NonNull AutoCloseable> void use(@NonNull StreamResourceFactory<? extends T> streamResourceFactory,
+			@NonNull AbortMode abortMode, @Nullable ResourceAborter<? super T> resourceAborter,
+			@NonNull ResourceConsumer<? super T> resourceConsumer) throws Exception {
 		requireNonNull(streamResourceFactory);
 		requireNonNull(resourceConsumer);
 		checkAcquisition();
@@ -527,7 +527,7 @@ public final class ManagedResponseStream implements ResponseStream {
 		rethrow(acquisitionFailure());
 	}
 
-	private Throwable acquisitionFailure() {
+	private @Nullable Throwable acquisitionFailure() {
 		if (this.phase != Phase.ACTIVE || this.cleanupDepth.get() != 0)
 			return new IllegalStateException("Resource acquisition is outside its lifetime");
 		Throwable outcome = outcome();
@@ -572,7 +572,7 @@ public final class ManagedResponseStream implements ResponseStream {
 		}
 	}
 
-	private void recordFailure(Throwable throwable) {
+	private void recordFailure(@NonNull Throwable throwable) {
 		if (this.phase == Phase.CLOSED)
 			return;
 		if (sameInstance(Thread.currentThread(), this.owner))
@@ -595,7 +595,7 @@ public final class ManagedResponseStream implements ResponseStream {
 		}
 	}
 
-	private void recordCleanupFailure(Throwable throwable) {
+	private void recordCleanupFailure(@NonNull Throwable throwable) {
 		if (this.phase != Phase.CLOSED) {
 			Throwable lexicalFailure = this.pendingLexicalFailure;
 			if (lexicalFailure != null) {
@@ -612,7 +612,7 @@ public final class ManagedResponseStream implements ResponseStream {
 		}
 	}
 
-	private Throwable outcome() {
+	private @Nullable Throwable outcome() {
 		Throwable primary = this.failure;
 		StreamTerminationReason reason = this.cancelationToken.getCancelationReason().orElse(null);
 		if (reason != null && (reason != StreamTerminationReason.PRODUCER_FAILED || primary == null)) {
@@ -624,29 +624,29 @@ public final class ManagedResponseStream implements ResponseStream {
 		return primary;
 	}
 
-	private final class Owned<T extends AutoCloseable> {
-		private final StateChangeWaiters stateChangeWaiters = new StateChangeWaiters(this);
-		private T resource;
-		private final AbortMode abortMode;
-		private ResourceAborter<? super T> resourceAborter;
-		private CallbackRegistration registration;
+	private final class Owned<T extends @NonNull AutoCloseable> {
+		private final @NonNull StateChangeWaiters stateChangeWaiters = new StateChangeWaiters(this);
+		private @Nullable T resource;
+		private final @NonNull AbortMode abortMode;
+		private @Nullable ResourceAborter<? super T> resourceAborter;
+		private @Nullable CallbackRegistration registration;
 		private boolean closeClaimed;
 		private boolean closeFinished;
 		private boolean abortClaimed;
 		private boolean abortFinished;
-		private Throwable cleanupFailure;
+		private @Nullable Throwable cleanupFailure;
 
-		private Owned(T resource, AbortMode abortMode, ResourceAborter<? super T> resourceAborter) {
+		private Owned(@NonNull T resource, @NonNull AbortMode abortMode, @Nullable ResourceAborter<? super T> resourceAborter) {
 			this.resource = resource;
 			this.abortMode = abortMode;
 			this.resourceAborter = resourceAborter;
 		}
 
-		private synchronized T resource() {
+		private synchronized @Nullable T resource() {
 			return this.resource;
 		}
 
-		private synchronized Throwable cleanupFailure() {
+		private synchronized @Nullable Throwable cleanupFailure() {
 			return this.cleanupFailure;
 		}
 
@@ -748,7 +748,7 @@ public final class ManagedResponseStream implements ResponseStream {
 			return this.abortClaimed && !this.abortFinished;
 		}
 
-		private void closeResource(T claimedResource) {
+		private void closeResource(@NonNull T claimedResource) {
 			try {
 				claimedResource.close();
 			} catch (Throwable throwable) {
@@ -762,7 +762,7 @@ public final class ManagedResponseStream implements ResponseStream {
 			}
 		}
 
-		private boolean expectedCanceledZipCloseFailure(T resource, Throwable closeFailure) {
+		private boolean expectedCanceledZipCloseFailure(@NonNull T resource, @NonNull Throwable closeFailure) {
 			// ZipOutputStream.closeEntry ends its Deflater after an output IOException.
 			// Its later owned close retries that entry using the ended Deflater. Limit
 			// this exception to the exact JDK encoder and a proven canceled entry write.
@@ -782,7 +782,7 @@ public final class ManagedResponseStream implements ResponseStream {
 			return false;
 		}
 
-		private void cleanupFailed(Throwable throwable) {
+		private void cleanupFailed(@NonNull Throwable throwable) {
 			if (throwable instanceof InterruptedException)
 				Thread.currentThread().interrupt();
 			synchronized (this) {
@@ -795,13 +795,13 @@ public final class ManagedResponseStream implements ResponseStream {
 		}
 	}
 
-	private static void addSuppressed(Throwable primary, Throwable secondary) {
+	private static void addSuppressed(@NonNull Throwable primary, @Nullable Throwable secondary) {
 		if (secondary == null || containsThrowable(primary, secondary) || containsThrowable(secondary, primary))
 			return;
 		primary.addSuppressed(secondary);
 	}
 
-	private static boolean containsThrowable(Throwable root, Throwable target) {
+	private static boolean containsThrowable(@NonNull Throwable root, @NonNull Throwable target) {
 		IdentityHashMap<Throwable, Boolean> visited = new IdentityHashMap<>();
 		Deque<Throwable> remaining = new ArrayDeque<>();
 		remaining.push(root);
@@ -820,7 +820,7 @@ public final class ManagedResponseStream implements ResponseStream {
 		return false;
 	}
 
-	private static void rethrow(Throwable throwable) throws Exception {
+	private static void rethrow(@Nullable Throwable throwable) throws Exception {
 		if (throwable instanceof Exception exception)
 			throw exception;
 		if (throwable instanceof Error error)

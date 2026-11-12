@@ -57,7 +57,7 @@ public final class SokletConfig {
 	@NonNull
 	private final RequestInterceptor requestInterceptor;
 	@NonNull
-	private final List<LifecycleObserver> lifecycleObservers;
+	private final List<@NonNull LifecycleObserver> lifecycleObservers;
 	@NonNull
 	private final LifecycleObserver aggregateLifecycleObserver;
 	@NonNull
@@ -312,7 +312,7 @@ public final class SokletConfig {
 		return this.lifecyclePolicy.toInternal();
 	}
 
-	void applyApplicationSettingsTo(Builder builder) {
+	void applyApplicationSettingsTo(@NonNull Builder builder) {
 		this.applicationSettings.applyTo(requireNonNull(builder));
 	}
 
@@ -423,7 +423,7 @@ public final class SokletConfig {
 		@Nullable
 		private RequestInterceptor requestInterceptor;
 		@Nullable
-		private List<LifecycleObserver> lifecycleObservers;
+		private List<@NonNull LifecycleObserver> lifecycleObservers;
 		@Nullable
 		private MetricsCollector metricsCollector;
 		@Nullable
@@ -730,7 +730,7 @@ public final class SokletConfig {
 	private record ConfiguredListenerAuthority(@NonNull String kind, @NonNull String host, int port) {}
 
 	@NonNull
-	private static List<LifecycleObserver> copyLifecycleObservers(@Nullable Collection<? extends LifecycleObserver> lifecycleObservers) {
+	private static List<@NonNull LifecycleObserver> copyLifecycleObservers(@Nullable Collection<? extends @NonNull LifecycleObserver> lifecycleObservers) {
 		if (lifecycleObservers == null || lifecycleObservers.isEmpty())
 			return List.of();
 

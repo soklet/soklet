@@ -907,7 +907,7 @@ public final class McpOutboundChannel {
 		return writeReadyCallback;
 	}
 
-	private Runnable reserveTerminalWakeIfNeeded() {
+	private @NonNull Runnable reserveTerminalWakeIfNeeded() {
 		if (!callbackInstalled || wakePending)
 			return McpOutboundChannel::noOp;
 

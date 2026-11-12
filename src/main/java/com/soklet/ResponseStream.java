@@ -203,7 +203,7 @@ public interface ResponseStream {
 	 * @throws Exception if acquisition or disposal fails
 	 */
 	@NonNull
-	<T extends AutoCloseable> T open(@NonNull StreamResourceFactory<? extends @NonNull T> streamResourceFactory) throws Exception;
+	<T extends @NonNull AutoCloseable> T open(@NonNull StreamResourceFactory<? extends @NonNull T> streamResourceFactory) throws Exception;
 
 	/**
 	 * Opens and owns a resource with a separate provider-supported abort operation.
@@ -220,7 +220,7 @@ public interface ResponseStream {
 	 * @throws Exception if acquisition or disposal fails
 	 */
 	@NonNull
-	<T extends AutoCloseable> T open(@NonNull StreamResourceFactory<? extends @NonNull T> streamResourceFactory,
+	<T extends @NonNull AutoCloseable> T open(@NonNull StreamResourceFactory<? extends @NonNull T> streamResourceFactory,
 			@NonNull ResourceAborter<? super @NonNull T> resourceAborter) throws Exception;
 
 	/**
@@ -242,7 +242,7 @@ public interface ResponseStream {
 	 * @throws Exception if disposal after cancelation fails
 	 */
 	@NonNull
-	<T extends AutoCloseable> T own(@NonNull T resource) throws Exception;
+	<T extends @NonNull AutoCloseable> T own(@NonNull T resource) throws Exception;
 
 	/**
 	 * Uses a resource in a shorter lexical lifetime with coordinated close-as-abort.
@@ -257,7 +257,7 @@ public interface ResponseStream {
 	 * @param <T> the resource type
 	 * @throws Exception if acquisition, the lexical body, or cleanup fails
 	 */
-	<T extends AutoCloseable> void using(@NonNull StreamResourceFactory<? extends @NonNull T> streamResourceFactory,
+	<T extends @NonNull AutoCloseable> void using(@NonNull StreamResourceFactory<? extends @NonNull T> streamResourceFactory,
 			@NonNull ResourceConsumer<? super @NonNull T> resourceConsumer) throws Exception;
 
 	/**
@@ -272,7 +272,7 @@ public interface ResponseStream {
 	 * @param <T> the resource type
 	 * @throws Exception if acquisition, the lexical body, or cleanup fails
 	 */
-	<T extends AutoCloseable> void using(@NonNull StreamResourceFactory<? extends @NonNull T> streamResourceFactory,
+	<T extends @NonNull AutoCloseable> void using(@NonNull StreamResourceFactory<? extends @NonNull T> streamResourceFactory,
 			@NonNull ResourceAborter<? super @NonNull T> resourceAborter,
 			@NonNull ResourceConsumer<? super @NonNull T> resourceConsumer) throws Exception;
 
@@ -284,7 +284,7 @@ public interface ResponseStream {
 	 */
 	@ThreadSafe
 	@FunctionalInterface
-	interface ResourceAborter<T extends AutoCloseable> {
+	interface ResourceAborter<T extends @NonNull AutoCloseable> {
 		/**
 		 * Aborts use of the resource.
 		 *
@@ -303,7 +303,7 @@ public interface ResponseStream {
 	 */
 	@ThreadSafe
 	@FunctionalInterface
-	interface ResourceConsumer<T extends AutoCloseable> {
+	interface ResourceConsumer<T extends @NonNull AutoCloseable> {
 		/**
 		 * Uses the resource within its lexical lifetime.
 		 *

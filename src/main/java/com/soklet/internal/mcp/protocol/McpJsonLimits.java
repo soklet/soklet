@@ -222,7 +222,7 @@ public final class McpJsonLimits {
 	}
 
 	@Override
-	public String toString() {
+	public @NonNull String toString() {
 		return "McpJsonLimits[maximumInputBytes=" + this.maximumInputBytes
 				+ ", maximumNestingDepth=" + this.maximumNestingDepth
 				+ ", maximumTokenLengthInCharacters="

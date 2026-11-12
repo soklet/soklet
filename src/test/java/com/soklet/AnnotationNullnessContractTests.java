@@ -16,43 +16,6 @@
 
 package com.soklet;
 
-import com.soklet.annotation.DELETE;
-import com.soklet.annotation.DELETEs;
-import com.soklet.annotation.FormParameter;
-import com.soklet.annotation.GET;
-import com.soklet.annotation.GETs;
-import com.soklet.annotation.HEAD;
-import com.soklet.annotation.HEADs;
-import com.soklet.annotation.McpAppTool;
-import com.soklet.annotation.McpHeader;
-import com.soklet.annotation.McpMayRequestInput;
-import com.soklet.annotation.McpPrompt;
-import com.soklet.annotation.McpPromptArgument;
-import com.soklet.annotation.McpPromptCompletion;
-import com.soklet.annotation.McpResource;
-import com.soklet.annotation.McpResourceCompletion;
-import com.soklet.annotation.McpResourceList;
-import com.soklet.annotation.McpResourceUriParameter;
-import com.soklet.annotation.McpServerEndpoint;
-import com.soklet.annotation.McpTool;
-import com.soklet.annotation.McpToolArgument;
-import com.soklet.annotation.McpToolProperty;
-import com.soklet.annotation.Multipart;
-import com.soklet.annotation.OPTIONS;
-import com.soklet.annotation.OPTIONSes;
-import com.soklet.annotation.PATCH;
-import com.soklet.annotation.PATCHes;
-import com.soklet.annotation.POST;
-import com.soklet.annotation.POSTs;
-import com.soklet.annotation.PUT;
-import com.soklet.annotation.PUTs;
-import com.soklet.annotation.PathParameter;
-import com.soklet.annotation.QueryParameter;
-import com.soklet.annotation.RequestBody;
-import com.soklet.annotation.RequestCookie;
-import com.soklet.annotation.RequestHeader;
-import com.soklet.annotation.SseEventSource;
-import com.soklet.annotation.SseEventSources;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
@@ -63,11 +26,12 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.AnnotatedArrayType;
 import java.lang.reflect.AnnotatedType;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * Verifies the explicit JSpecify contract of Soklet's annotation elements.
@@ -76,44 +40,10 @@ import java.util.stream.Collectors;
  */
 @ThreadSafe
 public class AnnotationNullnessContractTests {
-	@NonNull
-	private static final List<@NonNull Class<? extends Annotation>>
-			ANNOTATION_TYPES = List.of(
-			DELETE.class, DELETEs.class, FormParameter.class,
-			GET.class, GETs.class, HEAD.class, HEADs.class,
-			McpAppTool.class, McpHeader.class, McpMayRequestInput.class, McpPrompt.class,
-			McpPromptArgument.class, McpPromptCompletion.class,
-			McpResource.class, McpResourceCompletion.class,
-			McpResourceList.class, McpResourceUriParameter.class,
-			McpServerEndpoint.class, McpTool.class, McpToolArgument.class,
-			McpToolProperty.class, Multipart.class, OPTIONS.class,
-			OPTIONSes.class, PATCH.class, PATCHes.class, POST.class,
-			POSTs.class, PUT.class, PUTs.class, PathParameter.class,
-			QueryParameter.class, RequestBody.class, RequestCookie.class,
-			RequestHeader.class, SseEventSource.class,
-			SseEventSources.class);
 
 	@Test
-	void annotationInventoryIsComplete() throws Exception {
-		Set<String> expected;
-		try (var paths = Files.list(Path.of(
-				"src/main/java/com/soklet/annotation"))) {
-			expected = paths.filter(path -> path.getFileName().toString()
-					.endsWith(".java"))
-					.map(path -> path.getFileName().toString())
-					.filter(name -> !name.equals("package-info.java"))
-					.map(name -> name.substring(0, name.length() - 5))
-					.collect(Collectors.toUnmodifiableSet());
-		}
-		Set<String> actual = ANNOTATION_TYPES.stream()
-				.map(Class::getSimpleName).collect(Collectors.toSet());
-		Assertions.assertEquals(expected, actual,
-				"Public annotation inventory changed");
-	}
-
-	@Test
-	void referenceValuedElementsHaveExplicitNonNullTypeUse() {
-		for (Class<? extends Annotation> annotationType : ANNOTATION_TYPES)
+	void referenceValuedElementsHaveExplicitNonNullTypeUse() throws Exception {
+		for (Class<? extends Annotation> annotationType : annotationTypes())
 			for (Method element : annotationType.getDeclaredMethods()) {
 				if (element.getReturnType().isPrimitive())
 					continue;
@@ -128,6 +58,39 @@ public class AnnotationNullnessContractTests {
 									+ element.getName()
 									+ " must have non-null array components");
 			}
+	}
+
+	private static List<Class<? extends Annotation>> annotationTypes() throws Exception {
+		Path sourceRoot = Path.of("src/main/java/com/soklet/annotation");
+		List<Path> sources;
+		try (var paths = Files.walk(sourceRoot)) {
+			sources = paths.filter(Files::isRegularFile)
+					.filter(path -> path.getFileName().toString().endsWith(".java"))
+					.filter(path -> !path.getFileName().toString().equals("package-info.java"))
+					.sorted().toList();
+		}
+		List<Class<? extends Annotation>> result = new ArrayList<>();
+		for (Path source : sources) {
+			String relative = sourceRoot.relativize(source).toString()
+					.replace(source.getFileSystem().getSeparator(), ".");
+			String name = "com.soklet.annotation." + relative.substring(0,
+					relative.length() - ".java".length());
+			appendAnnotations(Class.forName(name, false,
+					AnnotationNullnessContractTests.class.getClassLoader()), result);
+		}
+		result.sort(Comparator.comparing(Class::getName));
+		Assertions.assertFalse(result.isEmpty(), "No public annotation types were discovered");
+		return List.copyOf(result);
+	}
+
+	private static void appendAnnotations(Class<?> type,
+			List<Class<? extends Annotation>> result) {
+		if (!Modifier.isPublic(type.getModifiers()))
+			return;
+		if (type.isAnnotation())
+			result.add(type.asSubclass(Annotation.class));
+		for (Class<?> nested : type.getDeclaredClasses())
+			appendAnnotations(nested, result);
 	}
 
 	private static boolean hasExactNonNull(AnnotatedType type) {

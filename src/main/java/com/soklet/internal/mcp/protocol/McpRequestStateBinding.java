@@ -50,9 +50,9 @@ final class McpRequestStateBinding {
 	private static final byte @NonNull [] GCM_AAD_DOMAIN =
 			"soklet-mcp-request-state-gcm-aad-v1\0"
 					.getBytes(StandardCharsets.US_ASCII);
-	private static final Set<@NonNull String> TRANSIENT_PARAMETER_FIELDS =
+	private static final @NonNull Set<@NonNull String> TRANSIENT_PARAMETER_FIELDS =
 			Set.of("inputResponses", "requestState");
-	private static final Set<@NonNull String> TRANSIENT_METADATA_FIELDS =
+	private static final @NonNull Set<@NonNull String> TRANSIENT_METADATA_FIELDS =
 			Set.of("progressToken", "traceparent", "tracestate", "baggage");
 
 	private final byte @NonNull [] parametersDigest;

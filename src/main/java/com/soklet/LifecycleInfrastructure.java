@@ -71,11 +71,11 @@ final class LifecycleWorkers {
 	@NonNull
 	private final Launcher interruptLauncher;
 	@NonNull
-	private final Map<Role, Integer> limits;
+	private final Map<@NonNull Role, @NonNull Integer> limits;
 	@NonNull
-	private final Map<Role, AtomicInteger> active;
+	private final Map<@NonNull Role, @NonNull AtomicInteger> active;
 	@NonNull
-	private final Map<Role, AtomicInteger> created;
+	private final Map<@NonNull Role, @NonNull AtomicInteger> created;
 
 	LifecycleWorkers() {
 		this(LifecycleWorkers::launchDaemon);
@@ -169,7 +169,7 @@ final class LifecycleWorkers {
 	}
 
 	@NonNull
-	private static Map<Role, AtomicInteger> counters() {
+	private static Map<@NonNull Role, @NonNull AtomicInteger> counters() {
 		EnumMap<Role, AtomicInteger> counters = new EnumMap<>(Role.class);
 		for (Role role : Role.values())
 			counters.put(role, new AtomicInteger());
@@ -232,16 +232,15 @@ final class InternalLifecycleCompletion {
 	@NonNull
 	private final LifecycleWorkers workers;
 	@NonNull
-	private final AtomicReference<InternalShutdownResult> result;
+	private final AtomicReference<@Nullable InternalShutdownResult> result;
 	@NonNull
-	private final CompletableFuture<InternalShutdownResult> publicHandoff;
+	private final CompletableFuture<@NonNull InternalShutdownResult> publicHandoff;
 	@NonNull
-	private final CompletionStage<InternalShutdownResult> publicView;
+	private final CompletionStage<@NonNull InternalShutdownResult> publicView;
 	@NonNull
 	private final Object monitor;
 	@NonNull
 	private final Runnable beforeWait;
-	@NonNull
 	private volatile boolean internalReleased;
 	@NonNull
 	private final AtomicBoolean publicHandoffStarted;
@@ -322,19 +321,19 @@ final class InternalLifecycleCompletion {
 	}
 
 	@NonNull
-	Optional<InternalShutdownResult> result() {
+	Optional<@NonNull InternalShutdownResult> result() {
 		return this.internalReleased
 				? Optional.of(requireNonNull(this.result.get())) : Optional.empty();
 	}
 
 	/** Result visibility for terminal diagnostics, independent of join release. */
 	@NonNull
-	Optional<InternalShutdownResult> installedResult() {
+	Optional<@NonNull InternalShutdownResult> installedResult() {
 		return Optional.ofNullable(this.result.get());
 	}
 
 	@NonNull
-	CompletionStage<InternalShutdownResult> publicStage() {
+	CompletionStage<@NonNull InternalShutdownResult> publicStage() {
 		return this.publicView;
 	}
 }
@@ -371,11 +370,11 @@ final class InternalLifecycleStateMachine {
 	@NonNull
 	private final ReentrantLock transitionLock;
 	@NonNull
-	private final AtomicReference<State> state;
+	private final AtomicReference<@NonNull State> state;
 	@NonNull
 	private final AtomicBoolean shutdownIntent;
 	@NonNull
-	private final AtomicReference<State> shutdownOrigin;
+	private final AtomicReference<@Nullable State> shutdownOrigin;
 	private long shutdownIntentNanos;
 	private boolean shutdownIntentNanosPresent;
 
@@ -416,7 +415,7 @@ final class InternalLifecycleStateMachine {
 	 * the callbacks only publish internal state; teardown runs after both unlock.
 	 */
 	@NonNull
-	Optional<ShutdownRequest> requestStartupCancellation(
+	Optional<@NonNull ShutdownRequest> requestStartupCancellation(
 			@NonNull Runnable recordCancellation,
 			@NonNull Supplier<@NonNull ShutdownRequest> publication) {
 		requireNonNull(recordCancellation);
@@ -523,7 +522,7 @@ final class LifecycleExecutionContext {
 	@NonNull
 	private static final Object LEGACY_OWNER_TOKEN = new Object();
 	@NonNull
-	private static final ThreadLocal<IdentityHashMap<Object, Integer>> DEPTHS =
+	private static final ThreadLocal<@Nullable IdentityHashMap<@NonNull Object, @NonNull Integer>> DEPTHS =
 			new ThreadLocal<>();
 
 	private LifecycleExecutionContext() {
@@ -571,7 +570,7 @@ final class LifecycleExecutionContext {
 		return scope;
 	}
 
-	private static void restore(@NonNull IdentityHashMap<Object, Integer> depths,
+	private static void restore(@NonNull IdentityHashMap<@NonNull Object, @NonNull Integer> depths,
 			@NonNull Object ownerToken, @Nullable Integer previousDepth) {
 		if (previousDepth == null)
 			depths.remove(ownerToken);
@@ -633,7 +632,7 @@ final class LifecycleExecutionContext {
 			// have been removed, so this retains no server or application state.
 		}
 
-		private static void leave(@NonNull IdentityHashMap<Object, Integer> depths,
+		private static void leave(@NonNull IdentityHashMap<@NonNull Object, @NonNull Integer> depths,
 				@NonNull Object ownerToken) {
 			int remaining = depths.getOrDefault(ownerToken, 0) - 1;
 			if (remaining < 0)
@@ -649,10 +648,10 @@ final class LifecycleExecutionContext {
 /** Immutable classification evidence; application status queries run only on proof workers. */
 final class LifecycleResidualActivity {
 	private record Snapshot(boolean terminated,
-			@NonNull Set<InternalResidualActivityType> residual) {}
+			@NonNull Set<@NonNull InternalResidualActivityType> residual) {}
 
-	private static final Snapshot TERMINATED = new Snapshot(true, Set.of());
-	private final AtomicReference<Snapshot> snapshot =
+	private static final @NonNull Snapshot TERMINATED = new Snapshot(true, Set.of());
+	private final @NonNull AtomicReference<@NonNull Snapshot> snapshot =
 			new AtomicReference<>(new Snapshot(false, Set.of()));
 
 	void recordTermination() {
@@ -663,7 +662,7 @@ final class LifecycleResidualActivity {
 		return this.snapshot.get().terminated();
 	}
 
-	void recordObservation(@NonNull Set<InternalResidualActivityType> residual) {
+	void recordObservation(@NonNull Set<@NonNull InternalResidualActivityType> residual) {
 		Set<InternalResidualActivityType> exact = Set.copyOf(requireNonNull(residual));
 		for (;;) {
 			Snapshot previous = this.snapshot.get();
@@ -680,13 +679,13 @@ final class LifecycleResidualActivity {
 	}
 
 	@NonNull
-	Set<InternalResidualActivityType> snapshot() {
+	Set<@NonNull InternalResidualActivityType> snapshot() {
 		return snapshot(Set.of());
 	}
 
 	@NonNull
-	Set<InternalResidualActivityType> snapshot(
-			@NonNull Set<InternalResidualActivityType> frameworkResidual) {
+	Set<@NonNull InternalResidualActivityType> snapshot(
+			@NonNull Set<@NonNull InternalResidualActivityType> frameworkResidual) {
 		Snapshot current = this.snapshot.get();
 		if (current.terminated())
 			return Set.of();
@@ -707,7 +706,7 @@ final class LifecycleRetentionAnchor {
 	private final LifecycleRetentionSummary summary;
 
 	LifecycleRetentionAnchor(@NonNull Object retainedGraph,
-			@NonNull Map<InternalResidualActivityType, Integer> counts,
+			@NonNull Map<@NonNull InternalResidualActivityType, @NonNull Integer> counts,
 			@NonNull String frameworkSummary) {
 		this.retainedGraph = requireNonNull(retainedGraph);
 		this.summary = new LifecycleRetentionSummary(counts, frameworkSummary);
@@ -727,11 +726,11 @@ final class LifecycleRetentionAnchor {
 final class LifecycleRetentionSummary {
 	private static final int MAXIMUM_SUMMARY_CODE_POINTS = 1_024;
 	@NonNull
-	private final Map<InternalResidualActivityType, Integer> counts;
+	private final Map<@NonNull InternalResidualActivityType, @NonNull Integer> counts;
 	@NonNull
 	private final String summary;
 
-	LifecycleRetentionSummary(@NonNull Map<InternalResidualActivityType, Integer> counts,
+	LifecycleRetentionSummary(@NonNull Map<@NonNull InternalResidualActivityType, @NonNull Integer> counts,
 			@NonNull String frameworkSummary) {
 		requireNonNull(counts);
 		EnumMap<InternalResidualActivityType, Integer> copy =
@@ -749,7 +748,7 @@ final class LifecycleRetentionSummary {
 	}
 
 	@NonNull
-	Map<InternalResidualActivityType, Integer> counts() {
+	Map<@NonNull InternalResidualActivityType, @NonNull Integer> counts() {
 		return this.counts;
 	}
 
@@ -802,7 +801,7 @@ final class LifecycleTransitionDispatcher {
 	@NonNull
 	private final LifecycleWorkers workers;
 	@NonNull
-	private final ArrayDeque<Runnable> queue;
+	private final ArrayDeque<@NonNull Runnable> queue;
 	@NonNull
 	private final Object monitor;
 	private boolean workerStarted;
@@ -910,7 +909,7 @@ final class LifecycleTransitionDispatcher {
 @Immutable
 record LifecycleTransitionSnapshot(int acceptedRecords, int pendingRecords,
 		boolean callbackActive, boolean sealed, boolean disabled,
-		int failedCallbacks, @NonNull Optional<String> firstFailureSummary) {
+		int failedCallbacks, @NonNull Optional<@NonNull String> firstFailureSummary) {
 	LifecycleTransitionSnapshot {
 		requireNonNull(firstFailureSummary);
 		if (acceptedRecords < 0 || acceptedRecords > 16)
@@ -1089,7 +1088,7 @@ final class InternalLifecycleCoordinator {
 		InternalTransportRuntime runtime();
 
 		@NonNull
-		Set<InternalResidualActivityType> residualActivity();
+		Set<@NonNull InternalResidualActivityType> residualActivity();
 
 		default boolean startupCallActive() {
 			return false;
@@ -1116,7 +1115,7 @@ final class InternalLifecycleCoordinator {
 	}
 
 	@NonNull
-	InternalShutdownResult shutdown(@NonNull List<? extends Participant> participants,
+	InternalShutdownResult shutdown(@NonNull List<? extends @NonNull Participant> participants,
 			long gracefulDeadlineNanos, long forcedDeadlineNanos) throws InterruptedException {
 		requireNonNull(participants);
 		List<Participant> ordered = new ArrayList<>(participants);

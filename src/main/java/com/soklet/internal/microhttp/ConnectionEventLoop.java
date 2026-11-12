@@ -1,5 +1,6 @@
 package com.soklet.internal.microhttp;
 
+import org.jspecify.annotations.NonNull;
 import com.soklet.internal.HelperThreads;
 
 import com.soklet.MetricsCollector.TransportFailureReason;
@@ -71,7 +72,7 @@ class ConnectionEventLoop {
     private static final int MAX_REMOTE_CLOSE_CAUSE_DEPTH = 32;
     // A completed closing response must survive unread client data (RFC 9112,
     // section 9.6), without allowing a peer to retain a connection indefinitely.
-    private static final Duration MAX_LINGERING_CLOSE_DURATION = Duration.ofSeconds(1);
+    private static final @NonNull Duration MAX_LINGERING_CLOSE_DURATION = Duration.ofSeconds(1);
     private static final long MAX_LINGERING_CLOSE_BYTES = 16L * 1024L * 1024L;
 
     @FunctionalInterface
@@ -80,11 +81,11 @@ class ConnectionEventLoop {
     }
 
     private static final class PendingRegistration {
-        final SocketChannel socketChannel;
-        final EventLoop.ConnectionAdmission admission;
-        final AtomicBoolean claimed;
+        final @NonNull SocketChannel socketChannel;
+        final EventLoop.@NonNull ConnectionAdmission admission;
+        final @NonNull AtomicBoolean claimed;
 
-        private PendingRegistration(SocketChannel socketChannel, EventLoop.ConnectionAdmission admission) {
+        private PendingRegistration(@NonNull SocketChannel socketChannel, EventLoop.@NonNull ConnectionAdmission admission) {
             this.socketChannel = socketChannel;
             this.admission = admission;
             this.claimed = new AtomicBoolean();
@@ -116,11 +117,11 @@ class ConnectionEventLoop {
     }
 
     private static final class ResponseOffer {
-        final ResponseDisposition disposition;
-        final StreamTerminationReason discardReason;
+        final @NonNull ResponseDisposition disposition;
+        final @NonNull StreamTerminationReason discardReason;
         final @Nullable Throwable discardCause;
 
-        private ResponseOffer(ResponseDisposition disposition, StreamTerminationReason discardReason,
+        private ResponseOffer(@NonNull ResponseDisposition disposition, @NonNull StreamTerminationReason discardReason,
                               @Nullable Throwable discardCause) {
             this.disposition = disposition;
             this.discardReason = discardReason;
@@ -142,15 +143,15 @@ class ConnectionEventLoop {
      * by the event-loop thread.
      */
     private static final class InFlightDispatch {
-        final MicrohttpRequest request;
+        final @NonNull MicrohttpRequest request;
         final boolean monitorClientDisconnects;
         final boolean closeConnectionOnInputEnd;
-        private DispatchState state;
+        private @NonNull DispatchState state;
         private @Nullable MicrohttpResponse pendingResponse;
         private @Nullable StreamTerminationReason cancelationReason;
         private @Nullable Throwable cancelationCause;
 
-        private InFlightDispatch(MicrohttpRequest request, boolean monitorClientDisconnects,
+        private InFlightDispatch(@NonNull MicrohttpRequest request, boolean monitorClientDisconnects,
                                  boolean closeConnectionOnInputEnd) {
             this.request = request;
             this.monitorClientDisconnects = monitorClientDisconnects;
@@ -158,7 +159,7 @@ class ConnectionEventLoop {
             this.state = DispatchState.HANDLING;
         }
 
-        private synchronized ResponseOffer offerResponse(MicrohttpResponse response) {
+        private synchronized @NonNull ResponseOffer offerResponse(@NonNull MicrohttpResponse response) {
             if (state == DispatchState.HANDLING) {
                 pendingResponse = response;
                 state = DispatchState.RESPONSE_PENDING;
@@ -175,7 +176,7 @@ class ConnectionEventLoop {
             return new ResponseOffer(ResponseDisposition.DUPLICATE, StreamTerminationReason.INTERNAL_ERROR, null);
         }
 
-        private synchronized ResponseOffer offerNullResponse() {
+        private synchronized @NonNull ResponseOffer offerNullResponse() {
             if (state == DispatchState.HANDLING) {
                 state = DispatchState.INVALID_RESPONSE_PENDING;
                 return new ResponseOffer(ResponseDisposition.ACCEPTED, StreamTerminationReason.INTERNAL_ERROR, null);
@@ -210,7 +211,7 @@ class ConnectionEventLoop {
             state = DispatchState.COMMITTED;
         }
 
-        private synchronized @Nullable DispatchCancellation cancel(StreamTerminationReason reason,
+        private synchronized @Nullable DispatchCancellation cancel(@NonNull StreamTerminationReason reason,
                                                                     @Nullable Throwable cause) {
             if (state == DispatchState.COMMITTED || state == DispatchState.CANCELED) {
                 return null;
@@ -232,39 +233,39 @@ class ConnectionEventLoop {
         }
     }
 
-    private final Options options;
-    private final Logger logger;
-    private final Handler handler;
-    private final AtomicLong connectionCounter;
-    private final AtomicBoolean stop;
-    private final AtomicBoolean draining;
-    private final Consumer<Throwable> unexpectedTerminationHandler;
-    private final Runnable terminationHandler;
-    private final TransportFailureObserver transportFailureObserver;
+    private final @NonNull Options options;
+    private final @NonNull Logger logger;
+    private final @NonNull Handler handler;
+    private final @NonNull AtomicLong connectionCounter;
+    private final @NonNull AtomicBoolean stop;
+    private final @NonNull AtomicBoolean draining;
+    private final @NonNull Consumer<@NonNull Throwable> unexpectedTerminationHandler;
+    private final @NonNull Runnable terminationHandler;
+    private final @NonNull TransportFailureObserver transportFailureObserver;
 
-    private final Scheduler timeoutQueue;
-    private final Queue<Runnable> taskQueue;
-    private final Queue<PendingRegistration> pendingRegistrations;
-    private final ByteBuffer buffer;
-    private final Selector selector;
-    private final Thread thread;
-    private final AtomicInteger connectionCount;
-    private final AtomicInteger pendingRegistrationCount;
-    private final AtomicBoolean registrationsClosed;
-    private final Object lifecycleLock;
+    private final @NonNull Scheduler timeoutQueue;
+    private final @NonNull Queue<@NonNull Runnable> taskQueue;
+    private final @NonNull Queue<@NonNull PendingRegistration> pendingRegistrations;
+    private final @NonNull ByteBuffer buffer;
+    private final @NonNull Selector selector;
+    private final @NonNull Thread thread;
+    private final @NonNull AtomicInteger connectionCount;
+    private final @NonNull AtomicInteger pendingRegistrationCount;
+    private final @NonNull AtomicBoolean registrationsClosed;
+    private final @NonNull Object lifecycleLock;
     private boolean started;
     private boolean closedBeforeStart;
 
     ConnectionEventLoop(
-            Options options,
-            Logger logger,
-            Handler handler,
-            AtomicLong connectionCounter,
-            AtomicBoolean stop,
-            AtomicBoolean draining,
-            Consumer<Throwable> unexpectedTerminationHandler,
-            Runnable terminationHandler,
-            TransportFailureObserver transportFailureObserver) throws IOException {
+            @NonNull Options options,
+            @NonNull Logger logger,
+            @NonNull Handler handler,
+            @NonNull AtomicLong connectionCounter,
+            @NonNull AtomicBoolean stop,
+            @NonNull AtomicBoolean draining,
+            @NonNull Consumer<@NonNull Throwable> unexpectedTerminationHandler,
+            @NonNull Runnable terminationHandler,
+            @NonNull TransportFailureObserver transportFailureObserver) throws IOException {
         this.options = options;
         this.logger = logger;
         this.handler = handler;
@@ -301,28 +302,29 @@ class ConnectionEventLoop {
     }
 
     private class Connection {
-        static final String HTTP_1_0 = "HTTP/1.0";
-        static final String HTTP_1_1 = "HTTP/1.1";
+        static final @NonNull String HTTP_1_0 = "HTTP/1.0";
+        static final @NonNull String HTTP_1_1 = "HTTP/1.1";
 
-        static final String HEADER_CONNECTION = "Connection";
-        static final String HEADER_CONTENT_LENGTH = "Content-Length";
-        static final String HEADER_TRANSFER_ENCODING = "Transfer-Encoding";
+        static final @NonNull String HEADER_CONNECTION = "Connection";
+        static final @NonNull String HEADER_CONTENT_LENGTH = "Content-Length";
+        static final @NonNull String HEADER_TRANSFER_ENCODING = "Transfer-Encoding";
 
-        static final String KEEP_ALIVE = "Keep-Alive";
-        static final String CLOSE = "close";
-        static final String CHUNKED = "chunked";
+        static final @NonNull String KEEP_ALIVE = "Keep-Alive";
+        static final @NonNull String CLOSE = "close";
+        static final @NonNull String CHUNKED = "chunked";
 
-        static final byte[] CONTINUE_RESPONSE =
+        static final byte @NonNull [] CONTINUE_RESPONSE =
                 "HTTP/1.1 100 Continue\r\n\r\n"
                         .getBytes(StandardCharsets.US_ASCII);
 
-        final SocketChannel socketChannel;
-        final SelectionKey selectionKey;
-        final ByteTokenizer byteTokenizer;
-        final String id;
+        final @NonNull SocketChannel socketChannel;
+        final @NonNull SelectionKey selectionKey;
+        final @NonNull ByteTokenizer byteTokenizer;
+        final @NonNull String id;
+        final @Nullable SocketAddress peerAddress;
         final @Nullable InetSocketAddress remoteAddress;
-        final EventLoop.ConnectionAdmission admission;
-        RequestParser requestParser;
+        final EventLoop.@NonNull ConnectionAdmission admission;
+        @NonNull RequestParser requestParser;
         @Nullable
         WritableSource writableSource;
         @Nullable
@@ -349,21 +351,21 @@ class ConnectionEventLoop {
         boolean lingeringClose;
         long lingeringCloseBytesDiscarded;
         boolean streamingResponseClosesOnInputEnd;
-        Handler.StreamingResponseInputPolicy streamingResponseInputPolicy =
+        Handler.@NonNull StreamingResponseInputPolicy streamingResponseInputPolicy =
                 Handler.StreamingResponseInputPolicy.NONE;
-        final AtomicBoolean writeReadyTaskQueued = new AtomicBoolean();
+        final @NonNull AtomicBoolean writeReadyTaskQueued = new AtomicBoolean();
         boolean unparsedResponsePending;
         int streamingResponseBytesDiscarded;
-        final AtomicBoolean closed;
+        final @NonNull AtomicBoolean closed;
 
-        private Connection(SocketChannel socketChannel, SelectionKey selectionKey,
-                           @Nullable InetSocketAddress remoteAddress,
-                           EventLoop.ConnectionAdmission admission) throws IOException {
+        private Connection(@NonNull SocketChannel socketChannel, @NonNull SelectionKey selectionKey,
+                           EventLoop.@NonNull ConnectionAdmission admission) throws IOException {
             this.socketChannel = socketChannel;
             this.selectionKey = selectionKey;
+            this.peerAddress = socketChannel.getRemoteAddress();
+            this.remoteAddress = this.peerAddress instanceof InetSocketAddress address ? address : null;
             byteTokenizer = new ByteTokenizer();
             id = Long.toString(connectionCounter.getAndIncrement());
-            this.remoteAddress = remoteAddress;
             this.admission = admission;
             closed = new AtomicBoolean(false);
             requestParser = new RequestParser(byteTokenizer, remoteAddress, options.maxRequestBodySize(),
@@ -497,7 +499,7 @@ class ConnectionEventLoop {
             }
         }
 
-        private void closeAfterReadFailure(Throwable throwable) {
+        private void closeAfterReadFailure(@NonNull Throwable throwable) {
             InFlightDispatch dispatch = inFlightDispatch;
             if (dispatch != null && dispatch.shouldMonitorClientDisconnects()) {
                 failSafeClose(StreamTerminationReason.CLIENT_DISCONNECTED, throwable);
@@ -581,7 +583,7 @@ class ConnectionEventLoop {
             }
         }
 
-        private void doOnReadableWhileAwaitingResponse(InFlightDispatch dispatch) throws IOException {
+        private void doOnReadableWhileAwaitingResponse(@NonNull InFlightDispatch dispatch) throws IOException {
             if (dispatch != inFlightDispatch || !dispatch.shouldMonitorClientDisconnects()) {
                 disableReadInterest();
                 return;
@@ -731,11 +733,11 @@ class ConnectionEventLoop {
             }
         }
 
-        private void respondToRequestTooLarge(RequestTooLargeException exception) {
+        private void respondToRequestTooLarge(@NonNull RequestTooLargeException exception) {
             respondToRequestTooLarge(exception.reason());
         }
 
-        private void respondToRequestTooLarge(RequestTooLargeException.Reason reason) {
+        private void respondToRequestTooLarge(RequestTooLargeException.@NonNull Reason reason) {
             if (reason == RequestTooLargeException.Reason.HEADERS) {
                 respondToUnparsedRequest(
                         UnparsedRequestRejection.Reason.REQUEST_HEADERS_TOO_LARGE,
@@ -770,8 +772,9 @@ class ConnectionEventLoop {
                 return;
             }
 
-            List<Header> headers = request.headers() == null ? new ArrayList<>(0) : new ArrayList<>(request.headers());
-            MicrohttpRequest tooLargeRequest = new MicrohttpRequest(request.method(), request.uri(), request.version(), headers, new byte[0], true, remoteAddress,
+            @Nullable List<Header> parsedHeaders = request.headers();
+            List<Header> headers = parsedHeaders == null ? new ArrayList<>(0) : new ArrayList<>(parsedHeaders);
+            MicrohttpRequest tooLargeRequest = new MicrohttpRequest(request.parsedMethod(), request.parsedUri(), request.parsedVersion(), headers, new byte[0], true, remoteAddress,
                     request.observedWireByteCount());
 
             applyConnectionPolicy(tooLargeRequest);
@@ -794,12 +797,12 @@ class ConnectionEventLoop {
         }
 
         private void respondToUnparsedRequest(
-                UnparsedRequestRejection.Reason reason, byte[] fallbackResponse) {
+                UnparsedRequestRejection.@NonNull Reason reason, byte @NonNull [] fallbackResponse) {
             respondToUnparsedRequest(reason, fallbackResponse, requestParser.failureBoundaryExclusive());
         }
 
-        private void respondToUnparsedRequest(UnparsedRequestRejection.Reason reason,
-                                             byte[] fallbackResponse, int failureBoundaryExclusive) {
+        private void respondToUnparsedRequest(UnparsedRequestRejection.@NonNull Reason reason,
+                                             byte @NonNull [] fallbackResponse, int failureBoundaryExclusive) {
             prepareForRawErrorResponse();
             ByteTokenizer.CapturedPrefix capture = byteTokenizer.capturePrefixAndRelease(
                     failureBoundaryExclusive,
@@ -865,7 +868,7 @@ class ConnectionEventLoop {
             closeAfterResponse = true;
         }
 
-        private void writeRawErrorResponse(byte[] response) {
+        private void writeRawErrorResponse(byte @NonNull [] response) {
             responseWriteIdleTimeoutEnabled = !options.responseWriteIdleTimeout().isZero();
             if (responseWriteIdleTimeoutEnabled)
                 resetResponseWriteIdleTimeoutIfNeeded();
@@ -897,7 +900,7 @@ class ConnectionEventLoop {
             dispatchRequest(request);
         }
 
-        private void dispatchRequest(MicrohttpRequest request) {
+        private void dispatchRequest(@NonNull MicrohttpRequest request) {
             boolean monitorClientDisconnects;
             boolean closeConnectionOnInputEnd;
 
@@ -952,7 +955,7 @@ class ConnectionEventLoop {
             }
         }
 
-        private void onResponse(InFlightDispatch dispatch, @Nullable MicrohttpResponse microhttpResponse) {
+        private void onResponse(@NonNull InFlightDispatch dispatch, @Nullable MicrohttpResponse microhttpResponse) {
             if (microhttpResponse == null) {
                 ResponseOffer offer = dispatch.offerNullResponse();
 
@@ -996,7 +999,7 @@ class ConnectionEventLoop {
             wakeupSelectorForCallback();
         }
 
-        private TransportFailureObserver.Observation
+        private TransportFailureObserver.@NonNull Observation
                 beginDuplicateResponseFailure() {
             TransportFailureObserver.Observation observation =
                     beginTransportFailure(TransportFailureReason.UNKNOWN);
@@ -1020,7 +1023,7 @@ class ConnectionEventLoop {
             }
         }
 
-        private void prepareToWriteResponse(InFlightDispatch dispatch) throws Exception {
+        private void prepareToWriteResponse(@NonNull InFlightDispatch dispatch) throws Exception {
             MicrohttpResponse microhttpResponse = dispatch.beginPreparation();
 
             if (microhttpResponse == null) {
@@ -1578,7 +1581,7 @@ class ConnectionEventLoop {
         }
 
         private TransportFailureObserver.@Nullable Observation cancelDispatch(
-                InFlightDispatch dispatch, StreamTerminationReason reason,
+                @NonNull InFlightDispatch dispatch, @NonNull StreamTerminationReason reason,
                 @Nullable Throwable cause) {
             DispatchCancellation cancellation = dispatch.cancel(reason, cause);
 
@@ -1612,7 +1615,7 @@ class ConnectionEventLoop {
             }
         }
 
-        private void discardResponse(MicrohttpResponse response, StreamTerminationReason reason,
+        private void discardResponse(@NonNull MicrohttpResponse response, @NonNull StreamTerminationReason reason,
                                      @Nullable Throwable cause) {
             @Nullable Throwable closeFailure = null;
             boolean bodyCloseFailed = false;
@@ -1640,7 +1643,7 @@ class ConnectionEventLoop {
             }
         }
 
-        private void deliverBodyTermination(MicrohttpResponse response) {
+        private void deliverBodyTermination(@NonNull MicrohttpResponse response) {
             try (TransportFailureObserver.Observation observation =
                          beginTransportFailure(TransportFailureReason.UNKNOWN)) {
                 try {
@@ -1758,7 +1761,7 @@ class ConnectionEventLoop {
                     this::onRequestReadTimeout), timeout);
         }
 
-        private boolean shouldRecordReadFailure(Throwable throwable) {
+        private boolean shouldRecordReadFailure(@NonNull Throwable throwable) {
             return requestDataInFlight() || !isRemoteClose(throwable);
         }
 
@@ -1802,15 +1805,15 @@ class ConnectionEventLoop {
             }
         }
 
-        private void queueConnectionTask(String failureEvent,
-                                         TransportFailureReason failureReason,
-                                         ThrowingTask task) {
+        private void queueConnectionTask(@NonNull String failureEvent,
+                                         @NonNull TransportFailureReason failureReason,
+                                         @NonNull ThrowingTask task) {
             taskQueue.add(() -> runConnectionTask(failureEvent, failureReason, task));
         }
 
-        private void runConnectionTask(String failureEvent,
-                                       TransportFailureReason failureReason,
-                                       ThrowingTask task) {
+        private void runConnectionTask(@NonNull String failureEvent,
+                                       @NonNull TransportFailureReason failureReason,
+                                       @NonNull ThrowingTask task) {
             try (TransportFailureObserver.Observation observation =
                          beginTransportFailure(failureReason)) {
                 try {
@@ -1859,9 +1862,9 @@ class ConnectionEventLoop {
             failSafeClose(StreamTerminationReason.SERVER_STOPPING, null);
         }
 
-        private void applyConnectionPolicy(MicrohttpRequest request) {
+        private void applyConnectionPolicy(@NonNull MicrohttpRequest request) {
             closeAfterResponse = false;
-            httpOneDotZero = request.version().equalsIgnoreCase(HTTP_1_0);
+            httpOneDotZero = request.parsedVersion().equalsIgnoreCase(HTTP_1_0);
             headRequest = "HEAD".equals(request.method());
 
             boolean hasClose = hasHeaderToken(request.headers(), HEADER_CONNECTION, CLOSE);
@@ -1878,7 +1881,7 @@ class ConnectionEventLoop {
             }
         }
 
-        private boolean shouldAddContentLength(MicrohttpResponse microhttpResponse) {
+        private boolean shouldAddContentLength(@NonNull MicrohttpResponse microhttpResponse) {
             if (microhttpResponse.hasHeader(HEADER_CONTENT_LENGTH)) {
                 return false;
             }
@@ -1894,7 +1897,7 @@ class ConnectionEventLoop {
             return (status >= 100 && status < 200) || status == 204 || status == 304;
         }
 
-        private boolean hasHeaderToken(@Nullable List<Header> headers, String headerName, String token) {
+        private boolean hasHeaderToken(@Nullable List<@NonNull Header> headers, @NonNull String headerName, @NonNull String token) {
             if (headers == null) {
                 return false;
             }
@@ -2051,7 +2054,7 @@ class ConnectionEventLoop {
         }
     }
 
-    private byte[] rawErrorResponse(int status, String reason) {
+    private byte @NonNull [] rawErrorResponse(int status, @NonNull String reason) {
         StringBuilder response = new StringBuilder()
                 .append("HTTP/1.1 ").append(status).append(' ').append(reason).append("\r\n")
                 .append("Connection: close\r\n")
@@ -2071,7 +2074,7 @@ class ConnectionEventLoop {
         return response.toString().getBytes(StandardCharsets.US_ASCII);
     }
 
-    private boolean validEarlyErrorHeader(Header header) {
+    private boolean validEarlyErrorHeader(@Nullable Header header) {
         if (header == null || header.name() == null || header.value() == null
                 || header.name().isEmpty())
             return false;
@@ -2156,7 +2159,7 @@ class ConnectionEventLoop {
         }
     }
 
-    void register(SocketChannel socketChannel, EventLoop.ConnectionAdmission admission) {
+    void register(@NonNull SocketChannel socketChannel, EventLoop.@NonNull ConnectionAdmission admission) {
         PendingRegistration pendingRegistration = new PendingRegistration(socketChannel, admission);
         pendingRegistrationCount.incrementAndGet();
         pendingRegistrations.add(pendingRegistration);
@@ -2177,7 +2180,7 @@ class ConnectionEventLoop {
         selector.wakeup(); // wakeup event loop thread to process task immediately
     }
 
-    private void processPendingRegistration(PendingRegistration pendingRegistration) {
+    private void processPendingRegistration(@NonNull PendingRegistration pendingRegistration) {
         if (!claimPendingRegistration(pendingRegistration)) {
             return;
         }
@@ -2199,7 +2202,7 @@ class ConnectionEventLoop {
         }
     }
 
-    private void doRegister(PendingRegistration pendingRegistration) throws IOException {
+    private void doRegister(@NonNull PendingRegistration pendingRegistration) throws IOException {
         SocketChannel socketChannel = pendingRegistration.socketChannel;
         @Nullable SelectionKey selectionKey = null;
         @Nullable Connection connection = null;
@@ -2207,16 +2210,14 @@ class ConnectionEventLoop {
         try {
             configureAcceptedSocket(socketChannel);
             selectionKey = socketChannel.register(selector, SelectionKey.OP_READ);
-            SocketAddress socketAddress = socketChannel.getRemoteAddress();
-            InetSocketAddress remoteAddress = socketAddress instanceof InetSocketAddress
-                    ? (InetSocketAddress) socketAddress
-                    : null;
-            connection = new Connection(socketChannel, selectionKey, remoteAddress, pendingRegistration.admission);
+            connection = new Connection(socketChannel, selectionKey, pendingRegistration.admission);
             connectionCount.incrementAndGet();
             selectionKey.attach(connection);
 
             try {
                 if (logger.enabled()) {
+                    InetSocketAddress remoteAddress = connection.remoteAddress;
+                    SocketAddress socketAddress = connection.peerAddress;
                     String remoteAddressString = remoteAddress != null
                             ? remoteAddress.toString()
                             : (socketAddress != null ? socketAddress.toString() : "unknown");
@@ -2253,7 +2254,7 @@ class ConnectionEventLoop {
         }
     }
 
-    static void configureAcceptedSocket(SocketChannel socketChannel) throws IOException {
+    static void configureAcceptedSocket(@NonNull SocketChannel socketChannel) throws IOException {
         socketChannel.configureBlocking(false);
         try {
             // Response headers and bodies may use separate writes. Avoid holding a small
@@ -2265,7 +2266,7 @@ class ConnectionEventLoop {
         }
     }
 
-    private boolean claimPendingRegistration(PendingRegistration pendingRegistration) {
+    private boolean claimPendingRegistration(@NonNull PendingRegistration pendingRegistration) {
         if (!pendingRegistration.claim()) {
             return false;
         }
@@ -2275,7 +2276,7 @@ class ConnectionEventLoop {
         return true;
     }
 
-    private void closePendingRegistration(PendingRegistration pendingRegistration) {
+    private void closePendingRegistration(@NonNull PendingRegistration pendingRegistration) {
         if (claimPendingRegistration(pendingRegistration)) {
             pendingRegistration.closeAndRelease();
         }
@@ -2317,8 +2318,8 @@ class ConnectionEventLoop {
         }
     }
 
-    private void runLoopTask(Runnable task, String failureEvent,
-                             TransportFailureReason failureReason) {
+    private void runLoopTask(@NonNull Runnable task, @NonNull String failureEvent,
+                             @NonNull TransportFailureReason failureReason) {
         try (TransportFailureObserver.Observation observation =
                      beginTransportFailure(failureReason)) {
             try {
@@ -2330,13 +2331,13 @@ class ConnectionEventLoop {
         }
     }
 
-    private TransportFailureObserver.Observation beginTransportFailure(
-            TransportFailureReason reason) {
+    private TransportFailureObserver.@NonNull Observation beginTransportFailure(
+            @NonNull TransportFailureReason reason) {
         return TransportFailureObservations.beginSafely(
                 transportFailureObserver, reason);
     }
 
-    private void logThrowable(Throwable throwable, LogEntry... entries) {
+    private void logThrowable(@NonNull Throwable throwable, @NonNull LogEntry @NonNull ... entries) {
         try {
             if (logger.failureEnabled()) {
                 logger.logFailure(throwable, entries);

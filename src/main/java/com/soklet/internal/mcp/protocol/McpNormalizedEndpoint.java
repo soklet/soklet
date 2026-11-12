@@ -280,7 +280,7 @@ final class McpNormalizedEndpoint {
 
 	@SafeVarargs
 	private static void validateResourceDescriptors(
-			@NonNull List<@NonNull McpNormalizedOperation>... operationGroups) {
+			@NonNull List<@NonNull McpNormalizedOperation> @NonNull ... operationGroups) {
 		for (List<McpNormalizedOperation> operations : operationGroups) {
 			for (McpNormalizedOperation operation : operations) {
 				if (operation.resourceDescriptor().isPresent()
@@ -293,7 +293,7 @@ final class McpNormalizedEndpoint {
 
 	@SafeVarargs
 	private static void validateToolDescriptors(
-			@NonNull List<@NonNull McpNormalizedOperation>... operationGroups) {
+			@NonNull List<@NonNull McpNormalizedOperation> @NonNull ... operationGroups) {
 		for (List<McpNormalizedOperation> operations : operationGroups) {
 			for (McpNormalizedOperation operation : operations) {
 				if (operation.toolDescriptor().isPresent())
@@ -305,7 +305,7 @@ final class McpNormalizedEndpoint {
 
 	@SafeVarargs
 	private static void validatePromptDescriptors(
-			@NonNull List<@NonNull McpNormalizedOperation>... operationGroups) {
+			@NonNull List<@NonNull McpNormalizedOperation> @NonNull ... operationGroups) {
 		for (List<McpNormalizedOperation> operations : operationGroups) {
 			for (McpNormalizedOperation operation : operations) {
 				if (operation.promptDescriptor().isPresent())
@@ -317,7 +317,7 @@ final class McpNormalizedEndpoint {
 
 	@SafeVarargs
 	private static void validateToolOnlyMirroredHeaders(
-			@NonNull List<@NonNull McpNormalizedOperation>... operationGroups) {
+			@NonNull List<@NonNull McpNormalizedOperation> @NonNull ... operationGroups) {
 		for (List<McpNormalizedOperation> operations : operationGroups) {
 			for (McpNormalizedOperation operation : operations) {
 				if (!operation.mirroredHeaderPlan().declarations().isEmpty())
@@ -789,7 +789,7 @@ record McpNormalizedSubscriptionConfiguration(
 	@NonNull
 	static McpNormalizedSubscriptionConfiguration supporting(
 			@NonNull McpResourceNotificationType first,
-			@NonNull McpResourceNotificationType... remaining) {
+			@NonNull McpResourceNotificationType @NonNull ... remaining) {
 		requireNonNull(first);
 		requireNonNull(remaining);
 		Set<McpResourceNotificationType> notificationTypes = EnumSet.of(first);

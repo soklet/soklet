@@ -127,9 +127,9 @@ final class McpCatalogProjectionQueue {
 	}
 
 	@NonNull
-	private final EnumMap<Family, State> states;
+	private final EnumMap<@NonNull Family, @NonNull State> states;
 	@NonNull
-	private final ArrayDeque<Family> pendingFamilies;
+	private final ArrayDeque<@NonNull Family> pendingFamilies;
 	private @Nullable Projection active;
 	private boolean jobOutstanding;
 

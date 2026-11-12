@@ -59,7 +59,7 @@ class NoOriginsCorsAuthorizer implements CorsAuthorizer {
 
 	@NonNull
 	@Override
-	public Optional<CorsResponse> authorize(@NonNull Request request,
+	public Optional<@NonNull CorsResponse> authorize(@NonNull Request request,
 																					@NonNull Cors cors) {
 		requireNonNull(request);
 		requireNonNull(cors);
@@ -69,7 +69,7 @@ class NoOriginsCorsAuthorizer implements CorsAuthorizer {
 
 	@NonNull
 	@Override
-	public Optional<CorsPreflightResponse> authorizePreflight(@NonNull Request request,
+	public Optional<@NonNull CorsPreflightResponse> authorizePreflight(@NonNull Request request,
 																														@NonNull CorsPreflight corsPreflight,
 																														@NonNull Map<@NonNull HttpMethod, @NonNull ResourceMethod> availableResourceMethodsByHttpMethod) {
 		requireNonNull(request);
@@ -81,7 +81,7 @@ class NoOriginsCorsAuthorizer implements CorsAuthorizer {
 
 	@NonNull
 	@Override
-	public Optional<CorsPreflightResponse> authorizePreflight(@NonNull Request request,
+	public Optional<@NonNull CorsPreflightResponse> authorizePreflight(@NonNull Request request,
 																														@NonNull CorsPreflight corsPreflight,
 																														@NonNull Set<@NonNull HttpMethod> availableHttpMethods) {
 		requireNonNull(request);

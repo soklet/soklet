@@ -77,7 +77,7 @@ final class McpAppMetadataValidation {
 		return Collections.unmodifiableSet(new LinkedHashSet<>(sorted));
 	}
 
-	private static boolean isOrigin(String origin, boolean connectDomains) {
+	private static boolean isOrigin(@NonNull String origin, boolean connectDomains) {
 		for (int index = 0; index < origin.length(); ++index) {
 			char character = origin.charAt(index);
 			if (character <= 0x20 || character >= 0x7F || character == ','
@@ -134,7 +134,7 @@ final class McpAppMetadataValidation {
 		return (!insecure || loopback) && (port == null || isPort(port));
 	}
 
-	private static boolean isDnsName(String value) {
+	private static boolean isDnsName(@NonNull String value) {
 		if (value.isEmpty() || value.length() > 253)
 			return false;
 		for (String label : value.split("\\.", -1)) {
@@ -151,7 +151,7 @@ final class McpAppMetadataValidation {
 		return true;
 	}
 
-	private static boolean isPort(String port) {
+	private static boolean isPort(@NonNull String port) {
 		if (port.isEmpty() || port.length() > 5 || port.charAt(0) == '0')
 			return false;
 		int value = 0;
@@ -165,7 +165,7 @@ final class McpAppMetadataValidation {
 	}
 
 	/** Reject legacy integer, octal, hexadecimal, and shortened IPv4 spellings. */
-	private static boolean isLegacyIpv4(String host) {
+	private static boolean isLegacyIpv4(@NonNull String host) {
 		for (String label : host.split("\\.", -1)) {
 			boolean hexadecimal = label.startsWith("0x");
 			int start = hexadecimal ? 2 : 0;
@@ -181,7 +181,7 @@ final class McpAppMetadataValidation {
 		return true;
 	}
 
-	private static int @Nullable [] parseIpv4(String host) {
+	private static int @Nullable [] parseIpv4(@NonNull String host) {
 		String[] parts = host.split("\\.", -1);
 		if (parts.length != 4)
 			return null;
@@ -206,7 +206,7 @@ final class McpAppMetadataValidation {
 	}
 
 	/** Parse literal bytes locally; never pass untrusted names to a resolver. */
-	private static int @Nullable [] parseIpv6(String host) {
+	private static int @Nullable [] parseIpv6(@NonNull String host) {
 		int compression = host.indexOf("::");
 		if (compression >= 0 && host.indexOf("::", compression + 2) >= 0)
 			return null;
@@ -228,7 +228,7 @@ final class McpAppMetadataValidation {
 	}
 
 	@Nullable
-	private static List<Integer> parseIpv6Groups(String part, boolean allowIpv4Tail) {
+	private static List<@NonNull Integer> parseIpv6Groups(@NonNull String part, boolean allowIpv4Tail) {
 		List<Integer> groups = new ArrayList<>();
 		if (part.isEmpty())
 			return groups;
@@ -262,7 +262,7 @@ final class McpAppMetadataValidation {
 	}
 
 	/** RFC 5952 zero compression; mapped IPv4 addresses use a dotted tail. */
-	private static String canonicalIpv6(int[] address) {
+	private static @NonNull String canonicalIpv6(int @NonNull [] address) {
 		if (address[0] == 0 && address[1] == 0 && address[2] == 0
 				&& address[3] == 0 && address[4] == 0 && address[5] == 0xffff)
 			return "::ffff:" + (address[6] >> 8) + "." + (address[6] & 0xff)

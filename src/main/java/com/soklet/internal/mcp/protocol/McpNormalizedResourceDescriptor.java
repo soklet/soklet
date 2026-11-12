@@ -1005,7 +1005,7 @@ final class McpLevelOneUriTemplate {
 		return expansionLength > 0 ? expansionLength : 3;
 	}
 
-	private BitSet @NonNull [] matchReachability(@NonNull String uri,
+	private @NonNull BitSet @NonNull [] matchReachability(@NonNull String uri,
 			int @NonNull [] tokenLengths) {
 		BitSet[] rows = new BitSet[parts.size() + 1];
 		rows[parts.size()] = new BitSet(uri.length() + 1);

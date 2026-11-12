@@ -149,7 +149,7 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 				requireNonNull(loader));
 	}
 
-	private static DefaultResourceMethodResolver fromClasspathIntrospection(
+	private static @NonNull DefaultResourceMethodResolver fromClasspathIntrospection(
 			@Nullable ClassLoader classLoader) {
 		// Read declarations from SokletProcessor's compile-time lookup table
 		List<ResourceMethodDeclaration> resourceMethodDeclarations =
@@ -242,8 +242,8 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	}
 
 	@NonNull
-	private static <K, V> Map<K, Set<V>> immutableSetMap(
-			@NonNull Map<K, Set<V>> source) {
+	private static <K, V> Map<K, @NonNull Set<V>> immutableSetMap(
+			@NonNull Map<K, @NonNull Set<V>> source) {
 		requireNonNull(source);
 
 		Map<K, Set<V>> copy = new HashMap<>(source.size());
@@ -301,7 +301,7 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		@NonNull
 		private final Object monitor;
 		@NonNull
-		private final IdentityHashMap<DeadlineWaiter, Integer> lifecycleWaiters;
+		private final IdentityHashMap<@NonNull DeadlineWaiter, @NonNull Integer> lifecycleWaiters;
 		@NonNull
 		private State state;
 		@Nullable
@@ -518,7 +518,7 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		private ResourceMethodDeclarationLoader() {}
 
 		@SuppressWarnings("unchecked")
-		static List<ResourceMethodDeclaration> loadAll(@Nullable ClassLoader cl) {
+		static @NonNull List<@NonNull ResourceMethodDeclaration> loadAll(@Nullable ClassLoader cl) {
 			List<ResourceMethodDeclaration> out = new ArrayList<>();
 			Enumeration<URL> resources = null;
 
@@ -589,7 +589,7 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		}
 
 		@NonNull
-		private static List<ResourceMethodDeclaration> dedupeAndOrder(@NonNull List<ResourceMethodDeclaration> in) {
+		private static List<@NonNull ResourceMethodDeclaration> dedupeAndOrder(@NonNull List<@NonNull ResourceMethodDeclaration> in) {
 			requireNonNull(in);
 
 			Map<String, ResourceMethodDeclaration> byKey = new LinkedHashMap<>();
@@ -616,7 +616,7 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 	@NonNull
 	private static Method resolveMethod(@NonNull String className,
 														 @NonNull String methodName,
-														 @NonNull String[] paramTypeNames,
+														 @NonNull String @NonNull [] paramTypeNames,
 														 @Nullable ClassLoader classLoader) {
 		requireNonNull(className);
 		requireNonNull(methodName);
@@ -648,8 +648,8 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		return Class.forName(paramTypeName, true, classLoader);
 	}
 
-	private DefaultResourceMethodResolver(@Nullable Set<Class<?>> resourceClasses,
-																				@Nullable Set<Method> methods) {
+	private DefaultResourceMethodResolver(@Nullable Set<@NonNull Class<?>> resourceClasses,
+																				@Nullable Set<@NonNull Method> methods) {
 		Set<Method> allMethods = new HashSet<>();
 
 		if (resourceClasses != null)
@@ -703,7 +703,7 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 
 	@NonNull
 	@Override
-	public Optional<ResourceMethod> resourceMethodForRequest(@NonNull Request request,
+	public Optional<@NonNull ResourceMethod> resourceMethodForRequest(@NonNull Request request,
 																			 @NonNull ServerType serverType) {
 		requireNonNull(request);
 		requireNonNull(serverType);
@@ -895,7 +895,7 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		}
 	}
 
-	private static String describeResourceMethod(@NonNull ResourceMethod resourceMethod) {
+	private static @NonNull String describeResourceMethod(@NonNull ResourceMethod resourceMethod) {
 		requireNonNull(resourceMethod);
 
 		String serverType = resourceMethod.isSseEventSource() ? "SSE" : "HTTP";
@@ -1053,7 +1053,7 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		}
 
 		@SuppressWarnings("ReferenceEquality")
-		private Boolean isOptionsSplat(@NonNull ResourcePath resourcePath) {
+		private @NonNull Boolean isOptionsSplat(@NonNull ResourcePath resourcePath) {
 			requireNonNull(resourcePath);
 			return resourcePath == ResourcePath.OPTIONS_SPLAT_RESOURCE_PATH;
 		}
@@ -1212,7 +1212,7 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		return methods;
 	}
 
-	private static boolean isTypeAdaptationBridge(Method method) {
+	private static boolean isTypeAdaptationBridge(@NonNull Method method) {
 		if (!method.isBridge()) return false;
 		// javac places an interface bridge in the class that adds the interface, even when
 		// the implementing declaration is inherited from a superclass.
@@ -1287,7 +1287,7 @@ final class DefaultResourceMethodResolver implements ResourceMethodResolver {
 		}
 
 		@Override
-		public String toString() {
+		public @NonNull String toString() {
 			return format("%s{httpMethod=%s, resourcePathDeclaration=%s, sseEventSource=%s}", getClass().getSimpleName(),
 					getHttpMethod(), getResourcePathDeclaration(), isSseEventSource());
 		}

@@ -247,7 +247,7 @@ public final class ValueConverterRegistry {
 
 	@SuppressWarnings("unchecked")
 	@NonNull
-	protected <F, T> Optional<ValueConverter<F, T>> getInternal(@NonNull Type fromType,
+	protected <F, T> Optional<@NonNull ValueConverter<@NonNull F, @NonNull T>> getInternal(@NonNull Type fromType,
 																															@NonNull Type toType) {
 		requireNonNull(fromType);
 		requireNonNull(toType);
@@ -363,6 +363,7 @@ public final class ValueConverterRegistry {
 		}
 
 		@Override
+		@NonNull
 		public String toString() {
 			return format("%s{fromType=%s, toType=%s}", getClass().getSimpleName(), getFromType(), getToType());
 		}

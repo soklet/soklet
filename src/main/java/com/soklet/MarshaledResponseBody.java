@@ -62,8 +62,8 @@ public sealed interface MarshaledResponseBody permits MarshaledResponseBody.Byte
 	 */
 	@ThreadSafe
 	final class Bytes implements MarshaledResponseBody {
-		@NonNull
-		private final byte[] bytes;
+
+		private final byte @NonNull [] bytes;
 
 		public Bytes(byte @NonNull [] bytes) {
 			this.bytes = requireNonNull(bytes);
@@ -163,14 +163,14 @@ public sealed interface MarshaledResponseBody permits MarshaledResponseBody.Byte
 	 */
 	@ThreadSafe
 	final class SecureFile implements MarshaledResponseBody {
-		private final SecureStaticFileRoot root;
-		private final Path path;
-		private final Long offset;
-		private final Long count;
-		private final BasicFileAttributes attributes;
+		private final @NonNull SecureStaticFileRoot root;
+		private final @NonNull Path path;
+		private final @NonNull Long offset;
+		private final @NonNull Long count;
+		private final @NonNull BasicFileAttributes attributes;
 
-		SecureFile(SecureStaticFileRoot root, Path path, Long offset, Long count,
-				BasicFileAttributes attributes) {
+		SecureFile(@NonNull SecureStaticFileRoot root, @NonNull Path path, @NonNull Long offset, @NonNull Long count,
+				@NonNull BasicFileAttributes attributes) {
 			this.root = requireNonNull(root);
 			this.path = requireNonNull(path);
 			this.offset = requireNonNull(offset);

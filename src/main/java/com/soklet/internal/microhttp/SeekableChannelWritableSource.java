@@ -15,6 +15,7 @@
 
 package com.soklet.internal.microhttp;
 
+import org.jspecify.annotations.NonNull;
 import java.io.EOFException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -25,11 +26,11 @@ import static java.util.Objects.requireNonNull;
 
 /** Buffered adapter for secure-directory channels that are not FileChannels. */
 final class SeekableChannelWritableSource implements WritableSource {
-	private final SeekableByteChannel channel;
-	private final ByteBuffer buffer = ByteBuffer.allocate(64 * 1024);
+	private final @NonNull SeekableByteChannel channel;
+	private final @NonNull ByteBuffer buffer = ByteBuffer.allocate(64 * 1024);
 	private long remaining;
 
-	SeekableChannelWritableSource(SeekableByteChannel channel, long offset, long count) throws IOException {
+	SeekableChannelWritableSource(@NonNull SeekableByteChannel channel, long offset, long count) throws IOException {
 		this.channel = requireNonNull(channel);
 		this.remaining = count;
 		buffer.limit(0);
@@ -37,7 +38,7 @@ final class SeekableChannelWritableSource implements WritableSource {
 	}
 
 	@Override
-	public long writeTo(SocketChannel socketChannel, long maxBytes) throws IOException {
+	public long writeTo(@NonNull SocketChannel socketChannel, long maxBytes) throws IOException {
 		if (maxBytes <= 0 || !hasRemaining())
 			return 0;
 		if (!buffer.hasRemaining()) {

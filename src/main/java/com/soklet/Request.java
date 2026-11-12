@@ -1225,7 +1225,7 @@ public final class Request {
 	}
 
 	@NonNull
-	Optional<List<@NonNull String>> getHeaderValues(@NonNull String name) {
+	Optional<@NonNull List<@NonNull String>> getHeaderValues(@NonNull String name) {
 		requireNonNull(name);
 		return this.headers.get(name);
 	}
@@ -1303,7 +1303,7 @@ public final class Request {
 
 	@NonNull
 	private <T> Optional<T> singleValueForName(@NonNull String name,
-																						 @Nullable Map<String, List<T>> valuesByName) throws MultipleValuesException {
+																						 @Nullable Map<@NonNull String, @NonNull List<T>> valuesByName) throws MultipleValuesException {
 		if (valuesByName == null)
 			return Optional.empty();
 
@@ -1333,7 +1333,7 @@ public final class Request {
 	}
 
 	@NonNull
-	private static Optional<Cors> extractCors(@NonNull HttpMethod httpMethod,
+	private static Optional<@NonNull Cors> extractCors(@NonNull HttpMethod httpMethod,
 																						@NonNull RequestHeaders headers) {
 		requireNonNull(httpMethod);
 		requireNonNull(headers);
@@ -1342,7 +1342,7 @@ public final class Request {
 	}
 
 	@NonNull
-	private static Optional<CorsPreflight> extractCorsPreflight(@NonNull RequestHeaders headers) {
+	private static Optional<@NonNull CorsPreflight> extractCorsPreflight(@NonNull RequestHeaders headers) {
 		requireNonNull(headers);
 
 		String origin = firstHeaderValue(headers, "Origin").orElse(null);
@@ -1375,7 +1375,7 @@ public final class Request {
 	}
 
 	@NonNull
-	private static Optional<String> firstHeaderValue(@NonNull RequestHeaders headers,
+	private static Optional<@NonNull String> firstHeaderValue(@NonNull RequestHeaders headers,
 																									@NonNull String name) {
 		requireNonNull(headers);
 		requireNonNull(name);
@@ -1389,7 +1389,7 @@ public final class Request {
 	}
 
 	@NonNull
-	private static Optional<TraceContext> extractTraceContext(@NonNull RequestHeaders headers) {
+	private static Optional<@NonNull TraceContext> extractTraceContext(@NonNull RequestHeaders headers) {
 		requireNonNull(headers);
 
 		// Preserve duplicate traceparent occurrences for both physical and map-backed requests.
@@ -1398,7 +1398,7 @@ public final class Request {
 
 	private interface RequestHeaders {
 		@NonNull
-		Optional<List<@NonNull String>> get(@NonNull String name);
+		Optional<@NonNull List<@NonNull String>> get(@NonNull String name);
 
 		@NonNull
 		List<@NonNull String> values(@NonNull String name);
@@ -1424,7 +1424,7 @@ public final class Request {
 
 		@Override
 		@NonNull
-		public Optional<List<@NonNull String>> get(@NonNull String name) {
+		public Optional<@NonNull List<@NonNull String>> get(@NonNull String name) {
 			requireNonNull(name);
 			return Optional.ofNullable(this.headers.get(name));
 		}
@@ -1462,7 +1462,7 @@ public final class Request {
 
 		@Override
 		@NonNull
-		public Optional<List<@NonNull String>> get(@NonNull String name) {
+		public Optional<@NonNull List<@NonNull String>> get(@NonNull String name) {
 			requireNonNull(name);
 
 			List<String> matchingValues = null;

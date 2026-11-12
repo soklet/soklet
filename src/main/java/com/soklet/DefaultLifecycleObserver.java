@@ -36,7 +36,7 @@ import java.util.concurrent.TimeoutException;
 final class DefaultLifecycleObserver implements LifecycleObserver {
 	@NonNull
 	private static final DefaultLifecycleObserver DEFAULT_INSTANCE;
-	private final LifecycleLogDispatcher dispatcher;
+	private final @NonNull LifecycleLogDispatcher dispatcher;
 
 	static {
 		DEFAULT_INSTANCE = new DefaultLifecycleObserver();
@@ -70,8 +70,8 @@ final class DefaultLifecycleObserver implements LifecycleObserver {
 		dispatcher.dispatch(() -> write(type, message, throwable, errorStream));
 	}
 
-	private static void write(LogEventType type, String message,
-			@Nullable Throwable throwable, PrintStream errorStream) {
+	private static void write(@NonNull LogEventType type, @NonNull String message,
+			@Nullable Throwable throwable, @NonNull PrintStream errorStream) {
 
 		if (throwable == null) {
 			errorStream.printf("%s::didReceiveLogEvent [%s]: %s%n", LifecycleObserver.class.getSimpleName(), type.name(), message);
@@ -91,7 +91,7 @@ final class DefaultLifecycleObserver implements LifecycleObserver {
 		}
 	}
 
-	private static String routineFailureMessage(Throwable throwable) {
+	private static @NonNull String routineFailureMessage(@NonNull Throwable throwable) {
 		String message = throwable.getMessage();
 		if (message == null)
 			return "";

@@ -29,9 +29,9 @@ final class HttpResponseStreamObservation {
 	@NonNull
 	private final Request request;
 	private final long processingStartedNanos;
-	private final CountDownLatch handlingFinished = new CountDownLatch(1);
-	private final AtomicBoolean delivered = new AtomicBoolean();
-	private final AtomicBoolean prepared = new AtomicBoolean();
+	private final @NonNull CountDownLatch handlingFinished = new CountDownLatch(1);
+	private final @NonNull AtomicBoolean delivered = new AtomicBoolean();
+	private final @NonNull AtomicBoolean prepared = new AtomicBoolean();
 	@Nullable
 	private volatile StreamingResponseHandle preparedHandle;
 	private volatile long establishedNanos;
@@ -47,7 +47,7 @@ final class HttpResponseStreamObservation {
 	Request getRequest() { return this.request; }
 
 	void prepare(@NonNull StreamingResponseHandle handle, long establishedNanos, @Nullable MetricsCollector metricsCollector,
-			@NonNull LifecycleObserver lifecycleObserver, @NonNull Consumer<LogEvent> log) {
+			@NonNull LifecycleObserver lifecycleObserver, @NonNull Consumer<@NonNull LogEvent> log) {
 		if (!this.prepared.compareAndSet(false, true))
 			return;
 		this.establishedNanos = establishedNanos;
@@ -70,7 +70,7 @@ final class HttpResponseStreamObservation {
 		}
 	}
 
-	private static void reportFailure(@NonNull Consumer<LogEvent> log, @NonNull LogEvent event) {
+	private static void reportFailure(@NonNull Consumer<@NonNull LogEvent> log, @NonNull LogEvent event) {
 		try { log.accept(event); }
 		catch (Throwable throwable) { LifecycleObserverLogFallback.report(throwable); }
 	}
@@ -83,7 +83,7 @@ final class HttpResponseStreamObservation {
 	@NonNull
 	Delivery deliver(@NonNull StreamingResponseHandle handle, @NonNull StreamTermination termination,
 			long terminatedNanos, long bodyBytes, @Nullable MetricsCollector metricsCollector,
-			@NonNull Consumer<LogEvent> log) {
+			@NonNull Consumer<@NonNull LogEvent> log) {
 		boolean interrupted = false;
 		for (;;) {
 			try { this.handlingFinished.await(); break; }

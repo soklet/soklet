@@ -16,6 +16,8 @@
 
 package com.soklet.internal.mcp.transport;
 
+
+import org.jspecify.annotations.NonNull;
 /**
  * Monotonic time source used by the MCP transport.
  *
@@ -23,7 +25,7 @@ package com.soklet.internal.mcp.transport;
  */
 @FunctionalInterface
 interface McpMonotonicClock {
-	McpMonotonicClock SYSTEM = System::nanoTime;
+	@NonNull McpMonotonicClock SYSTEM = System::nanoTime;
 
 	long nanoTime();
 }

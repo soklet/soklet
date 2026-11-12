@@ -64,23 +64,23 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 public final class StreamLifecycleCoordinator {
 
-	private static final AtomicInteger THREAD_SEQUENCE = new AtomicInteger();
+	private static final @NonNull AtomicInteger THREAD_SEQUENCE = new AtomicInteger();
 	private static final int MAX_DIAGNOSTIC_GRAPH_STEPS = 64;
-	private final Object lock = new Object();
+	private final @NonNull Object lock = new Object();
 	private final int capacity;
 	private final long cleanupGraceNanos;
-	private final Consumer<Throwable> diagnostics;
-	private final Consumer<Runnable> callbackExecution;
-	private final LongSupplier nanoClock;
-	private final Set<Reservation> reservations = new LinkedHashSet<>();
-	private final ThreadPoolExecutor callbackExecutor;
-	private final ThreadPoolExecutor terminationExecutor;
+	private final @NonNull Consumer<@NonNull Throwable> diagnostics;
+	private final @NonNull Consumer<@NonNull Runnable> callbackExecution;
+	private final @NonNull LongSupplier nanoClock;
+	private final @NonNull Set<@NonNull Reservation> reservations = new LinkedHashSet<>();
+	private final @NonNull ThreadPoolExecutor callbackExecutor;
+	private final @NonNull ThreadPoolExecutor terminationExecutor;
 	private final int rejectionObserverCapacity;
 	private int rejectionObservers;
 	private int queuedRejectionObservers;
-	private final ThreadPoolExecutor diagnosticExecutor;
-	private final ThreadPoolExecutor interruptExecutor;
-	private final ScheduledThreadPoolExecutor supervisor;
+	private final @NonNull ThreadPoolExecutor diagnosticExecutor;
+	private final @NonNull ThreadPoolExecutor interruptExecutor;
+	private final @NonNull ScheduledThreadPoolExecutor supervisor;
 	private boolean accepting = true;
 	private boolean forced;
 	private boolean infrastructureStopping;
@@ -89,23 +89,23 @@ public final class StreamLifecycleCoordinator {
 	public StreamLifecycleCoordinator(int capacity,
 																		int callbackConcurrency,
 																		@NonNull Duration cleanupGrace,
-																			@NonNull Consumer<Throwable> diagnostics) {
+																			@NonNull Consumer<@NonNull Throwable> diagnostics) {
 		this(capacity, callbackConcurrency, cleanupGrace, diagnostics, System::nanoTime);
 	}
 
-	StreamLifecycleCoordinator(int capacity, int callbackConcurrency, Duration cleanupGrace,
-														 Consumer<Throwable> diagnostics, LongSupplier nanoClock) {
+	StreamLifecycleCoordinator(int capacity, int callbackConcurrency, @NonNull Duration cleanupGrace,
+														 @NonNull Consumer<@NonNull Throwable> diagnostics, @NonNull LongSupplier nanoClock) {
 		this(capacity, callbackConcurrency, cleanupGrace, diagnostics, nanoClock, Runnable::run);
 	}
 
 	/** Carries the owning lifecycle's self-wait guard across all managed application work. */
-	public static StreamLifecycleCoordinator withCallbackExecution(int capacity, int callbackConcurrency, @NonNull Duration cleanupGrace,
-			@NonNull Consumer<Throwable> diagnostics, @NonNull Consumer<Runnable> callbackExecution) {
+	public static @NonNull StreamLifecycleCoordinator withCallbackExecution(int capacity, int callbackConcurrency, @NonNull Duration cleanupGrace,
+			@NonNull Consumer<@NonNull Throwable> diagnostics, @NonNull Consumer<@NonNull Runnable> callbackExecution) {
 		return new StreamLifecycleCoordinator(capacity, callbackConcurrency, cleanupGrace, diagnostics, System::nanoTime, callbackExecution);
 	}
 
-	private StreamLifecycleCoordinator(int capacity, int callbackConcurrency, Duration cleanupGrace,
-			Consumer<Throwable> diagnostics, LongSupplier nanoClock, Consumer<Runnable> callbackExecution) {
+	private StreamLifecycleCoordinator(int capacity, int callbackConcurrency, @NonNull Duration cleanupGrace,
+			@NonNull Consumer<@NonNull Throwable> diagnostics, @NonNull LongSupplier nanoClock, @NonNull Consumer<@NonNull Runnable> callbackExecution) {
 		if (capacity <= 0 || capacity > Integer.MAX_VALUE / 2)
 			throw new IllegalArgumentException("Stream lifecycle capacity must be positive and fit twice in an int");
 		if (callbackConcurrency <= 0 || callbackConcurrency > capacity)
@@ -337,19 +337,19 @@ public final class StreamLifecycleCoordinator {
 	public static final class CleanupDeadlineExceededException extends RuntimeException {
 		private static final long serialVersionUID = 1L;
 		private final long reservationId;
-		private final String phase;
-		private final String producerState;
-		private final String cancelationState;
-		private final String terminationState;
-		private final String publisherState;
+		private final @NonNull String phase;
+		private final @NonNull String producerState;
+		private final @NonNull String cancelationState;
+		private final @NonNull String terminationState;
+		private final @NonNull String publisherState;
 		private final int publisherLifetimes;
 		private final int pendingPublisherAcquisitions;
 		private final long retainedWork;
 		private final int dispatcherRunning;
 		private final int dispatcherQueued;
 
-		private CleanupDeadlineExceededException(long reservationId, String phase, String producerState,
-				String cancelationState, String terminationState, String publisherState,
+		private CleanupDeadlineExceededException(long reservationId, @NonNull String phase, @NonNull String producerState,
+				@NonNull String cancelationState, @NonNull String terminationState, @NonNull String publisherState,
 				int publisherLifetimes, int pendingPublisherAcquisitions, long retainedWork, int dispatcherRunning, int dispatcherQueued) {
 			super("Streaming cleanup deadline exceeded for reservation " + reservationId
 					+ ": phase=" + phase + ", producer=" + producerState + ", cancelation=" + cancelationState
@@ -398,9 +398,9 @@ public final class StreamLifecycleCoordinator {
 	 */
 	@ThreadSafe
 	public final class PublisherWork implements AutoCloseable {
-		private final Reservation reservation;
+		private final @NonNull Reservation reservation;
 
-		private PublisherWork(Reservation reservation) {
+		private PublisherWork(@NonNull Reservation reservation) {
 			this.reservation = reservation;
 		}
 
@@ -428,9 +428,9 @@ public final class StreamLifecycleCoordinator {
 	public final class Reservation {
 		private final long id;
 		private volatile boolean gracefulShutdownRequested;
-		private final JobState[] jobs = {JobState.ABSENT, JobState.ABSENT};
-		private ProducerState producerState = ProducerState.RESERVED;
-		private PublisherState publisherState = PublisherState.ABSENT;
+		private final @NonNull JobState @NonNull [] jobs = {JobState.ABSENT, JobState.ABSENT};
+		private @NonNull ProducerState producerState = ProducerState.RESERVED;
+		private @NonNull PublisherState publisherState = PublisherState.ABSENT;
 		private long retainedWork;
 		@Nullable
 		private ProducerTask producerTask;
@@ -443,7 +443,7 @@ public final class StreamLifecycleCoordinator {
 		@Nullable
 		private Throwable cause;
 		@Nullable
-		private BiConsumer<StreamTerminationReason, Throwable> terminationHandler;
+		private BiConsumer<@NonNull StreamTerminationReason, @Nullable Throwable> terminationHandler;
 		private boolean signalClaimed;
 		private int signalsRunning;
 		private boolean submissionPending;
@@ -465,9 +465,9 @@ public final class StreamLifecycleCoordinator {
 		private boolean diagnosticClaimed;
 		private boolean diagnosticPending;
 		@Nullable
-		private Consumer<Throwable> cleanupFailureObserver;
+		private Consumer<@NonNull Throwable> cleanupFailureObserver;
 		@Nullable
-		private Consumer<Throwable> producerFailureObserver;
+		private Consumer<@NonNull Throwable> producerFailureObserver;
 		@Nullable
 		private Throwable producerFailure;
 
@@ -676,7 +676,7 @@ public final class StreamLifecycleCoordinator {
 			return true;
 		}
 
-		private boolean reserveCancelation(StreamTerminationReason reason, @Nullable Throwable cause) {
+		private boolean reserveCancelation(@NonNull StreamTerminationReason reason, @Nullable Throwable cause) {
 			if (this.retired || this.publicationComplete || this.transportComplete || this.reason != null)
 				return false;
 			this.reason = reason;
@@ -762,12 +762,12 @@ public final class StreamLifecycleCoordinator {
 		}
 
 		@NonNull
-		public Optional<StreamTerminationReason> reason() {
+		public Optional<@NonNull StreamTerminationReason> reason() {
 			synchronized (lock) { return Optional.ofNullable(this.reason); }
 		}
 
 		@NonNull
-		public Optional<Throwable> cause() {
+		public Optional<@NonNull Throwable> cause() {
 			synchronized (lock) { return Optional.ofNullable(this.cause); }
 		}
 
@@ -777,7 +777,7 @@ public final class StreamLifecycleCoordinator {
 		 * until observer exit. Framework failures and deadline evidence still use the coordinator's
 		 * diagnostic consumer. The binding is cleared on physical retirement.
 		 */
-		public void bindCleanupFailureObserver(@NonNull Consumer<Throwable> observer) {
+		public void bindCleanupFailureObserver(@NonNull Consumer<@NonNull Throwable> observer) {
 			requireNonNull(observer);
 			synchronized (lock) {
 				if (this.retired || this.producerState != ProducerState.RESERVED || this.cleanupFailureObserver != null)
@@ -796,7 +796,7 @@ public final class StreamLifecycleCoordinator {
 		}
 
 		/** Binds contextual evidence for a competing producer failure before accepting producer work. */
-		public void bindProducerFailureObserver(@NonNull Consumer<Throwable> observer) {
+		public void bindProducerFailureObserver(@NonNull Consumer<@NonNull Throwable> observer) {
 			requireNonNull(observer);
 			synchronized (lock) {
 				if (this.retired || this.producerState != ProducerState.RESERVED || this.producerFailureObserver != null)
@@ -910,7 +910,7 @@ public final class StreamLifecycleCoordinator {
 			return true;
 		}
 
-		private void invokeSignal(BiConsumer<StreamTerminationReason, Throwable> handler) {
+		private void invokeSignal(@NonNull BiConsumer<@NonNull StreamTerminationReason, @Nullable Throwable> handler) {
 			try {
 				callbackExecution.accept(() -> handler.accept(requireNonNull(this.reason), this.cause));
 			} catch (Throwable failure) {
@@ -923,7 +923,7 @@ public final class StreamLifecycleCoordinator {
 			}
 		}
 
-		private void dispatch(int index, Runnable action) {
+		private void dispatch(int index, @NonNull Runnable action) {
 			requireNonNull(action);
 			synchronized (lock) {
 				if (this.publicationComplete || this.retired)
@@ -1049,11 +1049,11 @@ public final class StreamLifecycleCoordinator {
 				publishDiagnostic(evidence);
 		}
 
-		private void report(Throwable failure) {
+		private void report(@NonNull Throwable failure) {
 			report(failure, diagnostics);
 		}
 
-		private void report(Throwable failure, Consumer<Throwable> observer) {
+		private void report(@NonNull Throwable failure, @NonNull Consumer<@NonNull Throwable> observer) {
 			synchronized (lock) {
 				if (!claimDiagnostic())
 					return;
@@ -1072,11 +1072,11 @@ public final class StreamLifecycleCoordinator {
 			return true;
 		}
 
-		private void publishDiagnostic(Throwable failure) {
+		private void publishDiagnostic(@NonNull Throwable failure) {
 			publishDiagnostic(failure, diagnostics);
 		}
 
-		private void publishDiagnostic(Throwable failure, Consumer<Throwable> observer) {
+		private void publishDiagnostic(@NonNull Throwable failure, @NonNull Consumer<@NonNull Throwable> observer) {
 			try {
 				diagnosticExecutor.execute(() -> {
 					Throwable secondary;
@@ -1142,11 +1142,11 @@ public final class StreamLifecycleCoordinator {
 
 	/** Exact producer-execution fence; never acquired while holding the coordinator lock. */
 	private static final class ProducerInterruptDelivery {
-		private final Thread target;
-		private final ReentrantLock fence = new ReentrantLock();
+		private final @NonNull Thread target;
+		private final @NonNull ReentrantLock fence = new ReentrantLock();
 		private boolean retired;
 
-		private ProducerInterruptDelivery(Thread target) {
+		private ProducerInterruptDelivery(@NonNull Thread target) {
 			this.target = requireNonNull(target);
 		}
 
@@ -1171,13 +1171,13 @@ public final class StreamLifecycleCoordinator {
 	}
 
 	private final class InterruptDeliveryTask implements Runnable {
-		private final Reservation reservation;
-		private final ProducerInterruptDelivery delivery;
-		private final Reservation.Work work;
-		private final AtomicBoolean claimed = new AtomicBoolean();
+		private final @NonNull Reservation reservation;
+		private final @NonNull ProducerInterruptDelivery delivery;
+		private final Reservation.@NonNull Work work;
+		private final @NonNull AtomicBoolean claimed = new AtomicBoolean();
 
-		private InterruptDeliveryTask(Reservation reservation,
-				ProducerInterruptDelivery delivery, Reservation.Work work) {
+		private InterruptDeliveryTask(@NonNull Reservation reservation,
+				@NonNull ProducerInterruptDelivery delivery, Reservation.@NonNull Work work) {
 			this.reservation = reservation;
 			this.delivery = delivery;
 			this.work = work;
@@ -1196,7 +1196,7 @@ public final class StreamLifecycleCoordinator {
 			}
 		}
 
-		private void rejected(Throwable failure) {
+		private void rejected(@NonNull Throwable failure) {
 			// A rejected wrapper may still be delivered late. Retire only work
 			// whose actual execution has not already claimed its physical proof.
 			if (this.claimed.compareAndSet(false, true))
@@ -1216,7 +1216,7 @@ public final class StreamLifecycleCoordinator {
 	}
 
 	/** Attaches only when bounded inspection finds no existing path or back edge. */
-	private static void attachProducerEvidence(Throwable primary, @Nullable Throwable secondary) {
+	private static void attachProducerEvidence(@NonNull Throwable primary, @Nullable Throwable secondary) {
 		if (secondary == null || sameInstance(primary, secondary))
 			return;
 		try {
@@ -1228,7 +1228,7 @@ public final class StreamLifecycleCoordinator {
 		}
 	}
 
-	private static GraphContainment containsDiagnosticThrowable(Throwable root, Throwable target) {
+	private static @NonNull GraphContainment containsDiagnosticThrowable(@NonNull Throwable root, @NonNull Throwable target) {
 		ArrayDeque<Throwable> pending = new ArrayDeque<>();
 		IdentityHashMap<Throwable, Boolean> visited = new IdentityHashMap<>();
 		pending.add(root);
@@ -1256,17 +1256,17 @@ public final class StreamLifecycleCoordinator {
 	}
 
 	private final class ProducerTask implements Runnable {
-		private final Reservation reservation;
-		private final Runnable producer;
-		private final Thread submittingThread;
+		private final @NonNull Reservation reservation;
+		private final @NonNull Runnable producer;
+		private final @NonNull Thread submittingThread;
 
-		private ProducerTask(Reservation reservation, Runnable producer, Thread submittingThread) {
+		private ProducerTask(@NonNull Reservation reservation, @NonNull Runnable producer, @NonNull Thread submittingThread) {
 			this.reservation = reservation;
 			this.producer = producer;
 			this.submittingThread = submittingThread;
 		}
 
-		private StreamLifecycleCoordinator coordinator() {
+		private @NonNull StreamLifecycleCoordinator coordinator() {
 			return StreamLifecycleCoordinator.this;
 		}
 
@@ -1321,7 +1321,7 @@ public final class StreamLifecycleCoordinator {
 		this.supervisor.shutdown();
 	}
 
-	private static boolean awaitExecutor(ExecutorService executor, long deadline) throws InterruptedException {
+	private static boolean awaitExecutor(@NonNull ExecutorService executor, long deadline) throws InterruptedException {
 		if (executor.isTerminated())
 			return true;
 		long remaining = deadline - System.nanoTime();
@@ -1342,15 +1342,15 @@ public final class StreamLifecycleCoordinator {
 	 * No application code runs under the dispatch lock or inline.
 	 */
 	private static final class ObservationExecutor extends ThreadPoolExecutor {
-		private final Object dispatchLock = new Object();
+		private final @NonNull Object dispatchLock = new Object();
 		private int pendingTasks;
 
-		private ObservationExecutor(int capacity, String prefix) {
+		private ObservationExecutor(int capacity, @NonNull String prefix) {
 			this(capacity, prefix, new LinkedBlockingQueue<>(capacity));
 		}
 
 		// Queue injection permits deterministic worker-retirement scheduling tests.
-		private ObservationExecutor(int capacity, String prefix, BlockingQueue<Runnable> queue) {
+		private ObservationExecutor(int capacity, @NonNull String prefix, @NonNull BlockingQueue<@NonNull Runnable> queue) {
 			super(0, capacity, 30L, TimeUnit.SECONDS, queue,
 					threadFactory(prefix), new AbortPolicy());
 			setThreadFactory(getThreadFactory());
@@ -1405,7 +1405,7 @@ public final class StreamLifecycleCoordinator {
 		}
 	}
 
-	private static ThreadFactory threadFactory(String prefix) {
+	private static @NonNull ThreadFactory threadFactory(@NonNull String prefix) {
 		ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
 		return runnable -> {
 			Thread thread = HelperThreads.platform(runnable, prefix + "-" + THREAD_SEQUENCE.incrementAndGet());

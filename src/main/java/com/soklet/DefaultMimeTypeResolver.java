@@ -122,7 +122,7 @@ final class DefaultMimeTypeResolver implements MimeTypeResolver {
 
 	@Override
 	@NonNull
-	public Optional<String> contentTypeFor(@NonNull Path path) {
+	public Optional<@NonNull String> contentTypeFor(@NonNull Path path) {
 		requireNonNull(path);
 
 		String extension = extensionFor(path).orElse(null);
@@ -134,7 +134,7 @@ final class DefaultMimeTypeResolver implements MimeTypeResolver {
 	}
 
 	@NonNull
-	private static Optional<String> extensionFor(@NonNull Path path) {
+	private static Optional<@NonNull String> extensionFor(@NonNull Path path) {
 		requireNonNull(path);
 
 		Path filenamePath = path.getFileName();

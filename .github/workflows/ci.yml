@@ -523,6 +523,12 @@ jobs:
           verifyOfficialSuite('.mcp-conformance-source',pins,{requireBuilt:false});
           })"
 
+      - name: Prepare refreshed conformance dependencies
+        run: |
+          node conformance/official/dependencies-self-test.mjs
+          node conformance/official/dependencies.mjs prepare \
+            "${GITHUB_WORKSPACE}/.mcp-conformance-source"
+
       - name: Build pinned official MCP conformance suite
         working-directory: .mcp-conformance-source
         run: |
@@ -554,6 +560,11 @@ jobs:
         run: >-
           npm audit --package-lock-only --json --audit-level=moderate
           > "${GITHUB_WORKSPACE}/target/conformance/official/dependency-audit.json"
+
+      - name: Restore and verify immutable upstream source inputs
+        run: >-
+          node conformance/official/dependencies.mjs restore
+          "${GITHUB_WORKSPACE}/.mcp-conformance-source"
 
       - name: Self-test Soklet conformance infrastructure
         run: |

@@ -16,6 +16,7 @@
 
 package com.soklet.internal.microhttp;
 
+import org.jspecify.annotations.NonNull;
 import com.soklet.StreamTerminationReason;
 import org.jspecify.annotations.Nullable;
 
@@ -38,11 +39,11 @@ public interface WritableSource extends Closeable {
         // No-op by default
     }
 
-    default void writeReadyCallback(Runnable callback) {
+    default void writeReadyCallback(@NonNull Runnable callback) {
         // No-op by default
     }
 
-    long writeTo(SocketChannel socketChannel, long maxBytes) throws IOException;
+    long writeTo(@NonNull SocketChannel socketChannel, long maxBytes) throws IOException;
 
     boolean hasRemaining();
 

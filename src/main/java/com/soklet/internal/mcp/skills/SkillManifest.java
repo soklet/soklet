@@ -11,6 +11,8 @@
  */
 package com.soklet.internal.mcp.skills;
 
+
+import org.jspecify.annotations.NonNull;
 import com.soklet.internal.mcp.protocol.McpJsonArray;
 import com.soklet.internal.mcp.protocol.McpJsonCodec;
 import com.soklet.internal.mcp.protocol.McpJsonLimits;
@@ -36,17 +38,17 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 final class SkillManifest {
-	private final URI uri;
-	private final McpJsonObject entry;
-	private final List<Resource> resources;
+	private final @NonNull URI uri;
+	private final @NonNull McpJsonObject entry;
+	private final @NonNull List<@NonNull Resource> resources;
 
-	private SkillManifest(URI uri, McpJsonObject entry, List<Resource> resources) {
+	private SkillManifest(@NonNull URI uri, @NonNull McpJsonObject entry, @NonNull List<@NonNull Resource> resources) {
 		this.uri = uri;
 		this.entry = entry;
 		this.resources = List.copyOf(resources);
 	}
 
-	static SkillManifest from(URI rootUri, SkillBundle bundle, McpJsonLimits jsonLimits) {
+	static @NonNull SkillManifest from(@NonNull URI rootUri, @NonNull SkillBundle bundle, @NonNull McpJsonLimits jsonLimits) {
 		requireNonNull(rootUri, "A Skills root URI is required.");
 		requireNonNull(bundle, "A Skills bundle is required.");
 		requireNonNull(jsonLimits, "Skills JSON limits are required.");
@@ -78,14 +80,14 @@ final class SkillManifest {
 		return new SkillManifest(rootUri, entry, resources);
 	}
 
-	URI uri() { return this.uri; }
-	McpJsonObject entry() { return this.entry; }
-	List<Resource> resources() { return this.resources; }
+	@NonNull URI uri() { return this.uri; }
+	@NonNull McpJsonObject entry() { return this.entry; }
+	@NonNull List<@NonNull Resource> resources() { return this.resources; }
 
 	@Override
-	public String toString() { return "SkillManifest[redacted]"; }
+	public @NonNull String toString() { return "SkillManifest[redacted]"; }
 
-	record Resource(URI uri, String digest, long size) {
-		@Override public String toString() { return "SkillManifest.Resource[redacted]"; }
+	record Resource(@NonNull URI uri, @NonNull String digest, long size) {
+		@Override public @NonNull String toString() { return "SkillManifest.Resource[redacted]"; }
 	}
 }

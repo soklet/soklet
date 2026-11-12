@@ -419,14 +419,14 @@ final class McpServerCapabilityRegistry {
 				McpWireResult.complete(new McpJsonObject(fields)), serverInformation);
 	}
 
-	private static boolean hasAppMetadata(McpNormalizedToolDescriptor descriptor) {
+	private static boolean hasAppMetadata(@NonNull McpNormalizedToolDescriptor descriptor) {
 		return descriptor.metadata().members().get("ui") instanceof McpJsonObject ui
 				&& (ui.members().containsKey("resourceUri")
 						|| ui.members().containsKey("visibility"));
 	}
 
 	private static boolean appVisibilityIncludes(
-			McpNormalizedToolDescriptor descriptor, String audience) {
+			@NonNull McpNormalizedToolDescriptor descriptor, @NonNull String audience) {
 		McpJsonObject ui = (McpJsonObject) requireNonNull(
 				descriptor.metadata().members().get("ui"));
 		McpJsonValue visibility = ui.members().get("visibility");
@@ -436,7 +436,7 @@ final class McpServerCapabilityRegistry {
 
 	@NonNull
 	static McpNormalizedToolDescriptor withoutAppPresentation(
-			McpNormalizedToolDescriptor descriptor) {
+			@NonNull McpNormalizedToolDescriptor descriptor) {
 		if (!hasAppMetadata(descriptor))
 			return descriptor;
 		McpJsonObject ui = (McpJsonObject) requireNonNull(
@@ -455,7 +455,7 @@ final class McpServerCapabilityRegistry {
 				descriptor.descriptorFields(), new McpJsonObject(metadataFields));
 	}
 
-	private static boolean isAppResource(McpNormalizedResourceDescriptor resource) {
+	private static boolean isAppResource(@NonNull McpNormalizedResourceDescriptor resource) {
 		URI uri = URI.create(resource.uri());
 		if (!"ui".equalsIgnoreCase(uri.getScheme()) || uri.isOpaque()
 				|| uri.getRawAuthority() == null || uri.getRawAuthority().isEmpty())

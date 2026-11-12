@@ -47,10 +47,10 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class McpSkillRuntimeBridge {
-	private static final McpJsonLimits JSON_LIMITS = McpJsonLimits.productionDefaults();
+	private static final @NonNull McpJsonLimits JSON_LIMITS = McpJsonLimits.productionDefaults();
 	// The exercised corpus profile, with independent production JSON constraints.
 	// The input ceiling counts the complete root document, including its body.
-	static final SkillYamlLimits YAML_LIMITS = new SkillYamlLimits(
+	static final @NonNull SkillYamlLimits YAML_LIMITS = new SkillYamlLimits(
 			4 * 1_024 * 1_024, 128, 1_000_000, 1_048_576, 4_194_304L, 50_000_000L);
 
 	private McpSkillRuntimeBridge() {}
@@ -71,7 +71,7 @@ public final class McpSkillRuntimeBridge {
 
 	// Explicit smaller profiles are test-only; public construction always uses the
 	// same output profile as McpServerRuntimeBridge, regardless of request size.
-	static Registration register(URI uri, Bundle bundle, McpCachePolicy cachePolicy, McpJsonLimits limits) {
+	static @NonNull Registration register(@NonNull URI uri, @NonNull Bundle bundle, @NonNull McpCachePolicy cachePolicy, @NonNull McpJsonLimits limits) {
 		requireNonNull(uri, "A Skills root URI is required.");
 		requireNonNull(bundle, "A Skills bundle is required.");
 		requireNonNull(cachePolicy, "A Skills cache policy is required.");
@@ -99,7 +99,7 @@ public final class McpSkillRuntimeBridge {
 		return new Registration(bundle, manifest.entry(), get, resources, reads, paths);
 	}
 
-	private static McpJsonObject result(String field, McpJsonValue value, McpCachePolicy policy) {
+	private static @NonNull McpJsonObject result(@NonNull String field, @NonNull McpJsonValue value, @NonNull McpCachePolicy policy) {
 		Map<String, McpJsonValue> members = new LinkedHashMap<>();
 		members.put("resultType", new McpJsonString("complete"));
 		members.put(field, value);
@@ -108,7 +108,7 @@ public final class McpSkillRuntimeBridge {
 		return new McpJsonObject(members);
 	}
 
-	private static void preflight(McpJsonObject result, McpJsonLimits limits) {
+	private static void preflight(@NonNull McpJsonObject result, @NonNull McpJsonLimits limits) {
 		// Allow either cache scope and any supported TTL, including later privacy
 		// clamping. Match framework startup's representative numeric request ID.
 		// Actual request IDs, server metadata and caller-specific page projections
@@ -230,7 +230,7 @@ public final class McpSkillRuntimeBridge {
 		}
 	}
 
-	private static McpJsonObject endpointMetadata(com.soklet.McpImplementation info, boolean serverInfoIncluded) {
+	private static @NonNull McpJsonObject endpointMetadata(com.soklet.@NonNull McpImplementation info, boolean serverInfoIncluded) {
 		if (!serverInfoIncluded) return McpJsonObject.empty();
 		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
 		fields.put("name", new McpJsonString(info.getName()));
@@ -241,14 +241,14 @@ public final class McpSkillRuntimeBridge {
 		return new McpJsonObject(Map.of("io.modelcontextprotocol/serverInfo", new McpJsonObject(fields)));
 	}
 
-	private static McpJsonObject withMetadata(McpJsonObject result, McpJsonObject metadata) {
+	private static @NonNull McpJsonObject withMetadata(@NonNull McpJsonObject result, @NonNull McpJsonObject metadata) {
 		if (metadata.members().isEmpty()) return result;
 		Map<String, McpJsonValue> fields = new LinkedHashMap<>(result.members());
 		fields.put("_meta", metadata);
 		return new McpJsonObject(fields);
 	}
 
-	private static int nodeCount(McpJsonValue value) {
+	private static int nodeCount(@NonNull McpJsonValue value) {
 		int count = 1;
 		if (value instanceof McpJsonObject object)
 			for (McpJsonValue child : object.members().values()) count += nodeCount(child);
@@ -257,20 +257,20 @@ public final class McpSkillRuntimeBridge {
 		return count;
 	}
 
-	private static IllegalArgumentException paginationRequired() {
+	private static @NonNull IllegalArgumentException paginationRequired() {
 		return new IllegalArgumentException("The automatic MCP Skills page exceeds the output profile; configure skillListHandler(...).");
 	}
 
 	/** Immutable owned bundle and its once-derived inspection/delivery values. */
 	@ThreadSafe
 	public static final class Bundle {
-		private final SkillBundle snapshot;
-		private final Map<String, SkillFileContents> contents;
-		private final com.soklet.McpJsonObject documentMetadata;
-		private final Set<String> filePaths;
+		private final @NonNull SkillBundle snapshot;
+		private final @NonNull Map<@NonNull String, @NonNull SkillFileContents> contents;
+		private final com.soklet.@NonNull McpJsonObject documentMetadata;
+		private final @NonNull Set<@NonNull String> filePaths;
 		private final int hashCode;
 
-		private Bundle(SkillBundle snapshot, Map<String, SkillFileContents> contents) {
+		private Bundle(@NonNull SkillBundle snapshot, @NonNull Map<@NonNull String, @NonNull SkillFileContents> contents) {
 			this.snapshot = snapshot;
 			this.contents = contents;
 			this.documentMetadata = (com.soklet.McpJsonObject) McpPublicJsonValueConverter.toPublic(snapshot.documentMetadata());
@@ -303,15 +303,15 @@ public final class McpSkillRuntimeBridge {
 	/** Immutable generated wire values for future authorized runtime routing. */
 	@ThreadSafe
 	public static final class Registration {
-		private final Bundle bundle;
-		private final McpJsonObject entry;
-		private final McpJsonObject getResult;
-		private final List<Resource> resources;
-		private final Map<URI, McpJsonObject> reads;
-		private final Map<URI, String> paths;
+		private final @NonNull Bundle bundle;
+		private final @NonNull McpJsonObject entry;
+		private final @NonNull McpJsonObject getResult;
+		private final @NonNull List<@NonNull Resource> resources;
+		private final @NonNull Map<@NonNull URI, @NonNull McpJsonObject> reads;
+		private final @NonNull Map<@NonNull URI, @NonNull String> paths;
 
-		private Registration(Bundle bundle, McpJsonObject entry, McpJsonObject getResult,
-				List<Resource> resources, Map<URI, McpJsonObject> reads, Map<URI, String> paths) {
+		private Registration(@NonNull Bundle bundle, @NonNull McpJsonObject entry, @NonNull McpJsonObject getResult,
+				@NonNull List<@NonNull Resource> resources, @NonNull Map<@NonNull URI, @NonNull McpJsonObject> reads, @NonNull Map<@NonNull URI, @NonNull String> paths) {
 			this.bundle = bundle;
 			this.entry = entry;
 			this.getResult = getResult;

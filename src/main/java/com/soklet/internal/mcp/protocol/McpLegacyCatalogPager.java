@@ -13,6 +13,8 @@
 
 package com.soklet.internal.mcp.protocol;
 
+
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
@@ -41,8 +43,8 @@ import static java.util.Objects.requireNonNull;
 final class McpLegacyCatalogPager {
 	static final int MAXIMUM_CURSOR_BYTES = 2_048;
 	private static final int FORMAT_VERSION = 1;
-	private static final Base64.Encoder ENCODER = Base64.getUrlEncoder().withoutPadding();
-	private static final Base64.Decoder DECODER = Base64.getUrlDecoder();
+	private static final Base64.@NonNull Encoder ENCODER = Base64.getUrlEncoder().withoutPadding();
+	private static final Base64.@NonNull Decoder DECODER = Base64.getUrlDecoder();
 
 	enum Kind {
 		TOOLS("tools", "name", McpProfileFrameworkResultKind.TOOLS_LIST,
@@ -55,20 +57,20 @@ final class McpLegacyCatalogPager {
 				McpProfileFrameworkResultKind.RESOURCE_TEMPLATES_LIST,
 				McpRuntimeCatalogLocalizer.ResponseKind.RESOURCE_TEMPLATES_LIST);
 
-		final String member;
-		final String identityMember;
-		final McpProfileFrameworkResultKind profileKind;
-		final McpRuntimeCatalogLocalizer.ResponseKind responseKind;
+		final @NonNull String member;
+		final @NonNull String identityMember;
+		final @NonNull McpProfileFrameworkResultKind profileKind;
+		final McpRuntimeCatalogLocalizer.@NonNull ResponseKind responseKind;
 
-		Kind(String member, String identityMember, McpProfileFrameworkResultKind profileKind,
-				McpRuntimeCatalogLocalizer.ResponseKind responseKind) {
+		Kind(@NonNull String member, @NonNull String identityMember, @NonNull McpProfileFrameworkResultKind profileKind,
+				McpRuntimeCatalogLocalizer.@NonNull ResponseKind responseKind) {
 			this.member = member;
 			this.identityMember = identityMember;
 			this.profileKind = profileKind;
 			this.responseKind = responseKind;
 		}
 
-		static Optional<Kind> forMethod(String method) {
+		static @NonNull Optional<@NonNull Kind> forMethod(@NonNull String method) {
 			return switch (method) {
 				case "tools/list" -> Optional.of(TOOLS);
 				case "prompts/list" -> Optional.of(PROMPTS);
@@ -79,40 +81,40 @@ final class McpLegacyCatalogPager {
 		}
 	}
 
-	record Entry(String ownerId, String key, McpJsonObject descriptor,
+	record Entry(@NonNull String ownerId, @NonNull String key, @NonNull McpJsonObject descriptor,
 			long encodedBytes, long nodes, int index) {
-		@Override public String toString() { return "Entry{<redacted>}"; }
+		@Override public @NonNull String toString() { return "Entry{<redacted>}"; }
 	}
 
-	record Cursor(int kind, String fingerprint, String key, String locale) {
-		@Override public String toString() { return "Cursor{<redacted>}"; }
+	record Cursor(int kind, @NonNull String fingerprint, @NonNull String key, @NonNull String locale) {
+		@Override public @NonNull String toString() { return "Cursor{<redacted>}"; }
 	}
 
-	record Page(List<Entry> entries, boolean more, boolean invalidCursor,
+	record Page(@NonNull List<@NonNull Entry> entries, boolean more, boolean invalidCursor,
 			boolean oversizedEntry) {
 		Page { entries = List.copyOf(entries); }
-		@Override public String toString() { return "Page{entryCount=" + entries.size() + "}"; }
+		@Override public @NonNull String toString() { return "Page{entryCount=" + entries.size() + "}"; }
 	}
 
 	@FunctionalInterface
 	interface Access {
-		boolean permits(String ownerId) throws Exception;
+		boolean permits(@NonNull String ownerId) throws Exception;
 	}
 
-	private final Kind kind;
-	private final List<Entry> entries;
-	private final Map<String, Integer> indexesByKey;
-	private final String fingerprint;
+	private final @NonNull Kind kind;
+	private final @NonNull List<@NonNull Entry> entries;
+	private final @NonNull Map<@NonNull String, @NonNull Integer> indexesByKey;
+	private final @NonNull String fingerprint;
 	private final boolean localizableOwners;
 
-	McpLegacyCatalogPager(String path, McpProtocolProfile profile, Kind kind,
-			McpWireResult canonicalResult, McpJsonCodec jsonCodec) {
+	McpLegacyCatalogPager(@NonNull String path, @NonNull McpProtocolProfile profile, @NonNull Kind kind,
+			@NonNull McpWireResult canonicalResult, @NonNull McpJsonCodec jsonCodec) {
 		this(path, profile, kind, canonicalResult, jsonCodec, owner -> 0);
 	}
 
-	McpLegacyCatalogPager(String path, McpProtocolProfile profile, Kind kind,
-			McpWireResult canonicalResult, McpJsonCodec jsonCodec,
-			java.util.function.ToIntFunction<String> slotCount) {
+	McpLegacyCatalogPager(@NonNull String path, @NonNull McpProtocolProfile profile, @NonNull Kind kind,
+			@NonNull McpWireResult canonicalResult, @NonNull McpJsonCodec jsonCodec,
+			java.util.function.@NonNull ToIntFunction<@NonNull String> slotCount) {
 		this.kind = requireNonNull(kind);
 		if (!McpLegacyHttpWire.isLegacyRevision(profile.revision()))
 			throw new IllegalArgumentException("Framework pagination requires a 2025 profile.");
@@ -149,11 +151,11 @@ final class McpLegacyCatalogPager {
 		this.localizableOwners = localizable;
 	}
 
-	Kind kind() { return kind; }
+	@NonNull Kind kind() { return kind; }
 	boolean hasLocalizableOwners() { return localizableOwners; }
 
 	/** Cheap framing checks only; catalog, owner and locale checks follow admission. */
-	static Optional<Cursor> decode(String token) {
+	static @NonNull Optional<@NonNull Cursor> decode(@NonNull String token) {
 		if (token.isEmpty() || token.length() > MAXIMUM_CURSOR_BYTES
 				|| !token.matches("[A-Za-z0-9_-]+"))
 			return Optional.empty();
@@ -188,9 +190,9 @@ final class McpLegacyCatalogPager {
 		}
 	}
 
-	Page select(@Nullable Cursor cursor, String locale, long baseBytes, long baseNodes,
+	@NonNull Page select(@Nullable Cursor cursor, @NonNull String locale, long baseBytes, long baseNodes,
 			long maximumBytes, long maximumNodes, int maximumSlots,
-			java.util.function.ToIntFunction<String> slotCount, Access access) throws Exception {
+			java.util.function.@NonNull ToIntFunction<@NonNull String> slotCount, @NonNull Access access) throws Exception {
 		int start = 0;
 		if (cursor != null) {
 			Integer index = indexesByKey.get(cursor.key());
@@ -221,7 +223,7 @@ final class McpLegacyCatalogPager {
 		return new Page(selected, false, false, false);
 	}
 
-	private Page continuingPage(List<Entry> selected, String locale, long bytes, long nodes,
+	private @NonNull Page continuingPage(@NonNull List<@NonNull Entry> selected, @NonNull String locale, long bytes, long nodes,
 			long maximumBytes, long maximumNodes) {
 		if (selected.isEmpty())
 			return new Page(selected, true, false, true);
@@ -240,7 +242,7 @@ final class McpLegacyCatalogPager {
 		return new Page(selected, true, false, selected.isEmpty());
 	}
 
-	McpJsonObject document(List<Entry> selected, boolean more, String locale) {
+	@NonNull McpJsonObject document(@NonNull List<@NonNull Entry> selected, boolean more, @NonNull String locale) {
 		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
 		fields.put(kind.member, new McpJsonArray(selected.stream()
 				.map(entry -> (McpJsonValue) entry.descriptor()).toList()));
@@ -252,7 +254,7 @@ final class McpLegacyCatalogPager {
 		return new McpJsonObject(fields);
 	}
 
-	private String encode(Entry anchor, String locale) {
+	private @NonNull String encode(@NonNull Entry anchor, @NonNull String locale) {
 		byte[] localeBytes = locale.getBytes(StandardCharsets.US_ASCII);
 		if (localeBytes.length > 255)
 			throw new IllegalArgumentException("Invalid catalog locale.");
@@ -263,7 +265,7 @@ final class McpLegacyCatalogPager {
 		return ENCODER.encodeToString(output.array());
 	}
 
-	static McpJsonObject envelope(McpJsonRpcId requestId, McpJsonObject document) {
+	static @NonNull McpJsonObject envelope(@NonNull McpJsonRpcId requestId, @NonNull McpJsonObject document) {
 		Map<String, McpJsonValue> fields = new LinkedHashMap<>();
 		fields.put("jsonrpc", new McpJsonString("2.0"));
 		fields.put("id", requestId.toJsonValue());
@@ -271,7 +273,7 @@ final class McpLegacyCatalogPager {
 		return new McpJsonObject(fields);
 	}
 
-	static long nodes(McpJsonValue value) {
+	static long nodes(@NonNull McpJsonValue value) {
 		long count = 1;
 		if (value instanceof McpJsonObject object)
 			for (McpJsonValue member : object.members().values()) count += nodes(member);
@@ -280,11 +282,11 @@ final class McpLegacyCatalogPager {
 		return count;
 	}
 
-	private static String identity(McpJsonObject descriptor, Kind kind) {
+	private static @NonNull String identity(@NonNull McpJsonObject descriptor, @NonNull Kind kind) {
 		return ((McpJsonString) descriptor.members().get(kind.identityMember)).value();
 	}
 
-	private static McpJsonValue canonical(McpJsonValue value) {
+	private static @NonNull McpJsonValue canonical(@NonNull McpJsonValue value) {
 		if (value instanceof McpJsonObject object) {
 			Map<String, McpJsonValue> members = new TreeMap<>();
 			object.members().forEach((name, member) -> members.put(name, canonical(member)));
@@ -297,12 +299,12 @@ final class McpLegacyCatalogPager {
 		return value;
 	}
 
-	private static void update(MessageDigest digest, byte[] bytes) {
+	private static void update(@NonNull MessageDigest digest, byte @NonNull [] bytes) {
 		digest.update(ByteBuffer.allocate(4).putInt(bytes.length).array());
 		digest.update(bytes);
 	}
 
-	private static MessageDigest digest() {
+	private static @NonNull MessageDigest digest() {
 		try { return MessageDigest.getInstance("SHA-256"); }
 		catch (NoSuchAlgorithmException exception) { throw new IllegalStateException("SHA-256 unavailable.", exception); }
 	}

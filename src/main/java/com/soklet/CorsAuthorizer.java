@@ -17,6 +17,7 @@
 package com.soklet;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Map;
@@ -140,6 +141,7 @@ public interface CorsAuthorizer {
 	 * Acquires a threadsafe {@link CorsAuthorizer} configured to accept only those cross-domain requests whose {@code Origin} matches a value in the provided set of {@code whitelistedOrigins}.
 	 * <p>
 	 * The provided {@code allowCredentialsResolver} is used to control the value of {@code Access-Control-Allow-Credentials}: it's a function which takes a normalized {@code Origin} as input and should return {@code true} if clients are permitted to include credentials in cross-origin HTTP requests and {@code false} otherwise.
+	 * A {@code null} result omits the credentials header.
 	 * The resolver may be invoked concurrently and must support concurrent invocation.
 	 * <p>
 	 * The returned {@link CorsAuthorizer} will omit the {@code Access-Control-Allow-Credentials} response header to reduce CSRF attack surface area. This behavior can be customized via {@link #fromWhitelistAuthorizer(Function, Function)}.
@@ -152,7 +154,7 @@ public interface CorsAuthorizer {
 	 */
 	@NonNull
 	static CorsAuthorizer fromWhitelistedOrigins(@NonNull Set<@NonNull String> whitelistedOrigins,
-																 @NonNull Function<@NonNull String, @NonNull Boolean> allowCredentialsResolver) {
+																 @NonNull Function<@NonNull String, ? extends @Nullable Boolean> allowCredentialsResolver) {
 		requireNonNull(whitelistedOrigins);
 		requireNonNull(allowCredentialsResolver);
 
@@ -163,6 +165,7 @@ public interface CorsAuthorizer {
 	 * Acquires a threadsafe {@link CorsAuthorizer} configured to accept only those cross-domain requests whose {@code Origin} is allowed by the provided {@code whitelistAuthorizer} function.
 	 * <p>
 	 * The {@code whitelistAuthorizer} function should return {@code true} if the supplied {@code Origin} is acceptable and {@code false} otherwise.
+	 * A {@code null} result rejects the origin.
 	 * The function may be invoked concurrently and must support concurrent invocation.
 	 * <p>
 	 * The returned {@link CorsAuthorizer} will omit the {@code Access-Control-Allow-Credentials} response header to reduce CSRF attack surface area. This behavior can be customized via {@link #fromWhitelistAuthorizer(Function, Function)}.
@@ -174,7 +177,7 @@ public interface CorsAuthorizer {
 	 */
 	@NonNull
 	static CorsAuthorizer fromWhitelistAuthorizer(
-			@NonNull Function<@NonNull String, @NonNull Boolean> whitelistAuthorizer) {
+			@NonNull Function<@NonNull String, ? extends @Nullable Boolean> whitelistAuthorizer) {
 		requireNonNull(whitelistAuthorizer);
 		return WhitelistedOriginsCorsAuthorizer.fromAuthorizer(whitelistAuthorizer, (origin) -> false);
 	}
@@ -185,6 +188,7 @@ public interface CorsAuthorizer {
 	 * The {@code whitelistAuthorizer} function should return {@code true} if the supplied {@code Origin} is acceptable and {@code false} otherwise.
 	 * <p>
 	 * The provided {@code allowCredentialsResolver} is used to control the value of {@code Access-Control-Allow-Credentials}: it's a function which takes a normalized {@code Origin} as input and should return {@code true} if clients are permitted to include credentials in cross-origin HTTP requests and {@code false} otherwise.
+	 * A {@code null} authorization result rejects the origin; a {@code null} credentials result omits the credentials header.
 	 * Both functions may be invoked concurrently and must support concurrent invocation.
 	 * <p>
 	 * Callers should not rely on reference identity; this method may return a new or cached instance.
@@ -195,8 +199,8 @@ public interface CorsAuthorizer {
 	 */
 	@NonNull
 	static CorsAuthorizer fromWhitelistAuthorizer(
-			@NonNull Function<@NonNull String, @NonNull Boolean> whitelistAuthorizer,
-			@NonNull Function<@NonNull String, @NonNull Boolean> allowCredentialsResolver) {
+			@NonNull Function<@NonNull String, ? extends @Nullable Boolean> whitelistAuthorizer,
+			@NonNull Function<@NonNull String, ? extends @Nullable Boolean> allowCredentialsResolver) {
 		requireNonNull(whitelistAuthorizer);
 		requireNonNull(allowCredentialsResolver);
 

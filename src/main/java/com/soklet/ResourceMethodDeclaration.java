@@ -38,7 +38,7 @@ record ResourceMethodDeclaration(
 		@NonNull
 		String methodName,
 		@NonNull
-		String[] parameterTypes,
+		String @NonNull [] parameterTypes,
 		@NonNull
 		Boolean sseEventSource
 ) {
@@ -53,7 +53,7 @@ record ResourceMethodDeclaration(
 
 	/** Reads the existing semicolon-delimited index, including reference-array descriptor terminators. */
 	@NonNull
-	static String[] parameterTypesFromIndex(@NonNull String encoded) {
+	static String @NonNull [] parameterTypesFromIndex(@NonNull String encoded) {
 		requireNonNull(encoded);
 		if (encoded.isEmpty())
 			return new String[0];

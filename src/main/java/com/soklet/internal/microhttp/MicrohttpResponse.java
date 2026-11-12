@@ -23,25 +23,25 @@ import static java.util.Objects.requireNonNull;
 
 public final class MicrohttpResponse {
     private final int status;
-    private final String reason;
-    private final List<Header> headers;
+    private final @NonNull String reason;
+    private final @NonNull List<@NonNull Header> headers;
     private final long bodyLength;
-    private final BodySourceFactory bodySourceFactory;
+    private final @NonNull BodySourceFactory bodySourceFactory;
     private final byte @Nullable [] body;
     private final boolean streaming;
     private final @Nullable BodyTerminationState bodyTerminationState;
 
-    public MicrohttpResponse(int status, String reason, List<Header> headers, byte[] body) {
+    public MicrohttpResponse(int status, @NonNull String reason, @NonNull List<@NonNull Header> headers, byte @NonNull [] body) {
         this(status, reason, headers, requireNonNull(body).length, () -> new ByteBufferWritableSource(ByteBuffer.wrap(body)), body, false);
     }
 
-    private MicrohttpResponse(int status, String reason, List<Header> headers, long bodyLength,
-                              BodySourceFactory bodySourceFactory, byte @Nullable [] body, boolean streaming) {
+    private MicrohttpResponse(int status, @NonNull String reason, @NonNull List<@NonNull Header> headers, long bodyLength,
+                              @NonNull BodySourceFactory bodySourceFactory, byte @Nullable [] body, boolean streaming) {
         this(status, reason, headers, bodyLength, bodySourceFactory, body, streaming, null);
     }
 
-    private MicrohttpResponse(int status, String reason, List<Header> headers, long bodyLength,
-                              BodySourceFactory bodySourceFactory, byte @Nullable [] body, boolean streaming,
+    private MicrohttpResponse(int status, @NonNull String reason, @NonNull List<@NonNull Header> headers, long bodyLength,
+                              @NonNull BodySourceFactory bodySourceFactory, byte @Nullable [] body, boolean streaming,
                               @Nullable BodyTerminationState bodyTerminationState) {
         this.status = status;
         this.reason = requireNonNull(reason);
@@ -53,8 +53,8 @@ public final class MicrohttpResponse {
         this.bodyTerminationState = bodyTerminationState;
     }
 
-    public static MicrohttpResponse withFileBody(int status, String reason, List<Header> headers,
-                                                 Path path, Long offset, Long count) {
+    public static @NonNull MicrohttpResponse withFileBody(int status, @NonNull String reason, @NonNull List<@NonNull Header> headers,
+                                                 @NonNull Path path, @NonNull Long offset, @NonNull Long count) {
         requireNonNull(path);
         requireNonNull(offset);
         requireNonNull(count);
@@ -66,9 +66,9 @@ public final class MicrohttpResponse {
                 false);
     }
 
-    public static MicrohttpResponse withFileChannelBody(int status, String reason, List<Header> headers,
-                                                        FileChannel fileChannel, Long offset, Long count,
-                                                        Boolean closeOnComplete) {
+    public static @NonNull MicrohttpResponse withFileChannelBody(int status, @NonNull String reason, @NonNull List<@NonNull Header> headers,
+                                                        @NonNull FileChannel fileChannel, @NonNull Long offset, @NonNull Long count,
+                                                        @NonNull Boolean closeOnComplete) {
         requireNonNull(fileChannel);
         requireNonNull(offset);
         requireNonNull(count);
@@ -81,8 +81,8 @@ public final class MicrohttpResponse {
                 false);
     }
 
-    public static MicrohttpResponse withSecureFileBody(int status, String reason, List<Header> headers,
-                                                        MarshaledResponseBody.SecureFile file) {
+    public static @NonNull MicrohttpResponse withSecureFileBody(int status, @NonNull String reason, @NonNull List<@NonNull Header> headers,
+                                                        MarshaledResponseBody.@NonNull SecureFile file) {
         requireNonNull(file);
         long offset = file.getOffset();
         long count = file.getCount();
@@ -114,8 +114,8 @@ public final class MicrohttpResponse {
             throw new IllegalArgumentException("Offset plus count exceeds maximum supported file position.");
     }
 
-    public static MicrohttpResponse withByteBufferBody(int status, String reason, List<Header> headers,
-                                                       ByteBuffer byteBuffer) {
+    public static @NonNull MicrohttpResponse withByteBufferBody(int status, @NonNull String reason, @NonNull List<@NonNull Header> headers,
+                                                       @NonNull ByteBuffer byteBuffer) {
         requireNonNull(byteBuffer);
         ByteBuffer responseBuffer = byteBuffer.asReadOnlyBuffer();
 
@@ -125,14 +125,14 @@ public final class MicrohttpResponse {
                 false);
     }
 
-    static MicrohttpResponse withStreamingBody(int status, String reason, List<Header> headers,
-                                               BodySourceFactory bodySourceFactory) {
+    static @NonNull MicrohttpResponse withStreamingBody(int status, @NonNull String reason, @NonNull List<@NonNull Header> headers,
+                                               @NonNull BodySourceFactory bodySourceFactory) {
         requireNonNull(bodySourceFactory);
         return new MicrohttpResponse(status, reason, headers, 0L, bodySourceFactory, null, true);
     }
 
-    static MicrohttpResponse withWritableSourceBody(int status, String reason, List<Header> headers,
-                                                    long bodyLength, BodySourceFactory bodySourceFactory) {
+    static @NonNull MicrohttpResponse withWritableSourceBody(int status, @NonNull String reason, @NonNull List<@NonNull Header> headers,
+                                                    long bodyLength, @NonNull BodySourceFactory bodySourceFactory) {
         requireNonNull(bodySourceFactory);
         return new MicrohttpResponse(status, reason, headers, bodyLength, bodySourceFactory, null, false);
     }
@@ -141,11 +141,11 @@ public final class MicrohttpResponse {
         return status;
     }
 
-    public String reason() {
+    public @NonNull String reason() {
         return reason;
     }
 
-    public List<Header> headers() {
+    public @NonNull List<@NonNull Header> headers() {
         return headers;
     }
 
@@ -153,14 +153,14 @@ public final class MicrohttpResponse {
         return bodyLength;
     }
 
-    public byte[] body() {
+    public byte @NonNull [] body() {
         if (body == null) {
             throw new IllegalStateException("Response body is not byte-array-backed.");
         }
         return body;
     }
 
-    public MicrohttpResponse withHeaders(List<Header> headers) {
+    public @NonNull MicrohttpResponse withHeaders(@NonNull List<@NonNull Header> headers) {
         return new MicrohttpResponse(status, reason, headers, bodyLength, bodySourceFactory, body, streaming,
                 bodyTerminationState);
     }
@@ -176,7 +176,7 @@ public final class MicrohttpResponse {
      *
      * @throws IllegalStateException if this response is streaming or already has a termination listener
      */
-    public MicrohttpResponse withBodyTerminationListener(@NonNull BodyTerminationListener listener) {
+    public @NonNull MicrohttpResponse withBodyTerminationListener(@NonNull BodyTerminationListener listener) {
         requireNonNull(listener);
 
         if (streaming)
@@ -189,7 +189,7 @@ public final class MicrohttpResponse {
                 new BodyTerminationState(listener));
     }
 
-    MicrohttpResponse withoutBodyOrFramingHeaders() {
+    @NonNull MicrohttpResponse withoutBodyOrFramingHeaders() {
         byte[] emptyBody = new byte[0];
         return new MicrohttpResponse(status, reason, headers.stream()
                 .filter(header -> !header.name().equalsIgnoreCase("Content-Length"))
@@ -201,7 +201,7 @@ public final class MicrohttpResponse {
     // RFC 9110 §9.3.2: a response to HEAD carries no content, but SHOULD send the header fields a
     // GET would have produced. Omit the body bytes while preserving (or synthesizing) the
     // hypothetical Content-Length. Only meaningful for non-streaming responses.
-    MicrohttpResponse withBodyOmittedForHead() {
+    @NonNull MicrohttpResponse withBodyOmittedForHead() {
         // A non-byte body source may own resources (e.g. a pre-opened FileChannel with
         // closeOnComplete): create and close it so nothing leaks when the body goes unwritten
         if (body == null) {
@@ -229,7 +229,7 @@ public final class MicrohttpResponse {
         return streaming;
     }
 
-    public boolean hasHeader(String name) {
+    public boolean hasHeader(@NonNull String name) {
         for (Header header : headers) {
             if (header.name().equalsIgnoreCase(name)) {
                 return true;
@@ -238,26 +238,26 @@ public final class MicrohttpResponse {
         return false;
     }
 
-    static final byte[] COLON_SPACE = ": ".getBytes(StandardCharsets.US_ASCII);
-    static final byte[] SPACE = " ".getBytes(StandardCharsets.US_ASCII);
-    static final byte[] CRLF = "\r\n".getBytes(StandardCharsets.US_ASCII);
-    static final byte[] CACHE_CONTROL_HEADER_NAME = "Cache-Control".getBytes(StandardCharsets.US_ASCII);
-    static final byte[] CONNECTION_HEADER_NAME = "Connection".getBytes(StandardCharsets.US_ASCII);
-    static final byte[] CONTENT_LENGTH_HEADER_NAME = "Content-Length".getBytes(StandardCharsets.US_ASCII);
-    static final byte[] CONTENT_TYPE_HEADER_NAME = "Content-Type".getBytes(StandardCharsets.US_ASCII);
-    static final byte[] DATE_HEADER_NAME = "Date".getBytes(StandardCharsets.US_ASCII);
-    static final byte[] ETAG_HEADER_NAME = "ETag".getBytes(StandardCharsets.US_ASCII);
-    static final byte[] LAST_MODIFIED_HEADER_NAME = "Last-Modified".getBytes(StandardCharsets.US_ASCII);
-    static final byte[] LOCATION_HEADER_NAME = "Location".getBytes(StandardCharsets.US_ASCII);
-    static final byte[] SERVER_HEADER_NAME = "Server".getBytes(StandardCharsets.US_ASCII);
-    static final byte[] SET_COOKIE_HEADER_NAME = "Set-Cookie".getBytes(StandardCharsets.US_ASCII);
-    static final byte[] VARY_HEADER_NAME = "Vary".getBytes(StandardCharsets.US_ASCII);
+    static final byte @NonNull [] COLON_SPACE = ": ".getBytes(StandardCharsets.US_ASCII);
+    static final byte @NonNull [] SPACE = " ".getBytes(StandardCharsets.US_ASCII);
+    static final byte @NonNull [] CRLF = "\r\n".getBytes(StandardCharsets.US_ASCII);
+    static final byte @NonNull [] CACHE_CONTROL_HEADER_NAME = "Cache-Control".getBytes(StandardCharsets.US_ASCII);
+    static final byte @NonNull [] CONNECTION_HEADER_NAME = "Connection".getBytes(StandardCharsets.US_ASCII);
+    static final byte @NonNull [] CONTENT_LENGTH_HEADER_NAME = "Content-Length".getBytes(StandardCharsets.US_ASCII);
+    static final byte @NonNull [] CONTENT_TYPE_HEADER_NAME = "Content-Type".getBytes(StandardCharsets.US_ASCII);
+    static final byte @NonNull [] DATE_HEADER_NAME = "Date".getBytes(StandardCharsets.US_ASCII);
+    static final byte @NonNull [] ETAG_HEADER_NAME = "ETag".getBytes(StandardCharsets.US_ASCII);
+    static final byte @NonNull [] LAST_MODIFIED_HEADER_NAME = "Last-Modified".getBytes(StandardCharsets.US_ASCII);
+    static final byte @NonNull [] LOCATION_HEADER_NAME = "Location".getBytes(StandardCharsets.US_ASCII);
+    static final byte @NonNull [] SERVER_HEADER_NAME = "Server".getBytes(StandardCharsets.US_ASCII);
+    static final byte @NonNull [] SET_COOKIE_HEADER_NAME = "Set-Cookie".getBytes(StandardCharsets.US_ASCII);
+    static final byte @NonNull [] VARY_HEADER_NAME = "Vary".getBytes(StandardCharsets.US_ASCII);
 
-    public byte[] serialize(String version, List<Header> headers) {
+    public byte @NonNull [] serialize(@NonNull String version, @NonNull List<@NonNull Header> headers) {
         return serialize(version, headers, Integer.MAX_VALUE);
     }
 
-    public byte[] serialize(String version, List<Header> headers,
+    public byte @NonNull [] serialize(@NonNull String version, @NonNull List<@NonNull Header> headers,
                             int maximumSizeInBytes) {
         if (maximumSizeInBytes < 1)
             throw new IllegalArgumentException("Maximum serialized response size must be positive.");
@@ -274,11 +274,11 @@ public final class MicrohttpResponse {
         return result;
     }
 
-    byte[] serializeHead(String version, List<Header> headers) {
+    byte @NonNull [] serializeHead(@NonNull String version, @NonNull List<@NonNull Header> headers) {
         return serializeHead(version, headers, Integer.MAX_VALUE);
     }
 
-    private byte[] serializeHead(String version, List<Header> headers,
+    private byte @NonNull [] serializeHead(@NonNull String version, @NonNull List<@NonNull Header> headers,
                                  int maximumSizeInBytes) {
         HeadWriter writer = new HeadWriter(
                 initialHeadCapacity((long) headers.size() + this.headers.size()),
@@ -287,13 +287,13 @@ public final class MicrohttpResponse {
         return writer.toByteArray();
     }
 
-    WritableSource writableSource(byte[] serializedHead) throws IOException {
+    @NonNull WritableSource writableSource(byte @NonNull [] serializedHead) throws IOException {
         return new CompositeWritableSource(List.of(
                 new ByteBufferWritableSource(ByteBuffer.wrap(serializedHead)),
                 newBodySource()));
     }
 
-    void closeStreamingBody(StreamTerminationReason cancelationReason, @Nullable Throwable cause) throws IOException {
+    void closeStreamingBody(@NonNull StreamTerminationReason cancelationReason, @Nullable Throwable cause) throws IOException {
         if (!streaming) {
             return;
         }
@@ -301,12 +301,12 @@ public final class MicrohttpResponse {
         closeBody(cancelationReason, cause);
     }
 
-    void closeBody(StreamTerminationReason cancelationReason, @Nullable Throwable cause) throws IOException {
+    void closeBody(@NonNull StreamTerminationReason cancelationReason, @Nullable Throwable cause) throws IOException {
         WritableSource source = newBodySource();
         source.close(cancelationReason, cause);
     }
 
-    void reserveBodyTermination(StreamTerminationReason reason, @Nullable Throwable cause) {
+    void reserveBodyTermination(@NonNull StreamTerminationReason reason, @Nullable Throwable cause) {
         if (bodyTerminationState != null)
             bodyTerminationState.reserve(reason, cause);
     }
@@ -316,12 +316,12 @@ public final class MicrohttpResponse {
             bodyTerminationState.deliver();
     }
 
-    private WritableSource newBodySource() throws IOException {
+    private @NonNull WritableSource newBodySource() throws IOException {
         WritableSource source = bodySourceFactory.create();
         return bodyTerminationState == null ? source : new BodyTerminationWritableSource(source, bodyTerminationState);
     }
 
-    private void appendHead(String version, List<Header> headers, HeadWriter writer) {
+    private void appendHead(@NonNull String version, @NonNull List<@NonNull Header> headers, @NonNull HeadWriter writer) {
         writer.writeAscii(version);
         writer.write(SPACE);
         writer.writeAscii(Integer.toString(status));
@@ -333,7 +333,7 @@ public final class MicrohttpResponse {
         writer.write(CRLF);
     }
 
-    private static void appendHeaders(HeadWriter writer, List<Header> headers) {
+    private static void appendHeaders(@NonNull HeadWriter writer, @NonNull List<@NonNull Header> headers) {
         for (Header header : headers) {
             validateHeaderForSerialization(header);
             writeHeaderName(writer, header.name());
@@ -343,7 +343,7 @@ public final class MicrohttpResponse {
         }
     }
 
-    private static void validateHeaderForSerialization(Header header) {
+    private static void validateHeaderForSerialization(@NonNull Header header) {
         requireNonNull(header);
         String name = requireNonNull(header.name());
         String value = requireNonNull(header.value());
@@ -379,7 +379,7 @@ public final class MicrohttpResponse {
         };
     }
 
-    private static void writeHeaderName(HeadWriter writer, String name) {
+    private static void writeHeaderName(@NonNull HeadWriter writer, @NonNull String name) {
         switch (name) {
             case "Cache-Control" -> writer.write(CACHE_CONTROL_HEADER_NAME);
             case "Connection" -> writer.write(CONNECTION_HEADER_NAME);
@@ -401,7 +401,7 @@ public final class MicrohttpResponse {
     }
 
     private static final class HeadWriter {
-        private byte[] bytes;
+        private byte @NonNull [] bytes;
         private int size;
         private final int maximumSize;
 
@@ -413,17 +413,17 @@ public final class MicrohttpResponse {
                     Math.max(64, initialCapacity))];
         }
 
-        private void write(byte[] bytes) {
+        private void write(byte @NonNull [] bytes) {
             ensureCapacity(bytes.length);
             writeUnchecked(bytes);
         }
 
-        private void writeUnchecked(byte[] bytes) {
+        private void writeUnchecked(byte @NonNull [] bytes) {
             System.arraycopy(bytes, 0, this.bytes, this.size, bytes.length);
             this.size += bytes.length;
         }
 
-        private void writeAscii(String value) {
+        private void writeAscii(@NonNull String value) {
             for (int i = 0; i < value.length(); i++) {
                 if (value.charAt(i) > 0x7F) {
                     write(value.getBytes(StandardCharsets.US_ASCII));
@@ -435,7 +435,7 @@ public final class MicrohttpResponse {
             writeLowBytesUnchecked(value);
         }
 
-        private void writeLatin1(String value) {
+        private void writeLatin1(@NonNull String value) {
             for (int i = 0; i < value.length(); i++) {
                 if (value.charAt(i) > 0xFF) {
                     write(value.getBytes(StandardCharsets.ISO_8859_1));
@@ -448,7 +448,7 @@ public final class MicrohttpResponse {
         }
 
         @SuppressWarnings("deprecation")
-        private void writeLowBytesUnchecked(String value) {
+        private void writeLowBytesUnchecked(@NonNull String value) {
             value.getBytes(0, value.length(), this.bytes, this.size);
             this.size += value.length();
         }
@@ -474,14 +474,14 @@ public final class MicrohttpResponse {
             this.bytes = Arrays.copyOf(this.bytes, newCapacity);
         }
 
-        private byte[] toByteArray() {
+        private byte @NonNull [] toByteArray() {
             return Arrays.copyOf(this.bytes, this.size);
         }
     }
 
     @FunctionalInterface
     interface BodySourceFactory {
-        WritableSource create() throws IOException;
+        @NonNull WritableSource create() throws IOException;
     }
 
     /**
@@ -499,17 +499,17 @@ public final class MicrohttpResponse {
     }
 
     private static final class BodyTerminationState {
-        private final BodyTerminationListener listener;
-        private final AtomicReference<BodyTermination> termination;
-        private final AtomicBoolean delivered;
+        private final @NonNull BodyTerminationListener listener;
+        private final @NonNull AtomicReference<@Nullable BodyTermination> termination;
+        private final @NonNull AtomicBoolean delivered;
 
-        private BodyTerminationState(BodyTerminationListener listener) {
+        private BodyTerminationState(@NonNull BodyTerminationListener listener) {
             this.listener = requireNonNull(listener);
             this.termination = new AtomicReference<>();
             this.delivered = new AtomicBoolean();
         }
 
-        private void reserve(StreamTerminationReason reason, @Nullable Throwable cause) {
+        private void reserve(@NonNull StreamTerminationReason reason, @Nullable Throwable cause) {
             termination.compareAndSet(null, new BodyTermination(reason, cause));
         }
 
@@ -522,12 +522,12 @@ public final class MicrohttpResponse {
     }
 
     private static final class BodyTerminationWritableSource implements WritableSource {
-        private final WritableSource delegate;
-        private final BodyTerminationState terminationState;
-        private final AtomicBoolean closed;
+        private final @NonNull WritableSource delegate;
+        private final @NonNull BodyTerminationState terminationState;
+        private final @NonNull AtomicBoolean closed;
 
-        private BodyTerminationWritableSource(WritableSource delegate,
-                                               BodyTerminationState terminationState) {
+        private BodyTerminationWritableSource(@NonNull WritableSource delegate,
+                                               @NonNull BodyTerminationState terminationState) {
             this.delegate = requireNonNull(delegate);
             this.terminationState = requireNonNull(terminationState);
             this.closed = new AtomicBoolean();
@@ -539,12 +539,12 @@ public final class MicrohttpResponse {
         }
 
         @Override
-        public void writeReadyCallback(Runnable callback) {
+        public void writeReadyCallback(@NonNull Runnable callback) {
             delegate.writeReadyCallback(callback);
         }
 
         @Override
-        public long writeTo(SocketChannel socketChannel, long maxBytes) throws IOException {
+        public long writeTo(@NonNull SocketChannel socketChannel, long maxBytes) throws IOException {
             return delegate.writeTo(socketChannel, maxBytes);
         }
 

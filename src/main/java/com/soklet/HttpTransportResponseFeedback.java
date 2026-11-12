@@ -34,9 +34,9 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 final class HttpTransportResponseFeedback implements AutoCloseable {
-	private final AtomicReference<@Nullable HttpTransportResponseOutcome> outcome =
+	private final @NonNull AtomicReference<@Nullable HttpTransportResponseOutcome> outcome =
 			new AtomicReference<>(HttpTransportResponseOutcome.accepted());
-	private final Object lifecycleConsumerLock = new Object();
+	private final @NonNull Object lifecycleConsumerLock = new Object();
 	private volatile boolean lifecycleConsumerClaimed;
 
 	@NonNull
@@ -53,28 +53,28 @@ final class HttpTransportResponseFeedback implements AutoCloseable {
 	}
 
 	@Nullable
-	static HttpTransportResponseFeedback forConsumer(@NonNull Consumer<HttpRequestResult> consumer) {
+	static HttpTransportResponseFeedback forConsumer(@NonNull Consumer<@NonNull HttpRequestResult> consumer) {
 		return consumer instanceof Writer writer ? writer.feedback : null;
 	}
 
 	@NonNull
-	static Consumer<HttpRequestResult> fromWriter(@NonNull HttpTransportResponseFeedback feedback,
-			@NonNull Function<HttpRequestResult, HttpTransportResponseOutcome> writer) {
+	static Consumer<@NonNull HttpRequestResult> fromWriter(@NonNull HttpTransportResponseFeedback feedback,
+			@NonNull Function<@NonNull HttpRequestResult, @NonNull HttpTransportResponseOutcome> writer) {
 		return new Writer(feedback, writer);
 	}
 
 	private static final class Writer implements Consumer<HttpRequestResult> {
-		private final HttpTransportResponseFeedback feedback;
-		private final Function<HttpRequestResult, HttpTransportResponseOutcome> writer;
+		private final @NonNull HttpTransportResponseFeedback feedback;
+		private final @NonNull Function<@NonNull HttpRequestResult, @NonNull HttpTransportResponseOutcome> writer;
 
 		private Writer(@NonNull HttpTransportResponseFeedback feedback,
-				@NonNull Function<HttpRequestResult, HttpTransportResponseOutcome> writer) {
+				@NonNull Function<@NonNull HttpRequestResult, @NonNull HttpTransportResponseOutcome> writer) {
 			this.feedback = requireNonNull(feedback);
 			this.writer = requireNonNull(writer);
 		}
 
 		@Override
-		public void accept(HttpRequestResult requestResult) {
+		public void accept(@NonNull HttpRequestResult requestResult) {
 			HttpTransportResponseOutcome outcome = requireNonNull(this.writer.apply(requireNonNull(requestResult)));
 			boolean recorded = this.feedback.record(outcome);
 			switch (outcome) {
@@ -120,7 +120,7 @@ final class HttpTransportResponseFeedback implements AutoCloseable {
 
 	static final class UnclaimedReplacement extends RuntimeException {
 		private static final long serialVersionUID = 1L;
-		private final HttpTransportResponseOutcome.Replaced outcome;
+		private final HttpTransportResponseOutcome.@NonNull Replaced outcome;
 
 		@NonNull
 		private static UnclaimedReplacement fromOutcome(HttpTransportResponseOutcome.@NonNull Replaced outcome) {

@@ -76,7 +76,7 @@ enum McpSchemaType {
 					&& isIntegral(number.value());
 		};
 	}
-	private static boolean isIntegral(BigDecimal value) {
+	private static boolean isIntegral(@NonNull BigDecimal value) {
 		if (value.scale() <= 0 || value.signum() == 0)
 			return true;
 		if (value.scale() >= value.precision())

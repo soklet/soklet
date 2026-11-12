@@ -1,5 +1,6 @@
 package com.soklet.internal.microhttp;
 
+import org.jspecify.annotations.NonNull;
 class RequestTooLargeException extends RuntimeException {
     enum Reason {
         CONTENT,
@@ -7,17 +8,17 @@ class RequestTooLargeException extends RuntimeException {
         URI_TOO_LONG
     }
 
-    private final Reason reason;
+    private final @NonNull Reason reason;
 
     RequestTooLargeException() {
         this(Reason.CONTENT);
     }
 
-    RequestTooLargeException(Reason reason) {
+    RequestTooLargeException(@NonNull Reason reason) {
         this.reason = reason;
     }
 
-    Reason reason() {
+    @NonNull Reason reason() {
         return reason;
     }
 }

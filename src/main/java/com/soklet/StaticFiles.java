@@ -342,7 +342,7 @@ public final class StaticFiles {
 	}
 
 	@NonNull
-	private Optional<ResolvedFile> resolvedFileFor(@NonNull String relativePath) {
+	private Optional<@NonNull ResolvedFile> resolvedFileFor(@NonNull String relativePath) {
 		requireNonNull(relativePath);
 
 		if (relativePath.getBytes(StandardCharsets.UTF_8).length > MAX_RELATIVE_PATH_UTF_8_LENGTH)
@@ -389,7 +389,7 @@ public final class StaticFiles {
 	}
 
 	@NonNull
-	private Optional<ResolvedFile> resolvedFileForCandidate(@NonNull Path candidate) {
+	private Optional<@NonNull ResolvedFile> resolvedFileForCandidate(@NonNull Path candidate) {
 		requireNonNull(candidate);
 
 		if (getFollowSymlinks())
@@ -399,7 +399,7 @@ public final class StaticFiles {
 	}
 
 	@NonNull
-	private Optional<ResolvedFile> noFollowResolvedFileForCandidate(@NonNull Path candidate) {
+	private Optional<@NonNull ResolvedFile> noFollowResolvedFileForCandidate(@NonNull Path candidate) {
 		requireNonNull(candidate);
 
 		Path canonicalCandidate = canonicalNoFollowPath(candidate).orElse(null);
@@ -433,7 +433,7 @@ public final class StaticFiles {
 	}
 
 	@NonNull
-	private Optional<Path> canonicalNoFollowPath(@NonNull Path candidate) {
+	private Optional<@NonNull Path> canonicalNoFollowPath(@NonNull Path candidate) {
 		if (!candidate.startsWith(this.noFollowRoot) || Files.isSymbolicLink(this.noFollowRoot)
 				|| hasSymlinkComponent(candidate))
 			return Optional.empty();
@@ -452,7 +452,7 @@ public final class StaticFiles {
 		}
 	}
 
-	private <T> Optional<T> unresolvedFile(IOException failure, Path candidate) {
+	private <T> @NonNull Optional<T> unresolvedFile(@NonNull IOException failure, @NonNull Path candidate) {
 		// The Unix provider reports ENOTDIR as a generic FileSystemException.
 		// Inspect existing ancestors rather than relying on localized reason text.
 		if (failure instanceof FileSystemException) {
@@ -473,7 +473,7 @@ public final class StaticFiles {
 		return unresolvedFile(failure);
 	}
 
-	private boolean hasUnresolvableSymlinkChain(Path candidate) {
+	private boolean hasUnresolvableSymlinkChain(@NonNull Path candidate) {
 		// A generic I/O failure on a path containing a symlink is not itself a loop.
 		// Prove a repeated expansion (or reject excessive expansion) using only
 		// public no-follow metadata. Preserve the original failure if probing fails.
@@ -527,14 +527,14 @@ public final class StaticFiles {
 		}
 	}
 
-	private static <T> Optional<T> unresolvedFile(IOException failure) {
+	private static <T> @NonNull Optional<T> unresolvedFile(@NonNull IOException failure) {
 		if (failure instanceof NoSuchFileException || failure instanceof NotDirectoryException || failure instanceof FileSystemLoopException
 				|| failure instanceof AccessDeniedException || failure instanceof SecureStaticFileRoot.FileChangedException)
 			return Optional.empty();
 		throw new UncheckedIOException("Unable to acquire static file.", failure);
 	}
 
-	private Optional<ResolvedFile> readableIndex(Optional<ResolvedFile> candidate) {
+	private @NonNull Optional<@NonNull ResolvedFile> readableIndex(@NonNull Optional<@NonNull ResolvedFile> candidate) {
 		if (candidate.isEmpty())
 			return candidate;
 		Path path = candidate.orElseThrow().path();
@@ -551,7 +551,7 @@ public final class StaticFiles {
 	}
 
 	@NonNull
-	private Optional<ResolvedFile> noFollowRegularFile(@NonNull Path candidate) {
+	private Optional<@NonNull ResolvedFile> noFollowRegularFile(@NonNull Path candidate) {
 		requireNonNull(candidate);
 
 		try {
@@ -563,7 +563,7 @@ public final class StaticFiles {
 	}
 
 	@NonNull
-	private Optional<ResolvedFile> followedResolvedFileForCandidate(@NonNull Path candidate) {
+	private Optional<@NonNull ResolvedFile> followedResolvedFileForCandidate(@NonNull Path candidate) {
 		requireNonNull(candidate);
 
 		Path realCandidate;
@@ -603,7 +603,7 @@ public final class StaticFiles {
 	}
 
 	@NonNull
-	private Optional<ResolvedFile> followedRegularFile(@NonNull Path candidate) {
+	private Optional<@NonNull ResolvedFile> followedRegularFile(@NonNull Path candidate) {
 		requireNonNull(candidate);
 
 		try {
@@ -1257,7 +1257,7 @@ public final class StaticFiles {
 
 		@Override
 		@NonNull
-		public Optional<EntityTag> entityTagFor(@NonNull Path path,
+		public Optional<@NonNull EntityTag> entityTagFor(@NonNull Path path,
 																						@NonNull BasicFileAttributes attributes) {
 			requireNonNull(path);
 			requireNonNull(attributes);
@@ -1281,7 +1281,7 @@ public final class StaticFiles {
 
 		@Override
 		@NonNull
-		public Optional<EntityTag> entityTagFor(@NonNull Path path,
+		public Optional<@NonNull EntityTag> entityTagFor(@NonNull Path path,
 																						@NonNull BasicFileAttributes attributes) {
 			requireNonNull(path);
 			requireNonNull(attributes);
@@ -1357,7 +1357,7 @@ public final class StaticFiles {
 
 		@Override
 		@NonNull
-		public Optional<Instant> lastModifiedFor(@NonNull Path path,
+		public Optional<@NonNull Instant> lastModifiedFor(@NonNull Path path,
 																						 @NonNull BasicFileAttributes attributes) {
 			requireNonNull(path);
 			requireNonNull(attributes);
@@ -1381,7 +1381,7 @@ public final class StaticFiles {
 
 		@Override
 		@NonNull
-		public Optional<Instant> lastModifiedFor(@NonNull Path path,
+		public Optional<@NonNull Instant> lastModifiedFor(@NonNull Path path,
 																						 @NonNull BasicFileAttributes attributes) {
 			requireNonNull(path);
 			requireNonNull(attributes);
@@ -1405,7 +1405,7 @@ public final class StaticFiles {
 
 		@Override
 		@NonNull
-		public Optional<EntityTag> entityTagFor(@NonNull Path path,
+		public Optional<@NonNull EntityTag> entityTagFor(@NonNull Path path,
 																						@NonNull BasicFileAttributes attributes) {
 			requireNonNull(path);
 			requireNonNull(attributes);
@@ -1431,7 +1431,7 @@ public final class StaticFiles {
 
 		@Override
 		@NonNull
-		public Optional<String> cacheControlFor(@NonNull Path path,
+		public Optional<@NonNull String> cacheControlFor(@NonNull Path path,
 																						@NonNull BasicFileAttributes attributes) {
 			requireNonNull(path);
 			requireNonNull(attributes);

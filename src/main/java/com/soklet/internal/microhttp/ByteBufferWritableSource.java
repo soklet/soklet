@@ -16,6 +16,7 @@
 
 package com.soklet.internal.microhttp;
 
+import org.jspecify.annotations.NonNull;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
@@ -28,14 +29,14 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 class ByteBufferWritableSource implements WritableSource {
-    private final ByteBuffer buffer;
+    private final @NonNull ByteBuffer buffer;
 
-    ByteBufferWritableSource(ByteBuffer buffer) {
+    ByteBufferWritableSource(@NonNull ByteBuffer buffer) {
         this.buffer = requireNonNull(buffer).slice();
     }
 
     @Override
-    public long writeTo(SocketChannel socketChannel, long maxBytes) throws IOException {
+    public long writeTo(@NonNull SocketChannel socketChannel, long maxBytes) throws IOException {
         requireNonNull(socketChannel);
 
         if (maxBytes <= 0 || !hasRemaining()) {

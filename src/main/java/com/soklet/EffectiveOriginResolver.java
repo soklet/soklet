@@ -63,7 +63,7 @@ public final class EffectiveOriginResolver {
 	@Nullable
 	private InetSocketAddress remoteAddress;
 	@Nullable
-	private Predicate<InetSocketAddress> trustedProxyPredicate;
+	private Predicate<@NonNull InetSocketAddress> trustedProxyPredicate;
 	@Nullable
 	private Boolean allowOriginFallback;
 	@Nullable
@@ -198,7 +198,7 @@ public final class EffectiveOriginResolver {
 	}
 
 	@Nullable
-	Predicate<InetSocketAddress> getTrustedProxyPredicate() {
+	Predicate<@NonNull InetSocketAddress> getTrustedProxyPredicate() {
 		return this.trustedProxyPredicate;
 	}
 

@@ -68,7 +68,7 @@ final class McpLegacySessionStore {
 	static final long MAXIMUM_NOTIFICATION_BYTES_GLOBAL = 16_777_216L;
 	static final long MAINTENANCE_DEMAND_SCALE = 1_000_000L;
 	static final long MAXIMUM_MAINTENANCE_DEMAND_UNITS = 64L * MAINTENANCE_DEMAND_SCALE;
-	private static final BooleanSupplier ALWAYS_ACTIVE_SOURCE = () -> true;
+	private static final @NonNull BooleanSupplier ALWAYS_ACTIVE_SOURCE = () -> true;
 
 	enum Status {
 		ACCEPTED, NOT_FOUND, REVISION_MISMATCH, INVALID_ID,
@@ -115,7 +115,7 @@ final class McpLegacySessionStore {
 
 	record GrantAllocation(@NonNull Status status, @NonNull Optional<@NonNull Grant> grant) {
 		GrantAllocation { requireNonNull(status); requireNonNull(grant); }
-		@Override public String toString() { return "GrantAllocation[status=" + status + "]"; }
+		@Override public @NonNull String toString() { return "GrantAllocation[status=" + status + "]"; }
 	}
 
 	record GrantCounts(int logicalGrants, int physicalGrantHolds, long retainedUriBytes,
@@ -123,7 +123,7 @@ final class McpLegacySessionStore {
 
 	record GetAllocation(@NonNull Status status, @NonNull Optional<@NonNull Get> get) {
 		GetAllocation { requireNonNull(status); requireNonNull(get); }
-		@Override public String toString() { return "GetAllocation[status=" + status + "]"; }
+		@Override public @NonNull String toString() { return "GetAllocation[status=" + status + "]"; }
 	}
 
 	record GetCounts(int logicalGets, int physicalGets, int quotaRegistrations) {}
@@ -134,7 +134,7 @@ final class McpLegacySessionStore {
 	record NotificationAllocation(@NonNull NotificationStatus status,
 			@NonNull Optional<@NonNull NotificationReservation> reservation) {
 		NotificationAllocation { requireNonNull(status); requireNonNull(reservation); }
-		@Override public String toString() { return "NotificationAllocation[status=" + status + "]"; }
+		@Override public @NonNull String toString() { return "NotificationAllocation[status=" + status + "]"; }
 	}
 
 	record Config(int maximumSessions, int maximumSessionsPerOwner,
@@ -189,7 +189,7 @@ final class McpLegacySessionStore {
 				throw new IllegalArgumentException("A session owner must be nonblank, valid UTF-8, and at most 256 bytes.");
 		}
 
-		@Override public String toString() { return "Owner[redacted]"; }
+		@Override public @NonNull String toString() { return "Owner[redacted]"; }
 	}
 
 	record Snapshot(@NonNull McpClientCapabilities clientCapabilities,
@@ -199,32 +199,32 @@ final class McpLegacySessionStore {
 			requireNonNull(clientInformation);
 		}
 
-		@Override public String toString() { return "Snapshot[redacted]"; }
+		@Override public @NonNull String toString() { return "Snapshot[redacted]"; }
 	}
 
 	record Allocation(@NonNull Status status,
 			@NonNull Optional<@NonNull Initialization> initialization) {
 		Allocation { requireNonNull(status); requireNonNull(initialization); }
-		@Override public String toString() { return "Allocation[status=" + status + "]"; }
+		@Override public @NonNull String toString() { return "Allocation[status=" + status + "]"; }
 	}
 
 	record Acquisition(@NonNull Status status, @NonNull Optional<@NonNull Call> call) {
 		Acquisition { requireNonNull(status); requireNonNull(call); }
-		@Override public String toString() { return "Acquisition[status=" + status + "]"; }
+		@Override public @NonNull String toString() { return "Acquisition[status=" + status + "]"; }
 	}
 
 	/** Counts are diagnostic internals; no identifiers or owners escape here. */
 	record Counts(int liveSessions, int anonymousSessions, int owners,
 			long retainedBytes, int physicalReferences) {}
 
-	private final Object lock = new Object();
-	private final Config config;
-	private final McpJsonCodec snapshotCodec;
-	private final McpApplicationClock clock;
-	private final Supplier<byte[]> tokenSource;
-	private final Map<String, Session> sessions = new LinkedHashMap<>();
-	private final Map<EndpointRevision, Set<Session>> endpointSessions = new HashMap<>();
-	private final Map<Owner, OwnerUsage> owners = new HashMap<>();
+	private final @NonNull Object lock = new Object();
+	private final @NonNull Config config;
+	private final @NonNull McpJsonCodec snapshotCodec;
+	private final @NonNull McpApplicationClock clock;
+	private final @NonNull Supplier<byte @NonNull []> tokenSource;
+	private final @NonNull Map<@NonNull String, @NonNull Session> sessions = new LinkedHashMap<>();
+	private final @NonNull Map<@NonNull EndpointRevision, @NonNull Set<@NonNull Session>> endpointSessions = new HashMap<>();
+	private final @NonNull Map<@NonNull Owner, @NonNull OwnerUsage> owners = new HashMap<>();
 	private int anonymousSessions;
 	// retainedBytes counts all evidence; transientBytes includes ordinary and control work.
 	private long retainedBytes;
@@ -642,13 +642,13 @@ final class McpLegacySessionStore {
 
 	@ThreadSafe
 	final class Delivery {
-		private final Session session;
-		private final McpResourceNotificationType notificationType;
+		private final @NonNull Session session;
+		private final @NonNull McpResourceNotificationType notificationType;
 		private final @Nullable GrantEntry entry;
 		private final long dirtySequence;
-		private final List<Get> eligibleGets;
-		private Delivery(Session session, McpResourceNotificationType type, @Nullable GrantEntry entry,
-				long sequence, List<Get> eligibleGets) {
+		private final @NonNull List<@NonNull Get> eligibleGets;
+		private Delivery(@NonNull Session session, @NonNull McpResourceNotificationType type, @Nullable GrantEntry entry,
+				long sequence, @NonNull List<@NonNull Get> eligibleGets) {
 			this.session = session; this.notificationType = type; this.entry = entry;
 			this.dirtySequence = sequence; this.eligibleGets = List.copyOf(eligibleGets);
 		}
@@ -664,14 +664,14 @@ final class McpLegacySessionStore {
 						? Optional.of(attempt) : Optional.empty();
 			}
 		}
-		@Override public String toString() { return "Delivery[redacted]"; }
+		@Override public @NonNull String toString() { return "Delivery[redacted]"; }
 	}
 
 	/** Lock-free predicate suitable for the transport's actual socket-write boundary. */
 	@ThreadSafe
 	final class DeliveryAttempt {
-		private final Get get;
-		private final McpResourceNotificationType notificationType;
+		private final @NonNull Get get;
+		private final @NonNull McpResourceNotificationType notificationType;
 		private final @Nullable GrantEntry entry;
 		private final @Nullable CatalogDirty catalog;
 		private final long dirtySequence;
@@ -679,9 +679,9 @@ final class McpLegacySessionStore {
 		private final long grantGeneration;
 		private final long getDeliveryGeneration;
 		private final long grantDeliveryGeneration;
-		private final BooleanSupplier sourceActive;
+		private final @NonNull BooleanSupplier sourceActive;
 		private boolean written;
-		private DeliveryAttempt(Get get, McpResourceNotificationType type, @Nullable GrantEntry entry, long sequence) {
+		private DeliveryAttempt(@NonNull Get get, @NonNull McpResourceNotificationType type, @Nullable GrantEntry entry, long sequence) {
 			this.get = get; this.notificationType = type; this.entry = entry; this.dirtySequence = sequence;
 			this.catalog = entry == null ? requireNonNull(get.session.catalogDirty.get(type)) : null;
 			this.getGeneration = get.authorizationGeneration.get(); this.grantGeneration = entry == null ? 0L : entry.generation.get();
@@ -725,15 +725,15 @@ final class McpLegacySessionStore {
 					&& requireNonNull(catalog).writtenSequence == dirtySequence;
 		}
 
-		@Override public String toString() { return "DeliveryAttempt[redacted]"; }
+		@Override public @NonNull String toString() { return "DeliveryAttempt[redacted]"; }
 	}
 
 	@ThreadSafe
 	final class NotificationReservation {
-		private final DeliveryAttempt attempt;
+		private final @NonNull DeliveryAttempt attempt;
 		private final long encodedBytes;
-		private final AtomicBoolean released = new AtomicBoolean();
-		private NotificationReservation(DeliveryAttempt attempt, long encodedBytes) {
+		private final @NonNull AtomicBoolean released = new AtomicBoolean();
+		private NotificationReservation(@NonNull DeliveryAttempt attempt, long encodedBytes) {
 			this.attempt = attempt; this.encodedBytes = encodedBytes;
 		}
 		boolean valid() { return !released.get() && attempt.valid(); }
@@ -758,12 +758,12 @@ final class McpLegacySessionStore {
 				removeOwnerIfCompleteWhileLocked(attempt.get.session);
 			}
 		}
-		@Override public String toString() { return "NotificationReservation[redacted]"; }
+		@Override public @NonNull String toString() { return "NotificationReservation[redacted]"; }
 	}
 
 	/** The deterministic token seam is package-private and absent from public configuration. */
 	McpLegacySessionStore(@NonNull Config config, @NonNull McpJsonLimits limits,
-			@NonNull McpApplicationClock clock, @NonNull Supplier<byte[]> tokenSource) {
+			@NonNull McpApplicationClock clock, @NonNull Supplier<byte @NonNull []> tokenSource) {
 		this.config = requireNonNull(config);
 		requireNonNull(limits);
 		this.clock = requireNonNull(clock);
@@ -922,7 +922,7 @@ final class McpLegacySessionStore {
 			else {
 				McpProgressToken retainedToken = requestId != null && validProgressToken(progressToken)
 						&& !session.progressTokens.contains(progressToken) ? progressToken : null;
-				Call call = new Call(session, requestId, retainedToken, target, retainedRequestEvidenceBytes);
+				Call call = new Call(this, session, requestId, retainedToken, target, retainedRequestEvidenceBytes);
 				call.evidence.controlRetention = control;
 				addEvidenceWhileLocked(session, retainedRequestEvidenceBytes);
 				session.transientBytes += retainedRequestEvidenceBytes;
@@ -1005,12 +1005,12 @@ final class McpLegacySessionStore {
 
 	@ThreadSafe
 	final class Initialization {
-		private final Session session;
+		private final @NonNull Session session;
 		private @Nullable Target target;
 		private final long evidenceBytes;
 		private boolean physical = true;
 
-		private Initialization(Session session, Target target, long evidenceBytes) {
+		private Initialization(@NonNull Session session, @NonNull Target target, long evidenceBytes) {
 			this.session = session; this.target = target; this.evidenceBytes = evidenceBytes;
 		}
 		@NonNull String sessionId() { return session.id; }
@@ -1036,66 +1036,68 @@ final class McpLegacySessionStore {
 				releaseClientPhysicalWhileLocked(session);
 			}
 		}
-		@Override public String toString() { return "Initialization[redacted]"; }
+		@Override public @NonNull String toString() { return "Initialization[redacted]"; }
 	}
 
 	@ThreadSafe
-	final class Call {
-		private final Session session;
+	static final class Call {
+		private final @NonNull McpLegacySessionStore store;
+		private final @NonNull Session session;
 		private final @Nullable McpJsonRpcId requestId;
 		private @Nullable McpProgressToken progressToken;
 		private @Nullable Target target;
-		private final EvidenceReservation evidence;
+		private final @NonNull EvidenceReservation evidence;
 		private boolean logical = true;
 		private boolean physical = true;
 		private boolean accepted;
 
-		private Call(Session session, @Nullable McpJsonRpcId requestId,
-				@Nullable McpProgressToken progressToken, Target target, long evidenceBytes) {
+		private Call(@NonNull McpLegacySessionStore store, @NonNull Session session, @Nullable McpJsonRpcId requestId,
+				@Nullable McpProgressToken progressToken, @NonNull Target target, long evidenceBytes) {
+			this.store = requireNonNull(store);
 			this.session = session; this.requestId = requestId;
 			this.progressToken = progressToken; this.target = target;
-			this.evidence = new EvidenceReservation(session, evidenceBytes);
+			this.evidence = store.new EvidenceReservation(session, evidenceBytes);
 		}
 
 		@NonNull Snapshot snapshot() { return session.snapshot; }
-		boolean progressAllowed() { synchronized (lock) { return logical && session.live && progressToken != null; } }
-		boolean acceptedUse() { return acceptUse(this, false); }
-		void detachProgress() { synchronized (lock) { releaseProgressWhileLocked(this); } }
-		void logicalComplete() { synchronized (lock) { logicalCompleteWhileLocked(this); } }
+		boolean progressAllowed() { synchronized (store.lock) { return logical && session.live && progressToken != null; } }
+		boolean acceptedUse() { return store.acceptUse(this, false); }
+		void detachProgress() { synchronized (store.lock) { store.releaseProgressWhileLocked(this); } }
+		void logicalComplete() { synchronized (store.lock) { store.logicalCompleteWhileLocked(this); } }
 		void physicalComplete() {
-			synchronized (lock) {
+			synchronized (store.lock) {
 				if (!physical) return;
 				physical = false;
-				logicalCompleteWhileLocked(this);
-				releaseSharedEvidenceWhileLocked(evidence);
-				releaseClientPhysicalWhileLocked(session);
+				store.logicalCompleteWhileLocked(this);
+				store.releaseSharedEvidenceWhileLocked(evidence);
+				store.releaseClientPhysicalWhileLocked(session);
 			}
 		}
-		@Override public String toString() { return "Call[redacted]"; }
-		private McpLegacySessionStore store() { return McpLegacySessionStore.this; }
+		@Override public @NonNull String toString() { return "Call[redacted]"; }
+		private @NonNull McpLegacySessionStore store() { return store; }
 	}
 
 	/** One historical GET evidence reservation, retained until physical exit. */
 	@ThreadSafe
 	final class Get {
-		private final Session session;
+		private final @NonNull Session session;
 		private @Nullable GetTarget target;
 		private final long evidenceBytes;
 		private final long totalDeadlineNanos;
 		private volatile long leaseDeadlineNanos;
-		private final AtomicLong authorizationGeneration = new AtomicLong(1L);
-		private final AtomicLong deliveryGeneration = new AtomicLong(1L);
+		private final @NonNull AtomicLong authorizationGeneration = new AtomicLong(1L);
+		private final @NonNull AtomicLong deliveryGeneration = new AtomicLong(1L);
 		private volatile boolean authorized = true;
 		private volatile boolean logical = true;
 		private boolean physical = true;
-		private volatile Set<McpResourceNotificationType> notificationTypes;
+		private volatile @NonNull Set<@NonNull McpResourceNotificationType> notificationTypes;
 		private final boolean accountDemand;
 		private long maintenanceDemandUnits;
 		private long queuedNotificationBytes;
 
-		private Get(Session session, GetTarget target, long evidenceBytes,
+		private Get(@NonNull Session session, @NonNull GetTarget target, long evidenceBytes,
 				long leaseDeadlineNanos, long totalDeadlineNanos, long now,
-				Set<McpResourceNotificationType> notificationTypes, boolean accountDemand, long demand) {
+				@NonNull Set<@NonNull McpResourceNotificationType> notificationTypes, boolean accountDemand, long demand) {
 			this.session = session; this.target = target; this.evidenceBytes = evidenceBytes;
 			this.totalDeadlineNanos = earlierDeadline(now, totalDeadlineNanos, session.createdNanos + config.lifetimeNanos());
 			this.leaseDeadlineNanos = earlierDeadline(now, leaseDeadlineNanos, this.totalDeadlineNanos);
@@ -1183,10 +1185,10 @@ final class McpLegacySessionStore {
 			run(actions);
 			return result;
 		}
-		private boolean validGeneration(long expected, McpResourceNotificationType type, long now) {
+		private boolean validGeneration(long expected, @NonNull McpResourceNotificationType type, long now) {
 			return authorizationGeneration.get() == expected && deliveryPermitted(type, now);
 		}
-		private boolean deliveryPermitted(McpResourceNotificationType type, long now) {
+		private boolean deliveryPermitted(@NonNull McpResourceNotificationType type, long now) {
 			return logical && session.live && authorized
 					&& notificationTypes.contains(type) && now - leaseDeadlineNanos < 0L;
 		}
@@ -1220,19 +1222,19 @@ final class McpLegacySessionStore {
 			}
 			run(actions);
 		}
-		@Override public String toString() { return "Get[redacted]"; }
+		@Override public @NonNull String toString() { return "Get[redacted]"; }
 	}
 
 	/** Historical subscribe evidence persists for the logical grant and any unfinished callback. */
 	@ThreadSafe
 	final class Grant {
-		private final GrantEntry entry;
-		private final EvidenceReservation evidence;
+		private final @NonNull GrantEntry entry;
+		private final @NonNull EvidenceReservation evidence;
 		private @Nullable GrantTarget target;
 		private volatile boolean logical = true;
 		private boolean initialPhysical = true;
 
-		private Grant(GrantEntry entry, GrantTarget target, EvidenceReservation evidence) {
+		private Grant(@NonNull GrantEntry entry, @NonNull GrantTarget target, @NonNull EvidenceReservation evidence) {
 			this.entry = entry; this.target = target; this.evidence = evidence;
 		}
 		@NonNull String uri() { return entry.uri; }
@@ -1354,15 +1356,15 @@ final class McpLegacySessionStore {
 				releaseGrantPhysicalWhileLocked(this);
 			}
 		}
-		@Override public String toString() { return "Grant[redacted]"; }
+		@Override public @NonNull String toString() { return "Grant[redacted]"; }
 	}
 
 	/** One renewal callback's physical evidence pin, including after logical permission is gone. */
 	@ThreadSafe
 	final class GrantWork implements AutoCloseable {
-		private final Grant grant;
+		private final @NonNull Grant grant;
 		private boolean physical = true;
-		private GrantWork(Grant grant) { this.grant = grant; }
+		private GrantWork(@NonNull Grant grant) { this.grant = grant; }
 		long retainedEvidenceBytes() { return grant.evidence.bytes; }
 		void physicalComplete() { close(); }
 		@Override public void close() {
@@ -1371,10 +1373,10 @@ final class McpLegacySessionStore {
 				physical = false; releaseGrantPhysicalWhileLocked(grant);
 			}
 		}
-		@Override public String toString() { return "GrantWork[redacted]"; }
+		@Override public @NonNull String toString() { return "GrantWork[redacted]"; }
 	}
 
-	private Status updateGrant(Grant grant, long expectedGeneration, long leaseDeadlineNanos, boolean establishing) {
+	private @NonNull Status updateGrant(@NonNull Grant grant, long expectedGeneration, long leaseDeadlineNanos, boolean establishing) {
 		List<Runnable> actions = new ArrayList<>(); Status result = Status.NOT_FOUND;
 		synchronized (lock) {
 			long now = clock.nanoTime();
@@ -1404,7 +1406,7 @@ final class McpLegacySessionStore {
 		run(actions); return result;
 	}
 
-	private boolean acceptUse(Call call, boolean acknowledge) {
+	private boolean acceptUse(@NonNull Call call, boolean acknowledge) {
 		List<Runnable> actions = new ArrayList<>();
 		boolean accepted;
 		synchronized (lock) {
@@ -1422,15 +1424,15 @@ final class McpLegacySessionStore {
 		return accepted;
 	}
 
-	private boolean owned(Call call) { return call.store() == this; }
+	private boolean owned(@NonNull Call call) { return call.store() == this; }
 
 	/** Global expiry runs on the periodic sweep and when allocating a new session. */
-	private void maintainWhileLocked(long now, List<Runnable> actions) {
+	private void maintainWhileLocked(long now, @NonNull List<@NonNull Runnable> actions) {
 		for (Session session : List.copyOf(sessions.values())) maintainSessionWhileLocked(session, now, actions);
 	}
 
 	/** Existing-session operations inspect only their bounded session, GETs and grants. */
-	private void maintainSessionWhileLocked(@Nullable Session session, long now, List<Runnable> actions) {
+	private void maintainSessionWhileLocked(@Nullable Session session, long now, @NonNull List<@NonNull Runnable> actions) {
 		if (session == null || !session.live) return;
 		boolean hardExpired = now - session.createdNanos >= config.lifetimeNanos();
 		boolean ackExpired = !session.acknowledged && !session.deliveryEvidence
@@ -1454,7 +1456,7 @@ final class McpLegacySessionStore {
 		}
 	}
 
-	private @Nullable Session oldestEvictableWhileLocked(Owner owner, long now) {
+	private @Nullable Session oldestEvictableWhileLocked(@NonNull Owner owner, long now) {
 		Session oldest = null;
 		for (Session candidate : sessions.values()) {
 			if (!candidate.owner.equals(owner) || candidate.clientPhysicalReferences != 0
@@ -1467,7 +1469,7 @@ final class McpLegacySessionStore {
 		return oldest;
 	}
 
-	private Status publicationCapacityWhileLocked(Owner owner, @Nullable OwnerUsage usage,
+	private @NonNull Status publicationCapacityWhileLocked(@NonNull Owner owner, @Nullable OwnerUsage usage,
 			long bytes, long requestBytes) {
 		if (usage != null && (usage.liveSessions >= config.maximumSessionsPerOwner()
 				|| exceeds(usage.retainedBytes - usage.transientBytes, bytes, config.maximumOwnerEvidenceBytes())))
@@ -1482,7 +1484,7 @@ final class McpLegacySessionStore {
 		return Status.ACCEPTED;
 	}
 
-	private void retireWhileLocked(Session session, Cause cause, List<Runnable> actions) {
+	private void retireWhileLocked(@NonNull Session session, @NonNull Cause cause, @NonNull List<@NonNull Runnable> actions) {
 		if (!session.live) return;
 		session.live = false;
 		sessions.remove(session.id, session);
@@ -1518,7 +1520,7 @@ final class McpLegacySessionStore {
 		if (session.physicalReferences == 0) releaseEvidenceWhileLocked(session);
 	}
 
-	private void fenceGetWhileLocked(Get get, List<Runnable> actions) {
+	private void fenceGetWhileLocked(@NonNull Get get, @NonNull List<@NonNull Runnable> actions) {
 		if (!get.logical || !get.session.live) return;
 		get.authorized = false;
 		get.deliveryGeneration.incrementAndGet();
@@ -1527,14 +1529,14 @@ final class McpLegacySessionStore {
 		if (target != null) actions.add(() -> target.fence(generation));
 	}
 
-	private void retireGetWhileLocked(Get get, GetCause cause, List<Runnable> actions) {
+	private void retireGetWhileLocked(@NonNull Get get, @NonNull GetCause cause, @NonNull List<@NonNull Runnable> actions) {
 		if (!get.logical) return;
 		GetTarget target = get.target;
 		completeGetWhileLocked(get, actions);
 		if (target != null) actions.add(() -> target.retire(cause));
 	}
 
-	private void completeGetWhileLocked(Get get, List<Runnable> actions) {
+	private void completeGetWhileLocked(@NonNull Get get, @NonNull List<@NonNull Runnable> actions) {
 		if (!get.logical) return;
 		get.logical = false; get.authorized = false; get.authorizationGeneration.incrementAndGet();
 		get.deliveryGeneration.incrementAndGet(); get.target = null;
@@ -1546,7 +1548,7 @@ final class McpLegacySessionStore {
 	}
 
 
-	private void fenceGrantEntryWhileLocked(GrantEntry entry, List<Runnable> actions) {
+	private void fenceGrantEntryWhileLocked(@NonNull GrantEntry entry, @NonNull List<@NonNull Runnable> actions) {
 		if (!entry.live || !entry.session.live) return;
 		entry.authorized = false; entry.generation.incrementAndGet(); entry.deliveryGeneration.incrementAndGet();
 		fenceGrantTargetWhileLocked(entry.activeGrant, entry.generation.get(), actions);
@@ -1554,12 +1556,12 @@ final class McpLegacySessionStore {
 	}
 
 
-	private void fenceGrantTargetWhileLocked(@Nullable Grant grant, long generation, List<Runnable> actions) {
+	private void fenceGrantTargetWhileLocked(@Nullable Grant grant, long generation, @NonNull List<@NonNull Runnable> actions) {
 		if (grant == null || grant.target == null) return;
 		GrantTarget target = grant.target; actions.add(() -> target.fence(generation));
 	}
 
-	private void retireGrantHandleWhileLocked(Grant grant, GrantCause cause, List<Runnable> actions) {
+	private void retireGrantHandleWhileLocked(@NonNull Grant grant, @NonNull GrantCause cause, @NonNull List<@NonNull Runnable> actions) {
 		if (!grant.logical) return;
 		grant.logical = false;
 		GrantTarget target = grant.target; grant.target = null;
@@ -1567,7 +1569,7 @@ final class McpLegacySessionStore {
 		if (target != null) actions.add(() -> target.retire(cause));
 	}
 
-	private void retireGrantEntryWhileLocked(GrantEntry entry, GrantCause cause, List<Runnable> actions) {
+	private void retireGrantEntryWhileLocked(@NonNull GrantEntry entry, @NonNull GrantCause cause, @NonNull List<@NonNull Runnable> actions) {
 		if (!entry.live) return;
 		// Legacy MCP has no subscription-ended notification. Losing an established
 		// grant must also make the session unusable so reconnect can reinitialize.
@@ -1587,14 +1589,14 @@ final class McpLegacySessionStore {
 		if (lostEstablishedGrant) retireWhileLocked(entry.session, Cause.SESSION_CLOSED, actions);
 	}
 
-	private void releaseGrantPhysicalWhileLocked(Grant grant) {
+	private void releaseGrantPhysicalWhileLocked(@NonNull Grant grant) {
 		releaseSharedEvidenceWhileLocked(grant.evidence);
 		grant.entry.physicalHolds--; physicalGrantHolds--;
 		releaseUriEvidenceIfCompleteWhileLocked(grant.entry);
 		releasePhysicalWhileLocked(grant.entry.session);
 	}
 
-	private void releaseUriEvidenceIfCompleteWhileLocked(GrantEntry entry) {
+	private void releaseUriEvidenceIfCompleteWhileLocked(@NonNull GrantEntry entry) {
 		if (entry.live || entry.physicalHolds != 0 || entry.uriEvidenceReleased) return;
 		entry.uriEvidenceReleased = true;
 		entry.session.retainedUriBytes -= entry.uriBytes; retainedUriBytes -= entry.uriBytes;
@@ -1603,19 +1605,19 @@ final class McpLegacySessionStore {
 			entry.session.authorizationSlots.remove(URI.create(entry.uri), entry.authorizationSlot);
 	}
 
-	private static boolean validPartition(Session session, McpEffectivePartition partition) {
+	private static boolean validPartition(@NonNull Session session, @NonNull McpEffectivePartition partition) {
 		return partition.purpose() == McpPartitionPurpose.AUTHORIZATION
 				&& partition.endpointIdentity().endpointPath().equals(session.path)
 				&& partition.applicationKey().map(value -> !value.isBlank() && fitsUtf8(value, MAXIMUM_CORRELATION_BYTES)).orElse(true)
 				&& (session.deliveryPartition == null || session.deliveryPartition.equals(partition));
 	}
 
-	private static long partitionBytes(McpEffectivePartition partition) {
+	private static long partitionBytes(@NonNull McpEffectivePartition partition) {
 		return (long) partition.endpointIdentity().endpointPath().length()
 				+ partition.applicationKey().map(value -> value.getBytes(StandardCharsets.UTF_8).length).orElse(0);
 	}
 
-	private Status ensureDeliveryQuotaWhileLocked(Session session, McpEffectivePartition partition) {
+	private @NonNull Status ensureDeliveryQuotaWhileLocked(@NonNull Session session, @NonNull McpEffectivePartition partition) {
 		if (session.deliveryQuotaReserved) return Status.ACCEPTED;
 		if (getQuota == null) return Status.INTERNAL_FAILURE;
 		boolean accepted;
@@ -1624,18 +1626,18 @@ final class McpLegacySessionStore {
 		session.deliveryQuotaReserved = true; quotaRegistrations++; return Status.ACCEPTED;
 	}
 
-	private void maybeReleaseDeliveryQuotaWhileLocked(Session session, List<Runnable> actions) {
+	private void maybeReleaseDeliveryQuotaWhileLocked(@NonNull Session session, @NonNull List<@NonNull Runnable> actions) {
 		if (!session.gets.isEmpty() || !session.grants.isEmpty() || !session.deliveryQuotaReserved) return;
 		session.deliveryQuotaReserved = false; quotaRegistrations--;
 		McpEffectivePartition partition = requireNonNull(session.deliveryPartition);
 		GetQuota quota = requireNonNull(getQuota); actions.add(() -> quota.release(partition));
 	}
 
-	private void addEvidenceWhileLocked(Session session, long bytes) {
+	private void addEvidenceWhileLocked(@NonNull Session session, long bytes) {
 		session.retainedBytes += bytes; session.usage.retainedBytes += bytes; retainedBytes += bytes;
 	}
 
-	private void releaseSharedEvidenceWhileLocked(EvidenceReservation evidence) {
+	private void releaseSharedEvidenceWhileLocked(@NonNull EvidenceReservation evidence) {
 		if (--evidence.references == 0) {
 			if (evidence.controlRetention) {
 				evidence.session.controlCalls--; evidence.session.usage.controlCalls--; controlCalls--;
@@ -1649,23 +1651,23 @@ final class McpLegacySessionStore {
 		}
 	}
 
-	private List<Get> eligibleGetsWhileLocked(Session session, McpResourceNotificationType type, long now) {
+	private @NonNull List<@NonNull Get> eligibleGetsWhileLocked(@NonNull Session session, @NonNull McpResourceNotificationType type, long now) {
 		List<Get> result = new ArrayList<>();
 		for (Get get : session.gets) if (get.validGeneration(get.authorizationGeneration.get(), type, now)) result.add(get);
 		java.util.Collections.reverse(result); return result;
 	}
 
-	private static boolean grantDeliverable(GrantEntry entry, long now) {
+	private static boolean grantDeliverable(@NonNull GrantEntry entry, long now) {
 		return entry.live && entry.session.live && entry.authorized && entry.pending == null
 				&& entry.activeGrant != null && entry.activeGrant.logical && now - entry.leaseDeadlineNanos < 0L;
 	}
 
-	private static void requireCatalogType(McpResourceNotificationType type) {
+	private static void requireCatalogType(@NonNull McpResourceNotificationType type) {
 		if (requireNonNull(type) == McpResourceNotificationType.RESOURCE_UPDATED)
 			throw new IllegalArgumentException("Resource updates require an authorized URI grant.");
 	}
 
-	private static boolean validResourceUri(String uri) {
+	private static boolean validResourceUri(@NonNull String uri) {
 		try { McpLevelOneUriTemplate.requireValidAbsoluteUri(requireNonNull(uri), "Resource subscription URI"); return true; }
 		catch (IllegalArgumentException exception) { return false; }
 	}
@@ -1677,7 +1679,7 @@ final class McpLegacySessionStore {
 		return Math.min(units, MAXIMUM_MAINTENANCE_DEMAND_UNITS + 1L);
 	}
 
-	private void logicalCompleteWhileLocked(Call call) {
+	private void logicalCompleteWhileLocked(@NonNull Call call) {
 		if (!call.logical) return;
 		call.logical = false;
 		call.target = null;
@@ -1687,38 +1689,38 @@ final class McpLegacySessionStore {
 		releaseProgressWhileLocked(call);
 	}
 
-	private void releaseProgressWhileLocked(Call call) {
+	private void releaseProgressWhileLocked(@NonNull Call call) {
 		if (call.progressToken == null) return;
 		call.session.progressTokens.remove(call.progressToken);
 		call.progressToken = null;
 	}
 
-	private void releaseClientPhysicalWhileLocked(Session session) {
+	private void releaseClientPhysicalWhileLocked(@NonNull Session session) {
 		if (--session.clientPhysicalReferences == 0)
 			session.quiescentNanos = clock.nanoTime();
 		releasePhysicalWhileLocked(session);
 	}
 
-	private void releasePhysicalWhileLocked(Session session) {
+	private void releasePhysicalWhileLocked(@NonNull Session session) {
 		session.physicalReferences--;
 		physicalReferences--;
 		if (session.physicalReferences == 0 && !session.live)
 			releaseEvidenceWhileLocked(session);
 	}
 
-	private void releaseTransientAccountingWhileLocked(Session session, long bytes) {
+	private void releaseTransientAccountingWhileLocked(@NonNull Session session, long bytes) {
 		session.transientBytes -= bytes;
 		session.usage.transientBytes -= bytes;
 		transientBytes -= bytes;
 	}
 
-	private void releaseRequestEvidenceWhileLocked(Session session, long bytes) {
+	private void releaseRequestEvidenceWhileLocked(@NonNull Session session, long bytes) {
 		session.retainedBytes -= bytes;
 		session.usage.retainedBytes -= bytes;
 		retainedBytes -= bytes;
 	}
 
-	private void releaseEvidenceWhileLocked(Session session) {
+	private void releaseEvidenceWhileLocked(@NonNull Session session) {
 		if (session.evidenceReleased) return;
 		session.evidenceReleased = true;
 		releaseTransientAccountingWhileLocked(session, session.transientBytes);
@@ -1727,7 +1729,7 @@ final class McpLegacySessionStore {
 		removeOwnerIfCompleteWhileLocked(session);
 	}
 
-	private void removeOwnerIfCompleteWhileLocked(Session session) {
+	private void removeOwnerIfCompleteWhileLocked(@NonNull Session session) {
 		if (session.usage.liveSessions == 0 && session.usage.retainedBytes == 0 && session.usage.queuedNotificationBytes == 0)
 			owners.remove(session.owner, session.usage);
 	}
@@ -1763,7 +1765,7 @@ final class McpLegacySessionStore {
 				: ((McpProgressToken.IntegerToken) token).value().toString(), MAXIMUM_CORRELATION_BYTES);
 	}
 
-	private static boolean fitsUtf8(String value, int maximumBytes) {
+	private static boolean fitsUtf8(@NonNull String value, int maximumBytes) {
 		if (value.length() > maximumBytes) return false;
 		int bytes = 0;
 		for (int index = 0; index < value.length(); index++) {
@@ -1782,22 +1784,22 @@ final class McpLegacySessionStore {
 	private static void requireEvidence(long bytes) {
 		if (bytes < 0) throw new IllegalArgumentException("Retained session evidence bytes must not be negative.");
 	}
-	private static void requireLegacy(String revision) {
+	private static void requireLegacy(@NonNull String revision) {
 		if (!McpLegacyHttpWire.isLegacyRevision(requireNonNull(revision)))
 			throw new IllegalArgumentException("Legacy sessions require an exact supported 2025 revision.");
 	}
-	private static Allocation allocation(Status status) { return new Allocation(status, Optional.empty()); }
-	private static Acquisition acquisition(Status status) { return new Acquisition(status, Optional.empty()); }
-	private static GetAllocation getAllocation(Status status) { return new GetAllocation(status, Optional.empty()); }
-	private static GrantAllocation grantAllocation(Status status) { return new GrantAllocation(status, Optional.empty()); }
+	private static @NonNull Allocation allocation(@NonNull Status status) { return new Allocation(status, Optional.empty()); }
+	private static @NonNull Acquisition acquisition(@NonNull Status status) { return new Acquisition(status, Optional.empty()); }
+	private static @NonNull GetAllocation getAllocation(@NonNull Status status) { return new GetAllocation(status, Optional.empty()); }
+	private static @NonNull GrantAllocation grantAllocation(@NonNull Status status) { return new GrantAllocation(status, Optional.empty()); }
 	private static long earlierDeadline(long now, long first, long second) {
 		return first - now <= second - now ? first : second;
 	}
-	private static Supplier<byte[]> secureTokens() {
+	private static @NonNull Supplier<byte @NonNull []> secureTokens() {
 		SecureRandom random = new SecureRandom();
 		return () -> { byte[] value = new byte[32]; random.nextBytes(value); return value; };
 	}
-	private static void run(List<Runnable> actions) {
+	private static void run(@NonNull List<@NonNull Runnable> actions) {
 		for (Runnable action : actions) {
 			try { action.run(); } catch (Throwable ignored) {
 				// Framework target failure cannot resurrect state or skip another retirement.
@@ -1805,7 +1807,7 @@ final class McpLegacySessionStore {
 		}
 	}
 
-	private record EndpointRevision(String path, String revision) {}
+	private record EndpointRevision(@NonNull String path, @NonNull String revision) {}
 
 	private static final class OwnerUsage {
 		private int liveSessions;
@@ -1817,12 +1819,12 @@ final class McpLegacySessionStore {
 		private long queuedNotificationBytes;
 	}
 	private final class EvidenceReservation {
-		private final Session session;
+		private final @NonNull Session session;
 		private final long bytes;
 		private int references = 1;
 		private boolean transientRetention = true;
 		private boolean controlRetention;
-		private EvidenceReservation(Session session, long bytes) { this.session = session; this.bytes = bytes; }
+		private EvidenceReservation(@NonNull Session session, long bytes) { this.session = session; this.bytes = bytes; }
 	}
 	private final class CatalogDirty {
 		private boolean dirty;
@@ -1830,16 +1832,16 @@ final class McpLegacySessionStore {
 		private long sequence;
 		private long writtenSequence;
 		private @Nullable DeliveryAttempt pendingAttempt;
-		private BooleanSupplier sourceActive = ALWAYS_ACTIVE_SOURCE;
+		private @NonNull BooleanSupplier sourceActive = ALWAYS_ACTIVE_SOURCE;
 	}
 	private final class GrantEntry {
-		private final Session session;
-		private final String uri;
+		private final @NonNull Session session;
+		private final @NonNull String uri;
 		private final long uriBytes;
 		private final long totalDeadlineNanos;
-		private final AuthorizationSlot authorizationSlot;
-		private final AtomicLong generation = new AtomicLong();
-		private final AtomicLong deliveryGeneration = new AtomicLong();
+		private final @NonNull AuthorizationSlot authorizationSlot;
+		private final @NonNull AtomicLong generation = new AtomicLong();
+		private final @NonNull AtomicLong deliveryGeneration = new AtomicLong();
 		private volatile long leaseDeadlineNanos;
 		private volatile boolean live = true;
 		private volatile boolean authorized;
@@ -1851,8 +1853,8 @@ final class McpLegacySessionStore {
 		private boolean dirty;
 		private long dirtySequence;
 		private @Nullable DeliveryAttempt pendingAttempt;
-		private BooleanSupplier sourceActive = ALWAYS_ACTIVE_SOURCE;
-		private GrantEntry(Session session, String uri, long uriBytes, long totalDeadlineNanos) {
+		private @NonNull BooleanSupplier sourceActive = ALWAYS_ACTIVE_SOURCE;
+		private GrantEntry(@NonNull Session session, @NonNull String uri, long uriBytes, long totalDeadlineNanos) {
 			this.session = session; this.uri = uri; this.uriBytes = uriBytes; this.totalDeadlineNanos = totalDeadlineNanos;
 			this.authorizationSlot = session.authorizationSlots.computeIfAbsent(URI.create(uri), ignored -> new AuthorizationSlot());
 			this.authorizationSlot.references++;
@@ -1863,13 +1865,13 @@ final class McpLegacySessionStore {
 		private @Nullable Grant busy;
 	}
 	private final class Session {
-		private final EndpointRevision endpointRevision;
-		private final String id;
-		private final Owner owner;
-		private final String path;
-		private final String revision;
-		private final Object lifecycleGeneration;
-		private final Snapshot snapshot;
+		private final @NonNull EndpointRevision endpointRevision;
+		private final @NonNull String id;
+		private final @NonNull Owner owner;
+		private final @NonNull String path;
+		private final @NonNull String revision;
+		private final @NonNull Object lifecycleGeneration;
+		private final @NonNull Snapshot snapshot;
 		private long retainedBytes;
 		private long transientBytes;
 		private long controlBytes;
@@ -1877,14 +1879,14 @@ final class McpLegacySessionStore {
 		private int logicalControlRequests;
 		private final long createdNanos;
 		private final long sequence;
-		private final OwnerUsage usage;
-		private final Map<McpJsonRpcId, Call> requests = new HashMap<>();
-		private final Set<McpProgressToken> progressTokens = new HashSet<>();
-		private final Set<Call> uses = new HashSet<>();
-		private final Set<Get> gets = new java.util.LinkedHashSet<>();
-		private final Map<URI, GrantEntry> grants = new LinkedHashMap<>();
-		private final Map<URI, AuthorizationSlot> authorizationSlots = new HashMap<>();
-		private final Map<McpResourceNotificationType, CatalogDirty> catalogDirty = new EnumMap<>(McpResourceNotificationType.class);
+		private final @NonNull OwnerUsage usage;
+		private final @NonNull Map<@NonNull McpJsonRpcId, @NonNull Call> requests = new HashMap<>();
+		private final @NonNull Set<@NonNull McpProgressToken> progressTokens = new HashSet<>();
+		private final @NonNull Set<@NonNull Call> uses = new HashSet<>();
+		private final @NonNull Set<@NonNull Get> gets = new java.util.LinkedHashSet<>();
+		private final @NonNull Map<@NonNull URI, @NonNull GrantEntry> grants = new LinkedHashMap<>();
+		private final @NonNull Map<@NonNull URI, @NonNull AuthorizationSlot> authorizationSlots = new HashMap<>();
+		private final @NonNull Map<@NonNull McpResourceNotificationType, @NonNull CatalogDirty> catalogDirty = new EnumMap<>(McpResourceNotificationType.class);
 		private long retainedUriBytes;
 		private @Nullable McpEffectivePartition deliveryPartition;
 		private boolean deliveryQuotaReserved;
@@ -1899,8 +1901,8 @@ final class McpLegacySessionStore {
 		private boolean deliveryEvidence;
 		private boolean acknowledged;
 		private boolean evidenceReleased;
-		private Session(String id, Owner owner, String path, String revision, Object generation,
-				Snapshot snapshot, long bytes, long now, long sequence, OwnerUsage usage) {
+		private Session(@NonNull String id, @NonNull Owner owner, @NonNull String path, @NonNull String revision, @NonNull Object generation,
+				@NonNull Snapshot snapshot, long bytes, long now, long sequence, @NonNull OwnerUsage usage) {
 			this.id = id; this.owner = owner; this.path = path; this.revision = revision;
 			this.endpointRevision = new EndpointRevision(path, revision);
 			this.lifecycleGeneration = generation; this.snapshot = snapshot;

@@ -1523,8 +1523,8 @@ final class McpApplicationExecutionStoppedException extends Exception {
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
-record McpApplicationCancellationReservation(boolean registered, boolean won, Runnable complete) {
-	@Override public String toString() { return "McpApplicationCancellationReservation{<redacted>}"; }
+record McpApplicationCancellationReservation(boolean registered, boolean won, @NonNull Runnable complete) {
+	@Override public @NonNull String toString() { return "McpApplicationCancellationReservation{<redacted>}"; }
 }
 
 /**
@@ -1538,7 +1538,7 @@ record McpApplicationCancellationReservation(boolean registered, boolean won, Ru
 @ThreadSafe
 final class McpApplicationExecution {
 	private static final int MAXIMUM_SESSION_OWNER_POLICY_CONCURRENCY = 4;
-	private static final AtomicLong CANCELLATION_CALLBACK_THREAD_SEQUENCE =
+	private static final @NonNull AtomicLong CANCELLATION_CALLBACK_THREAD_SEQUENCE =
 			new AtomicLong();
 
 	@ThreadSafe
@@ -2175,7 +2175,7 @@ final class McpApplicationExecution {
 	}
 
 	/** Distinguishes a lost terminal race from dispatch that has not registered yet. */
-	McpApplicationCancellationReservation tryReserveCancellation(
+	@NonNull McpApplicationCancellationReservation tryReserveCancellation(
 			@NonNull MicrohttpRequest request, @NonNull StreamTerminationReason reason) {
 		Exchange exchange = requestsByIdentity.get(requireNonNull(request));
 		if (exchange == null)
@@ -2911,10 +2911,10 @@ final class McpApplicationExecution {
 		private final AtomicBoolean handlerRunning;
 		@NonNull
 		private final AtomicBoolean handlerFinished;
-		private final AtomicBoolean physicalWorkFinished;
-		private final Runnable physicalExitObserver;
-		private final CountDownLatch cancellationCallbacksFinished = new CountDownLatch(1);
-		private final CountDownLatch cancellationEffectsReady = new CountDownLatch(1);
+		private final @NonNull AtomicBoolean physicalWorkFinished;
+		private final @NonNull Runnable physicalExitObserver;
+		private final @NonNull CountDownLatch cancellationCallbacksFinished = new CountDownLatch(1);
+		private final @NonNull CountDownLatch cancellationEffectsReady = new CountDownLatch(1);
 		private volatile boolean cancellationCallbacksOutstanding;
 		private @Nullable RejectedExecutionException cancellationDispatchFailure;
 		@NonNull
@@ -3333,7 +3333,7 @@ final class McpApplicationExecution {
 			return tryReserveCancellation(reason).orElseGet(() -> () -> {});
 		}
 
-		private Optional<Runnable> tryReserveCancellation(
+		private @NonNull Optional<@NonNull Runnable> tryReserveCancellation(
 				@NonNull StreamTerminationReason reason) {
 			boolean cancelBeforeDispatch;
 			McpApplicationExecutionObserver.MetricDeferral metricDeferral =
@@ -3419,7 +3419,7 @@ final class McpApplicationExecution {
 				McpApplicationExecution.this.reportCancellationDispatchFailure(failure);
 		}
 
-		private void awaitCancellationLatch(CountDownLatch latch) {
+		private void awaitCancellationLatch(@NonNull CountDownLatch latch) {
 			boolean interrupted = false;
 			while (true) {
 				try { latch.await(); break; }

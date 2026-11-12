@@ -40,9 +40,9 @@ final class McpLegacyHttpControlBudget {
 
 	record Snapshot(int retainedPartitions, int activeReservations, int retainedAttempts) {}
 
-	private final Object lock = new Object();
-	private final McpApplicationClock clock;
-	private final Map<McpEffectivePartition, Bucket> buckets = new HashMap<>();
+	private final @NonNull Object lock = new Object();
+	private final @NonNull McpApplicationClock clock;
+	private final @NonNull Map<@NonNull McpEffectivePartition, @NonNull Bucket> buckets = new HashMap<>();
 	private int activeReservations;
 
 	McpLegacyHttpControlBudget(@NonNull McpApplicationClock clock) {
@@ -105,7 +105,7 @@ final class McpLegacyHttpControlBudget {
 	}
 
 	private static final class Bucket {
-		private final long[] attemptTimes = new long[MAXIMUM_ATTEMPTS_PER_SECOND];
+		private final long @NonNull [] attemptTimes = new long[MAXIMUM_ATTEMPTS_PER_SECOND];
 		private int attemptHead;
 		private int attemptCount;
 		private int active;

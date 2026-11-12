@@ -1,5 +1,6 @@
 package com.soklet.internal.microhttp;
 
+import org.jspecify.annotations.NonNull;
 import com.soklet.StreamTerminationReason;
 import org.jspecify.annotations.Nullable;
 
@@ -29,7 +30,7 @@ public interface Handler {
      * The provided callback object has a reference to internal connection state.
      * Avoid retaining the callback for an extended period.
      */
-    void handle(MicrohttpRequest request, Consumer<MicrohttpResponse> callback);
+    void handle(@NonNull MicrohttpRequest request, @NonNull Consumer<@NonNull MicrohttpResponse> callback);
 
     /**
      * Handles bytes rejected before a valid request could be constructed. This
@@ -39,8 +40,8 @@ public interface Handler {
      * must eventually be invoked at most once; a {@code null} callback value asks
      * the transport to use its built-in response.
      */
-    default boolean handleUnparsedRequest(UnparsedRequestRejection rejection,
-                                          Consumer<byte[]> callback) {
+    default boolean handleUnparsedRequest(@NonNull UnparsedRequestRejection rejection,
+                                          @NonNull Consumer<byte @Nullable []> callback) {
         return false;
     }
 
@@ -53,7 +54,7 @@ public interface Handler {
      * @param reason the cancellation reason
      * @param cause the cancellation cause, if available
      */
-    default void cancel(MicrohttpRequest request, StreamTerminationReason reason,
+    default void cancel(@NonNull MicrohttpRequest request, @NonNull StreamTerminationReason reason,
                         @Nullable Throwable cause) {
         // No-op by default
     }
@@ -72,7 +73,7 @@ public interface Handler {
      * @param request the request about to be dispatched
      * @return {@code true} to monitor the client connection until response commitment
      */
-    default boolean monitorClientDisconnectsBeforeResponse(MicrohttpRequest request) {
+    default boolean monitorClientDisconnectsBeforeResponse(@NonNull MicrohttpRequest request) {
         return false;
     }
 
@@ -90,7 +91,7 @@ public interface Handler {
      * @param request the request whose streaming response is about to be committed
      * @return {@code true} to monitor the client connection for the lifetime of the streaming response
      */
-    default boolean monitorClientDisconnectsDuringStreamingResponse(MicrohttpRequest request) {
+    default boolean monitorClientDisconnectsDuringStreamingResponse(@NonNull MicrohttpRequest request) {
         return false;
     }
 
@@ -106,7 +107,7 @@ public interface Handler {
      * <p>The default preserves the behavior of handlers that already override
      * {@link #monitorClientDisconnectsDuringStreamingResponse(MicrohttpRequest)}.</p>
      */
-    default StreamingResponseInputPolicy streamingResponseInputPolicy(MicrohttpRequest request) {
+    default @NonNull StreamingResponseInputPolicy streamingResponseInputPolicy(@NonNull MicrohttpRequest request) {
         return monitorClientDisconnectsDuringStreamingResponse(request)
                 ? StreamingResponseInputPolicy.DISCARD
                 : StreamingResponseInputPolicy.NONE;
@@ -126,7 +127,7 @@ public interface Handler {
      * @param request the request about to be dispatched
      * @return whether observed input EOF ends this monitored response
      */
-    default boolean closeConnectionOnInputEnd(MicrohttpRequest request) {
+    default boolean closeConnectionOnInputEnd(@NonNull MicrohttpRequest request) {
         return false;
     }
 

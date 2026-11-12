@@ -116,7 +116,7 @@ public final class ValueConverters {
 	private static final class StringToIntegerValueConverter extends FromStringValueConverter<Integer> {
 		@Override
 		@NonNull
-		public Optional<Integer> performConversion(@Nullable String from) throws Exception {
+		public Optional<@NonNull Integer> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
 
@@ -128,7 +128,7 @@ public final class ValueConverters {
 	private static final class StringToLongValueConverter extends FromStringValueConverter<Long> {
 		@Override
 		@NonNull
-		public Optional<Long> performConversion(@Nullable String from) throws Exception {
+		public Optional<@NonNull Long> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
 
@@ -140,7 +140,7 @@ public final class ValueConverters {
 	private static final class StringToDoubleValueConverter extends FromStringValueConverter<Double> {
 		@Override
 		@NonNull
-		public Optional<Double> performConversion(@Nullable String from) throws Exception {
+		public Optional<@NonNull Double> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
 
@@ -152,7 +152,7 @@ public final class ValueConverters {
 	private static final class StringToFloatValueConverter extends FromStringValueConverter<Float> {
 		@Override
 		@NonNull
-		public Optional<Float> performConversion(@Nullable String from) throws Exception {
+		public Optional<@NonNull Float> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
 
@@ -164,7 +164,7 @@ public final class ValueConverters {
 	private static final class StringToByteValueConverter extends FromStringValueConverter<Byte> {
 		@Override
 		@NonNull
-		public Optional<Byte> performConversion(@Nullable String from) throws Exception {
+		public Optional<@NonNull Byte> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
 
@@ -176,7 +176,7 @@ public final class ValueConverters {
 	private static final class StringToShortValueConverter extends FromStringValueConverter<Short> {
 		@Override
 		@NonNull
-		public Optional<Short> performConversion(@Nullable String from) throws Exception {
+		public Optional<@NonNull Short> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
 
@@ -188,7 +188,7 @@ public final class ValueConverters {
 	private static final class StringToCharacterValueConverter extends FromStringValueConverter<Character> {
 		@NonNull
 		@Override
-		public Optional<Character> performConversion(@Nullable String from) throws Exception {
+		public Optional<@NonNull Character> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
 
@@ -231,7 +231,7 @@ public final class ValueConverters {
 	private static final class StringToBooleanValueConverter extends FromStringValueConverter<Boolean> {
 		@Override
 		@NonNull
-		public Optional<Boolean> performConversion(@Nullable String from) throws Exception {
+		public Optional<@NonNull Boolean> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
 
@@ -256,7 +256,7 @@ public final class ValueConverters {
 			throw new IllegalArgumentException("Numeric input must not exceed 4096 characters.");
 	}
 
-	private static BigDecimal boundedDecimal(@NonNull String value) {
+	private static @NonNull BigDecimal boundedDecimal(@NonNull String value) {
 		validateNumericInputLength(value);
 		BigDecimal decimal = new BigDecimal(value);
 		long adjustedExponent = decimal.precision() - (long) decimal.scale() - 1L;
@@ -269,7 +269,7 @@ public final class ValueConverters {
 	private static final class StringToBigIntegerValueConverter extends FromStringValueConverter<BigInteger> {
 		@Override
 		@NonNull
-		public Optional<BigInteger> performConversion(@Nullable String from) throws Exception {
+		public Optional<@NonNull BigInteger> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
 
@@ -282,7 +282,7 @@ public final class ValueConverters {
 	private static final class StringToBigDecimalValueConverter extends FromStringValueConverter<BigDecimal> {
 		@Override
 		@NonNull
-		public Optional<BigDecimal> performConversion(@Nullable String from) throws Exception {
+		public Optional<@NonNull BigDecimal> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
 
@@ -294,7 +294,7 @@ public final class ValueConverters {
 	private static final class StringToNumberValueConverter extends FromStringValueConverter<Number> {
 		@Override
 		@NonNull
-		public Optional<Number> performConversion(@Nullable String from) throws Exception {
+		public Optional<@NonNull Number> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
 
@@ -306,7 +306,7 @@ public final class ValueConverters {
 	private static final class StringToUuidValueConverter extends FromStringValueConverter<UUID> {
 		@Override
 		@NonNull
-		public Optional<UUID> performConversion(@Nullable String from) throws Exception {
+		public Optional<@NonNull UUID> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
 
@@ -321,7 +321,7 @@ public final class ValueConverters {
 		 */
 		@Override
 		@NonNull
-		public Optional<Date> performConversion(@Nullable String from) throws Exception {
+		public Optional<@NonNull Date> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
 
@@ -340,7 +340,7 @@ public final class ValueConverters {
 		 */
 		@Override
 		@NonNull
-		public Optional<Instant> performConversion(@Nullable String from) throws Exception {
+		public Optional<@NonNull Instant> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
 
@@ -356,7 +356,7 @@ public final class ValueConverters {
 	private static final class StringToLocalDateValueConverter extends FromStringValueConverter<LocalDate> {
 		@Override
 		@NonNull
-		public Optional<LocalDate> performConversion(@Nullable String from) throws Exception {
+		public Optional<@NonNull LocalDate> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
 
@@ -368,7 +368,7 @@ public final class ValueConverters {
 	private static final class StringToLocalTimeValueConverter extends FromStringValueConverter<LocalTime> {
 		@Override
 		@NonNull
-		public Optional<LocalTime> performConversion(@Nullable String from) throws Exception {
+		public Optional<@NonNull LocalTime> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
 
@@ -380,7 +380,7 @@ public final class ValueConverters {
 	private static final class StringToLocalDateTimeValueConverter extends FromStringValueConverter<LocalDateTime> {
 		@Override
 		@NonNull
-		public Optional<LocalDateTime> performConversion(@Nullable String from) throws Exception {
+		public Optional<@NonNull LocalDateTime> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
 
@@ -392,7 +392,7 @@ public final class ValueConverters {
 	private static final class StringToZoneIdValueConverter extends FromStringValueConverter<ZoneId> {
 		@Override
 		@NonNull
-		public Optional<ZoneId> performConversion(@Nullable String from) throws Exception {
+		public Optional<@NonNull ZoneId> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
 
@@ -404,7 +404,7 @@ public final class ValueConverters {
 	private static final class StringToTimeZoneValueConverter extends FromStringValueConverter<TimeZone> {
 		@Override
 		@NonNull
-		public Optional<TimeZone> performConversion(@Nullable String from) throws Exception {
+		public Optional<@NonNull TimeZone> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
 
@@ -418,7 +418,7 @@ public final class ValueConverters {
 	private static final class StringToLocaleValueConverter extends FromStringValueConverter<Locale> {
 		@Override
 		@NonNull
-		public Optional<Locale> performConversion(@Nullable String from) throws Exception {
+		public Optional<@NonNull Locale> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
 
@@ -430,7 +430,7 @@ public final class ValueConverters {
 	private static final class StringToCurrencyValueConverter extends FromStringValueConverter<Currency> {
 		@Override
 		@NonNull
-		public Optional<Currency> performConversion(@Nullable String from) throws Exception {
+		public Optional<@NonNull Currency> performConversion(@Nullable String from) throws Exception {
 			if (from == null)
 				return Optional.empty();
 

@@ -183,7 +183,7 @@ public final class StreamingMicrohttpResponses {
 																									 @Nullable Instant deadline,
 																	 @Nullable Duration idleTimeout,
 																	 @NonNull TerminationListener terminationListener,
-																	 @NonNull Consumer<Throwable> cancelationCallbackFailureConsumer) {
+																	 @NonNull Consumer<@NonNull Throwable> cancelationCallbackFailureConsumer) {
 		return withStreamingBody(status, reason, headers, request, body,
 				executorService, timeoutExecutorService, queueCapacityInBytes,
 				chunkSizeInBytes, deadline, idleTimeout, () -> false,
@@ -204,7 +204,7 @@ public final class StreamingMicrohttpResponses {
 																	 @Nullable Duration idleTimeout,
 									 @NonNull BooleanSupplier forcedShutdownStarted,
 									 @NonNull TerminationListener terminationListener,
-									 @NonNull Consumer<Throwable> cancelationCallbackFailureConsumer) {
+									 @NonNull Consumer<@NonNull Throwable> cancelationCallbackFailureConsumer) {
 		return withStreamingBody(status, reason, headers, request, body, executorService,
 				timeoutExecutorService, queueCapacityInBytes, chunkSizeInBytes, deadline, idleTimeout,
 				forcedShutdownStarted, terminationListener, cancelationCallbackFailureConsumer, null);
@@ -221,7 +221,7 @@ public final class StreamingMicrohttpResponses {
 			@Nullable Instant deadline, @Nullable Duration idleTimeout,
 			@NonNull BooleanSupplier forcedShutdownStarted,
 			@NonNull TerminationListener terminationListener,
-			@NonNull Consumer<Throwable> cancelationCallbackFailureConsumer,
+			@NonNull Consumer<@NonNull Throwable> cancelationCallbackFailureConsumer,
 			StreamLifecycleCoordinator.@Nullable Reservation reservation) {
 		requireNonNull(status);
 		requireNonNull(reason);
@@ -291,8 +291,8 @@ public final class StreamingMicrohttpResponses {
 
 	@NotThreadSafe
 	private static final class StreamingWritableSource implements WritableSource {
-		private static final byte[] CRLF = "\r\n".getBytes(StandardCharsets.US_ASCII);
-		private static final byte[] TERMINAL_CHUNK = "0\r\n\r\n".getBytes(StandardCharsets.US_ASCII);
+		private static final byte @NonNull [] CRLF = "\r\n".getBytes(StandardCharsets.US_ASCII);
+		private static final byte @NonNull [] TERMINAL_CHUNK = "0\r\n\r\n".getBytes(StandardCharsets.US_ASCII);
 
 		@NonNull
 		private final StreamingResponseBody body;
@@ -324,15 +324,15 @@ public final class StreamingMicrohttpResponses {
 		@NonNull
 		private final StateChangeWaiters stateChangeWaiters;
 		@NonNull
-		private final ArrayDeque<QueuedChunk> chunks;
+		private final ArrayDeque<@NonNull QueuedChunk> chunks;
 		@NonNull
 		private final AtomicBoolean started;
 		@NonNull
 		private final AtomicBoolean terminationNotified;
 		@NonNull
-		private final AtomicReference<ScheduledFuture<?>> responseTimeoutFuture;
+		private final AtomicReference<@Nullable ScheduledFuture<?>> responseTimeoutFuture;
 		@NonNull
-		private final AtomicReference<ScheduledFuture<?>> idleTimeoutFuture;
+		private final AtomicReference<@Nullable ScheduledFuture<?>> idleTimeoutFuture;
 		@NonNull
 		private volatile Runnable writeReadyCallback;
 		@Nullable
@@ -363,7 +363,7 @@ public final class StreamingMicrohttpResponses {
 																						@Nullable Duration idleTimeout,
 																						@NonNull BooleanSupplier forcedShutdownStarted,
 																						@NonNull TerminationListener terminationListener,
-																	 @NonNull Consumer<Throwable> cancelationCallbackFailureConsumer,
+																	 @NonNull Consumer<@NonNull Throwable> cancelationCallbackFailureConsumer,
 																	 StreamLifecycleCoordinator.@Nullable Reservation reservation) {
 			requireNonNull(request);
 			this.body = requireNonNull(body);
@@ -447,14 +447,14 @@ public final class StreamingMicrohttpResponses {
 		}
 
 		@Override
-		public void writeReadyCallback(Runnable callback) {
+		public void writeReadyCallback(@NonNull Runnable callback) {
 			this.writeReadyCallback = callback == null ? () -> {
 				// No-op
 			} : callback;
 		}
 
 		@Override
-		public long writeTo(SocketChannel socketChannel, long maxBytes) throws IOException {
+		public long writeTo(@NonNull SocketChannel socketChannel, long maxBytes) throws IOException {
 			requireNonNull(socketChannel);
 
 			if (maxBytes <= 0)
@@ -646,8 +646,8 @@ public final class StreamingMicrohttpResponses {
 		}
 
 		@Nullable
-		private static Throwable competingProducerFailure(Throwable throwable, @Nullable Throwable electedCause,
-				IdentityHashMap<Throwable, Boolean> visited) {
+		private static Throwable competingProducerFailure(@NonNull Throwable throwable, @Nullable Throwable electedCause,
+				@NonNull IdentityHashMap<@NonNull Throwable, @NonNull Boolean> visited) {
 			ArrayDeque<Throwable> pending = new ArrayDeque<>();
 			pending.add(throwable);
 			int remaining = 64;
@@ -669,7 +669,7 @@ public final class StreamingMicrohttpResponses {
 			return null;
 		}
 
-		private static boolean hasRoutineCancelationCause(Throwable throwable) {
+		private static boolean hasRoutineCancelationCause(@NonNull Throwable throwable) {
 			IdentityHashMap<Throwable, Boolean> visited = new IdentityHashMap<>();
 			int remaining = 64;
 			for (Throwable cause = throwable; cause != null && visited.put(cause, Boolean.TRUE) == null;
@@ -685,7 +685,7 @@ public final class StreamingMicrohttpResponses {
 			return false;
 		}
 
-		private static boolean isInterruptedClassicSocketOperation(Throwable cause) {
+		private static boolean isInterruptedClassicSocketOperation(@NonNull Throwable cause) {
 			if (!(cause instanceof java.net.SocketException) || !Thread.currentThread().isInterrupted())
 				return false;
 			// On virtual threads the JDK Socket facade translates its interrupted IO
@@ -716,7 +716,7 @@ public final class StreamingMicrohttpResponses {
 				this.cancelationToken.reportCallbackFailure(throwable);
 		}
 
-		private ManagedResponseStream newManagedResponseStream() {
+		private @NonNull ManagedResponseStream newManagedResponseStream() {
 			return new ManagedResponseStream(this.request, this.cancelationToken,
 					() -> this.reservation != null && this.reservation.isGracefulShutdownRequested(), this.deadline,
 					this.idleTimeout, new ResponseStreamAdapter(), this::beginFinalization,
@@ -982,7 +982,7 @@ public final class StreamingMicrohttpResponses {
 				notification.run();
 		}
 
-		private IOException toIOException(@NonNull Throwable throwable) {
+		private @NonNull IOException toIOException(@NonNull Throwable throwable) {
 			requireNonNull(throwable);
 
 			if (throwable instanceof IOException ioException)
@@ -1049,7 +1049,7 @@ public final class StreamingMicrohttpResponses {
 						< Math.max(16, StreamingWritableSource.this.queueCapacityInBytes / 256);
 			}
 
-			private void enqueue(@NonNull byte[] payload, @NonNull ByteBuffer acceptedSource) throws IOException, InterruptedException, StreamingResponseCanceledException {
+			private void enqueue(byte @NonNull [] payload, @NonNull ByteBuffer acceptedSource) throws IOException, InterruptedException, StreamingResponseCanceledException {
 				requireNonNull(payload);
 
 				if (payload.length == 0)
@@ -1100,13 +1100,13 @@ public final class StreamingMicrohttpResponses {
 
 	@NotThreadSafe
 	private static final class QueuedChunk {
-		private ByteBuffer[] buffers;
+		private @NonNull ByteBuffer @NonNull [] buffers;
 		private byte @Nullable [] pendingPayload;
 		private int payloadBytes;
 		private final boolean terminal;
 		private int bufferIndex;
 
-		private static QueuedChunk payload(@NonNull byte[] payload) {
+		private static @NonNull QueuedChunk payload(byte @NonNull [] payload) {
 			requireNonNull(payload);
 
 			QueuedChunk chunk = new QueuedChunk(new ByteBuffer[0], payload.length, false);
@@ -1121,7 +1121,7 @@ public final class StreamingMicrohttpResponses {
 					&& this.payloadBytes <= maximumPayloadBytes - length;
 		}
 
-		private void append(byte[] payload, int maximumPayloadBytes) {
+		private void append(byte @NonNull [] payload, int maximumPayloadBytes) {
 			byte[] pending = requireNonNull(this.pendingPayload);
 			int required = this.payloadBytes + payload.length;
 			if (required > pending.length) {
@@ -1142,7 +1142,7 @@ public final class StreamingMicrohttpResponses {
 			this.pendingPayload = null;
 		}
 
-		private static QueuedChunk terminal() {
+		private static @NonNull QueuedChunk terminal() {
 			return new QueuedChunk(new ByteBuffer[] {ByteBuffer.wrap(StreamingWritableSource.TERMINAL_CHUNK)}, 0, true);
 		}
 
@@ -1213,21 +1213,21 @@ public final class StreamingMicrohttpResponses {
 
 	@ThreadSafe
 	private static final class DefaultCancelationToken implements CancelationToken {
-		private static final Runnable NO_CALLBACKS = () -> {};
-		private final Object lock = new Object();
+		private static final @NonNull Runnable NO_CALLBACKS = () -> {};
+		private final @NonNull Object lock = new Object();
 		private boolean canceled;
 		private boolean completed;
 		@Nullable
-		private Set<CancelationCallbackRegistration> callbacks;
+		private Set<@NonNull CancelationCallbackRegistration> callbacks;
 		@NonNull
-		private final Consumer<Throwable> callbackFailureConsumer;
+		private final Consumer<@NonNull Throwable> callbackFailureConsumer;
 		private final StreamLifecycleCoordinator.@Nullable Reservation reservation;
 		@Nullable
 		private volatile StreamTerminationReason reason;
 		@Nullable
 		private volatile Throwable cause;
 
-		private DefaultCancelationToken(@NonNull Consumer<Throwable> callbackFailureConsumer,
+		private DefaultCancelationToken(@NonNull Consumer<@NonNull Throwable> callbackFailureConsumer,
 				StreamLifecycleCoordinator.@Nullable Reservation reservation) {
 			this.callbackFailureConsumer = requireNonNull(callbackFailureConsumer);
 			this.reservation = reservation;
@@ -1255,7 +1255,7 @@ public final class StreamingMicrohttpResponses {
 
 		@Override
 		@NonNull
-		public Optional<StreamTerminationReason> getCancelationReason() {
+		public Optional<@NonNull StreamTerminationReason> getCancelationReason() {
 			synchronized (this.lock) {
 				Optional<StreamTerminationReason> reason = this.reason == null && this.reservation != null
 						? this.reservation.reason() : Optional.ofNullable(this.reason);
@@ -1265,7 +1265,7 @@ public final class StreamingMicrohttpResponses {
 
 		@Override
 		@NonNull
-		public Optional<Throwable> getCancelationCause() {
+		public Optional<@NonNull Throwable> getCancelationCause() {
 			synchronized (this.lock) {
 				Optional<Throwable> cause = this.reason == null && this.reservation != null
 						? this.reservation.cause() : Optional.ofNullable(this.cause);

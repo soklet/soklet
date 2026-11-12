@@ -208,17 +208,17 @@ public final class HttpRequestResult {
 
 
 	@NonNull
-	Optional<MarshaledResponseBody> getHeadResponseCompressionBody() {
+	Optional<@NonNull MarshaledResponseBody> getHeadResponseCompressionBody() {
 		return Optional.ofNullable(this.headResponseCompressionBody);
 	}
 
 	@NonNull
-	Optional<Long> getHeadResponseBodyLength() {
+	Optional<@NonNull Long> getHeadResponseBodyLength() {
 		return Optional.ofNullable(this.headResponseBodyLength);
 	}
 
 	@NonNull
-	Optional<Throwable> getRequestHandlingFailure() {
+	Optional<@NonNull Throwable> getRequestHandlingFailure() {
 		return Optional.ofNullable(this.requestHandlingFailure);
 	}
 

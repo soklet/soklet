@@ -9,6 +9,8 @@
  */
 package com.soklet.internal.mcp.skills;
 
+
+import org.jspecify.annotations.NonNull;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
@@ -28,34 +30,34 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 final class SkillYamlParser {
-	private final String source;
-	private final SkillYamlBudget budget;
+	private final @NonNull String source;
+	private final @NonNull SkillYamlBudget budget;
 	private int index;
 	private int line;
 	private int column = 1;
 	private boolean nextContent;
-	private Map<String, String> tagDirectives = new HashMap<>();
+	private @NonNull Map<@NonNull String, @NonNull String> tagDirectives = new HashMap<>();
 	private boolean versionDirective;
 
-	private SkillYamlParser(String source, SkillYamlBudget budget, int firstLine) {
+	private SkillYamlParser(@NonNull String source, @NonNull SkillYamlBudget budget, int firstLine) {
 		this.source = requireNonNull(source);
 		this.budget = requireNonNull(budget);
 		if (firstLine < 1) throw new IllegalArgumentException("Invalid YAML first line.");
 		this.line = firstLine;
 	}
 
-	static SkillYamlNode parse(String source, SkillYamlBudget budget, int firstLine) {
+	static @NonNull SkillYamlNode parse(@NonNull String source, @NonNull SkillYamlBudget budget, int firstLine) {
 		SkillYamlParser parser = new SkillYamlParser(source, budget, firstLine);
 		List<SkillYamlNode> documents = parser.documents(true);
 		return documents.isEmpty() ? parser.empty(1, Properties.EMPTY) : documents.get(0);
 	}
 
 	/** Qualification entry point; Skills frontmatter still uses the single-document entry point. */
-	static List<SkillYamlNode> parseStream(String source, SkillYamlBudget budget, int firstLine) {
+	static @NonNull List<@NonNull SkillYamlNode> parseStream(@NonNull String source, @NonNull SkillYamlBudget budget, int firstLine) {
 		return new SkillYamlParser(source, budget, firstLine).documents(false);
 	}
 
-	private List<SkillYamlNode> documents(boolean singleDocument) {
+	private @NonNull List<@NonNull SkillYamlNode> documents(boolean singleDocument) {
 		validateInput();
 		List<SkillYamlNode> documents = new ArrayList<>();
 		boolean anyDocumentAllowed = true;
@@ -93,7 +95,7 @@ final class SkillYamlParser {
 		}
 	}
 
-	private SkillYamlNode document() {
+	private @NonNull SkillYamlNode document() {
 		boolean directives = false;
 		while (this.column == 1 && peek() == '%') {
 			directive(); directives = true;
@@ -117,7 +119,7 @@ final class SkillYamlParser {
 		return root;
 	}
 
-	private SkillYamlNode documentNode() {
+	private @NonNull SkillYamlNode documentNode() {
 		return end() || marker("...") || marker("---") || byteOrderMark() ? empty(1, Properties.EMPTY)
 				: block(this.column - 1, 1, Properties.EMPTY);
 	}
@@ -159,21 +161,21 @@ final class SkillYamlParser {
 		finishLine();
 	}
 
-	private String directiveArgument() {
+	private @NonNull String directiveArgument() {
 		if (!horizontal(peek())) throw failure(SYNTAX);
 		skipHorizontal();
 		if (lineEnd() || peek() == '#') throw failure(SYNTAX);
 		return directiveToken();
 	}
 
-	private String directiveToken() {
+	private @NonNull String directiveToken() {
 		Position start = position(); StringBuilder value = builder();
 		while (!lineEnd() && !horizontal(peek())) append(value, take(), start);
 		if (value.isEmpty()) throw failure(SYNTAX);
 		return value.toString();
 	}
 
-	private void validateHandle(String handle, Position position) {
+	private void validateHandle(@NonNull String handle, @NonNull Position position) {
 		this.budget.work(handle.length(), position);
 		if (handle.equals("!") || handle.equals("!!")) return;
 		if (handle.length() < 3 || handle.charAt(0) != '!' || handle.charAt(handle.length() - 1) != '!')
@@ -183,7 +185,7 @@ final class SkillYamlParser {
 				throw new SkillYamlException(SYNTAX, position.line(), position.column());
 	}
 
-	private String expandTag(String tag, Position position) {
+	private @NonNull String expandTag(@NonNull String tag, @NonNull Position position) {
 		this.budget.work(2L * tag.length(), position);
 		if (tag.equals("!")) return tag;
 		if (tag.startsWith("!<") && tag.endsWith(">")) {
@@ -213,7 +215,7 @@ final class SkillYamlParser {
 		return "!<" + identity + ">";
 	}
 
-	private void validateTagCharacters(String value, boolean suffix, Position position) {
+	private void validateTagCharacters(@NonNull String value, boolean suffix, @NonNull Position position) {
 		this.budget.work(value.length(), position);
 		if (value.isEmpty()) throw new SkillYamlException(SYNTAX, position.line(), position.column());
 		for (int offset = 0; offset < value.length(); ++offset) {
@@ -230,7 +232,7 @@ final class SkillYamlParser {
 		}
 	}
 
-	private void validateTagIdentity(String identity, Position position) {
+	private void validateTagIdentity(@NonNull String identity, @NonNull Position position) {
 		this.budget.work(identity.length(), position);
 		if (identity.startsWith("!") && identity.length() > 1) return;
 		try {
@@ -269,7 +271,7 @@ final class SkillYamlParser {
 		}
 	}
 
-	private SkillYamlNode block(int indent, int depth, Properties properties) {
+	private @NonNull SkillYamlNode block(int indent, int depth, @NonNull Properties properties) {
 		if (marker("---") || marker("...") || peek() == '%') throw failure(UNSUPPORTED_SYNTAX);
 		if (indicator('-')) return blockSequence(indent, depth, properties);
 		if (indicator('?') || mappingColonAhead()) return blockMapping(indent, depth, properties);
@@ -278,7 +280,7 @@ final class SkillYamlParser {
 		return value;
 	}
 
-	private Sequence blockSequence(int indent, int depth, Properties properties) {
+	private @NonNull Sequence blockSequence(int indent, int depth, @NonNull Properties properties) {
 		Position start = position();
 		this.budget.node(depth, start);
 		List<SkillYamlNode> items = new ArrayList<>();
@@ -290,7 +292,7 @@ final class SkillYamlParser {
 	}
 
 	/** The compact notation is legal after '-', '?' and an explicit ':', not an implicit ':'. */
-	private SkillYamlNode blockIndented(int parentIndent, int depth, boolean indentlessSequence) {
+	private @NonNull SkillYamlNode blockIndented(int parentIndent, int depth, boolean indentlessSequence) {
 		int separationStart = this.index;
 		skipHorizontal();
 		if (lineEnd() || peek() == '#')
@@ -308,7 +310,7 @@ final class SkillYamlParser {
 		return value;
 	}
 
-	private Mapping blockMapping(int indent, int depth, Properties properties) {
+	private @NonNull Mapping blockMapping(int indent, int depth, @NonNull Properties properties) {
 		Position start = position();
 		this.budget.node(depth, start);
 		List<Entry> entries = new ArrayList<>();
@@ -348,7 +350,7 @@ final class SkillYamlParser {
 		return new Mapping(entries, properties, start);
 	}
 
-	private SkillYamlNode nested(int parentIndent, int depth, Properties properties, boolean indentlessSequence) {
+	private @NonNull SkillYamlNode nested(int parentIndent, int depth, @NonNull Properties properties, boolean indentlessSequence) {
 		Position start = position();
 		finishLine(); skipBlankLines();
 		int beforeTab = spacesBeforeSeparationTab();
@@ -369,11 +371,11 @@ final class SkillYamlParser {
 		return new Scalar("", Style.PLAIN, properties, start);
 	}
 
-	private SkillYamlNode inline(int parentIndent, int depth, Properties inherited, boolean flow, boolean key) {
+	private @NonNull SkillYamlNode inline(int parentIndent, int depth, @NonNull Properties inherited, boolean flow, boolean key) {
 		return inline(parentIndent, depth, inherited, flow, key, false);
 	}
 
-	private SkillYamlNode inline(int parentIndent, int depth, Properties inherited, boolean flow, boolean key,
+	private @NonNull SkillYamlNode inline(int parentIndent, int depth, @NonNull Properties inherited, boolean flow, boolean key,
 			boolean indentlessSequence) {
 		Position start = position();
 		if (flow && (marker("---") || marker("..."))) throw failure(SYNTAX);
@@ -408,7 +410,7 @@ final class SkillYamlParser {
 		};
 	}
 
-	private Properties properties(Properties inherited, int parentIndent, boolean flow) {
+	private @NonNull Properties properties(@NonNull Properties inherited, int parentIndent, boolean flow) {
 		String tag = inherited.tag(), anchor = inherited.anchor();
 		while (peek() == '!' || peek() == '&') {
 			if (peek() == '!') {
@@ -429,7 +431,7 @@ final class SkillYamlParser {
 		return tag == null && anchor == null ? Properties.EMPTY : new Properties(tag, anchor);
 	}
 
-	private String propertyToken(boolean tag) {
+	private @NonNull String propertyToken(boolean tag) {
 		Position start = position();
 		StringBuilder value = builder();
 		if (tag && peek() == '!' && at(this.index + 1) == '<') {
@@ -449,7 +451,7 @@ final class SkillYamlParser {
 		return value.toString();
 	}
 
-	private Sequence flowSequence(int parentIndent, int depth, Properties properties) {
+	private @NonNull Sequence flowSequence(int parentIndent, int depth, @NonNull Properties properties) {
 		Position start = position(); this.budget.node(depth, start);
 		take(); skipFlow(parentIndent);
 		List<SkillYamlNode> items = new ArrayList<>();
@@ -464,7 +466,7 @@ final class SkillYamlParser {
 		take(); return new Sequence(items, properties, start);
 	}
 
-	private SkillYamlNode flowSequenceEntry(int parentIndent, int depth) {
+	private @NonNull SkillYamlNode flowSequenceEntry(int parentIndent, int depth) {
 		Position start = position();
 		boolean explicitKey = indicator('?');
 		if (explicitKey) { take(); skipFlow(parentIndent); }
@@ -486,7 +488,7 @@ final class SkillYamlParser {
 		return new Mapping(List.of(new Entry(key, value)), Properties.EMPTY, start);
 	}
 
-	private void checkNestedDepth(SkillYamlNode node, int depth) {
+	private void checkNestedDepth(@NonNull SkillYamlNode node, int depth) {
 		this.budget.work(1, node.position());
 		this.budget.depth(depth, node.position());
 		if (node instanceof Sequence sequence) {
@@ -503,7 +505,7 @@ final class SkillYamlParser {
 		return peek() == ':' && (separation(at(this.index + 1)) || flowDelimiter(at(this.index + 1)));
 	}
 
-	private SkillYamlNode flowPairValue(int parentIndent, int depth, char closing, SkillYamlNode key) {
+	private @NonNull SkillYamlNode flowPairValue(int parentIndent, int depth, char closing, @NonNull SkillYamlNode key) {
 		if (peek() != ':') return empty(depth, Properties.EMPTY);
 		boolean jsonLike = key instanceof Sequence || key instanceof Mapping
 				|| key instanceof Scalar scalar && (scalar.style() == Style.SINGLE_QUOTED || scalar.style() == Style.DOUBLE_QUOTED);
@@ -515,7 +517,7 @@ final class SkillYamlParser {
 				: inline(parentIndent, depth, Properties.EMPTY, true, false);
 	}
 
-	private Mapping flowMapping(int parentIndent, int depth, Properties properties) {
+	private @NonNull Mapping flowMapping(int parentIndent, int depth, @NonNull Properties properties) {
 		Position start = position(); this.budget.node(depth, start);
 		take(); skipFlow(parentIndent);
 		List<Entry> entries = new ArrayList<>();
@@ -539,7 +541,7 @@ final class SkillYamlParser {
 		take(); return new Mapping(entries, properties, start);
 	}
 
-	private Scalar quoted(int parentIndent, int depth, Properties properties, boolean key) {
+	private @NonNull Scalar quoted(int parentIndent, int depth, @NonNull Properties properties, boolean key) {
 		Position start = position(); this.budget.node(depth, start);
 		char quote = take();
 		StringBuilder value = builder();
@@ -605,7 +607,7 @@ final class SkillYamlParser {
 		return (int) value;
 	}
 
-	private Scalar plain(int parentIndent, int depth, Properties properties, boolean flow, boolean key) {
+	private @NonNull Scalar plain(int parentIndent, int depth, @NonNull Properties properties, boolean flow, boolean key) {
 		Position start = position(); this.budget.node(depth, start);
 		if (flowDelimiter(peek()) || indicator('-') || indicator('?') || indicator(':')) throw failure(SYNTAX);
 		if (flow && (peek() == '-' || peek() == '?' || peek() == ':')
@@ -638,7 +640,7 @@ final class SkillYamlParser {
 		return new Scalar(value.toString(), Style.PLAIN, properties, start);
 	}
 
-	private Scalar blockScalar(int parentIndent, int depth, Properties properties) {
+	private @NonNull Scalar blockScalar(int parentIndent, int depth, @NonNull Properties properties) {
 		Position start = position(); this.budget.node(depth, start);
 		boolean folded = take() == '>';
 		char chomp = ' ';
@@ -700,7 +702,7 @@ final class SkillYamlParser {
 		return new Scalar(value.toString(), folded ? Style.FOLDED : Style.LITERAL, properties, start);
 	}
 
-	private Scalar empty(int depth, Properties properties) {
+	private @NonNull Scalar empty(int depth, @NonNull Properties properties) {
 		Position start = position(); this.budget.node(depth, start);
 		return new Scalar("", Style.PLAIN, properties, start);
 	}
@@ -787,7 +789,7 @@ final class SkillYamlParser {
 		skipHorizontal();
 		if (tab && spaces <= parentIndent && !lineEnd() && peek() != '#') throw failure(SYNTAX);
 	}
-	private void checkImplicitKey(Position start) {
+	private void checkImplicitKey(@NonNull Position start) {
 		if (this.line != start.line() || this.column - start.column() > 1024) throw failure(SYNTAX);
 	}
 	private void skipFlow(int parentIndent) {
@@ -819,7 +821,7 @@ final class SkillYamlParser {
 		if (this.column > 1 && !horizontal(at(this.index - 1))) throw failure(SYNTAX);
 		while (!lineEnd()) take();
 	}
-	private boolean marker(String marker) {
+	private boolean marker(@NonNull String marker) {
 		return this.column == 1 && this.source.startsWith(marker, this.index)
 				&& separation(at(this.index + marker.length()));
 	}
@@ -833,8 +835,8 @@ final class SkillYamlParser {
 	private boolean end() { return this.index == this.source.length(); }
 	private char peek() { return at(this.index); }
 	private char at(int offset) { return offset >= this.source.length() ? 0 : this.source.charAt(offset); }
-	private Position position() { return new Position(this.line, this.column); }
-	private SkillYamlException failure(SkillYamlException.Reason reason) { return new SkillYamlException(reason, this.line, this.column); }
+	private @NonNull Position position() { return new Position(this.line, this.column); }
+	private @NonNull SkillYamlException failure(SkillYamlException.@NonNull Reason reason) { return new SkillYamlException(reason, this.line, this.column); }
 	private char take() { return take(false); }
 	private char take(boolean allowByteOrderMark) {
 		if (end()) throw failure(SYNTAX);
@@ -852,16 +854,16 @@ final class SkillYamlParser {
 		if (c == '\r' && peek() == '\n') take();
 		++this.line; this.column = 1;
 	}
-	private StringBuilder builder() { return new StringBuilder(Math.min(64, this.budget.limits().maximumScalarCharacters())); }
-	private void append(StringBuilder value, char c, Position start) {
+	private @NonNull StringBuilder builder() { return new StringBuilder(Math.min(64, this.budget.limits().maximumScalarCharacters())); }
+	private void append(@NonNull StringBuilder value, char c, @NonNull Position start) {
 		this.budget.scalarLength(value.length() + 1, start);
 		this.budget.text(1, start); value.append(c);
 	}
-	private void appendBreaks(StringBuilder value, int breaks, boolean space, Position start) {
+	private void appendBreaks(@NonNull StringBuilder value, int breaks, boolean space, @NonNull Position start) {
 		if (space) append(value, ' ', start);
 		for (int count = 0; count < breaks; ++count) append(value, '\n', start);
 	}
-	private static void trimHorizontal(StringBuilder value) {
+	private static void trimHorizontal(@NonNull StringBuilder value) {
 		while (!value.isEmpty() && horizontal(value.charAt(value.length() - 1))) value.setLength(value.length() - 1);
 	}
 }

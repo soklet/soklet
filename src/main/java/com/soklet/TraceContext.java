@@ -41,12 +41,12 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 public final class TraceContext {
 	private static final int VERSION_00_TRACEPARENT_LENGTH = 55;
-	private static final String ZERO_TRACE_ID = "00000000000000000000000000000000";
-	private static final String ZERO_PARENT_ID = "0000000000000000";
-	private static final Integer SAMPLED_FLAG = 1;
-	private static final Integer MAX_TRACESTATE_ENTRIES = 32;
-	private static final Integer MAX_TRACESTATE_LENGTH = 512;
-	private static final Integer MAX_TRACESTATE_ENTRY_TRUNCATION_LENGTH = 128;
+	private static final @NonNull String ZERO_TRACE_ID = "00000000000000000000000000000000";
+	private static final @NonNull String ZERO_PARENT_ID = "0000000000000000";
+	private static final @NonNull Integer SAMPLED_FLAG = 1;
+	private static final @NonNull Integer MAX_TRACESTATE_ENTRIES = 32;
+	private static final @NonNull Integer MAX_TRACESTATE_LENGTH = 512;
+	private static final @NonNull Integer MAX_TRACESTATE_ENTRY_TRUNCATION_LENGTH = 128;
 	@NonNull
 	private final String traceId;
 	@NonNull
@@ -200,7 +200,7 @@ public final class TraceContext {
 	}
 
 	@NonNull
-	private static Optional<ParsedTraceparent> parseTraceparent(@Nullable String traceparentHeaderValue) {
+	private static Optional<@NonNull ParsedTraceparent> parseTraceparent(@Nullable String traceparentHeaderValue) {
 		if (traceparentHeaderValue == null || traceparentHeaderValue.length() < VERSION_00_TRACEPARENT_LENGTH)
 			return Optional.empty();
 
@@ -317,7 +317,7 @@ public final class TraceContext {
 		return List.copyOf(normalizedEntries);
 	}
 
-	private static int traceStateEntryLength(TraceStateEntry entry) {
+	private static int traceStateEntryLength(@NonNull TraceStateEntry entry) {
 		return entry.getKey().length() + 1 + entry.getValue().length();
 	}
 

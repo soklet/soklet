@@ -74,16 +74,16 @@ final class SokletApplicationCoreDiagnostics {
 	@NonNull
 	private final LifecycleTransitionSnapshot transitionSnapshot;
 	@NonNull
-	private final Map<InternalLifecycleComponentType,
-			SokletApplicationParticipantDiagnostics> participantDiagnostics;
+	private final Map<@NonNull InternalLifecycleComponentType,
+			@NonNull SokletApplicationParticipantDiagnostics> participantDiagnostics;
 	@NonNull
 	private final InternalLifecyclePolicy lifecyclePolicy;
 	private final long lifecycleBeganNanos;
 
 	SokletApplicationCoreDiagnostics(
 			@NonNull LifecycleTransitionSnapshot transitionSnapshot,
-			@NonNull Map<InternalLifecycleComponentType,
-					SokletApplicationParticipantDiagnostics> participantDiagnostics,
+			@NonNull Map<@NonNull InternalLifecycleComponentType,
+					@NonNull SokletApplicationParticipantDiagnostics> participantDiagnostics,
 			@NonNull InternalLifecyclePolicy lifecyclePolicy,
 			long lifecycleBeganNanos) {
 		this.transitionSnapshot = requireNonNull(transitionSnapshot);
@@ -102,7 +102,7 @@ final class SokletApplicationCoreDiagnostics {
 	}
 
 	@NonNull
-	Map<InternalLifecycleComponentType, SokletApplicationParticipantDiagnostics>
+	Map<@NonNull InternalLifecycleComponentType, @NonNull SokletApplicationParticipantDiagnostics>
 	participantDiagnostics() {
 		return this.participantDiagnostics;
 	}
@@ -123,16 +123,16 @@ final class InternalShutdownCleanupOutcome {
 	@NonNull
 	private final InternalShutdownCleanupDisposition disposition;
 	@NonNull
-	private final Optional<Duration> configuredTimeout;
+	private final Optional<@NonNull Duration> configuredTimeout;
 	@NonNull
-	private final Optional<Throwable> failure;
+	private final Optional<@NonNull Throwable> failure;
 	private final boolean workerMayRemain;
 	private final long publicationNanos;
 
 	InternalShutdownCleanupOutcome(
 			@NonNull InternalShutdownCleanupDisposition disposition,
-			@NonNull Optional<Duration> configuredTimeout,
-			@NonNull Optional<? extends Throwable> failure,
+			@NonNull Optional<@NonNull Duration> configuredTimeout,
+			@NonNull Optional<? extends @NonNull Throwable> failure,
 			boolean workerMayRemain, long publicationNanos) {
 		this.disposition = requireNonNull(disposition);
 		this.configuredTimeout = requireNonNull(configuredTimeout);
@@ -152,12 +152,12 @@ final class InternalShutdownCleanupOutcome {
 	}
 
 	@NonNull
-	Optional<Duration> configuredTimeout() {
+	Optional<@NonNull Duration> configuredTimeout() {
 		return this.configuredTimeout;
 	}
 
 	@NonNull
-	Optional<Throwable> failure() {
+	Optional<@NonNull Throwable> failure() {
 		return this.failure;
 	}
 
@@ -183,7 +183,7 @@ final class SokletApplicationTerminalSnapshot {
 	@NonNull
 	private final SokletApplicationPrimaryOutcome primaryOutcome;
 	@NonNull
-	private final Optional<Throwable> primaryFailure;
+	private final Optional<@NonNull Throwable> primaryFailure;
 	@NonNull
 	private final InternalShutdownCleanupOutcome cleanupOutcome;
 	@NonNull
@@ -194,7 +194,7 @@ final class SokletApplicationTerminalSnapshot {
 	SokletApplicationTerminalSnapshot(
 			@NonNull InternalLifecycleCoreSnapshot coreSnapshot,
 			@NonNull SokletApplicationPrimaryOutcome primaryOutcome,
-			@NonNull Optional<? extends Throwable> primaryFailure,
+			@NonNull Optional<? extends @NonNull Throwable> primaryFailure,
 			@NonNull InternalShutdownCleanupOutcome cleanupOutcome,
 			@NonNull SokletApplicationCoreDiagnostics coreDiagnostics,
 			long runnerBeganNanos, long reporterDeadlineNanos) {
@@ -219,7 +219,7 @@ final class SokletApplicationTerminalSnapshot {
 	}
 
 	@NonNull
-	Optional<Throwable> primaryFailure() {
+	Optional<@NonNull Throwable> primaryFailure() {
 		return this.primaryFailure;
 	}
 
@@ -245,7 +245,7 @@ final class SokletApplicationTerminalSnapshot {
 /** One cleanup/reporter attempt shared by the ordinary runner and JVM hook. */
 @ThreadSafe
 final class SokletApplicationFinalization {
-	private static final Duration REPORTER_TIMEOUT = Duration.ofMillis(250);
+	private static final @NonNull Duration REPORTER_TIMEOUT = Duration.ofMillis(250);
 
 	@NonNull
 	private final NanoClock clock;
@@ -259,13 +259,13 @@ final class SokletApplicationFinalization {
 	private final LifecycleTerminalReporter reporter;
 	private final long runnerBeganNanos;
 	@NonNull
-	private final AtomicReference<CorePlan> corePlan;
+	private final AtomicReference<@Nullable CorePlan> corePlan;
 	@NonNull
-	private final AtomicReference<InternalShutdownCleanupOutcome> cleanupOutcome;
+	private final AtomicReference<@Nullable InternalShutdownCleanupOutcome> cleanupOutcome;
 	@NonNull
 	private final AtomicBoolean cleanupLaunchClaimed;
 	@NonNull
-	private final AtomicReference<LifecycleInterruptDelivery> cleanupInterruptDelivery;
+	private final AtomicReference<@Nullable LifecycleInterruptDelivery> cleanupInterruptDelivery;
 	@NonNull
 	private final AtomicBoolean cleanupInterruptRequested;
 	@NonNull
@@ -273,7 +273,7 @@ final class SokletApplicationFinalization {
 	@NonNull
 	private final AtomicBoolean cleanupWorkerFinished;
 	@NonNull
-	private final AtomicReference<ReporterPlan> reporterPlan;
+	private final AtomicReference<@Nullable ReporterPlan> reporterPlan;
 	@NonNull
 	private final AtomicBoolean reporterLaunchClaimed;
 	@NonNull
@@ -281,13 +281,13 @@ final class SokletApplicationFinalization {
 	@NonNull
 	private final AtomicBoolean completionPublished;
 	@NonNull
-	private final AtomicReference<Supplier<SokletApplicationCoreDiagnostics>>
+	private final AtomicReference<@Nullable Supplier<@NonNull SokletApplicationCoreDiagnostics>>
 			diagnosticsSupplier;
 	@NonNull
-	private final AtomicReference<Function<InternalShutdownResult,
-			Optional<RuntimeException>>> terminalFailureClassifier;
+	private final AtomicReference<@Nullable Function<@NonNull InternalShutdownResult,
+			@NonNull Optional<@NonNull RuntimeException>>> terminalFailureClassifier;
 	@NonNull
-	private final AtomicReference<PrimaryEvidence> primaryEvidence;
+	private final AtomicReference<@Nullable PrimaryEvidence> primaryEvidence;
 
 	SokletApplicationFinalization(
 			@Nullable ShutdownCleanup shutdownCleanup,
@@ -317,15 +317,15 @@ final class SokletApplicationFinalization {
 	}
 
 	void diagnosticsSupplier(
-			@NonNull Supplier<SokletApplicationCoreDiagnostics> supplier) {
+			@NonNull Supplier<@NonNull SokletApplicationCoreDiagnostics> supplier) {
 		if (!this.diagnosticsSupplier.compareAndSet(null,
 				requireNonNull(supplier)))
 			throw new IllegalStateException(
 					"Core diagnostics supplier was already installed");
 	}
 
-	void terminalFailureClassifier(@NonNull Function<InternalShutdownResult,
-			Optional<RuntimeException>> classifier) {
+	void terminalFailureClassifier(@NonNull Function<@NonNull InternalShutdownResult,
+			@NonNull Optional<@NonNull RuntimeException>> classifier) {
 		if (!this.terminalFailureClassifier.compareAndSet(null,
 				requireNonNull(classifier)))
 			throw new IllegalStateException(
@@ -382,7 +382,7 @@ final class SokletApplicationFinalization {
 	}
 
 	@NonNull
-	Optional<InternalShutdownCleanupOutcome> cleanupOutcome() {
+	Optional<@NonNull InternalShutdownCleanupOutcome> cleanupOutcome() {
 		return Optional.ofNullable(this.cleanupOutcome.get());
 	}
 
@@ -690,7 +690,7 @@ final class SokletApplicationFinalization {
 	}
 
 	@NonNull
-	private Optional<RuntimeException> classifyTerminalFailure(
+	private Optional<@NonNull RuntimeException> classifyTerminalFailure(
 			@NonNull InternalShutdownResult result) {
 		Function<InternalShutdownResult, Optional<RuntimeException>> classifier =
 				this.terminalFailureClassifier.get();
@@ -744,7 +744,7 @@ final class SokletApplicationFinalization {
 	}
 
 	@NonNull
-	private static Optional<Throwable> firstLifecycleFailure(
+	private static Optional<@NonNull Throwable> firstLifecycleFailure(
 			@NonNull InternalShutdownResult result) {
 		return requireNonNull(result).participantResults().stream()
 				.flatMap(participant -> participant.failures().stream())

@@ -174,7 +174,7 @@ public final class HttpDate {
 		return Optional.empty();
 	}
 
-	private static Optional<Instant> representableDate(Instant instant) {
+	private static @NonNull Optional<@NonNull Instant> representableDate(@NonNull Instant instant) {
 		int year = instant.atZone(GMT).getYear();
 		return year >= MINIMUM_IMF_FIXDATE_YEAR && year <= MAXIMUM_IMF_FIXDATE_YEAR
 				? Optional.of(instant) : Optional.empty();

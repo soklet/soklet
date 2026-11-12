@@ -32,8 +32,8 @@ final class LifecycleLogDispatcher {
 
 	static final int QUEUE_CAPACITY = 128;
 	static final int MAXIMUM_MESSAGE_CHARACTERS = 4_096;
-	private static final LifecycleLogDispatcher DEFAULT_INSTANCE = new LifecycleLogDispatcher();
-	private final ThreadPoolExecutor executor;
+	private static final @NonNull LifecycleLogDispatcher DEFAULT_INSTANCE = new LifecycleLogDispatcher();
+	private final @NonNull ThreadPoolExecutor executor;
 
 	LifecycleLogDispatcher() {
 		this(task -> {

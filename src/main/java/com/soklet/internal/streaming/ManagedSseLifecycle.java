@@ -38,9 +38,9 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class ManagedSseLifecycle {
-	private final Object lock = new Object();
-	private final StreamLifecycleCoordinator.Reservation reservation;
-	private final Runnable transportTermination;
+	private final @NonNull Object lock = new Object();
+	private final StreamLifecycleCoordinator.@NonNull Reservation reservation;
+	private final @NonNull Runnable transportTermination;
 	private final long startedAt = System.nanoTime();
 	private boolean terminalPublished;
 	@Nullable
@@ -99,7 +99,7 @@ public final class ManagedSseLifecycle {
 	}
 
 	@NonNull
-	public Optional<StreamTermination> termination() {
+	public Optional<@NonNull StreamTermination> termination() {
 		synchronized (this.lock) {
 			// The coordinator elects an outcome before invoking its framework hook.
 			if (this.termination == null) {
@@ -111,7 +111,7 @@ public final class ManagedSseLifecycle {
 		}
 	}
 
-	private void publishTermination(StreamTerminationReason reason, @Nullable Throwable cause) {
+	private void publishTermination(@NonNull StreamTerminationReason reason, @Nullable Throwable cause) {
 		synchronized (this.lock) {
 			if (this.terminalPublished)
 				return;
@@ -128,12 +128,12 @@ public final class ManagedSseLifecycle {
 		}
 	}
 
-	private StreamTermination outcome(StreamTerminationReason reason, @Nullable Throwable cause) {
+	private @NonNull StreamTermination outcome(@NonNull StreamTerminationReason reason, @Nullable Throwable cause) {
 		return StreamTermination.with(reason, Duration.ofNanos(Math.max(0L, System.nanoTime() - this.startedAt)))
 				.cause(cause).build();
 	}
 
-	private static void rethrow(Throwable failure) throws Exception {
+	private static void rethrow(@NonNull Throwable failure) throws Exception {
 		if (failure instanceof Exception exception)
 			throw exception;
 		if (failure instanceof Error error)

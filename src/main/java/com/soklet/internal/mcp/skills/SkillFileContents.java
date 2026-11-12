@@ -16,6 +16,8 @@ import com.soklet.internal.mcp.protocol.McpJsonLimits;
 import com.soklet.internal.mcp.protocol.McpJsonObject;
 import com.soklet.internal.mcp.protocol.McpJsonString;
 import com.soklet.internal.mcp.protocol.McpJsonValue;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 
 import java.net.URI;
 import java.nio.ByteBuffer;
@@ -41,17 +43,17 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 final class SkillFileContents {
-	private final String mimeType;
+	private final @NonNull String mimeType;
 	private final boolean text;
-	private final String value;
+	private final @NonNull String value;
 
-	private SkillFileContents(String mimeType, boolean text, String value) {
+	private SkillFileContents(@NonNull String mimeType, boolean text, @NonNull String value) {
 		this.mimeType = mimeType;
 		this.text = text;
 		this.value = value;
 	}
 
-	static SkillFileContents from(String path, byte[] bytes, McpJsonLimits limits) {
+	static @NonNull SkillFileContents from(@NonNull String path, byte @NonNull [] bytes, @NonNull McpJsonLimits limits) {
 		requireNonNull(path, "A Skills logical path is required.");
 		requireNonNull(bytes, "Skills file bytes are required.");
 		requireNonNull(limits, "Skills JSON limits are required.");
@@ -78,21 +80,21 @@ final class SkillFileContents {
 		return new SkillFileContents(mime.value(), false, Base64.getEncoder().encodeToString(bytes));
 	}
 
-	McpJsonObject atUri(URI uri) {
+	@NonNull McpJsonObject atUri(@NonNull URI uri) {
 		requireNonNull(uri, "A Skills resource URI is required.");
-		Map<String, McpJsonValue> members = new LinkedHashMap<>();
+		Map<@NonNull String, @NonNull McpJsonValue> members = new LinkedHashMap<>();
 		members.put("uri", new McpJsonString(uri.toString()));
 		members.put("mimeType", new McpJsonString(this.mimeType));
 		members.put(this.text ? "text" : "blob", new McpJsonString(this.value));
 		return new McpJsonObject(members);
 	}
 
-	String mimeType() { return this.mimeType; }
+	@NonNull String mimeType() { return this.mimeType; }
 	boolean isText() { return this.text; }
-	String value() { return this.value; }
+	@NonNull String value() { return this.value; }
 
 	/** Strict UTF-8 preserves BOMs and authored line endings; malformed text is binary. */
-	private static String decode(byte[] bytes) {
+	private static @Nullable String decode(byte @NonNull [] bytes) {
 		try {
 			return StandardCharsets.UTF_8.newDecoder()
 					.onMalformedInput(CodingErrorAction.REPORT)
@@ -103,7 +105,7 @@ final class SkillFileContents {
 		}
 	}
 
-	private static void validateScalar(String value, McpJsonLimits limits) {
+	private static void validateScalar(@NonNull String value, @NonNull McpJsonLimits limits) {
 		try {
 			new McpJsonCodec(limits).toUtf8Bytes(new McpJsonString(value));
 		} catch (IllegalArgumentException ignored) {
@@ -113,7 +115,7 @@ final class SkillFileContents {
 		}
 	}
 
-	private static Mime mime(String path) {
+	private static @NonNull Mime mime(@NonNull String path) {
 		String name = path.substring(path.lastIndexOf('/') + 1).toLowerCase(Locale.ROOT);
 		int dot = name.lastIndexOf('.');
 		String suffix = dot < 0 ? "" : name.substring(dot);
@@ -135,12 +137,12 @@ final class SkillFileContents {
 		};
 	}
 
-	private static IllegalArgumentException invalid() {
+	private static @NonNull IllegalArgumentException invalid() {
 		return new IllegalArgumentException("The Skills file contents exceed the configured JSON profile.");
 	}
 
 	@Override
-	public String toString() { return "SkillFileContents[redacted]"; }
+	public @NonNull String toString() { return "SkillFileContents[redacted]"; }
 
-	private record Mime(String value, boolean text) {}
+	private record Mime(@NonNull String value, boolean text) {}
 }

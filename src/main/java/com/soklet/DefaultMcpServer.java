@@ -467,9 +467,9 @@ final class DefaultMcpServer implements McpServer {
 	@NonNull
 	private McpApplicationExecutionObserver applicationExecutionObserver() {
 		return new McpApplicationExecutionObserver() {
-			private final AtomicLong lastCapacityDiagnostic = new AtomicLong(Long.MIN_VALUE);
+			private final @NonNull AtomicLong lastCapacityDiagnostic = new AtomicLong(Long.MIN_VALUE);
 			@Override
-			public LifecycleScope enterLifecycleExecution() {
+			public @NonNull LifecycleScope enterLifecycleExecution() {
 				LifecycleExecutionContext.Scope scope = enterCallbackExecution();
 				return scope == null ? () -> {} : scope::close;
 			}
@@ -871,7 +871,7 @@ final class DefaultMcpServer implements McpServer {
 	}
 
 	@NonNull
-	private Optional<SkillsPlan> skillsPlan(@NonNull McpEndpoint endpoint) {
+	private Optional<@NonNull SkillsPlan> skillsPlan(@NonNull McpEndpoint endpoint) {
 		if (endpoint.skillIndex().registrations().isEmpty()
 				&& endpoint.getSkillListHandler().isEmpty()) return Optional.empty();
 		McpSkillPolicyEvaluator evaluator = new McpSkillPolicyEvaluator(endpoint,
@@ -883,30 +883,30 @@ final class DefaultMcpServer implements McpServer {
 				invocation -> invokeSkills(endpoint, evaluator, invocation)));
 	}
 
-	private boolean skillsDependOnLanguage(McpEndpoint endpoint) {
+	private boolean skillsDependOnLanguage(@NonNull McpEndpoint endpoint) {
 		return this.skillVariantSelector != null || endpoint.getSkillGroups().stream()
 				.anyMatch(group -> !group.getSkillRegistrations().isEmpty());
 	}
 
-	private boolean skillsRequirePrivateCache(McpEndpoint endpoint) {
+	private boolean skillsRequirePrivateCache(@NonNull McpEndpoint endpoint) {
 		return this.localizer != null || this.catalogAccessPolicyExplicitlyConfigured
 				|| this.skillAccessPolicyExplicitlyConfigured || skillsDependOnLanguage(endpoint)
 				|| endpoint.getSkillListHandler().isPresent();
 	}
 
-	private CachePlan effectiveSkillCachePlan(McpEndpoint endpoint, McpCachePolicy policy) {
+	private @NonNull CachePlan effectiveSkillCachePlan(@NonNull McpEndpoint endpoint, @NonNull McpCachePolicy policy) {
 		return skillsRequirePrivateCache(endpoint) ? new CachePlan(0L, CacheScope.PRIVATE) : toCachePlan(policy);
 	}
 
-	private ResourceListInvocationResult invokeSkills(McpEndpoint endpoint,
-			McpSkillPolicyEvaluator evaluator, SkillsInvocation invocation) throws Exception {
+	private @NonNull ResourceListInvocationResult invokeSkills(@NonNull McpEndpoint endpoint,
+			@NonNull McpSkillPolicyEvaluator evaluator, @NonNull SkillsInvocation invocation) throws Exception {
 		try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
 			return invokeSkillsWhileMarked(endpoint, evaluator, invocation);
 		}
 	}
 
-	private ResourceListInvocationResult invokeSkillsWhileMarked(McpEndpoint endpoint,
-			McpSkillPolicyEvaluator evaluator, SkillsInvocation invocation) throws Exception {
+	private @NonNull ResourceListInvocationResult invokeSkillsWhileMarked(@NonNull McpEndpoint endpoint,
+			@NonNull McpSkillPolicyEvaluator evaluator, @NonNull SkillsInvocation invocation) throws Exception {
 		PromptInvocation base = invocation.base();
 		McpRequestContext request = base.requestContext();
 		List<Locale.LanguageRange> ranges = McpLocaleSupport.boundedLanguageRanges(
@@ -995,8 +995,8 @@ final class DefaultMcpServer implements McpServer {
 		return ResourceListInvocationResult.complete(McpJsonObject.fromMembers(fields), complete.getMetadata());
 	}
 
-	private static ResourceListInvocationResult skillResult(
-			com.soklet.internal.mcp.protocol.McpJsonObject result, CachePlan cache) {
+	private static @NonNull ResourceListInvocationResult skillResult(
+			com.soklet.internal.mcp.protocol.@NonNull McpJsonObject result, @NonNull CachePlan cache) {
 		Map<String, McpJsonValue> fields = new LinkedHashMap<>(
 				((McpJsonObject) McpPublicJsonValueConverter.toPublic(result)).getMembers());
 		fields.remove("resultType");
@@ -1060,7 +1060,7 @@ final class DefaultMcpServer implements McpServer {
 		// policy.  Initialize the shared feature carrier only on the first actual
 		// policy/localization use, and memoize both success and failure.
 		class LazyCatalogAccess {
-			private final ReentrantLock initializationLock = new ReentrantLock();
+			private final @NonNull ReentrantLock initializationLock = new ReentrantLock();
 			private boolean initialized;
 			private @Nullable Throwable failure;
 			private @Nullable McpInvocationFeatures invocationFeatures;
@@ -1526,10 +1526,10 @@ final class DefaultMcpServer implements McpServer {
 		Optional<String> negotiatedLocale = contentLanguageTag(context.getLocale());
 		McpCanonicalLocalizationPlan.ResponsePlan resolvedPlan = responsePlan.orElseThrow();
 		return new McpRuntimeCatalogLocalizer.PageSession() {
-			private final ReentrantLock cacheLock = new ReentrantLock();
-			private final Map<McpLocalizableText, McpLocalizationResult> cachedResults = new LinkedHashMap<>();
+			private final @NonNull ReentrantLock cacheLock = new ReentrantLock();
+			private final @NonNull Map<@NonNull McpLocalizableText, @NonNull McpLocalizationResult> cachedResults = new LinkedHashMap<>();
 			private int distinctLookupCount;
-			private final McpLocalizationContext cachedContext = McpLocalizationContext
+			private final @NonNull McpLocalizationContext cachedContext = McpLocalizationContext
 					.withLocale(context.getLocale(), text -> {
 						cacheLock.lock();
 						try {
@@ -1714,19 +1714,19 @@ final class DefaultMcpServer implements McpServer {
 	@NonNull
 	private CorsAuthorizer lifecycleCorsAuthorizer() {
 		return new CorsAuthorizer() {
-			@Override public Optional<CorsResponse> authorize(Request request, Cors cors) {
+			@Override public @NonNull Optional<@NonNull CorsResponse> authorize(@NonNull Request request, @NonNull Cors cors) {
 				try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
 					return corsAuthorizer.authorize(request, cors);
 				}
 			}
-			@Override public Optional<CorsPreflightResponse> authorizePreflight(Request request, CorsPreflight cors,
-					Map<HttpMethod, ResourceMethod> methods) {
+			@Override public @NonNull Optional<@NonNull CorsPreflightResponse> authorizePreflight(@NonNull Request request, @NonNull CorsPreflight cors,
+					@NonNull Map<@NonNull HttpMethod, @NonNull ResourceMethod> methods) {
 				try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
 					return corsAuthorizer.authorizePreflight(request, cors, methods);
 				}
 			}
-			@Override public Optional<CorsPreflightResponse> authorizePreflight(Request request, CorsPreflight cors,
-					Set<HttpMethod> methods) {
+			@Override public @NonNull Optional<@NonNull CorsPreflightResponse> authorizePreflight(@NonNull Request request, @NonNull CorsPreflight cors,
+					@NonNull Set<@NonNull HttpMethod> methods) {
 				try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
 					return corsAuthorizer.authorizePreflight(request, cors, methods);
 				}
@@ -1909,7 +1909,7 @@ final class DefaultMcpServer implements McpServer {
 	}
 
 	@SuppressWarnings("unchecked")
-	private static <E extends Throwable> void throwStartupFailure(
+	private static <E extends @NonNull Throwable> void throwStartupFailure(
 			@NonNull Throwable failure) throws E {
 		throw (E) requireNonNull(failure);
 	}
@@ -3360,7 +3360,7 @@ final class DefaultMcpServer implements McpServer {
 			@NonNull Optional<@NonNull String> resourceListCursor,
 			@Nullable List<@NonNull String> acceptLanguageValues,
 			@NonNull Optional<@NonNull String> skillListCursor,
-			@Nullable List<Locale.LanguageRange> boundedLanguageRanges) {
+			@Nullable List<Locale.@NonNull LanguageRange> boundedLanguageRanges) {
 		McpLocalizer configuredLocalizer = this.localizer;
 
 		if (configuredLocalizer == null) {
@@ -4133,8 +4133,8 @@ final class DefaultMcpServer implements McpServer {
 	}
 
 	private static void addContentAnnotationsAndMetadata(
-			@NonNull Map<String, McpJsonValue> fields,
-			@NonNull Optional<McpContentAnnotations> annotations,
+			@NonNull Map<@NonNull String, @NonNull McpJsonValue> fields,
+			@NonNull Optional<@NonNull McpContentAnnotations> annotations,
 			@NonNull McpJsonObject metadata) {
 		annotations.ifPresent(value ->
 				fields.put("annotations", contentAnnotationsToJson(value)));
@@ -4258,12 +4258,12 @@ final class DefaultMcpServer implements McpServer {
 	private RequestObservationAdapter requestObservationAdapter() {
 		return new RequestObservationAdapter() {
 			@Override
-			public RequestObservation didStartRequest(RequestObservationInput input) {
+			public @NonNull RequestObservation didStartRequest(@NonNull RequestObservationInput input) {
 				return didStartRequestObservation(input);
 			}
 
 			@Override
-			public Optional<McpRequestContext> contextForOmittedRequest(RequestObservationInput input) {
+			public @NonNull Optional<@NonNull McpRequestContext> contextForOmittedRequest(@NonNull RequestObservationInput input) {
 				try (LifecycleExecutionContext.Scope ignored = enterCallbackExecution()) {
 					return Optional.of(new DefaultMcpRequestContext(requireNonNull(input),
 							securityKeyManagers, instanceProvider));
@@ -4492,9 +4492,9 @@ final class DefaultMcpServer implements McpServer {
 		@NonNull
 		private final IdentityHashMap<@NonNull McpMetricEventDeliveryEntry, @NonNull MetricTransition> deferredEvents;
 		@NonNull
-		private final ThreadLocal<MetricTransition> currentTransition;
+		private final ThreadLocal<@Nullable MetricTransition> currentTransition;
 		@NonNull
-		private final ThreadLocal<RequestMetricSequence> currentSequence;
+		private final ThreadLocal<@Nullable RequestMetricSequence> currentSequence;
 		private int deferralDepth;
 		private boolean delivering;
 		private boolean asynchronousDrainRequired;

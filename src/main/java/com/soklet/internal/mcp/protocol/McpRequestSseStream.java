@@ -446,7 +446,7 @@ final class McpRequestSseStream {
 		channel.close(requireNonNull(reason), cause);
 	}
 
-	Optional<McpOutboundChannel.@NonNull Snapshot> snapshot() {
+	@NonNull Optional<McpOutboundChannel.@NonNull Snapshot> snapshot() {
 		return channel.snapshot();
 	}
 

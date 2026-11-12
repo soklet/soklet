@@ -49,115 +49,115 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 final class DefaultMetricsCollector implements MetricsCollector {
-	private static final String UNKNOWN_STATUS_CLASS = "unknown";
+	private static final @NonNull String UNKNOWN_STATUS_CLASS = "unknown";
 	private static final int DEFAULT_METRICS_MAP_CAPACITY = 8_192;
 
-	private static final long[] HTTP_LATENCY_BUCKETS_NANOS = nanosFromMillis(
+	private static final long @NonNull [] HTTP_LATENCY_BUCKETS_NANOS = nanosFromMillis(
 			1, 2, 5, 10, 25, 50, 100, 200, 400, 800, 1500, 3000, 7000, 15000);
 
 	// Cover the default 60-second MCP request timeout and longer configured deadlines.
-	private static final long[] MCP_REQUEST_DURATION_BUCKETS_NANOS = nanosFromMillis(
+	private static final long @NonNull [] MCP_REQUEST_DURATION_BUCKETS_NANOS = nanosFromMillis(
 			1, 2, 5, 10, 25, 50, 100, 200, 400, 800, 1500, 3000, 7000, 15000,
 			30000, 60000, 120000, 300000);
 
-	private static final long[] HTTP_BODY_BYTES_BUCKETS = new long[]{
+	private static final long @NonNull [] HTTP_BODY_BYTES_BUCKETS = new long[]{
 			0, 128, 256, 512, 1024, 2048, 4096, 8192,
 			16384, 32768, 65536, 131072, 262144, 524288,
 			1048576, 2097152, 4194304, 8388608
 	};
 
-	private static final long[] SSE_STREAM_DURATION_BUCKETS_NANOS = nanosFromSeconds(
+	private static final long @NonNull [] SSE_STREAM_DURATION_BUCKETS_NANOS = nanosFromSeconds(
 			1, 5, 10, 30, 60, 120, 300, 600, 1800, 3600, 7200, 14400);
 
-	private static final long[] SSE_TIME_TO_FIRST_EVENT_BUCKETS_NANOS = nanosFromMillis(
+	private static final long @NonNull [] SSE_TIME_TO_FIRST_EVENT_BUCKETS_NANOS = nanosFromMillis(
 			1, 2, 5, 10, 25, 50, 100, 200, 500, 1000, 3000, 10000);
 
-	private static final long[] SSE_EVENT_WRITE_DURATION_BUCKETS_NANOS = nanosFromMillis(
+	private static final long @NonNull [] SSE_EVENT_WRITE_DURATION_BUCKETS_NANOS = nanosFromMillis(
 			0, 1, 2, 5, 10, 25, 50, 100, 200, 400, 800, 1500, 3000, 7000, 15000, 30000);
 
-	private static final long[] SSE_QUEUE_DEPTH_BUCKETS = new long[]{
+	private static final long @NonNull [] SSE_QUEUE_DEPTH_BUCKETS = new long[]{
 			0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024
 	};
 
 
-	private final ConcurrentHashMap<IdentityKey<Request>, RequestState> requestsInFlightByIdentity;
-	private final ConcurrentHashMap<Object, RequestIdStateBucket> requestsInFlightById;
-	private final ThreadLocal<RequestState> requestStateByThread;
-	private final ConcurrentLruMap<RequestReadFailureKey, LongAdder> httpRequestReadFailuresByReason;
-	private final ConcurrentLruMap<RequestRejectionKey, LongAdder> httpRequestRejectionsByReason;
-	private final ConcurrentLruMap<RequestReadFailureKey, LongAdder> sseRequestReadFailuresByReason;
-	private final ConcurrentLruMap<RequestRejectionKey, LongAdder> sseRequestRejectionsByReason;
-	private final ConcurrentLruMap<HttpServerRouteStatusKey, Histogram> httpRequestDurationByRouteStatus;
-	private final ConcurrentLruMap<HttpServerRouteStatusKey, Histogram> httpHandlerDurationByRouteStatus;
-	private final ConcurrentLruMap<HttpServerRouteStatusKey, Histogram> httpTimeToFirstByteByRouteStatus;
-	private final ConcurrentLruMap<HttpServerRouteKey, Histogram> httpRequestBodyBytesByRoute;
-	private final ConcurrentLruMap<HttpServerRouteStatusKey, Histogram> httpResponseBodyBytesByRouteStatus;
-	private final ConcurrentLruMap<HttpResponseStreamTerminationKey, LongAdder> httpResponseStreamTerminations;
-	private final ConcurrentHashMap<IdentityKey<SseConnection>, SseConnectionState> sseConnectionsByIdentity;
-	private final ConcurrentLruMap<SseEventRouteKey, LongAdder> sseHandshakesAcceptedByRoute;
-	private final ConcurrentLruMap<SseEventRouteHandshakeFailureKey, LongAdder> sseHandshakesRejectedByRouteAndReason;
-	private final ConcurrentLruMap<SseEventRouteEnqueueOutcomeKey, LongAdder> sseEventEnqueueOutcomesByRoute;
-	private final ConcurrentLruMap<SseCommentRouteEnqueueOutcomeKey, LongAdder> sseCommentEnqueueOutcomesByRoute;
-	private final ConcurrentLruMap<SseEventRouteDropKey, LongAdder> sseEventDropsByRouteAndReason;
-	private final ConcurrentLruMap<SseCommentRouteDropKey, LongAdder> sseCommentDropsByRouteAndReason;
-	private final ConcurrentLruMap<SseEventRouteKey, Histogram> sseTimeToFirstEventByRoute;
-	private final ConcurrentLruMap<SseEventRouteKey, Histogram> sseEventWriteDurationByRoute;
-	private final ConcurrentLruMap<SseEventRouteKey, Histogram> sseEventDeliveryLagByRoute;
-	private final ConcurrentLruMap<SseEventRouteKey, Histogram> sseEventSizeByRoute;
-	private final ConcurrentLruMap<SseEventRouteKey, Histogram> sseQueueDepthByRoute;
-	private final ConcurrentLruMap<SseCommentRouteKey, Histogram> sseCommentDeliveryLagByRoute;
-	private final ConcurrentLruMap<SseCommentRouteKey, Histogram> sseCommentSizeByRoute;
-	private final ConcurrentLruMap<SseCommentRouteKey, Histogram> sseCommentQueueDepthByRoute;
-	private final ConcurrentLruMap<SseStreamRouteTerminationKey, Histogram> sseStreamDurationByRouteAndReason;
-	private final LongAdder activeRequests;
-	private final LongAdder activeSseStreams;
-	private final LongAdder httpConnectionsAccepted;
-	private final LongAdder httpConnectionsRejected;
-	private final LongAdder sseConnectionsAccepted;
-	private final LongAdder sseConnectionsRejected;
-	private final ConcurrentLruMap<TransportFailureKey, LongAdder> transportFailuresByServerTypeAndReason;
-	private final AtomicLong mcpActiveHandlerExecutions;
-	private final AtomicLong mcpHandlerQueueDepth;
-	private final LongAdder mcpHandlerCapacityRejections;
-	private final Map<ShutdownComponentDisposition, LongAdder>
+	private final @NonNull ConcurrentHashMap<@NonNull IdentityKey<@NonNull Request>, @NonNull RequestState> requestsInFlightByIdentity;
+	private final @NonNull ConcurrentHashMap<@NonNull Object, @NonNull RequestIdStateBucket> requestsInFlightById;
+	private final @NonNull ThreadLocal<@Nullable RequestState> requestStateByThread;
+	private final @NonNull ConcurrentLruMap<@NonNull RequestReadFailureKey, @NonNull LongAdder> httpRequestReadFailuresByReason;
+	private final @NonNull ConcurrentLruMap<@NonNull RequestRejectionKey, @NonNull LongAdder> httpRequestRejectionsByReason;
+	private final @NonNull ConcurrentLruMap<@NonNull RequestReadFailureKey, @NonNull LongAdder> sseRequestReadFailuresByReason;
+	private final @NonNull ConcurrentLruMap<@NonNull RequestRejectionKey, @NonNull LongAdder> sseRequestRejectionsByReason;
+	private final @NonNull ConcurrentLruMap<@NonNull HttpServerRouteStatusKey, @NonNull Histogram> httpRequestDurationByRouteStatus;
+	private final @NonNull ConcurrentLruMap<@NonNull HttpServerRouteStatusKey, @NonNull Histogram> httpHandlerDurationByRouteStatus;
+	private final @NonNull ConcurrentLruMap<@NonNull HttpServerRouteStatusKey, @NonNull Histogram> httpTimeToFirstByteByRouteStatus;
+	private final @NonNull ConcurrentLruMap<@NonNull HttpServerRouteKey, @NonNull Histogram> httpRequestBodyBytesByRoute;
+	private final @NonNull ConcurrentLruMap<@NonNull HttpServerRouteStatusKey, @NonNull Histogram> httpResponseBodyBytesByRouteStatus;
+	private final @NonNull ConcurrentLruMap<@NonNull HttpResponseStreamTerminationKey, @NonNull LongAdder> httpResponseStreamTerminations;
+	private final @NonNull ConcurrentHashMap<@NonNull IdentityKey<@NonNull SseConnection>, @NonNull SseConnectionState> sseConnectionsByIdentity;
+	private final @NonNull ConcurrentLruMap<@NonNull SseEventRouteKey, @NonNull LongAdder> sseHandshakesAcceptedByRoute;
+	private final @NonNull ConcurrentLruMap<@NonNull SseEventRouteHandshakeFailureKey, @NonNull LongAdder> sseHandshakesRejectedByRouteAndReason;
+	private final @NonNull ConcurrentLruMap<@NonNull SseEventRouteEnqueueOutcomeKey, @NonNull LongAdder> sseEventEnqueueOutcomesByRoute;
+	private final @NonNull ConcurrentLruMap<@NonNull SseCommentRouteEnqueueOutcomeKey, @NonNull LongAdder> sseCommentEnqueueOutcomesByRoute;
+	private final @NonNull ConcurrentLruMap<@NonNull SseEventRouteDropKey, @NonNull LongAdder> sseEventDropsByRouteAndReason;
+	private final @NonNull ConcurrentLruMap<@NonNull SseCommentRouteDropKey, @NonNull LongAdder> sseCommentDropsByRouteAndReason;
+	private final @NonNull ConcurrentLruMap<@NonNull SseEventRouteKey, @NonNull Histogram> sseTimeToFirstEventByRoute;
+	private final @NonNull ConcurrentLruMap<@NonNull SseEventRouteKey, @NonNull Histogram> sseEventWriteDurationByRoute;
+	private final @NonNull ConcurrentLruMap<@NonNull SseEventRouteKey, @NonNull Histogram> sseEventDeliveryLagByRoute;
+	private final @NonNull ConcurrentLruMap<@NonNull SseEventRouteKey, @NonNull Histogram> sseEventSizeByRoute;
+	private final @NonNull ConcurrentLruMap<@NonNull SseEventRouteKey, @NonNull Histogram> sseQueueDepthByRoute;
+	private final @NonNull ConcurrentLruMap<@NonNull SseCommentRouteKey, @NonNull Histogram> sseCommentDeliveryLagByRoute;
+	private final @NonNull ConcurrentLruMap<@NonNull SseCommentRouteKey, @NonNull Histogram> sseCommentSizeByRoute;
+	private final @NonNull ConcurrentLruMap<@NonNull SseCommentRouteKey, @NonNull Histogram> sseCommentQueueDepthByRoute;
+	private final @NonNull ConcurrentLruMap<@NonNull SseStreamRouteTerminationKey, @NonNull Histogram> sseStreamDurationByRouteAndReason;
+	private final @NonNull LongAdder activeRequests;
+	private final @NonNull LongAdder activeSseStreams;
+	private final @NonNull LongAdder httpConnectionsAccepted;
+	private final @NonNull LongAdder httpConnectionsRejected;
+	private final @NonNull LongAdder sseConnectionsAccepted;
+	private final @NonNull LongAdder sseConnectionsRejected;
+	private final @NonNull ConcurrentLruMap<@NonNull TransportFailureKey, @NonNull LongAdder> transportFailuresByServerTypeAndReason;
+	private final @NonNull AtomicLong mcpActiveHandlerExecutions;
+	private final @NonNull AtomicLong mcpHandlerQueueDepth;
+	private final @NonNull LongAdder mcpHandlerCapacityRejections;
+	private final @NonNull Map<@NonNull ShutdownComponentDisposition, @NonNull LongAdder>
 			mcpServerStopsByDisposition;
-	private final LongAdder mcpConnectionsAccepted;
-	private final LongAdder mcpConnectionsRejected;
-	private final Map<TransportFailureReason, LongAdder>
+	private final @NonNull LongAdder mcpConnectionsAccepted;
+	private final @NonNull LongAdder mcpConnectionsRejected;
+	private final @NonNull Map<@NonNull TransportFailureReason, @NonNull LongAdder>
 			mcpTransportFailuresByReason;
-	private final LongAdder mcpServerStarts;
-	private final LongAdder mcpRequestsAccepted;
-	private final LongAdder mcpRequestsRejected;
-	private final AtomicLong mcpActiveRequests;
-	private final ConcurrentLruMap<McpMetricsSnapshot.RequestOutcomeKey,
-			LongAdder> mcpRequestsByOutcome;
-	private final ConcurrentLruMap<McpMetricsSnapshot.RequestOutcomeKey,
-			Histogram> mcpRequestDurationsByOutcome;
-	private final AtomicLong mcpActiveRequestStreams;
-	private final ConcurrentLruMap<McpMetricsSnapshot.RequestStreamTerminationKey,
-			Histogram> mcpRequestStreamDurationsByReason;
-	private final AtomicLong mcpActiveSubscriptions;
-	private final ConcurrentLruMap<McpMetricsSnapshot.SubscriptionTerminationKey,
-			Histogram> mcpSubscriptionDurationsByReason;
-	private final ConcurrentLruMap<McpMetricsSnapshot.SubscriptionMaintenanceKey,
-			LongAdder> mcpSubscriptionMaintenanceByWorkAndOutcome;
-	private final ConcurrentLruMap<McpMetricsSnapshot.EndpointMethodKey,
-			LongAdder> mcpCancelationsSignaledByEndpointAndMethod;
-	private final ConcurrentLruMap<McpMetricsSnapshot.EndpointMethodKey,
-			LongAdder> mcpProgressEmittedByEndpointAndMethod;
-	private final LongAdder mcpKeepAlivesEmitted;
-	private final ConcurrentLruMap<Integer, LongAdder> mcpProtocolErrorsByCode;
-	private final ConcurrentLruMap<McpMetricsSnapshot.EndpointMethodKey,
-			LongAdder> mcpUnknownMirroredHeadersByEndpointAndMethod;
-	private final AtomicBoolean includeSseMetrics;
-	private final AtomicBoolean includeMcpHandlerMetrics;
-	private final AtomicBoolean includeMcpTransportMetrics;
-	private final AtomicBoolean includeMcpServerMetrics;
-	private final AtomicBoolean includeMcpRequestBoundaryMetrics;
-	private final AtomicBoolean includeMcpRequestLifecycleMetrics;
-	private final AtomicBoolean includeMcpRequestStreamLifecycleMetrics;
-	private final AtomicBoolean includeMcpSubscriptionLifecycleMetrics;
-	private final AtomicBoolean includeMcpKeepAliveMetrics;
+	private final @NonNull LongAdder mcpServerStarts;
+	private final @NonNull LongAdder mcpRequestsAccepted;
+	private final @NonNull LongAdder mcpRequestsRejected;
+	private final @NonNull AtomicLong mcpActiveRequests;
+	private final @NonNull ConcurrentLruMap<McpMetricsSnapshot.@NonNull RequestOutcomeKey,
+			@NonNull LongAdder> mcpRequestsByOutcome;
+	private final @NonNull ConcurrentLruMap<McpMetricsSnapshot.@NonNull RequestOutcomeKey,
+			@NonNull Histogram> mcpRequestDurationsByOutcome;
+	private final @NonNull AtomicLong mcpActiveRequestStreams;
+	private final @NonNull ConcurrentLruMap<McpMetricsSnapshot.@NonNull RequestStreamTerminationKey,
+			@NonNull Histogram> mcpRequestStreamDurationsByReason;
+	private final @NonNull AtomicLong mcpActiveSubscriptions;
+	private final @NonNull ConcurrentLruMap<McpMetricsSnapshot.@NonNull SubscriptionTerminationKey,
+			@NonNull Histogram> mcpSubscriptionDurationsByReason;
+	private final @NonNull ConcurrentLruMap<McpMetricsSnapshot.@NonNull SubscriptionMaintenanceKey,
+			@NonNull LongAdder> mcpSubscriptionMaintenanceByWorkAndOutcome;
+	private final @NonNull ConcurrentLruMap<McpMetricsSnapshot.@NonNull EndpointMethodKey,
+			@NonNull LongAdder> mcpCancelationsSignaledByEndpointAndMethod;
+	private final @NonNull ConcurrentLruMap<McpMetricsSnapshot.@NonNull EndpointMethodKey,
+			@NonNull LongAdder> mcpProgressEmittedByEndpointAndMethod;
+	private final @NonNull LongAdder mcpKeepAlivesEmitted;
+	private final @NonNull ConcurrentLruMap<@NonNull Integer, @NonNull LongAdder> mcpProtocolErrorsByCode;
+	private final @NonNull ConcurrentLruMap<McpMetricsSnapshot.@NonNull EndpointMethodKey,
+			@NonNull LongAdder> mcpUnknownMirroredHeadersByEndpointAndMethod;
+	private final @NonNull AtomicBoolean includeSseMetrics;
+	private final @NonNull AtomicBoolean includeMcpHandlerMetrics;
+	private final @NonNull AtomicBoolean includeMcpTransportMetrics;
+	private final @NonNull AtomicBoolean includeMcpServerMetrics;
+	private final @NonNull AtomicBoolean includeMcpRequestBoundaryMetrics;
+	private final @NonNull AtomicBoolean includeMcpRequestLifecycleMetrics;
+	private final @NonNull AtomicBoolean includeMcpRequestStreamLifecycleMetrics;
+	private final @NonNull AtomicBoolean includeMcpSubscriptionLifecycleMetrics;
+	private final @NonNull AtomicBoolean includeMcpKeepAliveMetrics;
 
 	@NonNull
 	public static DefaultMetricsCollector defaultInstance() {
@@ -1026,7 +1026,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 	@Override
 	@NonNull
-	public Optional<Snapshot> snapshot() {
+	public Optional<@NonNull Snapshot> snapshot() {
 		return Optional.of(Snapshot.builder()
 				.activeRequests(getActiveRequests())
 				.activeSseStreams(getActiveSseStreams())
@@ -1066,7 +1066,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 	@Override
 	@NonNull
-	public Optional<String> snapshotText(@NonNull SnapshotTextOptions options) {
+	public Optional<@NonNull String> snapshotText(@NonNull SnapshotTextOptions options) {
 		requireNonNull(options);
 
 		Snapshot snapshot = snapshot().orElse(null);
@@ -1608,16 +1608,16 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		return UNKNOWN_STATUS_CLASS;
 	}
 
-	@NonNull
-	private static long[] nanosFromMillis(int... millis) {
+
+	private static long @NonNull [] nanosFromMillis(int @NonNull ... millis) {
 		long[] nanos = new long[millis.length];
 		for (int i = 0; i < millis.length; i++)
 			nanos[i] = millis[i] * 1_000_000L;
 		return nanos;
 	}
 
-	@NonNull
-	private static long[] nanosFromSeconds(int... seconds) {
+
+	private static long @NonNull [] nanosFromSeconds(int @NonNull ... seconds) {
 		long[] nanos = new long[seconds.length];
 		for (int i = 0; i < seconds.length; i++)
 			nanos[i] = seconds[i] * 1_000_000_000L;
@@ -1655,9 +1655,9 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	}
 
 	@NonNull
-	private static <K> Histogram histogramFor(@NonNull Map<K, Histogram> map,
+	private static <K> Histogram histogramFor(@NonNull Map<K, @NonNull Histogram> map,
 																						@NonNull K key,
-																						@NonNull long[] buckets) {
+																						 long @NonNull [] buckets) {
 		requireNonNull(map);
 		requireNonNull(key);
 		requireNonNull(buckets);
@@ -1666,7 +1666,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	}
 
 	@NonNull
-	private static <K> LongAdder counterFor(@NonNull Map<K, LongAdder> map,
+	private static <K> LongAdder counterFor(@NonNull Map<K, @NonNull LongAdder> map,
 																					@NonNull K key) {
 		requireNonNull(map);
 		requireNonNull(key);
@@ -1675,7 +1675,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	}
 
 	@NonNull
-	private static <K> Map<@NonNull K, @NonNull HistogramSnapshot> snapshotMap(@NonNull Map<K, Histogram> map) {
+	private static <K> Map<@NonNull K, @NonNull HistogramSnapshot> snapshotMap(@NonNull Map<K, @NonNull Histogram> map) {
 		requireNonNull(map);
 
 		Map<K, HistogramSnapshot> snapshot = new ConcurrentHashMap<>(map.size());
@@ -1685,7 +1685,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	}
 
 	@NonNull
-	private static <K> Map<@NonNull K, @NonNull Long> snapshotCounterMap(@NonNull Map<K, LongAdder> map) {
+	private static <K> Map<@NonNull K, @NonNull Long> snapshotCounterMap(@NonNull Map<K, @NonNull LongAdder> map) {
 		requireNonNull(map);
 
 		Map<K, Long> snapshot = new ConcurrentHashMap<>(map.size());
@@ -1694,14 +1694,14 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		return snapshot;
 	}
 
-	private static <K> void resetMap(@NonNull Map<K, Histogram> map) {
+	private static <K> void resetMap(@NonNull Map<K, @NonNull Histogram> map) {
 		requireNonNull(map);
 
 		for (Histogram histogram : map.values())
 			histogram.reset();
 	}
 
-	private static <K> void resetCounterMap(@NonNull Map<K, LongAdder> map) {
+	private static <K> void resetCounterMap(@NonNull Map<K, @NonNull LongAdder> map) {
 		requireNonNull(map);
 
 		for (LongAdder counter : map.values())
@@ -1785,8 +1785,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	private static <K> void appendCounter(@NonNull StringBuilder sb,
 																				@NonNull String name,
 																				@NonNull String help,
-																				@NonNull Map<K, Long> counters,
-																				@NonNull Function<K, LabelSet> labelsProvider,
+																				@NonNull Map<K, @NonNull Long> counters,
+																				@NonNull Function<K, @NonNull LabelSet> labelsProvider,
 																				@NonNull SnapshotTextOptions options) {
 		requireNonNull(sb);
 		requireNonNull(name);
@@ -1833,8 +1833,8 @@ final class DefaultMetricsCollector implements MetricsCollector {
 	private static <K> void appendHistogram(@NonNull StringBuilder sb,
 																					@NonNull String name,
 																					@NonNull String help,
-																					@NonNull Map<K, HistogramSnapshot> histograms,
-																					@NonNull Function<K, LabelSet> labelsProvider,
+																					@NonNull Map<K, @NonNull HistogramSnapshot> histograms,
+																					@NonNull Function<K, @NonNull LabelSet> labelsProvider,
 																					@NonNull SnapshotTextOptions options) {
 		requireNonNull(sb);
 		requireNonNull(name);
@@ -2360,9 +2360,9 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 	private static final class RequestState {
 		@NonNull
-		private final IdentityKey<Request> identityKey;
+		private final IdentityKey<@NonNull Request> identityKey;
 		@NonNull
-		private final Set<IdentityKey<Request>> identityKeys;
+		private final Set<@NonNull IdentityKey<@NonNull Request>> identityKeys;
 		@NonNull
 		private final Object requestId;
 		private final long startedAtNanos;
@@ -2382,7 +2382,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		@Nullable
 		private StreamMetricTerminal pendingStreamTerminal;
 
-		private RequestState(@NonNull IdentityKey<Request> identityKey,
+		private RequestState(@NonNull IdentityKey<@NonNull Request> identityKey,
 												 @NonNull Object requestId,
 												 long startedAtNanos,
 												 @NonNull HttpMethod method,
@@ -2405,16 +2405,16 @@ final class DefaultMetricsCollector implements MetricsCollector {
 		}
 
 		@NonNull
-		IdentityKey<Request> getIdentityKey() {
+		IdentityKey<@NonNull Request> getIdentityKey() {
 			return this.identityKey;
 		}
 
-		void addIdentityKey(@NonNull IdentityKey<Request> identityKey) {
+		void addIdentityKey(@NonNull IdentityKey<@NonNull Request> identityKey) {
 			this.identityKeys.add(requireNonNull(identityKey));
 		}
 
 		@NonNull
-		Set<IdentityKey<Request>> getIdentityKeys() {
+		Set<@NonNull IdentityKey<@NonNull Request>> getIdentityKeys() {
 			return this.identityKeys;
 		}
 
@@ -2457,7 +2457,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 	private static final class RequestIdStateBucket {
 		@NonNull
-		private final Set<RequestState> states;
+		private final Set<@NonNull RequestState> states;
 		private boolean collisionObserved;
 
 		private RequestIdStateBucket() {
@@ -2666,7 +2666,7 @@ final class DefaultMetricsCollector implements MetricsCollector {
 
 	@Nullable
 	private RequestState associateRequestIdentity(
-			@NonNull IdentityKey<Request> identityKey,
+			@NonNull IdentityKey<@NonNull Request> identityKey,
 			@NonNull RequestState state) {
 		requireNonNull(identityKey);
 		requireNonNull(state);

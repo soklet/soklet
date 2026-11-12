@@ -36,7 +36,7 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 @ThreadSafe
 @FunctionalInterface
-public interface StreamResourceFactory<T extends AutoCloseable> {
+public interface StreamResourceFactory<T extends @NonNull AutoCloseable> {
 	/**
 	 * Opens a resource for one streaming operation.
 	 *

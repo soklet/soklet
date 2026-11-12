@@ -36,7 +36,7 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 final class McpRuntimeTypedSchemaCompiler {
 	@NonNull
-	private final McpTypedSchemaCompiler<Type> schemaCompiler;
+	private final McpTypedSchemaCompiler<@NonNull Type> schemaCompiler;
 	@NonNull
 	private final McpRuntimeTypedJsonBindingCompiler bindingCompiler;
 	@NonNull

@@ -188,7 +188,7 @@ public final class ResponseCookie {
 	}
 
 	@NonNull
-	private static ParsedSetCookieAttributes parseSetCookieAttributes(@NonNull List<String> components) {
+	private static ParsedSetCookieAttributes parseSetCookieAttributes(@NonNull List<@NonNull String> components) {
 		ParsedSetCookieAttributes attributes = new ParsedSetCookieAttributes();
 
 		if (components.size() <= 1)
@@ -1005,17 +1005,17 @@ public final class ResponseCookie {
 		private Boolean partitioned = false;
 
 		@NonNull
-		private Optional<Instant> getExpires() {
+		private Optional<@NonNull Instant> getExpires() {
 			return Optional.ofNullable(this.expires);
 		}
 
 		@NonNull
-		private Optional<SameSite> getSameSite() {
+		private Optional<@NonNull SameSite> getSameSite() {
 			return Optional.ofNullable(this.sameSite);
 		}
 
 		@NonNull
-		private Optional<Priority> getPriority() {
+		private Optional<@NonNull Priority> getPriority() {
 			return Optional.ofNullable(this.priority);
 		}
 

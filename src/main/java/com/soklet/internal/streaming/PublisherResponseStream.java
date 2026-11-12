@@ -11,6 +11,7 @@
  */
 package com.soklet.internal.streaming;
 
+import org.jspecify.annotations.NonNull;
 import com.soklet.CallbackRegistration;
 import com.soklet.CancelationToken;
 import com.soklet.StreamingResponseBody;
@@ -36,18 +37,18 @@ import static java.util.Objects.requireNonNull;
  */
 public final class PublisherResponseStream implements Flow.Subscriber<ByteBuffer> {
 
-	private final Object lock = new Object();
-	private final CancelationToken cancelationToken;
-	private final ManagedResponseStream.Output output;
-	private final Runnable beginFinalization;
-	private final Consumer<Throwable> failureConsumer;
-	private final Consumer<Throwable> cleanupFailureConsumer;
+	private final @NonNull Object lock = new Object();
+	private final @NonNull CancelationToken cancelationToken;
+	private final ManagedResponseStream.@NonNull Output output;
+	private final @NonNull Runnable beginFinalization;
+	private final @NonNull Consumer<@NonNull Throwable> failureConsumer;
+	private final @NonNull Consumer<@NonNull Throwable> cleanupFailureConsumer;
 	private final StreamLifecycleCoordinator.@Nullable PublisherWork publisherWork;
-	private final Consumer<Runnable> callbackExecution;
-	private final CountDownLatch completed = new CountDownLatch(1);
-	private final CountDownLatch released = new CountDownLatch(1);
-	private final CountDownLatch cancelCompleted = new CountDownLatch(1);
-	private final AtomicReference<Throwable> failure = new AtomicReference<>();
+	private final @NonNull Consumer<@NonNull Runnable> callbackExecution;
+	private final @NonNull CountDownLatch completed = new CountDownLatch(1);
+	private final @NonNull CountDownLatch released = new CountDownLatch(1);
+	private final @NonNull CountDownLatch cancelCompleted = new CountDownLatch(1);
+	private final @NonNull AtomicReference<@Nullable Throwable> failure = new AtomicReference<>();
 	private Flow.@Nullable Subscription subscription;
 	private boolean acquisitionFailed;
 	private boolean terminal;
@@ -59,9 +60,9 @@ public final class PublisherResponseStream implements Flow.Subscriber<ByteBuffer
 	private boolean demandPending;
 	private int enteredCalls;
 
-	private PublisherResponseStream(CancelationToken cancelationToken, ManagedResponseStream.Output output,
-			StreamLifecycleCoordinator.@Nullable Reservation reservation, Runnable beginFinalization,
-			Consumer<Throwable> failureConsumer, Consumer<Throwable> cleanupFailureConsumer) {
+	private PublisherResponseStream(@NonNull CancelationToken cancelationToken, ManagedResponseStream.@NonNull Output output,
+			StreamLifecycleCoordinator.@Nullable Reservation reservation, @NonNull Runnable beginFinalization,
+			@NonNull Consumer<@NonNull Throwable> failureConsumer, @NonNull Consumer<@NonNull Throwable> cleanupFailureConsumer) {
 		this.cancelationToken = requireNonNull(cancelationToken);
 		this.output = requireNonNull(output);
 		this.beginFinalization = requireNonNull(beginFinalization);
@@ -71,10 +72,10 @@ public final class PublisherResponseStream implements Flow.Subscriber<ByteBuffer
 		this.publisherWork = reservation == null ? null : reservation.retainPublisher();
 	}
 
-	public static void copy(StreamingResponseBody.PublisherBody body, CancelationToken cancelationToken,
-			ManagedResponseStream.Output output, StreamLifecycleCoordinator.@Nullable Reservation reservation,
-			Runnable beginFinalization, Consumer<Throwable> failureConsumer,
-			Consumer<Throwable> cleanupFailureConsumer) throws Exception {
+	public static void copy(StreamingResponseBody.@NonNull PublisherBody body, @NonNull CancelationToken cancelationToken,
+			ManagedResponseStream.@NonNull Output output, StreamLifecycleCoordinator.@Nullable Reservation reservation,
+			@NonNull Runnable beginFinalization, @NonNull Consumer<@NonNull Throwable> failureConsumer,
+			@NonNull Consumer<@NonNull Throwable> cleanupFailureConsumer) throws Exception {
 		requireNonNull(body);
 		cancelationToken.throwIfCanceled();
 		PublisherResponseStream stream;
@@ -90,7 +91,7 @@ public final class PublisherResponseStream implements Flow.Subscriber<ByteBuffer
 		stream.consume(body.getPublisher());
 	}
 
-	private void consume(Flow.Publisher<ByteBuffer> publisher) throws Exception {
+	private void consume(Flow.@NonNull Publisher<@NonNull ByteBuffer> publisher) throws Exception {
 		// Keep the obligation alive while installing the registration and entering
 		// subscribe, including synchronous reentrant terminal callbacks.
 		synchronized (this.lock) { this.enteredCalls++; }
@@ -150,7 +151,7 @@ public final class PublisherResponseStream implements Flow.Subscriber<ByteBuffer
 	}
 
 	@Override
-	public void onSubscribe(Flow.Subscription subscription) {
+	public void onSubscribe(Flow.@NonNull Subscription subscription) {
 		requireNonNull(subscription);
 		boolean duplicate;
 		boolean same;
@@ -185,7 +186,7 @@ public final class PublisherResponseStream implements Flow.Subscriber<ByteBuffer
 	}
 
 	@Override
-	public void onNext(ByteBuffer item) {
+	public void onNext(@NonNull ByteBuffer item) {
 		if (!enterSignal()) return;
 		try {
 			synchronized (this.lock) {
@@ -208,7 +209,7 @@ public final class PublisherResponseStream implements Flow.Subscriber<ByteBuffer
 	}
 
 	@Override
-	public void onError(Throwable throwable) {
+	public void onError(@NonNull Throwable throwable) {
 		end(throwable == null ? new IllegalStateException("Publisher failed without an error") : throwable);
 	}
 
@@ -305,7 +306,7 @@ public final class PublisherResponseStream implements Flow.Subscriber<ByteBuffer
 		}
 	}
 
-	private void cancelRejectedSubscription(Flow.Subscription rejected) {
+	private void cancelRejectedSubscription(Flow.@NonNull Subscription rejected) {
 		try {
 			this.callbackExecution.accept(rejected::cancel);
 		} catch (Throwable throwable) {
@@ -314,7 +315,7 @@ public final class PublisherResponseStream implements Flow.Subscriber<ByteBuffer
 		}
 	}
 
-	private void fail(Throwable throwable) {
+	private void fail(@NonNull Throwable throwable) {
 		boolean first = this.failure.compareAndSet(null, throwable);
 		boolean alreadyCanceled = this.cancelationToken.isCanceled();
 		if (first) this.failureConsumer.accept(throwable);

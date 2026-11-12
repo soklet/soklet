@@ -60,7 +60,7 @@ public final class SokletSimulator {
 	 */
 	@NotThreadSafe
 	@FunctionalInterface
-	public interface Simulation<E extends Throwable> {
+	public interface Simulation<E extends @NonNull Throwable> {
 		/**
 		 * Executes against the transport-isolated simulator.
 		 *
@@ -101,7 +101,7 @@ public final class SokletSimulator {
 	 * by shutdown that cannot be proven complete
 	 */
 	@NonNull
-	public static <E extends Throwable> ShutdownResult run(
+	public static <E extends @NonNull Throwable> ShutdownResult run(
 			@NonNull SokletConfig sokletConfig,
 			@NonNull Simulation<@NonNull E> simulation) throws E {
 		SokletConfig exactConfig = requireNonNull(sokletConfig);
@@ -127,7 +127,7 @@ public final class SokletSimulator {
 	 * @throws IllegalStateException if {@code simulatorConfig} was already claimed
 	 */
 	@NonNull
-	public static <E extends Throwable> ShutdownResult run(
+	public static <E extends @NonNull Throwable> ShutdownResult run(
 			@NonNull SimulatorConfig simulatorConfig,
 			@NonNull Simulation<@NonNull E> simulation) throws E {
 		return ShutdownResult.fromInternal(run(simulatorConfig, simulation,
@@ -135,7 +135,7 @@ public final class SokletSimulator {
 	}
 
 	@NonNull
-	static <E extends Throwable> InternalShutdownResult run(
+	static <E extends @NonNull Throwable> InternalShutdownResult run(
 			@NonNull SimulatorConfig simulatorConfig,
 			@NonNull Simulation<E> simulation,
 			@NonNull NanoClock clock,
@@ -146,7 +146,7 @@ public final class SokletSimulator {
 	}
 
 	@NonNull
-	static <E extends Throwable> InternalShutdownResult run(
+	static <E extends @NonNull Throwable> InternalShutdownResult run(
 			@NonNull SimulatorConfig simulatorConfig,
 			@NonNull Simulation<E> simulation,
 			@NonNull NanoClock clock,
@@ -163,7 +163,7 @@ public final class SokletSimulator {
 	}
 
 	@SuppressWarnings("unchecked")
-	private static <E extends Throwable> void throwBodyFailure(
+	private static <E extends @NonNull Throwable> void throwBodyFailure(
 			@NonNull Throwable failure) throws E {
 		throw (E) requireNonNull(failure);
 	}
@@ -218,7 +218,7 @@ public final class SokletSimulator {
 		}
 
 		@NonNull
-		private <E extends Throwable> InternalShutdownResult run(
+		private <E extends @NonNull Throwable> InternalShutdownResult run(
 				@NonNull SimulatorConfig simulatorConfig,
 				@NonNull Simulation<E> simulation) throws E {
 			if (!simulatorConfig.belongsTo(this.configurationIdentity))
@@ -352,7 +352,7 @@ public final class SokletSimulator {
 		}
 
 		@NonNull
-		private List<ScopeParticipant> participants(
+		private List<@NonNull ScopeParticipant> participants(
 				@NonNull ResolvedScopeTransports resolved,
 				@NonNull Object executionOwnerToken) {
 			List<ScopeParticipant> participants = new ArrayList<>(3);
@@ -369,7 +369,7 @@ public final class SokletSimulator {
 		}
 
 		private void startParticipants(@NonNull Soklet soklet,
-				@NonNull List<ScopeParticipant> participants,
+				@NonNull List<@NonNull ScopeParticipant> participants,
 				@NonNull StartupBudget startupBudget,
 				@NonNull StartupAttempt setupAttempt) throws Throwable {
 			StartupBudget exactBudget = requireNonNull(startupBudget);
@@ -400,7 +400,7 @@ public final class SokletSimulator {
 		}
 
 		private boolean openParticipantAdmission(
-				@NonNull List<ScopeParticipant> participants) {
+				@NonNull List<@NonNull ScopeParticipant> participants) {
 			boolean everyAdmissionOpened = true;
 			for (ScopeParticipant participant : requireNonNull(participants)) {
 				if (!participant.openAdmission())
@@ -506,7 +506,7 @@ public final class SokletSimulator {
 
 		@NonNull
 		private TeardownOutcome teardown(
-				@NonNull List<ScopeParticipant> participants,
+				@NonNull List<@NonNull ScopeParticipant> participants,
 				@NonNull StartupAttempt setupAttempt,
 				@NonNull InternalLifecyclePolicy policy,
 				@NonNull StartupBudget startupBudget,
@@ -657,7 +657,7 @@ public final class SokletSimulator {
 		}
 
 		private void submitStartupCancelationQuiesce(
-				@NonNull List<ScopeParticipant> participants,
+				@NonNull List<@NonNull ScopeParticipant> participants,
 				long gracefulDeadlineNanos) {
 			ShutdownContext context = new ShutdownContext(
 					ShutdownPhase.GRACEFUL, this.clock,
@@ -681,11 +681,11 @@ public final class SokletSimulator {
 
 		@NonNull
 		private InternalShutdownResult incompleteResult(
-				@NonNull List<ScopeParticipant> participants,
+				@NonNull List<@NonNull ScopeParticipant> participants,
 				@NonNull StartupAttempt setupAttempt,
 				@NonNull InternalStartupDisposition startupDisposition,
 				@Nullable InternalShutdownResult coordinated,
-				@NonNull List<? extends Throwable> failures) {
+				@NonNull List<? extends @NonNull Throwable> failures) {
 			List<InternalLifecycleComponentShutdownResult> results;
 			if (coordinated == null) {
 				results = new ArrayList<>();
@@ -803,9 +803,9 @@ public final class SokletSimulator {
 		}
 
 		@NonNull
-		private List<Throwable> mergedFailures(
+		private List<@NonNull Throwable> mergedFailures(
 				InternalTerminationGroup.@NonNull EvidenceSnapshot evidence,
-				@NonNull List<? extends Throwable> infrastructureFailures) {
+				@NonNull List<? extends @NonNull Throwable> infrastructureFailures) {
 			List<Throwable> merged = new ArrayList<>(
 					requireNonNull(evidence).failures());
 			for (Throwable failure : requireNonNull(infrastructureFailures))
@@ -817,7 +817,7 @@ public final class SokletSimulator {
 		@NonNull
 		private InternalShutdownResult completeConfiguredParticipantResults(
 				@NonNull InternalShutdownResult result,
-				@NonNull List<ScopeParticipant> participants,
+				@NonNull List<@NonNull ScopeParticipant> participants,
 				@NonNull InternalStartupDisposition startupDisposition) {
 			EnumMap<InternalLifecycleComponentType, InternalLifecycleComponentShutdownResult>
 					resultsByKind = new EnumMap<>(InternalLifecycleComponentType.class);
@@ -880,7 +880,7 @@ public final class SokletSimulator {
 		void beginStartupCall();
 
 		void installStartupCall(
-				TrackedLifecycleCallRunner.@NonNull Call<Void> call);
+				TrackedLifecycleCallRunner.@NonNull Call<@Nullable Void> call);
 
 		void completeStartupCall();
 
@@ -926,7 +926,7 @@ public final class SokletSimulator {
 		@NonNull
 		private final DirectParticipantPhaseGate phaseGate;
 		@NonNull
-		private final AtomicReference<TrackedLifecycleCallRunner.@Nullable Call<Void>>
+		private final AtomicReference<TrackedLifecycleCallRunner.@Nullable Call<@Nullable Void>>
 				startupCall;
 
 		private StartupAttempt(@NonNull Scope scope,
@@ -953,7 +953,7 @@ public final class SokletSimulator {
 
 		@Override
 		public void installStartupCall(
-				TrackedLifecycleCallRunner.@NonNull Call<Void> call) {
+				TrackedLifecycleCallRunner.@NonNull Call<@Nullable Void> call) {
 			TrackedLifecycleCallRunner.Call<Void> exactCall = requireNonNull(call);
 			this.startupCall.set(exactCall);
 			if (!this.phaseGate.startupCallActive())
@@ -1023,7 +1023,7 @@ public final class SokletSimulator {
 
 		@NonNull
 		@Override
-		public Set<InternalResidualActivityType> residualActivity() {
+		public Set<@NonNull InternalResidualActivityType> residualActivity() {
 			return Set.of();
 		}
 	}
@@ -1057,10 +1057,10 @@ public final class SokletSimulator {
 		@NonNull
 		private final DirectParticipantPhaseGate phaseGate;
 		@NonNull
-		private final AtomicReference<TrackedLifecycleCallRunner.@Nullable Call<Void>>
+		private final AtomicReference<TrackedLifecycleCallRunner.@Nullable Call<@Nullable Void>>
 				startupCall;
 		@NonNull
-		private final AtomicReference<TrackedLifecycleCallRunner.@Nullable Call<Void>>
+		private final AtomicReference<TrackedLifecycleCallRunner.@Nullable Call<@Nullable Void>>
 				proofObservation;
 		@NonNull
 		private final LifecycleResidualActivity residualActivity = new LifecycleResidualActivity();
@@ -1189,7 +1189,7 @@ public final class SokletSimulator {
 
 		@Override
 		public void installStartupCall(
-				TrackedLifecycleCallRunner.@NonNull Call<Void> call) {
+				TrackedLifecycleCallRunner.@NonNull Call<@Nullable Void> call) {
 			TrackedLifecycleCallRunner.Call<Void> exactCall = requireNonNull(call);
 			this.startupCall.set(exactCall);
 			if (!this.phaseGate.startupCallActive())
@@ -1345,7 +1345,7 @@ public final class SokletSimulator {
 
 		@NonNull
 		@Override
-		public Set<InternalResidualActivityType> residualActivity() {
+		public Set<@NonNull InternalResidualActivityType> residualActivity() {
 			// The mock projections contain only framework-owned counters and
 			// conservatively retained references, never application status calls.
 			if (this.residualActivity.terminationProven())
@@ -1354,7 +1354,7 @@ public final class SokletSimulator {
 		}
 
 		@NonNull
-		private Set<InternalResidualActivityType> queryResidualActivity() {
+		private Set<@NonNull InternalResidualActivityType> queryResidualActivity() {
 			return switch (this.kind) {
 				case HTTP -> this.scope.simulator().httpScopeResidualActivity();
 				case MCP -> this.scope.simulator().mcpScopeResidualActivity();
@@ -1405,9 +1405,9 @@ public final class SokletSimulator {
 
 	@Immutable
 	private record ResolvedScopeTransports(
-			@NonNull Optional<MockHttpServer> httpServer,
-			@NonNull Optional<MockSseServer> sseServer,
-			@NonNull Optional<DefaultMcpServer> mcpServer) {
+			@NonNull Optional<@NonNull MockHttpServer> httpServer,
+			@NonNull Optional<@NonNull MockSseServer> sseServer,
+			@NonNull Optional<@NonNull DefaultMcpServer> mcpServer) {
 		private ResolvedScopeTransports {
 			requireNonNull(httpServer);
 			requireNonNull(sseServer);
@@ -1437,11 +1437,11 @@ interface SimulatorScopeDispatchGate {
 @ThreadSafe
 final class ScopeDispatchGate implements SimulatorScopeDispatchGate {
 	@NonNull
-	private final Map<InternalLifecycleComponentType, AdmissionFence> fences;
+	private final Map<@NonNull InternalLifecycleComponentType, @NonNull AdmissionFence> fences;
 	@NonNull
 	private final AtomicBoolean sealed;
 
-	ScopeDispatchGate(@NonNull List<SokletSimulator.ScopeParticipant> participants) {
+	ScopeDispatchGate(@NonNull List<SokletSimulator.@NonNull ScopeParticipant> participants) {
 		EnumMap<InternalLifecycleComponentType, AdmissionFence> fences =
 				new EnumMap<>(InternalLifecycleComponentType.class);
 		for (SokletSimulator.ScopeParticipant participant

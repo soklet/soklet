@@ -44,7 +44,7 @@ record McpHttpEndpointBinding(@NonNull McpHttpEndpointPolicy endpointPolicy,
 				taskManagerAdapter,
 		@NonNull Map<@NonNull String, @NonNull McpNormalizedEndpoint>
 				revisionEndpoints) {
-	private static final String MODERN_REVISION = "2026-07-28";
+	private static final @NonNull String MODERN_REVISION = "2026-07-28";
 
 	McpHttpEndpointBinding(@NonNull McpHttpEndpointPolicy endpointPolicy,
 			@NonNull McpNormalizedEndpoint endpoint,
@@ -119,11 +119,11 @@ record McpHttpEndpointBinding(@NonNull McpHttpEndpointPolicy endpointPolicy,
 					"MCP task notifications require a task-manager adapter.");
 	}
 
-	Optional<McpNormalizedEndpoint> revisionEndpoint(String revision) {
+	@NonNull Optional<@NonNull McpNormalizedEndpoint> revisionEndpoint(@NonNull String revision) {
 		return Optional.ofNullable(revisionEndpoints.get(requireNonNull(revision)));
 	}
 
-	Set<String> supportedRevisions() {
+	@NonNull Set<@NonNull String> supportedRevisions() {
 		return revisionEndpoints.keySet();
 	}
 }

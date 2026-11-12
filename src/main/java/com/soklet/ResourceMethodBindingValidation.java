@@ -33,7 +33,7 @@ import java.util.Optional;
 /** Shared declaration rules; compiler and runtime adapt their existing parameter metadata. */
 final class ResourceMethodBindingValidation {
 
-	static final List<Class<? extends Annotation>> BINDING_ANNOTATIONS = List.of(
+	static final @NonNull List<@NonNull Class<? extends @NonNull Annotation>> BINDING_ANNOTATIONS = List.of(
 			PathParameter.class, QueryParameter.class, FormParameter.class, RequestHeader.class,
 			RequestCookie.class, Multipart.class, RequestBody.class);
 

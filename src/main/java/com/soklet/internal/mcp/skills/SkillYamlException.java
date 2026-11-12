@@ -9,6 +9,8 @@
  */
 package com.soklet.internal.mcp.skills;
 
+
+import org.jspecify.annotations.NonNull;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -23,11 +25,11 @@ final class SkillYamlException extends IllegalArgumentException {
 		NODE_LIMIT, DEPTH_LIMIT, SCALAR_LIMIT, TYPE, DUPLICATE_KEY,
 		UNSUPPORTED_TAG, UNDEFINED_ALIAS, CYCLIC_ALIAS, NUMBER_LIMIT, OUTPUT_LIMIT
 	}
-	private final Reason reason;
+	private final @NonNull Reason reason;
 	private final int line;
 	private final int column;
 
-	SkillYamlException(Reason reason, int line, int column) {
+	SkillYamlException(@NonNull Reason reason, int line, int column) {
 		super("Invalid skill frontmatter (" + requireNonNull(reason).name()
 				+ " at " + line + ":" + column + ").");
 		this.reason = reason;
@@ -35,7 +37,7 @@ final class SkillYamlException extends IllegalArgumentException {
 		this.column = column;
 	}
 
-	Reason reason() { return this.reason; }
+	@NonNull Reason reason() { return this.reason; }
 	int line() { return this.line; }
 	int column() { return this.column; }
 }

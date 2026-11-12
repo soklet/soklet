@@ -42,7 +42,7 @@ final class McpLegacyHttpWire {
 	private McpLegacyHttpWire() {
 	}
 
-	static Era classify(@NonNull McpJsonRpcEnvelope envelope,
+	static @NonNull Era classify(@NonNull McpJsonRpcEnvelope envelope,
 			@NonNull List<@NonNull String> versionHeaders,
 			@NonNull List<@NonNull String> methodHeaders,
 			@NonNull List<@NonNull String> nameHeaders,

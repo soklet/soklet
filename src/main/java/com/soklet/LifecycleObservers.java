@@ -49,7 +49,7 @@ final class LifecycleObservers {
 	}
 
 	@NonNull
-	public static LifecycleObserver aggregate(@NonNull List<LifecycleObserver> lifecycleObservers) {
+	public static LifecycleObserver aggregate(@NonNull List<@NonNull LifecycleObserver> lifecycleObservers) {
 		requireNonNull(lifecycleObservers);
 
 		List<LifecycleObserver> lifecycleObserversSnapshot = List.copyOf(lifecycleObservers);
@@ -68,8 +68,8 @@ final class LifecycleObservers {
 	@Nullable
 	private static Object invoke(@NonNull Object proxy,
 															 @NonNull Method method,
-															 Object[] args,
-															 @NonNull List<LifecycleObserver> lifecycleObservers) throws Throwable {
+															 @Nullable Object @Nullable [] args,
+															 @NonNull List<@NonNull LifecycleObserver> lifecycleObservers) throws Throwable {
 		requireNonNull(proxy);
 		requireNonNull(method);
 		requireNonNull(lifecycleObservers);
@@ -98,7 +98,7 @@ final class LifecycleObservers {
 	@NonNull
 	private static Object invokeObjectMethod(@NonNull Object proxy,
 																					 @NonNull Method method,
-																					 Object[] args) {
+																					 @Nullable Object @Nullable [] args) {
 		requireNonNull(proxy);
 		requireNonNull(method);
 

@@ -9,6 +9,8 @@
  */
 package com.soklet.internal.mcp.skills;
 
+
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import java.util.List;
 import static java.util.Objects.requireNonNull;
@@ -19,8 +21,8 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 sealed interface SkillYamlNode {
-	Position position();
-	Properties properties();
+	@NonNull Position position();
+	@NonNull Properties properties();
 	enum Style { PLAIN, SINGLE_QUOTED, DOUBLE_QUOTED, LITERAL, FOLDED }
 	record Position(int line, int column) {
 		public Position {
@@ -29,31 +31,31 @@ sealed interface SkillYamlNode {
 		}
 	}
 	record Properties(@Nullable String tag, @Nullable String anchor) {
-		static final Properties EMPTY = new Properties(null, null);
-		@Override public String toString() { return "Properties[redacted]"; }
+		static final @NonNull Properties EMPTY = new Properties(null, null);
+		@Override public @NonNull String toString() { return "Properties[redacted]"; }
 	}
-	record Scalar(String value, Style style, Properties properties, Position position)
+	record Scalar(@NonNull String value, @NonNull Style style, @NonNull Properties properties, @NonNull Position position)
 			implements SkillYamlNode {
 		public Scalar { requireNonNull(value); requireNonNull(style); requireNonNull(properties); requireNonNull(position); }
-		@Override public String toString() { return "Scalar[style=" + style + ", characters=" + value.length() + "]"; }
+		@Override public @NonNull String toString() { return "Scalar[style=" + style + ", characters=" + value.length() + "]"; }
 	}
-	record Sequence(List<SkillYamlNode> items, Properties properties, Position position)
+	record Sequence(@NonNull List<@NonNull SkillYamlNode> items, @NonNull Properties properties, @NonNull Position position)
 			implements SkillYamlNode {
 		public Sequence { items = List.copyOf(items); requireNonNull(properties); requireNonNull(position); }
-		@Override public String toString() { return "Sequence[items=" + items.size() + "]"; }
+		@Override public @NonNull String toString() { return "Sequence[items=" + items.size() + "]"; }
 	}
-	record Entry(SkillYamlNode key, SkillYamlNode value) {
+	record Entry(@NonNull SkillYamlNode key, @NonNull SkillYamlNode value) {
 		public Entry { requireNonNull(key); requireNonNull(value); }
-		@Override public String toString() { return "Entry[redacted]"; }
+		@Override public @NonNull String toString() { return "Entry[redacted]"; }
 	}
-	record Mapping(List<Entry> entries, Properties properties, Position position)
+	record Mapping(@NonNull List<@NonNull Entry> entries, @NonNull Properties properties, @NonNull Position position)
 			implements SkillYamlNode {
 		public Mapping { entries = List.copyOf(entries); requireNonNull(properties); requireNonNull(position); }
-		@Override public String toString() { return "Mapping[entries=" + entries.size() + "]"; }
+		@Override public @NonNull String toString() { return "Mapping[entries=" + entries.size() + "]"; }
 	}
-	record Alias(String name, Position position) implements SkillYamlNode {
+	record Alias(@NonNull String name, @NonNull Position position) implements SkillYamlNode {
 		public Alias { requireNonNull(name); requireNonNull(position); }
-		@Override public Properties properties() { return Properties.EMPTY; }
-		@Override public String toString() { return "Alias[redacted]"; }
+		@Override public @NonNull Properties properties() { return Properties.EMPTY; }
+		@Override public @NonNull String toString() { return "Alias[redacted]"; }
 	}
 }

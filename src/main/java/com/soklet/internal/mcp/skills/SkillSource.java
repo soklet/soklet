@@ -204,7 +204,7 @@ final class SkillSource {
 	 */
 	record Frontmatter(@NonNull String text, int firstLine, int bodyByteOffset) {
 		@Override
-		public String toString() {
+		public @NonNull String toString() {
 			return "Frontmatter[redacted]";
 		}
 	}

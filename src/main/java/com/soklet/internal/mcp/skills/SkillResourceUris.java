@@ -11,6 +11,8 @@
  */
 package com.soklet.internal.mcp.skills;
 
+
+import org.jspecify.annotations.NonNull;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
@@ -32,10 +34,10 @@ import static java.util.Objects.requireNonNull;
 final class SkillResourceUris {
 	// Matches the existing exact-resource ceiling in McpNormalizedResourceDescriptor.
 	static final int MAXIMUM_URI_ASCII_BYTES = 1_048_576;
-	private static final char[] HEX = "0123456789ABCDEF".toCharArray();
-	private final Map<String, URI> uris;
+	private static final char @NonNull [] HEX = "0123456789ABCDEF".toCharArray();
+	private final @NonNull Map<@NonNull String, @NonNull URI> uris;
 
-	private SkillResourceUris(Map<String, URI> uris) {
+	private SkillResourceUris(@NonNull Map<@NonNull String, @NonNull URI> uris) {
 		this.uris = Collections.unmodifiableMap(uris);
 	}
 
@@ -44,7 +46,7 @@ final class SkillResourceUris {
 	 * byte budget bounds this projection's URI text, not JVM heap or coexisting
 	 * projections. Preflight all output lengths before constructing output URIs.
 	 */
-	static SkillResourceUris from(URI rootUri, String validatedSkillName, SkillPaths paths,
+	static @NonNull SkillResourceUris from(@NonNull URI rootUri, @NonNull String validatedSkillName, @NonNull SkillPaths paths,
 			long maximumTotalUriBytes) {
 		requireNonNull(rootUri, "A Skills root URI is required.");
 		requireNonNull(validatedSkillName, "A validated Skills name is required.");
@@ -74,9 +76,9 @@ final class SkillResourceUris {
 		return new SkillResourceUris(projected);
 	}
 
-	Map<String, URI> uris() { return this.uris; }
+	@NonNull Map<@NonNull String, @NonNull URI> uris() { return this.uris; }
 
-	private static String validateRoot(URI uri, String name) {
+	private static @NonNull String validateRoot(@NonNull URI uri, @NonNull String name) {
 		String root = uri.toString();
 		if (root.length() > MAXIMUM_URI_ASCII_BYTES || !uri.isAbsolute() || uri.isOpaque()
 				|| uri.getRawQuery() != null || uri.getRawFragment() != null) throw invalid();
@@ -116,7 +118,7 @@ final class SkillResourceUris {
 	}
 
 	/** URI component decoding is strict UTF-8, with no form-URL '+' substitution. */
-	private static String decode(String raw) {
+	private static @NonNull String decode(@NonNull String raw) {
 		byte[] bytes = new byte[raw.length()];
 		int length = 0;
 		for (int offset = 0; offset < raw.length(); offset++) {
@@ -139,12 +141,12 @@ final class SkillResourceUris {
 		}
 	}
 
-	private static int octet(String raw, int offset) {
+	private static int octet(@NonNull String raw, int offset) {
 		// java.net.URI has already checked percent-triplet syntax.
 		return Character.digit(raw.charAt(offset + 1), 16) * 16 + Character.digit(raw.charAt(offset + 2), 16);
 	}
 
-	private static int encodedLength(String path) {
+	private static int encodedLength(@NonNull String path) {
 		int length = 0;
 		for (int offset = 0; offset < path.length(); offset++) {
 			char c = path.charAt(offset);
@@ -155,7 +157,7 @@ final class SkillResourceUris {
 		return length;
 	}
 
-	private static URI derive(String prefix, String path) {
+	private static @NonNull URI derive(@NonNull String prefix, @NonNull String path) {
 		StringBuilder value = new StringBuilder(prefix.length() + encodedLength(path));
 		value.append(prefix);
 		for (byte raw : path.getBytes(StandardCharsets.UTF_8)) {
@@ -178,10 +180,10 @@ final class SkillResourceUris {
 				|| c == '-' || c == '.' || c == '_' || c == '~';
 	}
 
-	private static IllegalArgumentException invalid() {
+	private static @NonNull IllegalArgumentException invalid() {
 		return new IllegalArgumentException("Invalid Skills resource URI.");
 	}
 
 	@Override
-	public String toString() { return "SkillResourceUris[redacted]"; }
+	public @NonNull String toString() { return "SkillResourceUris[redacted]"; }
 }

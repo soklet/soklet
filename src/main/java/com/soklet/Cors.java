@@ -45,7 +45,7 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 public final class Cors {
-	@Nullable
+	@NonNull
 	private final HttpMethod httpMethod;
 	@NonNull
 	private final String origin;

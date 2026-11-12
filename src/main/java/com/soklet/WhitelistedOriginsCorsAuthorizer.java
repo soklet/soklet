@@ -16,6 +16,8 @@
 
 package com.soklet;
 
+
+import org.jspecify.annotations.Nullable;
 import org.jspecify.annotations.NonNull;
 
 import javax.annotation.concurrent.ThreadSafe;
@@ -49,9 +51,9 @@ final class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 	}
 
 	@NonNull
-	private final Function<String, Boolean> authorizer;
+	private final Function<@NonNull String, ? extends @Nullable Boolean> authorizer;
 	@NonNull
-	private final Function<String, Boolean> allowCredentialsResolver;
+	private final Function<@NonNull String, ? extends @Nullable Boolean> allowCredentialsResolver;
 
 	/**
 	 * Creates an authorizer with a fixed set of whitelisted origins.
@@ -64,7 +66,7 @@ final class WhitelistedOriginsCorsAuthorizer implements CorsAuthorizer {
 	 */
 	@NonNull
 public static WhitelistedOriginsCorsAuthorizer fromOrigins(@NonNull Set<@NonNull String> origins,
-																														 @NonNull Function<String, Boolean> allowCredentialsResolver) {
+																														 @NonNull Function<@NonNull String, ? extends @Nullable Boolean> allowCredentialsResolver) {
 		requireNonNull(origins);
 		requireNonNull(allowCredentialsResolver);
 
@@ -85,16 +87,16 @@ public static WhitelistedOriginsCorsAuthorizer fromOrigins(@NonNull Set<@NonNull
 	 * @return an instance of {@link WhitelistedOriginsCorsAuthorizer}
 	 */
 	@NonNull
-public static WhitelistedOriginsCorsAuthorizer fromAuthorizer(@NonNull Function<String, Boolean> authorizer,
-																																@NonNull Function<String, Boolean> allowCredentialsResolver) {
+public static WhitelistedOriginsCorsAuthorizer fromAuthorizer(@NonNull Function<@NonNull String, ? extends @Nullable Boolean> authorizer,
+																																@NonNull Function<@NonNull String, ? extends @Nullable Boolean> allowCredentialsResolver) {
 		requireNonNull(authorizer);
 		requireNonNull(allowCredentialsResolver);
 
 		return new WhitelistedOriginsCorsAuthorizer(authorizer, allowCredentialsResolver);
 	}
 
-	private WhitelistedOriginsCorsAuthorizer(@NonNull Function<String, Boolean> authorizer,
-																					 @NonNull Function<String, Boolean> allowCredentialsResolver) {
+	private WhitelistedOriginsCorsAuthorizer(@NonNull Function<@NonNull String, ? extends @Nullable Boolean> authorizer,
+																					 @NonNull Function<@NonNull String, ? extends @Nullable Boolean> allowCredentialsResolver) {
 		requireNonNull(authorizer);
 		requireNonNull(allowCredentialsResolver);
 
@@ -104,7 +106,7 @@ public static WhitelistedOriginsCorsAuthorizer fromAuthorizer(@NonNull Function<
 
 	@NonNull
 	@Override
-	public Optional<CorsResponse> authorize(@NonNull Request request,
+	public Optional<@NonNull CorsResponse> authorize(@NonNull Request request,
 																					@NonNull Cors cors) {
 		requireNonNull(request);
 		requireNonNull(cors);
@@ -130,7 +132,7 @@ public static WhitelistedOriginsCorsAuthorizer fromAuthorizer(@NonNull Function<
 
 	@NonNull
 	@Override
-	public Optional<CorsPreflightResponse> authorizePreflight(@NonNull Request request,
+	public Optional<@NonNull CorsPreflightResponse> authorizePreflight(@NonNull Request request,
 																														@NonNull CorsPreflight corsPreflight,
 																														@NonNull Map<@NonNull HttpMethod, @NonNull ResourceMethod> availableResourceMethodsByHttpMethod) {
 		requireNonNull(request);
@@ -142,7 +144,7 @@ public static WhitelistedOriginsCorsAuthorizer fromAuthorizer(@NonNull Function<
 
 	@NonNull
 	@Override
-	public Optional<CorsPreflightResponse> authorizePreflight(@NonNull Request request,
+	public Optional<@NonNull CorsPreflightResponse> authorizePreflight(@NonNull Request request,
 																														@NonNull CorsPreflight corsPreflight,
 																														@NonNull Set<@NonNull HttpMethod> availableHttpMethods) {
 		requireNonNull(request);
@@ -153,7 +155,7 @@ public static WhitelistedOriginsCorsAuthorizer fromAuthorizer(@NonNull Function<
 	}
 
 	@NonNull
-	private Optional<CorsPreflightResponse> authorizePreflight(@NonNull CorsPreflight corsPreflight,
+	private Optional<@NonNull CorsPreflightResponse> authorizePreflight(@NonNull CorsPreflight corsPreflight,
 																														 @NonNull Set<@NonNull HttpMethod> availableHttpMethods) {
 		String origin = normalizeOrigin(corsPreflight.getOrigin());
 
@@ -190,12 +192,12 @@ public static WhitelistedOriginsCorsAuthorizer fromAuthorizer(@NonNull Function<
 	}
 
 	@NonNull
-	private Function<String, Boolean> getAuthorizer() {
+	private Function<@NonNull String, ? extends @Nullable Boolean> getAuthorizer() {
 		return this.authorizer;
 	}
 
 	@NonNull
-	private Function<String, Boolean> getAllowCredentialsResolver() {
+	private Function<@NonNull String, ? extends @Nullable Boolean> getAllowCredentialsResolver() {
 		return this.allowCredentialsResolver;
 	}
 }

@@ -16,6 +16,7 @@
 
 package com.soklet.internal.microhttp;
 
+import org.jspecify.annotations.NonNull;
 import java.io.EOFException;
 import java.io.IOException;
 import java.nio.channels.FileChannel;
@@ -37,14 +38,14 @@ import static com.soklet.internal.ObjectIdentity.sameInstance;
 class FileChannelWritableSource implements WritableSource {
     private static final int MAX_SOCKET_CAUSE_DEPTH = 16;
     private static final int MAX_RECORDED_SOCKET_FAILURES = 8;
-    private final FileChannel fileChannel;
+    private final @NonNull FileChannel fileChannel;
     private final boolean closeOnComplete;
     private final boolean nativeTransfer;
     private long position;
     private long remaining;
     private @Nullable SocketSink socketSink;
 
-    FileChannelWritableSource(FileChannel fileChannel, long offset, long count, boolean closeOnComplete) {
+    FileChannelWritableSource(@NonNull FileChannel fileChannel, long offset, long count, boolean closeOnComplete) {
         this.fileChannel = requireNonNull(fileChannel);
         if (offset < 0) {
             throw new IllegalArgumentException("Offset must be >= 0.");
@@ -65,7 +66,7 @@ class FileChannelWritableSource implements WritableSource {
     }
 
     @Override
-    public long writeTo(SocketChannel socketChannel, long maxBytes) throws IOException {
+    public long writeTo(@NonNull SocketChannel socketChannel, long maxBytes) throws IOException {
         requireNonNull(socketChannel);
 
         if (maxBytes <= 0 || !hasRemaining()) {
@@ -136,7 +137,7 @@ class FileChannelWritableSource implements WritableSource {
         }
     }
 
-    private static SocketChannelIo.@Nullable SocketIoException socketIoCause(Throwable failure,
+    private static SocketChannelIo.@Nullable SocketIoException socketIoCause(@NonNull Throwable failure,
             @Nullable SocketSink sink) {
         if (sink == null || sink.latestFailure == null)
             return null;
@@ -160,7 +161,7 @@ class FileChannelWritableSource implements WritableSource {
         return null;
     }
 
-    private IOException classifyTransferFailure(SocketChannel socketChannel, IOException failure) {
+    private @NonNull IOException classifyTransferFailure(@NonNull SocketChannel socketChannel, @NonNull IOException failure) {
         if (!fileChannel.isOpen())
             return new ResponseBodySourceException("Response file channel closed during delivery", failure);
 
@@ -200,19 +201,19 @@ class FileChannelWritableSource implements WritableSource {
     }
 
     private static final class SocketSink implements WritableByteChannel {
-        private final SocketChannel channel;
+        private final @NonNull SocketChannel channel;
         // Keep the first bounded set of witnesses across successful/zero-byte
         // transfer returns, plus the latest failure even after that set fills.
         // This covers retries that throw either their first or last failure
         // while bounding retention and requiring exact identity provenance.
-        private final IdentityHashMap<SocketChannelIo.SocketIoException, Boolean> failures = new IdentityHashMap<>();
+        private final @NonNull IdentityHashMap<SocketChannelIo.@NonNull SocketIoException, @NonNull Boolean> failures = new IdentityHashMap<>();
         private SocketChannelIo.@Nullable SocketIoException latestFailure;
-        private SocketSink(SocketChannel channel) { this.channel = channel; }
+        private SocketSink(@NonNull SocketChannel channel) { this.channel = channel; }
         private void clearFailures() {
             failures.clear();
             latestFailure = null;
         }
-        @Override public int write(ByteBuffer buffer) throws IOException {
+        @Override public int write(@NonNull ByteBuffer buffer) throws IOException {
             try {
                 return SocketChannelIo.write(channel, buffer);
             } catch (SocketChannelIo.SocketIoException failure) {

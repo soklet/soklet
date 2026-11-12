@@ -173,7 +173,7 @@ public final class Soklet {
 	 */
 	@NotThreadSafe
 	@FunctionalInterface
-	public interface RunAction<E extends Throwable> {
+	public interface RunAction<E extends @NonNull Throwable> {
 		/**
 		 * Performs work while the enclosing caller owns the running application.
 		 *
@@ -216,7 +216,7 @@ public final class Soklet {
 	@NonNull
 	static Soklet fromConfig(@NonNull SokletConfig sokletConfig,
 			@NonNull LifecycleRuntimeServices services,
-			@NonNull Consumer<InternalLifecycleCoreSnapshot> coreSnapshotPublisher) {
+			@NonNull Consumer<@NonNull InternalLifecycleCoreSnapshot> coreSnapshotPublisher) {
 		return new Soklet(requireNonNull(sokletConfig), requireNonNull(services),
 				requireNonNull(coreSnapshotPublisher));
 	}
@@ -245,7 +245,7 @@ public final class Soklet {
 	 */
 	private Soklet(@NonNull SokletConfig sokletConfig,
 			@NonNull LifecycleRuntimeServices services,
-			@NonNull Consumer<InternalLifecycleCoreSnapshot> coreSnapshotPublisher) {
+			@NonNull Consumer<@NonNull InternalLifecycleCoreSnapshot> coreSnapshotPublisher) {
 		requireNonNull(sokletConfig);
 
 		this.sokletConfig = sokletConfig;
@@ -340,7 +340,7 @@ public final class Soklet {
 	 * @throws SokletLifecycleException if finalization fails without an action failure
 	 */
 	@NonNull
-	public static <E extends Throwable> ShutdownResult run(
+	public static <E extends @NonNull Throwable> ShutdownResult run(
 			@NonNull SokletConfig sokletConfig,
 			@NonNull RunAction<@NonNull E> action) throws E {
 		return runScoped(sokletConfig, null, action);
@@ -363,7 +363,7 @@ public final class Soklet {
 	 * @throws SokletLifecycleException if finalization fails without an action failure
 	 */
 	@NonNull
-	public static <E extends Throwable> ShutdownResult run(
+	public static <E extends @NonNull Throwable> ShutdownResult run(
 			@NonNull SokletConfig sokletConfig,
 			@NonNull ShutdownCleanup cleanup,
 			@NonNull RunAction<@NonNull E> action) throws E {
@@ -371,7 +371,7 @@ public final class Soklet {
 	}
 
 	@NonNull
-	private static <E extends Throwable> ShutdownResult runScoped(
+	private static <E extends @NonNull Throwable> ShutdownResult runScoped(
 			@NonNull SokletConfig sokletConfig, @Nullable ShutdownCleanup cleanup,
 			@NonNull RunAction<E> action) throws E {
 		SokletConfig exactConfig = requireNonNull(sokletConfig);
@@ -427,7 +427,7 @@ public final class Soklet {
 	}
 
 	@SuppressWarnings("unchecked")
-	private static <E extends Throwable> void throwRunFailure(
+	private static <E extends @NonNull Throwable> void throwRunFailure(
 			@NonNull Throwable failure) throws E {
 		throw (E) requireNonNull(failure);
 	}
@@ -539,7 +539,7 @@ public final class Soklet {
 	 */
 	void handleRequest(@NonNull Request request,
 														 @NonNull ServerType serverType,
-														 @NonNull Consumer<HttpRequestResult> requestResultConsumer) {
+														 @NonNull Consumer<@NonNull HttpRequestResult> requestResultConsumer) {
 		try (LifecycleExecutionContext.Scope ignored =
 					 this.directLifecycle.enterExecution()) {
 			handleRequestWithinLifecycle(request, serverType,
@@ -549,7 +549,7 @@ public final class Soklet {
 
 	private void handleRequestWithinLifecycle(@NonNull Request request,
 														 @NonNull ServerType serverType,
-														 @NonNull Consumer<HttpRequestResult> requestResultConsumer) {
+														 @NonNull Consumer<@NonNull HttpRequestResult> requestResultConsumer) {
 		requireNonNull(request);
 		requireNonNull(serverType);
 		requireNonNull(requestResultConsumer);
@@ -565,15 +565,15 @@ public final class Soklet {
 		MetricsCollector metricsCollector = sokletConfig.getMetricsCollector();
 
 		// Holders to permit mutable effectively-final variables
-		AtomicReference<MarshaledResponse> marshaledResponseHolder = new AtomicReference<>();
-		AtomicReference<Throwable> resourceMethodResolutionExceptionHolder = new AtomicReference<>();
-		AtomicReference<Request> requestHolder = new AtomicReference<>(request);
+		AtomicReference<@Nullable MarshaledResponse> marshaledResponseHolder = new AtomicReference<>();
+		AtomicReference<@Nullable Throwable> resourceMethodResolutionExceptionHolder = new AtomicReference<>();
+		AtomicReference<@NonNull Request> requestHolder = new AtomicReference<>(request);
 		// The handler's effective request may be replaced by either interceptor hook. Paired
 		// lifecycle/metrics callbacks retain the original per-dispatch identity, as do HTTP
 		// stream handles, so observers never have to correlate caller-controlled request IDs.
-		AtomicReference<ResourceMethod> resourceMethodHolder = new AtomicReference<>();
-		AtomicReference<HttpRequestResult> requestResultHolder = new AtomicReference<>();
-		AtomicReference<Throwable> requestHandlingFailureHolder = new AtomicReference<>();
+		AtomicReference<@Nullable ResourceMethod> resourceMethodHolder = new AtomicReference<>();
+		AtomicReference<@Nullable HttpRequestResult> requestResultHolder = new AtomicReference<>();
+		AtomicReference<@Nullable Throwable> requestHandlingFailureHolder = new AtomicReference<>();
 		Consumer<MarshaledResponse> captureHeadRepresentation = representation -> {
 			if (serverType != ServerType.HTTP || requestHolder.get().getHttpMethod() != HttpMethod.HEAD)
 				return;
@@ -1395,7 +1395,7 @@ public final class Soklet {
 				.build();
 	}
 
-	private static boolean isCompatibleAcceptedSseResponse(MarshaledResponse response) {
+	private static boolean isCompatibleAcceptedSseResponse(@NonNull MarshaledResponse response) {
 		if (response.getStatusCode() != 200 || response.isStreaming() || response.getBody().isPresent())
 			return false;
 		List<String> contentTypes = response.getHeaders().getOrDefault("Content-Type", List.of());
@@ -1491,19 +1491,19 @@ public final class Soklet {
 		private boolean postProcessingStarted;
 	}
 
-	private ResponseFinalizationToken newPostProcessingToken() {
+	private @NonNull ResponseFinalizationToken newPostProcessingToken() {
 		// Recovery must not repeat a processor that completed or failed before a later hook failed.
 		return new ResponseFinalizationToken();
 	}
 
-	private boolean requiresPostProcessing(MarshaledResponse response, @Nullable ResponseFinalizationToken token) {
+	private boolean requiresPostProcessing(@NonNull MarshaledResponse response, @Nullable ResponseFinalizationToken token) {
 		return token != null && !response.isPostProcessedFor(token);
 	}
 
 	@NonNull
 	private MarshaledResponse applyCommonPropertiesToMarshaledResponse(@NonNull Request request,
 			@NonNull MarshaledResponse response, boolean suppressContentLength,
-			@NonNull Consumer<MarshaledResponse> headRepresentationConsumer, @Nullable ResponseFinalizationToken postProcessingToken) {
+			@NonNull Consumer<@NonNull MarshaledResponse> headRepresentationConsumer, @Nullable ResponseFinalizationToken postProcessingToken) {
 		return applyCommonPropertiesToMarshaledResponse(request, response, suppressContentLength,
 				headRepresentationConsumer, postProcessingToken, true);
 	}
@@ -1511,7 +1511,7 @@ public final class Soklet {
 	@NonNull
 	private MarshaledResponse applyCommonPropertiesToMarshaledResponse(@NonNull Request request,
 			@NonNull MarshaledResponse response, boolean suppressContentLength,
-			@NonNull Consumer<MarshaledResponse> headRepresentationConsumer, @Nullable ResponseFinalizationToken postProcessingToken, boolean applyHead) {
+			@NonNull Consumer<@NonNull MarshaledResponse> headRepresentationConsumer, @Nullable ResponseFinalizationToken postProcessingToken, boolean applyHead) {
 		requireNonNull(request);
 		requireNonNull(response);
 		boolean head = applyHead && request.getHttpMethod() == HttpMethod.HEAD;
@@ -1526,14 +1526,17 @@ public final class Soklet {
 			}
 			response = response.markPostProcessed(token);
 		}
-		boolean postProcessed = postProcessingToken != null && response.isPostProcessedFor(postProcessingToken);
+		@Nullable ResponseFinalizationToken completedPostProcessingToken =
+				postProcessingToken != null && response.isPostProcessedFor(postProcessingToken)
+						? postProcessingToken : null;
 		MarshaledResponse headRepresentation = response;
 		if (head) {
 			response = ResponseBodyCleanup.transform(response, current -> applyHeadResponseIfApplicable(request, current));
 			// Only a projection of this representation may borrow its discarded body.
 			// A fresh descriptor or changed representation metadata belongs to the HEAD handler.
 			List<String> projectedLength = response.getHeaders().get("Content-Length");
-			boolean preservesRepresentation = postProcessed && response.isPostProcessedFor(postProcessingToken)
+			boolean preservesRepresentation = completedPostProcessingToken != null
+					&& response.isPostProcessedFor(completedPostProcessingToken)
 					&& response.getStatusCode().equals(headRepresentation.getStatusCode())
 					&& Objects.equals(response.getHeaders().get("Content-Encoding"), headRepresentation.getHeaders().get("Content-Encoding"))
 					&& (projectedLength == null || headRepresentation.getBody().isEmpty()
@@ -1542,7 +1545,8 @@ public final class Soklet {
 				headRepresentation = response;
 		}
 		headRepresentationConsumer.accept(headRepresentation);
-		if (postProcessed) response = response.markPostProcessed(postProcessingToken);
+		if (completedPostProcessingToken != null)
+			response = response.markPostProcessed(completedPostProcessingToken);
 		response = normalizeBodylessMarshaledResponse(request, response);
 		if (!suppressContentLength) response = applyContentLengthIfApplicable(request, response);
 		if (!response.getHeaders().containsKey("Date"))
@@ -1690,7 +1694,7 @@ public final class Soklet {
 	}
 
 	@SuppressWarnings("ReferenceEquality")
-	private static Boolean isOptionsSplat(@NonNull ResourcePath resourcePath) {
+	private static @NonNull Boolean isOptionsSplat(@NonNull ResourcePath resourcePath) {
 		requireNonNull(resourcePath);
 		return resourcePath == ResourcePath.OPTIONS_SPLAT_RESOURCE_PATH;
 	}
@@ -1845,9 +1849,9 @@ public final class Soklet {
 		private volatile @Nullable SimulationSession mcpSimulationSession;
 		private volatile @Nullable SimulationSession rejectedMcpSimulationSession;
 		private volatile @Nullable StreamLifecycleCoordinator streamLifecycleCoordinator;
-		private @Nullable Supplier<StreamLifecycleCoordinator> streamLifecycleCoordinatorFactoryForTests;
+		private @Nullable Supplier<@NonNull StreamLifecycleCoordinator> streamLifecycleCoordinatorFactoryForTests;
 		private volatile @Nullable StreamLifecycleCoordinator sseLifecycleCoordinator;
-		private @Nullable Supplier<StreamLifecycleCoordinator> sseLifecycleCoordinatorFactoryForTests;
+		private @Nullable Supplier<@NonNull StreamLifecycleCoordinator> sseLifecycleCoordinatorFactoryForTests;
 		@NonNull
 		private final AtomicBoolean closed;
 
@@ -2005,7 +2009,7 @@ public final class Soklet {
 		}
 
 		@NonNull
-		Set<InternalResidualActivityType> httpScopeResidualActivity() {
+		Set<@NonNull InternalResidualActivityType> httpScopeResidualActivity() {
 			StreamLifecycleCoordinator coordinator = this.streamLifecycleCoordinator;
 			if (coordinator == null || coordinator.isTerminated())
 				return Set.of();
@@ -2020,7 +2024,7 @@ public final class Soklet {
 			return Collections.unmodifiableSet(residual);
 		}
 
-		void setStreamLifecycleCoordinatorFactoryForTests(@NonNull Supplier<StreamLifecycleCoordinator> factory) {
+		void setStreamLifecycleCoordinatorFactoryForTests(@NonNull Supplier<@NonNull StreamLifecycleCoordinator> factory) {
 			synchronized (this.scopeStateLock) {
 				requireScopeOpenWhileLocked();
 				if (this.streamLifecycleCoordinator != null)
@@ -2030,7 +2034,7 @@ public final class Soklet {
 		}
 
 		@NonNull
-		Optional<StreamLifecycleCoordinator> getStreamLifecycleCoordinatorForTests() {
+		Optional<@NonNull StreamLifecycleCoordinator> getStreamLifecycleCoordinatorForTests() {
 			return Optional.ofNullable(this.streamLifecycleCoordinator);
 		}
 
@@ -2084,7 +2088,7 @@ public final class Soklet {
 		}
 
 		@NonNull
-		Set<InternalResidualActivityType> sseScopeResidualActivity() {
+		Set<@NonNull InternalResidualActivityType> sseScopeResidualActivity() {
 			StreamLifecycleCoordinator coordinator = this.sseLifecycleCoordinator;
 			if (coordinator == null || coordinator.isTerminated())
 				return Set.of();
@@ -2099,7 +2103,7 @@ public final class Soklet {
 			return Collections.unmodifiableSet(residual);
 		}
 
-		void setSseLifecycleCoordinatorFactoryForTests(@NonNull Supplier<StreamLifecycleCoordinator> factory) {
+		void setSseLifecycleCoordinatorFactoryForTests(@NonNull Supplier<@NonNull StreamLifecycleCoordinator> factory) {
 			synchronized (this.scopeStateLock) {
 				requireScopeOpenWhileLocked();
 				if (this.sseLifecycleCoordinator != null)
@@ -2109,7 +2113,7 @@ public final class Soklet {
 		}
 
 		@NonNull
-		Optional<StreamLifecycleCoordinator> getSseLifecycleCoordinatorForTests() {
+		Optional<@NonNull StreamLifecycleCoordinator> getSseLifecycleCoordinatorForTests() {
 			return Optional.ofNullable(this.sseLifecycleCoordinator);
 		}
 
@@ -2161,7 +2165,7 @@ public final class Soklet {
 		}
 
 		@NonNull
-		Set<InternalResidualActivityType> mcpScopeResidualActivity() {
+		Set<@NonNull InternalResidualActivityType> mcpScopeResidualActivity() {
 			SimulationSession session = mcpEvidenceSession();
 			if (session == null)
 				return Set.of();
@@ -2252,13 +2256,13 @@ public final class Soklet {
 				throw new IllegalStateException(format("You must specify a %s in your %s to simulate requests",
 						HttpServer.class.getSimpleName(), SokletConfig.class.getSimpleName()));
 
-			AtomicReference<HttpRequestResult> requestResultHolder = new AtomicReference<>();
+			AtomicReference<@Nullable HttpRequestResult> requestResultHolder = new AtomicReference<>();
 			HttpServer.RequestHandler requestHandler = server.getRequestHandler().orElse(null);
 
 			if (requestHandler == null)
 				throw new IllegalStateException("You must register a request handler prior to simulating requests");
 
-			AtomicReference<StreamLifecycleCoordinator.Reservation> reservationHolder = new AtomicReference<>();
+			AtomicReference<StreamLifecycleCoordinator.@Nullable Reservation> reservationHolder = new AtomicReference<>();
 			Throwable primaryFailure = null;
 			Throwable terminalCleanupFailure = null;
 			HttpRequestResult completedResult;
@@ -2338,7 +2342,7 @@ public final class Soklet {
 			return completedResult;
 		}
 
-		private static HttpRequestResult materializeFiniteSimulationResult(HttpRequestResult result) {
+		private static @NonNull HttpRequestResult materializeFiniteSimulationResult(@NonNull HttpRequestResult result) {
 			MarshaledResponse response = result.getMarshaledResponse();
 			Throwable primary = null;
 			try {
@@ -2354,7 +2358,7 @@ public final class Soklet {
 			}
 		}
 
-		private HttpRequestResult materializeAcceptedSseSimulationResult(HttpRequestResult result) {
+		private @NonNull HttpRequestResult materializeAcceptedSseSimulationResult(@NonNull HttpRequestResult result) {
 			MarshaledResponse response = result.getMarshaledResponse();
 			Object token = this.executionOwnerToken;
 			try (LifecycleExecutionContext.Scope ignored = token == null ? null : LifecycleExecutionContext.enter(token)) {
@@ -2374,7 +2378,7 @@ public final class Soklet {
 			}
 		}
 
-		private static HttpRequestResult projectSimulatedHttpResponse(Request request, HttpRequestResult result) {
+		private static @NonNull HttpRequestResult projectSimulatedHttpResponse(@NonNull Request request, @NonNull HttpRequestResult result) {
 			MarshaledResponse response = normalizeBodylessMarshaledResponse(request, result.getMarshaledResponse());
 			boolean head = request.getHttpMethod() == HttpMethod.HEAD;
 			if (!response.isStreaming())
@@ -2388,7 +2392,7 @@ public final class Soklet {
 			return result.copy().marshaledResponse(response).headResponseCompressionBody(null).finish();
 		}
 
-		private static HttpRequestResult projectSimulatedSseRejection(Request request, HttpRequestResult result) {
+		private static @NonNull HttpRequestResult projectSimulatedSseRejection(@NonNull Request request, @NonNull HttpRequestResult result) {
 			MarshaledResponse response = normalizeBodylessMarshaledResponse(request, result.getMarshaledResponse());
 			boolean head = request.getHttpMethod() == HttpMethod.HEAD;
 			if (head)
@@ -2424,8 +2428,8 @@ public final class Soklet {
 				return requestResult;
 
 			StreamLifecycleCoordinator.Reservation reservation = requireNonNull(reservedLifetime);
-			AtomicReference<HttpRequestResult> result = new AtomicReference<>();
-			AtomicReference<Throwable> failure = new AtomicReference<>();
+			AtomicReference<@Nullable HttpRequestResult> result = new AtomicReference<>();
+			AtomicReference<@Nullable Throwable> failure = new AtomicReference<>();
 			LifecycleObserver cleanupObserver = requireNonNull(this.server).getSokletConfig().orElseThrow()
 					.getAggregateLifecycleObserver();
 			reservation.bindCleanupFailureObserver(throwable -> {
@@ -2681,11 +2685,10 @@ public final class Soklet {
 			}
 		}
 
-		@NonNull
-		private byte[] materializeStreamingResponseBody(@NonNull Request request,
+		private byte @NonNull [] materializeStreamingResponseBody(@NonNull Request request,
 																										@NonNull HttpRequestResult requestResult,
 				@NonNull StreamingResponseBody stream,
-				StreamLifecycleCoordinator.@NonNull Reservation reservation, java.util.concurrent.atomic.AtomicLong acceptedBytes) throws Exception {
+				StreamLifecycleCoordinator.@NonNull Reservation reservation, java.util.concurrent.atomic.@NonNull AtomicLong acceptedBytes) throws Exception {
 			requireNonNull(request);
 			requireNonNull(requestResult);
 			requireNonNull(stream);
@@ -2860,11 +2863,11 @@ public final class Soklet {
 				throw new IllegalStateException(format("You must specify a %s in your %s to simulate Server-Sent Event requests",
 						SseServer.class.getSimpleName(), SokletConfig.class.getSimpleName()));
 
-			AtomicReference<HttpRequestResult> requestResultHolder = new AtomicReference<>();
+			AtomicReference<@Nullable HttpRequestResult> requestResultHolder = new AtomicReference<>();
 			SseServer.RequestHandler requestHandler = sseServer.getRequestHandler().orElse(null);
-			AtomicReference<StreamLifecycleCoordinator.Reservation> reservationHolder = new AtomicReference<>();
-			AtomicReference<SseConnection.HandshakeFailureReason> replacementFailureReason = new AtomicReference<>();
-			AtomicReference<Throwable> replacementFailureCause = new AtomicReference<>();
+			AtomicReference<StreamLifecycleCoordinator.@Nullable Reservation> reservationHolder = new AtomicReference<>();
+			AtomicReference<SseConnection.@Nullable HandshakeFailureReason> replacementFailureReason = new AtomicReference<>();
+			AtomicReference<@Nullable Throwable> replacementFailureCause = new AtomicReference<>();
 
 			if (requestHandler == null)
 				throw new IllegalStateException("You must register a request handler prior to simulating SSE Event Source requests");
@@ -3046,7 +3049,7 @@ public final class Soklet {
 
 		@NonNull
 		@Override
-		public Simulator onBroadcastError(@Nullable Consumer<Throwable> onBroadcastError) {
+		public Simulator onBroadcastError(@Nullable Consumer<@NonNull Throwable> onBroadcastError) {
 			Runnable releaseScope = enterScope(InternalLifecycleComponentType.SSE);
 			try {
 				MockSseServer sseServer = this.sseServer;
@@ -3060,7 +3063,7 @@ public final class Soklet {
 
 		@NonNull
 		@Override
-		public Simulator onUnicastError(@Nullable Consumer<Throwable> onUnicastError) {
+		public Simulator onUnicastError(@Nullable Consumer<@NonNull Throwable> onUnicastError) {
 			Runnable releaseScope = enterScope(InternalLifecycleComponentType.SSE);
 			try {
 				MockSseServer sseServer = this.sseServer;
@@ -3127,10 +3130,10 @@ public final class Soklet {
 		@NonNull
 		private final SimulatorCancelationToken cancelationToken;
 		private boolean closed;
-		private final java.util.concurrent.atomic.AtomicLong acceptedBytes;
+		private final java.util.concurrent.atomic.@NonNull AtomicLong acceptedBytes;
 
 		private SimulatorResponseOutput(@NonNull SimulatorCancelationToken cancelationToken,
-				@NonNull Integer limitInBytes, java.util.concurrent.atomic.AtomicLong acceptedBytes) {
+				@NonNull Integer limitInBytes, java.util.concurrent.atomic.@NonNull AtomicLong acceptedBytes) {
 			this.acceptedBytes = acceptedBytes;
 			this.byteArrayOutputStream = new ByteArrayOutputStream();
 			this.limitInBytes = requireNonNull(limitInBytes);
@@ -3180,8 +3183,7 @@ public final class Soklet {
 			return !this.closed && !this.cancelationToken.isCanceled();
 		}
 
-		@NonNull
-		private byte[] toByteArray() {
+		private byte @NonNull [] toByteArray() {
 			this.closed = true;
 			return this.byteArrayOutputStream.toByteArray();
 		}
@@ -3189,21 +3191,21 @@ public final class Soklet {
 
 	@ThreadSafe
 	private static final class SimulatorCancelationToken implements CancelationToken {
-		private static final Runnable NO_CALLBACKS = () -> {};
-		private final Object lock = new Object();
+		private static final @NonNull Runnable NO_CALLBACKS = () -> {};
+		private final @NonNull Object lock = new Object();
 		private boolean canceled;
 		private boolean completed;
 		private final StreamLifecycleCoordinator.@Nullable Reservation reservation;
 		@Nullable
-		private Set<CancelationCallbackRegistration> callbacks;
+		private Set<@NonNull CancelationCallbackRegistration> callbacks;
 		@NonNull
-		private final Consumer<Throwable> callbackFailureConsumer;
+		private final Consumer<@NonNull Throwable> callbackFailureConsumer;
 		@Nullable
 		private StreamTerminationReason reason;
 		@Nullable
 		private Throwable cause;
 
-		private SimulatorCancelationToken(@NonNull Consumer<Throwable> callbackFailureConsumer,
+		private SimulatorCancelationToken(@NonNull Consumer<@NonNull Throwable> callbackFailureConsumer,
 				StreamLifecycleCoordinator.@Nullable Reservation reservation) {
 			this.callbackFailureConsumer = requireNonNull(callbackFailureConsumer);
 			this.reservation = reservation;
@@ -3220,7 +3222,7 @@ public final class Soklet {
 
 		@Override
 		@NonNull
-		public Optional<StreamTerminationReason> getCancelationReason() {
+		public Optional<@NonNull StreamTerminationReason> getCancelationReason() {
 			synchronized (this.lock) {
 				Optional<StreamTerminationReason> reason = this.reason == null && this.reservation != null
 						? this.reservation.reason() : Optional.ofNullable(this.reason);
@@ -3230,7 +3232,7 @@ public final class Soklet {
 
 		@Override
 		@NonNull
-		public Optional<Throwable> getCancelationCause() {
+		public Optional<@NonNull Throwable> getCancelationCause() {
 			synchronized (this.lock) {
 				Optional<Throwable> cause = this.reason == null && this.reservation != null
 						? this.reservation.cause() : Optional.ofNullable(this.cause);
@@ -3472,12 +3474,12 @@ public final class Soklet {
 		}
 
 		@NonNull
-		synchronized Optional<SokletConfig> getSokletConfig() {
+		synchronized Optional<@NonNull SokletConfig> getSokletConfig() {
 			return Optional.ofNullable(this.sokletConfig);
 		}
 
 		@NonNull
-		synchronized Optional<RequestHandler> getRequestHandler() {
+		synchronized Optional<@NonNull RequestHandler> getRequestHandler() {
 			return Optional.ofNullable(this.requestHandler);
 		}
 	}
@@ -3488,14 +3490,14 @@ public final class Soklet {
 	 */
 	@ThreadSafe
 	static class MockSseUnicaster implements SseUnicaster {
-		private final Request request;
-		private final Consumer<SseEvent> eventConsumer;
-		private final Consumer<SseComment> commentConsumer;
-		private final Object initializerLock = new Object();
+		private final @NonNull Request request;
+		private final @NonNull Consumer<@NonNull SseEvent> eventConsumer;
+		private final @NonNull Consumer<@NonNull SseComment> commentConsumer;
+		private final @NonNull Object initializerLock = new Object();
 		private boolean initializing;
 
 		MockSseUnicaster(@NonNull Request request,
-				@NonNull Consumer<SseEvent> eventConsumer, @NonNull Consumer<SseComment> commentConsumer) {
+				@NonNull Consumer<@NonNull SseEvent> eventConsumer, @NonNull Consumer<@NonNull SseComment> commentConsumer) {
 			this.request = requireNonNull(request);
 			this.eventConsumer = requireNonNull(eventConsumer);
 			this.commentConsumer = requireNonNull(commentConsumer);
@@ -3531,7 +3533,7 @@ public final class Soklet {
 	@ThreadSafe
 	static class MockSseBroadcaster implements SseBroadcaster {
 		// ConcurrentHashMap doesn't allow null values, so we use a sentinel if context is null
-		private static final Object NULL_CONTEXT_SENTINEL;
+		private static final @NonNull Object NULL_CONTEXT_SENTINEL;
 
 		static {
 			NULL_CONTEXT_SENTINEL = new Object();
@@ -3541,19 +3543,19 @@ public final class Soklet {
 		private final ResourcePath resourcePath;
 		// Maps the Consumer (Listener) to its Context object (e.g. Locale)
 		@NonNull
-		private final Map<@NonNull Consumer<SseEvent>, @NonNull Object> eventConsumers;
+		private final Map<@NonNull Consumer<@NonNull SseEvent>, @NonNull Object> eventConsumers;
 		// Same goes for comments
 		@NonNull
-		private final Map<@NonNull Consumer<SseComment>, @NonNull Object> commentConsumers;
-		private final Set<HandshakeAccepted> connections = ConcurrentHashMap.newKeySet();
+		private final Map<@NonNull Consumer<@NonNull SseComment>, @NonNull Object> commentConsumers;
+		private final @NonNull Set<@NonNull HandshakeAccepted> connections = ConcurrentHashMap.newKeySet();
 		@NonNull
-		private final AtomicReference<Consumer<Throwable>> broadcastErrorHandler;
+		private final AtomicReference<@Nullable Consumer<@NonNull Throwable>> broadcastErrorHandler;
 		@NonNull
-		private final Consumer<LogEvent> logEventConsumer;
+		private final Consumer<@NonNull LogEvent> logEventConsumer;
 
 		public MockSseBroadcaster(@NonNull ResourcePath resourcePath,
-															@NonNull AtomicReference<Consumer<Throwable>> broadcastErrorHandler,
-															@NonNull Consumer<LogEvent> logEventConsumer) {
+															@NonNull AtomicReference<@Nullable Consumer<@NonNull Throwable>> broadcastErrorHandler,
+															@NonNull Consumer<@NonNull LogEvent> logEventConsumer) {
 			requireNonNull(resourcePath);
 			requireNonNull(broadcastErrorHandler);
 			requireNonNull(logEventConsumer);
@@ -3604,8 +3606,8 @@ public final class Soklet {
 		}
 
 		@Override
-		public <T> void broadcastEvent(@NonNull Function<Object, T> keySelector,
-				@NonNull Function<T, SseEvent> eventProvider) {
+		public <T> void broadcastEvent(@NonNull Function<@Nullable Object, @Nullable T> keySelector,
+				@NonNull Function<@Nullable T, @NonNull SseEvent> eventProvider) {
 			requireNonNull(keySelector);
 			requireNonNull(eventProvider);
 			Map<T, SseBroadcastPayload<SseEvent>> payloadCache = new HashMap<>();
@@ -3631,8 +3633,8 @@ public final class Soklet {
 		}
 
 		@Override
-		public <T> void broadcastComment(@NonNull Function<Object, T> keySelector,
-				@NonNull Function<T, SseComment> commentProvider) {
+		public <T> void broadcastComment(@NonNull Function<@Nullable Object, @Nullable T> keySelector,
+				@NonNull Function<@Nullable T, @NonNull SseComment> commentProvider) {
 			requireNonNull(keySelector);
 			requireNonNull(commentProvider);
 			Map<T, SseBroadcastPayload<SseComment>> payloadCache = new HashMap<>();
@@ -3665,7 +3667,7 @@ public final class Soklet {
 		}
 
 		@NonNull
-		public Boolean registerEventConsumer(@NonNull Consumer<SseEvent> eventConsumer) {
+		public Boolean registerEventConsumer(@NonNull Consumer<@NonNull SseEvent> eventConsumer) {
 			return registerEventConsumer(eventConsumer, null);
 		}
 
@@ -3673,20 +3675,20 @@ public final class Soklet {
 		 * Registers a consumer with an associated context, simulating a client with specific traits.
 		 */
 		@NonNull
-		public Boolean registerEventConsumer(@NonNull Consumer<SseEvent> eventConsumer, @Nullable Object context) {
+		public Boolean registerEventConsumer(@NonNull Consumer<@NonNull SseEvent> eventConsumer, @Nullable Object context) {
 			requireNonNull(eventConsumer);
 			// map.put returns null if the key was new, which conceptually matches "add" returning true
 			return this.getEventConsumers().put(eventConsumer, context == null ? NULL_CONTEXT_SENTINEL : context) == null;
 		}
 
 		@NonNull
-		public Boolean unregisterEventConsumer(@NonNull Consumer<SseEvent> eventConsumer) {
+		public Boolean unregisterEventConsumer(@NonNull Consumer<@NonNull SseEvent> eventConsumer) {
 			requireNonNull(eventConsumer);
 			return this.getEventConsumers().remove(eventConsumer) != null;
 		}
 
 		@NonNull
-		public Boolean registerCommentConsumer(@NonNull Consumer<SseComment> commentConsumer) {
+		public Boolean registerCommentConsumer(@NonNull Consumer<@NonNull SseComment> commentConsumer) {
 			return registerCommentConsumer(commentConsumer, null);
 		}
 
@@ -3694,36 +3696,36 @@ public final class Soklet {
 		 * Registers a consumer with an associated context, simulating a client with specific traits.
 		 */
 		@NonNull
-		public Boolean registerCommentConsumer(@NonNull Consumer<SseComment> commentConsumer, @Nullable Object context) {
+		public Boolean registerCommentConsumer(@NonNull Consumer<@NonNull SseComment> commentConsumer, @Nullable Object context) {
 			requireNonNull(commentConsumer);
 			return this.getCommentConsumers().put(commentConsumer, context == null ? NULL_CONTEXT_SENTINEL : context) == null;
 		}
 
 		@NonNull
-		public Boolean unregisterCommentConsumer(@NonNull Consumer<SseComment> commentConsumer) {
+		public Boolean unregisterCommentConsumer(@NonNull Consumer<@NonNull SseComment> commentConsumer) {
 			requireNonNull(commentConsumer);
 			return this.getCommentConsumers().remove(commentConsumer) != null;
 		}
 
 		@NonNull
-		Map<@NonNull Consumer<SseEvent>, @NonNull Object> getEventConsumers() {
+		Map<@NonNull Consumer<@NonNull SseEvent>, @NonNull Object> getEventConsumers() {
 			return this.eventConsumers;
 		}
 
 		@NonNull
-		Map<@NonNull Consumer<SseComment>, @NonNull Object> getCommentConsumers() {
+		Map<@NonNull Consumer<@NonNull SseComment>, @NonNull Object> getCommentConsumers() {
 			return this.commentConsumers;
 		}
 
-		synchronized void registerConnection(HandshakeAccepted connection, Consumer<SseEvent> events,
-				Consumer<SseComment> comments, @Nullable Object context) {
+		synchronized void registerConnection(@NonNull HandshakeAccepted connection, @NonNull Consumer<@NonNull SseEvent> events,
+				@NonNull Consumer<@NonNull SseComment> comments, @Nullable Object context) {
 			this.connections.add(connection);
 			registerEventConsumer(events, context);
 			registerCommentConsumer(comments, context);
 		}
 
-		synchronized void unregisterConnection(HandshakeAccepted connection, Consumer<SseEvent> events,
-				Consumer<SseComment> comments) {
+		synchronized void unregisterConnection(@NonNull HandshakeAccepted connection, @NonNull Consumer<@NonNull SseEvent> events,
+				@NonNull Consumer<@NonNull SseComment> comments) {
 			unregisterEventConsumer(events);
 			unregisterCommentConsumer(comments);
 			this.connections.remove(connection);
@@ -3787,9 +3789,9 @@ public final class Soklet {
 		@NonNull
 		private final ConcurrentHashMap<@NonNull ResourcePath, @NonNull MockSseBroadcaster> broadcastersByResourcePath;
 		@NonNull
-		private final AtomicReference<Consumer<Throwable>> broadcastErrorHandler;
+		private final AtomicReference<@Nullable Consumer<@NonNull Throwable>> broadcastErrorHandler;
 		@NonNull
-		private final AtomicReference<Consumer<Throwable>> unicastErrorHandler;
+		private final AtomicReference<@Nullable Consumer<@NonNull Throwable>> unicastErrorHandler;
 
 		public MockSseServer() { this(null); }
 
@@ -3881,27 +3883,27 @@ public final class Soklet {
 			return Optional.of(broadcaster);
 		}
 
-		void registerConnection(HandshakeAccepted connection, ResourcePath resourcePath,
-				Consumer<SseEvent> events, Consumer<SseComment> comments, @Nullable Object context) {
+		void registerConnection(@NonNull HandshakeAccepted connection, @NonNull ResourcePath resourcePath,
+				@NonNull Consumer<@NonNull SseEvent> events, @NonNull Consumer<@NonNull SseComment> comments, @Nullable Object context) {
 			this.broadcastersByResourcePath.computeIfAbsent(resourcePath,
 					rp -> new MockSseBroadcaster(rp, this.broadcastErrorHandler, this::safelyLog))
 					.registerConnection(connection, events, comments, context);
 		}
 
-		void unregisterConnection(HandshakeAccepted connection, ResourcePath resourcePath,
-				Consumer<SseEvent> events, Consumer<SseComment> comments) {
+		void unregisterConnection(@NonNull HandshakeAccepted connection, @NonNull ResourcePath resourcePath,
+				@NonNull Consumer<@NonNull SseEvent> events, @NonNull Consumer<@NonNull SseComment> comments) {
 			MockSseBroadcaster broadcaster = this.broadcastersByResourcePath.get(resourcePath);
 			if (broadcaster != null)
 				broadcaster.unregisterConnection(connection, events, comments);
 		}
 
 		public void registerEventConsumer(@NonNull ResourcePath resourcePath,
-																			@NonNull Consumer<SseEvent> eventConsumer) {
+																			@NonNull Consumer<@NonNull SseEvent> eventConsumer) {
 			registerEventConsumer(resourcePath, eventConsumer, null);
 		}
 
 		public void registerEventConsumer(@NonNull ResourcePath resourcePath,
-																			@NonNull Consumer<SseEvent> eventConsumer,
+																			@NonNull Consumer<@NonNull SseEvent> eventConsumer,
 																			@Nullable Object context) {
 			requireNonNull(resourcePath);
 			requireNonNull(eventConsumer);
@@ -3914,7 +3916,7 @@ public final class Soklet {
 
 		@NonNull
 		public Boolean unregisterEventConsumer(@NonNull ResourcePath resourcePath,
-																					 @NonNull Consumer<SseEvent> eventConsumer) {
+																					 @NonNull Consumer<@NonNull SseEvent> eventConsumer) {
 			requireNonNull(resourcePath);
 			requireNonNull(eventConsumer);
 
@@ -3927,12 +3929,12 @@ public final class Soklet {
 		}
 
 		public void registerCommentConsumer(@NonNull ResourcePath resourcePath,
-																				@NonNull Consumer<SseComment> commentConsumer) {
+																				@NonNull Consumer<@NonNull SseComment> commentConsumer) {
 			registerCommentConsumer(resourcePath, commentConsumer, null);
 		}
 
 		public void registerCommentConsumer(@NonNull ResourcePath resourcePath,
-																				@NonNull Consumer<SseComment> commentConsumer,
+																				@NonNull Consumer<@NonNull SseComment> commentConsumer,
 																				@Nullable Object context) {
 			requireNonNull(resourcePath);
 			requireNonNull(commentConsumer);
@@ -3945,7 +3947,7 @@ public final class Soklet {
 
 		@NonNull
 		public Boolean unregisterCommentConsumer(@NonNull ResourcePath resourcePath,
-																						 @NonNull Consumer<SseComment> commentConsumer) {
+																						 @NonNull Consumer<@NonNull SseComment> commentConsumer) {
 			requireNonNull(resourcePath);
 			requireNonNull(commentConsumer);
 
@@ -3984,18 +3986,18 @@ public final class Soklet {
 			this.unicastErrorHandler.set(null);
 		}
 
-		public void onBroadcastError(@Nullable Consumer<Throwable> onBroadcastError) {
+		public void onBroadcastError(@Nullable Consumer<@NonNull Throwable> onBroadcastError) {
 			this.broadcastErrorHandler.set(onBroadcastError);
 		}
 
-		public void onUnicastError(@Nullable Consumer<Throwable> onUnicastError) {
+		public void onUnicastError(@Nullable Consumer<@NonNull Throwable> onUnicastError) {
 			this.unicastErrorHandler.set(onUnicastError);
 		}
 
 		void notifyConnectionLifecycle(@NonNull Request request, @Nullable ResourceMethod resourceMethod,
 				@NonNull LogEventType failureType, @NonNull String callbackName,
-				@NonNull Consumer<LifecycleObserver> observerNotification,
-				@NonNull Consumer<MetricsCollector> metricsNotification) {
+				@NonNull Consumer<@NonNull LifecycleObserver> observerNotification,
+				@NonNull Consumer<@NonNull MetricsCollector> metricsNotification) {
 			SokletConfig config = this.sokletConfig;
 			if (config == null)
 				return;
@@ -4030,12 +4032,12 @@ public final class Soklet {
 		}
 
 		@NonNull
-		synchronized Optional<SokletConfig> getSokletConfig() {
+		synchronized Optional<@NonNull SokletConfig> getSokletConfig() {
 			return Optional.ofNullable(this.sokletConfig);
 		}
 
 		@NonNull
-		synchronized Optional<SseServer.RequestHandler> getRequestHandler() {
+		synchronized Optional<SseServer.@NonNull RequestHandler> getRequestHandler() {
 			return Optional.ofNullable(this.requestHandler);
 		}
 
@@ -4045,12 +4047,12 @@ public final class Soklet {
 		}
 
 		@NonNull
-		AtomicReference<Consumer<Throwable>> getBroadcastErrorHandler() {
+		AtomicReference<@Nullable Consumer<@NonNull Throwable>> getBroadcastErrorHandler() {
 			return this.broadcastErrorHandler;
 		}
 
 		@NonNull
-		AtomicReference<Consumer<Throwable>> getUnicastErrorHandler() {
+		AtomicReference<@Nullable Consumer<@NonNull Throwable>> getUnicastErrorHandler() {
 			return this.unicastErrorHandler;
 		}
 	}

@@ -18,7 +18,6 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.net.SocketOption;
@@ -227,10 +226,9 @@ class ContinueResponseTimeoutTests {
                     (Runnable) releases::incrementAndGet);
             Class<?> type = Class.forName(ConnectionEventLoop.class.getName() + "$Connection");
             Constructor<?> constructor = type.getDeclaredConstructor(ConnectionEventLoop.class,
-                    SocketChannel.class, SelectionKey.class, InetSocketAddress.class,
-                    EventLoop.ConnectionAdmission.class);
+                    SocketChannel.class, SelectionKey.class, EventLoop.ConnectionAdmission.class);
             constructor.setAccessible(true);
-            connection = constructor.newInstance(loop, socket, key, null, admission);
+            connection = constructor.newInstance(loop, socket, key, admission);
             ((AtomicInteger) field(loop, "connectionCount")).set(1);
         }
 

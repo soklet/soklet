@@ -216,7 +216,7 @@ public sealed interface StreamingResponseBody permits StreamingResponseBody.Publ
 	@ThreadSafe
 	final class InputStreamBody implements StreamingResponseBody {
 		@NonNull
-		private final StreamResourceFactory<? extends InputStream> inputStreamFactory;
+		private final StreamResourceFactory<? extends @NonNull InputStream> inputStreamFactory;
 		@NonNull
 		private final Integer bufferSizeInBytes;
 
@@ -259,7 +259,7 @@ public sealed interface StreamingResponseBody permits StreamingResponseBody.Publ
 	@ThreadSafe
 	final class ReaderBody implements StreamingResponseBody {
 		@NonNull
-		private final StreamResourceFactory<? extends Reader> readerFactory;
+		private final StreamResourceFactory<? extends @NonNull Reader> readerFactory;
 		@NonNull
 		private final Charset charset;
 		@NonNull
@@ -384,11 +384,11 @@ public sealed interface StreamingResponseBody permits StreamingResponseBody.Publ
 	@NotThreadSafe
 	final class InputStreamBuilder {
 		@NonNull
-		private final StreamResourceFactory<? extends InputStream> inputStreamFactory;
+		private final StreamResourceFactory<? extends @NonNull InputStream> inputStreamFactory;
 		@Nullable
 		private Integer bufferSizeInBytes;
 
-		private InputStreamBuilder(@NonNull StreamResourceFactory<? extends InputStream> inputStreamFactory) {
+		private InputStreamBuilder(@NonNull StreamResourceFactory<? extends @NonNull InputStream> inputStreamFactory) {
 			this.inputStreamFactory = requireNonNull(inputStreamFactory);
 		}
 
@@ -423,7 +423,7 @@ public sealed interface StreamingResponseBody permits StreamingResponseBody.Publ
 	@NotThreadSafe
 	final class ReaderBuilder {
 		@NonNull
-		private final StreamResourceFactory<? extends Reader> readerFactory;
+		private final StreamResourceFactory<? extends @NonNull Reader> readerFactory;
 		@NonNull
 		private final Charset charset;
 		@Nullable
@@ -433,7 +433,7 @@ public sealed interface StreamingResponseBody permits StreamingResponseBody.Publ
 		@Nullable
 		private CodingErrorAction unmappableCharacterAction;
 
-		private ReaderBuilder(@NonNull StreamResourceFactory<? extends Reader> readerFactory,
+		private ReaderBuilder(@NonNull StreamResourceFactory<? extends @NonNull Reader> readerFactory,
 													@NonNull Charset charset) {
 			this.readerFactory = requireNonNull(readerFactory);
 			this.charset = requireNonNull(charset);

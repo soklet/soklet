@@ -69,7 +69,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 	// Default registries share this converter. Identify it by identity so explicit
 	// String converters keep control over empty suffix conversion and rejection.
 	@NonNull
-	private static final ValueConverter<Object, Object> DEFAULT_STRING_VALUE_CONVERTER =
+	private static final ValueConverter<@NonNull Object, @NonNull Object> DEFAULT_STRING_VALUE_CONVERTER =
 			ValueConverterRegistry.fromDefaults().get(String.class, String.class).orElseThrow();
 	@NonNull
 	private static final Map<@NonNull Type, @NonNull Object> DEFAULT_VALUES_BY_PRIMITIVE_TYPE;
@@ -494,7 +494,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 	 * @return the default value for the type, or an empty optional if no default exists (i.e. is null)
 	 */
 	@NonNull
-	protected Optional<Object> defaultValueForType(@Nullable Type type) {
+	protected Optional<@NonNull Object> defaultValueForType(@Nullable Type type) {
 		if (type == null)
 			return Optional.empty();
 
@@ -859,7 +859,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 	}
 
 	@NonNull
-	protected ValueConverter<Object, Object> valueConverterFor(@NonNull Parameter parameter,
+	protected ValueConverter<@NonNull Object, @NonNull Object> valueConverterFor(@NonNull Parameter parameter,
 																														 @NonNull Type fromType,
 																														 @NonNull Type toType,
 																														 @NonNull ResourceMethod resourceMethod) {
@@ -884,7 +884,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 
 	@NonNull
 	protected String expectedTypeName(@NonNull Type toType,
-																		@Nullable ValueConverter<Object, Object> valueConverter) {
+																		@Nullable ValueConverter<@NonNull Object, @NonNull Object> valueConverter) {
 		requireNonNull(toType);
 		return valueConverter == null ? toType.getTypeName() : valueConverter.getToType().getTypeName();
 	}
@@ -916,7 +916,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 		@Nullable
 		Object convert(@NonNull T valueMetadatum,
 									 @NonNull Type toType,
-									 @Nullable ValueConverter<Object, Object> valueConverter) throws ValueConversionException;
+									 @Nullable ValueConverter<@NonNull Object, @NonNull Object> valueConverter) throws ValueConversionException;
 	}
 
 	@NotThreadSafe
@@ -1086,7 +1086,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 		}
 
 		@NonNull
-		public Optional<ValueMetadatumConverter<T>> getValueMetadatumConverter() {
+		public Optional<@NonNull ValueMetadatumConverter<T>> getValueMetadatumConverter() {
 			return Optional.ofNullable(this.valueMetadatumConverter);
 		}
 
@@ -1151,7 +1151,7 @@ final class DefaultResourceMethodParameterProvider implements ResourceMethodPara
 		}
 
 		@NonNull
-		public Optional<Type> getListElementType() {
+		public Optional<@NonNull Type> getListElementType() {
 			return Optional.ofNullable(this.listElementType);
 		}
 

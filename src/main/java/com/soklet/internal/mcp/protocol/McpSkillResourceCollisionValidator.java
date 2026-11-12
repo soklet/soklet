@@ -94,7 +94,7 @@ public final class McpSkillResourceCollisionValidator {
 		}
 	}
 
-	private static IllegalArgumentException invalid() {
+	private static @NonNull IllegalArgumentException invalid() {
 		return new IllegalArgumentException(
 				"Skills file URIs conflict with resource templates or cannot be safely validated.");
 	}

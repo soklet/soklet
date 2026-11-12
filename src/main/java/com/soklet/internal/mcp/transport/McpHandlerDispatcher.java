@@ -67,7 +67,7 @@ final class McpHandlerDispatcher {
 		@NonNull
 		private final Work work;
 		@NonNull
-		private final Consumer<Throwable> submissionFailureConsumer;
+		private final Consumer<@NonNull Throwable> submissionFailureConsumer;
 		@NonNull
 		private final AtomicReference<@Nullable Thread> handlerThread;
 		@NonNull

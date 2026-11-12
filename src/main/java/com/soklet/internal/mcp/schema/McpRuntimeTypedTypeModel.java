@@ -187,7 +187,7 @@ final class McpRuntimeTypedTypeModel implements McpTypedTypeModel<Type> {
 	private McpTypedTypeDescriptor.@NonNull RecordValue<@NonNull Type> recordDescriptor(
 			@NonNull Class<?> recordClass,
 			@NonNull Map<@NonNull TypeVariable<?>, @NonNull Type> substitutions,
-			Type @NonNull [] actualArguments,
+			@NonNull Type @NonNull [] actualArguments,
 			int genericArgumentStructuralComplexity) {
 		RecordComponent[] components = requireNonNull(
 				recordClass.getRecordComponents());
@@ -250,7 +250,7 @@ final class McpRuntimeTypedTypeModel implements McpTypedTypeModel<Type> {
 				screeningOnlyGenericArguments);
 	}
 
-	private Type @NonNull [] typeArguments(@NonNull ParameterizedType type) {
+	private @NonNull Type @NonNull [] typeArguments(@NonNull ParameterizedType type) {
 		Type[] arguments = requireNonNull(type.getActualTypeArguments());
 		if (arguments.length > limits.maximumCollectionEntryCount())
 			throw new McpTypedTypeModelLimitException(
@@ -262,7 +262,7 @@ final class McpRuntimeTypedTypeModel implements McpTypedTypeModel<Type> {
 		return arguments;
 	}
 
-	private Type @NonNull [] wildcardBounds(Type @NonNull [] bounds) {
+	private @NonNull Type @NonNull [] wildcardBounds(@NonNull Type @NonNull [] bounds) {
 		requireNonNull(bounds);
 		if (bounds.length > limits.maximumCollectionEntryCount())
 			throw new McpTypedTypeModelLimitException(
@@ -348,7 +348,7 @@ final class McpRuntimeTypedTypeModel implements McpTypedTypeModel<Type> {
 			}
 		}
 
-		private int structuralComplexity(Type @NonNull [] types) {
+		private int structuralComplexity(@NonNull Type @NonNull [] types) {
 			for (Type type : types)
 				visitStructure(type, 1);
 			return visitedNodeCount;
@@ -540,7 +540,7 @@ final class McpRuntimeTypedTypeModel implements McpTypedTypeModel<Type> {
 		}
 
 		@Override
-		public Type @NonNull [] getActualTypeArguments() {
+		public @NonNull Type @NonNull [] getActualTypeArguments() {
 			return arguments.toArray(Type[]::new);
 		}
 

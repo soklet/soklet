@@ -11,6 +11,8 @@
  */
 package com.soklet;
 
+
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import javax.annotation.concurrent.ThreadSafe;
@@ -37,11 +39,11 @@ import static java.util.Objects.requireNonNull;
  */
 @ThreadSafe
 final class McpSkillPolicyEvaluator {
-	private final McpEndpoint endpoint;
-	private final McpSkillAccessPolicy accessPolicy;
+	private final @NonNull McpEndpoint endpoint;
+	private final @NonNull McpSkillAccessPolicy accessPolicy;
 	private final @Nullable McpSkillVariantSelector selector;
 
-	McpSkillPolicyEvaluator(McpEndpoint endpoint, McpSkillAccessPolicy accessPolicy,
+	McpSkillPolicyEvaluator(@NonNull McpEndpoint endpoint, @NonNull McpSkillAccessPolicy accessPolicy,
 			@Nullable McpSkillVariantSelector selector) {
 		this.endpoint = requireNonNull(endpoint);
 		this.accessPolicy = requireNonNull(accessPolicy);
@@ -52,9 +54,9 @@ final class McpSkillPolicyEvaluator {
 	}
 
 	/** Ordered eligible listing registrations, not yet a bounded/serialized page. */
-	List<McpSkillRegistration> discover(McpRequestContext requestContext,
-			List<Locale.LanguageRange> languageRanges, McpInvocationFeatures features,
-			BooleanSupplier pastDeadline) throws InterruptedException {
+	@NonNull List<@NonNull McpSkillRegistration> discover(@NonNull McpRequestContext requestContext,
+			@NonNull List<Locale.@NonNull LanguageRange> languageRanges, @NonNull McpInvocationFeatures features,
+			@NonNull BooleanSupplier pastDeadline) throws InterruptedException {
 		requireRequest(requestContext, features, pastDeadline);
 		List<Locale.LanguageRange> ranges = List.copyOf(languageRanges);
 		List<McpSkillRegistration> visible = new ArrayList<>();
@@ -96,8 +98,8 @@ final class McpSkillPolicyEvaluator {
 	}
 
 	/** Exact skill lookup ignores discovery and locale selection, and checks anew. */
-	Optional<McpSkillRegistration> findAccessibleSkill(URI uri, McpRequestContext requestContext,
-			McpInvocationFeatures features, BooleanSupplier pastDeadline) throws InterruptedException {
+	@NonNull Optional<@NonNull McpSkillRegistration> findAccessibleSkill(@NonNull URI uri, @NonNull McpRequestContext requestContext,
+			@NonNull McpInvocationFeatures features, @NonNull BooleanSupplier pastDeadline) throws InterruptedException {
 		requireRequest(requestContext, features, pastDeadline);
 		Optional<McpSkillRegistration> registration = this.endpoint.skillIndex().findRegistration(requireNonNull(uri));
 		if (registration.isEmpty()) return Optional.empty();
@@ -111,8 +113,8 @@ final class McpSkillPolicyEvaluator {
 	 * policy failure. Cancellation/deadline expiration stops all further work.
 	 * A denied owner supplies no grant; any failed owner prevents publication.
 	 */
-	Optional<McpSkillEndpointIndex.File> findAccessibleFile(URI uri, McpRequestContext requestContext,
-			McpInvocationFeatures features, BooleanSupplier pastDeadline) throws InterruptedException {
+	@NonNull Optional<McpSkillEndpointIndex.@NonNull File> findAccessibleFile(@NonNull URI uri, @NonNull McpRequestContext requestContext,
+			@NonNull McpInvocationFeatures features, @NonNull BooleanSupplier pastDeadline) throws InterruptedException {
 		requireRequest(requestContext, features, pastDeadline);
 		Optional<McpSkillEndpointIndex.File> file = this.endpoint.skillIndex().findFile(requireNonNull(uri));
 		if (file.isEmpty()) return Optional.empty();
@@ -133,10 +135,10 @@ final class McpSkillPolicyEvaluator {
 	 * First pages must retain the selected order. Continuations recheck current
 	 * access and discoverability but deliberately do not rerun variant selection.
 	 */
-	List<McpSkillRegistration> validatePage(List<McpSkillRegistration> pageRegistrations,
-			Optional<List<McpSkillRegistration>> initialSkillRegistrations,
-			McpRequestContext requestContext, McpInvocationFeatures features,
-			BooleanSupplier pastDeadline) throws InterruptedException {
+	@NonNull List<@NonNull McpSkillRegistration> validatePage(@NonNull List<@NonNull McpSkillRegistration> pageRegistrations,
+			@NonNull Optional<@NonNull List<@NonNull McpSkillRegistration>> initialSkillRegistrations,
+			@NonNull McpRequestContext requestContext, @NonNull McpInvocationFeatures features,
+			@NonNull BooleanSupplier pastDeadline) throws InterruptedException {
 		requireRequest(requestContext, features, pastDeadline);
 		if (pageRegistrations == null || initialSkillRegistrations == null) throw failure();
 		List<McpSkillRegistration> page;
@@ -171,8 +173,8 @@ final class McpSkillPolicyEvaluator {
 		return page;
 	}
 
-	private boolean discoverable(McpSkillRegistration registration, McpRequestContext requestContext,
-			McpInvocationFeatures features, BooleanSupplier pastDeadline) throws InterruptedException {
+	private boolean discoverable(@NonNull McpSkillRegistration registration, @NonNull McpRequestContext requestContext,
+			@NonNull McpInvocationFeatures features, @NonNull BooleanSupplier pastDeadline) throws InterruptedException {
 		Decision access = access(registration, requestContext, features, pastDeadline);
 		if (access == Decision.FAILED) throw failure();
 		if (access == Decision.DENIED) return false;
@@ -182,14 +184,14 @@ final class McpSkillPolicyEvaluator {
 		return discovery == Decision.ALLOWED;
 	}
 
-	private Decision access(McpSkillRegistration registration, McpRequestContext requestContext,
-			McpInvocationFeatures features, BooleanSupplier pastDeadline) throws InterruptedException {
+	private @NonNull Decision access(@NonNull McpSkillRegistration registration, @NonNull McpRequestContext requestContext,
+			@NonNull McpInvocationFeatures features, @NonNull BooleanSupplier pastDeadline) throws InterruptedException {
 		return evaluate(() -> this.accessPolicy.isSkillAccessible(requestContext, registration, features),
 				features, pastDeadline);
 	}
 
-	private static Decision evaluate(Evaluation evaluation, McpInvocationFeatures features,
-			BooleanSupplier pastDeadline) throws InterruptedException {
+	private static @NonNull Decision evaluate(@NonNull Evaluation evaluation, @NonNull McpInvocationFeatures features,
+			@NonNull BooleanSupplier pastDeadline) throws InterruptedException {
 		requireActive(features, pastDeadline);
 		Decision decision;
 		try {
@@ -206,8 +208,8 @@ final class McpSkillPolicyEvaluator {
 		return decision;
 	}
 
-	private void requireRequest(McpRequestContext requestContext, McpInvocationFeatures features,
-			BooleanSupplier pastDeadline) throws InterruptedException {
+	private void requireRequest(@NonNull McpRequestContext requestContext, @NonNull McpInvocationFeatures features,
+			@NonNull BooleanSupplier pastDeadline) throws InterruptedException {
 		requireNonNull(requestContext);
 		requireNonNull(features);
 		requireNonNull(pastDeadline);
@@ -215,14 +217,14 @@ final class McpSkillPolicyEvaluator {
 		requireActive(features, pastDeadline);
 	}
 
-	private static void requireActive(McpInvocationFeatures features, BooleanSupplier pastDeadline)
+	private static void requireActive(@NonNull McpInvocationFeatures features, @NonNull BooleanSupplier pastDeadline)
 			throws InterruptedException {
 		if (Thread.currentThread().isInterrupted() || features.getCancelationToken().isCanceled()
 				|| pastDeadline.getAsBoolean()) throw canceled();
 	}
 
 	/** RFC 4647 basic matching; most-specific match wins, then earliest range. */
-	private static boolean excluded(Locale locale, List<Locale.LanguageRange> ranges) {
+	private static boolean excluded(@NonNull Locale locale, @NonNull List<Locale.@NonNull LanguageRange> ranges) {
 		String tag = locale.toLanguageTag().toLowerCase(Locale.ROOT);
 		int specificity = -1;
 		boolean excluded = false;
@@ -238,15 +240,15 @@ final class McpSkillPolicyEvaluator {
 		return excluded;
 	}
 
-	private static IllegalStateException failure() {
+	private static @NonNull IllegalStateException failure() {
 		return new IllegalStateException("MCP Skills policy evaluation failed.");
 	}
 
-	private static InterruptedException canceled() {
+	private static @NonNull InterruptedException canceled() {
 		return new InterruptedException("MCP Skills policy evaluation was canceled.");
 	}
 
 	private enum Decision { ALLOWED, DENIED, FAILED }
 	@FunctionalInterface private interface Evaluation { boolean evaluate() throws Exception; }
-	@Override public String toString() { return "McpSkillPolicyEvaluator[redacted]"; }
+	@Override public @NonNull String toString() { return "McpSkillPolicyEvaluator[redacted]"; }
 }

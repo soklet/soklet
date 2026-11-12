@@ -74,14 +74,14 @@ final class SokletDirectLifecycle {
 	@NonNull
 	private final AtomicReference<@Nullable ShutdownResult> publicResult;
 	@NonNull
-	private final CompletionStage<ShutdownResult> publicShutdownStage;
+	private final CompletionStage<@NonNull ShutdownResult> publicShutdownStage;
 	@NonNull
 	private final LifecycleTransitionDispatcher transitions;
 	private final long lifecycleBeganNanos;
 	@NonNull
-	private final AtomicReference<InternalLifecycleCoreSnapshot> terminalCoreSnapshot;
+	private final AtomicReference<@Nullable InternalLifecycleCoreSnapshot> terminalCoreSnapshot;
 	@NonNull
-	private final Consumer<InternalLifecycleCoreSnapshot> coreSnapshotPublisher;
+	private final Consumer<@NonNull InternalLifecycleCoreSnapshot> coreSnapshotPublisher;
 	@NonNull
 	private final Object executionOwnerToken;
 	@NonNull
@@ -90,11 +90,11 @@ final class SokletDirectLifecycle {
 	@NonNull
 	private final Object attachmentMonitor;
 	@NonNull
-	private final List<ParticipantControl> controls;
+	private final List<@NonNull ParticipantControl> controls;
 	@NonNull
-	private final List<DirectParticipant> participants;
+	private final List<@NonNull DirectParticipant> participants;
 	@NonNull
-	private final AtomicReference<List<DirectParticipant>> installedParticipants;
+	private final AtomicReference<@NonNull List<@NonNull DirectParticipant>> installedParticipants;
 	@NonNull
 	private final AtomicReference<TrackedLifecycleCallRunner.@Nullable Call<?>> activeStartupCall;
 	@NonNull
@@ -113,7 +113,7 @@ final class SokletDirectLifecycle {
 	@NonNull
 	private final AtomicReference<@Nullable Throwable> startupFailure;
 	@NonNull
-	private final AtomicReference<InternalStartupDisposition> startupDisposition;
+	private final AtomicReference<@NonNull InternalStartupDisposition> startupDisposition;
 	@NonNull
 	private final AtomicBoolean readyPublished;
 	@NonNull
@@ -138,7 +138,7 @@ final class SokletDirectLifecycle {
 	@NonNull
 	private final Runnable afterAttachmentSettled;
 	@NonNull
-	private final Consumer<String> beforeStartupCallOutcomeSelection;
+	private final Consumer<@NonNull String> beforeStartupCallOutcomeSelection;
 	private final boolean transitionObservationEnabled;
 
 	SokletDirectLifecycle(@NonNull Soklet soklet,
@@ -152,7 +152,7 @@ final class SokletDirectLifecycle {
 			@NonNull SokletConfig config,
 			@NonNull SokletFrameworkSetup frameworkSetup,
 			@NonNull LifecycleRuntimeServices services,
-			@NonNull Consumer<InternalLifecycleCoreSnapshot> coreSnapshotPublisher) {
+			@NonNull Consumer<@NonNull InternalLifecycleCoreSnapshot> coreSnapshotPublisher) {
 		this(soklet, config, frameworkSetup, services, () -> { }, () -> { },
 				() -> { }, () -> { }, coreSnapshotPublisher, ignored -> { });
 	}
@@ -208,7 +208,7 @@ final class SokletDirectLifecycle {
 			@NonNull Runnable afterFirstShutdownIntentPublished,
 			@NonNull Runnable completionWaitHook,
 			@NonNull Runnable afterAttachmentSettled,
-			@NonNull Consumer<String> beforeStartupCallOutcomeSelection) {
+			@NonNull Consumer<@NonNull String> beforeStartupCallOutcomeSelection) {
 		this(soklet, config, frameworkSetup,
 				new LifecycleRuntimeServices(clock, workers),
 				readyLinearizationHook, afterFirstShutdownIntentPublished,
@@ -224,8 +224,8 @@ final class SokletDirectLifecycle {
 			@NonNull Runnable afterFirstShutdownIntentPublished,
 			@NonNull Runnable completionWaitHook,
 			@NonNull Runnable afterAttachmentSettled,
-			@NonNull Consumer<InternalLifecycleCoreSnapshot> coreSnapshotPublisher,
-			@NonNull Consumer<String> beforeStartupCallOutcomeSelection) {
+			@NonNull Consumer<@NonNull InternalLifecycleCoreSnapshot> coreSnapshotPublisher,
+			@NonNull Consumer<@NonNull String> beforeStartupCallOutcomeSelection) {
 		this.soklet = requireNonNull(soklet);
 		this.config = requireNonNull(config);
 		this.frameworkSetup = requireNonNull(frameworkSetup);
@@ -316,7 +316,7 @@ final class SokletDirectLifecycle {
 		}
 		dispatchStartIntent();
 
-		AtomicReference<CoordinatorOutcome> outcome = new AtomicReference<>();
+		AtomicReference<@Nullable CoordinatorOutcome> outcome = new AtomicReference<>();
 		try {
 			this.workers.start(LifecycleWorkers.Role.COORDINATOR,
 					"soklet-lifecycle-coordinator",
@@ -368,13 +368,13 @@ final class SokletDirectLifecycle {
 	 * read-only public stage for this lifecycle attempt.
 	 */
 	@NonNull
-	CompletionStage<ShutdownResult> shutdown() {
+	CompletionStage<@NonNull ShutdownResult> shutdown() {
 		requestShutdownIntent();
 		return this.publicShutdownStage;
 	}
 
 	@NonNull
-	CompletionStage<ShutdownResult> shutdownStage() {
+	CompletionStage<@NonNull ShutdownResult> shutdownStage() {
 		return this.publicShutdownStage;
 	}
 
@@ -390,7 +390,7 @@ final class SokletDirectLifecycle {
 	}
 
 	@NonNull
-	private Optional<RuntimeException> shutdownFailure(@NonNull ShutdownResult result) {
+	private Optional<@NonNull RuntimeException> shutdownFailure(@NonNull ShutdownResult result) {
 		ShutdownResult exactResult = requireNonNull(result);
 		UnexpectedTerminationClaim unexpected =
 				this.terminalUnexpectedTermination;
@@ -404,7 +404,7 @@ final class SokletDirectLifecycle {
 	}
 
 	@NonNull
-	Optional<RuntimeException> applicationTerminalFailure(
+	Optional<@NonNull RuntimeException> applicationTerminalFailure(
 			@NonNull InternalShutdownResult result) {
 		InternalShutdownResult exactResult = requireNonNull(result);
 		if (exactResult.startupDisposition() == InternalStartupDisposition.FAILED
@@ -572,7 +572,7 @@ final class SokletDirectLifecycle {
 	}
 
 	@NonNull
-	private List<DirectParticipant> commitInstalledParticipants() throws Throwable {
+	private List<@NonNull DirectParticipant> commitInstalledParticipants() throws Throwable {
 		synchronized (this.attachmentMonitor) {
 			if (!this.attachmentWindowOpen.get()
 					|| this.stateMachine.shutdownRequested())
@@ -667,11 +667,11 @@ final class SokletDirectLifecycle {
 				== InternalLifecycleStateMachine.State.READY;
 	}
 
-	InternalLifecycleStateMachine.State state() {
+	InternalLifecycleStateMachine.@NonNull State state() {
 		return this.stateMachine.state();
 	}
 
-	LifecycleExecutionContext.Scope enterExecution() {
+	LifecycleExecutionContext.@NonNull Scope enterExecution() {
 		return LifecycleExecutionContext.enter(this.executionOwnerToken);
 	}
 
@@ -695,7 +695,7 @@ final class SokletDirectLifecycle {
 	}
 
 	@NonNull
-	Optional<InternalShutdownResult> result() {
+	Optional<@NonNull InternalShutdownResult> result() {
 		if (this.stateMachine.state()
 				!= InternalLifecycleStateMachine.State.CLOSED)
 			return Optional.empty();
@@ -703,7 +703,7 @@ final class SokletDirectLifecycle {
 	}
 
 	@NonNull
-	Optional<ShutdownResult> publicResult() {
+	Optional<@NonNull ShutdownResult> publicResult() {
 		if (this.stateMachine.state()
 				!= InternalLifecycleStateMachine.State.CLOSED)
 			return Optional.empty();
@@ -970,7 +970,7 @@ final class SokletDirectLifecycle {
 	}
 
 	private void awaitRunningShutdown(
-			@NonNull List<DirectParticipant> participants)
+			@NonNull List<@NonNull DirectParticipant> participants)
 			throws InterruptedException {
 		long effectivelyInfinite = LifecycleDeadlines.after(this.clock.nanoTime(),
 				Duration.ofNanos(Long.MAX_VALUE));
@@ -985,7 +985,7 @@ final class SokletDirectLifecycle {
 
 	@NonNull
 	private CoordinatorOutcome coordinateShutdown(
-			@NonNull List<? extends InternalLifecycleCoordinator.Participant> participants,
+			@NonNull List<? extends InternalLifecycleCoordinator.@NonNull Participant> participants,
 			@NonNull InternalStartupDisposition disposition,
 			@Nullable Throwable primaryFailure,
 			boolean cancellationBudget) {
@@ -995,7 +995,7 @@ final class SokletDirectLifecycle {
 
 	@NonNull
 	private CoordinatorOutcome coordinateShutdown(
-			@NonNull List<? extends InternalLifecycleCoordinator.Participant> participants,
+			@NonNull List<? extends InternalLifecycleCoordinator.@NonNull Participant> participants,
 			@NonNull InternalStartupDisposition disposition,
 			@Nullable Throwable primaryFailure,
 			boolean cancellationBudget,
@@ -1361,7 +1361,7 @@ final class SokletDirectLifecycle {
 	}
 
 	@NonNull
-	private List<ParticipantControl> createControls() {
+	private List<@NonNull ParticipantControl> createControls() {
 		List<ParticipantControl> result = new ArrayList<>(3);
 		this.config.getHttpServer().ifPresent(server -> result.add(
 				new HttpControl(server)));
@@ -1372,12 +1372,12 @@ final class SokletDirectLifecycle {
 		return result;
 	}
 
-	private <T> T runStartupCall(@NonNull String name,
-			InternalLifecycleCoordinator.Participant participant,
-			java.util.concurrent.Callable<T> callable,
+	private <T extends @Nullable Object> @Nullable T runStartupCall(@NonNull String name,
+			InternalLifecycleCoordinator.@NonNull Participant participant,
+			java.util.concurrent.@NonNull Callable<T> callable,
 			long startupDeadline) throws Throwable {
-		AtomicReference<T> value = new AtomicReference<>();
-		AtomicReference<Throwable> failure = new AtomicReference<>();
+		AtomicReference<@Nullable T> value = new AtomicReference<>();
+		AtomicReference<@Nullable Throwable> failure = new AtomicReference<>();
 		InternalLifecycleCoordinator.Participant exactParticipant =
 				requireNonNull(participant);
 		boolean syntheticAttempt = exactParticipant instanceof FrameworkAttempt;
@@ -1579,7 +1579,7 @@ final class SokletDirectLifecycle {
 	}
 
 	@NonNull
-	private Optional<Throwable> unexpectedTerminationCause() {
+	private Optional<@NonNull Throwable> unexpectedTerminationCause() {
 		UnexpectedTerminationClaim elected = this.unexpectedTermination.get();
 		if (elected != null)
 			return Optional.of(elected.failure());
@@ -1601,7 +1601,7 @@ final class SokletDirectLifecycle {
 	}
 
 	@NonNull
-	private Optional<InternalTerminationEvent> firstInstalledControllingEvent() {
+	private Optional<@NonNull InternalTerminationEvent> firstInstalledControllingEvent() {
 		Optional<InternalTerminationEvent> first =
 				this.controllingEventElection.firstEvent();
 		if (first.isPresent())
@@ -1859,7 +1859,7 @@ final class SokletDirectLifecycle {
 
 	@NonNull
 	private InternalShutdownResult unknownResult(
-			@NonNull List<? extends InternalLifecycleCoordinator.Participant> participants,
+			@NonNull List<? extends InternalLifecycleCoordinator.@NonNull Participant> participants,
 			@NonNull InternalStartupDisposition disposition,
 			@NonNull Throwable failure) {
 		List<InternalLifecycleComponentShutdownResult> results = new ArrayList<>();
@@ -1984,7 +1984,7 @@ final class SokletDirectLifecycle {
 		@Override @NonNull public InternalLifecycleComponentType kind() { return this.kind; }
 		@Override @NonNull public AdmissionFence admissionFence() { return this.admission; }
 		@Override @NonNull public InternalTerminationGroup terminationGroup() { return this.group; }
-		@Override @NonNull public Set<InternalResidualActivityType> residualActivity() { return Set.of(); }
+		@Override @NonNull public Set<@NonNull InternalResidualActivityType> residualActivity() { return Set.of(); }
 		@Override @NonNull public InternalTransportRuntime runtime() {
 			return new InternalTransportRuntime() {
 				@Override public void start(@NonNull StartupContext context) { }
@@ -2088,7 +2088,7 @@ final class SokletDirectLifecycle {
 		@Override @NonNull public InternalLifecycleComponentType kind() { return this.control.kind(); }
 		@Override @NonNull public AdmissionFence admissionFence() { return this.control.admissionFence(); }
 		@Override @NonNull public InternalTerminationGroup terminationGroup() { return this.control.terminationGroup(); }
-		@Override @NonNull public Set<InternalResidualActivityType> residualActivity() { return this.control.residualActivity(); }
+		@Override @NonNull public Set<@NonNull InternalResidualActivityType> residualActivity() { return this.control.residualActivity(); }
 		@Override public boolean startupCallActive() {
 			return this.phaseGate.startupCallActive();
 		}
@@ -2132,8 +2132,8 @@ final class SokletDirectLifecycle {
 		@NonNull AdmissionFence admissionFence();
 		@NonNull InternalTerminationGroup terminationGroup();
 		@NonNull InternalTransportRuntime runtime();
-		@NonNull Set<InternalResidualActivityType> residualActivity();
-		@NonNull Optional<Throwable> finalizeEvidence(
+		@NonNull Set<@NonNull InternalResidualActivityType> residualActivity();
+		@NonNull Optional<@NonNull Throwable> finalizeEvidence(
 				@NonNull InternalLifecycleComponentShutdownResult result);
 		void publishResult(@NonNull InternalShutdownResult result);
 		void publishResultAfterFailure(@NonNull InternalShutdownResult result);
@@ -2152,10 +2152,10 @@ final class SokletDirectLifecycle {
 		}
 
 		@NonNull
-		private final AtomicReference<AttachmentState> attachmentState =
+		private final AtomicReference<@NonNull AttachmentState> attachmentState =
 				new AtomicReference<>(AttachmentState.NOT_BEGUN);
-		private final AtomicBoolean committed = new AtomicBoolean();
-		private final AtomicBoolean startAttempted = new AtomicBoolean();
+		private final @NonNull AtomicBoolean committed = new AtomicBoolean();
+		private final @NonNull AtomicBoolean startAttempted = new AtomicBoolean();
 
 		void markAttachmentPending() {
 			if (!this.attachmentState.compareAndSet(AttachmentState.NOT_BEGUN,
@@ -2200,7 +2200,7 @@ final class SokletDirectLifecycle {
 					AttachmentState.DISCARDED))
 				discardUncommittedAttachment();
 		}
-		@Override @NonNull public Optional<Throwable> finalizeEvidence(
+		@Override @NonNull public Optional<@NonNull Throwable> finalizeEvidence(
 				@NonNull InternalLifecycleComponentShutdownResult result) { return Optional.empty(); }
 		@Override public void publishResult(@NonNull InternalShutdownResult result) { }
 		@Override public void publishResultAfterFailure(
@@ -2290,8 +2290,8 @@ final class SokletDirectLifecycle {
 		@Override @NonNull public AdmissionFence admissionFence() { return generation().admissionFence(); }
 		@Override @NonNull public InternalTerminationGroup terminationGroup() { return generation().terminationGroup(); }
 		@Override @NonNull public InternalTransportRuntime runtime() { return generation().runtime(); }
-		@Override @NonNull public Set<InternalResidualActivityType> residualActivity() { return generation().residualActivity(); }
-		@Override @NonNull public Optional<Throwable> finalizeEvidence(@NonNull InternalLifecycleComponentShutdownResult result) {
+		@Override @NonNull public Set<@NonNull InternalResidualActivityType> residualActivity() { return generation().residualActivity(); }
+		@Override @NonNull public Optional<@NonNull Throwable> finalizeEvidence(@NonNull InternalLifecycleComponentShutdownResult result) {
 			return this.builtIn == null ? Optional.empty()
 					: ((DefaultHttpServer) this.server).getLifecycleAdapter()
 						.finalizeExternallyCoordinatedEvidence(this.builtIn, result);
@@ -2308,7 +2308,7 @@ final class SokletDirectLifecycle {
 						.publishExternallyCoordinatedOwnerResultAfterFailure(
 								this.builtIn, result);
 		}
-		private InternalLifecycleCoordinator.Participant generation() {
+		private InternalLifecycleCoordinator.@NonNull Participant generation() {
 			return this.builtIn != null ? this.builtIn : requireNonNull(this.local);
 		}
 	}
@@ -2387,11 +2387,11 @@ final class SokletDirectLifecycle {
 		@Override @NonNull public AdmissionFence admissionFence() { return generation().admissionFence(); }
 		@Override @NonNull public InternalTerminationGroup terminationGroup() { return generation().terminationGroup(); }
 		@Override @NonNull public InternalTransportRuntime runtime() { return generation().runtime(); }
-		@Override @NonNull public Set<InternalResidualActivityType> residualActivity() { return generation().residualActivity(); }
-		@Override @NonNull public Optional<Throwable> finalizeEvidence(@NonNull InternalLifecycleComponentShutdownResult result) { return this.builtIn == null ? Optional.empty() : ((DefaultSseServer) this.server).getLifecycleAdapter().finalizeExternallyCoordinatedEvidence(this.builtIn, result); }
+		@Override @NonNull public Set<@NonNull InternalResidualActivityType> residualActivity() { return generation().residualActivity(); }
+		@Override @NonNull public Optional<@NonNull Throwable> finalizeEvidence(@NonNull InternalLifecycleComponentShutdownResult result) { return this.builtIn == null ? Optional.empty() : ((DefaultSseServer) this.server).getLifecycleAdapter().finalizeExternallyCoordinatedEvidence(this.builtIn, result); }
 		@Override public void publishResult(@NonNull InternalShutdownResult result) { if (this.builtIn != null) ((DefaultSseServer) this.server).getLifecycleAdapter().publishExternallyCoordinatedResult(this.builtIn, result); }
 		@Override public void publishResultAfterFailure(@NonNull InternalShutdownResult result) { if (this.builtIn != null) ((DefaultSseServer) this.server).getLifecycleAdapter().publishExternallyCoordinatedOwnerResultAfterFailure(this.builtIn, result); }
-		private InternalLifecycleCoordinator.Participant generation() { return this.builtIn != null ? this.builtIn : requireNonNull(this.local); }
+		private InternalLifecycleCoordinator.@NonNull Participant generation() { return this.builtIn != null ? this.builtIn : requireNonNull(this.local); }
 	}
 
 	private final class McpControl extends AbstractControl {
@@ -2443,8 +2443,8 @@ final class SokletDirectLifecycle {
 		@Override @NonNull public AdmissionFence admissionFence() { return requireNonNull(this.generation).admissionFence(); }
 		@Override @NonNull public InternalTerminationGroup terminationGroup() { return requireNonNull(this.generation).terminationGroup(); }
 		@Override @NonNull public InternalTransportRuntime runtime() { return requireNonNull(this.generation).runtime(); }
-		@Override @NonNull public Set<InternalResidualActivityType> residualActivity() { return requireNonNull(this.generation).residualActivity(); }
-		@Override @NonNull public Optional<Throwable> finalizeEvidence(@NonNull InternalLifecycleComponentShutdownResult result) { return this.adapter.finalizeExternallyCoordinatedEvidence(requireNonNull(this.generation), result); }
+		@Override @NonNull public Set<@NonNull InternalResidualActivityType> residualActivity() { return requireNonNull(this.generation).residualActivity(); }
+		@Override @NonNull public Optional<@NonNull Throwable> finalizeEvidence(@NonNull InternalLifecycleComponentShutdownResult result) { return this.adapter.finalizeExternallyCoordinatedEvidence(requireNonNull(this.generation), result); }
 		@Override public void publishResult(@NonNull InternalShutdownResult result) {
 			McpTransportLifecycleAdapter.Generation exactGeneration =
 					requireNonNull(this.generation);
@@ -2525,11 +2525,11 @@ final class SokletDirectLifecycle {
 		@NonNull private final InternalTerminationGroup group;
 		@NonNull private final StartupContext startupContext;
 		@NonNull private final Runnable unexpectedTerminationCallback;
-		private final AtomicReference<InternalTransportRuntime> runtime = new AtomicReference<>();
-		private final AtomicBoolean committed = new AtomicBoolean();
-		private final AtomicBoolean discarded = new AtomicBoolean();
-		private final AtomicBoolean started = new AtomicBoolean();
-		private final AtomicBoolean unexpectedCallbackPublished = new AtomicBoolean();
+		private final @NonNull AtomicReference<@Nullable InternalTransportRuntime> runtime = new AtomicReference<>();
+		private final @NonNull AtomicBoolean committed = new AtomicBoolean();
+		private final @NonNull AtomicBoolean discarded = new AtomicBoolean();
+		private final @NonNull AtomicBoolean started = new AtomicBoolean();
+		private final @NonNull AtomicBoolean unexpectedCallbackPublished = new AtomicBoolean();
 
 		private LocalGeneration(@NonNull InternalLifecycleComponentType kind,
 				@NonNull InternalTransportIdentity identity,
@@ -2605,7 +2605,7 @@ final class SokletDirectLifecycle {
 		@Override @NonNull public AdmissionFence admissionFence() { return this.admission; }
 		@Override @NonNull public InternalTerminationGroup terminationGroup() { return this.group; }
 		@Override @NonNull public InternalTransportRuntime runtime() { return requireNonNull(this.runtime.get(), "Transport runtime is not attached"); }
-		@Override @NonNull public Set<InternalResidualActivityType> residualActivity() { return Set.of(); }
+		@Override @NonNull public Set<@NonNull InternalResidualActivityType> residualActivity() { return Set.of(); }
 
 		@FunctionalInterface
 		private interface PublicRuntimeAttacher {
@@ -2614,7 +2614,7 @@ final class SokletDirectLifecycle {
 		}
 	}
 
-	private HttpServer.RequestHandler guardedHttpHandler(@Nullable LocalGeneration generation) {
+	private HttpServer.@NonNull RequestHandler guardedHttpHandler(@Nullable LocalGeneration generation) {
 		return (request, consumer) -> {
 			AdmissionFence.Admission admission = generation == null ? null
 					: request.claimLifecycleAdmission(generation.admissionFence());
@@ -2631,7 +2631,7 @@ final class SokletDirectLifecycle {
 		};
 	}
 
-	private SseServer.RequestHandler guardedSseHandler(@Nullable LocalGeneration generation) {
+	private SseServer.@NonNull RequestHandler guardedSseHandler(@Nullable LocalGeneration generation) {
 		return (request, consumer) -> {
 			AdmissionFence.Admission admission = generation == null ? null
 					: request.claimLifecycleAdmission(generation.admissionFence());

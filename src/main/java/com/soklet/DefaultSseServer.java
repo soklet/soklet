@@ -148,8 +148,8 @@ final class DefaultSseServer implements SseServer {
 	private static final ResourcePathDeclaration NO_MATCH_SENTINEL;
 	@NonNull
 	private static final String HEARTBEAT_COMMENT_PAYLOAD;
-	@NonNull
-	private static final byte[] HEARTBEAT_COMMENT_PAYLOAD_BYTES;
+
+	private static final byte @NonNull [] HEARTBEAT_COMMENT_PAYLOAD_BYTES;
 	@NonNull
 	private static final SseComment HEARTBEAT_COMMENT;
 	@NonNull
@@ -235,14 +235,14 @@ final class DefaultSseServer implements SseServer {
 			this.observedLength = endExclusive;
 		}
 
-		synchronized CapturedHandshakeBytes freeze() {
+		synchronized @NonNull CapturedHandshakeBytes freeze() {
 			this.frozen = true;
 			return new CapturedHandshakeBytes(this.prefix == null ? new byte[0]
 					: java.util.Arrays.copyOf(this.prefix, this.capturedLength), this.observedLength);
 		}
 	}
 
-	private record CapturedHandshakeBytes(byte[] bytes, long observedLength) {
+	private record CapturedHandshakeBytes(byte @NonNull [] bytes, long observedLength) {
 	}
 
 	private static final class SseInitializerQueueCapacityExceededException
@@ -267,23 +267,23 @@ final class DefaultSseServer implements SseServer {
 		@NonNull
 		private final ReentrantLock channelLock;
 		@NonNull
-		private final AtomicReference<HandshakeResponseOwner> handshakeResponseOwner;
+		private final AtomicReference<@NonNull HandshakeResponseOwner> handshakeResponseOwner;
 		@NonNull
 		private final AtomicBoolean acceptanceFinalized;
 		@NonNull
 		private final AtomicBoolean establishmentFailureNotified;
 		@NonNull
-		private final AtomicReference<TimeoutScheduler.ScheduledTask> handshakeTimeoutFutureRef;
+		private final AtomicReference<TimeoutScheduler.@Nullable ScheduledTask> handshakeTimeoutFutureRef;
 		@NonNull
-		private final AtomicReference<Thread> handlerThreadRef;
+		private final AtomicReference<@Nullable Thread> handlerThreadRef;
 		@NonNull
 		private final Object handlerThreadLock;
 		@NonNull
-		private final AtomicReference<Request> requestRef;
+		private final AtomicReference<@Nullable Request> requestRef;
 		@NonNull
-		private final AtomicReference<ResourceMethod> resourceMethodRef;
+		private final AtomicReference<@Nullable ResourceMethod> resourceMethodRef;
 		@NonNull
-		private final AtomicReference<InetSocketAddress> remoteAddressRef;
+		private final AtomicReference<@Nullable InetSocketAddress> remoteAddressRef;
 
 		private HandshakeContext(@Nullable InetSocketAddress remoteAddress) {
 			this.deadlineLock = new Object();
@@ -344,11 +344,11 @@ final class DefaultSseServer implements SseServer {
 	@NonNull
 	private final ReentrantLock lock;
 	@NonNull
-	private final Supplier<ExecutorService> requestHandlerExecutorServiceSupplier;
+	private final Supplier<@NonNull ExecutorService> requestHandlerExecutorServiceSupplier;
 	@NonNull
-	private final Supplier<ExecutorService> requestReaderExecutorServiceSupplier;
+	private final Supplier<@NonNull ExecutorService> requestReaderExecutorServiceSupplier;
 	@NonNull
-	private final Supplier<ExecutorService> connectionExecutorServiceSupplier;
+	private final Supplier<@NonNull ExecutorService> connectionExecutorServiceSupplier;
 	@NonNull
 	private final BuiltInTransportLifecycleAdapter lifecycleAdapter;
 	@NonNull
@@ -362,18 +362,18 @@ final class DefaultSseServer implements SseServer {
 	@Nullable
 	private volatile ExecutorService requestHandlerExecutorService;
 	@Nullable
-	private volatile Supplier<Optional<AdmissionFence.Admission>> outerRequestAdmissionSupplier;
+	private volatile Supplier<@NonNull Optional<AdmissionFence.@NonNull Admission>> outerRequestAdmissionSupplier;
 	@Nullable
 	private volatile TimeoutScheduler requestHandlerTimeoutScheduler;
 	@Nullable
 	private volatile ExecutorService requestReaderExecutorService;
 	@Nullable
 	private volatile ExecutorService connectionExecutorService;
-	private final Object handshakeTimeoutDeliveryMonitor = new Object();
+	private final @NonNull Object handshakeTimeoutDeliveryMonitor = new Object();
 	// Guarded by handshakeTimeoutDeliveryMonitor. Separates deadline delivery
 	// submissions from write deadlines, which must remain live until writers exit.
 	private boolean handshakeTimeoutDeliveryClosed;
-	private final Object headerPhaseMonitor = new Object();
+	private final @NonNull Object headerPhaseMonitor = new Object();
 	// Guarded by headerPhaseMonitor. Admission and service retirement share this
 	// fence so quiesce can close unparsed sockets without racing parsed admission.
 	private int activeHeaderPhases;
@@ -393,8 +393,8 @@ final class DefaultSseServer implements SseServer {
 	private final AtomicLong lifecycleGeneration = new AtomicLong();
 	// Tracks back-to-back accept() failures so the loop escalates backoff and coalesces logging
 	// instead of storming. Touched on the sse-event-loop thread; AtomicLong for safe publication on restart.
-	private final AtomicLong consecutiveAcceptFailures = new AtomicLong();
-	private final AtomicLong consecutivePendingHandshakeRejections = new AtomicLong();
+	private final @NonNull AtomicLong consecutiveAcceptFailures = new AtomicLong();
+	private final @NonNull AtomicLong consecutivePendingHandshakeRejections = new AtomicLong();
 	// Does not need to be concurrent because it's calculated just once at initialization time and is never modified after
 	@NonNull
 	private volatile Map<@NonNull ResourcePathDeclaration, @NonNull ResourceMethod> resourceMethodsByResourcePathDeclaration;
@@ -420,9 +420,9 @@ final class DefaultSseServer implements SseServer {
 		@NonNull
 		private final BackpressureHandler backpressureHandler;
 		@NonNull
-		private final Consumer<DefaultSseConnection> connectionUnregisteredListener;
+		private final Consumer<@NonNull DefaultSseConnection> connectionUnregisteredListener;
 		@NonNull
-		private final Consumer<LogEvent> logEventConsumer;
+		private final Consumer<@NonNull LogEvent> logEventConsumer;
 		// This must be threadsafe, e.g. via ConcurrentHashMap#newKeySet
 		@NonNull
 		private final Set<@NonNull DefaultSseConnection> sseConnections;
@@ -431,8 +431,8 @@ final class DefaultSseServer implements SseServer {
 																						 @NonNull ResourcePath resourcePath,
 																						 @Nullable MetricsCollector metricsCollector,
 																						 @NonNull BackpressureHandler backpressureHandler,
-																						 @NonNull Consumer<DefaultSseConnection> connectionUnregisteredListener,
-																						 @NonNull Consumer<LogEvent> logEventConsumer,
+																						 @NonNull Consumer<@NonNull DefaultSseConnection> connectionUnregisteredListener,
+																						 @NonNull Consumer<@NonNull LogEvent> logEventConsumer,
 																						 int connectionSetInitialCapacity) {
 			requireNonNull(resourceMethod);
 			requireNonNull(resourcePath);
@@ -467,7 +467,7 @@ final class DefaultSseServer implements SseServer {
 		}
 
 		private void safelyCollectMetrics(@NonNull String message,
-																			@NonNull Consumer<MetricsCollector> metricsConsumer) {
+																			@NonNull Consumer<@NonNull MetricsCollector> metricsConsumer) {
 			requireNonNull(message);
 			requireNonNull(metricsConsumer);
 
@@ -533,8 +533,8 @@ final class DefaultSseServer implements SseServer {
 		}
 
 		@Override
-		public <T> void broadcastEvent(@NonNull Function<Object, T> keySelector,
-																	 @NonNull Function<T, SseEvent> eventProvider) {
+		public <T> void broadcastEvent(@NonNull Function<@Nullable Object, @Nullable T> keySelector,
+																	 @NonNull Function<@Nullable T, @NonNull SseEvent> eventProvider) {
 			requireNonNull(keySelector);
 			requireNonNull(eventProvider);
 
@@ -575,8 +575,8 @@ final class DefaultSseServer implements SseServer {
 		}
 
 		@Override
-		public <T> void broadcastComment(@NonNull Function<Object, T> keySelector,
-																		 @NonNull Function<T, SseComment> commentProvider) {
+		public <T> void broadcastComment(@NonNull Function<@Nullable Object, @Nullable T> keySelector,
+																		 @NonNull Function<@Nullable T, @NonNull SseComment> commentProvider) {
 			requireNonNull(keySelector);
 			requireNonNull(commentProvider);
 
@@ -750,12 +750,12 @@ final class DefaultSseServer implements SseServer {
 		}
 
 		@NonNull
-		private Consumer<DefaultSseConnection> getConnectionUnregisteredListener() {
+		private Consumer<@NonNull DefaultSseConnection> getConnectionUnregisteredListener() {
 			return this.connectionUnregisteredListener;
 		}
 
 		@NonNull
-		private Consumer<LogEvent> getLogEventConsumer() {
+		private Consumer<@NonNull LogEvent> getLogEventConsumer() {
 			return this.logEventConsumer;
 		}
 	}
@@ -808,8 +808,8 @@ final class DefaultSseServer implements SseServer {
 		}
 
 		@Override
-		public <T> void broadcastEvent(@NonNull Function<Object, T> keySelector,
-																	 @NonNull Function<T, SseEvent> eventProvider) {
+		public <T> void broadcastEvent(@NonNull Function<@Nullable Object, @Nullable T> keySelector,
+																	 @NonNull Function<@Nullable T, @NonNull SseEvent> eventProvider) {
 			requireNonNull(keySelector);
 			requireNonNull(eventProvider);
 			DefaultSseBroadcaster b = getBroadcastersByResourcePath().get(resourcePath);
@@ -817,8 +817,8 @@ final class DefaultSseServer implements SseServer {
 		}
 
 		@Override
-		public <T> void broadcastComment(@NonNull Function<Object, T> keySelector,
-																		 @NonNull Function<T, SseComment> commentProvider) {
+		public <T> void broadcastComment(@NonNull Function<@Nullable Object, @Nullable T> keySelector,
+																		 @NonNull Function<@Nullable T, @NonNull SseComment> commentProvider) {
 			requireNonNull(keySelector);
 			requireNonNull(commentProvider);
 			DefaultSseBroadcaster b = getBroadcastersByResourcePath().get(resourcePath);
@@ -1179,7 +1179,7 @@ final class DefaultSseServer implements SseServer {
 
 	private static final class SseSocketIoException extends IOException {
 		private static final long serialVersionUID = 1L;
-		private SseSocketIoException(IOException cause) { super("The SSE connection could not complete socket IO", cause); }
+		private SseSocketIoException(@NonNull IOException cause) { super("The SSE connection could not complete socket IO", cause); }
 	}
 
 	private static final class HandshakeWriterStoppedException extends IOException {
@@ -1189,12 +1189,12 @@ final class DefaultSseServer implements SseServer {
 		}
 	}
 
-	private static int readSocket(SocketChannel channel, ByteBuffer buffer) throws IOException {
+	private static int readSocket(@NonNull SocketChannel channel, @NonNull ByteBuffer buffer) throws IOException {
 		try { return channel.read(buffer); }
 		catch (IOException failure) { throw new SseSocketIoException(failure); }
 	}
 
-	private static int writeSocket(SocketChannel channel, ByteBuffer buffer) throws IOException {
+	private static int writeSocket(@NonNull SocketChannel channel, @NonNull ByteBuffer buffer) throws IOException {
 		try { return channel.write(buffer); }
 		catch (IOException failure) { throw new SseSocketIoException(failure); }
 	}
@@ -1204,7 +1204,7 @@ final class DefaultSseServer implements SseServer {
 				? requireNonNull(failure.getCause()) : failure;
 	}
 
-	private static boolean peerClosedAfterSocketSetupFailure(SocketChannel channel) {
+	private static boolean peerClosedAfterSocketSetupFailure(@NonNull SocketChannel channel) {
 		try {
 			// An option failure alone is not evidence of a peer disconnect. Probe
 			// only that failure path, without blocking the sole accept-loop thread.
@@ -1595,7 +1595,7 @@ final class DefaultSseServer implements SseServer {
 	}
 
 	private void writeFailsafeHandshakeAndClose(@NonNull SocketChannel clientSocketChannel,
-																							@NonNull byte[] responseBytes) {
+																							 byte @NonNull [] responseBytes) {
 		requireNonNull(clientSocketChannel);
 		requireNonNull(responseBytes);
 
@@ -1636,7 +1636,7 @@ final class DefaultSseServer implements SseServer {
 			AdmissionFence.@Nullable Admission outer, @NonNull HandshakeContext context) implements AutoCloseable {
 		@Nullable
 		static SseHandshakeAdmission acquire(AdmissionFence.@NonNull Admission builtIn,
-				@Nullable Supplier<Optional<AdmissionFence.Admission>> outerSupplier, @NonNull HandshakeContext context) {
+				@Nullable Supplier<@NonNull Optional<AdmissionFence.@NonNull Admission>> outerSupplier, @NonNull HandshakeContext context) {
 			if (outerSupplier == null)
 				return new SseHandshakeAdmission(builtIn, null, context);
 			try {
@@ -2657,13 +2657,13 @@ final class DefaultSseServer implements SseServer {
 	}
 
 	private final class ConnectionTask implements Runnable {
-		private final ClientSocketChannelRegistration registration;
-		private final ReentrantLock channelLock;
-		private final StreamLifecycleCoordinator.Reservation.Work work;
-		private final AtomicBoolean claimed = new AtomicBoolean();
+		private final @NonNull ClientSocketChannelRegistration registration;
+		private final @NonNull ReentrantLock channelLock;
+		private final StreamLifecycleCoordinator.Reservation.@NonNull Work work;
+		private final @NonNull AtomicBoolean claimed = new AtomicBoolean();
 
-		private ConnectionTask(ClientSocketChannelRegistration registration, ReentrantLock channelLock,
-				StreamLifecycleCoordinator.Reservation.Work work) {
+		private ConnectionTask(@NonNull ClientSocketChannelRegistration registration, @NonNull ReentrantLock channelLock,
+				StreamLifecycleCoordinator.Reservation.@NonNull Work work) {
 			this.registration = registration;
 			this.channelLock = channelLock;
 			this.work = work;
@@ -2685,7 +2685,7 @@ final class DefaultSseServer implements SseServer {
 
 		// Only rejection or exact removal from shutdownNow proves this envelope
 		// will never run. Canceling a Future would not establish physical exit.
-		private void discard(StreamTerminationReason reason) {
+		private void discard(@NonNull StreamTerminationReason reason) {
 			if (!this.claimed.compareAndSet(false, true))
 				return;
 			try {
@@ -2699,7 +2699,7 @@ final class DefaultSseServer implements SseServer {
 		}
 	}
 
-	private void startClientDisconnectMonitor(DefaultSseConnection connection) {
+	private void startClientDisconnectMonitor(@NonNull DefaultSseConnection connection) {
 		if (!connection.disconnectMonitorStarted.compareAndSet(false, true)) return;
 		StreamLifecycleCoordinator.Reservation.Work work = connection.lifecycle.retainWork();
 		if (work == null) return;
@@ -2725,7 +2725,7 @@ final class DefaultSseServer implements SseServer {
 		}
 	}
 
-	private void monitorClientDisconnect(DefaultSseConnection connection) {
+	private void monitorClientDisconnect(@NonNull DefaultSseConnection connection) {
 		// A blocking read parks this virtual thread without consuming a carrier.
 		// Termination closes the channel and releases the read even when no event
 		// is pending. The monitor retains physical lifecycle work until it exits.
@@ -2783,10 +2783,10 @@ final class DefaultSseServer implements SseServer {
 	}
 
 	private record SseWriteOutcome(@Nullable SocketTimeoutException timeoutFailure) {
-		private static final SseWriteOutcome COMPLETED = new SseWriteOutcome(null);
+		private static final @NonNull SseWriteOutcome COMPLETED = new SseWriteOutcome(null);
 
-		private static SseWriteOutcome completed() { return COMPLETED; }
-		private static SseWriteOutcome timedOut() {
+		private static @NonNull SseWriteOutcome completed() { return COMPLETED; }
+		private static @NonNull SseWriteOutcome timedOut() {
 			return new SseWriteOutcome(new SocketTimeoutException("SSE write timed out"));
 		}
 	}
@@ -3058,7 +3058,7 @@ final class DefaultSseServer implements SseServer {
 		}
 	}
 
-	private void terminateAfterWriteFailure(DefaultSseConnection connection, Throwable failure) {
+	private void terminateAfterWriteFailure(@NonNull DefaultSseConnection connection, @NonNull Throwable failure) {
 		connection.lifecycle.terminate(isStopping() ? StreamTerminationReason.SERVER_STOPPING
 				: isRemoteClose(failure) ? StreamTerminationReason.CLIENT_DISCONNECTED
 				: StreamTerminationReason.WRITE_FAILED, socketFailureCause(failure));
@@ -3200,21 +3200,21 @@ final class DefaultSseServer implements SseServer {
 		}
 	}
 
-	@NonNull
-	private byte[] createHandshakeHttpResponse(@NonNull HttpRequestResult requestResult) throws IOException {
+
+	private byte @NonNull [] createHandshakeHttpResponse(@NonNull HttpRequestResult requestResult) throws IOException {
 		return createHandshakeHttpResponse(requestResult, false);
 	}
 
-	@NonNull
-	private byte[] createHandshakeHttpResponse(@NonNull HttpRequestResult requestResult,
+
+	private byte @NonNull [] createHandshakeHttpResponse(@NonNull HttpRequestResult requestResult,
 			boolean headRequest) throws IOException {
 		try (LifecycleExecutionContext.Scope ignored = getLifecycleAdapter().enterCallbackExecution()) {
 			return materializeHandshakeHttpResponse(requestResult, headRequest);
 		}
 	}
 
-	@NonNull
-	private byte[] materializeHandshakeHttpResponse(@NonNull HttpRequestResult requestResult,
+
+	private byte @NonNull [] materializeHandshakeHttpResponse(@NonNull HttpRequestResult requestResult,
 			boolean headRequest) throws IOException {
 		requireNonNull(requestResult);
 
@@ -3376,17 +3376,17 @@ final class DefaultSseServer implements SseServer {
 	}
 
 	@NonNull
-	private static List<String> normalizeHeaderValues(@NonNull List<String> values) {
+	private static List<@NonNull String> normalizeHeaderValues(@NonNull List<@NonNull String> values) {
 		return List.copyOf(requireNonNull(values));
 	}
 
-	@NonNull
-	private static byte[] createFailsafeHandshakeHttpResponse(@NonNull StatusCode statusCode) {
+
+	private static byte @NonNull [] createFailsafeHandshakeHttpResponse(@NonNull StatusCode statusCode) {
 		return createFailsafeHandshakeHttpResponse(statusCode, false);
 	}
 
-	@NonNull
-	private static byte[] createFailsafeHandshakeHttpResponse(@NonNull StatusCode statusCode,
+
+	private static byte @NonNull [] createFailsafeHandshakeHttpResponse(@NonNull StatusCode statusCode,
 			boolean headRequest) {
 		requireNonNull(statusCode);
 
@@ -3411,14 +3411,14 @@ final class DefaultSseServer implements SseServer {
 		return combined;
 	}
 
-	static MarshaledResponse describeFailsafeHandshakeResponse(StatusCode statusCode, boolean headRequest) {
+	static @NonNull MarshaledResponse describeFailsafeHandshakeResponse(@NonNull StatusCode statusCode, boolean headRequest) {
 		byte[] body = headRequest ? new byte[0] : format("HTTP %s: %s", statusCode.getStatusCode(), statusCode.getReasonPhrase())
 				.getBytes(StandardCharsets.UTF_8);
 		return MarshaledResponse.withStatusCode(statusCode.getStatusCode()).body(body)
 				.headers(Map.of("Content-Type", List.of("text/plain; charset=UTF-8"), "Connection", List.of("close"))).build();
 	}
 
-	private void writeHandshakeFully(SocketChannel channel, byte[] bytes) throws IOException {
+	private void writeHandshakeFully(@NonNull SocketChannel channel, byte @NonNull [] bytes) throws IOException {
 		if (getWriteTimeout().isZero()) {
 			writeFully(channel, bytes);
 			return;
@@ -3470,7 +3470,7 @@ final class DefaultSseServer implements SseServer {
 	}
 
 	private static void writeFully(@NonNull SocketChannel socketChannel,
-																 @NonNull byte[] bytes) throws IOException {
+																  byte @NonNull [] bytes) throws IOException {
 		requireNonNull(socketChannel);
 		requireNonNull(bytes);
 
@@ -3657,7 +3657,7 @@ final class DefaultSseServer implements SseServer {
 
 		@NonNull
 		@Override
-		public Optional<Object> getClientContext() {
+		public Optional<@NonNull Object> getClientContext() {
 			return Optional.ofNullable(clientContext);
 		}
 	}
@@ -3668,7 +3668,7 @@ final class DefaultSseServer implements SseServer {
 		@Nullable
 		private final Object clientContext;
 		@NonNull
-		private final BlockingQueue<WriteQueueElement> writeQueue;
+		private final BlockingQueue<@NonNull WriteQueueElement> writeQueue;
 		@NonNull
 		private final Instant establishedAt;
 		@NonNull
@@ -3676,13 +3676,13 @@ final class DefaultSseServer implements SseServer {
 		@NonNull
 		private final AtomicBoolean closing;
 		@NonNull
-		private final AtomicReference<StreamTerminationReason> terminationReason;
+		private final AtomicReference<@Nullable StreamTerminationReason> terminationReason;
 		@NonNull
 		private final SseConnectionSnapshot snapshot;
-		private final AtomicBoolean establishmentNotified = new AtomicBoolean();
-		private final AtomicBoolean terminationNotified = new AtomicBoolean();
-		private final AtomicBoolean disconnectMonitorStarted = new AtomicBoolean();
-		private final ManagedSseLifecycle lifecycle;
+		private final @NonNull AtomicBoolean establishmentNotified = new AtomicBoolean();
+		private final @NonNull AtomicBoolean terminationNotified = new AtomicBoolean();
+		private final @NonNull AtomicBoolean disconnectMonitorStarted = new AtomicBoolean();
+		private final @NonNull ManagedSseLifecycle lifecycle;
 
 		@ThreadSafe
 		static final class PreSerializedPayload {
@@ -3690,12 +3690,12 @@ final class DefaultSseServer implements SseServer {
 			private final SseEvent sseEvent;
 			@Nullable
 			private final SseComment sseComment;
-			@NonNull
-			private final byte[] payloadBytes;
+
+			private final byte @NonNull [] payloadBytes;
 
 			PreSerializedPayload(@Nullable SseEvent sseEvent,
 													 @Nullable SseComment sseComment,
-													 @NonNull byte[] payloadBytes) {
+													  byte @NonNull [] payloadBytes) {
 				if (sseEvent == null && sseComment == null)
 					throw new IllegalStateException("Must provide either a server-sent event or a comment");
 
@@ -3717,8 +3717,8 @@ final class DefaultSseServer implements SseServer {
 				return this.sseComment;
 			}
 
-			@NonNull
-			public byte[] getPayloadBytes() {
+
+			public byte @NonNull [] getPayloadBytes() {
 				return this.payloadBytes;
 			}
 		}
@@ -3730,7 +3730,7 @@ final class DefaultSseServer implements SseServer {
 			private final boolean poisonPill;
 			private final long enqueuedAtNanos;
 
-			private static final WriteQueueElement POISON_PILL = new WriteQueueElement(null, true, -1L);
+			private static final @NonNull WriteQueueElement POISON_PILL = new WriteQueueElement(null, true, -1L);
 
 			@NonNull
 			public static WriteQueueElement withPreSerializedPayload(@NonNull PreSerializedPayload preSerializedPayload,
@@ -3812,7 +3812,7 @@ final class DefaultSseServer implements SseServer {
 		}
 
 		@NonNull
-		public Optional<Object> getClientContext() {
+		public Optional<@NonNull Object> getClientContext() {
 			return Optional.ofNullable(this.clientContext);
 		}
 
@@ -3822,7 +3822,7 @@ final class DefaultSseServer implements SseServer {
 		}
 
 		@NonNull
-		public BlockingQueue<WriteQueueElement> getWriteQueue() {
+		public BlockingQueue<@NonNull WriteQueueElement> getWriteQueue() {
 			return this.writeQueue;
 		}
 
@@ -3842,7 +3842,7 @@ final class DefaultSseServer implements SseServer {
 		}
 
 		@NonNull
-		public Optional<StreamTerminationReason> getTerminationReason() {
+		public Optional<@NonNull StreamTerminationReason> getTerminationReason() {
 			return Optional.ofNullable(this.terminationReason.get());
 		}
 
@@ -3866,7 +3866,7 @@ final class DefaultSseServer implements SseServer {
 	}
 
 	@NonNull
-	private Optional<ClientSocketChannelRegistration> registerClientSocketChannel(
+	private Optional<@NonNull ClientSocketChannelRegistration> registerClientSocketChannel(
 			@NonNull DefaultSseConnection sseConnection,
 			SseHandshakeResult.@NonNull Accepted handshakeAccepted,
 			@NonNull AtomicBoolean connectionSlotReserved) throws Exception {
@@ -3912,7 +3912,7 @@ final class DefaultSseServer implements SseServer {
 		return Optional.of(registration);
 	}
 
-	private void logInitializerTermination(DefaultSseConnection connection) {
+	private void logInitializerTermination(@NonNull DefaultSseConnection connection) {
 		StreamTermination termination = connection.lifecycle.termination().orElse(null);
 		if (termination == null || (termination.getReason() != StreamTerminationReason.PRODUCER_FAILED
 				&& termination.getReason() != StreamTerminationReason.BACKPRESSURE))
@@ -3925,14 +3925,14 @@ final class DefaultSseServer implements SseServer {
 
 	@ThreadSafe
 	protected static class DefaultSseUnicaster implements SseUnicaster {
-		private final Request request;
-		private final BlockingQueue<DefaultSseConnection.WriteQueueElement> writeQueue;
-		private final ManagedSseLifecycle lifecycle;
-		private final Object initializerLock = new Object();
+		private final @NonNull Request request;
+		private final @NonNull BlockingQueue<DefaultSseConnection.@NonNull WriteQueueElement> writeQueue;
+		private final @NonNull ManagedSseLifecycle lifecycle;
+		private final @NonNull Object initializerLock = new Object();
 		private boolean initializing;
 
 		DefaultSseUnicaster(@NonNull Request request,
-				@NonNull BlockingQueue<DefaultSseConnection.WriteQueueElement> writeQueue,
+				@NonNull BlockingQueue<DefaultSseConnection.@NonNull WriteQueueElement> writeQueue,
 				@NonNull ManagedSseLifecycle lifecycle) {
 			this.request = requireNonNull(request);
 			this.writeQueue = requireNonNull(writeQueue);
@@ -3962,7 +3962,7 @@ final class DefaultSseServer implements SseServer {
 
 		@Override @NonNull public ResourcePath getResourcePath() { return this.request.getResourcePath(); }
 
-		private void enqueue(DefaultSseConnection.WriteQueueElement element) {
+		private void enqueue(DefaultSseConnection.@NonNull WriteQueueElement element) {
 			boolean accepted;
 			synchronized (this.initializerLock) {
 				requireInitializingUnderLock();
@@ -4125,24 +4125,24 @@ final class DefaultSseServer implements SseServer {
 	}
 
 	private static final class ParsedRequestLine {
-		private final HttpMethod method;
-		private final String target;
+		private final @NonNull HttpMethod method;
+		private final @NonNull String target;
 
-		private ParsedRequestLine(HttpMethod method, String target) {
+		private ParsedRequestLine(@NonNull HttpMethod method, @NonNull String target) {
 			this.method = method;
 			this.target = target;
 		}
 
-		private HttpMethod method() {
+		private @NonNull HttpMethod method() {
 			return method;
 		}
 
-		private String target() {
+		private @NonNull String target() {
 			return target;
 		}
 	}
 
-	private static ParsedRequestLine parseRequestLine(@NonNull String line) {
+	private static @NonNull ParsedRequestLine parseRequestLine(@NonNull String line) {
 		int firstSpace = line.indexOf(' ');
 		if (firstSpace <= 0)
 			throw new IllegalRequestException(format("Malformed Server-Sent Event request line (%d characters). Expected '<METHOD> <request-target> HTTP/1.1'", line.length()));
@@ -4177,7 +4177,7 @@ final class DefaultSseServer implements SseServer {
 		}
 	}
 
-	private static String decodeLastEventIdHeaderLine(@NonNull String rawLine) {
+	private static @NonNull String decodeLastEventIdHeaderLine(@NonNull String rawLine) {
 		String headerName = "Last-Event-ID";
 		int nameLength = headerName.length();
 		if (rawLine.length() <= nameLength || rawLine.charAt(nameLength) != ':'
@@ -4229,7 +4229,7 @@ final class DefaultSseServer implements SseServer {
 	}
 
 	@NonNull
-	private static List<String> splitRequestLines(@NonNull String rawRequest) {
+	private static List<@NonNull String> splitRequestLines(@NonNull String rawRequest) {
 		requireNonNull(rawRequest);
 
 		List<String> lines = new ArrayList<>();
@@ -4498,7 +4498,7 @@ final class DefaultSseServer implements SseServer {
 		private boolean requestLineEndedWithCarriageReturn;
 		private int headerEnd = -1;
 
-		int scan(CharSequence request) {
+		int scan(@NonNull CharSequence request) {
 			if (this.headerEnd != -1)
 				return this.headerEnd;
 			for (int index = this.scannedLength; index < request.length(); index++) {
@@ -4595,7 +4595,7 @@ final class DefaultSseServer implements SseServer {
 	 * If there isn't sufficient data to parse into a request (or if the data is malformed), then return the empty value.
 	 */
 	@NonNull
-	protected Optional<Request> parseTooLargeRequestForRawRequest(@NonNull String rawRequest) {
+	protected Optional<@NonNull Request> parseTooLargeRequestForRawRequest(@NonNull String rawRequest) {
 		requireNonNull(rawRequest);
 		int lastCompleteLine = rawRequest.lastIndexOf('\n');
 		if (lastCompleteLine < 0)
@@ -4716,7 +4716,7 @@ final class DefaultSseServer implements SseServer {
 	}
 
 	@NonNull
-	Optional<StreamLifecycleCoordinator> getStreamLifecycleCoordinatorForTests() {
+	Optional<@NonNull StreamLifecycleCoordinator> getStreamLifecycleCoordinatorForTests() {
 		return Optional.ofNullable(this.streamLifecycleCoordinator);
 	}
 
@@ -4772,7 +4772,7 @@ final class DefaultSseServer implements SseServer {
 			@Nullable ExecutorService requestReaderExecutor,
 			@Nullable ExecutorService connectionExecutor,
 			@Nullable StreamLifecycleCoordinator streamLifecycleCoordinator,
-			@NonNull List<DefaultSseConnection> establishedConnections) {
+			@NonNull List<@NonNull DefaultSseConnection> establishedConnections) {
 		private SseRuntimeSnapshot {
 			establishedConnections = List.copyOf(establishedConnections);
 		}
@@ -4781,7 +4781,7 @@ final class DefaultSseServer implements SseServer {
 	private final class SseLifecycleOperations
 			implements BuiltInTransportLifecycleAdapter.Operations {
 		@NonNull
-		private final AtomicReference<SseRuntimeSnapshot> retainedSnapshot =
+		private final AtomicReference<@Nullable SseRuntimeSnapshot> retainedSnapshot =
 				new AtomicReference<>();
 
 		@Override
@@ -4925,7 +4925,7 @@ final class DefaultSseServer implements SseServer {
 
 		@Override
 		@NonNull
-		public Set<InternalResidualActivityType> residualActivity() {
+		public Set<@NonNull InternalResidualActivityType> residualActivity() {
 			SseRuntimeSnapshot snapshot = retained();
 			Set<InternalResidualActivityType> kinds =
 					EnumSet.noneOf(InternalResidualActivityType.class);
@@ -5040,7 +5040,7 @@ final class DefaultSseServer implements SseServer {
 	}
 
 	@NonNull
-	protected Optional<ResourceMethod> resourceMethodForResourcePath(@NonNull ResourcePath resourcePath) {
+	protected Optional<@NonNull ResourceMethod> resourceMethodForResourcePath(@NonNull ResourcePath resourcePath) {
 		requireNonNull(resourcePath);
 
 		ResourcePathDeclaration resourcePathDeclaration = matchingResourcePath(resourcePath).orElse(null);
@@ -5140,7 +5140,7 @@ final class DefaultSseServer implements SseServer {
 	}
 
 	@NonNull
-	protected Optional<DefaultSseBroadcaster> acquireBroadcasterInternal(@NonNull ResourcePath resourcePath,
+	protected Optional<@NonNull DefaultSseBroadcaster> acquireBroadcasterInternal(@NonNull ResourcePath resourcePath,
 																																									 @NonNull ResourceMethod resourceMethod) {
 		requireNonNull(resourcePath);
 		requireNonNull(resourceMethod);
@@ -5202,7 +5202,7 @@ final class DefaultSseServer implements SseServer {
 
 	@NonNull
 	@SuppressWarnings("ReferenceEquality")
-	protected Optional<ResourcePathDeclaration> matchingResourcePath(@Nullable ResourcePath resourcePath) {
+	protected Optional<@NonNull ResourcePathDeclaration> matchingResourcePath(@Nullable ResourcePath resourcePath) {
 		if (resourcePath == null)
 			return Optional.empty();
 
@@ -5231,13 +5231,13 @@ final class DefaultSseServer implements SseServer {
 		}
 	}
 
-	private void recordTransportFailure(MetricsCollector.TransportFailureReason reason,
+	private void recordTransportFailure(MetricsCollector.@NonNull TransportFailureReason reason,
 																			@Nullable Throwable throwable,
 																			@NonNull String event) {
 		recordTransportFailure(reason, throwable, event, true);
 	}
 
-	private void recordTransportFailure(MetricsCollector.TransportFailureReason reason,
+	private void recordTransportFailure(MetricsCollector.@NonNull TransportFailureReason reason,
 			@Nullable Throwable throwable, @NonNull String event, boolean logFailure) {
 		requireNonNull(reason);
 		requireNonNull(event);
@@ -5267,7 +5267,7 @@ final class DefaultSseServer implements SseServer {
 				throwable instanceof SocketTimeoutException ? "write_timeout" : "write_error");
 	}
 
-	private static MetricsCollector.TransportFailureReason transportFailureReasonForWrite(@NonNull Throwable throwable) {
+	private static MetricsCollector.@NonNull TransportFailureReason transportFailureReasonForWrite(@NonNull Throwable throwable) {
 		requireNonNull(throwable);
 
 		if (throwable instanceof SocketTimeoutException)
@@ -5540,7 +5540,7 @@ final class DefaultSseServer implements SseServer {
 	protected void safelyCollectMetrics(@NonNull String message,
 																			@Nullable Request request,
 																			@Nullable ResourceMethod resourceMethod,
-																			@NonNull Consumer<MetricsCollector> metricsConsumer) {
+																			@NonNull Consumer<@NonNull MetricsCollector> metricsConsumer) {
 		requireNonNull(message);
 		requireNonNull(metricsConsumer);
 
@@ -5657,17 +5657,17 @@ final class DefaultSseServer implements SseServer {
 	}
 
 	@NonNull
-	protected Optional<ExecutorService> getRequestHandlerExecutorService() {
+	protected Optional<@NonNull ExecutorService> getRequestHandlerExecutorService() {
 		return Optional.ofNullable(this.requestHandlerExecutorService);
 	}
 
 	@NonNull
-	protected Optional<TimeoutScheduler> getRequestHandlerTimeoutScheduler() {
+	protected Optional<@NonNull TimeoutScheduler> getRequestHandlerTimeoutScheduler() {
 		return Optional.ofNullable(this.requestHandlerTimeoutScheduler);
 	}
 
 	@NonNull
-	protected Optional<ExecutorService> getRequestReaderExecutorService() {
+	protected Optional<@NonNull ExecutorService> getRequestReaderExecutorService() {
 		return Optional.ofNullable(this.requestReaderExecutorService);
 	}
 
@@ -5677,22 +5677,22 @@ final class DefaultSseServer implements SseServer {
 	}
 
 	@NonNull
-	protected Supplier<ExecutorService> getRequestHandlerExecutorServiceSupplier() {
+	protected Supplier<@NonNull ExecutorService> getRequestHandlerExecutorServiceSupplier() {
 		return this.requestHandlerExecutorServiceSupplier;
 	}
 
 	@NonNull
-	protected Supplier<ExecutorService> getRequestReaderExecutorServiceSupplier() {
+	protected Supplier<@NonNull ExecutorService> getRequestReaderExecutorServiceSupplier() {
 		return this.requestReaderExecutorServiceSupplier;
 	}
 
 	@NonNull
-	protected Supplier<ExecutorService> getConnectionExecutorServiceSupplier() {
+	protected Supplier<@NonNull ExecutorService> getConnectionExecutorServiceSupplier() {
 		return this.connectionExecutorServiceSupplier;
 	}
 
 	@NonNull
-	protected Optional<ExecutorService> getConnectionExecutorService() {
+	protected Optional<@NonNull ExecutorService> getConnectionExecutorService() {
 		return Optional.ofNullable(this.connectionExecutorService);
 	}
 
@@ -5732,12 +5732,12 @@ final class DefaultSseServer implements SseServer {
 	}
 
 	@NonNull
-	protected Optional<Thread> getEventLoopThread() {
+	protected Optional<@NonNull Thread> getEventLoopThread() {
 		return Optional.ofNullable(this.eventLoopThread);
 	}
 
 	@NonNull
-	protected Optional<RequestHandler> getRequestHandler() {
+	protected Optional<@NonNull RequestHandler> getRequestHandler() {
 		return Optional.ofNullable(this.requestHandler);
 	}
 
@@ -5754,12 +5754,12 @@ final class DefaultSseServer implements SseServer {
 	}
 
 	@NonNull
-	protected Optional<MetricsCollector> getMetricsCollector() {
+	protected Optional<@NonNull MetricsCollector> getMetricsCollector() {
 		return Optional.ofNullable(this.metricsCollector);
 	}
 
 	@NonNull
-	protected Optional<ResponseMarshaler> getResponseMarshaler() {
+	protected Optional<@NonNull ResponseMarshaler> getResponseMarshaler() {
 		return Optional.ofNullable(this.responseMarshaler);
 	}
 

@@ -108,7 +108,7 @@ final class McpTransportLifecycleAdapter
 
 		@Override
 		@NonNull
-		public Set<InternalResidualActivityType> residualActivity() {
+		public Set<@NonNull InternalResidualActivityType> residualActivity() {
 			return this.delegate.residualActivity();
 		}
 
@@ -129,7 +129,7 @@ final class McpTransportLifecycleAdapter
 	@NonNull
 	private final AtomicReference<@Nullable Generation> generation;
 	@NonNull
-	private final ThreadLocal<Generation> externalStartInvocation;
+	private final ThreadLocal<@Nullable Generation> externalStartInvocation;
 
 	McpTransportLifecycleAdapter(
 			@NonNull Supplier<@NonNull Duration> gracefulTimeout,
@@ -257,7 +257,7 @@ final class McpTransportLifecycleAdapter
 	}
 
 	@NonNull
-	Optional<Throwable> finalizeExternallyCoordinatedEvidence(
+	Optional<@NonNull Throwable> finalizeExternallyCoordinatedEvidence(
 			@NonNull Generation exactGeneration,
 			@NonNull InternalLifecycleComponentShutdownResult participantResult) {
 		requireCurrent(exactGeneration);
@@ -330,18 +330,18 @@ final class McpTransportLifecycleAdapter
 	}
 
 	@NonNull
-	Optional<InternalShutdownResult> result() {
+	Optional<@NonNull InternalShutdownResult> result() {
 		return this.delegate.result();
 	}
 
 	@NonNull
-	Optional<InternalShutdownResult> result(@NonNull Generation exactGeneration) {
+	Optional<@NonNull InternalShutdownResult> result(@NonNull Generation exactGeneration) {
 		requireOwned(exactGeneration);
 		return this.delegate.result(exactGeneration.delegate);
 	}
 
 	@NonNull
-	Optional<LifecycleRetentionSummary> retentionSummary() {
+	Optional<@NonNull LifecycleRetentionSummary> retentionSummary() {
 		return this.delegate.retentionSummary();
 	}
 
@@ -404,13 +404,13 @@ final class McpTransportLifecycleAdapter
 
 		@Override
 		@NonNull
-		public Set<InternalResidualActivityType> residualActivity() {
+		public Set<@NonNull InternalResidualActivityType> residualActivity() {
 			return frameworkResidualActivity();
 		}
 
 		@Override
 		@NonNull
-		public Set<InternalResidualActivityType> frameworkResidualActivity() {
+		public Set<@NonNull InternalResidualActivityType> frameworkResidualActivity() {
 			McpServerRuntimeBridge.LifecycleEvidence evidence =
 					runtime().getLifecycleEvidence();
 			EnumSet<InternalResidualActivityType> residual =

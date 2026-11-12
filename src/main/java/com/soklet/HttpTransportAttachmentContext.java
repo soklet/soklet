@@ -43,11 +43,11 @@ import static java.util.Objects.requireNonNull;
 @ThreadSafe
 public final class HttpTransportAttachmentContext {
 	@NonNull
-	private final InternalTransportAttachmentContext<HttpServer.RequestHandler>
+	private final InternalTransportAttachmentContext<HttpServer.@NonNull RequestHandler>
 			internalContext;
 
 	HttpTransportAttachmentContext(
-			@NonNull InternalTransportAttachmentContext<HttpServer.RequestHandler>
+			@NonNull InternalTransportAttachmentContext<HttpServer.@NonNull RequestHandler>
 					internalContext) {
 		this.internalContext = requireNonNull(internalContext);
 	}
@@ -76,7 +76,7 @@ public final class HttpTransportAttachmentContext {
 	}
 
 	@NonNull
-	Supplier<Optional<AdmissionFence.Admission>> builtInDispatchAdmissionSupplier() {
+	Supplier<@NonNull Optional<AdmissionFence.@NonNull Admission>> builtInDispatchAdmissionSupplier() {
 		return this.internalContext.builtInDispatchAdmissionSupplier();
 	}
 
@@ -135,7 +135,7 @@ public final class HttpTransportAttachmentContext {
 	}
 
 	@NonNull
-	InternalTransportAttachmentContext<HttpServer.RequestHandler> internalContext() {
+	InternalTransportAttachmentContext<HttpServer.@NonNull RequestHandler> internalContext() {
 		return this.internalContext;
 	}
 }

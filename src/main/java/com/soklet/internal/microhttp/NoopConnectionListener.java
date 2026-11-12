@@ -1,5 +1,6 @@
 package com.soklet.internal.microhttp;
 
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 
 import java.net.InetSocketAddress;
@@ -8,7 +9,7 @@ import java.net.InetSocketAddress;
  * A connection listener that performs no work.
  */
 public final class NoopConnectionListener implements ConnectionListener {
-    private static final NoopConnectionListener INSTANCE = new NoopConnectionListener();
+    private static final @NonNull NoopConnectionListener INSTANCE = new NoopConnectionListener();
 
     private NoopConnectionListener() {
     }
@@ -28,7 +29,7 @@ public final class NoopConnectionListener implements ConnectionListener {
         // No-op
     }
 
-    public static ConnectionListener instance() {
+    public static @NonNull ConnectionListener instance() {
         return INSTANCE;
     }
 }

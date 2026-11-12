@@ -31,7 +31,7 @@ final class ResponseBodyCleanup {
 
 	@NonNull
 	static MarshaledResponse transform(@NonNull MarshaledResponse previous,
-			@NonNull Function<MarshaledResponse, MarshaledResponse> transformation) {
+			@NonNull Function<@NonNull MarshaledResponse, @NonNull MarshaledResponse> transformation) {
 		MarshaledResponse replacement;
 		try {
 			replacement = requireNonNull(transformation.apply(previous));
@@ -48,7 +48,7 @@ final class ResponseBodyCleanup {
 	}
 
 	@NonNull
-	static MarshaledResponse track(@NonNull List<MarshaledResponse> pending,
+	static MarshaledResponse track(@NonNull List<@NonNull MarshaledResponse> pending,
 			@NonNull MarshaledResponse response) {
 		if (response.hasOwnedChannels())
 			pending.add(response);

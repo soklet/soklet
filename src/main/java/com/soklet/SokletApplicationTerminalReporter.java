@@ -216,8 +216,8 @@ final class DefaultLifecycleTerminalReporter implements LifecycleTerminalReporte
 		return escaped.toString();
 	}
 
-	@NonNull
-	static byte[] utf8Prefix(@NonNull String value, int maximumBytes) {
+
+	static byte @NonNull [] utf8Prefix(@NonNull String value, int maximumBytes) {
 		if (maximumBytes < 0)
 			throw new IllegalArgumentException("maximumBytes must be >= 0");
 		ByteArrayOutputStream output = new ByteArrayOutputStream(

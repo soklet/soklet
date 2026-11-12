@@ -92,14 +92,14 @@ final class InternalLifecycleComponentShutdownResult {
 	@NonNull
 	private final InternalLifecycleComponentShutdownDisposition disposition;
 	@NonNull
-	private final List<Throwable> failures;
+	private final List<@NonNull Throwable> failures;
 	@NonNull
-	private final Set<InternalResidualActivityType> residualActivity;
+	private final Set<@NonNull InternalResidualActivityType> residualActivity;
 
 	InternalLifecycleComponentShutdownResult(@NonNull InternalLifecycleComponentType kind,
 			@NonNull InternalLifecycleComponentShutdownDisposition disposition,
-			@NonNull List<? extends Throwable> failures,
-			@NonNull Set<InternalResidualActivityType> residualActivity) {
+			@NonNull List<? extends @NonNull Throwable> failures,
+			@NonNull Set<@NonNull InternalResidualActivityType> residualActivity) {
 		this.kind = requireNonNull(kind);
 		this.disposition = requireNonNull(disposition);
 		this.failures = List.copyOf(requireNonNull(failures));
@@ -120,12 +120,12 @@ final class InternalLifecycleComponentShutdownResult {
 	}
 
 	@NonNull
-	List<Throwable> failures() {
+	List<@NonNull Throwable> failures() {
 		return this.failures;
 	}
 
 	@NonNull
-	Set<InternalResidualActivityType> residualActivity() {
+	Set<@NonNull InternalResidualActivityType> residualActivity() {
 		return this.residualActivity;
 	}
 }
@@ -137,21 +137,21 @@ final class InternalShutdownResult {
 	@NonNull
 	private final InternalStartupDisposition startupDisposition;
 	@NonNull
-	private final List<InternalLifecycleComponentShutdownResult> participantResults;
+	private final List<@NonNull InternalLifecycleComponentShutdownResult> participantResults;
 	@NonNull
-	private final Map<InternalLifecycleComponentType, InternalLifecycleComponentShutdownResult> participantResultsByKind;
+	private final Map<@NonNull InternalLifecycleComponentType, @NonNull InternalLifecycleComponentShutdownResult> participantResultsByKind;
 	@Nullable
 	private final LifecycleRetentionAnchor retentionAnchor;
 
 	InternalShutdownResult(@NonNull InternalShutdownDisposition disposition,
 			@NonNull InternalStartupDisposition startupDisposition,
-			@NonNull List<InternalLifecycleComponentShutdownResult> participantResults) {
+			@NonNull List<@NonNull InternalLifecycleComponentShutdownResult> participantResults) {
 		this(disposition, startupDisposition, participantResults, null);
 	}
 
 	private InternalShutdownResult(@NonNull InternalShutdownDisposition disposition,
 			@NonNull InternalStartupDisposition startupDisposition,
-			@NonNull List<InternalLifecycleComponentShutdownResult> participantResults,
+			@NonNull List<@NonNull InternalLifecycleComponentShutdownResult> participantResults,
 			@Nullable LifecycleRetentionAnchor retentionAnchor) {
 		this.disposition = requireNonNull(disposition);
 		this.startupDisposition = requireNonNull(startupDisposition);
@@ -180,12 +180,12 @@ final class InternalShutdownResult {
 	}
 
 	@NonNull
-	List<InternalLifecycleComponentShutdownResult> participantResults() {
+	List<@NonNull InternalLifecycleComponentShutdownResult> participantResults() {
 		return this.participantResults;
 	}
 
 	@NonNull
-	Optional<InternalLifecycleComponentShutdownResult> participantResult(
+	Optional<@NonNull InternalLifecycleComponentShutdownResult> participantResult(
 			@NonNull InternalLifecycleComponentType kind) {
 		return Optional.ofNullable(this.participantResultsByKind.get(requireNonNull(kind)));
 	}
@@ -206,7 +206,7 @@ final class InternalShutdownResult {
 	}
 
 	@NonNull
-	Optional<LifecycleRetentionSummary> retentionSummary() {
+	Optional<@NonNull LifecycleRetentionSummary> retentionSummary() {
 		return this.retentionAnchor == null ? Optional.empty()
 				: Optional.of(LifecycleRetentionDiagnostics.read(
 						this.retentionAnchor));
@@ -221,7 +221,7 @@ final class InternalShutdownResult {
 final class InternalShutdownResultAggregator {
 	@NonNull
 	InternalShutdownResult aggregate(@NonNull InternalStartupDisposition startupDisposition,
-			@NonNull List<InternalLifecycleComponentShutdownResult> participantResults) {
+			@NonNull List<@NonNull InternalLifecycleComponentShutdownResult> participantResults) {
 		requireNonNull(startupDisposition);
 		requireNonNull(participantResults);
 		InternalShutdownDisposition disposition = InternalShutdownDisposition.NOT_STARTED;
@@ -256,13 +256,13 @@ final class AdmissionFence {
 	}
 
 	@NonNull
-	private final AtomicReference<State> state;
+	private final AtomicReference<@NonNull State> state;
 	@NonNull
 	private final AtomicInteger admittedWork;
 	@NonNull
 	private final Runnable stateChanged;
 	@NonNull
-	private final List<Runnable> admittedWorkReleased;
+	private final List<@NonNull Runnable> admittedWorkReleased;
 
 	AdmissionFence() {
 		this(true, () -> {
@@ -281,7 +281,7 @@ final class AdmissionFence {
 	}
 
 	@NonNull
-	Optional<Admission> tryAdmit() {
+	Optional<@NonNull Admission> tryAdmit() {
 		for (;;) {
 			if (this.state.get() != State.OPEN)
 				return Optional.empty();
@@ -344,7 +344,7 @@ final class AdmissionFence {
 		private volatile AdmissionFence fence;
 		@NonNull
 		private final AtomicBoolean closed;
-		private final AtomicBoolean claimedForHandling = new AtomicBoolean();
+		private final @NonNull AtomicBoolean claimedForHandling = new AtomicBoolean();
 
 		private Admission(@NonNull AdmissionFence fence) {
 			this.fence = requireNonNull(fence);
@@ -394,13 +394,13 @@ final class InternalTransportIdentity {
 @ThreadSafe
 final class TransportIdentityClaimRegistry {
 	@NonNull
-	private final Map<InternalTransportIdentity, StoredClaim> claims;
+	private final Map<@NonNull InternalTransportIdentity, @NonNull StoredClaim> claims;
 
 	TransportIdentityClaimRegistry() {
 		this.claims = new WeakHashMap<>();
 	}
 
-	synchronized void claimAll(@NonNull List<InternalTransportIdentity> identities,
+	synchronized void claimAll(@NonNull List<@NonNull InternalTransportIdentity> identities,
 			@NonNull Object owner) {
 		requireNonNull(identities);
 		requireNonNull(owner);
@@ -417,7 +417,7 @@ final class TransportIdentityClaimRegistry {
 			this.claims.put(identity, new StoredClaim(null, null, new Object()));
 	}
 
-	synchronized void claimAllDescriptors(@NonNull List<ClaimDescriptor> descriptors,
+	synchronized void claimAllDescriptors(@NonNull List<@NonNull ClaimDescriptor> descriptors,
 			@NonNull Object owner) {
 		requireNonNull(descriptors);
 		requireNonNull(owner);
@@ -585,7 +585,7 @@ final class InternalTerminationEvent {
 	}
 
 	@NonNull
-	Optional<Throwable> cause() {
+	Optional<@NonNull Throwable> cause() {
 		return Optional.ofNullable(this.cause);
 	}
 }
@@ -661,7 +661,7 @@ final class InternalControllingEventElection {
 	}
 
 	@NonNull
-	synchronized Optional<InternalTerminationEvent> firstEvent() {
+	synchronized Optional<@NonNull InternalTerminationEvent> firstEvent() {
 		return Optional.ofNullable(this.firstEvent);
 	}
 }
@@ -683,7 +683,7 @@ final class InternalTerminationGroup {
 	static final class Member {
 		private final int id;
 		@NonNull
-		private final List<Member> children;
+		private final List<@NonNull Member> children;
 		@Nullable
 		private InternalTerminationEvent failure;
 		@Nullable
@@ -695,9 +695,9 @@ final class InternalTerminationGroup {
 		@Nullable
 		private InternalTerminationEvent proofHandoffDiagnostic;
 		@Nullable
-		private CompletableFuture<Void> proofHandoff;
+		private CompletableFuture<@Nullable Void> proofHandoff;
 		@Nullable
-		private CompletionStage<Void> proofView;
+		private CompletionStage<@Nullable Void> proofView;
 		private boolean proofHandoffStarted;
 
 		private Member(int id) {
@@ -719,15 +719,15 @@ final class InternalTerminationGroup {
 		@Nullable
 		private final InternalTerminationEvent controllingEvent;
 		@NonNull
-		private final List<InternalTerminationEvent> primaryEvents;
+		private final List<@NonNull InternalTerminationEvent> primaryEvents;
 		@NonNull
-		private final List<Throwable> failures;
+		private final List<@NonNull Throwable> failures;
 
 		private EvidenceSnapshot(boolean barrierComplete,
 				int trackedLifecycleCalls, int admittedWork,
 				@Nullable InternalTerminationEvent controllingEvent,
-				@NonNull List<InternalTerminationEvent> primaryEvents,
-				@NonNull List<Throwable> failures) {
+				@NonNull List<@NonNull InternalTerminationEvent> primaryEvents,
+				@NonNull List<@NonNull Throwable> failures) {
 			this.barrierComplete = barrierComplete;
 			this.trackedLifecycleCalls = trackedLifecycleCalls;
 			this.admittedWork = admittedWork;
@@ -749,17 +749,17 @@ final class InternalTerminationGroup {
 		}
 
 		@NonNull
-		Optional<InternalTerminationEvent> controllingEvent() {
+		Optional<@NonNull InternalTerminationEvent> controllingEvent() {
 			return Optional.ofNullable(this.controllingEvent);
 		}
 
 		@NonNull
-		List<InternalTerminationEvent> primaryEvents() {
+		List<@NonNull InternalTerminationEvent> primaryEvents() {
 			return this.primaryEvents;
 		}
 
 		@NonNull
-		List<Throwable> failures() {
+		List<@NonNull Throwable> failures() {
 			return this.failures;
 		}
 	}
@@ -786,14 +786,14 @@ final class InternalTerminationGroup {
 	@NonNull
 	private final Member root;
 	@NonNull
-	private final List<Member> members;
+	private final List<@NonNull Member> members;
 	@NonNull
-	private final AtomicReference<InternalTerminationEvent> controllingEvent;
+	private final AtomicReference<@Nullable InternalTerminationEvent> controllingEvent;
 	@Nullable
 	private final InternalControllingEventElection ownerEventElection;
 	@Nullable
 	private EvidenceSnapshot frozenEvidence;
-	private State state;
+	private @NonNull State state;
 	private long nextSequence;
 	private int trackedLifecycleCalls;
 	private boolean shutdownIntent;
@@ -831,7 +831,7 @@ final class InternalTerminationGroup {
 	}
 
 	@NonNull
-	Optional<AdmissionFence.Admission> tryAdmitBuiltInDispatch() {
+	Optional<AdmissionFence.@NonNull Admission> tryAdmitBuiltInDispatch() {
 		return this.admissionFence.tryAdmit();
 	}
 
@@ -1005,7 +1005,7 @@ final class InternalTerminationGroup {
 	}
 
 	@NonNull
-	CompletionStage<Void> subtreeProofStage(@NonNull Member member) {
+	CompletionStage<@Nullable Void> subtreeProofStage(@NonNull Member member) {
 		synchronized (this) {
 			requireMember(member);
 			if (this.state == State.DISCARDED)
@@ -1067,7 +1067,7 @@ final class InternalTerminationGroup {
 	}
 
 	@NonNull
-	List<InternalTerminationEvent> primaryEventsInSequence() {
+	List<@NonNull InternalTerminationEvent> primaryEventsInSequence() {
 		synchronized (this) {
 			List<InternalTerminationEvent> events = new ArrayList<>();
 			for (Member member : this.members) {
@@ -1082,7 +1082,7 @@ final class InternalTerminationGroup {
 	}
 
 	@NonNull
-	private List<Throwable> failuresInSequence() {
+	private List<@NonNull Throwable> failuresInSequence() {
 		List<InternalTerminationEvent> events = new ArrayList<>();
 		for (Member member : this.members) {
 			if (member.failure != null)
@@ -1095,7 +1095,7 @@ final class InternalTerminationGroup {
 	}
 
 	@NonNull
-	Optional<InternalTerminationEvent> controllingEvent() {
+	Optional<@NonNull InternalTerminationEvent> controllingEvent() {
 		return Optional.ofNullable(this.controllingEvent.get());
 	}
 
@@ -1153,7 +1153,7 @@ final class InternalTerminationGroup {
 	}
 
 	@NonNull
-	synchronized Optional<InternalTerminationEvent> attachDiagnostic(@NonNull Member member) {
+	synchronized Optional<@NonNull InternalTerminationEvent> attachDiagnostic(@NonNull Member member) {
 		requireMember(member);
 		return Optional.ofNullable(member.attachDiagnostic);
 	}
@@ -1188,7 +1188,7 @@ final class InternalTerminationGroup {
 	}
 
 	@NonNull
-	private List<Member> subtreeMembers(@NonNull Member member) {
+	private List<@NonNull Member> subtreeMembers(@NonNull Member member) {
 		List<Member> result = new ArrayList<>();
 		result.add(member);
 		for (Member child : member.children)
@@ -1197,7 +1197,7 @@ final class InternalTerminationGroup {
 	}
 
 	@NonNull
-	private List<Member> proofHandoffsReadyToStart() {
+	private List<@NonNull Member> proofHandoffsReadyToStart() {
 		if (this.state != State.COMMITTED)
 			return List.of();
 		List<Member> result = new ArrayList<>();
@@ -1211,7 +1211,7 @@ final class InternalTerminationGroup {
 		return result;
 	}
 
-	private void startProofHandoffs(@NonNull List<Member> members) {
+	private void startProofHandoffs(@NonNull List<@NonNull Member> members) {
 		for (Member member : members) {
 			CompletableFuture<Void> handoff = member.proofHandoff;
 			if (handoff == null)
@@ -1379,7 +1379,7 @@ final class InternalTransportAttachmentContext<H> {
 	}
 
 	@NonNull
-	Supplier<Optional<AdmissionFence.Admission>> builtInDispatchAdmissionSupplier() {
+	Supplier<@NonNull Optional<AdmissionFence.@NonNull Admission>> builtInDispatchAdmissionSupplier() {
 		return this.group::tryAdmitBuiltInDispatch;
 	}
 
@@ -1400,12 +1400,14 @@ final class InternalTransportAttachmentContext<H> {
 		return attachDelegate(delegate, delegateRequestHandler, false,
 				new DelegateAccess<>() {
 					@Override
+					@Nullable
 					public InternalTransportIdentity identity(
 							@NonNull InternalTransportEndpoint<H> exactDelegate) {
 						return exactDelegate.identity();
 					}
 
 					@Override
+					@Nullable
 					public InternalTransportRuntime attach(
 							@NonNull InternalTransportEndpoint<H> exactDelegate,
 							@NonNull InternalTransportAttachmentContext<H> context,
@@ -1422,12 +1424,14 @@ final class InternalTransportAttachmentContext<H> {
 		return attachDelegate(delegate, delegateRequestHandler, true,
 				new DelegateAccess<>() {
 					@Override
+					@Nullable
 					public InternalTransportIdentity identity(
 							@NonNull InternalTransportEndpoint<H> exactDelegate) {
 						return exactDelegate.identity();
 					}
 
 					@Override
+					@Nullable
 					public InternalTransportRuntime attach(
 							@NonNull InternalTransportEndpoint<H> exactDelegate,
 							@NonNull InternalTransportAttachmentContext<H> context,
@@ -1444,6 +1448,7 @@ final class InternalTransportAttachmentContext<H> {
 		InternalTransportDelegateAttachment attachment = attachDelegate(delegate,
 				(H) delegateRequestHandler, false, new DelegateAccess<>() {
 					@Override
+					@Nullable
 					public InternalTransportIdentity identity(
 							@NonNull HttpServer exactDelegate) {
 						TransportIdentity identity = exactDelegate.getTransportIdentity();
@@ -1452,6 +1457,7 @@ final class InternalTransportAttachmentContext<H> {
 					}
 
 					@Override
+					@Nullable
 					public InternalTransportRuntime attach(@NonNull HttpServer exactDelegate,
 							@NonNull InternalTransportAttachmentContext<H> context,
 							@NonNull StartupContext startupContext) {
@@ -1475,6 +1481,7 @@ final class InternalTransportAttachmentContext<H> {
 		InternalTransportDelegateAttachment attachment = attachDelegate(delegate,
 				(H) delegateRequestHandler, true, new DelegateAccess<>() {
 					@Override
+					@Nullable
 					public InternalTransportIdentity identity(
 							@NonNull HttpServer exactDelegate) {
 						TransportIdentity identity = exactDelegate.getTransportIdentity();
@@ -1483,6 +1490,7 @@ final class InternalTransportAttachmentContext<H> {
 					}
 
 					@Override
+					@Nullable
 					public InternalTransportRuntime attach(@NonNull HttpServer exactDelegate,
 							@NonNull InternalTransportAttachmentContext<H> context,
 							@NonNull StartupContext startupContext) {
@@ -1507,6 +1515,7 @@ final class InternalTransportAttachmentContext<H> {
 		InternalTransportDelegateAttachment attachment = attachDelegate(delegate,
 				(H) delegateRequestHandler, false, new DelegateAccess<>() {
 					@Override
+					@Nullable
 					public InternalTransportIdentity identity(
 							@NonNull SseServer exactDelegate) {
 						TransportIdentity identity = exactDelegate.getTransportIdentity();
@@ -1515,6 +1524,7 @@ final class InternalTransportAttachmentContext<H> {
 					}
 
 					@Override
+					@Nullable
 					public InternalTransportRuntime attach(@NonNull SseServer exactDelegate,
 							@NonNull InternalTransportAttachmentContext<H> context,
 							@NonNull StartupContext startupContext) {
@@ -1538,6 +1548,7 @@ final class InternalTransportAttachmentContext<H> {
 		InternalTransportDelegateAttachment attachment = attachDelegate(delegate,
 				(H) delegateRequestHandler, true, new DelegateAccess<>() {
 					@Override
+					@Nullable
 					public InternalTransportIdentity identity(
 							@NonNull SseServer exactDelegate) {
 						TransportIdentity identity = exactDelegate.getTransportIdentity();
@@ -1546,6 +1557,7 @@ final class InternalTransportAttachmentContext<H> {
 					}
 
 					@Override
+					@Nullable
 					public InternalTransportRuntime attach(@NonNull SseServer exactDelegate,
 							@NonNull InternalTransportAttachmentContext<H> context,
 							@NonNull StartupContext startupContext) {

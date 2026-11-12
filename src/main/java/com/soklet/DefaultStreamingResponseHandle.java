@@ -62,7 +62,7 @@ final class DefaultStreamingResponseHandle implements StreamingResponseHandle {
 
 	@Override
 	@NonNull
-	public Optional<ResourceMethod> getResourceMethod() {
+	public Optional<@NonNull ResourceMethod> getResourceMethod() {
 		return Optional.ofNullable(this.resourceMethod);
 	}
 

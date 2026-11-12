@@ -88,8 +88,8 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	// ===================================================================================
 
 	private final int capacity;
-	private final ConcurrentHashMap<K, Node<K, V>> map;
-	private final BiConsumer<K, V> evictionListener;
+	private final @NonNull ConcurrentHashMap<K, @NonNull Node<K, V>> map;
+	private final @NonNull BiConsumer<K, V> evictionListener;
 
 	// ===================================================================================
 	// LRU Tracking (Intrusive Doubly-Linked List)
@@ -99,13 +99,13 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	 * Sentinel head; head.next is MRU.
 	 */
 	@GuardedBy("maintenanceLock")
-	private final Node<K, V> head;
+	private final @NonNull Node<K, V> head;
 
 	/**
 	 * Sentinel tail; tail.prev is LRU.
 	 */
 	@GuardedBy("maintenanceLock")
-	private final Node<K, V> tail;
+	private final @NonNull Node<K, V> tail;
 
 	// ===================================================================================
 	// Buffers
@@ -115,13 +115,13 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	 * Lossy ring buffer for recording read accesses.
 	 * Entries may be overwritten under contention (dropping older access events).
 	 */
-	private final AtomicReferenceArray<Node<K, V>> readBuffer;
-	private final AtomicInteger readBufferWriteIndex;
+	private final @NonNull AtomicReferenceArray<@Nullable Node<K, V>> readBuffer;
+	private final @NonNull AtomicInteger readBufferWriteIndex;
 
 	/**
 	 * Lossless MPSC queue for write operations.
 	 */
-	private final ConcurrentLinkedQueue<WriteTask<K, V>> writeBuffer;
+	private final @NonNull ConcurrentLinkedQueue<@NonNull WriteTask<K, V>> writeBuffer;
 
 	/**
 	 * Approximate count of queued write tasks.
@@ -129,7 +129,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	 * <p>
 	 * Important: we increment BEFORE enqueue to avoid "poll before increment" races going negative.
 	 */
-	private final AtomicInteger writeBufferSize;
+	private final @NonNull AtomicInteger writeBufferSize;
 
 	// ===================================================================================
 	// Maintenance
@@ -141,7 +141,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	 * - Updating the LRU linked list
 	 * - Evicting entries
 	 */
-	private final ReentrantLock maintenanceLock;
+	private final @NonNull ReentrantLock maintenanceLock;
 
 	// ===================================================================================
 	// Node States
@@ -196,13 +196,13 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	}
 
 	@Override
-	public boolean containsKey(Object key) {
+	public boolean containsKey(@NonNull Object key) {
 		// Note: does not count as access for LRU purposes
 		return map.containsKey(key);
 	}
 
 	@Override
-	public boolean containsValue(Object value) {
+	public boolean containsValue(@Nullable Object value) {
 		for (Node<K, V> node : map.values()) {
 			if (Objects.equals(node.value, value))
 				return true;
@@ -212,7 +212,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 
 	@Override
 	@Nullable
-	public V get(Object key) {
+	public V get(@NonNull Object key) {
 		Node<K, V> node = map.get(key);
 		if (node == null)
 			return null;
@@ -222,7 +222,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	}
 
 	@Override
-	public V getOrDefault(Object key, V defaultValue) {
+	public @Nullable V getOrDefault(@NonNull Object key, @Nullable V defaultValue) {
 		Node<K, V> node = map.get(key);
 		if (node == null)
 			return defaultValue;
@@ -274,7 +274,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 
 	@Override
 	@Nullable
-	public V computeIfAbsent(K key, Function<? super K, ? extends V> mappingFunction) {
+	public V computeIfAbsent(K key, @NonNull Function<? super K, ? extends @Nullable V> mappingFunction) {
 		Objects.requireNonNull(key, "key");
 		Objects.requireNonNull(mappingFunction, "mappingFunction");
 
@@ -309,7 +309,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 
 	@Override
 	@Nullable
-	public V remove(Object key) {
+	public V remove(@NonNull Object key) {
 		Node<K, V> node = map.remove(key);
 		if (node == null)
 			return null;
@@ -319,7 +319,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	}
 
 	@Override
-	public boolean remove(Object key, Object value) {
+	public boolean remove(@NonNull Object key, @Nullable Object value) {
 		Node<K, V> node = map.get(key);
 		if (node == null || !Objects.equals(node.value, value))
 			return false;
@@ -333,7 +333,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	}
 
 	@Override
-	public void putAll(Map<? extends K, ? extends V> m) {
+	public void putAll(@NonNull Map<? extends K, ? extends V> m) {
 		for (Entry<? extends K, ? extends V> entry : m.entrySet())
 			put(entry.getKey(), entry.getValue());
 	}
@@ -377,22 +377,22 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	// ===================================================================================
 
 	@Override
-	public Set<K> keySet() {
+	public @NonNull Set<K> keySet() {
 		return new KeySetView();
 	}
 
 	@Override
-	public Collection<V> values() {
+	public @NonNull Collection<V> values() {
 		return new ValuesView();
 	}
 
 	@Override
-	public Set<Entry<K, V>> entrySet() {
+	public @NonNull Set<@NonNull Entry<K, V>> entrySet() {
 		return new EntrySetView();
 	}
 
 	@Override
-	public boolean equals(Object o) {
+	public boolean equals(@Nullable Object o) {
 		if (o == this)
 			return true;
 		if (!(o instanceof Map))
@@ -478,7 +478,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	}
 
 	@GuardedBy("maintenanceLock")
-	private List<Node<K, V>> performMaintenanceLocked() {
+	private @NonNull List<@NonNull Node<K, V>> performMaintenanceLocked() {
 		drainReadBufferLocked();
 		drainWriteBufferLocked();
 		return evictLocked();
@@ -522,7 +522,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	}
 
 	@GuardedBy("maintenanceLock")
-	private List<Node<K, V>> evictLocked() {
+	private @NonNull List<@NonNull Node<K, V>> evictLocked() {
 		List<Node<K, V>> evicted = new ArrayList<>();
 
 		while (map.size() > capacity) {
@@ -543,7 +543,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 		return evicted;
 	}
 
-	private void notifyEvictionListener(@NonNull List<Node<K, V>> evicted) {
+	private void notifyEvictionListener(@NonNull List<@NonNull Node<K, V>> evicted) {
 		if (evicted.isEmpty())
 			return;
 
@@ -620,8 +620,8 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	// ===================================================================================
 
 	private static final class Node<K, V> {
-		final K key;
-		final V value;
+		final @Nullable K key;
+		final @Nullable V value;
 
 		// Guarded by the owning ConcurrentLruMap's maintenanceLock.
 		@Nullable
@@ -633,7 +633,6 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 
 		volatile int state = ALIVE;
 
-		@SuppressWarnings("NullAway")
 		Node() {
 			this.key = null;
 			this.value = null;
@@ -648,8 +647,8 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 	private static final class WriteTask<K, V> {
 		enum Type {ADD, REMOVE, UPDATE}
 
-		final Type type;
-		final Node<K, V> node;
+		final @NonNull Type type;
+		final @NonNull Node<K, V> node;
 		@Nullable
 		final Node<K, V> oldNode; // only for UPDATE
 
@@ -659,15 +658,15 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 			this.oldNode = oldNode;
 		}
 
-		static <K, V> WriteTask<K, V> add(@NonNull Node<K, V> node) {
+		static <K, V> @NonNull WriteTask<K, V> add(@NonNull Node<K, V> node) {
 			return new WriteTask<>(Type.ADD, node, null);
 		}
 
-		static <K, V> WriteTask<K, V> remove(@NonNull Node<K, V> node) {
+		static <K, V> @NonNull WriteTask<K, V> remove(@NonNull Node<K, V> node) {
 			return new WriteTask<>(Type.REMOVE, node, null);
 		}
 
-		static <K, V> WriteTask<K, V> update(@NonNull Node<K, V> oldNode, @NonNull Node<K, V> newNode) {
+		static <K, V> @NonNull WriteTask<K, V> update(@NonNull Node<K, V> oldNode, @NonNull Node<K, V> newNode) {
 			return new WriteTask<>(Type.UPDATE, newNode, oldNode);
 		}
 	}
@@ -688,12 +687,12 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 		}
 
 		@Override
-		public boolean contains(Object o) {
+		public boolean contains(@NonNull Object o) {
 			return ConcurrentLruMap.this.containsKey(o);
 		}
 
 		@Override
-		public Iterator<K> iterator() {
+		public @NonNull Iterator<K> iterator() {
 			final Iterator<K> it = map.keySet().iterator();
 
 			return new Iterator<>() {
@@ -729,7 +728,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 		}
 
 		@Override
-		public boolean remove(Object o) {
+		public boolean remove(@NonNull Object o) {
 			return ConcurrentLruMap.this.remove(o) != null;
 		}
 
@@ -756,17 +755,17 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 		}
 
 		@Override
-		public boolean contains(Object o) {
+		public boolean contains(@Nullable Object o) {
 			return ConcurrentLruMap.this.containsValue(o);
 		}
 
 		@Override
-		public Iterator<V> iterator() {
+		public @NonNull Iterator<V> iterator() {
 			final Iterator<Entry<K, Node<K, V>>> it = map.entrySet().iterator();
 
 			return new Iterator<>() {
 				@Nullable
-				private Entry<K, Node<K, V>> last;
+				private Entry<K, @NonNull Node<K, V>> last;
 
 				@Override
 				public boolean hasNext() {
@@ -795,7 +794,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 		}
 
 		@Override
-		public boolean remove(Object o) {
+		public boolean remove(@Nullable Object o) {
 			for (Entry<K, Node<K, V>> e : map.entrySet()) {
 				Node<K, V> node = e.getValue();
 				if (Objects.equals(node.value, o)) {
@@ -831,7 +830,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 		}
 
 		@Override
-		public boolean contains(Object o) {
+		public boolean contains(@Nullable Object o) {
 			if (!(o instanceof Entry))
 				return false;
 
@@ -841,7 +840,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 		}
 
 		@Override
-		public boolean remove(Object o) {
+		public boolean remove(@Nullable Object o) {
 			if (!(o instanceof Entry))
 				return false;
 
@@ -850,12 +849,12 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 		}
 
 		@Override
-		public Iterator<Entry<K, V>> iterator() {
+		public @NonNull Iterator<@NonNull Entry<K, V>> iterator() {
 			final Iterator<Entry<K, Node<K, V>>> it = map.entrySet().iterator();
 
 			return new Iterator<>() {
 				@Nullable
-				private Entry<K, Node<K, V>> last;
+				private Entry<K, @NonNull Node<K, V>> last;
 
 				@Override
 				public boolean hasNext() {
@@ -863,7 +862,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 				}
 
 				@Override
-				public Entry<K, V> next() {
+				public @NonNull Entry<K, V> next() {
 					last = it.next();
 					K key = last.getKey();
 					return new WriteThroughEntry(key, last.getValue().value);
@@ -885,7 +884,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 		}
 
 		@Override
-		public boolean add(Entry<K, V> kvEntry) {
+		public boolean add(@NonNull Entry<K, V> kvEntry) {
 			throw new UnsupportedOperationException();
 		}
 	}
@@ -924,7 +923,7 @@ public class ConcurrentLruMap<K, V> implements Map<K, V> {
 		}
 
 		@Override
-		public boolean equals(Object o) {
+		public boolean equals(@Nullable Object o) {
 			if (!(o instanceof Entry))
 				return false;
 			Entry<?, ?> e = (Entry<?, ?>) o;

@@ -9,6 +9,8 @@
  */
 package com.soklet.internal.mcp.skills;
 
+
+import org.jspecify.annotations.NonNull;
 import com.soklet.internal.mcp.protocol.McpJsonLimits;
 import com.soklet.internal.mcp.protocol.McpJsonObject;
 import com.soklet.internal.mcp.protocol.McpJsonValue;
@@ -22,17 +24,17 @@ import static java.util.Objects.requireNonNull;
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 final class SkillFrontmatter {
-	private final SkillSource source;
-	private final McpJsonObject metadata;
+	private final @NonNull SkillSource source;
+	private final @NonNull McpJsonObject metadata;
 	private final int bodyByteOffset;
 
-	private SkillFrontmatter(SkillSource source, McpJsonObject metadata, int bodyByteOffset) {
+	private SkillFrontmatter(@NonNull SkillSource source, @NonNull McpJsonObject metadata, int bodyByteOffset) {
 		this.source = source;
 		this.metadata = metadata;
 		this.bodyByteOffset = bodyByteOffset;
 	}
 
-	static SkillFrontmatter parse(byte[] bytes, SkillYamlLimits limits, McpJsonLimits jsonLimits) {
+	static @NonNull SkillFrontmatter parse(byte @NonNull [] bytes, @NonNull SkillYamlLimits limits, @NonNull McpJsonLimits jsonLimits) {
 		requireNonNull(bytes); requireNonNull(limits); requireNonNull(jsonLimits);
 		if (bytes.length > limits.maximumInputBytes())
 			throw new SkillYamlException(SkillYamlException.Reason.INPUT_LIMIT, 1, 1);
@@ -49,8 +51,8 @@ final class SkillFrontmatter {
 		return new SkillFrontmatter(source, metadata, frontmatter.bodyByteOffset());
 	}
 
-	SkillSource source() { return this.source; }
-	McpJsonObject metadata() { return this.metadata; }
+	@NonNull SkillSource source() { return this.source; }
+	@NonNull McpJsonObject metadata() { return this.metadata; }
 	int bodyByteOffset() { return this.bodyByteOffset; }
-	@Override public String toString() { return "SkillFrontmatter[redacted]"; }
+	@Override public @NonNull String toString() { return "SkillFrontmatter[redacted]"; }
 }
