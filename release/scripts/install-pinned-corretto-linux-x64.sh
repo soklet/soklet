@@ -13,7 +13,7 @@ github_path=$3
 github_env=$4
 evidence_file=$5
 manifest=release/release-validation-manifest.json
-helper=scripts/release-validation-evidence.mjs
+helper=scripts/read-toolchain-config.mjs
 
 case "$toolchain_name" in
 	java)
@@ -39,7 +39,7 @@ case "$toolchain_name" in
 esac
 
 manifest_value() {
-	node "$helper" value "$manifest" "toolchains.$toolchain_name.$1"
+	node "$helper" "$manifest" "toolchains.$toolchain_name.$1"
 }
 
 java_version=$(manifest_value version)

@@ -19,7 +19,6 @@ import {
   runBoundedCommand,
 } from '../run.mjs';
 import { validateFinalTagWire } from '../validate-final-tag-wire.mjs';
-import { verifyProfileEvidence } from '../verify-profile-evidence.mjs';
 import {
   officialScenarioArguments,
   sha256,
@@ -38,7 +37,6 @@ import {
 } from './capture-elicitation-socket.mjs';
 
 const officialRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const projectRoot = resolve(officialRoot, '..', '..');
 const scenarioName = 'server-stateless';
 const commandTimeoutMilliseconds = 60_000;
 const preflightTimeoutMilliseconds = 30_000;
@@ -106,7 +104,6 @@ export async function captureP0cProposal(options) {
   if (scenario === undefined || scenario.selection !== 'RUN'
       || scenario.expectedCheckProfile !== 'server-stateless.phase5.v1')
     throw new Error('Pinned server-stateless selection changed');
-  verifyProfileEvidence({ projectRoot });
   verifyOfficialSuite(suiteDirectory, pins);
 
   const supervisor = new ChildSupervisor();

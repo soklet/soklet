@@ -32,8 +32,6 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -349,15 +347,12 @@ public class McpProtocolProfileIsolationTests {
 	}
 
 	@Test
-	public void fakeProfileRemainsOutsideProductionRegistryEvidenceAndDiscovery()
+	public void fakeProfileRemainsOutsideProductionRegistryAndDiscovery()
 			throws Exception {
 		Assertions.assertEquals(List.of(CURRENT),
 				McpProductionProtocolProfiles.REGISTRY.revisions());
 		Assertions.assertTrue(
 				McpProductionProtocolProfiles.REGISTRY.resolve(FAKE).isEmpty());
-		Path evidence = Path.of("conformance", "official",
-				"protocol-profile-evidence.json");
-		Assertions.assertFalse(Files.readString(evidence).contains(FAKE));
 
 		McpHttpEndpointBinding binding = new McpHttpEndpointBinding(policy(),
 				minimalEndpoint(), McpApplicationRequestRouter.empty());

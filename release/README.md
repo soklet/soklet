@@ -88,7 +88,7 @@ for investigation, without formal exception or expiry records. To run a local
 redacted secrets report with Gitleaks installed:
 
 ```sh
-gitleaks git --redact --report-format json --report-path /tmp/soklet-gitleaks.json .
+gitleaks git --log-opts=HEAD --redact --report-format json --report-path /tmp/soklet-gitleaks.json .
 ```
 
 Keep reports redacted. The secrets report includes historical findings and test
@@ -384,14 +384,16 @@ the discrepancy instead of rebinding the seal or asserting a D1p rerun.
 
 ## Retained implementation checkpoints
 
-Candidate conformance also verifies
-`conformance/official/protocol-profile-evidence.json` before setup. That index
+The optional `conformance/official/protocol-profile-evidence.json` audit index
 binds the sole immutable production revision to its specification, schema,
 official-suite, scenario, golden, and interoperability evidence; its strict
-verifier/self-test run directly and through the API-freeze wrapper. A missing
-or extra profile, ownership-sentinel change, pin drift, untracked or symlinked
-evidence, or nondeterministic report fails closed. Test-only injected profiles
-are intentionally absent from discovery and candidate evidence.
+verifier/self-test can run directly and through the optional API-freeze wrapper.
+A missing or extra profile, ownership-sentinel change, pin drift, untracked or symlinked
+evidence, or nondeterministic report fails that audit. Normal conformance
+verification does not require the index or its release-manifest and
+Git-tracking checks.
+Test-only injected profiles are intentionally absent from discovery and
+candidate evidence.
 
 The preceding 2026-08-20 protocol/capability golden checkpoint passed 9/9 on
 local Corretto 17 and the pinned Corretto 21, 86/86 across the broader

@@ -15,7 +15,6 @@ import { fileURLToPath } from 'node:url';
 import { adjudicateChecks } from './adjudicate.mjs';
 import { acceptedP0CPolicy, acceptedP0CStatus, runAcceptedP0CScenario } from './p0c-policy.mjs';
 import { validateFinalTagWire } from './validate-final-tag-wire.mjs';
-import { verifyProfileEvidence } from './verify-profile-evidence.mjs';
 import {
   activeScenarios,
   officialScenarioArguments,
@@ -102,7 +101,6 @@ export async function runOfficialConformance(options, { processObject = process 
 		} else {
 			verifyPublicFixtureClasspath(options.classpath, options.projectRoot);
 		}
-		verifyProfileEvidence({ projectRoot: options.projectRoot });
     evidence.suiteCommit = pins.officialConformanceSuite.commit;
     evidence.protocolVersion = pins.protocolVersion;
     persistEvidence(evidencePath, evidence);

@@ -11,10 +11,10 @@ runner_temp=$1
 github_path=$2
 evidence_file=$3
 manifest=release/release-validation-manifest.json
-helper=scripts/release-validation-evidence.mjs
+helper=scripts/read-toolchain-config.mjs
 
 manifest_value() {
-	node "$helper" value "$manifest" "$1"
+	node "$helper" "$manifest" "$1"
 }
 
 maven_version=$(manifest_value toolchains.maven.version)

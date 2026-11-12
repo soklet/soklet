@@ -86,6 +86,7 @@ jobs:
           node scripts/release-promotion-self-test.mjs
           node scripts/api-diff/summarize-self-test.mjs
           node scripts/verify-runtime-dependency-surface-self-test.mjs
+          node scripts/report-secret-scan-self-test.mjs
           node scripts/verify-sibling-projects-self-test.mjs
           node scripts/verify-mcp-interoperability-self-test.mjs
 
@@ -314,8 +315,8 @@ jobs:
 
       - name: Scan committed history for secrets
         run: >-
-          gitleaks git --redact --report-format json
-          --report-path "${RUNNER_TEMP}/gitleaks.json" .
+          node scripts/report-secret-scan.mjs
+          "${GITHUB_WORKSPACE}" "${RUNNER_TEMP}/gitleaks.json"
 
       - name: Upload redacted findings
         if: always()

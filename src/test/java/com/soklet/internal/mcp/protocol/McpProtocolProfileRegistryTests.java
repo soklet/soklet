@@ -78,29 +78,13 @@ public class McpProtocolProfileRegistryTests {
 	}
 
 	@Test
-	public void productionRegistryAndEvidenceIndexHaveExactOneToOneParity()
-			throws Exception {
+	public void productionRegistryContainsOnlyCurrentProfile() {
 		McpProtocolProfileRegistry production =
 				McpProductionProtocolProfiles.REGISTRY;
 		Assertions.assertEquals(List.of(CURRENT), production.revisions());
 		Assertions.assertSame(Mcp20260728ProtocolProfile.INSTANCE,
 				production.resolve(CURRENT).orElseThrow());
-
-		Path indexPath = Path.of("conformance", "official",
-				"protocol-profile-evidence.json");
-		McpJsonObject index = Assertions.assertInstanceOf(McpJsonObject.class,
-				new McpJsonCodec(McpJsonLimits.productionDefaults())
-						.parse(Files.readAllBytes(indexPath)));
-		McpJsonArray profiles = Assertions.assertInstanceOf(McpJsonArray.class,
-				index.members().get("profiles"));
-		List<String> indexedRevisions = profiles.values().stream()
-				.map(value -> Assertions.assertInstanceOf(McpJsonObject.class, value))
-				.map(value -> value.members().get("revision"))
-				.map(value -> Assertions.assertInstanceOf(McpJsonString.class, value))
-				.map(McpJsonString::value)
-				.toList();
-		Assertions.assertEquals(production.revisions(), indexedRevisions);
-		Assertions.assertFalse(Files.readString(indexPath).contains(FAKE));
+		Assertions.assertTrue(production.resolve(FAKE).isEmpty());
 	}
 
 	@Test

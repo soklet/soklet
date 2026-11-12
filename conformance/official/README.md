@@ -45,8 +45,10 @@ must contain exactly the sole `2026-07-28` production profile and the exact
 `verify-profile-evidence.mjs` verifier rejects missing or extra revisions,
 unknown or widened ownership, pin drift, untracked/non-regular/symlinked
 evidence, and nondeterministic output; its self-test covers those fail-closed
-paths. The candidate-conformance runner verifies this index before consuming
-its profile evidence.
+paths. This index and its verifier are optional audit tools. The normal
+conformance verification run does not require the index or its release-manifest
+and Git-tracking checks. The runner verifies the pinned suite, schemas,
+scenario inventory, golden messages, and actual protocol behavior directly.
 
 The current gate is pinned to `@modelcontextprotocol/conformance`
 `0.2.0-alpha.11`, commit `a983ba93c91e0bb31d0b6849eeb52f0ad1083107`.

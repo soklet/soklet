@@ -3,18 +3,24 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readToolchainValue } from './read-toolchain-config.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const installer = join(root, 'release/scripts/install-pinned-corretto-linux-x64.sh');
-const pins = JSON.parse(readFileSync(join(root, 'release/release-validation-manifest.json'))).toolchains;
+const manifestPath = join(root, 'release/release-validation-manifest.json');
+const manifest = JSON.parse(readFileSync(manifestPath));
+const pins = manifest.toolchains;
+const reader = join(root, 'scripts/read-toolchain-config.mjs');
 const temporary = mkdtempSync(join(tmpdir(), 'soklet-javadoc-toolchain-'));
 let checks = 0;
 
 try {
+  verifyReader();
+
   function probe(name, mutation = null) {
     const directory = join(temporary, `${name}-${checks++}`);
     const mocks = join(directory, 'mock-bin');
@@ -31,9 +37,8 @@ try {
     if (mutation === 'checksum') toolchain.archiveSha256 = '0'.repeat(64);
     if (mutation === 'release-kind')
       toolchain.runtimeVersion = toolchain.runtimeVersion.replace(/-(FR|LTS)$/, name === 'javadocJava' ? '-LTS' : '-FR');
-    writeFileSync(join(directory, 'release/release-validation-manifest.json'), JSON.stringify({ toolchains: { [name]: toolchain } }));
-    writeFileSync(join(directory, 'scripts/release-validation-evidence.mjs'),
-      "import fs from 'node:fs'; const value = JSON.parse(fs.readFileSync(process.argv[3])); console.log(process.argv[4].split('.').reduce((v, k) => v[k], value));\n");
+    writeManifest(directory, name, toolchain);
+    copyFileSync(reader, join(directory, 'scripts/read-toolchain-config.mjs'));
     const executable = (path, text) => writeFileSync(path, `#!/bin/sh\nset -eu\n${text}\n`, { mode: 0o755 });
     // Match GNU checksum semantics without depending on the host's BSD/GNU CLI.
     writeFileSync(join(directory, 'checksum.mjs'),
@@ -100,7 +105,105 @@ try {
   }
   probe('javadocJava', 'checksum');
   probe('javadocJava', 'executable');
-  console.log(`Javadoc toolchain installer self-test passed (${checks} isolated flows).`);
+  for (const name of ['maven', 'go']) {
+    probeBuildTool(name);
+    probeBuildTool(name, 'checksum');
+    probeBuildTool(name, 'executable');
+  }
+  console.log(`Toolchain installer self-test passed (${checks} isolated flows; real configuration reader).`);
 } finally {
   rmSync(temporary, { recursive: true, force: true });
+}
+
+// Keep the actual production manifest, deliberately invalidating the retired
+// approval fields. A tool download must not inspect those unrelated fields.
+function writeManifest(directory, name, toolchain) {
+  const fixture = structuredClone(manifest);
+  fixture.toolchains[name] = toolchain;
+  fixture.promotion = {
+    helper: { path: 'missing-promotion-helper.mjs', sha256: 'retired-source-pin' },
+    wrapper: { path: 'missing-wrapper.sh', sha256: 'retired-source-pin' },
+  };
+  fixture.gates = [{ id: 'historical-only', status: 'NOT_CURRENT_BUILD_INPUT' }];
+  writeFileSync(join(directory, 'release/release-validation-manifest.json'), JSON.stringify(fixture));
+}
+
+function verifyReader() {
+  // This real manifest includes the stale promotion fingerprint that broke CI.
+  for (const [name, fields] of Object.entries(pins)) {
+    for (const [field, value] of Object.entries(fields))
+      assert.equal(readToolchainValue(manifestPath, `toolchains.${name}.${field}`), value);
+  }
+  const result = spawnSync(process.execPath,
+    [reader, manifestPath, 'toolchains.javadocJava.version'], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout, `${pins.javadocJava.version}\n`);
+  for (const path of ['promotion.helper.sha256', 'toolchains.maven', 'toolchains.unknown.version', 'toolchains.maven.toString'])
+    assert.throws(() => readToolchainValue(manifestPath, path));
+  const invalid = join(temporary, 'invalid-toolchains.json');
+  for (const version of ['', 'bad\nvalue', 21, null, {}]) {
+    writeFileSync(invalid, JSON.stringify({ toolchains: { java: { version } } }));
+    assert.throws(() => readToolchainValue(invalid, 'toolchains.java.version'), /nonempty single-line string/);
+  }
+}
+
+function probeBuildTool(name, mutation = null) {
+  const directory = join(temporary, `${name}-${checks++}`);
+  const mocks = join(directory, 'mock-bin');
+  mkdirSync(mocks, { recursive: true });
+  mkdirSync(join(directory, 'scripts'));
+  mkdirSync(join(directory, 'release'));
+  const toolchain = structuredClone(pins[name]);
+  const algorithm = name === 'maven' ? 'sha512' : 'sha256';
+  const hashField = name === 'maven' ? 'archiveSha512' : 'archiveSha256';
+  const archive = join(directory, 'fixture-archive');
+  const bytes = Buffer.from('checksum-verified synthetic build tool archive\n');
+  writeFileSync(archive, bytes);
+  toolchain[hashField] = mutation === 'checksum'
+    ? '0'.repeat(name === 'maven' ? 128 : 64)
+    : createHash(algorithm).update(bytes).digest('hex');
+  writeManifest(directory, name, toolchain);
+  copyFileSync(reader, join(directory, 'scripts/read-toolchain-config.mjs'));
+  const extracted = join(directory, 'extracted');
+  const downloaded = join(directory, 'downloaded');
+  const bin = name === 'maven'
+    ? join(directory, `soklet-release-maven-${toolchain.version}`, `apache-maven-${toolchain.version}`, 'bin')
+    : join(directory, `soklet-release-go-${toolchain.version}`, 'go/bin');
+  const template = join(directory, 'template-bin');
+  mkdirSync(template);
+  const executable = (path, source) => writeFileSync(path, `#!/bin/sh\nset -eu\n${source}\n`, { mode: 0o755 });
+  writeFileSync(join(directory, 'checksum.mjs'),
+    "import fs from 'node:fs'; import {createHash} from 'node:crypto'; const line=fs.readFileSync(0,'utf8'); const match=/^([a-f0-9]+)  (.+)\\n$/.exec(line); if(!match || createHash(process.env.TEST_ALGORITHM).update(fs.readFileSync(match[2])).digest('hex')!==match[1]) process.exit(1);\n");
+  executable(join(mocks, `${algorithm}sum`), '[ "$*" = "--check --strict" ]\nexec node "$TEST_CHECKSUM_SCRIPT"');
+  executable(join(mocks, 'curl'), 'printf downloaded > "$TEST_DOWNLOAD_MARKER"\nfor argument do destination=$argument; done\ncp "$TEST_ARCHIVE" "$destination"');
+  executable(join(mocks, 'tar'), 'printf extracted > "$TEST_EXTRACT_MARKER"\nmkdir -p "$TEST_EXTRACT/bin"\ncp "$TEST_TEMPLATE"/* "$TEST_EXTRACT/bin/"');
+  const command = name === 'maven' ? 'mvn' : 'go';
+  const reportedVersion = mutation === 'executable' ? '0.0.0' : toolchain.version;
+  executable(join(template, command), name === 'maven'
+    ? `printf 'Apache Maven ${reportedVersion}\\n'`
+    : `printf 'go version go${reportedVersion} linux/amd64\\n'`);
+  const githubPath = join(directory, 'github-path');
+  const evidence = join(directory, 'distribution.txt');
+  writeFileSync(githubPath, '/unchanged/bin\n');
+  const result = spawnSync('bash', [join(root, `release/scripts/install-pinned-${name}-linux-x64.sh`), directory, githubPath, evidence], {
+    cwd: directory,
+    encoding: 'utf8',
+    env: { ...process.env, PATH: `${mocks}:${process.env.PATH}`,
+      TEST_ARCHIVE: archive, TEST_ALGORITHM: algorithm,
+      TEST_CHECKSUM_SCRIPT: join(directory, 'checksum.mjs'),
+      TEST_DOWNLOAD_MARKER: downloaded, TEST_EXTRACT_MARKER: extracted,
+      TEST_EXTRACT: dirname(bin), TEST_TEMPLATE: template },
+  });
+  assert.equal(result.error, undefined);
+  assert.equal(existsSync(downloaded), true, result.stderr);
+  if (mutation !== null) {
+    assert.notEqual(result.status, 0, `${name}/${mutation} must reject invalid build inputs`);
+    assert.equal(existsSync(evidence), false);
+    assert.equal(readFileSync(githubPath, 'utf8'), '/unchanged/bin\n');
+    if (mutation === 'checksum') assert.equal(existsSync(extracted), false);
+  } else {
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(readFileSync(githubPath, 'utf8'), `/unchanged/bin\n${bin}\n`);
+    assert.match(readFileSync(evidence, 'utf8'), new RegExp(`${hashField}=${toolchain[hashField]}\\n$`));
+  }
 }
