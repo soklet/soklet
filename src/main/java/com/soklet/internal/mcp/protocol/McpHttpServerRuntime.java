@@ -15549,7 +15549,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 					McpHttpServerRuntime.this.applicationExecutionObserver
 							.beginRequestTransitionDeferral();
 			try {
-				return cancelWhileMetricsDeferred(reason, null);
+				return cancelWhileMetricsDeferred(reason, null,
+						reason == StreamTerminationReason.CLIENT_DISCONNECTED);
 			} finally {
 				metricDeferral.close();
 			}
@@ -15558,6 +15559,12 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		private boolean cancelWhileMetricsDeferred(
 				@NonNull StreamTerminationReason reason,
 				@Nullable Throwable cause) {
+			return cancelWhileMetricsDeferred(reason, cause, false);
+		}
+
+		private boolean cancelWhileMetricsDeferred(
+				@NonNull StreamTerminationReason reason,
+				@Nullable Throwable cause, boolean reserveSimulationDisconnect) {
 			LegacyGetControl get; McpApplicationExecution.BoundedPolicyCancellation policy;
 			synchronized (lock) { get = legacyGet; policy = legacyHttpCancellation; }
 			if (policy != null && policy.isActive()) policy.cancel(reason);
@@ -15565,7 +15572,8 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				get.close(reason, McpServerRuntimeBridge.toPublicTerminationReason(reason), cause);
 				if (get.headOwned) return true;
 			}
-			if (detachLegacyResponseDelivery(reason, cause))
+			if (detachLegacyResponseDelivery(reason, cause,
+					reserveSimulationDisconnect))
 				return true;
 			FutureTask<Void> task;
 			McpRequestSseStream stream;
@@ -15579,12 +15587,19 @@ final class McpHttpServerRuntime implements AutoCloseable {
 				if (terminal)
 					return false;
 
+				// close() may have waited while a response terminal reached capture.
+				// Reserve its exact result before changing request ownership.
+				if (reserveSimulationDisconnect && simulation != null
+						&& reason == StreamTerminationReason.CLIENT_DISCONNECTED
+						&& !simulation.tryReserveClientDisconnect())
+					return false;
+
 				canceled = true;
 
 				resourceNotificationAuthority = null;
 				cancellationReason = reason;
 				cancellationCause = cause;
-				if (simulation != null
+				if (!reserveSimulationDisconnect && simulation != null
 						&& reason == StreamTerminationReason.CLIENT_DISCONNECTED)
 					simulation.reserveRuntimeReason(
 							McpStreamTerminationReason.CLIENT_DISCONNECTED);
@@ -15945,6 +15960,13 @@ final class McpHttpServerRuntime implements AutoCloseable {
 		/** Closes a lost legacy SSE writer without abandoning bounded application work. */
 		private boolean detachLegacyResponseDelivery(
 				@NonNull StreamTerminationReason reason, @Nullable Throwable cause) {
+			return detachLegacyResponseDelivery(reason, cause, false);
+		}
+
+		/** A controller disconnect must win capture before detaching its legacy writer. */
+		private boolean detachLegacyResponseDelivery(
+				@NonNull StreamTerminationReason reason, @Nullable Throwable cause,
+				boolean reserveSimulationDisconnect) {
 			if (reason != StreamTerminationReason.CLIENT_DISCONNECTED
 					&& reason != StreamTerminationReason.WRITE_FAILED)
 				return false;
@@ -15957,11 +15979,14 @@ final class McpHttpServerRuntime implements AutoCloseable {
 						|| responseStream == null || protocolProfile == null
 						|| !McpLegacyHttpWire.isLegacyRevision(protocolProfile.revision()))
 					return false;
+				if (simulation != null && reserveSimulationDisconnect
+						&& !simulation.tryReserveClientDisconnect())
+					return false;
 				legacyResponseDeliveryDetached = true;
 				if (legacyCall != null) legacyCall.detachProgress();
 				stream = responseStream;
 				completedStream = stream.isTerminalWritten();
-				if (simulation != null)
+				if (simulation != null && !reserveSimulationDisconnect)
 					simulation.reserveRuntimeReason(McpStreamTerminationReason.CLIENT_DISCONNECTED);
 				if (!applicationOwned) {
 					markTerminalWhileLocked();

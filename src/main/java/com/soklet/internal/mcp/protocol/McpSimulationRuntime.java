@@ -233,6 +233,17 @@ final class McpSimulationRuntime implements McpSimulation,
 		afterUnlock.run();
 	}
 
+	/** Reserves a disconnect only while no earlier capture terminal owns the result. */
+	boolean tryReserveClientDisconnect() {
+		synchronized (this.lock) {
+			if (this.completion != null || this.pendingReason != null || this.channelTerminal)
+				return false;
+			this.pendingReason = McpStreamTerminationReason.CLIENT_DISCONNECTED;
+			this.cancelWon = true;
+			return true;
+		}
+	}
+
 	void reserveRuntimeReason(@NonNull McpStreamTerminationReason reason) {
 		synchronized (this.lock) {
 			if (this.completion != null)
@@ -342,7 +353,7 @@ final class McpSimulationRuntime implements McpSimulation,
 		} finally {
 			synchronized (this.lock) {
 				this.cancelInFlight = false;
-				if (won && this.completion == null) {
+				if (won && this.completion == null && this.pendingReason == null) {
 					this.pendingReason =
 							McpStreamTerminationReason.CLIENT_DISCONNECTED;
 					this.cancelWon = true;
