@@ -1,4 +1,115 @@
-# Release-candidate validation
+# Build checks and optional release reports
+
+The owner's 2026-11-12 direction removes release-paperwork enforcement across
+this project. Historical inventories, source hashes, seals, API freezes,
+25-gate receipt sets, approval records, and candidate-history requirements do
+not constrain development or publication preparation. Do not reseal or repin
+these records to make a source change acceptable.
+
+Run substantive build and behavior checks against the working tree:
+
+```sh
+scripts/validate-release-candidate.sh
+```
+
+This runs the full Maven verification with signing skipped and tests enabled.
+Use Java 21 for publication artifacts and set `SOKLET_JAVADOC_HOME` to a Java 26
+JDK for Javadoc. Java 25 is a compatibility-test build, not the publishing output. It requires no clean/committed checkout, release manifest, or receipts.
+The manual **Release Verification** workflow labels the Java 21 leg **Publishing
+build** and uploads its POM, main, sources, and Javadoc JARs together. The Java 25
+leg is **Compatibility check**. Validation prints SHA-256 values for the four
+publication files; compare them with `promotion-preparation.json` when selecting
+artifacts for signing.
+Normal CI retains static analysis, protocol conformance, documentation, packaged
+consumer, fuzz, and soak checks. API comparisons produce advisory reports.
+
+The standalone inventory and historical-evidence verifiers remain available for
+optional historical investigation. The lifecycle, matrix-closure, and
+version-transition verifiers are known to be out of date and fail on the current
+tree; the matrix-closure self-test is stale too. They are not supported current
+build checks. Do not change production code or refresh snapshots to make them green.
+
+`release/release-validation-manifest.json` is retained because its `toolchains`
+section is still read by the CI Java, Maven, and Go installers. Those executable
+versions and download checksums are live build configuration. The manifest's old
+gate, approval, and promotion-source fingerprints remain historical.
+
+Publication preparation validates the selected artifacts, Maven coordinates,
+signatures, and bundle bytes without requiring validation receipts or a reviewed
+manifest. See [artifact preparation and publication verification](PROMOTION.md).
+The user controls commits, uploads, publication, tags, and deployments; a formal
+G4/G5 authorization record is not required.
+
+The main website and generated Javadoc sites can be maintained independently.
+Build and check their content as appropriate; no release ledger dictates their
+source hashes, deployment order, or timing.
+
+## Consumer and interoperability checks
+
+The manual **Release Verification** workflow also runs the sibling projects and
+the real TypeScript/Go SDK checks against the exact JAR from its JDK 21 publishing
+build. Sibling sources come from their current default branches. These are
+ordinary compilation, behavior, and protocol checks; no receipt assembly or
+source snapshot approval is involved.
+
+To test current local sibling edits instead, keep their checkouts beside `soklet`
+and run from `soklet/`:
+
+```sh
+export SOKLET_JDK21_HOME=/absolute/path/to/jdk-21
+export SOKLET_JDK25_HOME=/absolute/path/to/jdk-25
+node scripts/verify-sibling-projects.mjs target/soklet-4.0.0.jar --workspace ..
+```
+
+The runner snapshots those source trees into temporary directories, installs the
+selected JAR under a hash-specific local version in an isolated Maven repository,
+and verifies the JAR actually used by the tests. It runs the javax/Jakarta
+adapters and OpenTelemetry on Java 21, ToyStore on Java 25, and compiles/runs the
+barebones app with real HTTP and clean-shutdown checks. The original checkouts
+and the usual Maven repository are not modified. Use `--project NAME` to select
+projects. An optional `--maven-cache /path/to/cache --offline` seeds the temporary
+repository from an existing dependency cache; no cached Soklet release can replace
+the selected JAR.
+
+With Java 21, Node/npm, and Go 1.25 or newer on `PATH`, run both SDK roundtrips:
+
+```sh
+node scripts/verify-mcp-interoperability.mjs target/soklet-4.0.0.jar
+```
+
+Append `typescript` or `go` to select one. The checked-in package lock and Go sums
+verify SDK dependencies; no SDK Git checkout is required. The clients initialize,
+list tools, call a tool, verify the response, and close the selected-JAR fixture.
+See [SDK check details](../verification/interoperability/README.md).
+
+Normal CI also enforces Soklet's zero-runtime-dependency convention. Gitleaks
+history scanning and the conformance tool's `npm audit` produce advisory reports
+for investigation, without formal exception or expiry records. To run a local
+redacted secrets report with Gitleaks installed:
+
+```sh
+gitleaks git --redact --report-format json --report-path /tmp/soklet-gitleaks.json .
+```
+
+Keep reports redacted. The secrets report includes historical findings and test
+fixtures; triage findings on their technical merits. A scanner result is not a
+release approval record.
+
+Longer tests remain available when relevant:
+
+```sh
+SOKLET_SOAK_PROFILE=release mvn -B -ntp -f soak/pom.xml test
+```
+
+Use [the benchmark guide](../BENCHMARKS.md) for JMH comparisons of changed hot
+paths. These checks need no benchmark approval receipt or historical ledger.
+
+## Historical release notes (superseded 2026-11-12)
+
+The material below records the former process. Its mandatory language, freezes,
+receipt requirements, and approval procedures are historical, not current policy.
+The current instructions above and [project instructions](../AGENTS.md) take
+precedence. No historical result establishes that the current code passed a test.
 
 Recorded run output was removed from the checkout on September 30. Historical
 results below describe the original runs; artifact links refer to that earlier

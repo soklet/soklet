@@ -20,6 +20,33 @@
       "defaultSwitchGuidance": "Use a forward-compatible default."
     },
     {
+      "owner": "com.soklet.ConditionalRequestResult",
+      "kind": "sealedRoot",
+      "status": "closed-by-domain",
+      "rationale": "Conditional evaluation proceeds, is not modified, or fails a precondition.",
+      "changePolicy": "New alternatives require an explicit reviewed contract amendment.",
+      "javadocGuidance": "Document the closed decision domain.",
+      "defaultSwitchGuidance": "Exhaustive switches are permitted."
+    },
+    {
+      "owner": "com.soklet.ConditionalRequestResult.Precondition",
+      "kind": "enum",
+      "status": "closed-by-domain",
+      "rationale": "The evaluator names the four supported conditional request fields.",
+      "changePolicy": "New alternatives require an explicit reviewed contract amendment.",
+      "javadocGuidance": "Document the closed condition domain.",
+      "defaultSwitchGuidance": "Exhaustive switches are permitted."
+    },
+    {
+      "owner": "com.soklet.ConditionalRequestResult.PreconditionFailed.Reason",
+      "kind": "enum",
+      "status": "evolutionary",
+      "rationale": "The framework may add reviewed failure classifications.",
+      "changePolicy": "New alternatives require API, behavior and observability review.",
+      "javadocGuidance": "Document vocabulary growth in 4.x.",
+      "defaultSwitchGuidance": "Use a forward-compatible default."
+    },
+    {
       "owner": "com.soklet.ConnectionRejectionReason",
       "kind": "enum",
       "status": "evolutionary",

@@ -1,105 +1,65 @@
-# No-rebuild release promotion
+# Artifact preparation and publication verification
 
-Soklet's promotion tooling is deliberately separate from candidate validation
-and ordinary CI. It consumes the completed release-validation evidence
-directory and the four already-built unsigned artifacts. It cannot compile,
-package, generate Javadocs, or invoke a build lifecycle.
+Publication tooling takes the four already-built artifacts directly. It requires
+no release-validation receipts, reviewed manifest, source freeze, version census,
+formal approval record, or committed candidate. It does not compile, rebuild,
+generate Javadocs, or publish automatically. See [current project policy](README.md).
 
-The main `soklet.com` website is independently owner-deployed at any time and
-is outside candidate validation and promotion. It has no release pin or frozen
-hash, required release tag, deployment order, or promotion receipt. The four
-packaged Javadoc sites still consume the accepted library artifacts under the
-[G5 runbook](G5_RELEASE_RUNBOOK.md).
+The four modes are:
 
-The four modes are intentionally distinct:
+1. `prepare`: offline artifact checks, signing and signature verification,
+   checksum generation, and deterministic Maven-layout bundle creation.
+2. `upload`: explicitly upload that bundle for Central `USER_MANAGED` validation.
+3. `status`: resume checking an existing deployment without uploading again.
+4. `verify-published`: after the user publishes, check that public artifacts
+   match the selected artifact bytes.
 
-1. `prepare` is offline. It verifies the independently supplied validation-
-   evidence SHA-256, separately pinned reviewed release-manifest SHA-256,
-   candidate commit, fixed `com.soklet:soklet:4.0.0` coordinates, exact ordered
-   25-gate PASS set and gate pins, every typed gate receipt in the format-v2
-   evidence envelope, reviewed workflow identity, and all four artifact names,
-   sizes, and SHA-256 values.
-   Each receipt must match its gate's evidence contract, toolchain, canonical
-   command/profile/expectation, workflow run/job identity, candidate commit,
-   main-JAR SHA-256, and exact role/media/type/basename set. Before signing, it
-   also reopens the retained `candidate-build.log` beside the canonical
-   evidence, matches its bytes and SHA-256 to the existing `build-log` role,
-   and requires exactly one canonical version-transition final-stage PASS
-   line. This adds no gate, evidence role, or receipt. It stages copies of the
-   exact candidate artifact bytes, creates and verifies
-   four detached armored signatures with one explicit full GPG fingerprint,
-   writes MD5, SHA-1, SHA-256, and SHA-512 files for the four base artifacts
-   only, and creates a deterministic Maven-layout ZIP plus canonical evidence.
-   Advisory fuzz, nightly-soak, and operational histories are intentionally
-   absent from both the release evidence and the promotion decision.
-2. `upload` is an explicit network operation. It atomically reserves both
-   evidence outputs before the request, uploads that exact ZIP to the fixed
-   Publisher Portal `USER_MANAGED` endpoint, accepts only HTTP 201 plus a
-   deployment UUID, and durably journals the UUID before its first poll. It
-   then polls only through `PENDING`/`VALIDATING` to `VALIDATED` or `FAILED`.
-   It cannot publish the deployment.
-3. `status` resumes polling from the checksum-verified accepted-deployment
-   receipt. It never uploads, so a timeout or interruption after HTTP 201 must
-   be recovered with `status`, never by rerunning `upload`.
-4. `verify-published` is a later explicit read-only operation. After a
-   maintainer publishes in the Central UI, it waits through `VALIDATED` and
-   `PUBLISHING` for `PUBLISHED`, then downloads the POM, main JAR, sources JAR,
-   and Javadocs JAR from Central and rechecks their recorded sizes and SHA-256
-   values. It also cannot publish a deployment.
-
-The implementation follows Central's [Publisher API contract][publisher-api],
-[bundle upload layout][bundle-upload], and [signature/checksum
-requirements][requirements]. Central publication itself is an irreversible
-maintainer action in the Portal UI and is outside this tooling.
+The user controls signing, upload, publication, tags, and deployments. No G4/G5
+record is required. The main website and generated Javadoc sites are maintained
+independently of these tools.
 
 ## Offline preparation
 
-Obtain the complete `target/release-validation/evidence` directory, the
-canonical `release-validation-evidence.json` SHA-256 through a separate trusted
-channel (for example the immutable workflow artifact digest), and the four
-artifact files from the same completed validation run. Preserve
-`candidate-build.log` beside `release-validation-evidence.json`; a missing,
-symlinked, substituted, or non-final log fails preparation. Do not use a hash
-copied out of an untrusted evidence download as the independent value.
+Build and test the intended source with Java 21 and a separate Java 26 Javadoc
+toolchain first. Use the JDK 21 publication inputs from **Release Verification**
+or an equivalent local build; the JDK 25 leg tests compatibility. Validation
+prints SHA-256 values for the four files. Compare those values with the artifact
+hashes in `promotion-preparation.json` before upload.
 
-The signer path must be absolute and must identify a regular nonsymlink
-executable. The fingerprint must be the full 40- or 64-hexadecimal fingerprint
-of the exact signing key or subkey. The command uses GPG's noninteractive mode;
-unlock the key through the GPG agent before running it. No passphrase option is
-accepted. The reviewed manifest pins the exact helper and wrapper paths and
-SHA-256 values; preparation verifies the currently executing files against
-those pins and records them.
+Select the POM, main JAR, sources JAR,
+and Javadoc JAR you intend to publish. Preparation verifies the expected filenames,
+`com.soklet:soklet:4.0.0` coordinates, JAR/ZIP headers, and the selected bytes.
+It signs staged copies, verifies signatures, and checks that signing did not
+change the original artifact bytes.
+
+The signer path must be absolute and identify a regular executable. Supply the
+full 40- or 64-character fingerprint of the intended key or subkey, with the key
+already available to the GPG agent. Passphrases are not command-line arguments.
 
 ```sh
 scripts/promote-release-candidate.sh prepare \
-  --evidence /secure/input/release-validation-evidence.json \
-  --evidence-sha256 <independently-recorded-64-lowercase-hex> \
-  --release-manifest /reviewed/candidate/release/release-validation-manifest.json \
-  --release-manifest-sha256 <independently-reviewed-manifest-sha256> \
-  --candidate-commit <40-lowercase-hex> \
-  --pom /secure/input/pom.xml \
-  --main-jar /secure/input/soklet-4.0.0.jar \
-  --sources-jar /secure/input/soklet-4.0.0-sources.jar \
-  --javadoc-jar /secure/input/soklet-4.0.0-javadoc.jar \
+  --pom /path/to/pom.xml \
+  --main-jar /path/to/soklet-4.0.0.jar \
+  --sources-jar /path/to/soklet-4.0.0-sources.jar \
+  --javadoc-jar /path/to/soklet-4.0.0-javadoc.jar \
   --signing-fingerprint <full-fingerprint> \
   --gpg /absolute/path/to/gpg \
   --output-directory /secure/output/soklet-4.0.0-promotion
 ```
 
-The output directory must not already exist. A successful run creates only:
+`--candidate-commit <40-lowercase-hex>` is optional provenance metadata. It is
+not authenticated against Git and does not constrain the source working tree.
+The output directory must be new. A successful preparation produces:
 
-- `soklet-4.0.0-central-bundle.zip`, containing the four Maven-layout base
-  artifacts, four `.asc` files, and four checksum files per base artifact; and
-- `promotion-preparation.json`, canonically recording the validation evidence,
-  commit, coordinates, signing fingerprint, every artifact/signature/checksum
-  hash, reviewed release-manifest hash, the executed helper/wrapper names,
-  sizes, and hashes, every ZIP entry hash, and the final bundle hash.
+- `soklet-4.0.0-central-bundle.zip`: four artifacts, detached signatures, and
+  MD5, SHA-1, SHA-256, and SHA-512 checksum files under the Maven coordinates;
+- `promotion-preparation.json`: artifact, signature, checksum, and bundle hashes,
+  signing fingerprint, optional source commit, and observed tool metadata.
 
-The ZIP writer stores entries in byte-sorted order with fixed ZIP timestamps,
-permissions, flags, and no extras or comments. Its bytes are deterministic for
-the exact artifact, signature, and checksum entry bytes from that preparation
-run. The base artifact bytes are rehashed after signing so a signer cannot
-silently mutate them.
+Tool hashes are recorded for information; changing the helper does not freeze
+later upload or verification. The ZIP has sorted entries and fixed timestamps,
+permissions, and flags. Existing version-1 preparations remain readable without
+revalidating their historical release-evidence references.
 
 ## Explicit USER_MANAGED upload
 
@@ -114,7 +74,7 @@ chmod 600 /secure/credentials/central-token
 SOKLET_CENTRAL_TOKEN_FILE=/secure/credentials/central-token \
   scripts/promote-release-candidate.sh upload \
   --preparation /secure/output/soklet-4.0.0-promotion/promotion-preparation.json \
-  --preparation-sha256 <reviewed-preparation-sha256> \
+  --preparation-sha256 <preparation-sha256> \
   --bundle /secure/output/soklet-4.0.0-promotion/soklet-4.0.0-central-bundle.zip \
   --accepted-output /secure/output/central-upload-accepted.json \
   --output /secure/output/central-upload-evidence.json \
@@ -138,10 +98,10 @@ rerun `upload`. Resume the same deployment ID instead:
 SOKLET_CENTRAL_TOKEN_FILE=/secure/credentials/central-token \
   scripts/promote-release-candidate.sh status \
   --preparation /secure/output/soklet-4.0.0-promotion/promotion-preparation.json \
-  --preparation-sha256 <reviewed-preparation-sha256> \
+  --preparation-sha256 <preparation-sha256> \
   --bundle /secure/output/soklet-4.0.0-promotion/soklet-4.0.0-central-bundle.zip \
   --accepted-evidence /secure/output/central-upload-accepted.json \
-  --accepted-evidence-sha256 <reviewed-accepted-evidence-sha256> \
+  --accepted-evidence-sha256 <accepted-evidence-sha256> \
   --output /secure/output/central-upload-evidence.json \
   --timeout-seconds 900 \
   --poll-interval-seconds 5
@@ -163,19 +123,18 @@ records and the same private status credential:
 SOKLET_CENTRAL_TOKEN_FILE=/secure/credentials/central-token \
   scripts/promote-release-candidate.sh verify-published \
   --preparation /secure/output/soklet-4.0.0-promotion/promotion-preparation.json \
-  --preparation-sha256 <reviewed-preparation-sha256> \
+  --preparation-sha256 <preparation-sha256> \
   --bundle /secure/output/soklet-4.0.0-promotion/soklet-4.0.0-central-bundle.zip \
   --upload-evidence /secure/output/central-upload-evidence.json \
-  --upload-evidence-sha256 <reviewed-upload-evidence-sha256> \
+  --upload-evidence-sha256 <upload-evidence-sha256> \
   --output /secure/output/central-published-evidence.json \
   --timeout-seconds 900 \
   --poll-interval-seconds 5
 ```
 
-Archive all four canonical JSON records (preparation, accepted deployment,
-terminal validation, and published verification), their independently recorded
-hashes, the bundle, the reviewed release manifest, the complete original
-workflow evidence directory, and the four validation artifacts.
+Keep the preparation, accepted deployment, terminal status, published-byte
+verification, and bundle files if you need to resume or inspect an upload. No
+release manifest or historical workflow evidence directory is required.
 A mismatch, unexpected Central state, redirect, timeout, extra ZIP entry,
 credential-permission issue, or existing output target fails closed.
 

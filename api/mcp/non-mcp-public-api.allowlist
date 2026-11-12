@@ -3,6 +3,13 @@ com.soklet.BearerAuthenticationChallenge$Builder
 com.soklet.BearerAuthenticationError
 com.soklet.CallbackRegistration
 com.soklet.CancelationToken
+com.soklet.ConditionalRequestResult
+com.soklet.ConditionalRequestResult$NotModified
+com.soklet.ConditionalRequestResult$Precondition
+com.soklet.ConditionalRequestResult$PreconditionFailed
+com.soklet.ConditionalRequestResult$PreconditionFailed$Reason
+com.soklet.ConditionalRequestResult$Proceed
+com.soklet.ConditionalRequests
 com.soklet.CorsPreflight
 com.soklet.HttpRequestResult
 com.soklet.HttpServer

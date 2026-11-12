@@ -2,24 +2,19 @@
 
 import assert from 'node:assert/strict';
 import {
-  interoperabilityEvidenceLine,
+  parseFixtureArguments,
   parseControl,
   validateClientOutput,
 } from './run-against-public-fixture.mjs';
 
 const protocolVersion = '2026-07-28';
-const sdkPins = {
-  go: {
-    artifactChecksum: 'h1:yqjY2dsbKAC0LSuWZVBMrHgiG8ukXv6NRo0JiALay44=',
-    artifactIdentity: 'github.com/modelcontextprotocol/go-sdk@v1.7.0',
-    commit: 'bc72835f62eb94d0fb484439f886b6885b075f36',
-  },
-  typescript: {
-    artifactChecksum: 'sha512-8f1OghQ2rjzIOfqgUCP+8GiUWqRs89njoWLNqAe8kWmDePv3s1fZXseej+QXemssEuuOvLLmLO/kqM3IQHtISw==',
-    artifactIdentity: 'npm:@modelcontextprotocol/client@2.0.0',
-    commit: 'cc4b41617ce3601b1290d67216ea0b194a3cd9ac',
-  },
-};
+assert.deepEqual(parseFixtureArguments(['built.jar', 'client-dir', 'go', './client']), {
+  candidateJar: 'built.jar', clientWorkingDirectory: 'client-dir', clientName: 'go',
+  clientCommand: './client', clientArguments: [],
+});
+assert.deepEqual(parseFixtureArguments(['built.jar', 'client-dir', 'typescript', 'node', 'client.mjs']).clientArguments, ['client.mjs']);
+assert.throws(() => parseFixtureArguments(['built.jar', 'client-dir', 'go']), /Usage:/);
+assert.throws(() => parseFixtureArguments(['built.jar', 'client-dir', 'unknown', './client']), /Unsupported interoperability client/);
 const ready = parseControl(
   '{"format":1,"event":"ready","host":"127.0.0.1","port":12345,"path":"/mcp"}',
   'ready',
@@ -57,35 +52,8 @@ for (const client of ['go', 'typescript']) {
     /unexpected stderr/,
   );
 
-  const line = interoperabilityEvidenceLine('a'.repeat(64), client, sdkPins[client]);
-  assert.ok(line.startsWith('SOKLET_INTEROP_EVIDENCE '));
-  const receipt = JSON.parse(line.slice('SOKLET_INTEROP_EVIDENCE '.length));
-  assert.deepEqual(receipt, {
-    candidateSha256: 'a'.repeat(64),
-    client,
-    fixtureScenario: 'tools-list',
-    fixtureShutdown: 'CLEAN',
-    formatVersion: 1,
-    protocolVersion,
-    sdkArtifactChecksum: sdkPins[client].artifactChecksum,
-    sdkArtifactIdentity: sdkPins[client].artifactIdentity,
-    sdkCommit: sdkPins[client].commit,
-    tool: 'test_simple_text',
-  });
 }
 
-assert.throws(
-  () => interoperabilityEvidenceLine('A'.repeat(64), 'go', sdkPins.go),
-  /64 lowercase hexadecimal/,
-);
-assert.throws(
-  () => interoperabilityEvidenceLine(
-    'a'.repeat(64),
-    'go',
-    { ...sdkPins.go, artifactChecksum: sdkPins.typescript.artifactChecksum },
-  ),
-  /Invalid go SDK artifact or commit pin/,
-);
 assert.throws(
   () => validateClientOutput(
     `SOKLET_INTEROP_PASS ${protocolVersion} python\n`,

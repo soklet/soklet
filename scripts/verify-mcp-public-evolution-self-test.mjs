@@ -73,7 +73,7 @@ const reviewedLedgers = inventory.reviewedIncludeFiles.flatMap((path) =>
     'utf8').trim().split(/\r?\n/u).map((line) => JSON.parse(line)));
 verifyStructuralOwners(root, inventory, reviewedIncludes, reviewedLedgers);
 // SokletStatus is internal and the console-only ShutdownTrigger has been removed.
-assert.equal(verifyCoreStructuralOwners(root), 39);
+assert.equal(verifyCoreStructuralOwners(root), 42);
 assert.deepEqual(coreStructuralOwnersInSource(`
   public interface Fixture {
     enum Visible { VALUE }

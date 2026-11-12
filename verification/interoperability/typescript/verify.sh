@@ -7,32 +7,16 @@ fail() {
 	exit 1
 }
 
-[ "$#" -eq 2 ] || fail "usage: verify.sh <candidate-jar> <typescript-sdk-checkout>"
+[ "$#" -eq 1 ] || fail "usage: verify.sh <candidate-jar>"
 candidate_jar=$(CDPATH= cd -- "$(dirname -- "$1")" && pwd -P)/$(basename -- "$1")
-[ -d "$2" ] && [ ! -L "$2" ] \
-	|| fail "TypeScript SDK checkout must be a regular nonsymlink directory"
-sdk_checkout=$(CDPATH= cd -- "$2" && pwd -P)
 script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
 project_root=$(CDPATH= cd -- "$script_directory/../../.." && pwd -P)
-expected_commit=cc4b41617ce3601b1290d67216ea0b194a3cd9ac
-artifact_identity=npm:@modelcontextprotocol/client@2.0.0
-artifact_checksum='sha512-8f1OghQ2rjzIOfqgUCP+8GiUWqRs89njoWLNqAe8kWmDePv3s1fZXseej+QXemssEuuOvLLmLO/kqM3IQHtISw=='
 node_command=$(command -v node) || fail "node is not on PATH"
 npm_command=$(command -v npm) || fail "npm is not on PATH"
 command_runner=$project_root/verification/interoperability/run-command.mjs
 
 [ -f "$candidate_jar" ] && [ ! -L "$candidate_jar" ] \
 	|| fail "candidate JAR must be a regular nonsymlink file"
-[ "$(git -C "$sdk_checkout" rev-parse --show-toplevel)" = "$sdk_checkout" ] \
-	|| fail "TypeScript SDK path is not its Git checkout root"
-[ "$(git -C "$sdk_checkout" rev-parse HEAD)" = "$expected_commit" ] \
-	|| fail "TypeScript SDK checkout is not the reviewed 2.0.0 commit"
-[ -z "$(git -C "$sdk_checkout" status --porcelain --untracked-files=all)" ] \
-	|| fail "TypeScript SDK checkout is dirty"
-"$node_command" -e 'const p=require(process.argv[1]); if(p.name!=="@modelcontextprotocol/client"||p.version!=="2.0.0")process.exit(1)' \
-	"$sdk_checkout/packages/client/package.json" \
-	|| fail "reviewed checkout does not contain @modelcontextprotocol/client 2.0.0"
-
 work_root=$(mktemp -d "${TMPDIR:-/tmp}/soklet-typescript-interop.XXXXXX")
 cleanup() {
 	case "$work_root" in
@@ -69,8 +53,5 @@ cmp -s "$script_directory/package.json" "$work_root/package.json" \
 	|| fail "TypeScript dependency manifests changed during installation"
 
 "$node_command" "$project_root/verification/interoperability/run-against-public-fixture.mjs" \
-	"$candidate_jar" "$work_root" typescript "$artifact_identity" \
-	"$artifact_checksum" "$expected_commit" "$node_command" \
+	"$candidate_jar" "$work_root" typescript "$node_command" \
 	"$work_root/client.mjs"
-[ -z "$(git -C "$sdk_checkout" status --porcelain --untracked-files=all)" ] \
-	|| fail "TypeScript SDK checkout changed during verification"

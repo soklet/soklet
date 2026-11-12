@@ -80,8 +80,19 @@ jobs:
       - name: Self-test separate Javadoc toolchain installation
         run: node scripts/verify-javadoc-toolchain-self-test.mjs
 
-      - name: Verify current release-history producer contracts
-        run: node scripts/produce-release-history-self-test.mjs
+      - name: Test build and publication tooling
+        run: |
+          node scripts/release-validation-self-test.mjs
+          node scripts/release-promotion-self-test.mjs
+          node scripts/api-diff/summarize-self-test.mjs
+          node scripts/verify-runtime-dependency-surface-self-test.mjs
+          node scripts/verify-sibling-projects-self-test.mjs
+          node scripts/verify-mcp-interoperability-self-test.mjs
+
+      - name: Verify zero external runtime dependencies
+        run: >-
+          node scripts/verify-runtime-dependency-surface.mjs
+          "${GITHUB_WORKSPACE}/pom.xml" "${RUNNER_TEMP}/runtime-dependency-surface.json"
 
       - name: Run tests
         run: mvn -B -ntp clean test
@@ -213,6 +224,7 @@ jobs:
           cmp pom.xml "${RUNNER_TEMP}/consumer-repository/com/soklet/soklet/4.0.0/soklet-4.0.0.pom"
 
       - name: Upload development-only consumer evidence
+        continue-on-error: true
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
@@ -226,7 +238,8 @@ jobs:
           retention-days: 30
 
   api-diff:
-    name: API Compatibility and MCP Freezes (JDK 21)
+    name: API Compatibility Report (JDK 21, advisory)
+    continue-on-error: true
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -241,20 +254,77 @@ jobs:
           java-version: '21'
           cache: maven
 
-      - name: Verify reviewed API incompatibilities and MCP freezes
-        run: scripts/verify-mcp-api-freezes.sh
+      - name: Generate API compatibility reports
+        run: >-
+          mvn -B -ntp -Papi-diff -Dgpg.skip=true -Dmaven.javadoc.skip=true
+          -DskipTests clean package
+          com.github.siom79.japicmp:japicmp-maven-plugin:0.26.2:cmp@mcp-api-diff
+          com.github.siom79.japicmp:japicmp-maven-plugin:0.26.2:cmp@mcp-api-freeze
 
-      - name: Upload API-diff evidence
+      - name: Extract API incompatibility report
+        run: >-
+          node scripts/api-diff/japicmp-symbols.mjs --extract
+          target/japicmp/mcp-api-diff.xml
+          target/japicmp/mcp-api-diff.incompatibilities.jsonl
+
+      - name: Summarize API incompatibility changes
+        run: |
+          node scripts/api-diff/summarize.mjs api/mcp/current-incompatibilities.jsonl \
+            target/japicmp/mcp-api-diff.incompatibilities.jsonl target/japicmp/api-diff-summary.md
+          cat target/japicmp/api-diff-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload API compatibility reports
+        continue-on-error: true
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: api-diff-${{ github.run_id }}-${{ github.run_attempt }}
-          if-no-files-found: error
+          if-no-files-found: warn
           path: |
             target/japicmp/mcp-api-diff.xml
             target/japicmp/mcp-api-diff.incompatibilities.jsonl
             target/japicmp/mcp-api-freeze.xml
-            target/mcp-api-freezes/*.signatures.jsonl
+            target/japicmp/api-diff-summary.md
+
+  secret-scan:
+    name: Secret scan (advisory)
+    continue-on-error: true
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out history
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install Gitleaks
+        shell: bash
+        run: |
+          archive="${RUNNER_TEMP}/gitleaks_8.30.1_linux_x64.tar.gz"
+          curl --proto '=https' --tlsv1.2 --fail --location --retry 3 \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz \
+            --output "$archive"
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  $archive" \
+            | sha256sum --check --strict
+          mkdir -p "${RUNNER_TEMP}/gitleaks"
+          tar -xzf "$archive" -C "${RUNNER_TEMP}/gitleaks" gitleaks
+          echo "${RUNNER_TEMP}/gitleaks" >> "$GITHUB_PATH"
+
+      - name: Scan committed history for secrets
+        run: >-
+          gitleaks git --redact --report-format json
+          --report-path "${RUNNER_TEMP}/gitleaks.json" .
+
+      - name: Upload redacted findings
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: secret-scan-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          path: ${{ runner.temp }}/gitleaks.json
 
   fuzz-regression:
     name: Fuzz Corpus Replay (JDK 25)
@@ -304,11 +374,12 @@ jobs:
         run: node scripts/verify-soak-evidence.mjs smoke
 
       - name: Upload soak smoke evidence
+        continue-on-error: true
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: soak-smoke-${{ github.run_id }}-${{ github.run_attempt }}
-          if-no-files-found: error
+          if-no-files-found: warn
           path: |
             soak/target/soak-report.md
             soak/target/surefire-reports
@@ -476,6 +547,13 @@ jobs:
             npm_config_globalconfig="${RUNNER_TEMP}/soklet-mcp-global.npmrc" \
             npm run build
 
+      - name: Report conformance-tool dependency vulnerabilities
+        continue-on-error: true
+        working-directory: .mcp-conformance-source
+        run: >-
+          npm audit --package-lock-only --json --audit-level=moderate
+          > "${GITHUB_WORKSPACE}/target/conformance/official/dependency-audit.json"
+
       - name: Self-test Soklet conformance infrastructure
         run: |
           node conformance/official/self-test.mjs \
@@ -511,11 +589,12 @@ jobs:
             --java "${JAVA_HOME}/bin/java"
 
       - name: Upload MCP conformance evidence
+        continue-on-error: true
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: mcp-conformance-phase-5-${{ github.run_id }}-${{ github.run_attempt }}
-          if-no-files-found: error
+          if-no-files-found: warn
           path: |
             target/conformance/official
             target/conformance/public-fixture/dependencies.txt
@@ -655,6 +734,7 @@ jobs:
             -Djazzer.max_duration=300s surefire:test
 
       - name: Produce canonical fuzz target receipt
+        continue-on-error: true
         shell: bash
         run: |
           mkdir -p target/release-history/fuzz-target
@@ -669,6 +749,7 @@ jobs:
             --output "${{ github.workspace }}/target/release-history/fuzz-target/${{ matrix.target_id }}.json"
 
       - name: Upload fuzz artifacts
+        continue-on-error: true
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
@@ -682,15 +763,17 @@ jobs:
             ${{ runner.temp }}/fuzz-java-distribution.txt
 
       - name: Upload canonical fuzz target receipt
+        continue-on-error: true
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: fuzz-history-target-${{ matrix.target_id }}-${{ github.run_id }}-${{ github.run_attempt }}
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 90
           path: target/release-history/fuzz-target/${{ matrix.target_id }}.json
 
   fuzz-nightly-history:
-    name: Assemble Nightly Fuzz History (JDK 25)
+    name: Assemble Nightly Fuzz History (JDK 25, advisory)
+    continue-on-error: true
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     needs: fuzz-nightly
     runs-on: ubuntu-latest
@@ -781,29 +864,32 @@ jobs:
             --output "${{ github.workspace }}/target/release-history/fuzz-nightly-history-bundle.json"
 
       - name: Upload fuzz history accumulation state
+        continue-on-error: true
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: fuzz-history-state-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 90
           path: target/release-history/fuzz-state/history-state.json
 
       - name: Upload immutable fuzz history bundle
+        continue-on-error: true
         if: steps.history.outputs.complete == 'true'
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: fuzz-nightly-history-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 90
           path: target/release-history/fuzz-nightly-history-bundle.json
 
       - name: Upload fuzz history producer evidence
+        continue-on-error: true
         if: steps.history.outputs.complete == 'true'
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: fuzz-nightly-history-raw-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 90
           path: |
             fuzz-nightly-history.json
@@ -820,6 +906,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Self-test advisory history producer
+        continue-on-error: true
         run: node scripts/produce-release-history-self-test.mjs
 
       - name: Install checksum-pinned Corretto 25
@@ -857,11 +944,12 @@ jobs:
         run: node scripts/verify-soak-evidence.mjs nightly
 
       - name: Upload nightly soak evidence
+        continue-on-error: true
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: soak-nightly-${{ github.run_id }}-${{ github.run_attempt }}
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 90
           path: |
             soak/target/soak-report.md
@@ -869,6 +957,7 @@ jobs:
             ${{ runner.temp }}/soak-nightly-java-distribution.txt
 
       - name: Install checksum-pinned Corretto 26 for Javadoc only
+        continue-on-error: true
         shell: bash
         run: >-
           bash release/scripts/install-pinned-corretto-linux-x64.sh
@@ -876,9 +965,11 @@ jobs:
           "${RUNNER_TEMP}/soak-nightly-javadoc-java-distribution.txt"
 
       - name: Package exact candidate main JAR
+        continue-on-error: true
         run: mvn -B -ntp -DskipTests package
 
       - name: Accumulate exact-candidate soak history
+        continue-on-error: true
         id: soak-history
         shell: bash
         run: |
@@ -901,6 +992,7 @@ jobs:
           fi
 
       - name: Verify and bundle complete soak history
+        continue-on-error: true
         if: steps.soak-history.outputs.complete == 'true'
         shell: bash
         run: |
@@ -912,29 +1004,32 @@ jobs:
             --output "${{ github.workspace }}/target/release-history/soak-nightly-history-bundle.json"
 
       - name: Upload soak history accumulation state
+        continue-on-error: true
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: soak-history-state-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 90
           path: target/release-history/soak-state/history-state.json
 
       - name: Upload immutable soak history bundle
+        continue-on-error: true
         if: steps.soak-history.outputs.complete == 'true'
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: soak-nightly-history-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 90
           path: target/release-history/soak-nightly-history-bundle.json
 
       - name: Upload soak history producer evidence
+        continue-on-error: true
         if: steps.soak-history.outputs.complete == 'true'
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: soak-nightly-history-raw-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 90
           path: |
             soak-nightly-history.json
@@ -942,7 +1037,8 @@ jobs:
             ${{ runner.temp }}/soak-nightly-java-distribution.txt
 
   operational-history:
-    name: Operational History (exact candidate, JDK 21)
+    name: Operational Load Report (JDK 21, advisory)
+    continue-on-error: true
     if: github.event_name == 'workflow_dispatch' && inputs.operational_candidate_commit != ''
     runs-on: [self-hosted, linux, x64]
     timeout-minutes: 420
@@ -1050,19 +1146,21 @@ jobs:
             --output "${GITHUB_WORKSPACE}/target/release-history/operational-history-bundle.json"
 
       - name: Upload immutable operational history bundle
+        continue-on-error: true
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: operational-history-${{ inputs.operational_candidate_commit }}-${{ github.run_id }}-${{ github.run_attempt }}
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 90
           path: target/release-history/operational-history-bundle.json
 
       - name: Upload operational producer diagnostics
+        continue-on-error: true
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: operational-history-raw-${{ inputs.operational_candidate_commit }}-${{ github.run_id }}-${{ github.run_attempt }}
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 90
           path: |
             operational-history.json

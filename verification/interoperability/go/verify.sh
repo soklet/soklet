@@ -7,31 +7,16 @@ fail() {
 	exit 1
 }
 
-[ "$#" -eq 2 ] || fail "usage: verify.sh <candidate-jar> <go-sdk-checkout>"
+[ "$#" -eq 1 ] || fail "usage: verify.sh <candidate-jar>"
 candidate_jar=$(CDPATH= cd -- "$(dirname -- "$1")" && pwd -P)/$(basename -- "$1")
-[ -d "$2" ] && [ ! -L "$2" ] \
-	|| fail "Go SDK checkout must be a regular nonsymlink directory"
-sdk_checkout=$(CDPATH= cd -- "$2" && pwd -P)
 script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
 project_root=$(CDPATH= cd -- "$script_directory/../../.." && pwd -P)
-expected_commit=bc72835f62eb94d0fb484439f886b6885b075f36
-artifact_identity=github.com/modelcontextprotocol/go-sdk@v1.7.0
-artifact_checksum='h1:yqjY2dsbKAC0LSuWZVBMrHgiG8ukXv6NRo0JiALay44='
 node_command=$(command -v node) || fail "node is not on PATH"
 go_command=$(command -v go) || fail "go is not on PATH"
 command_runner=$project_root/verification/interoperability/run-command.mjs
 
 [ -f "$candidate_jar" ] && [ ! -L "$candidate_jar" ] \
 	|| fail "candidate JAR must be a regular nonsymlink file"
-[ "$(git -C "$sdk_checkout" rev-parse --show-toplevel)" = "$sdk_checkout" ] \
-	|| fail "Go SDK path is not its Git checkout root"
-[ "$(git -C "$sdk_checkout" rev-parse HEAD)" = "$expected_commit" ] \
-	|| fail "Go SDK checkout is not the reviewed v1.7.0 commit"
-[ -z "$(git -C "$sdk_checkout" status --porcelain --untracked-files=all)" ] \
-	|| fail "Go SDK checkout is dirty"
-grep -Fxq 'module github.com/modelcontextprotocol/go-sdk' "$sdk_checkout/go.mod" \
-	|| fail "reviewed checkout has the wrong Go module identity"
-
 work_root=$(mktemp -d "${TMPDIR:-/tmp}/soklet-go-interop.XXXXXX")
 cleanup() {
 	case "$work_root" in
@@ -75,7 +60,4 @@ cmp -s "$script_directory/go.mod" "$work_root/go.mod" \
 	|| fail "Go dependency manifests changed during verification"
 
 "$node_command" "$project_root/verification/interoperability/run-against-public-fixture.mjs" \
-	"$candidate_jar" "$work_root" go "$artifact_identity" \
-	"$artifact_checksum" "$expected_commit" "$work_root/client"
-[ -z "$(git -C "$sdk_checkout" status --porcelain --untracked-files=all)" ] \
-	|| fail "Go SDK checkout changed during verification"
+	"$candidate_jar" "$work_root" go "$work_root/client"

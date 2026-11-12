@@ -481,6 +481,19 @@ maintenance or security fixes afterward. See the explicit
 
 ### Release Highlights
 
+- Added `ConditionalRequests.evaluate(...)` and
+  `evaluateWithoutRepresentation(...)`, returning immutable sealed
+  `ConditionalRequestResult` values. Applications can inspect evaluated true
+  preconditions and distinguish false, malformed, and over-limit tag conditions
+  while building their own responses. `Precondition.getHeaderName()` supplies
+  the request header name, such as `If-Match`, for those responses and for
+  logs. The bodyless `responseFor(...)` wrapper remains available. Missing
+  representations now have an explicit conditional creation path; null
+  validators still mean an existing representation.
+- Conditional headers are ignored for `OPTIONS`, including direct file-response
+  use of the shared evaluator. Existing GET/HEAD, mutation, and range semantics
+  are unchanged. Updated write examples re-evaluate after storage races instead
+  of treating every failed internal version check as a client `412`.
 - **MCP Apps CSP convenience:** `McpAppResourceMetadata.ContentSecurityPolicy.defaultInstance()`
   returns the immutable policy with empty origin allowlists. The metadata getter
   remains optional, preserving omitted versus explicitly supplied CSP metadata.

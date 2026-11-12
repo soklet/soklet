@@ -40,6 +40,9 @@ import static java.util.Objects.requireNonNull;
 
 /**
  * Low-level helper for serving one already-resolved file path.
+ * <p>
+ * Uses the same conditional decisions as dynamic responses. An explicitly requested OPTIONS file response ignores
+ * conditional values and returns its normal full representation; this is separate from framework-generated OPTIONS.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
@@ -110,12 +113,12 @@ final class FileResponse {
 
 		BasicFileAttributes attributes = getAttributes().orElseGet(this::readAttributes);
 		Long fileLength = attributes.size();
-		PreconditionResult preconditionResult = evaluatePreconditions(requestContext);
+		ConditionalRequestResult preconditionResult = evaluatePreconditions(requestContext);
 
-		if (preconditionResult == PreconditionResult.NOT_MODIFIED)
+		if (preconditionResult instanceof ConditionalRequestResult.NotModified)
 			return bodylessResponse(304);
 
-		if (preconditionResult == PreconditionResult.PRECONDITION_FAILED)
+		if (preconditionResult instanceof ConditionalRequestResult.PreconditionFailed)
 			return bodylessResponse(412);
 
 		if (requestContext.httpMethod() == HttpMethod.GET && getRangeRequests()) {
@@ -207,20 +210,10 @@ final class FileResponse {
 	}
 
 	@NonNull
-	private PreconditionResult evaluatePreconditions(@NonNull RequestContext requestContext) {
+	private ConditionalRequestResult evaluatePreconditions(@NonNull RequestContext requestContext) {
 		requireNonNull(requestContext);
-		ConditionalRequestEvaluator.PreconditionOutcome preconditionOutcome = ConditionalRequestEvaluator.evaluate(
-				requestContext.toConditionalRequestContext(),
-				getEntityTag().orElse(null),
-				getLastModified().orElse(null),
-				true
-		);
-
-		return switch (preconditionOutcome) {
-			case CONTINUE -> PreconditionResult.CONTINUE;
-			case NOT_MODIFIED -> PreconditionResult.NOT_MODIFIED;
-			case PRECONDITION_FAILED -> PreconditionResult.PRECONDITION_FAILED;
-		};
+		return ConditionalRequestEvaluator.evaluate(requestContext.toConditionalRequestContext(),
+				getEntityTag().orElse(null), getLastModified().orElse(null), true);
 	}
 
 	@NonNull
@@ -333,12 +326,6 @@ final class FileResponse {
 			if (CONTROLLED_HEADER_NAMES.contains(normalizedHeaderName))
 				throw new IllegalArgumentException(format("Header '%s' is controlled by file responses; %s must use a dedicated file-response setting when available.", headerName, source));
 		}
-	}
-
-	private enum PreconditionResult {
-		CONTINUE,
-		NOT_MODIFIED,
-		PRECONDITION_FAILED
 	}
 
 	record RequestContext(@NonNull HttpMethod httpMethod,

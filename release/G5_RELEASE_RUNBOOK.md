@@ -1,3 +1,11 @@
+> **Historical process, superseded 2026-11-12.** This document is retained
+> as optional reference. Its release freezes, inventory repins, receipt sets,
+> publication-order rules, and G4/G5 approval records are not requirements.
+> Use the current [build and release guidance](README.md) and
+> [artifact preparation commands](PROMOTION.md). Actual build/test failures
+> and artifact/signature integrity checks still matter. The user controls
+> commits, uploads, publication, tags, and deployments.
+
 # G5 release-promotion runbook
 
 > **DO NOT EXECUTE THIS RUNBOOK WITHOUT EXPLICIT G5 APPROVAL FROM THE PROJECT

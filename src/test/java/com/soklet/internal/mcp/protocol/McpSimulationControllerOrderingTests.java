@@ -60,31 +60,37 @@ import java.util.concurrent.atomic.AtomicReference;
 public class McpSimulationControllerOrderingTests {
 
 	@Test
+	@Timeout(150)
 	public void capturedTerminalWinsWhenCloseIsAlreadyWaitingToReachItsController() {
 		assertControllerOrdering(McpProtocolVersion.V2026_07_28, true);
 	}
 
 	@Test
+	@Timeout(150)
 	public void disconnectWinsWhenItsControllerRunsBeforeTerminalCapture() {
 		assertControllerOrdering(McpProtocolVersion.V2026_07_28, false);
 	}
 
 	@Test
+	@Timeout(150)
 	public void june2025CapturedTerminalWinsBeforeLegacyWriterDetach() {
 		assertControllerOrdering(McpProtocolVersion.V2025_06_18, true);
 	}
 
 	@Test
+	@Timeout(150)
 	public void june2025DisconnectDetachesBeforeTerminalCapture() {
 		assertControllerOrdering(McpProtocolVersion.V2025_06_18, false);
 	}
 
 	@Test
+	@Timeout(150)
 	public void november2025CapturedTerminalWinsBeforeLegacyWriterDetach() {
 		assertControllerOrdering(McpProtocolVersion.V2025_11_25, true);
 	}
 
 	@Test
+	@Timeout(150)
 	public void november2025DisconnectDetachesBeforeTerminalCapture() {
 		assertControllerOrdering(McpProtocolVersion.V2025_11_25, false);
 	}

@@ -1,4 +1,37 @@
-# MCP API compatibility and inventories
+# MCP API reports and convention checks
+
+API comparisons are advisory. Normal CI generates japicmp reports, compares the
+extracted incompatibilities with `current-incompatibilities.jsonl`, and writes
+added, removed, and changed symbols to the job summary. Differences do not fail
+CI and do not require a ledger or signature-snapshot refresh.
+
+To summarize an existing generated report locally:
+
+```sh
+node scripts/api-diff/summarize.mjs api/mcp/current-incompatibilities.jsonl \
+  target/japicmp/mcp-api-diff.incompatibilities.jsonl
+```
+
+The comparison artifact remains released `com.soklet:soklet:3.5.1` while 4.0.0 is
+unreleased. After 4.0.0 is published, move the Maven `api-diff` profile's old
+artifact to 4.0.0 and choose an appropriate advisory reference ledger for later
+4.x work. Do not change the baseline to an unpublished artifact.
+
+Public MCP convention tests discover current exported types directly. They
+check nullability annotations, reference-type scalars, Javadoc coverage, and
+explicit API behavior. Adding a public type or method does not require updating
+`*.includes`, type counts, or historical layout digests.
+
+The include lists, signature files, and `scripts/verify-mcp-api-freezes.sh`
+remain optional historical audit material. The wrapper can report drift; it is
+not called by CI or publication preparation and does not constrain API changes.
+See [project policy](../../AGENTS.md).
+
+## Historical API notes (superseded 2026-11-12)
+
+The notes below describe the former enforcing process and earlier API decisions.
+Their references to gates, mandatory snapshots, exact counts, and formal
+amendments are historical; the current reporting and testing policy is above.
 
 This directory contains the reviewed, repository-owned evidence for Soklet's
 MCP public/protected API. The [Phase 4 freeze rationale](phase-4-freeze-rationale.md)

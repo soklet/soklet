@@ -34,31 +34,20 @@ import java.lang.annotation.Target;
 import java.lang.reflect.AnnotatedArrayType;
 import java.lang.reflect.AnnotatedParameterizedType;
 import java.lang.reflect.AnnotatedType;
-import java.lang.reflect.AnnotatedWildcardType;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Executable;
 import java.lang.reflect.Field;
-import java.lang.reflect.GenericArrayType;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.RecordComponent;
 import java.lang.reflect.Type;
-import java.lang.reflect.TypeVariable;
 import java.lang.reflect.WildcardType;
 import java.net.URI;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Comparator;
-import java.util.HexFormat;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -67,39 +56,13 @@ import java.util.Set;
 import java.util.TreeMap;
 
 /**
- * Reflection contracts for reviewed MCP public API details that ordinary
+ * Reflection contracts for documented MCP public API details that ordinary
  * binary compatibility comparison does not reliably preserve.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
  */
 @ThreadSafe
 public class McpPublicApiReflectionContractTests {
-	private static final Path PHASE_FOUR_INCLUDES =
-			Path.of("api/mcp/phase-4.includes");
-	private static final Path PHASE_FIVE_INCLUDES =
-			Path.of("api/mcp/phase-5.includes");
-	private static final List<Path> MCP_API_INCLUDES = List.of(
-			PHASE_FOUR_INCLUDES,
-			PHASE_FIVE_INCLUDES,
-			Path.of("api/mcp/phase-6.includes"),
-			Path.of("api/mcp/provisional.includes"));
-	private static final int PHASE_FOUR_TYPE_COUNT = 169;
-	private static final int PHASE_FIVE_TYPE_COUNT = 45;
-	private static final int PHASE_SIX_TYPE_COUNT = 68;
-	private static final int PROVISIONAL_TYPE_COUNT = 22;
-	private static final int CURRENT_MCP_TYPE_COUNT = 304;
-	// 2026-11-02 amendment: optional JVM hook and boxed public scalar constants.
-	private static final String PHASE_FOUR_NULLABILITY_SHA_256 =
-			"2d3f05c0ffd1af5fc233863148fe769a90c191563e617b9334d9a2559fb3c444";
-	// Preserve the historical layout above. This is the one reviewed current
-	// extension; its complete type-use layout is checked before projection.
-	private static final String PHASE_FOUR_CURRENT_NULLABILITY_EXTENSION =
-			"FIELD|com.soklet.LogEventType#RESOURCE_METHOD_UNANNOTATED_VALUE_PARAMETER"
-					+ "|TYPE|class(com.soklet.LogEventType)|nullness=[]";
-	private static final String PHASE_FIVE_NULLABILITY_SHA_256 =
-			"d677a7f58b36d0293b7ff47dd1501fee626369b6cacee26317a350a5fd14b1e1";
-	private static final String PHASE_SIX_NULLABILITY_SHA_256 =
-			"76b6316df434fffe47a0e8276ba8e6f289ba020795fab2251073f3a054e2cb3f";
 	private static final Map<String, Object> PHASE_FOUR_SCALAR_CONSTANTS =
 			Map.of(
 					"com.soklet.McpAdmissionIdentity#MAXIMUM_PARTITION_KEY_SIZE_IN_UTF_8_BYTES",
@@ -145,7 +108,6 @@ public class McpPublicApiReflectionContractTests {
 							"com.soklet.McpTextResourceContents"),
 					"com.soklet.McpServer", Set.of(
 							"com.soklet.DefaultMcpServer"));
-	private static final Set<String> PHASE_FOUR_NON_SEALED_TYPES = Set.of();
 	private static final Map<String, List<String>> PHASE_FOUR_MCP_ENUM_VALUES =
 			Map.ofEntries(
 					Map.entry("com.soklet.McpAbsentOriginPolicy",
@@ -192,7 +154,6 @@ public class McpPublicApiReflectionContractTests {
 							"com.soklet.McpSubscriptionEvent$ResourceUpdated",
 							"com.soklet.McpSubscriptionEvent$ResourcesListChanged",
 							"com.soklet.McpSubscriptionEvent$ToolsListChanged"));
-	private static final Set<String> PHASE_FIVE_NON_SEALED_TYPES = Set.of();
 	private static final Map<String, List<String>> PHASE_FIVE_MCP_ENUM_VALUES =
 			Map.ofEntries(
 					Map.entry("com.soklet.McpInputRequestType", List.of(
@@ -246,7 +207,6 @@ public class McpPublicApiReflectionContractTests {
 							"com.soklet.McpMetricsEvent$SubscriptionOpened",
 							"com.soklet.McpMetricsEvent$TransportFailure",
 							"com.soklet.McpMetricsEvent$UnknownMirroredHeader"));
-	private static final Set<String> PHASE_SIX_NON_SEALED_TYPES = Set.of();
 	private static final List<Class<?>> FORMER_PUBLIC_RECORD_TYPES = List.of(
 			McpAdmissionDecision.Accepted.class,
 			McpAdmissionDecision.Rejected.class,
@@ -299,8 +259,7 @@ public class McpPublicApiReflectionContractTests {
 
 	@Test
 	public void phaseFourSealedHierarchyRemainsExact() throws Exception {
-		assertSealedHierarchy(phaseFourTypes(), PHASE_FOUR_PERMITTED_TYPES,
-				PHASE_FOUR_NON_SEALED_TYPES, "Phase 4");
+		assertSealedHierarchy(PHASE_FOUR_PERMITTED_TYPES);
 	}
 
 	@Test
@@ -664,98 +623,8 @@ public class McpPublicApiReflectionContractTests {
 	}
 
 	@Test
-	public void phaseFiveInventoryRetainsExactlyThirtySixOwners()
+	public void simulatorAndLocalizationSharedHostDescriptorsRemainSupported()
 			throws Exception {
-		Assertions.assertEquals(PHASE_FIVE_TYPE_COUNT, phaseFiveTypes().size(),
-				"The reviewed Phase 5 owner count changed");
-	}
-
-	@Test
-	public void phaseSixInventoryAndSharedHostDescriptorsAreExact()
-			throws Exception {
-		List<String> expectedPhaseSixTypes = List.of(
-				"com.soklet.McpLocalizableText",
-				"com.soklet.McpLocalizationCatalog",
-				"com.soklet.McpLocalizationCatalogInvalidator",
-				"com.soklet.McpLocalizationContext",
-				"com.soklet.McpLocalizationContext$Builder",
-				"com.soklet.McpLocalizationContextProvider",
-				"com.soklet.McpLocalizationFailurePolicy",
-				"com.soklet.McpLocalizationLookup",
-				"com.soklet.McpLocalizationRequest",
-				"com.soklet.McpLocalizationResult",
-				"com.soklet.McpLocalizationResult$Failure",
-				"com.soklet.McpLocalizationResult$Localized",
-				"com.soklet.McpLocalizationResult$UseDefaultText",
-				"com.soklet.McpLocalizationRevision",
-				"com.soklet.McpLocalizer",
-				"com.soklet.McpLocalizer$Builder",
-				"com.soklet.McpMetricsEvent",
-				"com.soklet.McpMetricsEvent$CancelationSignaled",
-				"com.soklet.McpMetricsEvent$ConnectionAccepted",
-				"com.soklet.McpMetricsEvent$ConnectionRejected",
-				"com.soklet.McpMetricsEvent$HandlerCapacityRejected",
-				"com.soklet.McpMetricsEvent$HandlerDequeued",
-				"com.soklet.McpMetricsEvent$HandlerExecutionFinished",
-				"com.soklet.McpMetricsEvent$HandlerExecutionStarted",
-				"com.soklet.McpMetricsEvent$HandlerQueued",
-				"com.soklet.McpMetricsEvent$KeepAliveEmitted",
-				"com.soklet.McpMetricsEvent$ProgressEmitted",
-				"com.soklet.McpMetricsEvent$ProtocolError",
-				"com.soklet.McpMetricsEvent$RequestAccepted",
-				"com.soklet.McpMetricsEvent$RequestFinished",
-				"com.soklet.McpMetricsEvent$RequestRejected",
-				"com.soklet.McpMetricsEvent$RequestStarted",
-				"com.soklet.McpMetricsEvent$RequestStreamClosed",
-				"com.soklet.McpMetricsEvent$RequestStreamOpened",
-				"com.soklet.McpMetricsEvent$ServerStarted",
-				"com.soklet.McpMetricsEvent$ServerStopped",
-				"com.soklet.McpMetricsEvent$SubscriptionClosed",
-				"com.soklet.McpMetricsEvent$SubscriptionMaintenance",
-				"com.soklet.McpMetricsEvent$SubscriptionMaintenance$Outcome",
-				"com.soklet.McpMetricsEvent$SubscriptionMaintenance$Work",
-				"com.soklet.McpMetricsEvent$SubscriptionOpened",
-				"com.soklet.McpMetricsEvent$TransportFailure",
-				"com.soklet.McpMetricsEvent$UnknownMirroredHeader",
-				"com.soklet.McpMetricsSnapshot",
-				"com.soklet.McpMetricsSnapshot$Builder",
-				"com.soklet.McpMetricsSnapshot$EndpointMethodKey",
-				"com.soklet.McpMetricsSnapshot$RequestOutcomeKey",
-				"com.soklet.McpMetricsSnapshot$RequestStreamTerminationKey",
-				"com.soklet.McpMetricsSnapshot$SubscriptionMaintenanceKey",
-				"com.soklet.McpMetricsSnapshot$SubscriptionTerminationKey",
-				"com.soklet.McpRequestOutcome",
-				"com.soklet.McpServerDiagnostics",
-				"com.soklet.McpServerStatus",
-				"com.soklet.McpSimulation",
-				"com.soklet.McpSimulationBodyType",
-				"com.soklet.McpSimulationCompletion",
-				"com.soklet.McpSimulationOptions",
-				"com.soklet.McpSimulationOptions$Builder",
-				"com.soklet.McpSimulationResponse",
-				"com.soklet.McpSimulationStreamItem",
-				"com.soklet.McpSimulationStreamItemType",
-				"com.soklet.McpStreamTerminationReason",
-				"com.soklet.McpTextCoordinate",
-				"com.soklet.McpTextOwnerType",
-				"com.soklet.McpTraceCorrelationFingerprint",
-				"com.soklet.McpTraceCorrelationKey",
-				"com.soklet.McpTraceCorrelationKeyManager",
-				"com.soklet.Simulator");
-		Path phaseSixIncludes = Path.of("api/mcp/phase-6.includes");
-		List<String> actualPhaseSixTypes = includeTypeNames(phaseSixIncludes);
-		Assertions.assertEquals(PHASE_SIX_TYPE_COUNT,
-				actualPhaseSixTypes.size());
-		Assertions.assertEquals(expectedPhaseSixTypes, actualPhaseSixTypes,
-				"The frozen Phase 6 owner inventory changed");
-
-		Assertions.assertEquals(PROVISIONAL_TYPE_COUNT,
-				includeTypeNames(Path.of("api/mcp/provisional.includes")).size(),
-				"The provisional owner inventory changed");
-		Assertions.assertEquals(CURRENT_MCP_TYPE_COUNT,
-				allReviewedOwnerNames().size(),
-				"The reviewed current MCP owner union changed");
-
 		Method defaultStart = assertInstanceMethod(Simulator.class,
 				"startMcpRequest", McpSimulation.class, MethodShape.ABSTRACT,
 				false, Request.class);
@@ -788,8 +657,7 @@ public class McpPublicApiReflectionContractTests {
 
 	@Test
 	public void phaseFiveSealedHierarchyRemainsExact() throws Exception {
-		assertSealedHierarchy(phaseFiveTypes(), PHASE_FIVE_PERMITTED_TYPES,
-				PHASE_FIVE_NON_SEALED_TYPES, "Phase 5");
+		assertSealedHierarchy(PHASE_FIVE_PERMITTED_TYPES);
 	}
 
 	@Test
@@ -874,19 +742,6 @@ public class McpPublicApiReflectionContractTests {
 				Set.of("icons", "inputRequestDeclarations"));
 		expectedNullableBuilderMethods.put(McpResourceRegistration.TemplateBuilder.class,
 				Set.of("icons", "inputRequestDeclarations"));
-		Set<Class<?>> actualNullableBuilderTypes = publicMcpTypes().stream()
-				.filter(type -> type.getSimpleName().endsWith("Builder"))
-				.filter(type -> Arrays.stream(type.getDeclaredMethods())
-						.anyMatch(method -> Modifier.isPublic(method.getModifiers())
-								&& !Modifier.isStatic(method.getModifiers())
-								&& method.getParameterCount() == 1
-								&& method.getAnnotatedParameterTypes()[0]
-										.isAnnotationPresent(Nullable.class)))
-				.collect(java.util.stream.Collectors.toUnmodifiableSet());
-		Assertions.assertEquals(expectedNullableBuilderMethods.keySet(),
-				actualNullableBuilderTypes,
-				"The nullable MCP builder-family inventory changed");
-
 		for (Map.Entry<Class<?>, Set<String>> entry
 				: expectedNullableBuilderMethods.entrySet()) {
 			Set<String> actualNullableBuilderMethods = Arrays.stream(
@@ -898,10 +753,9 @@ public class McpPublicApiReflectionContractTests {
 							.isAnnotationPresent(Nullable.class))
 					.map(Method::getName)
 					.collect(java.util.stream.Collectors.toUnmodifiableSet());
-			Assertions.assertEquals(entry.getValue(),
-					actualNullableBuilderMethods,
+			Assertions.assertTrue(actualNullableBuilderMethods.containsAll(entry.getValue()),
 					() -> entry.getKey().getName()
-							+ " nullable builder-property contract changed");
+							+ " no longer accepts null for an existing optional builder property");
 		}
 
 		Method server = McpServer.class.getMethod("withPort", Integer.class);
@@ -1055,7 +909,7 @@ public class McpPublicApiReflectionContractTests {
 	}
 
 	@Test
-	public void reviewedMcpReferenceReturnsDeclareTheirNullness()
+	public void currentMcpReferenceReturnsDeclareTheirNullness()
 			throws Exception {
 		List<String> incorrectNullness = new ArrayList<>();
 
@@ -1182,51 +1036,19 @@ public class McpPublicApiReflectionContractTests {
 
 	@Test
 	public void phaseSixSealedHierarchyRemainsExact() throws Exception {
-		assertSealedHierarchy(phaseSixTypes(), PHASE_SIX_PERMITTED_TYPES,
-				PHASE_SIX_NON_SEALED_TYPES, "Phase 6");
+		assertSealedHierarchy(PHASE_SIX_PERMITTED_TYPES);
 	}
 
 	@Test
-	public void phaseFourPublicReferenceConstantsRetainExactValues()
-			throws Exception {
-		Map<String, Object> actualConstants = new TreeMap<>();
-
-		for (Class<?> type : phaseFourTypes()) {
-			for (Field field : type.getDeclaredFields()) {
-				int modifiers = field.getModifiers();
-				if (Modifier.isPublic(modifiers) && Modifier.isStatic(modifiers)
-						&& Modifier.isFinal(modifiers)
-						&& field.getType() == Integer.class) {
-					Assertions.assertTrue(hasExactNullness(field.getAnnotatedType(), NonNull.class));
-					actualConstants.put(type.getName() + "#" + field.getName(),
-							field.get(null));
-				}
-			}
+	public void documentedPublicScalarConstantsRetainTheirValues() throws Exception {
+		for (Map.Entry<String, Object> expected : PHASE_FOUR_SCALAR_CONSTANTS.entrySet()) {
+			Field field = publicField(expected.getKey());
+			Assertions.assertEquals(Integer.class, field.getType());
+			Assertions.assertTrue(hasExactNullness(field.getAnnotatedType(), NonNull.class));
+			Assertions.assertEquals(expected.getValue(), field.get(null), expected.getKey());
 		}
-
-		Assertions.assertEquals(PHASE_FOUR_SCALAR_CONSTANTS, actualConstants,
-				"Phase 4 public static-final nonnull Integer constants changed");
-	}
-
-	@Test
-	public void phaseFivePublicScalarConstantsRetainExactValues()
-			throws Exception {
-		Map<String, Object> actualConstants = new TreeMap<>();
-
-		for (Class<?> type : phaseFiveTypes()) {
-			for (Field field : type.getDeclaredFields()) {
-				int modifiers = field.getModifiers();
-				if (Modifier.isPublic(modifiers) && Modifier.isStatic(modifiers)
-						&& Modifier.isFinal(modifiers)
-						&& (field.getType().isPrimitive()
-						|| field.getType() == String.class))
-					actualConstants.put(type.getName() + "#" + field.getName(),
-							field.get(null));
-			}
-		}
-
-		Assertions.assertEquals(PHASE_FIVE_SCALAR_CONSTANTS, actualConstants,
-				"Phase 5 public static-final primitive/String constants changed");
+		for (Map.Entry<String, Object> expected : PHASE_FIVE_SCALAR_CONSTANTS.entrySet())
+			Assertions.assertEquals(expected.getValue(), publicField(expected.getKey()).get(null), expected.getKey());
 	}
 
 	@Test
@@ -1290,38 +1112,13 @@ public class McpPublicApiReflectionContractTests {
 	}
 
 	@Test
-	public void phaseFourMcpEnumsRetainDeclarationOrder() throws Exception {
-		assertEnumValues(phaseFourTypes(), PHASE_FOUR_MCP_ENUM_VALUES,
-				"Phase 4");
+	public void phaseFourMcpEnumsRetainSupportedValues() throws Exception {
+		assertEnumValues(PHASE_FOUR_MCP_ENUM_VALUES);
 	}
 
 	@Test
-	public void phaseFiveMcpEnumsRetainDeclarationOrder() throws Exception {
-		assertEnumValues(phaseFiveTypes(), PHASE_FIVE_MCP_ENUM_VALUES,
-				"Phase 5");
-	}
-
-	@Test
-	public void phaseFourJSpecifyNullabilityLayoutRemainsExact()
-			throws Exception {
-		assertPhaseFourNullabilityLayout(
-				canonicalNullabilityContract(phaseFourTypes()));
-	}
-
-	@Test
-	public void phaseFiveJSpecifyNullabilityLayoutRemainsExact()
-			throws Exception {
-		assertNullabilityLayout(phaseFiveTypes(),
-				PHASE_FIVE_NULLABILITY_SHA_256,
-				"PHASE_FIVE_NULLABILITY_SHA_256", "Phase 5");
-	}
-
-	@Test
-	public void phaseSixJSpecifyNullabilityLayoutRemainsExact()
-			throws Exception {
-		assertNullabilityLayout(phaseSixTypes(),
-				PHASE_SIX_NULLABILITY_SHA_256,
-				"PHASE_SIX_NULLABILITY_SHA_256", "Phase 6");
+	public void phaseFiveMcpEnumsRetainSupportedValues() throws Exception {
+		assertEnumValues(PHASE_FIVE_MCP_ENUM_VALUES);
 	}
 
 	@Test
@@ -1474,8 +1271,6 @@ public class McpPublicApiReflectionContractTests {
 	@Test
 	public void publicMcpValueCarriersRemainEncapsulatedFinalClasses()
 			throws Exception {
-		Assertions.assertEquals(48, FORMER_PUBLIC_RECORD_TYPES.size(),
-				"The reviewed surviving former-record carrier inventory changed");
 		Assertions.assertEquals(FORMER_PUBLIC_RECORD_TYPES.size(),
 				Set.copyOf(FORMER_PUBLIC_RECORD_TYPES).size(),
 				"The reviewed former-record carrier inventory contains duplicates");
@@ -1489,17 +1284,10 @@ public class McpPublicApiReflectionContractTests {
 				"The reviewed public MCP API must not expose record types");
 
 		List<String> publicConstructors = publicMcpTypes().stream()
+				.filter(type -> !Throwable.class.isAssignableFrom(type))
 				.flatMap(type -> Arrays.stream(type.getConstructors()))
-				.map(constructor -> constructor.getDeclaringClass().getName()
-						+ "(" + Arrays.stream(constructor.getParameterTypes())
-						.map(Class::getName)
-						.collect(java.util.stream.Collectors.joining(",")) + ")")
-				.sorted()
-				.toList();
-		Assertions.assertEquals(List.of(
-				"com.soklet.McpJsonRpcException(com.soklet.McpJsonRpcError)",
-				"com.soklet.McpTaskNotFoundException()"),
-				publicConstructors,
+				.map(Constructor::toString).sorted().toList();
+		Assertions.assertEquals(List.of(), publicConstructors,
 				"Only throwable MCP APIs may expose public construction");
 
 		for (Class<?> type : FORMER_PUBLIC_RECORD_TYPES)
@@ -2308,124 +2096,44 @@ public class McpPublicApiReflectionContractTests {
 				wildcard.getUpperBounds(), "Class<?> upper bound changed");
 	}
 
-	private static List<Class<?>> phaseFourTypes() throws Exception {
-		return phaseTypes(PHASE_FOUR_INCLUDES, PHASE_FOUR_TYPE_COUNT,
-				"Phase 4");
+	private static Field publicField(String identity) throws Exception {
+		int separator = identity.indexOf('#');
+		Field field = Class.forName(identity.substring(0, separator))
+				.getField(identity.substring(separator + 1));
+		Assertions.assertTrue(Modifier.isStatic(field.getModifiers())
+				&& Modifier.isFinal(field.getModifiers()), identity);
+		return field;
 	}
 
-	private static List<Class<?>> phaseFiveTypes() throws Exception {
-		return phaseTypes(PHASE_FIVE_INCLUDES, PHASE_FIVE_TYPE_COUNT,
-				"Phase 5");
-	}
-
-	private static List<Class<?>> phaseSixTypes() throws Exception {
-		return phaseTypes(Path.of("api/mcp/phase-6.includes"),
-				PHASE_SIX_TYPE_COUNT, "Phase 6");
-	}
-
-	private static List<Class<?>> phaseTypes(Path includes, int expectedCount,
-			String phase) throws Exception {
-		List<String> typeNames = includeTypeNames(includes);
-
-		Assertions.assertEquals(expectedCount, typeNames.size(),
-				"The reviewed " + phase + " type count changed");
-		Assertions.assertEquals(typeNames.stream().sorted().toList(), typeNames,
-				"The reviewed " + phase + " type inventory must remain sorted");
-		Assertions.assertEquals(typeNames.size(), Set.copyOf(typeNames).size(),
-				"The reviewed " + phase + " type inventory contains duplicates");
-
-		List<Class<?>> types = new ArrayList<>(typeNames.size());
-		ClassLoader classLoader =
-				McpPublicApiReflectionContractTests.class.getClassLoader();
-
-		for (String typeName : typeNames)
-			types.add(Class.forName(typeName, false, classLoader));
-
-		return List.copyOf(types);
-	}
-
-	private static List<String> includeTypeNames(Path includes) throws Exception {
-		return Files.readAllLines(includes, StandardCharsets.UTF_8).stream()
-				.map(String::trim)
-				.filter(line -> !line.isEmpty() && !line.startsWith("#"))
-				.toList();
-	}
-
-	private static void assertSealedHierarchy(List<Class<?>> types,
-			Map<String, Set<String>> expectedPermittedTypes,
-			Set<String> expectedNonSealedTypes, String phase) {
-		Map<String, Set<String>> actualPermittedTypes = new TreeMap<>();
-		Set<String> actualNonSealedTypes = new java.util.TreeSet<>();
-
-		for (Class<?> type : types) {
-			if (type.isSealed())
-				actualPermittedTypes.put(type.getName(), Arrays.stream(
-						type.getPermittedSubclasses()).map(Class::getName)
-						.collect(java.util.stream.Collectors.toUnmodifiableSet()));
-			if (isNonSealed(type))
-				actualNonSealedTypes.add(type.getName());
+	private static void assertSealedHierarchy(Map<String, Set<String>> expectedPermittedTypes)
+			throws Exception {
+		for (Map.Entry<String, Set<String>> expected : expectedPermittedTypes.entrySet()) {
+			Class<?> type = Class.forName(expected.getKey());
+			Assertions.assertTrue(type.isSealed(), expected.getKey());
+			Set<String> permitted = Arrays.stream(type.getPermittedSubclasses())
+					.map(Class::getName).collect(java.util.stream.Collectors.toUnmodifiableSet());
+			Assertions.assertEquals(expected.getValue(), permitted,
+					expected.getKey() + " closed domain changed");
 		}
-
-		Assertions.assertEquals(expectedPermittedTypes, actualPermittedTypes,
-				phase + " sealed types or their exact permitted-subclass sets changed");
-		Assertions.assertEquals(expectedNonSealedTypes, actualNonSealedTypes,
-				phase + " non-sealed type declarations changed");
 	}
 
-	private static void assertEnumValues(List<Class<?>> types,
-			Map<String, List<String>> expectedValues, String phase) {
-		Map<String, List<String>> actualValues = new TreeMap<>();
-
-		for (Class<?> type : types) {
-			if (type.isEnum()
-					&& type.getName().startsWith("com.soklet.Mcp"))
-				actualValues.put(type.getName(), Arrays.stream(type.getEnumConstants())
-						.map(value -> ((Enum<?>) value).name()).toList());
+	private static void assertEnumValues(Map<String, List<String>> expectedValues) throws Exception {
+		for (Map.Entry<String, List<String>> expected : expectedValues.entrySet()) {
+			Class<?> type = Class.forName(expected.getKey());
+			Assertions.assertTrue(type.isEnum(), expected.getKey());
+			List<String> values = Arrays.stream(type.getEnumConstants())
+					.map(value -> ((Enum<?>) value).name()).toList();
+			if (Set.of(McpAppResourceMetadata.Permission.class, McpAppToolMetadata.Visibility.class,
+					McpJsonNull.class, McpInputRequirement.class).contains(type))
+				Assertions.assertEquals(expected.getValue(), values, expected.getKey() + " closed domain changed");
+			else
+				Assertions.assertTrue(values.containsAll(expected.getValue()),
+						expected.getKey() + " lost a supported enum value");
 		}
-
-		Assertions.assertEquals(expectedValues, actualValues,
-				phase + " MCP enum declarations or value order changed");
 	}
 
 	private static List<Class<?>> publicMcpTypes() throws Exception {
-		LinkedHashSet<String> typeNames = new LinkedHashSet<>();
-		for (Path includes : MCP_API_INCLUDES) {
-			for (String line : Files.readAllLines(includes, StandardCharsets.UTF_8)) {
-				String typeName = line.trim();
-				if (typeName.isEmpty() || typeName.startsWith("#"))
-					continue;
-				if (typeName.startsWith("com.soklet.Mcp")
-						|| typeName.startsWith("com.soklet.annotation.Mcp")
-						|| typeName.equals("com.soklet.DefaultMcpServer"))
-					typeNames.add(typeName);
-			}
-		}
-
-		ClassLoader classLoader =
-				McpPublicApiReflectionContractTests.class.getClassLoader();
-		List<Class<?>> types = new ArrayList<>(typeNames.size());
-		for (String typeName : typeNames)
-			types.add(Class.forName(typeName, false, classLoader));
-		return List.copyOf(types);
-	}
-
-	private static Set<String> allReviewedOwnerNames() throws Exception {
-		LinkedHashSet<String> typeNames = new LinkedHashSet<>();
-		for (Path includes : MCP_API_INCLUDES)
-			typeNames.addAll(includeTypeNames(includes));
-		return Set.copyOf(typeNames);
-	}
-
-	private static boolean isNonSealed(Class<?> type) {
-		if (type.isSealed() || Modifier.isFinal(type.getModifiers()))
-			return false;
-
-		Class<?> superclass = type.getSuperclass();
-		if (superclass != null && directlyPermits(superclass, type))
-			return true;
-
-		return Arrays.stream(type.getInterfaces())
-				.anyMatch(parent -> directlyPermits(parent, type));
+		return McpPublicApiTestSupport.publicMcpTypes();
 	}
 
 	private static boolean isJavaObjectContractMethod(Method method) {
@@ -2438,153 +2146,8 @@ public class McpPublicApiReflectionContractTests {
 				&& method.getParameterCount() == 0);
 	}
 
-	private static boolean directlyPermits(Class<?> parent, Class<?> child) {
-		return parent.isSealed() && Arrays.asList(parent.getPermittedSubclasses())
-				.contains(child);
-	}
-
-	private static void assertPhaseFourNullabilityLayout(String currentContract)
-			throws Exception {
-		List<String> historicalLines = new ArrayList<>(currentContract.lines().toList());
-		Assertions.assertEquals(1L, historicalLines.stream()
-				.filter(PHASE_FOUR_CURRENT_NULLABILITY_EXTENSION::equals).count(),
-				"The reviewed current LogEventType field must retain its exact type-use layout");
-		historicalLines.remove(PHASE_FOUR_CURRENT_NULLABILITY_EXTENSION);
-		String historicalContract = String.join("\n", historicalLines) + "\n";
-		String historicalDigest = sha256(historicalContract);
-		Assertions.assertEquals(PHASE_FOUR_NULLABILITY_SHA_256, historicalDigest,
-				() -> "The historical Phase 4 @NonNull/@Nullable layout changed. "
-						+ "Only the exact reviewed current field is projected out; "
-						+ "do not repin the historical digest for a current API extension."
-						+ "\nExpected SHA-256: " + PHASE_FOUR_NULLABILITY_SHA_256
-						+ "\nActual SHA-256:   " + historicalDigest
-						+ "\nHistorical canonical contract:\n" + historicalContract);
-	}
-
-	private static void assertNullabilityLayout(List<Class<?>> types,
-			String expectedDigest, String digestConstant, String phase)
-			throws Exception {
-		String canonicalContract = canonicalNullabilityContract(types);
-		String actualDigest = sha256(canonicalContract);
-
-		Assertions.assertEquals(expectedDigest, actualDigest,
-				() -> phase + " @NonNull/@Nullable type-use layout changed. "
-						+ "Review the canonical contract below, then deliberately "
-						+ "update " + digestConstant + " if the change is approved."
-						+ "\nExpected SHA-256: " + expectedDigest
-						+ "\nActual SHA-256:   " + actualDigest
-						+ "\nCanonical contract:\n" + canonicalContract);
-	}
-
-	private static String canonicalNullabilityContract(List<Class<?>> types) {
-		List<String> lines = new ArrayList<>();
-
-		for (Class<?> type : types) {
-			String typeOwner = "TYPE|" + type.getName();
-			lines.add(typeOwner);
-			appendTypeParameters(lines, typeOwner, type.getTypeParameters());
-
-			AnnotatedType superclass = type.getAnnotatedSuperclass();
-			if (superclass != null)
-				lines.add(typeOwner + "|SUPER|" + canonical(superclass));
-
-			Arrays.stream(type.getAnnotatedInterfaces())
-					.map(McpPublicApiReflectionContractTests::canonical)
-					.sorted()
-					.forEach(contract -> lines.add(
-							typeOwner + "|INTERFACE|" + contract));
-
-			Arrays.stream(type.getDeclaredFields())
-					.filter(field -> isPublicOrProtected(field.getModifiers()))
-					.map(field -> "FIELD|" + type.getName() + "#"
-							+ field.getName() + "|TYPE|"
-							+ canonical(field.getAnnotatedType()))
-					.sorted()
-					.forEach(lines::add);
-
-			for (Constructor<?> constructor : Arrays.stream(
-					type.getDeclaredConstructors())
-					.filter(candidate -> isPublicOrProtected(
-							candidate.getModifiers()))
-					.sorted(Comparator.comparing(
-							McpPublicApiReflectionContractTests::executableId))
-					.toList())
-				appendExecutable(lines, constructor,
-						"CONSTRUCTOR|" + executableId(constructor));
-
-			for (Method method : Arrays.stream(type.getDeclaredMethods())
-					.filter(candidate -> isPublicOrProtected(
-							candidate.getModifiers()))
-					.sorted(Comparator.comparing(
-							McpPublicApiReflectionContractTests::methodId))
-					.toList()) {
-				String methodOwner = "METHOD|" + methodId(method);
-				lines.add(methodOwner + "|RETURN|"
-						+ canonical(method.getAnnotatedReturnType()));
-				appendExecutable(lines, method, methodOwner);
-			}
-
-			RecordComponent[] recordComponents = type.getRecordComponents();
-			if (recordComponents != null) {
-				for (int index = 0; index < recordComponents.length; ++index) {
-					RecordComponent component = recordComponents[index];
-					lines.add("RECORD_COMPONENT|" + type.getName() + "|"
-							+ index + ":" + component.getName() + "|TYPE|"
-							+ canonical(component.getAnnotatedType()));
-				}
-			}
-		}
-
-		lines.sort(Comparator.naturalOrder());
-		return String.join("\n", lines) + "\n";
-	}
-
-	private static void appendExecutable(List<String> lines,
-			Executable executable, String owner) {
-		lines.add(owner);
-		appendTypeParameters(lines, owner, executable.getTypeParameters());
-
-		AnnotatedType receiver = executable.getAnnotatedReceiverType();
-		if (receiver != null)
-			lines.add(owner + "|RECEIVER|" + canonical(receiver));
-
-		AnnotatedType[] parameterTypes = executable.getAnnotatedParameterTypes();
-		for (int index = 0; index < parameterTypes.length; ++index)
-			lines.add(owner + "|PARAMETER[" + index + "]|"
-					+ canonical(parameterTypes[index]));
-
-		Arrays.stream(executable.getAnnotatedExceptionTypes())
-				.map(McpPublicApiReflectionContractTests::canonical)
-				.sorted()
-				.forEach(contract -> lines.add(owner + "|THROWS|" + contract));
-	}
-
-	private static void appendTypeParameters(List<String> lines, String owner,
-			TypeVariable<?>[] typeParameters) {
-		for (int parameterIndex = 0; parameterIndex < typeParameters.length;
-				++parameterIndex) {
-			TypeVariable<?> typeParameter = typeParameters[parameterIndex];
-			String parameterOwner = owner + "|TYPE_PARAMETER[" + parameterIndex
-					+ "]";
-			lines.add(parameterOwner);
-
-			AnnotatedType[] bounds = typeParameter.getAnnotatedBounds();
-			for (int boundIndex = 0; boundIndex < bounds.length; ++boundIndex)
-				lines.add(parameterOwner + "|BOUND[" + boundIndex + "]|"
-						+ canonical(bounds[boundIndex]));
-		}
-	}
-
 	private static boolean isPublicOrProtected(int modifiers) {
 		return Modifier.isPublic(modifiers) || Modifier.isProtected(modifiers);
-	}
-
-	private static String executableId(Executable executable) {
-		return executable.getDeclaringClass().getName() + "#<init>("
-				+ Arrays.stream(executable.getParameterTypes())
-						.map(Class::getName).collect(
-								java.util.stream.Collectors.joining(","))
-				+ ")";
 	}
 
 	private static String methodId(Method method) {
@@ -2595,112 +2158,6 @@ public class McpPublicApiReflectionContractTests {
 				+ ")->" + method.getReturnType().getName()
 				+ "|bridge=" + method.isBridge()
 				+ "|synthetic=" + method.isSynthetic();
-	}
-
-	private static String canonical(AnnotatedType annotatedType) {
-		List<String> annotations = new ArrayList<>();
-		appendNullabilityAnnotations(annotations, annotatedType, "root");
-		annotations.sort(Comparator.naturalOrder());
-		return canonical(annotatedType.getType()) + "|nullness=["
-				+ String.join(",", annotations) + "]";
-	}
-
-	private static void appendNullabilityAnnotations(List<String> annotations,
-			AnnotatedType annotatedType, String path) {
-		Arrays.stream(annotatedType.getAnnotations())
-				.map(Annotation::annotationType)
-				.filter(annotationType -> annotationType == NonNull.class
-						|| annotationType == Nullable.class)
-				.map(Class::getSimpleName)
-				.sorted()
-				.forEach(annotation -> annotations.add(path + "=" + annotation));
-
-		AnnotatedType owner = annotatedType.getAnnotatedOwnerType();
-		if (owner != null)
-			appendNullabilityAnnotations(annotations, owner, path + ".owner");
-
-		if (annotatedType instanceof AnnotatedParameterizedType parameterized) {
-			AnnotatedType[] arguments =
-					parameterized.getAnnotatedActualTypeArguments();
-			for (int index = 0; index < arguments.length; ++index)
-				appendNullabilityAnnotations(annotations, arguments[index],
-						path + ".argument[" + index + "]");
-		} else if (annotatedType instanceof AnnotatedArrayType array) {
-			appendNullabilityAnnotations(annotations,
-					array.getAnnotatedGenericComponentType(), path + ".component");
-		} else if (annotatedType instanceof AnnotatedWildcardType wildcard) {
-			AnnotatedType[] lowerBounds = wildcard.getAnnotatedLowerBounds();
-			for (int index = 0; index < lowerBounds.length; ++index)
-				appendNullabilityAnnotations(annotations, lowerBounds[index],
-						path + ".lower[" + index + "]");
-			AnnotatedType[] upperBounds = wildcard.getAnnotatedUpperBounds();
-			for (int index = 0; index < upperBounds.length; ++index)
-				appendNullabilityAnnotations(annotations, upperBounds[index],
-						path + ".upper[" + index + "]");
-		}
-	}
-
-	private static String canonical(Type type) {
-		if (type instanceof Class<?> classType) {
-			if (classType.isArray())
-				return "array(" + canonical(classType.getComponentType()) + ")";
-			return "class(" + classType.getName() + ")";
-		}
-		if (type instanceof ParameterizedType parameterized) {
-			String owner = parameterized.getOwnerType() == null ? "none"
-					: canonical(parameterized.getOwnerType());
-			return "parameterized(raw=" + canonical(parameterized.getRawType())
-					+ ",owner=" + owner + ",arguments=["
-					+ Arrays.stream(parameterized.getActualTypeArguments())
-							.map(McpPublicApiReflectionContractTests::canonical)
-							.collect(java.util.stream.Collectors.joining(","))
-					+ "])";
-		}
-		if (type instanceof GenericArrayType array)
-			return "array(" + canonical(array.getGenericComponentType()) + ")";
-		if (type instanceof TypeVariable<?> variable)
-			return canonical(variable);
-		if (type instanceof WildcardType wildcard)
-			return "wildcard(lower=[" + Arrays.stream(wildcard.getLowerBounds())
-					.map(McpPublicApiReflectionContractTests::canonical)
-					.collect(java.util.stream.Collectors.joining(","))
-					+ "],upper=[" + Arrays.stream(wildcard.getUpperBounds())
-					.map(McpPublicApiReflectionContractTests::canonical)
-					.collect(java.util.stream.Collectors.joining(",")) + "])";
-
-		throw new IllegalArgumentException("Unsupported reflective type: " + type);
-	}
-
-	private static String canonical(TypeVariable<?> variable) {
-		Object declaration = variable.getGenericDeclaration();
-		String declarationId;
-
-		if (declaration instanceof Class<?> declaringType)
-			declarationId = "type(" + declaringType.getName() + ")";
-		else if (declaration instanceof Method declaringMethod)
-			declarationId = "method(" + methodId(declaringMethod) + ")";
-		else if (declaration instanceof Constructor<?> declaringConstructor)
-			declarationId = "constructor("
-					+ executableId(declaringConstructor) + ")";
-		else
-			throw new IllegalArgumentException(
-					"Unsupported generic declaration: " + declaration);
-
-		TypeVariable<?>[] parameters = variable.getGenericDeclaration()
-				.getTypeParameters();
-		int index = Arrays.asList(parameters).indexOf(variable);
-		if (index < 0)
-			throw new IllegalArgumentException(
-					"Type variable is absent from its declaration: " + variable);
-
-		return "variable(declaration=" + declarationId + ",index=" + index + ")";
-	}
-
-	private static String sha256(String value)
-			throws NoSuchAlgorithmException {
-		MessageDigest digest = MessageDigest.getInstance("SHA-256");
-		return HexFormat.of().formatHex(digest.digest(
-				value.getBytes(StandardCharsets.UTF_8)));
 	}
 
 	private static void assertNonNullOptionalPayload(Method method,

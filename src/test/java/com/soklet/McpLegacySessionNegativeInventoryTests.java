@@ -30,7 +30,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Negative source and reviewed-API inventory preserving modern statelessness,
+ * Negative source checks preserving modern statelessness,
  * replay absence, and the exact provisional minimum 2025 session surface.
  *
  * @author <a href="https://www.revetkn.com">Mark Allen</a>
@@ -43,11 +43,6 @@ public class McpLegacySessionNegativeInventoryTests {
 			PUBLIC_SOURCE_ROOT.resolve("internal/mcp");
 	private static final Path HTTP_RUNTIME_SOURCE = INTERNAL_MCP_SOURCE_ROOT
 			.resolve("protocol/McpHttpServerRuntime.java");
-	private static final List<Path> REVIEWED_API_SIGNATURES = List.of(
-			Path.of("api/mcp/phase-4.signatures.jsonl"),
-			Path.of("api/mcp/phase-5.signatures.jsonl"),
-			Path.of("api/mcp/phase-6.signatures.jsonl"),
-			Path.of("api/mcp/provisional.signatures.jsonl"));
 	private static final Path MODERN_PROFILE_SOURCE = INTERNAL_MCP_SOURCE_ROOT
 			.resolve("protocol/Mcp20260728ProtocolProfile.java");
 	private static final Pattern REPLAY_STATE_IDENTIFIER = Pattern.compile(
@@ -61,7 +56,7 @@ public class McpLegacySessionNegativeInventoryTests {
 			Pattern.CASE_INSENSITIVE);
 
 	@Test
-	public void modernMcpSourceAndReviewedApiHaveNoLegacySessionOrReplayState()
+	public void modernMcpSourceHasNoLegacySessionOrReplayState()
 			throws Exception {
 		List<Path> sourcePaths = mcpProductionSourcePaths();
 		Assertions.assertFalse(sourcePaths.isEmpty(),
@@ -86,23 +81,6 @@ public class McpLegacySessionNegativeInventoryTests {
 			}
 		}
 
-		for (Path signatures : REVIEWED_API_SIGNATURES) {
-			String api = Files.readString(signatures, StandardCharsets.UTF_8);
-			// Only the exact configuration and HTTP admission identifiers are approved.
-			// "SessionIdle" otherwise matches the conservative session-ID spelling.
-			// Wire IDs, shared stores, replay contexts, and ID generators remain excluded.
-			assertNoLegacyStateIdentifier(signatures, api.replaceAll(
-					"\\b(?:McpSessionConfig|McpSessionOwnerKeyResolver"
-							+ "|McpSessionTransportAdmissionContext|McpSessionTransportAdmissionController"
-							+ "|McpSessionTransportAdmissionDecision"
-							+ "|getMaximumSessionIdleDuration|maximumSessionIdleDuration)\\b",
-					"Reviewed2025Configuration"));
-			String lowerApi = api.toLowerCase(Locale.ROOT);
-			Assertions.assertFalse(lowerApi.contains("mcp-session-id"),
-					() -> "Reviewed API exposes the legacy session header: " + signatures);
-			Assertions.assertFalse(lowerApi.contains("last-event-id"),
-					() -> "Reviewed API exposes the legacy replay header: " + signatures);
-		}
 	}
 
 	@Test

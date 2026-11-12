@@ -305,46 +305,6 @@ export function validateClientOutput(stdout, stderr, expectedClient) {
   return expectedOutput;
 }
 
-function validateSdkPin(clientName, sdkPin) {
-  const expected = clientName === 'typescript'
-    ? {
-      artifactChecksum: /^sha512-[A-Za-z0-9+/]{86}==$/,
-      artifactIdentity: 'npm:@modelcontextprotocol/client@2.0.0',
-    }
-    : clientName === 'go'
-      ? {
-        artifactChecksum: /^h1:[A-Za-z0-9+/]{43}=$/,
-        artifactIdentity: 'github.com/modelcontextprotocol/go-sdk@v1.7.0',
-      }
-      : fail(`Unsupported interoperability client: ${clientName}`);
-
-  if (sdkPin?.artifactIdentity !== expected.artifactIdentity
-      || !expected.artifactChecksum.test(sdkPin?.artifactChecksum ?? '')
-      || !/^[0-9a-f]{40}$/.test(sdkPin?.commit ?? '')) {
-    fail(`Invalid ${clientName} SDK artifact or commit pin`);
-  }
-}
-
-export function interoperabilityEvidenceLine(candidateSha256, clientName, sdkPin) {
-  if (!/^[0-9a-f]{64}$/.test(candidateSha256))
-    fail('Candidate SHA-256 must contain exactly 64 lowercase hexadecimal characters');
-  if (!supportedClients.has(clientName))
-    fail(`Unsupported interoperability client: ${clientName}`);
-  validateSdkPin(clientName, sdkPin);
-  return `SOKLET_INTEROP_EVIDENCE ${JSON.stringify({
-    candidateSha256,
-    client: clientName,
-    fixtureScenario: 'tools-list',
-    fixtureShutdown: 'CLEAN',
-    formatVersion: 1,
-    protocolVersion,
-    sdkArtifactChecksum: sdkPin.artifactChecksum,
-    sdkArtifactIdentity: sdkPin.artifactIdentity,
-    sdkCommit: sdkPin.commit,
-    tool: 'test_simple_text',
-  })}\n`;
-}
-
 async function fixtureControl(queue, fixture, fixtureStderr, event, timeoutMilliseconds) {
   try {
     return parseControl(await queue.next(timeoutMilliseconds), event);
@@ -362,23 +322,20 @@ async function fixtureControl(queue, fixture, fixtureStderr, event, timeoutMilli
   }
 }
 
-async function main(arguments_) {
-  if (arguments_.length < 7)
-    fail('Usage: run-against-public-fixture.mjs <candidate-jar> <client-cwd> <client-name> <sdk-artifact-identity> <sdk-artifact-checksum> <sdk-commit> <client-command> [client-args...]');
-
-  const candidateJar = realFile(arguments_[0], 'candidate JAR');
-  const clientWorkingDirectory = realDirectory(arguments_[1], 'client working directory');
-  const clientName = arguments_[2];
+export function parseFixtureArguments(arguments_) {
+  if (arguments_.length < 4)
+    fail('Usage: run-against-public-fixture.mjs <candidate-jar> <client-cwd> <client-name> <client-command> [client-args...]');
+  const [candidateJar, clientWorkingDirectory, clientName, clientCommand, ...clientArguments] = arguments_;
   if (!supportedClients.has(clientName))
     fail(`Unsupported interoperability client: ${clientName}`);
-  const sdkPin = {
-    artifactIdentity: arguments_[3],
-    artifactChecksum: arguments_[4],
-    commit: arguments_[5],
-  };
-  validateSdkPin(clientName, sdkPin);
-  const clientCommand = arguments_[6];
-  const clientArguments = arguments_.slice(7);
+  return { candidateJar, clientWorkingDirectory, clientName, clientCommand, clientArguments };
+}
+
+async function main(arguments_) {
+  const options = parseFixtureArguments(arguments_);
+  const candidateJar = realFile(options.candidateJar, 'candidate JAR');
+  const clientWorkingDirectory = realDirectory(options.clientWorkingDirectory, 'client working directory');
+  const { clientName, clientCommand, clientArguments } = options;
   const candidateSha256 = sha256File(candidateJar);
   const scratch = mkdtempSync(resolve(tmpdir(), 'soklet-interop-fixture-'));
   const fixtureOutput = resolve(scratch, 'public-fixture');
@@ -479,7 +436,6 @@ async function main(arguments_) {
       fail('Candidate JAR changed during interoperability verification');
 
     process.stdout.write(verifiedClientOutput);
-    process.stdout.write(interoperabilityEvidenceLine(candidateSha256, clientName, sdkPin));
   } finally {
     await terminate(build);
     await terminate(client);
