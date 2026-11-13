@@ -32,7 +32,9 @@ and Javadoc JAR you intend to publish. Preparation verifies the expected filenam
 It signs staged copies, verifies signatures, and checks that signing did not
 change the original artifact bytes.
 
-The signer path must be absolute and identify a regular executable. Supply the
+The signer path must be absolute and identify a regular executable. A symbolic
+link is rejected, so pass the resolved path, for example
+`--gpg "$(realpath "$(command -v gpg)")"`. Supply the
 full 40- or 64-character fingerprint of the intended key or subkey, with the key
 already available to the GPG agent. Passphrases are not command-line arguments.
 

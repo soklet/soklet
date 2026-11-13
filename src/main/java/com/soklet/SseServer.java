@@ -379,6 +379,10 @@ public interface SseServer {
 		/**
 		 * Sets the transport write timeout for SSE stream, handshake and rejection writes.
 		 * <p>
+		 * The timeout bounds each complete write, not a pause between bytes. An event
+		 * that takes longer than this to deliver ends the stream even while the client
+		 * is still reading, so allow for the largest event on the slowest connection.
+		 * <p>
 		 * Passing {@code null} restores the built-in default of 30 seconds. Use
 		 * {@link Duration#ZERO} to disable all of these write timeouts, including
 		 * handshake and failsafe response writes.
@@ -569,6 +573,11 @@ public interface SseServer {
 		 * Soklet's optional one-time connection-verification heartbeat does not
 		 * consume an application slot. Passing {@code null} restores the built-in
 		 * default of 128 pending application writes per connection.
+		 * <p>
+		 * A broadcast that finds a connection's queue full closes that connection
+		 * with {@link StreamTerminationReason#BACKPRESSURE} and discards the writes
+		 * still queued for it. Set the capacity above the largest burst the
+		 * application broadcasts.
 		 *
 		 * @param connectionQueueCapacity connection queue capacity, or {@code null}
 		 * for the default

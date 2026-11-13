@@ -144,8 +144,6 @@ public interface CorsAuthorizer {
 	 * A {@code null} result omits the credentials header.
 	 * The resolver may be invoked concurrently and must support concurrent invocation.
 	 * <p>
-	 * The returned {@link CorsAuthorizer} will omit the {@code Access-Control-Allow-Credentials} response header to reduce CSRF attack surface area. This behavior can be customized via {@link #fromWhitelistAuthorizer(Function, Function)}.
-	 * <p>
 	 * Callers should not rely on reference identity; this method may return a new or cached instance.
 	 *
 	 * @param whitelistedOrigins       the set of whitelisted origins

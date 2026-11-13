@@ -25,7 +25,7 @@ explicit API behavior. Adding a public type or method does not require updating
 The include lists, signature files, and `scripts/verify-mcp-api-freezes.sh`
 remain optional historical audit material. The wrapper can report drift; it is
 not called by CI or publication preparation and does not constrain API changes.
-See [project policy](../../AGENTS.md).
+See the [release README](../../release/README.md) for the current policy.
 
 ## Historical API notes (superseded 2026-11-12)
 

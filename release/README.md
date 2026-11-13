@@ -115,8 +115,9 @@ paths. These checks need no benchmark approval receipt or historical ledger.
 
 The material below records the former process. Its mandatory language, freezes,
 receipt requirements, and approval procedures are historical, not current policy.
-The current instructions above and [project instructions](../AGENTS.md) take
-precedence. No historical result establishes that the current code passed a test.
+The current instructions above, and the local `AGENTS.md` project instructions
+where present, take precedence. No historical result establishes that the
+current code passed a test.
 
 Recorded run output was removed from the checkout on September 30. Historical
 results below describe the original runs; artifact links refer to that earlier

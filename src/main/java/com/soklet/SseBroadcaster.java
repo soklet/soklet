@@ -43,6 +43,8 @@ import java.util.function.Function;
  * <p>
  * You may acquire a broadcaster via {@link SseServer#acquireBroadcaster(ResourcePath)}.
  * <p>
+ * Soklet's default {@link SseServer} gives each connection a bounded queue of pending writes; see {@link SseServer.Builder#connectionQueueCapacity(Integer)}. A broadcast that finds a connection's queue full closes that connection with {@link StreamTerminationReason#BACKPRESSURE} and discards the writes still queued for it. Pace bursts larger than that capacity, or raise it.
+ * <p>
  * See <a href="https://www.soklet.com/docs/server-sent-events">https://www.soklet.com/docs/server-sent-events</a> for detailed documentation.
  * <p>
  * Formal specification is available at <a href="https://html.spec.whatwg.org/multipage/server-sent-events.html#server-sent-events">https://html.spec.whatwg.org/multipage/server-sent-events.html#server-sent-events</a>.

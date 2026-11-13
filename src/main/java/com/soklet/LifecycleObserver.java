@@ -141,6 +141,8 @@ public interface LifecycleObserver {
 
 	/**
 	 * Called before the server stops.
+	 * Also called for a configured server that never started, for example after a startup failure,
+	 * so a preceding {@link #didStartHttpServer(HttpServer)} call is not guaranteed.
 	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 */
 	default void willStopHttpServer(@NonNull HttpServer httpServer) {
@@ -149,6 +151,8 @@ public interface LifecycleObserver {
 
 	/**
 	 * Called after the server publishes terminal evidence.
+	 * Also called for a configured server that never started, for example after a startup failure,
+	 * so a preceding {@link #didStartHttpServer(HttpServer)} call is not guaranteed.
 	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 *
 	 * @param httpServer stopped HTTP server
@@ -485,6 +489,8 @@ public interface LifecycleObserver {
 
 	/**
 	 * Called before the SSE server stops.
+	 * Also called for a configured server that never started, for example after a startup failure,
+	 * so a preceding {@link #didStartSseServer(SseServer)} call is not guaranteed.
 	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 */
 	default void willStopSseServer(@NonNull SseServer sseServer) {
@@ -493,6 +499,8 @@ public interface LifecycleObserver {
 
 	/**
 	 * Called after the SSE server publishes terminal evidence.
+	 * Also called for a configured server that never started, for example after a startup failure,
+	 * so a preceding {@link #didStartSseServer(SseServer)} call is not guaranteed.
 	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 *
 	 * @param sseServer stopped SSE server
@@ -540,6 +548,8 @@ public interface LifecycleObserver {
 
 	/**
 	 * Called before the MCP server stops.
+	 * Also called for a configured server that never started, for example after a startup failure,
+	 * so a preceding {@link #didStartMcpServer(McpServer)} call is not guaranteed.
 	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 *
 	 * @param mcpServer the MCP server that will stop
@@ -550,6 +560,8 @@ public interface LifecycleObserver {
 
 	/**
 	 * Called after the MCP server stops.
+	 * Also called for a configured server that never started, for example after a startup failure,
+	 * so a preceding {@link #didStartMcpServer(McpServer)} call is not guaranteed.
 	 * This lifecycle-transition callback is observational; exceptions are contained.
 	 *
 	 * @param mcpServer       the MCP server that stopped
