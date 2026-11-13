@@ -4,6 +4,7 @@ import com.soklet.annotation.SseEventSource;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import java.net.Socket;
+import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
@@ -310,9 +311,20 @@ class Round2SseRuntimeTests {
 					assertTrue(result.isComplete());
 					assertEquals(ShutdownDisposition.FORCED, result.getShutdownDisposition());
 					assertTrue(readerExecutor.isTerminated());
-					assertEquals(-1, partial.getInputStream().read());
+					try {
+						assertEquals(-1, partial.getInputStream().read(), "Shutdown must close the socket without a response");
+					} catch (SocketException reset) {
+						// The read observer precedes the actual socket read. Closing with
+						// unread request bytes may reset TCP instead of producing EOF.
+						assertFalse(partial.isClosed(), "The peer, rather than the test, must close the connection");
+					}
 					assertEquals(1, fixture.acceptedRequests.get());
 					assertEquals(0, fixture.rejectedRequests.get());
+					assertEquals(0, fixture.resource.calls.get());
+					assertTrue(fixture.logs.isEmpty(), fixture.logs.toString());
+					assertTrue(fixture.connectionRejections.isEmpty(), fixture.connectionRejections.toString());
+					assertTrue(fixture.readFailures.isEmpty(), fixture.readFailures.toString());
+					assertTrue(fixture.transportFailures.isEmpty(), fixture.transportFailures.toString());
 				}
 			} finally {
 				fixture.releaseWork();

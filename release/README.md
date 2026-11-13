@@ -20,6 +20,22 @@ build** and uploads its POM, main, sources, and Javadoc JARs together. The Java 
 leg is **Compatibility check**. Validation prints SHA-256 values for the four
 publication files; compare them with `promotion-preparation.json` when selecting
 artifacts for signing.
+
+The sibling job defaults to the 4.0 development branches: `feature/2.0.0` for
+the javax and Jakarta adapters, and `feature/mcp-v2` for OpenTelemetry, ToyStore,
+and barebones. The optional `javax_ref`, `jakarta_ref`, `otel_ref`,
+`toystore_ref`, and `barebones_ref` dispatch inputs accept another branch, tag,
+or commit, for example `main` after those branches merge.
+
+By default, core checkouts use the selected branch's dispatch commit, so a
+branch advancing does not change the core source on a failed-job retry. An
+explicit `candidate_commit` still selects the supplied Git ref.
+
+Publication inputs use one artifact name per workflow run. Retrying a failed
+consumer reuses the successful JDK 21 build; rerunning that build replaces the
+artifact. Upload failure fails the producer so a failed-job retry can recover.
+Diagnostic test-result artifacts remain separate for each attempt.
+
 Normal CI retains static analysis, protocol conformance, documentation, packaged
 consumer, fuzz, and soak checks. API comparisons produce advisory reports.
 
@@ -48,7 +64,8 @@ source hashes, deployment order, or timing.
 
 The manual **Release Verification** workflow also runs the sibling projects and
 the real TypeScript/Go SDK checks against the exact JAR from its JDK 21 publishing
-build. Sibling sources come from their current default branches. These are
+build. Sibling sources use the selected workflow refs, which default to the 4.0
+development branches listed above. These are
 ordinary compilation, behavior, and protocol checks; no receipt assembly or
 source snapshot approval is involved.
 

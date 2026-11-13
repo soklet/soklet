@@ -18,6 +18,7 @@ package com.soklet;
 
 import com.soklet.annotation.GET;
 import com.soklet.internal.microhttp.StreamLifecycleCoordinator;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -412,6 +413,7 @@ public class StreamingCleanupDiagnosticsTests {
 		private final int port = findFreePort();
 		final DefaultHttpServer server;
 		final SokletConfig config;
+		private @Nullable StreamLifecycleCoordinator coordinator;
 		private HttpFixture(TestResource resource, Observation observation, Duration responseTimeout) throws IOException {
 			this(resource, observation, responseTimeout, Duration.ofSeconds(5));
 		}
@@ -425,7 +427,11 @@ public class StreamingCleanupDiagnosticsTests {
 					.lifecyclePolicy(LifecyclePolicy.builder().gracefulShutdownTimeout(Duration.ofMillis(100))
 							.forcedShutdownTimeout(Duration.ofMillis(100)).build()).build();
 		}
-		StreamLifecycleCoordinator coordinator() { return this.server.getStreamLifecycleCoordinatorForTests().orElseThrow(); }
+		StreamLifecycleCoordinator coordinator() {
+			if (this.coordinator == null)
+				this.coordinator = this.server.getStreamLifecycleCoordinatorForTests().orElseThrow();
+			return this.coordinator;
+		}
 		String request(String path) throws Exception {
 			try (Socket socket = connectWithRetry("127.0.0.1", this.port, 3_000)) {
 				socket.setSoTimeout(3_000);
@@ -435,7 +441,13 @@ public class StreamingCleanupDiagnosticsTests {
 			}
 		}
 		void awaitPhysicalExit() throws Exception {
-			Assertions.assertTrue(coordinator().awaitTermination(System.nanoTime() + TimeUnit.SECONDS.toNanos(5)));
+			// Shutdown detaches the server's runtime before held cleanup is released.
+			// Keep observing that same runtime, including after the owner has closed.
+			@Nullable StreamLifecycleCoordinator coordinator = this.coordinator;
+			if (coordinator == null)
+				coordinator = this.server.getStreamLifecycleCoordinatorForTests().orElse(null);
+			if (coordinator != null)
+				Assertions.assertTrue(coordinator.awaitTermination(System.nanoTime() + TimeUnit.SECONDS.toNanos(5)));
 		}
 	}
 
@@ -449,7 +461,7 @@ public class StreamingCleanupDiagnosticsTests {
 			super(resource, observation, responseTimeout, cleanupTimeout);
 			this.soklet = Soklet.fromConfig(this.config);
 		}
-		private void start() { this.soklet.start(); }
+		private void start() { this.soklet.start(); coordinator(); }
 		@Override public void close() throws Exception {
 			this.soklet.shutdown().toCompletableFuture().get(3, TimeUnit.SECONDS);
 		}

@@ -4,9 +4,34 @@ on:
   workflow_dispatch:
     inputs:
       candidate_commit:
-        description: Optional Git ref to verify (defaults to the selected branch)
+        description: Optional Git ref to verify (defaults to the selected branch's dispatch commit)
         required: false
         type: string
+      javax_ref:
+        description: Git ref for the javax adapter
+        required: false
+        type: string
+        default: feature/2.0.0
+      jakarta_ref:
+        description: Git ref for the Jakarta adapter
+        required: false
+        type: string
+        default: feature/2.0.0
+      otel_ref:
+        description: Git ref for the OpenTelemetry adapter
+        required: false
+        type: string
+        default: feature/mcp-v2
+      toystore_ref:
+        description: Git ref for ToyStore
+        required: false
+        type: string
+        default: feature/mcp-v2
+      barebones_ref:
+        description: Git ref for barebones
+        required: false
+        type: string
+        default: feature/mcp-v2
 
 concurrency:
   group: release-verification-${{ inputs.candidate_commit || github.ref }}
@@ -29,7 +54,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
-          ref: ${{ inputs.candidate_commit || github.ref }}
+          ref: ${{ inputs.candidate_commit || github.sha }}
 
       - name: Set up JDK 26 for Javadoc
         uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
@@ -73,11 +98,13 @@ jobs:
 
       - name: Upload JDK 21 publication inputs
         if: success() && matrix.jdk == '21'
-        continue-on-error: true
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: publication-build-jdk-21-${{ github.run_id }}-${{ github.run_attempt }}
-          if-no-files-found: warn
+          # Consumer-only retries reuse this run's successful producer. A rerun
+          # of the producer replaces the artifact instead of colliding with it.
+          name: publication-build-jdk-21-${{ github.run_id }}
+          overwrite: true
+          if-no-files-found: error
           retention-days: 30
           path: |
             pom.xml
@@ -96,13 +123,14 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
-          ref: ${{ inputs.candidate_commit || github.ref }}
+          ref: ${{ inputs.candidate_commit || github.sha }}
           path: soklet
 
       - name: Check out javax adapter
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: soklet/soklet-servlet-javax
+          ref: ${{ inputs.javax_ref || 'feature/2.0.0' }}
           persist-credentials: false
           path: soklet-servlet-javax
 
@@ -110,6 +138,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: soklet/soklet-servlet-jakarta
+          ref: ${{ inputs.jakarta_ref || 'feature/2.0.0' }}
           persist-credentials: false
           path: soklet-servlet-jakarta
 
@@ -117,6 +146,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: soklet/soklet-otel
+          ref: ${{ inputs.otel_ref || 'feature/mcp-v2' }}
           persist-credentials: false
           path: soklet-otel
 
@@ -124,6 +154,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: soklet/toystore-app
+          ref: ${{ inputs.toystore_ref || 'feature/mcp-v2' }}
           persist-credentials: false
           path: toystore-app
 
@@ -131,13 +162,14 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: soklet/barebones-app
+          ref: ${{ inputs.barebones_ref || 'feature/mcp-v2' }}
           persist-credentials: false
           path: barebones-app
 
       - name: Download JDK 21 publication inputs
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
-          name: publication-build-jdk-21-${{ github.run_id }}-${{ github.run_attempt }}
+          name: publication-build-jdk-21-${{ github.run_id }}
           path: publication-inputs
 
       - name: Set up JDK 21
@@ -173,12 +205,12 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
-          ref: ${{ inputs.candidate_commit || github.ref }}
+          ref: ${{ inputs.candidate_commit || github.sha }}
 
       - name: Download JDK 21 publication inputs
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
-          name: publication-build-jdk-21-${{ github.run_id }}-${{ github.run_attempt }}
+          name: publication-build-jdk-21-${{ github.run_id }}
           path: publication-inputs
 
       - name: Set up JDK 21

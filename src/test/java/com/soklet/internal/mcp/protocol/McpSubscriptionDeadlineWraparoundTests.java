@@ -402,16 +402,18 @@ public class McpSubscriptionDeadlineWraparoundTests {
 					"subscriptionAuthorizationExpiryNanos");
 			long renewalNanos = longField(control,
 					"subscriptionAuthorizationRenewalNanos");
+			Assertions.assertTrue(booleanField(control,
+					"subscriptionAuthorizationRenewalScheduled"));
 
-			clock.advanceMonotonic(Duration.ofSeconds(6));
+			// The live timer may consume the renewal as soon as monotonic time
+			// advances. Roll back wall time first so either timer sees the rollback.
 			clock.rewindWall(Duration.ofHours(1));
+			clock.advanceMonotonic(Duration.ofSeconds(6));
 			Assertions.assertTrue(clock.nanoTime() - renewalNanos >= 0L,
 					"The renewal boundary was not due: now=" + clock.nanoTime()
 							+ ", renewal=" + renewalNanos);
 			Assertions.assertFalse(clock.nanoTime() - originalExpiry >= 0L,
 					"The authorization unexpectedly expired before renewal.");
-			Assertions.assertTrue(booleanField(control,
-					"subscriptionAuthorizationRenewalScheduled"));
 			invokeTimer(control, clock.nanoTime());
 			awaitCondition(() -> authorizations.get() == 2,
 					"The wrapped authorization renewal did not start after wall-clock rollback.");

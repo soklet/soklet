@@ -798,9 +798,12 @@ These setters replace, rather than append to, the previous list. Optional list
 properties accept `null` or an empty list to clear; each successful call snapshots
 the supplied list, and a null element leaves the previous value unchanged.
 
-Registration order is discovery order. Annotation-processed endpoints instead
-list tools and prompts in name order, and resources and resource templates in
-URI order. Names and resource addresses must be
+Programmatic endpoints preserve the supplied order of static registrations.
+The annotation processor registers static tools and prompts in name order,
+and static resources and resource templates in URI order. Static `2026-07-28`
+catalog lists use registration order; static 2025 catalog views use canonical
+key order. Application-owned `@McpResourceList` pages preserve the handler's
+supplied descriptor order. Names and resource addresses must be
 unique within one endpoint. The advertised capability set is derived from the
 registrations; there is no separate capability switch that can drift from the
 handlers.
@@ -3305,9 +3308,13 @@ Implemented framework mappings are stable:
 | Framework policy or pre-dispatch protector contract failure | 500 | `-32603` |
 | Unknown request method | 404 | `-32601` |
 
-On an endpoint that serves both a 2025 revision and `2026-07-28`, a legacy-shaped
-request whose `MCP-Protocol-Version` header names a revision the endpoint does
-not serve returns `-32020` with `data.supportedVersions`, not `-32022`.
+On mixed-version endpoints, a legacy-shaped request can produce a header
+mismatch instead of an unsupported-version error. For example, on an endpoint
+serving `2025-06-18` and `2026-07-28`, a legacy `ping` with
+`MCP-Protocol-Version: 2025-03-26` returns `-32020` with
+`data.supportedVersions`. With the same legacy framing, `initialize` with that
+header instead returns `-32022` with `data.supported` and `data.requested`, as
+does a `ping` naming the recognized but unserved revision `2025-11-25`.
 
 Initial `subscriptions/listen` catalog baselines use these same pre-commit policy mappings: exhausted handler capacity or a policy deadline while queued returns `503`; a deadline during active catalog-policy work returns `504`; an unrecovered projection failure returns `500`. These responses carry the neutral JSON-RPC `-32603` error. Once SSE is committed, terminal errors stay in that stream.
 
