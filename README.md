@@ -12,27 +12,36 @@
 
 ### What Is It?
 
-A small [HTTP/1.1 server](https://github.com/ebarlas/microhttp) and route handler for Java, well-suited for building RESTful APIs, broadcasting [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events), and exposing dedicated [Model Context Protocol](https://modelcontextprotocol.io/) servers.<br/><br/>
-Zero dependencies. Dependency Injection friendly.<br/>
-Powered by [JEP 444: Virtual Threads](https://openjdk.org/jeps/444).
+Soklet is a small Java library for building HTTP APIs,
+[Model Context Protocol (MCP) servers](https://www.soklet.com/docs/mcp), and
+[Server-Sent Event (SSE) systems](https://www.soklet.com/docs/server-sent-events).
+Author typed Java handlers with clear HTTP and MCP semantics and built-in testing
+support. Bring your own application services and dependency injection.
 
-Soklet codes like a library, not a framework.
+Zero dependencies. Powered by [JEP 444: Virtual Threads](https://openjdk.org/jeps/444).
 
 **Note: this README provides a high-level overview of Soklet.**<br/>
 **For details, please refer to the official documentation at [https://www.soklet.com](https://www.soklet.com).**
 
 ### Why?
 
-The Java web ecosystem is missing an HTTP server solution that is dependency-free but offers support for [Server-Sent Events (SSE)](https://www.soklet.com/docs/server-sent-events) along with hooks for dependency injection and annotation-based request handling. Soklet aims to fill this void.
+Build HTTP APIs and MCP endpoints around the same application logic; the
+[HTTP + MCP App](https://www.soklet.com/docs/http-and-mcp) shows a small example.
+Soklet embraces the Unix philosophy: build tools that each do one thing well,
+then let agents compose them into applications.
 
-Soklet provides the plumbing to build "transactional" REST APIs as well as systems that vend results via [HTTP response streaming](https://www.soklet.com/docs/response-writing#streaming-responses) or [SSE](https://www.soklet.com/docs/server-sent-events).
-It does not make technology choices on your behalf (but [an example of how to build a full-featured API is available](https://www.soklet.com/docs/toystore-app)). It does not natively support [Reactive Programming](https://en.wikipedia.org/wiki/Reactive_programming) or similar methodologies. It _does_ give you the foundation to build your system, your way.
+Soklet handles the HTTP and MCP plumbing. You choose your database, JSON library,
+authentication, and other application infrastructure; the
+[Toy Store App](https://www.soklet.com/docs/toystore-app) shows how those pieces
+fit together.
 
 Soklet is [commercially-friendly Open Source Software](https://www.soklet.com/docs/licensing), proudly powering production systems since 2015.
 
 ### Design Goals
 
-- Main focus: routing HTTP/1.1 requests to Java methods
+- First-class support for [Model Context Protocol](https://www.soklet.com/docs/mcp): typed tools, prompts, and resources for AI agents
+- Route HTTP/1.1 requests to typed Java methods
+- Built-in support for [Server-Sent Events](https://www.soklet.com/docs/server-sent-events)
 - Near-instant startup
 - Zero dependencies
 - Immutability/thread-safety
@@ -42,8 +51,7 @@ Soklet is [commercially-friendly Open Source Software](https://www.soklet.com/do
 - Thorough, high-quality documentation
 - Extensive support for [automated unit and integration testing](https://www.soklet.com/docs/testing)
 - Fine-grained [telemetry and metrics collection](https://www.soklet.com/docs/metrics-collection)
-- Best-in-class support for [Server-Sent Events](https://www.soklet.com/docs/server-sent-events)
-- [Servlet Integration](https://www.soklet.com/docs/servlet-integration) for legacy code
+- [Servlet integration](https://www.soklet.com/docs/servlet-integration) for legacy code
 
 ### Design Non-Goals
 
