@@ -7,7 +7,7 @@
 
 [![Maven Central](https://img.shields.io/maven-central/v/com.soklet/soklet.svg?label=Maven%20Central)](https://central.sonatype.com/artifact/com.soklet/soklet)
 [![CI](https://github.com/soklet/soklet/actions/workflows/ci.yml/badge.svg)](https://github.com/soklet/soklet/actions/workflows/ci.yml)
-[![Javadoc](https://javadoc.io/badge2/com.soklet/soklet/javadoc.svg)](https://javadoc.soklet.com)
+[![Javadoc](https://img.shields.io/badge/javadoc-view-brightgreen)](https://javadoc.soklet.com)
 [![Changelog](https://img.shields.io/badge/changelog-view-blue)](CHANGELOG.md)
 
 ### What Is It?
